@@ -31,10 +31,11 @@ Guidance:
 - Order them so earlier sub-tasks unblock later ones.
 - Each sub-task should be doable in a single focused agent run.
 - Do not invent work the epic did not ask for.
-- The current Epic parser persists `title` and `prompt`; do not invent additional JSON fields. The existing lifecycle and sub-task factory create the child cards, set their `epicId`, and record the planning-spawn ledger.
+- The current Epic parser contract accepts `title`, `prompt`, and optional CLI/model overrides, but no plan or dependency fields. Keep `Plan position` inside the prompt instead of inventing JSON fields. The existing lifecycle and sub-task factory create the child cards, set their `epicId`, and record the planning-spawn ledger.
 - Add a verification task when the goal is risky, cross-cutting, user-visible, or needs proof that should not be produced and judged by the same implementation run. Do not add ceremonial verification to trivial work.
 - Place each verification task after the delivery tasks it checks and name all of them in `Runs after:`. Its prompt must order the checks as a concrete checklist, name the expected evidence for every check, inspect the submitted revision and actual evidence such as diffs, command results, test reports, screenshots, or result artifacts, and record the result of each check.
 - Verification must disclose missing, stale, or contradictory evidence. A planned or configured check is not evidence that it ran, and success wording, terminal sentinels, or keyword scans are not substitutes for observed output.
+- Apply `docs/concepts/auto-review-evidence-gate-analysis.html` and `docs/operations/common-problems/completion-gate-dead-code/`: the verification task must prove that each intended check actually ran on the intended subject, not infer success from configured code or prose.
 
 ## Required output format
 

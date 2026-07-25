@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schichten &amp; Infrastruktur — Diagramm</title>
+<style>
+/* ============================================================
+   Stil-Adaption: "Agent Host Protocol" (microsoft.github.io/agent-host-protocol)
+   — flache Boxen, gedeckte Fläche, zwei Akzente (Blau = Autorität,
+     Teal = Ausführung), dünne Bezier-"Rails" mit fließenden Dashes,
+     Mono-Nummern-Badges, viel Ruhe. Self-contained, theme-aware.
+   Design-Tokens & Snippets: docs/app/prompts/diagramm-stil-agent-host-protocol.md
+   Diese Seite ist die LAYER-/INFRASTRUKTUR-SICHT (nicht die Deployment-/
+   Kommunikations-Sicht — die liegt in zielarchitektur-diagramm.html).
+   ============================================================ */
+:root {
+  color-scheme: light;
+  /* Flächen / Ink (aus VitePress-Default, das die Vorlage nutzt) */
+  --bg:        #ffffff;
+  --bg-soft:   #f6f6f7;
+  --bg-elv:    #ffffff;
+  --ink-1:     #3c3c43;
+  --ink-2:     #67676c;
+  --ink-3:     #929295;
+  --line:      #e2e2e3;
+  --border:    #c2c2c4;
+  /* Akzent A — Blau = Kontrollebene (UI-Layer + Orchestrator-Server-Layer) */
+  --blue:      #3b82f6;
+  --blue-ink:  #2f6fd6;
+  --blue-soft: #e7f0fe;
+  --blue-bd:   rgba(59,130,246,.42);
+  --blue-glow: rgba(59,130,246,.20);
+  /* Akzent B — Teal = Ausführungsebene (Host-Layer) */
+  --teal:      #14a37f;
+  --teal-ink:  #0f8e6e;
+  --teal-soft: #e6f6f1;
+  --teal-bd:   rgba(20,163,127,.42);
+  --teal-glow: rgba(20,163,127,.18);
+  /* Akzent C — Coral, sparsam für die drei Infrastruktur-Highlights (Wiki, Quality, Pipeline) */
+  --coral:      #e5484d;
+  --coral-ink:  #c53d42;
+  --coral-soft: #fdeceb;
+  --coral-bd:   rgba(229,72,77,.42);
+  --coral-glow: rgba(229,72,77,.20);
+  /* Schrift — Systemfont, dem Inter-Look der Vorlage nah */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --chip-shadow: 0 3px 12px rgba(0,0,0,.10);
+}
+:root[data-theme="dark"], html.dark-forced { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:        #1b1b1f;
+    --bg-soft:   #202127;
+    --bg-elv:    #202127;
+    --ink-1:     #dfdfd6;
+    --ink-2:     #98989f;
+    --ink-3:     #6a6a71;
+    --line:      #2e2e32;
+    --border:    #3c3f44;
+    --blue:      #4c8dff;
+    --blue-ink:  #a8b1ff;
+    --blue-soft: #1c2740;
+    --blue-bd:   rgba(90,150,255,.50);
+    --blue-glow: rgba(76,141,255,.30);
+    --teal:      #34d3a6;
+    --teal-ink:  #4fe0b6;
+    --teal-soft: #16302a;
+    --teal-bd:   rgba(52,211,166,.48);
+    --teal-glow: rgba(52,211,166,.24);
+    --coral:      #f06a6f;
+    --coral-ink:  #ff9a9e;
+    --coral-soft: #3a2023;
+    --coral-bd:   rgba(240,106,111,.48);
+    --coral-glow: rgba(240,106,111,.26);
+    --chip-shadow: 0 3px 14px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:        #1b1b1f;
+  --bg-soft:   #202127;
+  --bg-elv:    #202127;
+  --ink-1:     #dfdfd6;
+  --ink-2:     #98989f;
+  --ink-3:     #6a6a71;
+  --line:      #2e2e32;
+  --border:    #3c3f44;
+  --blue:      #4c8dff;
+  --blue-ink:  #a8b1ff;
+  --blue-soft: #1c2740;
+  --blue-bd:   rgba(90,150,255,.50);
+  --blue-glow: rgba(76,141,255,.30);
+  --teal:      #34d3a6;
+  --teal-ink:  #4fe0b6;
+  --teal-soft: #16302a;
+  --teal-bd:   rgba(52,211,166,.48);
+  --teal-glow: rgba(52,211,166,.24);
+  --coral:      #f06a6f;
+  --coral-ink:  #ff9a9e;
+  --coral-soft: #3a2023;
+  --coral-bd:   rgba(240,106,111,.48);
+  --coral-glow: rgba(240,106,111,.26);
+  --chip-shadow: 0 3px 14px rgba(0,0,0,.45);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 0 90px;
+  background: var(--bg); color: var(--ink-1);
+  font: 16px/1.65 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+
+/* --- Kopf --- */
+header.page { padding: 48px 0 26px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.kicker {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 600 12px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--blue-ink); border: 1px solid var(--blue-bd); background: var(--blue-soft);
+  border-radius: 99px; padding: 7px 14px; margin: 0 0 18px;
+}
+.kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+h1 { font-size: 34px; line-height: 1.18; letter-spacing: -.01em; margin: 0 0 14px; font-weight: 800; }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 70ch; margin: 0; }
+.meta { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+.meta b { color: var(--ink-2); font-weight: 600; }
+code, .mono { font: 12.5px/1.5 var(--font-mono); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+
+/* --- Nummerierte Abschnitts-Labels (Coral-Mono, wie die Vorlage) --- */
+h2 { font-size: 24px; margin: 60px 0 8px; letter-spacing: -.01em; font-weight: 750; }
+.sec-no {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 600 12px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--coral); margin: 0 0 8px;
+}
+.sec-no .n { color: var(--coral); font-weight: 700; }
+.sec-no::before { content: ""; width: 14px; height: 1.5px; background: var(--coral); }
+p { max-width: 78ch; }
+p.dim { color: var(--ink-2); }
+
+/* --- Theme-Toggle --- */
+.toggle {
+  position: fixed; top: 16px; right: 16px; z-index: 20;
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-2); background: var(--bg-elv); border: 1px solid var(--border);
+  border-radius: 99px; padding: 8px 13px;
+}
+.toggle:hover { color: var(--ink-1); border-color: var(--blue-bd); }
+
+figure { margin: 26px 0 8px; }
+figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 14px; max-width: 92ch; }
+figcaption b { color: var(--ink-1); }
+
+.canvas {
+  position: relative;
+  border: 1px solid var(--line); border-radius: 16px;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+  padding: 30px; overflow-x: auto;
+}
+
+/* ============================================================
+   §1 — DREI LAYER + ZWEI SÄULEN (Wiki, Quality/Test)
+   ============================================================ */
+.layers-wrap { display: flex; align-items: stretch; gap: 20px; min-width: 780px; }
+.layers-stack { flex: 1 1 auto; display: flex; flex-direction: column; gap: 20px; }
+
+.layer-slot { position: relative; }
+.layer-ghost {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: var(--bg-soft); border: 1px solid var(--border); box-shadow: var(--chip-shadow);
+}
+.layer-ghost.g2 { transform: translate(9px, 8px); opacity: .32; }
+.layer-ghost.g1 { transform: translate(5px, 4px); opacity: .58; }
+.layer-badge {
+  position: absolute; top: -9px; right: 16px; z-index: 3;
+  font: 700 9px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase;
+  border-radius: 99px; padding: 4px 9px; box-shadow: var(--chip-shadow);
+  white-space: nowrap; background: var(--bg-elv);
+}
+.layer-badge.blue { color: var(--blue-ink); border: 1px solid var(--blue-bd); }
+.layer-badge.teal { color: var(--teal-ink); border: 1px solid var(--teal-bd); }
+
+.layer { position: relative; z-index: 2; border-radius: 14px; padding: 17px 22px; box-shadow: var(--chip-shadow); }
+.layer.ui   { background: var(--blue-soft); border: 1px solid var(--blue-bd); }
+.layer.orch { background: var(--blue-soft); border: 1px solid var(--blue-bd); box-shadow: 0 0 30px var(--blue-glow); }
+.layer.host { background: var(--teal-soft); border: 1px solid var(--teal-bd); }
+
+.layer .lhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+.layer .lname { display: inline-flex; align-items: center; gap: 8px; font: 700 13px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
+.layer .lname .ic { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.layer.ui .lname, .layer.orch .lname { color: var(--blue-ink); }
+.layer.ui .lname .ic, .layer.orch .lname .ic { background: var(--blue); }
+.layer.host .lname { color: var(--teal-ink); }
+.layer.host .lname .ic { background: var(--teal); }
+.layer .loc-chip {
+  font: 600 9px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); border: 1px solid var(--border); border-radius: 5px;
+  padding: 3px 6px; background: var(--bg-elv); white-space: nowrap; flex: none;
+}
+.layer .ldesc { font-size: 12.5px; color: var(--ink-2); margin: 0 0 10px; }
+.layer .ltags { display: flex; gap: 7px; flex-wrap: wrap; }
+.layer .ltag {
+  font: 600 10.5px/1 var(--font-mono); letter-spacing: .04em;
+  padding: 5px 9px; border-radius: 6px; background: var(--bg-elv); white-space: nowrap;
+}
+.layer.ui .ltag, .layer.orch .ltag { border: 1px solid var(--blue-bd); color: var(--blue-ink); }
+.layer.host .ltag { border: 1px solid var(--teal-bd); color: var(--teal-ink); }
+
+/* Säulen: Wiki + Quality/Test, ziehen sich als coral-akzentuierte Bänder durch alle drei Layer */
+.pillars { flex: 0 0 auto; display: flex; gap: 14px; }
+.pillar {
+  width: 172px; position: relative; display: flex; flex-direction: column;
+  border: 1px solid var(--coral-bd); border-radius: 14px; background: var(--coral-soft);
+  padding: 14px 13px 16px; box-shadow: var(--chip-shadow);
+}
+.pillar .phead {
+  font: 700 10.5px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--coral-ink); margin-bottom: 12px;
+}
+.pillar .ptrack { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.pillar .ptrack::before {
+  content: ""; position: absolute; left: 8px; top: 3px; bottom: 3px; width: 1.5px;
+  background-image: repeating-linear-gradient(to bottom, var(--coral) 0 6px, transparent 6px 13px);
+  opacity: .55; animation: coralflow 2.6s linear infinite;
+}
+.pitem { position: relative; padding-left: 21px; }
+.pitem::before {
+  content: ""; position: absolute; left: 3px; top: 2px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--bg-elv); border: 1.5px solid var(--coral);
+}
+.pitem .ptag { display: block; font: 700 9px/1.2 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--coral-ink); margin-bottom: 2px; }
+.pitem .ptxt { display: block; font-size: 11px; line-height: 1.4; color: var(--ink-2); }
+@keyframes coralflow { to { background-position-y: -19px; } }
+@media (prefers-reduced-motion: reduce) { .pillar .ptrack::before { animation: none; } }
+
+/* ============================================================
+   §2 — TASK-PIPELINE als horizontales Fluss-Band (Wire-Format)
+   ============================================================ */
+.pipeline { border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%); padding: 40px 26px 24px; overflow-x: auto; }
+.pipe-track { position: relative; display: flex; align-items: flex-end; min-width: 800px; }
+.pipe-node { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.pipe-chip {
+  font: 700 12px/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase;
+  background: var(--bg-elv); color: var(--ink-1); border: 1px solid var(--border);
+  border-radius: 99px; padding: 9px 16px; box-shadow: var(--chip-shadow); white-space: nowrap;
+}
+.pipe-chip.gate { border-color: var(--coral-bd); color: var(--coral-ink); background: var(--coral-soft); }
+.pipe-node .psub { font: 600 9px/1.3 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.pipe-node .ibadge {
+  position: absolute; top: -26px; left: 50%; transform: translateX(-50%);
+  font: 700 9px/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--coral-ink); border: 1px solid var(--coral-bd); background: var(--bg-elv);
+  border-radius: 99px; padding: 4px 8px; box-shadow: var(--chip-shadow); white-space: nowrap;
+}
+.pipe-seg { flex: 1 1 auto; min-width: 64px; position: relative; padding-bottom: 21px; }
+.pipe-seg .line {
+  width: 100%; height: 2px;
+  background-image: repeating-linear-gradient(to right, var(--coral) 0 7px, transparent 7px 16px);
+  background-size: 23px 2px; opacity: .8; animation: pipeflow 2.2s linear infinite;
+}
+.pipe-seg .tag {
+  position: absolute; top: -19px; left: 50%; transform: translateX(-50%);
+  font: 600 9.5px/1.2 var(--font-mono); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-3); white-space: nowrap;
+}
+.pipe-seg .tag.gate { color: var(--coral-ink); font-weight: 700; }
+@keyframes pipeflow { to { background-position-x: -23px; } }
+@media (prefers-reduced-motion: reduce) { .pipe-seg .line { animation: none; } }
+
+footer.src { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--line);
+             font-size: 12.5px; color: var(--ink-3); }
+footer.src code { font-size: 11.5px; }
+@media (max-width: 700px){ h1 { font-size: 27px; } .canvas { padding: 14px; } }
+</style>
+</head>
+<body>
+
+<button class="toggle" id="tt" aria-label="Theme umschalten">◐ Theme</button>
+
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept · Layer-Infrastruktur</p>
+  <h1>Schichten &amp; Infrastruktur: drei Layer, drei Säulen</h1>
+  <p class="lede">Die ruhige Grundordnung ist gestapelt: UI-Layer bedient, der
+  Orchestrator-Server-Layer ist die eine Wahrheits- und Konfigurationsinstanz, der
+  Host-Layer führt aus. Quer dazu ziehen sich drei eng verzahnte Infrastruktur-Säulen
+  durch alle drei Ebenen — Wiki, Quality-/Test-Infrastruktur und die Task-Pipeline. Diese
+  Seite zeigt die <b>Schichten-Sicht</b>; die Deployment-/Kommunikations-Sicht (wer
+  spricht mit wem, über welche Kanäle) liegt separat in
+  <code>zielarchitektur-diagramm.html</code>.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 22.07.2026</span>
+    <span><b>Fachlich aus:</b> <code>docs/system/domains/pipeline.md</code> ·
+    <code>docs/system/domains/tasks.md</code> · <code>docs/quality/architecture-quality-layer/</code> ·
+    <code>docs/start/wiki-conventions.md</code></span>
+    <span><b>Stil:</b> Agent Host Protocol (adaptiert)</span>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<p class="sec-no"><span class="n">§1</span> · Schichten</p>
+<h2>Drei Layer, zwei Wissens-Säulen</h2>
+<p class="dim">Oben und unten wird vervielfacht — <b>N</b> Studio-Instanzen, <b>N</b>
+Runner-Hosts —, in der Mitte bleibt es bei einer einzigen Instanz: dem
+Orchestrator-Server als alleiniger Wahrheit. Wiki und Quality-/Test-Infrastruktur
+sind keine eigene Ebene, sondern <b>Infrastruktur-Säulen</b>, die alle drei Layer
+gleichzeitig durchziehen — jede Ebene liest, schreibt oder prüft gegen dieselbe Quelle.</p>
+
+<figure>
+<div class="canvas">
+  <div class="layers-wrap">
+    <div class="layers-stack">
+
+      <!-- UI-Layer -->
+      <div class="layer-slot">
+        <div class="layer-ghost g2"></div>
+        <div class="layer-ghost g1"></div>
+        <span class="layer-badge blue">× N · MULTIUSER</span>
+        <div class="layer ui">
+          <div class="lhead">
+            <span class="lname"><span class="ic"></span> UI-Layer</span>
+            <span class="loc-chip">STUDIO</span>
+          </div>
+          <p class="ldesc">Board · Wiki · Reviews · Orchestrator-Sicht — beliebig viele gleichzeitige Studio-Instanzen, jede ersetzbar.</p>
+          <div class="ltags">
+            <span class="ltag">Board</span>
+            <span class="ltag">Wiki-Ansicht</span>
+            <span class="ltag">Reviews</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Orchestrator-Server-Layer -->
+      <div class="layer-slot">
+        <span class="layer-badge blue">× 1 · WAHRHEIT</span>
+        <div class="layer orch">
+          <div class="lhead">
+            <span class="lname"><span class="ic"></span> Orchestrator-Server-Layer</span>
+            <span class="loc-chip">ZENTRAL</span>
+          </div>
+          <p class="ldesc">Die eine Konfigurations- und Wahrheitsinstanz — alle Layer richten sich hier aus.</p>
+          <div class="ltags">
+            <span class="ltag">Tasks / Wahrheit</span>
+            <span class="ltag">Scheduling &amp; Admission</span>
+            <span class="ltag">Identitäten</span>
+            <span class="ltag">Config</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Host-Layer -->
+      <div class="layer-slot">
+        <div class="layer-ghost g2"></div>
+        <div class="layer-ghost g1"></div>
+        <span class="layer-badge teal">× N · FLEET</span>
+        <div class="layer host">
+          <div class="lhead">
+            <span class="lname"><span class="ic"></span> Host-Layer</span>
+            <span class="loc-chip">RUNNER</span>
+          </div>
+          <p class="ldesc">Runner-Hosts führen aus — je Host eigene Kapazität, zwei getrennte Pools.</p>
+          <div class="ltags">
+            <span class="ltag">Build-Slots</span>
+            <span class="ltag">API-Lanes</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Säulen: Wiki, Quality/Test — je ein Touchpoint pro Layer, oben nach unten -->
+    <div class="pillars">
+      <div class="pillar">
+        <span class="phead">Wiki</span>
+        <div class="ptrack">
+          <div class="pitem"><span class="ptag">UI-Layer</span><span class="ptxt">Styleguides &amp; Konventionen — Ziel: alle Agenten lesen von hier</span></div>
+          <div class="pitem"><span class="ptag">Orchestrator</span><span class="ptxt">Klassifikation, Companions, Drift-Analysen</span></div>
+          <div class="pitem"><span class="ptag">Host-Layer</span><span class="ptxt">Agent-Lesezähler pro Zugriff</span></div>
+        </div>
+      </div>
+      <div class="pillar">
+        <span class="phead">Quality · Test</span>
+        <div class="ptrack">
+          <div class="pitem"><span class="ptag">UI-Layer</span><span class="ptxt">Quality Studio — eigenes Produkt daneben</span></div>
+          <div class="pitem"><span class="ptag">Orchestrator</span><span class="ptxt">Code-Review-Grades, Aspekt-Reviews</span></div>
+          <div class="pitem"><span class="ptag">Host-Layer</span><span class="ptxt">Build-Test-Gates · MachineBound-Filter</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</figure>
+<figcaption><b>Abb. 1 — Layer + Säulen.</b> <b style="color:var(--blue-ink)">Blau</b> = Kontrollebene
+(UI-Layer und Orchestrator-Server-Layer — Studio bedient, der Orchestrator-Server ist die einzige
+Instanz, glüht deshalb als einzige Box). <b style="color:var(--teal-ink)">Teal</b> = Ausführungsebene
+(Host-Layer, je Host mit Build-Slots- und API-Lanes-Pool). <b style="color:var(--coral-ink)">Coral</b>
+markiert die beiden Infrastruktur-Säulen, die quer durch alle drei Layer laufen: <b>Wiki</b> als
+Wissensschicht (Klassifikation, Drift-Analysen, Quelle für Agenten-Konventionen, mit Lesezähler) und
+<b>Quality-/Test-Infrastruktur</b> (Build-Test-Gates mit MachineBound-Filter, Review-Grades,
+Aspekt-Reviews, plus Quality Studio als eigenes Produkt neben Studio auf dem UI-Layer).</figcaption>
+
+<!-- ============================================================ -->
+<p class="sec-no"><span class="n">§2</span> · Task-Pipeline</p>
+<h2>Der Lebenszyklus jeder Karte</h2>
+<p class="dim">Die dritte Säule ist kein Querschnitt durch die Layer, sondern ein
+<b>horizontales Band</b>: jede Karte durchläuft dieselben Lanes, unabhängig davon, welcher
+Host oder welches Studio gerade beteiligt ist. Pre- und Post-Steps rahmen die Ausführung,
+zwei Gates entscheiden über den Übergang, Integritäts-Badges bestätigen am Ende die Kette.</p>
+
+<figure>
+<div class="pipeline">
+  <div class="pipe-track">
+    <div class="pipe-node"><div class="pipe-chip">backlog</div></div>
+    <div class="pipe-seg"><div class="line"></div></div>
+    <div class="pipe-node"><div class="pipe-chip">ready</div></div>
+    <div class="pipe-seg"><span class="tag">Pre-Steps</span><div class="line"></div></div>
+    <div class="pipe-node"><div class="pipe-chip">progress</div></div>
+    <div class="pipe-seg"><span class="tag">Post-Steps</span><div class="line"></div></div>
+    <div class="pipe-node"><div class="pipe-chip">review</div></div>
+    <div class="pipe-seg"><span class="tag gate">Completion-Gate</span><div class="line"></div></div>
+    <div class="pipe-node">
+      <div class="pipe-chip gate">human</div>
+      <span class="psub">Human-Gate</span>
+    </div>
+    <div class="pipe-seg"><div class="line"></div></div>
+    <div class="pipe-node">
+      <span class="ibadge">Integritäts-Badges</span>
+      <div class="pipe-chip">done</div>
+    </div>
+  </div>
+</div>
+</figure>
+<figcaption><b>Abb. 2 — Lane-Fluss.</b> Sechs Lanes von <code>backlog</code> bis <code>done</code>;
+<b style="color:var(--coral-ink)">Coral</b> markiert die beiden Gates und den Fluss selbst. Pre-Steps
+laufen vor, Post-Steps nach der eigentlichen Ausführung in <code>progress</code>. Das
+<b>Completion-Gate</b> entscheidet zentral (Orchestrator-Server-Layer), ob eine Karte review-fertig
+ist; das <b>Human-Gate</b> ist die Lane <code>human</code> selbst — ein manueller Schritt vor
+<code>done</code>. Integritäts-Badges bestätigen am Ende, dass die durchlaufene Kette lückenlos war.</figcaption>
+
+<footer class="src">
+  Quellen: <code>docs/system/domains/pipeline.md</code> · <code>docs/system/domains/tasks.md</code> ·
+  <code>docs/quality/architecture-quality-layer/</code> · <code>docs/start/wiki-conventions.md</code>.
+  Ergänzt die Deployment-/Kommunikations-Sicht in <code>docs/concepts/zielarchitektur-diagramm.html</code>
+  um die Schichtenperspektive — beide zeigen dasselbe System aus unterschiedlichem Blickwinkel.
+  Stil adaptiert von <code>microsoft.github.io/agent-host-protocol</code>; Tokens &amp; Template:
+  <code>docs/app/prompts/diagramm-stil-agent-host-protocol.md</code>.
+</footer>
+
+</main>
+
+<script>
+  // Theme-Toggle: prefers-color-scheme ist Default; Klick stampft data-theme.
+  (function(){
+    var b = document.getElementById('tt');
+    var root = document.documentElement;
+    b.addEventListener('click', function(){
+      var cur = root.getAttribute('data-theme');
+      if (!cur) { cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+    });
+  })();
+</script>
+</body>
+</html>

@@ -14,8 +14,6 @@ import { TaskPipelinePollService } from '../../../../polling/services/task-pipel
 import { TaskTimelinePollService } from '../../../../polling/services/task-timeline-poll.service';
 import type {
   PipelineExecutionRecord,
-  PipelineCostSummary,
-  PipelineStepCost,
   PipelineStep,
   PipelineStepConfig,
   PipelineStepStatus,
@@ -42,6 +40,7 @@ import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-ru
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
+import { OverviewFailureComponent } from '../overview-failure/overview-failure.component';
 import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
@@ -62,6 +61,14 @@ import {
   groupToneLabel,
   type PipelineGroupVm,
 } from './pipeline-groups.util';
+import {
+  buildPipelineStepCostTooltip,
+  buildPipelineStepTokenTooltip,
+  buildPipelineTotalCostTooltip,
+  buildPipelineTotalTokenTooltip,
+  formatPipelineCost,
+  formatPipelineTokens,
+} from './pipeline-cost-tooltip.util';
 
 interface PipelineRowVm {
   id: string;
@@ -91,10 +98,7 @@ interface PipelineRowVm {
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
-  /**
-   * Recorded failure / skip detail shown from the status icon. Null for
-   * successful or not-yet-reached steps, and for legacy rows with no reason.
-   */
+  /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
   model: string | null;
   thinkingLevel: string | null;
@@ -294,19 +298,18 @@ function buildConcernTooltip(
   return { title: `${label} · ${kind}`, body: text };
 }
 
-/** Show the recorded cause behind an executed Failed / Skipped status. */
+/** Show failures, skips, and the honest coverage scope behind a passed test gate. */
 function buildStepStatusTooltip(
   label: string,
   status: PipelineRowVm['status'],
   detail: string | null,
 ): StructuredTooltip | null {
-  if (status !== 'failed' && status !== 'skipped') return null;
   const body = detail?.trim();
   if (!body) return null;
-  return {
-    title: `${label}: ${status === 'failed' ? 'Failed' : 'Skipped'}`,
-    body,
-  };
+  const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
+  if (status !== 'failed' && status !== 'skipped' && !passedTestCoverage) return null;
+  const title = status === 'failed' ? 'Failed' : status === 'skipped' ? 'Skipped' : 'Passed';
+  return { title: `${label}: ${title}`, body };
 }
 
 /** Map a steering tone to the tooltip accent colour. */
@@ -406,9 +409,6 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
 };
 
-const API_PRICE_DISCLAIMER =
-  'API price estimate only. Actual CLI billing uses the subscription or plan, not these API rates.';
-
 /**
  * Catalogue id of the single FINAL orchestrator ruling. Only this row earns
  * the "Final verdict" chip / divider; the post-core `post-orchestrator-review`
@@ -479,7 +479,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -794,12 +794,6 @@ export class OverviewPaneComponent {
     return this.clients.resolve(ownerId);
   });
 
-  readonly failureInfo = computed<string | null>(() => {
-    const issue = this.job().outcomeIssue;
-    if (issue) return `${issue.label}: ${issue.summary}`;
-    return null;
-  });
-
   readonly lastRunRecord = computed<RunRecord | null>(() => {
     const r = this.runs();
     return r.length > 0 ? r[r.length - 1] : null;
@@ -901,8 +895,8 @@ export class OverviewPaneComponent {
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
-      const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
-      const costTooltip = this.buildStepCostTooltip(label, c ?? null);
+      const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
+      const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
       const inputTokens = c?.inputTokens ?? e?.inputTokens ?? 0;
       const outputTokens = c?.outputTokens ?? e?.outputTokens ?? 0;
@@ -1324,8 +1318,8 @@ export class OverviewPaneComponent {
       totalCacheCreationCostUsd: c.totalCacheCreationCostUsd,
       totalCostUsd: c.totalCostUsd,
       anyModelUnknown: c.anyModelUnknown,
-      tokenTooltip: this.buildTotalTokenTooltip(c),
-      costTooltip: this.buildTotalCostTooltip(c),
+      tokenTooltip: buildPipelineTotalTokenTooltip(c),
+      costTooltip: buildPipelineTotalCostTooltip(c),
     };
   });
 
@@ -1430,100 +1424,6 @@ export class OverviewPaneComponent {
       next.delete(stepId);
       return next;
     });
-  }
-
-  private buildStepTokenTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
-    if (!cost || cost.totalTokens <= 0) return null;
-    const source = cost.tokenUsageSource?.trim();
-    const costLines = cost.modelKnown
-      ? [
-          `Input API price: ${this.formatCost(cost.inputCostUsd)}`,
-          `Output API price: ${this.formatCost(cost.outputCostUsd)}`,
-          `Cache read API price: ${this.formatCost(cost.cacheReadCostUsd)}`,
-          `Cache creation API price: ${this.formatCost(cost.cacheCreationCostUsd)}`,
-          `Total API price estimate: ${this.formatCost(cost.costUsd)}`,
-        ]
-      : [
-          `Model: ${cost.model ?? 'unknown'}`,
-          'No API price on file for this model.',
-        ];
-    return {
-      title: `${label} tokens`,
-      body: [
-        ...(source ? [`Source: ${source}`] : []),
-        `Input: ${this.formatTokens(cost.inputTokens)}`,
-        `Output: ${this.formatTokens(cost.outputTokens)}`,
-        `Cache read: ${this.formatTokens(cost.cacheReadTokens)}`,
-        `Cache creation: ${this.formatTokens(cost.cacheCreationTokens)}`,
-        `Total: ${this.formatTokens(cost.totalTokens)}`,
-        '',
-        ...costLines,
-        API_PRICE_DISCLAIMER,
-      ].join('\n'),
-    };
-  }
-
-  private buildStepCostTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
-    if (!cost || cost.totalTokens <= 0) return null;
-    if (!cost.modelKnown) {
-      return {
-        title: `${label} cost`,
-        body: `Model: ${cost.model ?? 'unknown'}\nNo price on file for this model.\n${API_PRICE_DISCLAIMER}`,
-      };
-    }
-    return {
-      title: `${label} cost`,
-      body: [
-        `Input: ${this.formatCost(cost.inputCostUsd)}`,
-        `Output: ${this.formatCost(cost.outputCostUsd)}`,
-        `Cache read: ${this.formatCost(cost.cacheReadCostUsd)}`,
-        `Cache creation: ${this.formatCost(cost.cacheCreationCostUsd)}`,
-        `Total: ${this.formatCost(cost.costUsd)}`,
-        API_PRICE_DISCLAIMER,
-      ].join('\n'),
-    };
-  }
-
-  private buildTotalTokenTooltip(cost: PipelineCostSummary): StructuredTooltip | null {
-    if (cost.totalTokens <= 0) return null;
-    const lines = [
-      'Source: SUM of pipeline steps',
-      `Input: ${this.formatTokens(cost.totalInputTokens)}`,
-      `Output: ${this.formatTokens(cost.totalOutputTokens)}`,
-      `Cache read: ${this.formatTokens(cost.totalCacheReadTokens)}`,
-      `Cache creation: ${this.formatTokens(cost.totalCacheCreationTokens)}`,
-      `Total: ${this.formatTokens(cost.totalTokens)}`,
-      '',
-      `Input API price: ${this.formatCost(cost.totalInputCostUsd)}`,
-      `Output API price: ${this.formatCost(cost.totalOutputCostUsd)}`,
-      `Cache read API price: ${this.formatCost(cost.totalCacheReadCostUsd)}`,
-      `Cache creation API price: ${this.formatCost(cost.totalCacheCreationCostUsd)}`,
-      `Total API price estimate: ${this.formatCost(cost.totalCostUsd)}`,
-    ];
-    if (cost.anyModelUnknown) {
-      lines.push('One or more steps used a model with no price on file; the total excludes them.');
-    }
-    lines.push(API_PRICE_DISCLAIMER);
-    return {
-      title: 'Task total tokens (SUM)',
-      body: lines.join('\n'),
-    };
-  }
-
-  private buildTotalCostTooltip(cost: PipelineCostSummary): StructuredTooltip | null {
-    if (cost.totalTokens <= 0) return null;
-    const lines = [
-      `Input: ${this.formatCost(cost.totalInputCostUsd)}`,
-      `Output: ${this.formatCost(cost.totalOutputCostUsd)}`,
-      `Cache read: ${this.formatCost(cost.totalCacheReadCostUsd)}`,
-      `Cache creation: ${this.formatCost(cost.totalCacheCreationCostUsd)}`,
-      `Total: ${this.formatCost(cost.totalCostUsd)}`,
-    ];
-    if (cost.anyModelUnknown) {
-      lines.push('One or more steps used a model with no price on file; the total excludes them.');
-    }
-    lines.push(API_PRICE_DISCLAIMER);
-    return { title: 'Task total cost', body: lines.join('\n') };
   }
 
   /** The current run's execution record, or null before any run. */
@@ -1841,9 +1741,7 @@ export class OverviewPaneComponent {
 
   /** USD formatting: sub-cent costs need more than 2 dp to be non-zero. */
   formatCost(usd: number): string {
-    if (usd <= 0) return '$0.00';
-    if (usd < 0.01) return `$${usd.toFixed(4)}`;
-    return `$${usd.toFixed(2)}`;
+    return formatPipelineCost(usd);
   }
 
   laneLabel(state: string): string {
@@ -1888,11 +1786,7 @@ export class OverviewPaneComponent {
   }
 
   formatTokens(n: number): string {
-    if (n <= 0) return '—';
-    if (n < 1000) return String(n);
-    const scale = n < 1_000_000 ? 1000 : 1_000_000;
-    const suffix = n < 1_000_000 ? 'k' : 'm';
-    return `${(n / scale).toFixed(1).replace(/\.0$/, '')}${suffix}`;
+    return formatPipelineTokens(n);
   }
 
   formatDuration(seconds: number): string {

@@ -95,6 +95,46 @@ const PULSE_FIXTURE = {
     reason: null,
     runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: new Date(Date.now() - 43 * 60_000).toISOString(), docsFilesChanged: 3 }],
   },
+  lifecycle: {
+    available: true,
+    reason: null,
+    count: 4,
+    items: [
+      {
+        relPath: 'concepts/tree-project-indicator-alternatives.md', title: 'Project State Indicator Alternatives',
+        pageKind: 'exploration', state: 'review-requested', editedBy: 'Robert Mischke',
+        editedAtUtc: new Date(Date.now() - 45 * 60_000).toISOString(), history: [], workbenchId: null,
+        valid: true, error: null,
+      },
+      {
+        relPath: 'quality/architecture-quality-layer/index.html', title: 'Architecture and quality layer',
+        pageKind: 'workbench', state: 'review-requested', editedBy: 'AGT-2137',
+        editedAtUtc: new Date(Date.now() - 60 * 60_000).toISOString(), history: [], workbenchId: 'architecture-quality-layer',
+        valid: true, error: null,
+      },
+      {
+        relPath: 'concepts/experimentier-workbench.md', title: 'Experiment workbenches',
+        pageKind: 'concept', state: 'in-progress', editedBy: 'AGT-2137',
+        editedAtUtc: new Date(Date.now() - 2 * 3600_000).toISOString(), history: [], workbenchId: null,
+        valid: true, error: null,
+      },
+      {
+        relPath: 'concepts/wiki-pulse-dashboard.md', title: 'Wiki Pulse dashboard',
+        pageKind: 'concept', state: 'decided', editedBy: 'AGT-2137',
+        editedAtUtc: new Date(Date.now() - 3 * 3600_000).toISOString(), history: [], workbenchId: null,
+        valid: true, error: null,
+      },
+    ],
+  },
+  workbenches: {
+    projectName: 'demo', includesHistory: false, count: 1,
+    items: [{
+      id: 'architecture-quality-layer', title: 'Architecture and quality layer', summary: 'Review the layer.',
+      status: 'active', phase: 'decision-ready', updatedAtUtc: new Date(Date.now() - 60 * 60_000).toISOString(),
+      entryPath: 'quality/architecture-quality-layer/index.html', valid: true, error: null, sourceTaskKeys: ['AGT-2126'],
+      lifecycleState: 'review-requested', editedBy: 'AGT-2137', lifecycleHistory: [],
+    }],
+  },
 };
 
 const MAINTENANCE_MODEL = { cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null };
@@ -151,6 +191,11 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
 
 /** Keeps the spec independent of the host's configured real projects. */
 async function mockProjectContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
   await page.route('**/api/crash-recovery/pending', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -164,7 +209,7 @@ async function mockProjectContext(page: import('@playwright/test').Page): Promis
   await page.route('**/api/projects/demo/wiki/tree', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', relPath: 'README.md' }] }),
+    body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', title: 'Readme', relPath: 'README.md', children: [] }] }),
   }));
   await page.route('**/api/projects/demo/style-guides', route => route.fulfill({
     status: 200,
@@ -267,12 +312,33 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
   });
 
-  test('shows applicable style guides in both themes', async ({ page, devBackend }) => {
+  test('shows applicable style guides and review-first lifecycle groups in both themes', async ({ page, devBackend }) => {
     expect(devBackend.port).toBe(5030);
     await proxyBackend(page);
     await mockProjectContext(page);
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
+    await page.route('**/wiki/files/concepts/tree-project-indicator-alternatives.md', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        relPath: 'concepts/tree-project-indicator-alternatives.md',
+        content: '# Project State Indicator Alternatives\n\nOptions are ready for review.',
+      }),
+    }));
+    await page.route('**/wiki/history/concepts/tree-project-indicator-alternatives.md', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        relPath: 'concepts/tree-project-indicator-alternatives.md',
+        model: null,
+        metadata: {
+          model: null, updatedAt: null, reason: null, taskKey: null,
+          status: null, runCount: null, hasFrontmatter: true,
+        },
+        commits: [],
+      }),
+    }));
     await mockGradingContext(page);
     await page.addInitScript(() => {
       if (!localStorage.getItem('atp.studio.theme')) localStorage.setItem('atp.studio.theme', 'light');
@@ -281,7 +347,15 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
 
     const panel = page.getByTestId('project-wiki-style-guides');
+    const lifecycle = page.getByTestId('project-wiki-pulse-lifecycle');
     await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(lifecycle).toBeVisible();
+    await expect(page.getByTestId('project-wiki-lifecycle-group-review-requested'))
+      .toContainText('Project State Indicator Alternatives');
+    await expect(page.getByTestId('project-wiki-lifecycle-group-in-progress'))
+      .toContainText('Experiment workbenches');
+    await expect(page.getByTestId('project-wiki-lifecycle-group-decided'))
+      .toContainText('Wiki Pulse dashboard');
     await expect(panel).toContainText('Angular component guide');
     await expect(panel).toContainText('.NET backend guide');
     await expect(panel).toContainText('Prompt context · v1');
@@ -289,12 +363,19 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await expect(panel).toContainText('Matches all projects');
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
     await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-light--mocked.png') });
+    await lifecycle.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-lifecycle-light--mocked.png') });
 
     await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'dark'));
     await page.reload();
     await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(lifecycle).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
     await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-dark--mocked.png') });
+    await lifecycle.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-lifecycle-dark--mocked.png') });
+
+    await page.getByTestId('project-wiki-lifecycle-open-concepts/tree-project-indicator-alternatives.md').click();
+    await expect(page.getByTestId('project-wiki-viewer-path'))
+      .toContainText('concepts/tree-project-indicator-alternatives.md');
   });
 
   test('degrades to labelled empty states when a source is unavailable', async ({ page, devBackend }) => {

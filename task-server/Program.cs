@@ -8,6 +8,7 @@ builder.Services.Configure<TaskServerOptions>(builder.Configuration.GetSection(T
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<TaskServerStore>();
 builder.Services.AddSingleton<LegacyMigrationService>();
+builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
 
 var configuredUrl = builder.Configuration[$"{TaskServerOptions.SectionName}:ListenUrl"];
 if (!string.IsNullOrWhiteSpace(configuredUrl)
@@ -22,7 +23,8 @@ await store.InitializeAsync(app.Lifetime.ApplicationStopping);
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api/v1/runners")
-        || context.Request.Path.StartsWithSegments("/api/v1/runs"))
+        || context.Request.Path.StartsWithSegments("/api/v1/runs")
+        || context.Request.Path.StartsWithSegments("/api/v1/reviews"))
     {
         var raw = context.Request.Headers[TaskServerProtocol.HeaderName].FirstOrDefault();
         if (!int.TryParse(raw, out var version) || !TaskServerProtocol.Supports(version))

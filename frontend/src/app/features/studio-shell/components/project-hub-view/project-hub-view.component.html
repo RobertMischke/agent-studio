@@ -83,6 +83,7 @@
   }
   @defer (when activeRail() === 'test-quality') {
     @if (activeRail() === 'test-quality') {
+      <app-project-test-runs-panel [projectName]="projectName()" />
       <app-regression-radar scope="project" [projectName]="projectName()" />
     }
   }
@@ -129,7 +130,7 @@
   }
   @defer (when activeRail() === 'prompts') {
     @if (activeRail() === 'prompts') {
-      <app-prompt-admin-panel />
+      <app-prompt-admin-panel [projectName]="projectName()" />
     }
   }
   @defer (when isSettingsRail(activeRail())) {
@@ -144,6 +145,11 @@
         view="orchestrator"
         (openFeed)="openFeedFromDetail($event)"
         (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'ownership-routing') {
+    @if (activeRail() === 'ownership-routing') {
+      <app-ownership-mapping-panel [projectName]="projectName()" />
     }
   }
 </app-project-shell>

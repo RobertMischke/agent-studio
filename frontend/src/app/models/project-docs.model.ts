@@ -96,7 +96,7 @@ export interface RelatedTaskReference {
 export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
 
 /** Curated consolidation status of a wiki page. */
-export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt';
+export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt' | 'archived';
 
 /**
  * Curation classification of one wiki page (mirrors backend
@@ -110,6 +110,8 @@ export interface WikiClassification {
   supersededBy: string | null;
   /** konzept | adr | contract | domain-map | analyse | runbook | workbench | mockup | proposal | generiert | index */
   type: string | null;
+  /** Canonical interactive page kind derived by the backend. */
+  pageType?: 'doc' | 'concept' | 'workbench' | 'incident' | 'report' | null;
   /** ISO date of the consolidation analysis. */
   analyzedAt: string | null;
 }
@@ -157,6 +159,16 @@ export interface WikiTree {
   baseDir: string;
   exists: boolean;
   root: WikiTreeNode[];
+  source?: WikiSourceInfo | null;
+}
+
+export interface WikiSourceInfo {
+  mode: 'checkout' | 'branch';
+  branch: string;
+  commit: string | null;
+  shortCommit: string | null;
+  writable: boolean;
+  error: string | null;
 }
 
 /** One recently-edited wiki page (page / git author / when), newest first. */
@@ -198,6 +210,10 @@ export interface WorkbenchListItem {
   valid: boolean;
   error: string | null;
   sourceTaskKeys: string[];
+  /** Shared lifecycle projection. Present on schema-v2 descriptors. */
+  lifecycleState?: WikiLifecycleState | null;
+  editedBy?: string | null;
+  lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
 }
 
 export interface WorkbenchCatalogue {
@@ -339,6 +355,36 @@ export interface WikiPulseActivity {
   runs: WikiPulseLiveRun[];
 }
 
+export type WikiLifecyclePageKind = 'design' | 'concept' | 'exploration' | 'workbench';
+export type WikiLifecycleState = 'in-progress' | 'review-requested' | 'decided' | 'done';
+
+export interface WikiLifecycleHistoryEntry {
+  state: WikiLifecycleState | string;
+  editedBy: string | null;
+  editedAtUtc: string;
+  note: string | null;
+}
+
+export interface WikiLifecycleItem {
+  relPath: string;
+  title: string;
+  pageKind: WikiLifecyclePageKind | string;
+  state: WikiLifecycleState | string;
+  editedBy: string | null;
+  editedAtUtc: string | null;
+  history: WikiLifecycleHistoryEntry[];
+  workbenchId: string | null;
+  valid: boolean;
+  error: string | null;
+}
+
+export interface WikiPulseLifecycle {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiLifecycleItem[];
+}
+
 /**
  * The generated wiki Pulse landing view: a read-only composition of the change
  * feed, the sort-needed inbox, the deterministic drift grade bar, and the LLM
@@ -357,6 +403,7 @@ export interface WikiPulse {
   critical: WikiPulseCritical;
   warnings?: WikiPulseWarnings;
   activity?: WikiPulseActivity;
+  lifecycle?: WikiPulseLifecycle;
   workbenches?: WorkbenchCatalogue | null;
 }
 

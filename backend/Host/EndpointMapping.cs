@@ -38,6 +38,7 @@ public static class EndpointMapping
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
+        app.MapAttemptAuthorityEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
         app.MapRunnerEventIngestionEndpoints();
@@ -56,10 +57,12 @@ public static class EndpointMapping
         app.MapSecurityReviewEndpoints();
         app.MapDesignSurfaceEndpoints();
         app.MapProjectTokenUsageEndpoints();
+        app.MapPipelineHealthEndpoints();
         app.MapTokenPricingEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
         app.MapProjectOperatorDashboardEndpoints();
+        app.MapTestRunEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
         if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();
@@ -82,5 +85,6 @@ public static class EndpointMapping
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
         app.MapGlobalSearchEndpoints();
+        app.MapManagementEndpoints();
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 
 namespace AgentRunner;
 
@@ -34,17 +35,24 @@ public sealed class LogShipper
     private readonly string _taskKey;
     private readonly RunLeaseInfoDto _lease;
     private readonly Action<string> _diag;
+    private readonly DurableRunOutbox? _outbox;
     private readonly ConcurrentQueue<CliOutputLine> _pending = new();
     private int _pendingCount;
     private long _dropped;
     private long _reportedDropped;
 
-    public LogShipper(TaskServerClient client, string taskKey, RunLeaseInfoDto lease, Action<string> diag)
+    public LogShipper(
+        TaskServerClient client,
+        string taskKey,
+        RunLeaseInfoDto lease,
+        Action<string> diag,
+        DurableRunOutbox? outbox = null)
     {
         _client = client;
         _taskKey = taskKey;
         _lease = lease;
         _diag = diag;
+        _outbox = outbox;
     }
 
     /// <summary>Approximate number of lines currently buffered (test/diagnostic seam).</summary>
@@ -55,6 +63,15 @@ public sealed class LogShipper
 
     public void Add(string stream, string text)
     {
+        if (_outbox is not null)
+        {
+            _outbox.Enqueue(
+                "log",
+                JsonSerializer.Serialize(
+                    new CliOutputLine(DateTime.UtcNow, stream, text),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            return;
+        }
         _pending.Enqueue(new CliOutputLine(DateTime.UtcNow, stream, text));
         if (Interlocked.Increment(ref _pendingCount) > MaxPendingLines)
             TrimToCap();
@@ -70,20 +87,36 @@ public sealed class LogShipper
     }
 
     /// <summary>Drain the buffer and post it. Safe to call repeatedly; a no-op when empty.</summary>
-    public async Task FlushAsync(CancellationToken ct)
+    public async Task<bool> FlushAsync(CancellationToken ct)
     {
+        if (_outbox is not null)
+        {
+            await _outbox.ReplayAsync(
+                (item, token) => _client.SendOutboxItemAsync(_outbox.Authority, item, token),
+                ct);
+            return true;
+        }
         var batch = new List<CliOutputLine>();
         while (batch.Count < MaxBatchLines && _pending.TryDequeue(out var line))
         {
             Interlocked.Decrement(ref _pendingCount);
             batch.Add(line);
         }
-        if (batch.Count == 0) return;
+        if (batch.Count == 0) return true;
 
         try
         {
+            var delivery = string.Join("\n", batch.Select(x => $"{x.Timestamp:o}|{x.Stream}|{x.Text}"));
             await _client.IngestLogsAsync(new LogIngestRequest(
-                _taskKey, batch, _lease.RunnerId, _lease.LeaseId, _lease.FencingToken), ct);
+                _taskKey,
+                batch,
+                RunnerId: _lease.RunnerId,
+                LeaseId: _lease.LeaseId,
+                FencingToken: _lease.FencingToken,
+                AttemptId: _lease.AttemptId,
+                Fence: _lease.FencingToken,
+                AuthorityEpoch: _lease.AuthorityEpoch,
+                IdempotencyKey: $"logs:{_lease.AttemptId}:{WireDigest.Hash(delivery)}"), ct);
 
             var dropped = Volatile.Read(ref _dropped);
             var reported = Volatile.Read(ref _reportedDropped);
@@ -92,6 +125,7 @@ public sealed class LogShipper
                 _diag($"log buffer capped: dropped {dropped - reported} backlogged line(s) to bound memory");
                 Volatile.Write(ref _reportedDropped, dropped);
             }
+            return true;
         }
         catch (Exception ex)
         {
@@ -105,6 +139,7 @@ public sealed class LogShipper
             }
             TrimToCap();
             _diag($"log ingest failed, will retry: {ex.Message}");
+            return false;
         }
     }
 

@@ -1,3 +1,10 @@
+<!-- Review-first lifecycle surface: the operator sees fresh concepts before the ordinary dashboard feed. -->
+<app-workbench-inbox
+    [lifecycle]="pulse()?.lifecycle ?? null"
+    [catalogue]="pulse()?.workbenches ?? null"
+    (openPage)="openLifecyclePage($event)"
+    (openWorkbench)="openWorkbench.emit($event)" />
+
 <!-- Drift strip: full-width band across the dashboard grid (deterministic, per top-level docs folder). -->
 <section class="wpulse__card wpulse__card--drift" data-testid="project-wiki-pulse-drift" aria-label="Drift grade bar">
   <header class="wpulse__card-head">
@@ -120,13 +127,21 @@
         <ul class="wpulse__list" data-testid="project-wiki-pulse-warnings">
           @for (warning of warningSet.items; track warning.kind + ':' + warning.relPath + ':' + warning.detail) {
             <li class="wpulse__warning" [attr.data-kind]="warning.kind">
-              <span class="wpulse__row-top">
-                <span class="wpulse__signal-kind">{{ warning.kind }}</span>
-                @if (warning.status) { <span class="wpulse__status">{{ warning.status }}</span> }
-              </span>
-              <strong class="wpulse__row-title">{{ warning.title }}</strong>
-              <span class="wpulse__reason">{{ warning.detail }}</span>
-              <span class="wpulse__action">{{ warning.humanAction }}</span>
+              <!-- The whole row opens the affected document: a dead-link report
+                   without a jump to its source forces manual tree hunting. -->
+              <button type="button" class="wpulse__warning-open"
+                      [attr.data-testid]="'project-wiki-pulse-warning-open-' + warning.relPath"
+                      [title]="'Open ' + warning.relPath"
+                      (click)="openWarning(warning)">
+                <span class="wpulse__row-top">
+                  <span class="wpulse__signal-kind">{{ warning.kind }}</span>
+                  <span class="wpulse__warning-doc">{{ warning.relPath }}</span>
+                  @if (warning.status) { <span class="wpulse__status">{{ warning.status }}</span> }
+                </span>
+                <strong class="wpulse__row-title">{{ warning.title }}</strong>
+                <span class="wpulse__reason">{{ warning.detail }}</span>
+                <span class="wpulse__action">{{ warning.humanAction }}</span>
+              </button>
             </li>
           }
         </ul>
@@ -161,9 +176,6 @@
     }
   </article>
 }
-
-<!-- Workbenches: catalogue entries with title + summary line. -->
-<app-workbench-inbox [catalogue]="pulse()?.workbenches ?? null" (openWorkbench)="openWorkbench.emit($event)" />
 
 <!-- In Arbeit: docs-touching live runs. -->
 @if (activity(); as live) {

@@ -1,5 +1,8 @@
 @if (entries().length > 0) {
-  <section class="wstar" data-testid="project-wiki-starred" aria-label="Gestarrte Seiten">
+  <section class="wstar"
+           data-testid="project-wiki-starred"
+           aria-label="Gestarrte Seiten"
+           cacTooltip="Your personal shortlist">
     <header class="wstar__head">
       <span class="wstar__head-icon" aria-hidden="true">
         <app-studio-icon name="starFilled" [size]="13"></app-studio-icon>
@@ -18,7 +21,7 @@
           </button>
           <button class="wstar__remove" type="button"
                   [attr.data-testid]="'project-wiki-starred-remove-' + entry.relPath"
-                  cacTooltip="Stern entfernen"
+                  cacTooltip="Your personal shortlist"
                   (click)="unstar($event, entry)">
             <app-studio-icon name="starFilled" [size]="13"></app-studio-icon>
           </button>

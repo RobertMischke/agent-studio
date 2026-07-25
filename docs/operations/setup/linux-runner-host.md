@@ -24,11 +24,12 @@ Linux host and fills a bounded set of task slots without owning task state:
   credential-free URL and pushes with a write-enabled deploy key dedicated to
   this host and repository. The daemon proves that push identity at startup;
   a failed probe leaves the host read-only and blocks new claims.
-- **Results leave via the API** - CLI output goes to `POST /api/runner/logs`,
-  evidence files under `results/` go to `POST /api/runner/artifacts`, and the
-  terminal sentinel is handed off with fenced `POST /api/runner/completion`.
-  `Done` and `NoOp` enter normal `4-auto-review`; blocked, input, and genuinely
-  unknown outcomes go to human review. Remote runs are not labelled as
+- **Results leave through a durable outbox** - protocol 2 journals CLI output,
+  status, artifacts, Git facts, terminal facts, and the final result envelope
+  under `$RUNNER_WORKDIR/outbox/<run-attempt-id>/` before sending them. The
+  Task Server acknowledges one immutable result, then accepts an idempotent
+  completion. `Done` and `NoOp` enter normal review; blocked, input, and
+  genuinely unknown outcomes remain typed. Remote runs are not labelled as
   out-of-band completions.
 - **Exactly-one-runner is enforced by the fenced lease** - acquire mints a
   fencing token, a heartbeat renews it, and a rejected heartbeat (`StaleToken` /
@@ -42,7 +43,30 @@ Linux host and fills a bounded set of task slots without owning task state:
 - **Every slot has its own linked git worktree** under
   `$RUNNER_WORKDIR/<project-id>/worktrees/<task-key>`. Each project has a shared
   clone at `$RUNNER_WORKDIR/<project-id>/repo`; it is fetched before a claimed
-  task starts. Completed task worktrees are removed after handoff.
+  task starts. A coding worktree is removed only after the Task Server has
+  durably acknowledged the matching immutable result envelope.
+
+### Remote Review Executor service
+
+Run review as a second systemd identity, even when it shares the physical host
+with coding. Set `RUNNER_ROLE=review`, use a different `RUNNER_ID`, service
+account, credential file, cgroup quota, and `RUNNER_REVIEW_WORKDIR`. Do not point
+the review root at `RUNNER_WORKDIR`.
+
+The Review Executor advertises Git/source-bundle, semantic, and vision
+capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
+temporary directory, eight-port block, Compose namespace, database namespace,
+and fenced cleanup lifecycle. Child processes start from a cleared environment.
+Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted; the corresponding
+service credentials must be read-only. Coding deploy keys and write-enabled
+provider credentials must not be present in the review unit.
+
+The executor fetches the immutable result ref or verified Git bundle, proves
+repository identity, HEAD, tree, and clean state, then proves HEAD again before
+every completion, build/test, requirement, quality, documentation, evidence,
+artifact, or vision command. A missing ref reports
+`ReviewInfra/SnapshotUnavailable`; there is no coding-worktree or Task Server
+checkout fallback.
 
 ### MVP boundaries (read before relying on it)
 
@@ -186,8 +210,13 @@ list.
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
+| `RUNNER_ROLE` | `--role` | `coding` | `coding` or the separately registered `review` service. |
+| `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. |
+| `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
+| `RUNNER_STATE_DIR` | `--state-dir` | `$RUNNER_WORKDIR/.runner-state` | Durable slot, attempt, PID, worker result, and file-backed output state used for planned restart reattachment. Keep it on persistent local storage. |
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
 | `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
+| `RUNNER_CLI_RESUME_ARGS` | `--cli-resume-args` | (none) | Optional provider-specific same-session arguments containing the literal `{sessionId}` placeholder. A supported infrastructure failure resumes at most once; an invalid session falls back to durable salvage once and then escalates. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
 | `RUNNER_AUTH_TOKEN` | none | (none) | Compatibility environment input. Prefer the credential file so the secret is absent from process diagnostics. |
 | `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
@@ -198,11 +227,14 @@ list.
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
-- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, text
-  output on stdout that the runner scans for the `[[TASK_*]]` sentinel).
+- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, final
+  response on stdout; the runner accepts a `[[TASK_*]]` sentinel only as its
+  terminal standalone line).
 - Codex: `RUNNER_CLI_BIN=codex`, plus the non-interactive exec flags your version
-  exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
-  script instead of fighting the space-split arg parser.
+  exposes. The runner reads the last completed `agent_message`, not raw JSONL
+  tool, diff, or diagnostic payloads. When quoting gets awkward, point
+  `RUNNER_CLI_BIN` at a small wrapper script instead of fighting the space-split
+  arg parser.
 
 ### Multi-repository clone layout and eligibility
 
@@ -318,6 +350,35 @@ The daemon registers once, polls `POST /api/runner/claim`, and fills free host
 slots. The server only returns pickup-eligible `2-ready` cards from assigned,
 remote-capable projects and moves a successful fenced claim to `3-progress`.
 
+Ready Epic containers are eligible for a special remote planning claim. They
+consume one slot and use the normal lease, heartbeat, telemetry, drain, and
+cancellation lifecycle. The server supplies the same rendered Epic
+decomposition prompt used by the local runner. The daemon creates a bounded,
+detached checkout for read-only repository inspection and removes it after the
+run without creating or pushing a runner branch. A valid plan creates child
+coding cards and sends the Epic to auto-review. Empty or invalid output, or any
+attempted source mutation, returns the Epic to Backlog.
+
+The startup Git push probe still describes coding capability. A host whose
+identity reports `read-only` may claim Epic planning, but it receives no normal
+coding claims until push capability is restored.
+
+At startup the daemon reads `RUNNER_STATE_DIR` before making a new claim. A
+persisted attempt is adopted only when its worker PID still has the recorded
+start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
+then restores the same lease, fence, Task Server run id, and attempt instance,
+and follows the worker's JSONL output file from the persisted sequence. A
+worker that finished during the short restart window is finalized from its
+atomically written result file. The slot enters `launching` before
+`Process.Start`, and the worker writes its own atomic `worker.json` identity
+before starting the CLI. Startup briefly waits for that identity, closing the
+child-start-to-slot-save handoff window without trusting an unverified PID. A
+missing process, reused PID, or worktree mismatch is never heartbeated: the
+lease is actively released and the Task Server returns the Progress card to
+Ready with the next claim using a higher fence. This recovery preserves the
+bounded attempt/autonomy contract; it does not create a second attempt or an
+autonomous task store on the Runner.
+
 ### systemd deployment
 
 Install the shipped unit and an environment file, then enable it:
@@ -335,9 +396,40 @@ At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
 `RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
 sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
 protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
-requests graceful SIGINT shutdown, and best-effort starts
+requests graceful SIGTERM drain, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
+
+The shipped unit deliberately uses `KillMode=process`. This is required:
+`control-group` kills detached job workers and makes safe reattachment
+impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
+`RestartSec=10s` bound a broken-binary restart loop while allowing ordinary
+recovery. Installing or changing the unit requires root, followed by
+`systemctl daemon-reload`.
+
+### Planned daemon restart and deploy
+
+A planned Runner deploy no longer waits for host idle. Replace the published
+files and restart the main service process:
+
+```bash
+sudo systemctl restart agent-runner
+sudo journalctl -u agent-runner --since '-2 minutes' \
+  | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+```
+
+On SIGTERM the old daemon stops making claims, leaves detached job workers
+running, flushes its already-atomic slot records, and exits. systemd starts the
+replacement, which verifies and reattaches those workers before opening any
+freed slot to claims. Confirm every previously occupied slot reports either
+`persisted attempt accepted` or `releasing dead persisted attempt`. The latter
+must be followed by a Ready card and a later higher-fence claim. Do not change
+the unit back to `KillMode=control-group`.
+
+This procedure covers a planned daemon binary restart, not a machine reboot,
+power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
+still use the existing fenced containment and `process-unknown` recovery
+contracts.
 
 ## 5. Run one task end-to-end for diagnostics
 
@@ -356,9 +448,10 @@ The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
 dropped tunnel is reported cleanly *before* any lease or CLI work), **registers
 its client identity** (see below), acquires the fenced lease, starts
 heartbeating, checks out the branch from origin, fetches `prompt.md` over the
-API, spawns the CLI in the working tree, ships stdout/stderr to the server every
-few seconds, uploads everything under `results/`, secures and removes the
-worktree, posts the fenced normal runner completion, and releases the lease.
+API, spawns the CLI in the working tree, journals and ships stdout/stderr,
+journals everything under `results/`, secures the exact result on an immutable
+remote ref, obtains the durable Task Server acknowledgement, removes the
+worktree, posts the idempotent fenced completion, and releases the lease.
 Exit code `0` means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
@@ -368,7 +461,7 @@ For unattended operation, run `agent-runner --health-check` as a readiness probe
 a service. Both are covered in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
-### Worktree salvage before teardown
+### Durable result handoff before teardown
 
 The runner never removes a checkout that contains work available only on the
 host. This rule applies to success, missing terminal sentinels, failure,
@@ -378,10 +471,37 @@ next process starts:
 1. Inspect `git status` in the task worktree.
 2. Commit dirty and untracked files with
    `wip(runner): salvage before teardown - outcome <X>`.
-3. Push run-produced commits to
-   `runner/<runner-id>/<task-key>` and verify the origin ref matches `HEAD`.
-4. Remove the linked worktree only after that verification. A clean checkout
-   at its original commit needs no salvage branch.
+3. Preserve the moving salvage ref at `runner/<runner-id>/<task-key>` using only
+   a normal create or fast-forward push.
+4. Publish the exact result to
+   `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>` and verify that ref.
+5. Send the immutable result envelope. It binds repository ID, source
+   RunAttempt ID, base SHA, result SHA, immutable ref, artifact-manifest digest,
+   and applicable submodule or LFS identities.
+6. Persist the matching Task Server acknowledgement locally.
+7. Remove the linked worktree only after that acknowledgement. A local commit
+   or the moving salvage branch alone is not sufficient.
+
+If upload, push, the connection, the runner process, or the Task Server fails,
+the daemon replays the original monotonic outbox before claiming new work.
+Idempotency keys make a lost response safe. A transfer failure is retried
+without starting the coding CLI and without consuming coding or completion
+budget. `transfer-recovery` means the host still owns recoverable transfer work.
+
+Operators can inspect durable server projections without reading host files:
+
+```bash
+curl -sS https://tasks.example.com/api/v1/management/status
+curl -sS https://tasks.example.com/api/v1/management/outboxes
+curl -sS https://tasks.example.com/api/v1/runs/<run-id>/result-handoff \
+  -H 'X-Task-Protocol-Version: 2'
+```
+
+The status projection includes total backlog, oldest unacknowledged sequence,
+and counts by final handoff state. Each outbox row includes its RunAttempt.
+Result envelopes are retained through task completion and for at least
+`TaskServer:ResultRetentionDays` afterward, default 30 days. Automatic deletion
+is not currently enabled.
 
 On a later pickup, the retained local tip and the existing canonical salvage
 ref are compared by ancestry. Local-ahead is published by normal fast-forward;
@@ -393,14 +513,13 @@ both exact tips, then prepares the new checkout from the canonical SHA and start
 the CLI. Repeating the pickup reuses the same collision ref and creates no extra
 history. No force push is used.
 
-The runner-completion deliverables link a successful salvage branch and its
-commit. A divergent recovery also records the collision ref, canonical and
-local SHAs, and which canonical SHA was the next pickup base. Publishing is
-bounded to three attempts. If the remote check or push still fails, the runner
-leaves the worktree in place and records an open `worktree-blocked` gate item
-containing the host, path, exact known tips, failure, and next safe action. Do
-not delete that path manually. Restore origin access, publish the retained tip
-to a new ref, and close the gate only after that ref is verified.
+The result facts retain the salvage branch and commit. A divergent recovery also
+records the collision ref, canonical and local SHAs, and the typed recovery
+action. Each transfer pass makes three publish attempts. Exhaustion leaves the
+worktree and both tips untouched, records `transfer-recovery`, and retries a
+transfer pass with backoff. It does not complete, move, requeue, or launch a new
+coding attempt. Do not delete that path manually. Restore origin access and let
+the outbox converge.
 
 ### Local-profile client attribution
 
@@ -496,3 +615,9 @@ The host card raises these sustained findings after at least three consecutive s
 - **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.
+
+Claim admission uses the same one-minute load sample. New claims stop only
+after load divided by logical CPU cores remains above
+`RUNNER_CLAIM_MAX_LOAD_PER_CORE` (default `1.5`) for
+`RUNNER_LOAD_GATE_SUSTAINED_SECONDS` (default `120`). Existing runs continue,
+and one recovery event is reported per sustained high-load interval.

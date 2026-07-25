@@ -1,4 +1,6 @@
 import type { ChatNavigationContext } from './models/orchestrator.model';
+import type { PageContext } from '../../models/page-context.model';
+import { pageContextKey } from '../../models/page-context.model';
 
 /**
  * Pure inputs that describe "where the operator is" when they hit send.
@@ -10,6 +12,9 @@ export interface ChatNavigationContextInput {
   activeJobTitle: string | null;
   activeJobState?: string | null;
   laneFilter?: string | null;
+  observedSurface?: string | null;
+  affectedComponent?: string | null;
+  pageContext?: PageContext | null;
   /**
    * Override for tests. Production should leave this undefined so the
    * builder stamps the real wall-clock UTC ISO string at call time.
@@ -38,12 +43,23 @@ export function buildChatNavigationContext(
   const taskTitle = sanitize(input.activeJobTitle);
   const taskState = sanitize(input.activeJobState ?? null);
   const lane = sanitize(input.laneFilter ?? null);
+  const surface = sanitize(input.observedSurface ?? null);
+  const component = sanitize(input.affectedComponent ?? null);
+  const page = input.pageContext ?? null;
 
-  out.currentPage = taskId ? 'task-detail' : 'kanban-board';
-  if (taskId) out.currentTaskId = taskId;
-  if (taskTitle) out.currentTaskTitle = taskTitle;
-  if (taskState) out.currentTaskState = taskState;
+  out.currentPage = page ? 'repository-page' : taskId ? 'task-detail' : 'kanban-board';
+  if (!page && taskId) out.currentTaskId = taskId;
+  if (!page && taskTitle) out.currentTaskTitle = taskTitle;
+  if (!page && taskState) out.currentTaskState = taskState;
   if (lane) out.currentLaneFilter = lane;
+  out.observedSurface = surface ?? 'Agent Studio Orchestrator chat';
+  if (component) out.affectedComponent = component;
+  if (page) {
+    out.pageRef = pageContextKey(page);
+    out.pageTitle = page.title;
+    out.pageType = page.pageType;
+    out.pageExcerpt = page.excerpt;
+  }
 
   const now = (input.now ?? (() => new Date()))();
   out.viewportTimestamp = now.toISOString();

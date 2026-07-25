@@ -36,8 +36,29 @@ public sealed record BuildTestGateRequest(
     bool RequireExactSubject = true)
 {
     public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
+    public string? Project { get; init; }
+    public string? WatchPath { get; init; }
+    public string? JobId { get; init; }
     public string? AttemptChainId { get; init; }
     public string? SubjectRef { get; init; }
+    public string Lane { get; init; } = TaskStates.AutoReview;
+    public string? RequiredTestLevel { get; init; }
+    public TestExecutionPolicy? TestExecution { get; init; }
+    public string? JobFolderPath { get; init; }
+
+    /// <summary>
+    /// SSH host alias of the project's remote execution host. When set, the gate
+    /// FIRST tries to run its verify commands remotely on that host (ssh-gate
+    /// bridge, AGT-2222 tranche 2): the subject SHA is located in the host's
+    /// per-project repos, materialized into a disposable worktree there, and the
+    /// build-profile commands run over ssh - freeing the local machine from
+    /// build/test load. Any remote infrastructure problem falls back to the
+    /// local path. The bridge is superseded by claimable remote gate steps
+    /// (AGT-2229) and then removed wholesale.
+    /// </summary>
+    public string? RemoteSshHost { get; init; }
+    public Action? OnMachineGateWaiting { get; init; }
+    public Action? OnMachineGateAcquired { get; init; }
 
     /// <summary>
     /// Budget for the true infrastructure operations that MUST be quick regardless
@@ -76,6 +97,14 @@ public sealed record BuildTestGateProcessEvidence
     public string StandardError { get; init; } = "";
 }
 
+public sealed record BuildTestGateFinding(
+    string Kind,
+    string Scope,
+    string Command,
+    string Reason,
+    int? ExitCode,
+    string Evidence);
+
 public sealed record BuildTestGateResult(
     BuildTestGateVerdict Verdict,
     int? ExitCode,
@@ -101,6 +130,8 @@ public sealed record BuildTestGateResult(
     public BuildTestGateFailureKind FailureKind { get; init; }
     public string? FailureFingerprint { get; init; }
     public IReadOnlyList<BuildTestGateProcessEvidence> Processes { get; init; } = [];
+    public TestSelectionAudit? TestSelection { get; init; }
+    public IReadOnlyList<BuildTestGateFinding> Findings { get; init; } = [];
     public bool IsInfrastructureFailure => FailureKind is not BuildTestGateFailureKind.None
         and not BuildTestGateFailureKind.Code;
 }
@@ -149,13 +180,22 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private readonly ILogger<BuildTestGateRunner> _logger;
     private readonly ILoadThrottleGate? _loadThrottle;
+    private readonly ITestSelectionAdvisor? _testSelectionAdvisor;
+    private readonly IPipelineHealthSensor? _health;
+    private readonly RemoteGateActivityStore? _remoteGateActivity;
 
     public BuildTestGateRunner(
         ILogger<BuildTestGateRunner> logger,
-        ILoadThrottleGate? loadThrottle = null)
+        ILoadThrottleGate? loadThrottle = null,
+        ITestSelectionAdvisor? testSelectionAdvisor = null,
+        IPipelineHealthSensor? health = null,
+        RemoteGateActivityStore? remoteGateActivity = null)
     {
         _logger = logger;
         _loadThrottle = loadThrottle;
+        _testSelectionAdvisor = testSelectionAdvisor;
+        _health = health;
+        _remoteGateActivity = remoteGateActivity;
     }
 
     public async Task<BuildTestGateResult> RunAsync(
@@ -167,7 +207,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         CancellationToken ct)
     {
         if (mode == PostStepMode.Off) return Skipped("mode=off");
-        if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
+        var requestedLevel = TestSelectionPlanner.ResolveLevel(
+            request.TestExecution, request.Lane, request.RequiredTestLevel);
+        var hasContinuousBaseline = request.TestExecution?.ContinuousCommands?
+            .Any(command => !string.IsNullOrWhiteSpace(command)) == true;
+        if (changedFiles is { Count: > 0 }
+            && !HasCodeDiff(changedFiles)
+            && requestedLevel != TestExecutionLevels.Full
+            && !hasContinuousBaseline)
             return Skipped("no code diff");
 
         var repositoryPath = Path.GetFullPath(request.RepositoryPath);
@@ -188,28 +235,76 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         BuildTestGateResult? completed = null;
         string? workspace = null;
         string? testedSha = null;
+        long fallbackQueueWaitMs = 0;
+        var fallbackCollision = false;
+        DateTime? acquiredAtUtc = null;
         try
         {
-            if (_loadThrottle is not null)
+            // ssh-gate bridge (AGT-2222 tranche 2): try the remote host first.
+            // Success or a genuine remote verdict short-circuits the local path
+            // entirely - no local machine lock, no local build/test load. Only
+            // remote INFRASTRUCTURE problems fall through to the local path.
+            if (request.RemoteSshHost is { Length: > 0 }
+                && request.RequireExactSubject
+                && request.ExpectedSha is { } remoteSha
+                && SafeSha.IsMatch(remoteSha))
+            {
+                var remotePlan = VerifyCommandPlanner.Plan(repositoryPath, profile);
+                List<VerifyCommand> remoteCommands = remotePlan.IsEmpty
+                    ? new()
+                    : remotePlan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+                if (remoteCommands.Count > 0)
+                {
+                    var remote = await TryRunRemoteAsync(
+                        request.RemoteSshHost, remoteSha, gateRunId, remoteCommands,
+                        remotePlan.Source, mode, timeout, queueWaitTimeout,
+                        infrastructureTimeout, ct).ConfigureAwait(false);
+                    if (remote is not null)
+                    {
+                        completed = remote.Result;
+                        workspace = remote.Workspace;
+                        testedSha = remote.TestedSha;
+                        fallbackQueueWaitMs = remote.QueueWaitMs;
+                    }
+                }
+            }
+
+            if (completed is null && _loadThrottle is not null)
             {
                 await _loadThrottle.WaitUntilReadyAsync(
                     $"build-test-gate:{Path.GetFileName(repositoryPath)}", ct).ConfigureAwait(false);
             }
 
-            var acquisition = await AcquireMachineGateAsync(queueWaitTimeout, ct).ConfigureAwait(false);
-            if (acquisition.Lease is null)
+            if (completed is null)
             {
-                completed = InfrastructureFailure(
-                    BuildTestGateFailureKind.Timeout, acquisition.Reason, acquisition.Reason);
+                var acquisition = await AcquireMachineGateAsync(
+                    queueWaitTimeout, request.OnMachineGateWaiting, ct).ConfigureAwait(false);
+                fallbackQueueWaitMs = acquisition.QueueWaitMs;
+                fallbackCollision = acquisition.CollisionDetected;
+                if (acquisition.Lease is null)
+                {
+                    completed = InfrastructureFailure(
+                        BuildTestGateFailureKind.Timeout, acquisition.Reason, acquisition.Reason);
+                }
+                else
+                {
+                    machineLease = acquisition.Lease;
+                    request.OnMachineGateAcquired?.Invoke();
+                    acquiredAtUtc = DateTime.UtcNow;
+                    _logger.LogInformation(
+                        "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
+                        gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
+                    if (HasHealthContext(request))
+                    {
+                        ReportGateAcquired(new PipelineGateContext(
+                            gateRunId,
+                            request.Project!,
+                            request.WatchPath!,
+                            request.JobId!,
+                            acquiredAtUtc.Value));
+                    }
+                }
             }
-            else
-            {
-                machineLease = acquisition.Lease;
-                _logger.LogInformation(
-                    "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
-                    gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
-            }
-
             if (completed is null && request.RequireExactSubject)
             {
                 var prepared = await PrepareExactWorkspaceAsync(
@@ -251,11 +346,35 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 }
                 else
                 {
-                    var commands = plan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+                    var staged = TestSelectionPlanner.Plan(
+                        workspace!, plan, changedFiles, request.TestExecution,
+                        request.Lane, request.RequiredTestLevel);
+                    if (_testSelectionAdvisor is not null
+                        && staged.Audit.Level == TestExecutionLevels.WorkPackage
+                        && staged.Audit.Candidates.Count > 0)
+                    {
+                        var advice = await _testSelectionAdvisor.AdviseAsync(
+                            staged.Audit, request.TestExecution, workspace!,
+                            request.Project, request.JobId, request.JobFolderPath, ct).ConfigureAwait(false);
+                        if (advice is not null)
+                        {
+                            staged = TestSelectionPlanner.Plan(
+                                workspace!, plan, changedFiles, request.TestExecution,
+                                request.Lane, request.RequiredTestLevel, advice);
+                        }
+                    }
+                    var commands = staged.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
                     completed = commands.Count == 0
-                        ? Skipped($"no verify commands apply to the changed files ({plan.Source})")
+                        ? Skipped($"no verify commands apply to the changed files ({plan.Source}); level={staged.Audit.Level}")
+                            with { TestSelection = staged.Audit }
                         : await RunCommandsAsync(workspace!, commands, plan.Source, mode, timeout, ct)
                             .ConfigureAwait(false);
+                    var completedAudit = CompleteAudit(staged.Audit, commands, completed.Processes);
+                    completed = completed with
+                    {
+                        TestSelection = completedAudit,
+                        Reason = CoverageReason(completed.Reason, completedAudit),
+                    };
                 }
             }
 
@@ -279,8 +398,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 GateId = request.GateId,
                 GateStartedAtUtc = startedAt,
                 GateCompletedAtUtc = DateTimeOffset.UtcNow,
-                GateQueueWaitMs = machineLease?.QueueWaitMs ?? acquisition.QueueWaitMs,
-                GateCollisionDetected = machineLease?.CollisionDetected ?? acquisition.CollisionDetected,
+                GateQueueWaitMs = machineLease?.QueueWaitMs ?? fallbackQueueWaitMs,
+                GateCollisionDetected = machineLease?.CollisionDetected ?? fallbackCollision,
                 Repository = repositoryPath,
                 ExpectedSha = request.ExpectedSha,
                 TestedSha = testedSha,
@@ -306,6 +425,272 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 completed?.FailureFingerprint ?? "none",
                 machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0);
             machineLease?.Dispose();
+            machineLease = null;
+            if (acquiredAtUtc.HasValue && HasHealthContext(request))
+            {
+                ReportGateCompleted(new PipelineGateCompletion(
+                    gateRunId,
+                    request.Project!,
+                    request.WatchPath!,
+                    request.JobId!,
+                    completedAt.UtcDateTime,
+                    completed?.FailureFingerprint));
+            }
+        }
+    }
+
+    // ================= ssh-gate bridge (AGT-2222 tranche 2) =================
+    // Deliberately self-contained so the cleanup card can remove the whole
+    // region plus the RemoteSshHost request field once claimable remote gate
+    // steps (AGT-2229) supersede it. Concurrency: the remote host runs up to
+    // RemoteGateSlots verify runs in parallel - independent of the local
+    // machine lock, which remote gates never touch.
+
+    private const int RemoteGateSlots = 4;
+    private static readonly SemaphoreSlim RemoteGate = new(RemoteGateSlots, RemoteGateSlots);
+
+    private sealed record RemoteGateOutcome(
+        BuildTestGateResult Result, string Workspace, string TestedSha, long QueueWaitMs);
+
+    private async Task<RemoteGateOutcome?> TryRunRemoteAsync(
+        string sshHost,
+        string sha,
+        string gateRunId,
+        IReadOnlyList<VerifyCommand> commands,
+        string planSource,
+        PostStepMode mode,
+        TimeSpan timeout,
+        TimeSpan queueWaitTimeout,
+        TimeSpan infrastructureTimeout,
+        CancellationToken ct)
+    {
+        var queueWait = Stopwatch.StartNew();
+        if (!await RemoteGate.WaitAsync(queueWaitTimeout, ct).ConfigureAwait(false))
+        {
+            _logger.LogInformation(
+                "remote_gate_queue_timeout gate_run_id={GateRunId} host={Host}; falling back to the local gate",
+                gateRunId, sshHost);
+            return null;
+        }
+        queueWait.Stop();
+
+        var worktree = $"$HOME/gate-work/{gateRunId}";
+        string? repo = null;
+        var activityStarted = false;
+        try
+        {
+            // 1. Locate a host repo that already knows the subject SHA (second
+            //    pass fetches, in case the branch was pushed after the host's
+            //    last fetch). No hit -> local fallback.
+            var discover = await RunSshCaptureAsync(sshHost,
+                "for d in $HOME/runner-work/*/repo; do if git -C \"$d\" cat-file -e " + sha + "^{commit} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; " +
+                "for d in $HOME/runner-work/*/repo; do git -C \"$d\" fetch -q origin >/dev/null 2>&1; if git -C \"$d\" cat-file -e " + sha + "^{commit} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; echo NONE",
+                infrastructureTimeout, ct).ConfigureAwait(false);
+            var found = discover.Stdout.Split('\n', StringSplitOptions.TrimEntries)
+                .FirstOrDefault(l => l.StartsWith("FOUND:", StringComparison.Ordinal));
+            if (discover.ExitCode != 0 || found is null)
+            {
+                _logger.LogInformation(
+                    "remote_gate_subject_not_on_host gate_run_id={GateRunId} host={Host} sha={Sha} exit={Exit}; falling back to the local gate",
+                    gateRunId, sshHost, sha, discover.ExitCode);
+                return null;
+            }
+            repo = found["FOUND:".Length..];
+
+            // 2. Disposable worktree at the exact SHA; verify HEAD before testing.
+            var prep = await RunSshCaptureAsync(sshHost,
+                $"git -C \"{repo}\" worktree add --detach --force \"{worktree}\" {sha} >/dev/null 2>&1 && git -C \"{worktree}\" rev-parse HEAD",
+                infrastructureTimeout, ct).ConfigureAwait(false);
+            var testedSha = prep.Stdout.Trim().Split('\n').LastOrDefault()?.Trim();
+            if (prep.ExitCode != 0 || !string.Equals(testedSha, sha, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "remote_gate_worktree_failed gate_run_id={GateRunId} host={Host} exit={Exit} head={Head}; falling back to the local gate",
+                    gateRunId, sshHost, prep.ExitCode, testedSha ?? "n/a");
+                return null;
+            }
+
+            _logger.LogInformation(
+                "remote_gate_started gate_run_id={GateRunId} host={Host} repo={Repo} sha={Sha} queue_wait_ms={QueueWaitMs}",
+                gateRunId, sshHost, repo, sha, queueWait.ElapsedMilliseconds);
+            _remoteGateActivity?.Started(gateRunId, sshHost, DateTimeOffset.UtcNow);
+            activityStarted = true;
+
+            // 3. Verify commands over ssh - same loop shape, verdicts and
+            //    fingerprints as the local RunCommandsAsync.
+            var sw = Stopwatch.StartNew();
+            var output = new RingOutput(MaxOutputLines);
+            var evidence = new List<BuildTestGateProcessEvidence>();
+            output.AppendLine($"# verify plan: {planSource} ({commands.Count} command(s)) [remote: {sshHost}]");
+            var ranBackend = false;
+            var ranFrontend = false;
+            BuildTestGateResult result;
+
+            foreach (var command in commands)
+            {
+                if (command.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
+                else ranBackend = true;
+                var remoteDir = string.IsNullOrWhiteSpace(command.WorkingSubdir) || command.WorkingSubdir == "."
+                    ? worktree
+                    : $"{worktree}/{command.WorkingSubdir.Replace('\\', '/')}";
+                output.AppendLine($"# working directory: {sshHost}:{remoteDir}");
+
+                var remaining = Remaining(timeout, sw.Elapsed);
+                var script = $"cd \"{remoteDir}\" && {command.Command}";
+                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
+                // Remote-side `timeout` mirrors the local budget so an ssh kill
+                // never leaves an orphaned build burning the host.
+                var sshCommand = $"echo {b64} | base64 -d | timeout {(int)Math.Max(30, remaining.TotalSeconds)} bash -l";
+                var process = await RunProcessAsync(
+                    Path.GetTempPath(), command.Command, "ssh",
+                    ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost, sshCommand],
+                    remaining, output, ct).ConfigureAwait(false);
+                evidence.Add(process);
+                if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
+                {
+                    sw.Stop();
+                    var kind = ClassifyFailure(process);
+                    var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
+                        ? BuildTestGateVerdict.Warn
+                        : BuildTestGateVerdict.Fail;
+                    var reason = $"{Describe(command)} exit {process.ExitCode?.ToString() ?? "n/a"} [remote:{sshHost}]";
+                    result = WithFailure(new BuildTestGateResult(
+                        verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
+                        reason, ranBackend, ranFrontend)
+                    {
+                        Processes = evidence,
+                        TerminationSignal = process.TerminationSignal,
+                    }, kind);
+                    return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
+                }
+            }
+
+            sw.Stop();
+            result = new BuildTestGateResult(
+                BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds, output.Text,
+                $"verify gate passed ({planSource}) [remote:{sshHost}]", ranBackend, ranFrontend)
+            {
+                Processes = evidence,
+            };
+            return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "remote_gate_failed gate_run_id={GateRunId} host={Host}; falling back to the local gate",
+                gateRunId, sshHost);
+            return null;
+        }
+        finally
+        {
+            if (activityStarted)
+            {
+                _remoteGateActivity?.Completed(gateRunId);
+                _logger.LogInformation(
+                    "remote_gate_completed gate_run_id={GateRunId} host={Host}",
+                    gateRunId, sshHost);
+            }
+            if (repo is not null)
+            {
+                try
+                {
+                    await RunSshCaptureAsync(sshHost,
+                        $"git -C \"{repo}\" worktree remove --force \"{worktree}\" >/dev/null 2>&1; git -C \"{repo}\" worktree prune >/dev/null 2>&1; rm -rf \"{worktree}\"",
+                        infrastructureTimeout, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    SilentCatch.Note(ex, "BuildTestGateRunner: remote gate worktree cleanup");
+                }
+            }
+            RemoteGate.Release();
+        }
+    }
+
+    private sealed record SshCaptureResult(int? ExitCode, string Stdout);
+
+    /// <summary>Small capture runner for the bridge's infra scripts (discovery,
+    /// worktree, cleanup); verify commands go through <see cref="RunProcessAsync"/>
+    /// instead so their output lands in the gate evidence.</summary>
+    private static async Task<SshCaptureResult> RunSshCaptureAsync(
+        string sshHost, string script, TimeSpan timeout, CancellationToken ct)
+    {
+        var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
+        var psi = new ProcessStartInfo
+        {
+            FileName = "ssh",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in new[]
+        {
+            "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost,
+            $"echo {b64} | base64 -d | timeout {(int)Math.Max(15, timeout.TotalSeconds)} bash -l",
+        }) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("ssh process failed to start");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bounded.CancelAfter(timeout + TimeSpan.FromSeconds(20));
+        try
+        {
+            await process.WaitForExitAsync(bounded.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (Exception ex) { SilentCatch.Note(ex, "BuildTestGateRunner: ssh capture kill"); }
+        }
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        _ = await stderrTask.ConfigureAwait(false);
+        return new SshCaptureResult(process.HasExited ? process.ExitCode : null, stdout);
+    }
+
+    // =============== end ssh-gate bridge (AGT-2222 tranche 2) ===============
+
+    private static bool HasHealthContext(BuildTestGateRequest request)
+        => !string.IsNullOrWhiteSpace(request.Project)
+           && !string.IsNullOrWhiteSpace(request.WatchPath)
+           && !string.IsNullOrWhiteSpace(request.JobId);
+
+    private void ReportGateAcquired(PipelineGateContext gate)
+    {
+        try
+        {
+            _health?.GateAcquired(gate);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=acquired gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                gate.GateRunId,
+                gate.Project,
+                gate.JobId);
+        }
+    }
+
+    private void ReportGateCompleted(PipelineGateCompletion completion)
+    {
+        try
+        {
+            _health?.GateCompleted(completion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=completed gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                completion.GateRunId,
+                completion.Project,
+                completion.JobId);
         }
     }
 
@@ -320,6 +705,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var sw = Stopwatch.StartNew();
         var output = new RingOutput(MaxOutputLines);
         var evidence = new List<BuildTestGateProcessEvidence>();
+        var findings = new List<BuildTestGateFinding>();
         output.AppendLine($"# verify plan: {planSource} ({commands.Count} command(s))");
         var ranBackend = false;
         var ranFrontend = false;
@@ -347,8 +733,20 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             evidence.Add(process);
             if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
             {
-                sw.Stop();
                 var kind = ClassifyFailure(process);
+                if (kind == BuildTestGateFailureKind.Code && !command.BlocksWorkPackage)
+                {
+                    findings.Add(new BuildTestGateFinding(
+                        "out-of-work-package-test-failure",
+                        command.TestScope,
+                        command.Command,
+                        $"{Describe(command)} failed outside the selected work package",
+                        process.ExitCode,
+                        LastEvidence(process)));
+                    output.AppendLine("# non-blocking finding: continuous test failure recorded separately");
+                    continue;
+                }
+                sw.Stop();
                 var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
                     ? BuildTestGateVerdict.Warn
                     : BuildTestGateVerdict.Fail;
@@ -358,6 +756,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     reason, ranBackend, ranFrontend)
                 {
                     Processes = evidence,
+                    Findings = findings,
                     TerminationSignal = process.TerminationSignal,
                 }, kind);
             }
@@ -365,11 +764,65 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
         sw.Stop();
         return new BuildTestGateResult(
-            BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds, output.Text,
-            $"verify gate passed ({planSource})", ranBackend, ranFrontend)
+            findings.Count == 0 ? BuildTestGateVerdict.Ok : BuildTestGateVerdict.Warn,
+            0, sw.ElapsedMilliseconds, output.Text,
+            findings.Count == 0
+                ? $"verify gate passed ({planSource})"
+                : $"work-package gate passed with {findings.Count} separate non-blocking finding(s)",
+            ranBackend, ranFrontend)
         {
             Processes = evidence,
+            Findings = findings,
         };
+    }
+
+    private static string CoverageReason(string reason, TestSelectionAudit audit)
+    {
+        var omitted = audit.OmittedTestCommands.Count;
+        return $"{reason}; test-level={audit.Level}; selected={audit.SelectedCommands.Count}; " +
+               (audit.FullSuiteRan
+                   ? audit.FullSuiteRequired ? "full-suite=required-and-run" : "full-suite=run-conservatively"
+                   : $"full-suite=not-run; omitted={omitted}");
+    }
+
+    private static TestSelectionAudit CompleteAudit(
+        TestSelectionAudit audit,
+        IReadOnlyList<VerifyCommand> commands,
+        IReadOnlyList<BuildTestGateProcessEvidence> processes)
+    {
+        if (audit.Level != TestExecutionLevels.Full) return audit;
+
+        // Evidence is appended once per attempted command and commands execute
+        // sequentially. A failure can stop the loop, so only the matching prefix
+        // is known to have run. An empty declared test inventory is complete
+        // after the remaining verify commands finish successfully; the verdict
+        // still guards that case at the pre-main boundary.
+        var attemptedCount = Math.Min(commands.Count, processes.Count);
+        var allTestsAttempted = commands
+            .Select((command, index) => (command, index))
+            .Where(item => item.command.Kind == VerifyCommandKind.Test)
+            .All(item => item.index < attemptedCount
+                && processes[item.index].LaunchError is null);
+        var notRun = commands
+            .Select((command, index) => (command, index))
+            .Where(item => item.command.Kind == VerifyCommandKind.Test
+                && (item.index >= attemptedCount || processes[item.index].LaunchError is not null))
+            .Select(item => TestSelectionPlanner.Describe(item.command));
+        return audit with
+        {
+            FullSuiteRan = allTestsAttempted,
+            OmittedTestCommands = audit.OmittedTestCommands
+                .Concat(notRun)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+        };
+    }
+
+    private static string LastEvidence(BuildTestGateProcessEvidence process)
+    {
+        var text = string.Join('\n', process.StandardOutput, process.StandardError);
+        var lines = text.Replace("\r", string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join('\n', lines.TakeLast(40));
     }
 
     /// <summary>
@@ -397,10 +850,12 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private static async Task<MachineGateAcquisition> AcquireMachineGateAsync(
         TimeSpan queueWaitTimeout,
+        Action? onWaiting,
         CancellationToken ct)
     {
         var wait = Stopwatch.StartNew();
         var collision = !await ProcessGate.WaitAsync(0, ct).ConfigureAwait(false);
+        if (collision) onWaiting?.Invoke();
         var ownsProcessGate = !collision;
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bounded.CancelAfter(queueWaitTimeout);
@@ -424,6 +879,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     if (!OperatingSystem.IsWindows() && !NativeFileLock.TryAcquireExclusive(stream))
                     {
                         stream.Dispose();
+                        if (!collision) onWaiting?.Invoke();
                         collision = true;
                         await Task.Delay(TimeSpan.FromMilliseconds(100), bounded.Token).ConfigureAwait(false);
                         continue;
@@ -987,9 +1443,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         };
     }
 
-    private static bool ShouldRunForChange(VerifyCommand command, IReadOnlyList<string>? changedFiles)
+    internal static bool ShouldRunForChange(VerifyCommand command, IReadOnlyList<string>? changedFiles)
     {
         if (changedFiles is null) return true;
+        // Staged test selection has already applied diff, ownership, Test Hub,
+        // and optional model evidence. Re-applying the legacy package-prefix
+        // filter here would silently discard cross-package tests selected from
+        // history or by the adviser. It would also make an explicit full run
+        // smaller than the declared suite.
+        if (command.Kind == VerifyCommandKind.Test) return true;
         if (command.Ecosystem != VerifyEcosystem.Node || string.IsNullOrEmpty(command.WorkingSubdir))
             return true;
         var prefix = command.WorkingSubdir.Replace('\\', '/').TrimEnd('/') + "/";

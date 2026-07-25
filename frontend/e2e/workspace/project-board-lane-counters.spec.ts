@@ -24,9 +24,22 @@ interface TaskFixture {
   commit: null;
   ownerClientId: string;
   tags: string[];
+  testEvidence?: {
+    runId: string | null;
+    runCommit: string | null;
+    runState: string | null;
+    runResult: string | null;
+    matchQuality: string;
+    direction: string;
+    distance: number | null;
+    diffContained: boolean;
+    evidenceState: string;
+    awaitingEvidence: boolean;
+    summary: string;
+  };
 }
 
-function task(id: string, state: string, order: number): TaskFixture {
+function task(id: string, state: string, order: number, testEvidence?: TaskFixture['testEvidence']): TaskFixture {
   return {
     id,
     taskKey: `${WATCH_PATH}::${id}`,
@@ -48,13 +61,26 @@ function task(id: string, state: string, order: number): TaskFixture {
     commit: null,
     ownerClientId: 'local-default',
     tags: [],
+    testEvidence,
   };
 }
 
 const READY = [
-  task('ready-one', '2-ready', 1),
-  task('ready-two', '2-ready', 2),
-  task('ready-three', '2-ready', 3),
+  task('ready-one', '2-ready', 1, {
+    runId: 'TR-perfect', runCommit: 'a'.repeat(40), runState: 'completed', runResult: 'passed',
+    matchQuality: 'perfect', direction: 'exact', distance: 0, diffContained: true,
+    evidenceState: 'proven', awaitingEvidence: false, summary: 'Perfect match',
+  }),
+  task('ready-two', '2-ready', 2, {
+    runId: 'TR-later', runCommit: 'b'.repeat(40), runState: 'completed', runResult: 'passed',
+    matchQuality: 'contains-diff', direction: 'after', distance: 10, diffContained: true,
+    evidenceState: 'proven', awaitingEvidence: false, summary: '10 commit(s) after, diff included',
+  }),
+  task('ready-three', '2-ready', 3, {
+    runId: null, runCommit: null, runState: null, runResult: null,
+    matchQuality: 'none', direction: 'none', distance: null, diffContained: false,
+    evidenceState: 'unassigned', awaitingEvidence: false, summary: 'No matching test run',
+  }),
 ];
 const PROGRESS = [
   task('progress-one', '3-progress', 1),
@@ -97,6 +123,9 @@ function json(route: Route, body: unknown): Promise<void> {
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
+    if (url.includes('/api/auth/status')) {
+      return json(route, { profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
+    }
     if (url.includes('/api/tasks/grouped') || url.includes('/api/tasks/grouped')) {
       return json(route, GROUPED);
     }
@@ -231,4 +260,20 @@ test('each lane counter explains its lane via the canonical appTooltip', async (
     path: tipShot,
     contentType: 'image/png',
   });
+});
+
+test('cards show exact, later-containing, and unassigned test-run evidence', async ({ page }) => {
+  await boot(page);
+
+  const evidence = page.getByTestId('task-card-test-evidence');
+  await expect(evidence).toHaveCount(3);
+  await expect(evidence.filter({ hasText: 'Perfect match' })).toHaveAttribute('data-match-quality', 'perfect');
+  await expect(evidence.filter({ hasText: '10 commit(s) after, diff included' })).toHaveAttribute('data-match-quality', 'contains-diff');
+  const unassigned = evidence.filter({ hasText: 'No matching test run' });
+  await expect(unassigned).toHaveAttribute('data-evidence-state', 'unassigned');
+  await expect(unassigned).toContainText('No run is allowed to imply green evidence');
+
+  const boardShot = test.info().outputPath('task-card-test-run-evidence.png');
+  await page.getByTestId('studio-board').screenshot({ path: boardShot });
+  await test.info().attach('task-card-test-run-evidence', { path: boardShot, contentType: 'image/png' });
 });

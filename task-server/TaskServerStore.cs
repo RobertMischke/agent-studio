@@ -2,22 +2,28 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AgentStudio.TaskServer.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 
 namespace AgentStudio.TaskServer;
 
-public sealed class TaskServerStore
+public sealed partial class TaskServerStore
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 3;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly DateTime _startedAt;
+    private static readonly JsonSerializerOptions OutcomeJson = CreateOutcomeJson();
     private string _serverId = string.Empty;
     private TaskServerMode _mode = TaskServerMode.Maintenance;
+    private int _outboxBacklog;
+    private long? _oldestUnacknowledgedSequence;
+    private IReadOnlyDictionary<string, int> _finalHandoffStates =
+        new Dictionary<string, int>(StringComparer.Ordinal);
 
     public TaskServerStore(IOptions<TaskServerOptions> options, TimeProvider clock)
     {
@@ -52,6 +58,7 @@ public sealed class TaskServerStore
             _mode = Enum.TryParse<TaskServerMode>(storedMode, true, out var parsedMode)
                 ? parsedMode
                 : TaskServerMode.Maintenance;
+            await RefreshOutboxSummaryAsync(connection, cancellationToken);
 
             // A server restart cannot infer that an old runner process stopped.
             // Preserve its fence and fail the attempt closed until an explicit,
@@ -63,6 +70,9 @@ public sealed class TaskServerStore
                 UPDATE runs
                    SET status = 'process-unknown'
                  WHERE status = 'running';
+                UPDATE review_attempts
+                   SET status = 'process-unknown'
+                 WHERE status = 'leased';
                 """, cancellationToken);
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
@@ -94,7 +104,10 @@ public sealed class TaskServerStore
                 version,
                 _serverId,
                 ["studio", "runner", "management"]),
-            _startedAt);
+            _startedAt,
+            _outboxBacklog,
+            _oldestUnacknowledgedSequence,
+            _finalHandoffStates);
     }
 
     public async Task<WorkspaceDto> CreateWorkspaceAsync(CreateWorkspaceRequest request, string actorId, CancellationToken ct)
@@ -214,6 +227,49 @@ public sealed class TaskServerStore
         return result;
     }
 
+    public async Task<IReadOnlyList<ExecutionAttemptTimelineDto>> ListAttemptsAsync(
+        string projectId,
+        string taskIdentity,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        string? taskId;
+        await using (var taskCommand = Command(connection, """
+            SELECT id FROM tasks
+             WHERE project_id = $project AND (id = $identity OR task_key = upper($identity));
+            """, ("$project", projectId), ("$identity", taskIdentity)))
+        {
+            taskId = Convert.ToString(await taskCommand.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        }
+        if (string.IsNullOrWhiteSpace(taskId)) throw new KeyNotFoundException("Task was not found.");
+
+        var runs = new List<RunDto>();
+        await using (var runCommand = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at
+              FROM runs WHERE task_id = $task ORDER BY created_at, id;
+            """, ("$task", taskId)))
+        await using (var reader = await runCommand.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct)) runs.Add(ReadRun(reader));
+        }
+
+        var result = new List<ExecutionAttemptTimelineDto>(runs.Count);
+        foreach (var run in runs)
+        {
+            await using var outcomeCommand = Command(connection, """
+                SELECT payload_json FROM events
+                 WHERE run_id = $run AND kind = 'execution.outcome.classified'
+                 ORDER BY cursor DESC LIMIT 1;
+                """, ("$run", run.RunId));
+            var payload = Convert.ToString(await outcomeCommand.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+            var decision = string.IsNullOrWhiteSpace(payload)
+                ? null
+                : JsonSerializer.Deserialize<ExecutionOutcomeDecision>(payload, OutcomeJson);
+            result.Add(new ExecutionAttemptTimelineDto(run, decision));
+        }
+        return result;
+    }
+
     public async Task<TaskDto?> UpdateTaskAsync(string projectId, string taskIdentity, UpdateTaskRequest request, string actorId, CancellationToken ct)
     {
         RequireWritable();
@@ -239,6 +295,20 @@ public sealed class TaskServerStore
                 """, ct, transaction,
                 ("$title", updated.Title), ("$body", updated.Body), ("$state", updated.State),
                 ("$version", updated.Version), ("$updated", Iso(now)), ("$id", updated.TaskId), ("$expected", request.ExpectedVersion));
+            if (updated.State is "6-completed" or "7-archive")
+            {
+                var retainedThrough = now.AddDays(Math.Max(1, _options.ResultRetentionDays));
+                await ExecuteAsync(connection, """
+                    UPDATE result_handoffs
+                       SET retain_until = CASE
+                           WHEN retain_until < $retained_through THEN $retained_through
+                           ELSE retain_until
+                       END
+                     WHERE task_id = $task;
+                    """, ct, transaction,
+                    ("$retained_through", Iso(retainedThrough)),
+                    ("$task", updated.TaskId));
+            }
             await AuditAsync(connection, transaction, actorId, "task.updated", "task", updated.TaskId,
                 JsonSerializer.Serialize(new { request.ExpectedVersion, updated.Version, updated.State }), ct);
         }, ct);
@@ -252,11 +322,39 @@ public sealed class TaskServerStore
             throw new TaskServerProtocolException(request.ProtocolVersion);
         if (string.IsNullOrWhiteSpace(request.InstanceId) || string.IsNullOrWhiteSpace(request.HostId))
             throw new ArgumentException("Runner host and instance ids are required.");
+        var capabilities = request.Capabilities ?? [];
+        if (capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+            throw new TaskServerConflictException(
+                "runner-role-conflict",
+                "Coding and review executors require separate registered service identities.");
 
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            var existingCapabilitiesJson = Convert.ToString(
+                await ScalarAsync(
+                    connection,
+                    "SELECT capabilities_json FROM runners WHERE id = $id;",
+                    ct,
+                    transaction,
+                    ("$id", id)),
+                CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(existingCapabilitiesJson))
+            {
+                var existingCapabilities =
+                    JsonSerializer.Deserialize<string[]>(existingCapabilitiesJson) ?? [];
+                var changesExecutorRole =
+                    existingCapabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+                    && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                    || existingCapabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                    && capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal);
+                if (changesExecutorRole)
+                    throw new TaskServerConflictException(
+                        "runner-role-conflict",
+                        "A registered coding or review service identity cannot be reused for the other executor role.");
+            }
             await ExecuteAsync(connection, """
                 INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version, capabilities_json, status, registered_at, last_seen_at)
                 VALUES ($id, $name, $host, $instance, $version, $protocol, $capabilities, 'active', $now, $now)
@@ -272,7 +370,7 @@ public sealed class TaskServerStore
                 """, ct, transaction,
                 ("$id", id), ("$name", request.Name.Trim()), ("$host", request.HostId.Trim()),
                 ("$instance", request.InstanceId.Trim()), ("$version", request.RunnerVersion),
-                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(request.Capabilities ?? [])), ("$now", now));
+                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)), ("$now", now));
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new { request.HostId, request.InstanceId, request.RunnerVersion, request.ProtocolVersion }), ct);
         }, ct);
@@ -282,17 +380,28 @@ public sealed class TaskServerStore
 
     public async Task<ClaimResponse> ClaimAsync(ClaimRequest request, string actorId, CancellationToken ct)
     {
-        RequireAdmission();
+        if (request.AvailableSlots > 0)
+            RequireAdmission();
+        else
+            RequireWritable();
         ClaimResponse? response = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             await ValidateRunnerAsync(connection, transaction, request.RunnerId, request.InstanceId, ct);
+            await RecordRunnerInventoryAsync(
+                connection, transaction, request.RunnerId, request.InstanceId,
+                request.Inventory, actorId, ct);
+            var reconciliationActions = await ReadPendingReconciliationActionsAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
             await ExecuteAsync(connection, "UPDATE runners SET last_seen_at = $now WHERE id = $id;", ct, transaction,
                 ("$now", Iso(UtcNow)), ("$id", request.RunnerId));
 
             if (request.AvailableSlots <= 0)
             {
-                response = new ClaimResponse("empty", Message: "Runner has no available execution slot.");
+                response = new ClaimResponse(
+                    "empty",
+                    Message: "Runner has no available execution slot.",
+                    ReconciliationActions: reconciliationActions);
                 return;
             }
 
@@ -312,7 +421,10 @@ public sealed class TaskServerStore
 
             if (task is null)
             {
-                response = new ClaimResponse("empty", Message: "No admissible task is ready.");
+                response = new ClaimResponse(
+                    "empty",
+                    Message: "No admissible task is ready.",
+                    ReconciliationActions: reconciliationActions);
                 return;
             }
 
@@ -342,20 +454,33 @@ public sealed class TaskServerStore
 
             var run = new RunDto(runId, task.TaskId, "running", request.RunnerId, fence, now, now, null);
             var lease = new LeaseDto(leaseId, runId, task.TaskId, request.RunnerId, request.InstanceId, fence, now, expires, "active");
-            response = new ClaimResponse("claimed", run, task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now }, lease);
+            response = new ClaimResponse(
+                "claimed",
+                run,
+                task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now },
+                lease,
+                ReconciliationActions: reconciliationActions);
         }, ct);
         return response!;
     }
 
     public async Task<LeaseResponse> RenewLeaseAsync(string runId, LeaseRenewRequest request, string actorId, CancellationToken ct)
     {
-        RequireAdmission();
+        // Draining closes new admission, not heartbeat renewal for work that is
+        // already fenced. ReadOnly and Maintenance still block the write.
+        RequireWritable();
         LeaseDto? renewed = null;
+        IReadOnlyList<RunnerReconciliationAction> reconciliationActions = [];
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.Fence);
+            await RecordRunnerInventoryAsync(
+                connection, transaction, request.RunnerId, request.InstanceId,
+                request.Inventory, actorId, ct);
+            reconciliationActions = await ReadPendingReconciliationActionsAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
             if (!string.Equals(lease.Status, "active", StringComparison.Ordinal))
                 throw new TaskServerConflictException("lease-not-active", $"Lease status is '{lease.Status}'.");
             if (lease.ExpiresAt <= UtcNow)
@@ -371,7 +496,10 @@ public sealed class TaskServerStore
             await AuditAsync(connection, transaction, actorId, "lease.renewed", "run", runId,
                 JsonSerializer.Serialize(new { request.Fence, expiresAt = expires }), ct);
         }, ct);
-        return new LeaseResponse("renewed", renewed);
+        return new LeaseResponse(
+            "renewed",
+            renewed,
+            ReconciliationActions: reconciliationActions);
     }
 
     public async Task<LeaseResponse> ReleaseLeaseAsync(string runId, LeaseReleaseRequest request, string actorId, CancellationToken ct)
@@ -388,12 +516,173 @@ public sealed class TaskServerStore
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'released' WHERE run_id = $run;
                 UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
-                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome), ("$now", Iso(UtcNow)));
+                UPDATE tasks SET state = '2-ready', version = version + 1, updated_at = $now
+                 WHERE id = $task AND state = '3-progress';
+                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome),
+                ("$now", Iso(UtcNow)), ("$task", lease.TaskId));
             released = lease with { Status = "released" };
             await AuditAsync(connection, transaction, actorId, "lease.released", "run", runId,
                 JsonSerializer.Serialize(new { request.Fence, request.Outcome }), ct);
         }, ct);
         return new LeaseResponse("released", released);
+    }
+
+    public async Task<ResultHandoffAck> AcknowledgeResultHandoffAsync(
+        string runId,
+        ResultHandoffRequest request,
+        string actorId,
+        CancellationToken ct)
+    {
+        RequireWritable();
+        ResultEnvelopeDigest.Validate(request.Envelope);
+        if (!string.Equals(request.Envelope.SourceRunAttemptId, runId, StringComparison.Ordinal))
+            throw new ArgumentException("Result envelope sourceRunAttemptId must match the route run id.");
+        var computedDigest = ResultEnvelopeDigest.Compute(request.Envelope);
+        if (!string.Equals(computedDigest, request.EnvelopeDigest, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Result envelope digest does not match the canonical envelope.");
+        ValidateImmutableSource(runId, request.Envelope);
+
+        ResultHandoffAck? acknowledgement = null;
+        await InWriteTransactionAsync(async (connection, transaction) =>
+        {
+            var existing = await ReadResultHandoffAsync(connection, transaction, runId, ct);
+            if (existing is not null)
+            {
+                ValidateHandoffReplay(existing, request);
+                await RestoreHandoffReplayAuthorityAsync(
+                    connection, transaction, runId, request, ct);
+                acknowledgement = existing.Acknowledgement with { Replay = true };
+                return;
+            }
+
+            var idempotent = await ReadResultHandoffByKeyAsync(
+                connection, transaction, request.IdempotencyKey, ct);
+            if (idempotent is not null)
+            {
+                ValidateHandoffReplay(idempotent, request);
+                await RestoreHandoffReplayAuthorityAsync(
+                    connection, transaction, runId, request, ct);
+                acknowledgement = idempotent.Acknowledgement with { Replay = true };
+                return;
+            }
+
+            var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
+                ?? throw new KeyNotFoundException("Run lease was not found.");
+            ValidateLeaseReference(
+                lease,
+                request.RunnerId,
+                request.InstanceId,
+                request.LeaseId,
+                request.Fence);
+            await EnsureOutboxLeaseCurrentAsync(connection, transaction, lease, ct);
+            var now = UtcNow;
+            var retainUntil = now.AddDays(Math.Max(1, _options.ResultRetentionDays));
+            await RecordOutboxSequenceAsync(
+                connection,
+                transaction,
+                runId,
+                request.Sequence,
+                request.IdempotencyKey,
+                "result-handoff",
+                ct);
+            await ExecuteAsync(connection, """
+                INSERT INTO result_handoffs(
+                    run_id, task_id, runner_id, instance_id, lease_id, fence,
+                    repository_id, repository_url, source_run_attempt_id,
+                    base_sha, result_sha, immutable_remote_ref, source_bundle_digest,
+                    artifact_manifest_digest, submodules_json, lfs_objects_json,
+                    envelope_digest, sequence, idempotency_key, acknowledged_at, retain_until)
+                VALUES (
+                    $run, $task, $runner, $instance, $lease, $fence,
+                    $repository, $repository_url, $source_run, $base_sha, $result_sha,
+                    $remote_ref, $bundle_digest, $manifest_digest, $submodules,
+                    $lfs, $envelope_digest, $sequence, $key, $acknowledged, $retain_until);
+                """, ct, transaction,
+                ("$run", runId),
+                ("$task", lease.TaskId),
+                ("$runner", request.RunnerId),
+                ("$instance", request.InstanceId),
+                ("$lease", request.LeaseId),
+                ("$fence", request.Fence),
+                ("$repository", request.Envelope.RepositoryId),
+                ("$repository_url", request.Envelope.RepositoryUrl),
+                ("$source_run", request.Envelope.SourceRunAttemptId),
+                ("$base_sha", request.Envelope.BaseSha.ToLowerInvariant()),
+                ("$result_sha", request.Envelope.ResultSha.ToLowerInvariant()),
+                ("$remote_ref", request.Envelope.ImmutableRemoteRef),
+                ("$bundle_digest", request.Envelope.SourceBundleDigest),
+                ("$manifest_digest", request.Envelope.ArtifactManifestDigest.ToLowerInvariant()),
+                ("$submodules", JsonSerializer.Serialize(request.Envelope.Submodules ?? [])),
+                ("$lfs", JsonSerializer.Serialize(request.Envelope.LfsObjects ?? [])),
+                ("$envelope_digest", computedDigest),
+                ("$sequence", request.Sequence),
+                ("$key", request.IdempotencyKey),
+                ("$acknowledged", Iso(now)),
+                ("$retain_until", Iso(retainUntil)));
+            await AuditAsync(
+                connection,
+                transaction,
+                actorId,
+                "result-handoff.acknowledged",
+                "run",
+                runId,
+                JsonSerializer.Serialize(new
+                {
+                    request.Sequence,
+                    envelopeDigest = computedDigest,
+                    request.Envelope.RepositoryId,
+                    request.Envelope.ResultSha,
+                    request.Envelope.ImmutableRemoteRef,
+                    request.Envelope.SourceBundleDigest,
+                    retainUntil,
+                }),
+                ct);
+            acknowledgement = new ResultHandoffAck(
+                runId,
+                request.Sequence,
+                computedDigest,
+                "acknowledged",
+                now,
+                retainUntil,
+                false);
+        }, ct);
+        return acknowledgement!;
+    }
+
+    public async Task<ResultHandoffDto?> GetResultHandoffAsync(
+        string runId,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        await using var command = Command(connection, """
+            SELECT run_id, repository_id, source_run_attempt_id, base_sha,
+                   result_sha, immutable_remote_ref, source_bundle_digest,
+                   artifact_manifest_digest, submodules_json, lfs_objects_json,
+                   envelope_digest, sequence, acknowledged_at, retain_until,
+                   repository_url
+              FROM result_handoffs
+             WHERE run_id = $run;
+            """, ("$run", runId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        var envelope = new ImmutableResultEnvelope(
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6),
+            reader.GetString(7),
+            JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(8)),
+            JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(9)),
+            reader.IsDBNull(14) ? null : reader.GetString(14));
+        return new ResultHandoffDto(
+            reader.GetString(0),
+            envelope,
+            reader.GetString(10),
+            reader.GetInt64(11),
+            Parse(reader.GetString(12)),
+            Parse(reader.GetString(13)));
     }
 
     public async Task<RunDto> CompleteRunAsync(string runId, CompleteRunRequest request, string actorId, CancellationToken ct)
@@ -402,19 +691,168 @@ public sealed class TaskServerStore
         RunDto? completed = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            if (request.OutcomeDecision is not null
+                && !string.Equals(
+                    request.Outcome,
+                    request.OutcomeDecision.Outcome.ToString(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new TaskServerConflictException(
+                    "outcome-decision-mismatch",
+                    "The run outcome does not match the shared typed outcome decision.");
+            }
+
+            var outcomePayload = request.OutcomeDecision is null
+                ? null
+                : JsonSerializer.Serialize(request.OutcomeDecision, OutcomeJson);
+            var outcomeKey = $"execution-outcome:{runId}:{request.OutcomeDecision?.ClassifierVersion}";
+            var prior = await ReadRunCompletionAsync(connection, transaction, runId, ct);
+            if (prior is not null)
+            {
+                ValidateCompletionReplay(prior, request);
+                if (outcomePayload is not null)
+                {
+                    var priorOutcome = await ReadEventByIdempotencyKeyAsync(
+                        connection,
+                        transaction,
+                        outcomeKey,
+                        ct);
+                    if (priorOutcome is null
+                        || !string.Equals(
+                            priorOutcome.PayloadJson,
+                            outcomePayload,
+                            StringComparison.Ordinal))
+                    {
+                        throw new TaskServerConflictException(
+                            "completion-conflict",
+                            "The run is already completed with different classified facts.");
+                    }
+                }
+                completed = prior.Run;
+                return;
+            }
+
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.Fence);
-            await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
+            await EnsureOutboxLeaseCurrentAsync(
+                connection,
+                transaction,
+                lease,
+                request.RunnerId,
+                request.InstanceId,
+                request.LeaseId,
+                ct);
+            StoredResultHandoff? resultHandoff = null;
+            if (RequiresResultEnvelope(request.Outcome))
+            {
+                if (string.IsNullOrWhiteSpace(request.ResultEnvelopeDigest))
+                    throw new TaskServerConflictException(
+                        "result-handoff-required",
+                        "Successful coding completion requires an acknowledged immutable result envelope.");
+                resultHandoff = await ReadResultHandoffAsync(connection, transaction, runId, ct);
+                if (resultHandoff is null
+                    || !string.Equals(
+                        resultHandoff.Acknowledgement.EnvelopeDigest,
+                        request.ResultEnvelopeDigest,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new TaskServerConflictException(
+                        "result-handoff-required",
+                        "Successful coding completion requires the matching acknowledged immutable result envelope.");
+                }
+            }
+            if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || request.Sequence is null)
+                throw new ArgumentException("Run completion idempotencyKey and monotonic sequence are required.");
+            await RecordOutboxSequenceAsync(
+                connection,
+                transaction,
+                runId,
+                request.Sequence,
+                request.IdempotencyKey,
+                "completion",
+                ct);
             var now = UtcNow;
+            if (request.OutcomeDecision is not null)
+            {
+                if (!string.Equals(request.OutcomeDecision.RawFacts.AttemptId, runId, StringComparison.Ordinal))
+                    throw new TaskServerConflictException("attempt-identity-mismatch", "Outcome facts are not bound to this immutable attempt.");
+
+                var eventId = DeterministicId("evt", outcomeKey);
+                var eventRequest = new EventIngestRequest(
+                    eventId,
+                    "execution.outcome.classified",
+                    outcomePayload!,
+                    outcomeKey,
+                    request.Fence,
+                    now);
+                await ExecuteAsync(connection, """
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred)
+                    ON CONFLICT(idempotency_key) DO NOTHING;
+                    """, ct, transaction,
+                    ("$event", eventId), ("$run", runId), ("$task", lease.TaskId),
+                    ("$kind", eventRequest.Kind), ("$payload", outcomePayload), ("$key", outcomeKey),
+                    ("$fence", request.Fence), ("$occurred", Iso(now)));
+                var persisted = await ReadEventByIdempotencyKeyAsync(connection, transaction, outcomeKey, ct);
+                ValidateEventReplay(persisted, runId, lease.TaskId, eventRequest);
+            }
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'completed' WHERE run_id = $run;
-                UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
+                UPDATE runs
+                   SET status = $outcome,
+                       finished_at = $now,
+                       result_sha = $resultSha,
+                       repository_id = $repositoryId,
+                       repository_url = $repositoryUrl,
+                       result_ref = $resultRef,
+                       source_bundle_artifact_id = NULL,
+                       source_bundle_sha256 = $bundleSha
+                 WHERE id = $run;
                 UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
-                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome), ("$now", Iso(now)), ("$task", lease.TaskId));
+                INSERT INTO run_completions(
+                    run_id, outcome, summary, envelope_digest, sequence,
+                    idempotency_key, completed_at)
+                VALUES (
+                    $run, $outcome, $summary, $envelope_digest, $sequence,
+                    $key, $now);
+                """, ct, transaction,
+                ("$run", runId),
+                ("$outcome", request.Outcome),
+                ("$summary", request.Summary),
+                ("$envelope_digest", request.ResultEnvelopeDigest),
+                ("$sequence", request.Sequence),
+                ("$key", request.IdempotencyKey),
+                ("$now", Iso(now)),
+                ("$task", lease.TaskId),
+                ("$resultSha", resultHandoff?.Envelope.ResultSha),
+                ("$repositoryId", resultHandoff?.Envelope.RepositoryId),
+                ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
+                ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
+                ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
-                JsonSerializer.Serialize(new { request.Fence, request.Outcome, request.Summary }), ct);
-            completed = new RunDto(runId, lease.TaskId, request.Outcome, request.RunnerId, request.Fence, lease.AcquiredAt, lease.AcquiredAt, now);
+                JsonSerializer.Serialize(new
+                {
+                    request.Fence,
+                    request.Outcome,
+                    request.Summary,
+                    request.ResultEnvelopeDigest,
+                    request.Sequence,
+                    request.IdempotencyKey,
+                    classifierVersion = request.OutcomeDecision?.ClassifierVersion,
+                    recoveryAction = request.OutcomeDecision?.RecoveryAction.ToString(),
+                }), ct);
+            completed = new RunDto(
+                runId,
+                lease.TaskId,
+                request.Outcome,
+                request.RunnerId,
+                request.Fence,
+                lease.AcquiredAt,
+                lease.AcquiredAt,
+                now,
+                resultHandoff?.Envelope.ResultSha,
+                resultHandoff?.Envelope.RepositoryId);
         }, ct);
         return completed!;
     }
@@ -425,19 +863,43 @@ public sealed class TaskServerStore
         EventDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            var replay = await ReadEventByIdempotencyKeyAsync(
+                connection, transaction, request.IdempotencyKey, ct);
+            if (replay is not null)
+            {
+                ValidateEventReplay(replay, runId, replay.TaskId, request);
+                result = replay;
+                return;
+            }
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             if (lease.Fence != request.Fence)
                 throw new TaskServerConflictException("stale-fence", "Event fence does not match the run authority.");
-            await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
+            await EnsureOutboxLeaseCurrentAsync(
+                connection,
+                transaction,
+                lease,
+                request.RunnerId,
+                request.InstanceId,
+                request.LeaseId,
+                ct);
+            await RecordOutboxSequenceAsync(
+                connection,
+                transaction,
+                runId,
+                request.Sequence,
+                request.IdempotencyKey,
+                "event",
+                ct);
             var occurred = request.OccurredAt?.ToUniversalTime() ?? UtcNow;
             var inserted = await ExecuteAsync(connection, """
-                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
-                VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred)
+                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at, sequence)
+                VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred, $sequence)
                 ON CONFLICT(idempotency_key) DO NOTHING;
                 """, ct, transaction,
                 ("$event", request.EventId), ("$run", runId), ("$task", lease.TaskId), ("$kind", request.Kind),
-                ("$payload", request.PayloadJson), ("$key", request.IdempotencyKey), ("$fence", request.Fence), ("$occurred", Iso(occurred)));
+                ("$payload", request.PayloadJson), ("$key", request.IdempotencyKey), ("$fence", request.Fence),
+                ("$occurred", Iso(occurred)), ("$sequence", request.Sequence));
             result = await ReadEventByIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, ct);
             ValidateEventReplay(result, runId, lease.TaskId, request);
             if (inserted > 0)
@@ -451,7 +913,7 @@ public sealed class TaskServerStore
     {
         await using var connection = await OpenReadyAsync(ct);
         await using var command = Command(connection, """
-            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at
+            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at, sequence
               FROM events WHERE run_id = $run AND cursor > $after ORDER BY cursor LIMIT 1000;
             """, ("$run", runId), ("$after", after));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -473,20 +935,43 @@ public sealed class TaskServerStore
 
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            var replay = await ReadArtifactByIdempotencyKeyAsync(
+                connection, transaction, request.IdempotencyKey, ct);
+            if (replay is not null)
+            {
+                ValidateArtifactReplay(replay, runId, request, actualSha, content.LongLength);
+                result = replay;
+                return;
+            }
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             if (lease.Fence != request.Fence)
                 throw new TaskServerConflictException("stale-fence", "Artifact fence does not match the run authority.");
-            await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
+            await EnsureOutboxLeaseCurrentAsync(
+                connection,
+                transaction,
+                lease,
+                request.RunnerId,
+                request.InstanceId,
+                request.LeaseId,
+                ct);
+            await RecordOutboxSequenceAsync(
+                connection,
+                transaction,
+                runId,
+                request.Sequence,
+                request.IdempotencyKey,
+                "artifact",
+                ct);
             var now = UtcNow;
             var inserted = await ExecuteAsync(connection, """
-                INSERT INTO artifacts(id, run_id, name, media_type, sha256, content, size_bytes, idempotency_key, fence, created_at)
-                VALUES ($id, $run, $name, $media, $sha, $content, $size, $key, $fence, $now)
+                INSERT INTO artifacts(id, run_id, name, media_type, sha256, content, size_bytes, idempotency_key, fence, created_at, sequence)
+                VALUES ($id, $run, $name, $media, $sha, $content, $size, $key, $fence, $now, $sequence)
                 ON CONFLICT(idempotency_key) DO NOTHING;
                 """, ct, transaction,
                 ("$id", request.ArtifactId), ("$run", runId), ("$name", request.Name), ("$media", request.MediaType),
                 ("$sha", actualSha), ("$content", content), ("$size", content.LongLength), ("$key", request.IdempotencyKey),
-                ("$fence", request.Fence), ("$now", Iso(now)));
+                ("$fence", request.Fence), ("$now", Iso(now)), ("$sequence", request.Sequence));
             result = await ReadArtifactByIdempotencyKeyAsync(connection, transaction, request.IdempotencyKey, ct);
             ValidateArtifactReplay(result, runId, request, actualSha, content.LongLength);
             if (inserted > 0)
@@ -500,12 +985,134 @@ public sealed class TaskServerStore
     {
         await using var connection = await OpenReadyAsync(ct);
         await using var command = Command(connection, """
-            SELECT id, run_id, name, media_type, sha256, size_bytes, idempotency_key, fence, created_at
+            SELECT id, run_id, name, media_type, sha256, size_bytes, idempotency_key, fence, created_at, sequence
               FROM artifacts WHERE run_id = $run ORDER BY created_at, id;
             """, ("$run", runId));
         await using var reader = await command.ExecuteReaderAsync(ct);
         var result = new List<ArtifactDto>();
         while (await reader.ReadAsync(ct)) result.Add(ReadArtifact(reader));
+        return result;
+    }
+
+    public async Task<RunnerOutboxStatusDto> ReportRunnerOutboxAsync(
+        string runnerId,
+        RunnerOutboxStatusRequest request,
+        string actorId,
+        CancellationToken ct)
+    {
+        RequireWritable();
+        if (request.LastAcknowledgedSequence > request.LastSequence)
+            throw new ArgumentException("Outbox acknowledgement cannot exceed its last sequence.");
+        if (request.BacklogCount < 0)
+            throw new ArgumentException("Outbox backlog cannot be negative.");
+        if (string.IsNullOrWhiteSpace(request.RunId))
+            throw new ArgumentException("Outbox status runId is required.");
+        if ((request.BacklogCount == 0) != (request.OldestUnacknowledgedSequence is null))
+            throw new ArgumentException("Oldest unacknowledged sequence must be present exactly when backlog is non-zero.");
+
+        RunnerOutboxStatusDto? status = null;
+        await InWriteTransactionAsync(async (connection, transaction) =>
+        {
+            await ValidateRunnerAsync(connection, transaction, runnerId, request.InstanceId, ct);
+            var existingSequence = Convert.ToInt64(
+                await ScalarAsync(
+                    connection,
+                    "SELECT last_sequence FROM runner_outbox_status WHERE runner_id = $runner AND run_id = $run;",
+                    ct,
+                    transaction,
+                    ("$runner", runnerId),
+                    ("$run", request.RunId)) ?? 0L,
+                CultureInfo.InvariantCulture);
+            if (request.LastSequence < existingSequence)
+                throw new TaskServerConflictException(
+                    "stale-outbox-status",
+                    $"Outbox status sequence {request.LastSequence} is older than {existingSequence}.");
+            await ExecuteAsync(connection, """
+                INSERT INTO runner_outbox_status(
+                    runner_id, instance_id, last_sequence, last_acknowledged_sequence,
+                    backlog_count, oldest_unacknowledged_sequence, final_handoff_state,
+                    run_id, envelope_digest, observed_at)
+                VALUES (
+                    $runner, $instance, $last, $acknowledged, $backlog, $oldest,
+                    $state, $run, $digest, $observed)
+                ON CONFLICT(runner_id, run_id) DO UPDATE SET
+                    instance_id = excluded.instance_id,
+                    last_sequence = excluded.last_sequence,
+                    last_acknowledged_sequence = excluded.last_acknowledged_sequence,
+                    backlog_count = excluded.backlog_count,
+                    oldest_unacknowledged_sequence = excluded.oldest_unacknowledged_sequence,
+                    final_handoff_state = excluded.final_handoff_state,
+                    run_id = excluded.run_id,
+                    envelope_digest = excluded.envelope_digest,
+                    observed_at = excluded.observed_at;
+                """, ct, transaction,
+                ("$runner", runnerId),
+                ("$instance", request.InstanceId),
+                ("$last", request.LastSequence),
+                ("$acknowledged", request.LastAcknowledgedSequence),
+                ("$backlog", request.BacklogCount),
+                ("$oldest", request.OldestUnacknowledgedSequence),
+                ("$state", request.FinalHandoffState),
+                ("$run", request.RunId),
+                ("$digest", request.EnvelopeDigest),
+                ("$observed", Iso(request.ObservedAt.ToUniversalTime())));
+            await RefreshOutboxSummaryAsync(connection, ct, transaction);
+            status = new RunnerOutboxStatusDto(
+                runnerId,
+                request.InstanceId,
+                request.LastSequence,
+                request.LastAcknowledgedSequence,
+                request.BacklogCount,
+                request.OldestUnacknowledgedSequence,
+                request.FinalHandoffState,
+                request.RunId,
+                request.EnvelopeDigest,
+                request.ObservedAt.ToUniversalTime());
+            await AuditAsync(
+                connection,
+                transaction,
+                actorId,
+                "runner.outbox.observed",
+                "runner",
+                runnerId,
+                JsonSerializer.Serialize(new
+                {
+                    request.BacklogCount,
+                    request.OldestUnacknowledgedSequence,
+                    request.FinalHandoffState,
+                    request.RunId,
+                }),
+                ct);
+        }, ct);
+        return status!;
+    }
+
+    public async Task<IReadOnlyList<RunnerOutboxStatusDto>> ListRunnerOutboxesAsync(CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        await using var command = Command(connection, """
+            SELECT runner_id, instance_id, last_sequence, last_acknowledged_sequence,
+                   backlog_count, oldest_unacknowledged_sequence, final_handoff_state,
+                   run_id, envelope_digest, observed_at
+              FROM runner_outbox_status
+             ORDER BY runner_id;
+            """);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var result = new List<RunnerOutboxStatusDto>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add(new RunnerOutboxStatusDto(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                Parse(reader.GetString(9))));
+        }
         return result;
     }
 
@@ -533,7 +1140,13 @@ public sealed class TaskServerStore
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var unresolved = Convert.ToInt32(await ScalarAsync(connection,
-                "SELECT count(*) FROM leases WHERE status IN ('active', 'process-unknown');", ct, transaction) ?? 0L,
+                """
+                SELECT
+                    (SELECT count(*) FROM leases
+                      WHERE status IN ('active', 'process-unknown'))
+                  + (SELECT count(*) FROM review_attempts
+                      WHERE status IN ('leased', 'process-unknown'));
+                """, ct, transaction) ?? 0L,
                 CultureInfo.InvariantCulture);
             if (unresolved > 0)
             {
@@ -590,16 +1203,23 @@ public sealed class TaskServerStore
             await using var source = Open();
             await source.OpenAsync(ct);
             await ConfigureConnectionAsync(source, ct);
-            await using var destination = new SqliteConnection(new SqliteConnectionStringBuilder
+            // Write and verify the snapshot inside a nested scope so the destination
+            // connection is fully closed before the file is hashed or the .db is later
+            // moved/deleted. Pooling stays off so dispose actually releases the OS file
+            // handle instead of parking it in the pool ("used by another process").
+            await using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = path,
                 Mode = SqliteOpenMode.ReadWriteCreate,
-            }.ToString());
-            await destination.OpenAsync(ct);
-            source.BackupDatabase(destination);
-            var integrity = Convert.ToString(await ScalarAsync(destination, "PRAGMA integrity_check;", ct), CultureInfo.InvariantCulture);
-            if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Backup integrity check failed: {integrity}");
+                Pooling = false,
+            }.ToString()))
+            {
+                await destination.OpenAsync(ct);
+                source.BackupDatabase(destination);
+                var integrity = Convert.ToString(await ScalarAsync(destination, "PRAGMA integrity_check;", ct), CultureInfo.InvariantCulture);
+                if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Backup integrity check failed: {integrity}");
+            }
             var sha = await HashFileAsync(path, ct);
             var info = new FileInfo(path);
             await using var transaction = (SqliteTransaction)await source.BeginTransactionAsync(ct);
@@ -623,6 +1243,9 @@ public sealed class TaskServerStore
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadOnly,
+            // Pooling off so the backup file handle is released on dispose and the
+            // .db can be moved/deleted afterwards.
+            Pooling = false,
         }.ToString()))
         {
             await verify.OpenAsync(ct);
@@ -645,7 +1268,13 @@ public sealed class TaskServerStore
                 await current.OpenAsync(ct);
                 await ConfigureConnectionAsync(current, ct);
                 var unresolved = Convert.ToInt64(await ScalarAsync(current,
-                    "SELECT count(*) FROM leases WHERE status IN ('active', 'process-unknown');", ct) ?? 0L, CultureInfo.InvariantCulture);
+                    """
+                    SELECT
+                        (SELECT count(*) FROM leases
+                          WHERE status IN ('active', 'process-unknown'))
+                      + (SELECT count(*) FROM review_attempts
+                          WHERE status IN ('leased', 'process-unknown'));
+                    """, ct) ?? 0L, CultureInfo.InvariantCulture);
                 if (unresolved > 0)
                     throw new TaskServerConflictException("attempt-authority-unresolved", "Restore is blocked while active or process-unknown attempts exist.");
 
@@ -745,7 +1374,14 @@ public sealed class TaskServerStore
     {
         await using var connection = await OpenReadyAsync(ct);
         var builder = new StringBuilder();
-        foreach (var table in new[] { "workspaces", "projects", "tasks", "runs", "events", "artifacts", "audit", "fence_counters", "leases", "runners" })
+        foreach (var table in new[]
+                 {
+                     "workspaces", "projects", "tasks", "runs", "events", "artifacts",
+                     "audit", "fence_counters", "leases", "runners", "review_subjects",
+                     "review_attempts", "review_fence_counters", "review_deliveries",
+                     "runner_inventories", "invariant_reports",
+                     "runner_reconciliation_actions",
+                 })
         {
             var count = Convert.ToInt64(await ScalarAsync(connection, $"SELECT count(*) FROM {table};", ct) ?? 0L, CultureInfo.InvariantCulture);
             builder.Append(table).Append(':').Append(count).Append('\n');
@@ -916,7 +1552,8 @@ public sealed class TaskServerStore
                 payload_json TEXT NOT NULL,
                 idempotency_key TEXT NOT NULL UNIQUE,
                 fence INTEGER NOT NULL,
-                occurred_at TEXT NOT NULL
+                occurred_at TEXT NOT NULL,
+                sequence INTEGER
             );
             CREATE TABLE IF NOT EXISTS artifacts(
                 id TEXT PRIMARY KEY,
@@ -928,7 +1565,62 @@ public sealed class TaskServerStore
                 size_bytes INTEGER NOT NULL,
                 idempotency_key TEXT NOT NULL UNIQUE,
                 fence INTEGER NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                sequence INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS result_handoffs(
+                run_id TEXT PRIMARY KEY REFERENCES runs(id),
+                task_id TEXT NOT NULL REFERENCES tasks(id),
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                lease_id TEXT NOT NULL,
+                fence INTEGER NOT NULL,
+                repository_id TEXT NOT NULL,
+                repository_url TEXT,
+                source_run_attempt_id TEXT NOT NULL UNIQUE,
+                base_sha TEXT NOT NULL,
+                result_sha TEXT NOT NULL,
+                immutable_remote_ref TEXT,
+                source_bundle_digest TEXT,
+                artifact_manifest_digest TEXT NOT NULL,
+                submodules_json TEXT NOT NULL,
+                lfs_objects_json TEXT NOT NULL,
+                envelope_digest TEXT NOT NULL UNIQUE,
+                sequence INTEGER NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                acknowledged_at TEXT NOT NULL,
+                retain_until TEXT NOT NULL,
+                CHECK ((immutable_remote_ref IS NULL) <> (source_bundle_digest IS NULL))
+            );
+            CREATE TABLE IF NOT EXISTS run_completions(
+                run_id TEXT PRIMARY KEY REFERENCES runs(id),
+                outcome TEXT NOT NULL,
+                summary TEXT,
+                envelope_digest TEXT,
+                sequence INTEGER NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                completed_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runner_outbox_status(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                last_sequence INTEGER NOT NULL,
+                last_acknowledged_sequence INTEGER NOT NULL,
+                backlog_count INTEGER NOT NULL,
+                oldest_unacknowledged_sequence INTEGER,
+                final_handoff_state TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                envelope_digest TEXT,
+                observed_at TEXT NOT NULL,
+                PRIMARY KEY(runner_id, run_id)
+            );
+            CREATE TABLE IF NOT EXISTS outbox_receipts(
+                run_id TEXT NOT NULL REFERENCES runs(id),
+                sequence INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                received_at TEXT NOT NULL,
+                PRIMARY KEY(run_id, sequence)
             );
             CREATE TABLE IF NOT EXISTS audit(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -939,16 +1631,73 @@ public sealed class TaskServerStore
                 target_id TEXT NOT NULL,
                 detail_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS runner_inventories(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                PRIMARY KEY(runner_id, instance_id)
+            );
+            CREATE TABLE IF NOT EXISTS invariant_reports(
+                report_id TEXT PRIMARY KEY,
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                detected_at TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runner_reconciliation_actions(
+                action_id TEXT PRIMARY KEY,
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                pid INTEGER,
+                run_id TEXT,
+                task_key TEXT,
+                created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS ix_tasks_project_state ON tasks(project_id, state);
             CREATE INDEX IF NOT EXISTS ix_leases_task_status ON leases(task_id, status);
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
             CREATE INDEX IF NOT EXISTS ix_artifacts_run ON artifacts(run_id);
+            CREATE INDEX IF NOT EXISTS ix_result_handoffs_retain_until ON result_handoffs(retain_until);
+            CREATE INDEX IF NOT EXISTS ix_runner_outbox_backlog ON runner_outbox_status(backlog_count);
+            CREATE INDEX IF NOT EXISTS ix_outbox_receipts_run ON outbox_receipts(run_id, sequence);
+            CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
+            CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
             """, ct);
+        await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;
             """, ct, ("$version", CurrentSchemaVersion), ("$now", Iso(UtcNow)));
+        await ApplyReviewMigrationAsync(connection, ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
+    }
+
+    private static async Task EnsureColumnAsync(
+        SqliteConnection connection,
+        string table,
+        string column,
+        string declaration,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, $"PRAGMA table_info({table});");
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        await reader.DisposeAsync();
+        await ExecuteAsync(
+            connection,
+            $"ALTER TABLE {table} ADD COLUMN {column} {declaration};",
+            ct);
     }
 
     private SqliteConnection Open() => new(new SqliteConnectionStringBuilder
@@ -1033,10 +1782,333 @@ public sealed class TaskServerStore
             throw new TaskServerConflictException("stale-fence", "A higher durable fence exists for this task.");
     }
 
+    private async Task EnsureOutboxLeaseCurrentAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LeaseDto lease,
+        CancellationToken ct)
+        => await EnsureOutboxLeaseCurrentAsync(
+            connection,
+            transaction,
+            lease,
+            lease.RunnerId,
+            lease.InstanceId,
+            lease.LeaseId,
+            ct);
+
+    private async Task EnsureOutboxLeaseCurrentAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LeaseDto lease,
+        string? runnerId,
+        string? instanceId,
+        string? leaseId,
+        CancellationToken ct)
+    {
+        if (lease.Status is not ("active" or "process-unknown"))
+            throw new TaskServerConflictException("lease-not-active", $"Lease status is '{lease.Status}'.");
+        if (string.Equals(lease.Status, "active", StringComparison.Ordinal)
+            && runnerId is null && instanceId is null && leaseId is null)
+        {
+            await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
+            return;
+        }
+        if (string.Equals(lease.Status, "process-unknown", StringComparison.Ordinal)
+            && (runnerId is null || instanceId is null || leaseId is null))
+        {
+            throw new TaskServerConflictException(
+                "lease-not-active",
+                "Lease status is 'process-unknown'; exact outbox authority is required for replay.");
+        }
+        if (!string.Equals(lease.RunnerId, runnerId, StringComparison.Ordinal)
+            || !string.Equals(lease.InstanceId, instanceId, StringComparison.Ordinal)
+            || !string.Equals(lease.LeaseId, leaseId, StringComparison.Ordinal))
+        {
+            throw new TaskServerConflictException(
+                "stale-fence",
+                "Outbox replay must present the exact runner instance and lease authority.");
+        }
+        var lastFence = Convert.ToInt64(await ScalarAsync(
+            connection,
+            "SELECT last_fence FROM fence_counters WHERE task_id = $task;",
+            ct,
+            transaction,
+            ("$task", lease.TaskId)) ?? 0L,
+            CultureInfo.InvariantCulture);
+        if (lastFence != lease.Fence)
+            throw new TaskServerConflictException("stale-fence", "A higher durable fence exists for this task.");
+        if (string.Equals(lease.Status, "process-unknown", StringComparison.Ordinal))
+        {
+            await ExecuteAsync(connection, """
+                UPDATE leases
+                   SET status = 'active', expires_at = $expires
+                 WHERE run_id = $run AND status = 'process-unknown';
+                UPDATE runs
+                   SET status = 'running'
+                 WHERE id = $run AND status = 'process-unknown';
+                """, ct, transaction,
+                ("$expires", Iso(UtcNow.AddSeconds(_options.MaximumLeaseSeconds))),
+                ("$run", lease.RunId));
+        }
+    }
+
+    private static bool RequiresResultEnvelope(string outcome)
+        => outcome.Trim().ToLowerInvariant() is "success" or "done" or "noop" or "no-op";
+
+    private static void ValidateImmutableSource(string runId, ImmutableResultEnvelope envelope)
+    {
+        if (envelope.ImmutableRemoteRef is null) return;
+        var expected = $"refs/heads/agent-studio/results/{runId}/{envelope.ResultSha.ToLowerInvariant()}";
+        if (!string.Equals(envelope.ImmutableRemoteRef, expected, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Immutable result ref must be '{expected}'. Moving task or runner branches are not durable result identity.");
+        }
+    }
+
+    private static void ValidateHandoffReplay(
+        StoredResultHandoff existing,
+        ResultHandoffRequest request)
+    {
+        if (!string.Equals(existing.Acknowledgement.RunId, request.Envelope.SourceRunAttemptId, StringComparison.Ordinal)
+            || existing.Acknowledgement.AcknowledgedSequence != request.Sequence
+            || !string.Equals(existing.Acknowledgement.EnvelopeDigest, request.EnvelopeDigest, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(existing.IdempotencyKey, request.IdempotencyKey, StringComparison.Ordinal)
+            || !string.Equals(existing.RunnerId, request.RunnerId, StringComparison.Ordinal)
+            || !string.Equals(existing.InstanceId, request.InstanceId, StringComparison.Ordinal)
+            || !string.Equals(existing.LeaseId, request.LeaseId, StringComparison.Ordinal)
+            || existing.Fence != request.Fence)
+        {
+            throw new TaskServerConflictException(
+                "idempotency-conflict",
+                "The result handoff identity is already bound to a different run, sequence, or envelope.");
+        }
+    }
+
+    private async Task RestoreHandoffReplayAuthorityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        ResultHandoffRequest request,
+        CancellationToken ct)
+    {
+        var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
+                    ?? throw new KeyNotFoundException("Run lease was not found.");
+        if (string.Equals(lease.Status, "completed", StringComparison.Ordinal))
+            return;
+        ValidateLeaseReference(
+            lease,
+            request.RunnerId,
+            request.InstanceId,
+            request.LeaseId,
+            request.Fence);
+        await EnsureOutboxLeaseCurrentAsync(connection, transaction, lease, ct);
+    }
+
+    private static void ValidateCompletionReplay(
+        StoredRunCompletion existing,
+        CompleteRunRequest request)
+    {
+        if (!string.Equals(existing.IdempotencyKey, request.IdempotencyKey, StringComparison.Ordinal)
+            || !string.Equals(existing.Run.Status, request.Outcome, StringComparison.Ordinal)
+            || !string.Equals(existing.EnvelopeDigest, request.ResultEnvelopeDigest, StringComparison.OrdinalIgnoreCase)
+            || existing.Sequence != request.Sequence)
+        {
+            throw new TaskServerConflictException(
+                "idempotency-conflict",
+                "The run completion is already bound to a different outcome, sequence, or result envelope.");
+        }
+    }
+
+    private static async Task<StoredResultHandoff?> ReadResultHandoffAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT run_id, sequence, envelope_digest, idempotency_key,
+                   acknowledged_at, retain_until, runner_id, instance_id,
+                   lease_id, fence, repository_id, source_run_attempt_id,
+                   base_sha, result_sha, immutable_remote_ref,
+                   source_bundle_digest, artifact_manifest_digest,
+                   submodules_json, lfs_objects_json, repository_url
+              FROM result_handoffs
+             WHERE run_id = $run;
+            """, transaction, ("$run", runId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct)
+            ? ReadStoredResultHandoff(reader)
+            : null;
+    }
+
+    private static async Task<StoredResultHandoff?> ReadResultHandoffByKeyAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string idempotencyKey,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT run_id, sequence, envelope_digest, idempotency_key,
+                   acknowledged_at, retain_until, runner_id, instance_id,
+                   lease_id, fence, repository_id, source_run_attempt_id,
+                   base_sha, result_sha, immutable_remote_ref,
+                   source_bundle_digest, artifact_manifest_digest,
+                   submodules_json, lfs_objects_json, repository_url
+              FROM result_handoffs
+             WHERE idempotency_key = $key;
+            """, transaction, ("$key", idempotencyKey));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct)
+            ? ReadStoredResultHandoff(reader)
+            : null;
+    }
+
+    private static StoredResultHandoff ReadStoredResultHandoff(SqliteDataReader reader)
+        => new(
+            new ResultHandoffAck(
+                reader.GetString(0),
+                reader.GetInt64(1),
+                reader.GetString(2),
+                "acknowledged",
+                Parse(reader.GetString(4)),
+                Parse(reader.GetString(5)),
+                false),
+            reader.GetString(3),
+            reader.GetString(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            reader.GetInt64(9),
+            new ImmutableResultEnvelope(
+                reader.GetString(10),
+                reader.GetString(11),
+                reader.GetString(12),
+                reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.GetString(16),
+                JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(17)),
+                JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(18)),
+                reader.IsDBNull(19) ? null : reader.GetString(19)));
+
+    private static async Task<StoredRunCompletion?> ReadRunCompletionAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT r.id, r.task_id, r.status, r.runner_id, r.fence,
+                   r.created_at, r.started_at, r.finished_at,
+                   c.envelope_digest, c.sequence, c.idempotency_key
+              FROM run_completions c
+              JOIN runs r ON r.id = c.run_id
+             WHERE c.run_id = $run;
+            """, transaction, ("$run", runId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        var run = new RunDto(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetInt64(4),
+            Parse(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : Parse(reader.GetString(6)),
+            reader.IsDBNull(7) ? null : Parse(reader.GetString(7)));
+        return new StoredRunCompletion(
+            run,
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.GetInt64(9),
+            reader.GetString(10));
+    }
+
+    private async Task RefreshOutboxSummaryAsync(
+        SqliteConnection connection,
+        CancellationToken ct,
+        SqliteTransaction? transaction = null)
+    {
+        _outboxBacklog = Convert.ToInt32(await ScalarAsync(
+            connection,
+            "SELECT COALESCE(sum(backlog_count), 0) FROM runner_outbox_status;",
+            ct,
+            transaction) ?? 0L,
+            CultureInfo.InvariantCulture);
+        var oldest = await ScalarAsync(
+            connection,
+            "SELECT min(oldest_unacknowledged_sequence) FROM runner_outbox_status WHERE backlog_count > 0;",
+            ct,
+            transaction);
+        _oldestUnacknowledgedSequence = oldest is null or DBNull
+            ? null
+            : Convert.ToInt64(oldest, CultureInfo.InvariantCulture);
+        var states = new Dictionary<string, int>(StringComparer.Ordinal);
+        await using var command = Command(connection, """
+            SELECT final_handoff_state, count(*)
+              FROM runner_outbox_status
+             GROUP BY final_handoff_state;
+            """, transaction);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            states[reader.GetString(0)] = reader.GetInt32(1);
+        _finalHandoffStates = states;
+    }
+
+    private async Task RecordOutboxSequenceAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        long? sequence,
+        string idempotencyKey,
+        string kind,
+        CancellationToken ct)
+    {
+        if (sequence is null) return;
+        if (sequence <= 0)
+            throw new ArgumentException("Outbox sequence must be positive.");
+        var last = Convert.ToInt64(await ScalarAsync(
+            connection,
+            "SELECT COALESCE(max(sequence), 0) FROM outbox_receipts WHERE run_id = $run;",
+            ct,
+            transaction,
+            ("$run", runId)) ?? 0L,
+            CultureInfo.InvariantCulture);
+        if (sequence <= last)
+        {
+            throw new TaskServerConflictException(
+                "stale-outbox-sequence",
+                $"Outbox sequence {sequence} is not newer than acknowledged sequence {last} for run '{runId}'.");
+        }
+        await ExecuteAsync(connection, """
+            INSERT INTO outbox_receipts(run_id, sequence, kind, idempotency_key, received_at)
+            VALUES ($run, $sequence, $kind, $key, $received);
+            """, ct, transaction,
+            ("$run", runId),
+            ("$sequence", sequence),
+            ("$kind", kind),
+            ("$key", idempotencyKey),
+            ("$received", Iso(UtcNow)));
+    }
+
+    private sealed record StoredResultHandoff(
+        ResultHandoffAck Acknowledgement,
+        string IdempotencyKey,
+        string RunnerId,
+        string InstanceId,
+        string LeaseId,
+        long Fence,
+        ImmutableResultEnvelope Envelope);
+
+    private sealed record StoredRunCompletion(
+        RunDto Run,
+        string? EnvelopeDigest,
+        long Sequence,
+        string IdempotencyKey);
+
     private static async Task ValidateRunnerAsync(SqliteConnection connection, SqliteTransaction transaction, string runnerId, string instanceId, CancellationToken ct)
     {
         await using var command = Command(connection,
-            "SELECT instance_id, protocol_version, status FROM runners WHERE id = $id;", transaction, ("$id", runnerId));
+            "SELECT instance_id, protocol_version, status, capabilities_json FROM runners WHERE id = $id;", transaction, ("$id", runnerId));
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) throw new KeyNotFoundException("Runner is not registered.");
         if (!string.Equals(reader.GetString(0), instanceId, StringComparison.Ordinal))
@@ -1045,6 +2117,11 @@ public sealed class TaskServerStore
         if (!TaskServerProtocol.Supports(protocol)) throw new TaskServerProtocolException(protocol);
         if (!string.Equals(reader.GetString(2), "active", StringComparison.Ordinal))
             throw new TaskServerConflictException("runner-not-active", "Runner is not active.");
+        var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(3)) ?? [];
+        if (capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+            throw new TaskServerConflictException(
+                "coding-capability-required",
+                "A separately registered Remote Review Executor cannot claim coding work.");
     }
 
     private static async Task<(string Prefix, long Next)> ReadProjectCounterAsync(
@@ -1072,6 +2149,17 @@ public sealed class TaskServerStore
         => new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
             reader.GetInt64(5), Parse(reader.GetString(6)), Parse(reader.GetString(7)), reader.IsDBNull(8) ? null : reader.GetString(8));
 
+    private static RunDto ReadRun(SqliteDataReader reader)
+        => new(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetInt64(4),
+            Parse(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : Parse(reader.GetString(6)),
+            reader.IsDBNull(7) ? null : Parse(reader.GetString(7)));
+
     private static async Task<LeaseDto?> ReadLeaseAsync(SqliteConnection connection, SqliteTransaction transaction, string runId, CancellationToken ct)
     {
         await using var command = Command(connection, """
@@ -1085,11 +2173,26 @@ public sealed class TaskServerStore
             : null;
     }
 
+    private static async Task<RunDto?> ReadRunAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at
+              FROM runs WHERE id = $run;
+            """, transaction, ("$run", runId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ReadRun(reader);
+    }
+
     private static async Task<EventDto?> ReadEventByIdempotencyKeyAsync(
         SqliteConnection connection, SqliteTransaction transaction, string key, CancellationToken ct)
     {
         await using var command = Command(connection, """
-            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at
+            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at, sequence
               FROM events WHERE idempotency_key = $key;
             """, transaction, ("$key", key));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -1098,7 +2201,8 @@ public sealed class TaskServerStore
 
     private static EventDto ReadEvent(SqliteDataReader reader)
         => new(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-            reader.GetString(5), reader.GetString(6), reader.GetInt64(7), Parse(reader.GetString(8)));
+            reader.GetString(5), reader.GetString(6), reader.GetInt64(7), Parse(reader.GetString(8)),
+            reader.IsDBNull(9) ? null : reader.GetInt64(9));
 
     private static void ValidateEventReplay(EventDto? existing, string runId, string taskId, EventIngestRequest request)
     {
@@ -1108,7 +2212,8 @@ public sealed class TaskServerStore
             || !string.Equals(existing.TaskId, taskId, StringComparison.Ordinal)
             || !string.Equals(existing.Kind, request.Kind, StringComparison.Ordinal)
             || !string.Equals(existing.PayloadJson, request.PayloadJson, StringComparison.Ordinal)
-            || existing.Fence != request.Fence)
+            || existing.Fence != request.Fence
+            || existing.Sequence != request.Sequence)
         {
             throw new TaskServerConflictException(
                 "idempotency-conflict",
@@ -1120,7 +2225,7 @@ public sealed class TaskServerStore
         SqliteConnection connection, SqliteTransaction transaction, string key, CancellationToken ct)
     {
         await using var command = Command(connection, """
-            SELECT id, run_id, name, media_type, sha256, size_bytes, idempotency_key, fence, created_at
+            SELECT id, run_id, name, media_type, sha256, size_bytes, idempotency_key, fence, created_at, sequence
               FROM artifacts WHERE idempotency_key = $key;
             """, transaction, ("$key", key));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -1129,7 +2234,8 @@ public sealed class TaskServerStore
 
     private static ArtifactDto ReadArtifact(SqliteDataReader reader)
         => new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-            reader.GetInt64(5), reader.GetString(6), reader.GetInt64(7), Parse(reader.GetString(8)));
+            reader.GetInt64(5), reader.GetString(6), reader.GetInt64(7), Parse(reader.GetString(8)),
+            reader.IsDBNull(9) ? null : reader.GetInt64(9));
 
     private static void ValidateArtifactReplay(
         ArtifactDto? existing,
@@ -1145,7 +2251,8 @@ public sealed class TaskServerStore
             || !string.Equals(existing.MediaType, request.MediaType, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(existing.Sha256, actualSha, StringComparison.OrdinalIgnoreCase)
             || existing.SizeBytes != sizeBytes
-            || existing.Fence != request.Fence)
+            || existing.Fence != request.Fence
+            || existing.Sequence != request.Sequence)
         {
             throw new TaskServerConflictException(
                 "idempotency-conflict",
@@ -1256,6 +2363,13 @@ public sealed class TaskServerStore
 
     private static string Iso(DateTime value) => value.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
     private static DateTime Parse(string value) => DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+    private static JsonSerializerOptions CreateOutcomeJson()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
 }
 
 public sealed class TaskServerConflictException(string code, string message) : Exception(message)

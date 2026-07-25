@@ -71,7 +71,7 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var raw = ProjectAccessAuthorization.FilterTasks(ctx, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -79,10 +79,14 @@ public static class TaskCrudEndpoints
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
+            var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
+            var testRunLookup = testRuns.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
                           .WithMergeSignal(mergeLookup)
+                          .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
+                          .WithTestRunEvidence(testRunLookup)
                           .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
@@ -94,7 +98,7 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var raw = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -102,10 +106,14 @@ public static class TaskCrudEndpoints
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
+            var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
+            var testRunLookup = testRuns.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
                           .WithMergeSignal(mergeLookup)
+                          .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
+                          .WithTestRunEvidence(testRunLookup)
                           .ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
@@ -252,7 +260,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var detail = scanner.GetJobDetail(jobId, watchPath);
@@ -273,11 +281,20 @@ public static class TaskCrudEndpoints
             var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
             if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
                 withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
+            // AGT-2202: fold the integration verdict so a completed/archived card
+            // opened from the board keeps the same "integrated / not integrated"
+            // badge as its board card.
+            var integrationLookup = integrationStatus.BuildLookup(new[] { withRuntime.Info });
+            if (integrationLookup.TryGetValue(withRuntime.Info.TaskKey, out var integration))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { Integration = integration } };
             // PUB-1: fold the per-task publish chip signal so a completed card opened
             // from the board shows "publishable: npm, website" in its detail too.
             var publishLookup = publishStatus.BuildLookup(new[] { withRuntime.Info });
             if (publishLookup.TryGetValue(withRuntime.Info.TaskKey, out var publishSignal))
                 withRuntime = withRuntime with { Info = withRuntime.Info with { PublishSignal = publishSignal } };
+            var testRunLookup = testRuns.BuildLookup(new[] { withRuntime.Info });
+            if (testRunLookup.TryGetValue(withRuntime.Info.TaskKey, out var testEvidence))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { TestEvidence = testEvidence } };
             return Results.Ok(withRuntime);
         });
 
@@ -361,7 +378,9 @@ public static class TaskCrudEndpoints
             // detail-view lane button), so the lane-change ledger trigger is the
             // human. Auto paths (runner pickup, orchestrator, sweeps) reach
             // MoveJob without a cause and are recorded as system.
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
+            return MoveResult(await transitions.MoveAsync(
+                jobId, req.TargetState, watchPath, ct, req.TargetIndex,
+                cause: TimelineActors.Human(""), reason: req.Reason));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
@@ -373,7 +392,9 @@ public static class TaskCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
+            return MoveResult(await transitions.MoveAsync(
+                jobId, req.TargetState, watchPath, ct, req.TargetIndex,
+                cause: TimelineActors.Human(""), reason: req.Reason));
         });
 
         // Batch move / restore. Per-item atomic: a failure on item N must
@@ -499,7 +520,7 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects, AgentStudio.Registry.ComponentRoutingService routing) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
@@ -522,8 +543,49 @@ public static class TaskCrudEndpoints
                 }
             }
 
+
+            AgentStudio.Registry.ComponentRoutingResolution? resolvedRouting = null;
+            if (req.Routing != null)
+            {
+                var routingRequest = req.Routing with
+                {
+                    NavigationProjectId = string.IsNullOrWhiteSpace(req.Routing.NavigationProjectId)
+                        ? req.Project
+                        : req.Routing.NavigationProjectId,
+                };
+                resolvedRouting = routing.Resolve(routingRequest);
+                if (resolvedRouting.RequiresQuestion || resolvedRouting.PrimaryProject == null)
+                {
+                    return Results.Conflict(new
+                    {
+                        error = "Task ownership must be resolved before creation.",
+                        routing = resolvedRouting,
+                    });
+                }
+                if (!string.IsNullOrWhiteSpace(req.RequestedTaskPrefix)
+                    && !string.Equals(req.RequestedTaskPrefix, resolvedRouting.AllowedTicketPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = $"Task prefix '{req.RequestedTaskPrefix}' is not valid for destination project {resolvedRouting.StorageProjectId}; expected '{resolvedRouting.AllowedTicketPrefix}'.",
+                        routing = resolvedRouting,
+                    });
+                }
+
+                var prompt = AppendDeliveryAcceptanceCriteria(req.PromptMarkdown, resolvedRouting);
+                req = req with
+                {
+                    Project = resolvedRouting.StorageProjectId,
+                    WatchPath = "",
+                    PromptMarkdown = prompt,
+                    RequestedTaskPrefix = resolvedRouting.AllowedTicketPrefix,
+                };
+            }
+
             var jobId = mutations.CreateJob(req);
-            return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
+            return jobId is null
+                ? Results.Conflict("Job already exists or invalid input")
+                : Results.Ok(new { id = jobId, routing = resolvedRouting });
         });
 
         group.MapPost("/reorder", (ReorderRequest req, HttpContext ctx, TaskStateMachine states,
@@ -567,6 +629,8 @@ public static class TaskCrudEndpoints
             // The target project is likewise addressable by a path-free handle;
             // resolve it so a caller can move a task with {"targetProject":"ASS"}.
             var targetWatchPath = ResolveWatchPath(projects, req.TargetProject, req.TargetWatchPath);
+            if (string.IsNullOrWhiteSpace(targetWatchPath))
+                return Results.BadRequest("A valid target project is required");
             var success = states.ChangeProject(jobId, targetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
@@ -703,6 +767,25 @@ public static class TaskCrudEndpoints
             var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
             return Results.Ok(index.Dependents(info.Key, kind));
         });
+    }
+
+    internal static string? AppendDeliveryAcceptanceCriteria(
+        string? prompt,
+        AgentStudio.Registry.ComponentRoutingResolution route)
+    {
+        if (route.ConsumerProjects.Count == 0 && route.DeploymentSteps.Count == 0) return prompt;
+        var sb = new System.Text.StringBuilder(prompt?.TrimEnd() ?? "");
+        if (sb.Length > 0) sb.AppendLine().AppendLine();
+        sb.AppendLine("## Ownership and delivery acceptance criteria");
+        sb.AppendLine();
+        sb.AppendLine($"- Primary implementation: {route.PrimaryProject!.Id} ({route.PrimaryProject.ShortCode}), repository/package `{route.Repository ?? route.PackageOrModule ?? "unspecified"}`.");
+        if (route.ConsumerProjects.Count > 0)
+            sb.AppendLine($"- Integrate in consumer project(s): {string.Join(", ", route.ConsumerProjects.Select(p => $"{p.Id} ({p.ShortCode})"))}.");
+        foreach (var step in route.DeploymentSteps) sb.AppendLine($"- {step.Trim().TrimEnd('.')}.");
+        if (route.Environments.Count > 0)
+            sb.AppendLine($"- Verify integration in: {string.Join(", ", route.Environments)}.");
+        sb.AppendLine($"- Routing evidence: {string.Join("; ", route.Evidence)} (mapping {route.MappingId ?? "local"} v{route.MappingVersion?.ToString() ?? "1"}).");
+        return sb.ToString();
     }
 
     /// <summary>

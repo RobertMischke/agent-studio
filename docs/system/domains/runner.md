@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -40,7 +40,11 @@ state.
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
   whether a run must be worktree-isolated, the main-checkout guard condition, and
-  the cwd-keyed session-resume gate (see ADR-0057).
+  the cwd-keyed session-resume gate (see ADR-0057). Every source-mutating run,
+  including a single-slot run, requires an authoritative Git repository and its
+  own task worktree. A non-Git project is rejected for mutating runs instead of
+  falling back to in-place execution; read-only planning and research remain
+  eligible to run in place.
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
@@ -51,6 +55,13 @@ state.
   side-sheet chat dispatch. This operating mode accepts the effective model and
   reasoning choice from the live Codex catalogue, executes through the Codex
   one-shot registry, and rejects non-GPT models without a Claude fallback.
+- `backend/Features/Runner/RemoteChatWorkBroker.cs`,
+  `backend/Features/Tasks/LeaseEndpoints.cs`, and
+  `runner/RemoteProjectChatRunner.cs`: assignment-aware remote side-sheet chat
+  dispatch. The Runner claims and renews opaque chat work, prepares the
+  project's dedicated chat checkout from its normal git cache, starts Codex
+  there, and completes with the observed hostname, repository path, branch,
+  and HEAD revision.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -81,21 +92,80 @@ state.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
 - `runner/*`: the standalone remote runner daemon. A dependency-free console
-  process that continuously claims server-assigned projects with bounded host
-  slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
-  log/artifact upload, and fenced normal completion into auto-review. The original `--task <key>`
+  process that runs as either a separately registered `coding` or `review`
+  service. Coding continuously claims server-assigned projects with bounded
+  host slots (default 2), fenced leases + heartbeat, per-task linked git
+  worktrees, log/artifact upload, and fenced normal completion into auto-review.
+  Review claims one immutable ReviewSubject, creates a fresh disposable
+  exact-SHA workspace, runs the server-supplied existing aspect command plan,
+  and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
   one-shot remains for diagnostics. It owns no task state. Its only git write to
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
+  (AGT-2182): the Task Server's persisted control-plane authority for separate
+  `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
+  owns stable attempt IDs, repository/task/source identity, leases, per-task
+  monotonic fences, authority epoch, heartbeat, terminal facts, evidence digests,
+  and task-and-operation-scoped idempotency. Remote completion carries an
+  explicit immutable Result-SHA independently of optional salvage-branch
+  metadata, and rejected late review reports remain non-authoritative attempt
+  history. Only an exact
+  acquire-delivery replay is idempotent; a new acquire from the same executor
+  cannot renew a live lease without the canonical attempt and fence. Replayed
+  review settlements become superseded once another subject is current. It
+  lives under `<TaskRepository>/.metadata/` and performs no
+  checkout, build, test, provider CLI, vision, or semantic review work.
+  Remote claim and completion lane facts carry the same attempt, fence, epoch,
+  and idempotency tuple. Claim, standalone acquire, and completion are serialized
+  at the Task Server mutation boundary, and canonical Remote completion suppresses
+  the generic local auto-commit, commit-attribution, drift, provenance, and
+  post-processing queue path.
+  `AgentSession` and process-holder identity remain continuity metadata only;
+  neither can mint or recover attempt write authority. Failed authority-store
+  persistence restores the last durable snapshot before the error escapes, so
+  the live process cannot retain a fence, epoch, or attempt that restart would
+  forget.
+- Canonical Remote ReviewAttempts are excluded from the legacy
+  `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
+  fenced Remote Review Executor claims them. This is the fail-closed bootstrap
+  boundary: the Task Server never substitutes its checkout or local
+  `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
+  authority continue through the established local compatibility path.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
-  (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
+  (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
+  persisted RunAttempt lease onto `TaskInfo.Runner`
   for `3-progress` cards, so the board can show which runner executes a card
   (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
-  A remote runner acquires the run lease; the local in-process runner uses the
-  disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
+  The projection includes canonical Attempt ID and authority epoch alongside
+  the lease and fence. A remote runner acquires the run lease; the local
+  in-process runner uses the disk pickup-lock and holds none, which is exactly
+  the lokal-vs-remote signal.
 
 ## Invariants
+
+- Coding and review service identities are not interchangeable. A
+  `review-executor` capability cannot claim coding work, mixed capabilities are
+  rejected, and a registered identity cannot switch executor roles. Review
+  claim, renew, report, and cleanup use a separate lease and monotonically increasing fence.
+  Same-host placement is allowed only with the distinct service identity,
+  instance, workspace root, cache, port block, container/database namespace,
+  read-only credentials, and quota. A ReviewPlan may require a different host
+  failure domain.
+- Every review command records the expected Result-SHA and the actual HEAD
+  immediately before process start. The Task Server accepts evidence only when
+  the repository identity, expected SHA, tested SHA, tree, executable-digest
+  toolchain, output-artifact, and containment facts match the immutable subject.
+  Missing source is `ReviewInfra` /
+  `SnapshotUnavailable`; wrong repository, wrong SHA, dirty-before, and
+  mutated-after are typed infrastructure outcomes. They stay in Auto Review and
+  consume no coding attempt.
+- Draining closes review admission but not active renew, report, or cleanup.
+  Safe shutdown and restore include unresolved ReviewAttempt authority, and
+  restart takeover changes both the durable fence and the containment namespace.
+  A report is also rejected when its immutable subject no longer owns the task's
+  Auto Review lifecycle.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps
@@ -103,12 +173,49 @@ state.
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
 
+- Remote host capacity is reported as distinct workload classes. RUN occupancy
+  comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
+  sum is the configured host maximum). Remote SSH build/test GATE occupancy
+  comes from gate start/completion events and runs outside RUN slots. Host CPU
+  and load include both pools and unrelated processes, so neither is inferred
+  from lane membership or from CPU percentage. This keeps claim/lane drift
+  visible instead of silently folding it into a slot count.
+
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
-- Sentinel matches are authoritative. When adding a sentinel, update
+- Side-sheet project and task chat follows the same remote pickup ownership.
+  A remote-assigned project's chat work is claimable only by its assigned
+  Runner and executes inside a host checkout from the same project git cache as
+  card runs. A project without a remote assignment executes chat locally. Each
+  response projects the actual local or remote hostname, repository path,
+  branch, and HEAD; a reassignment invalidates a cached host context.
+- A planned remote-daemon restart is an execution handoff, not an attempt
+  boundary. The daemon persists lease, fence, Task Server run/instance,
+  worktree, detached-worker PID/start time, and file-log progress below
+  `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
+  workers. A pre-launch slot marker plus worker-written atomic identity closes
+  the `Process.Start`-to-slot-save handoff window. The replacement renews
+  authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
+  persisted worktree, then follows JSONL output and completes the same attempt.
+  Missing or mismatched processes are actively released and returned to Ready;
+  DB lease presence alone is never process-liveness evidence. systemd must use
+  `KillMode=process`.
+
+- A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
+  occupies a normal host slot and holds the same fenced lease, heartbeat,
+  cancellation, drain, and telemetry contract as a coding task, but it is not a
+  coding work item. The server renders `epic-decomposition.md`, and the remote
+  host runs it in a detached disposable checkout. No task branch, salvage
+  commit, or push is created. Only the children produced by the plan enter the
+  coding pipeline. An interrupted assigned card whose lease is free is requeued
+  to Ready inside the next atomic claim before a higher fence is issued.
+
+- A terminal sentinel in the final agent reply is authoritative. Sentinel-shaped
+  text in streamed tool output, diffs, file content, or stderr is not a verdict.
+  When adding a sentinel, update
   [docs/system/contracts/agent-task.md](../contracts/agent-task.md) and
   `AgentOutcomeAnalyzer.SentinelRegex`.
 - The agent classifies its run. The rule engine decides reissue, stop,
@@ -151,11 +258,12 @@ state.
   aspect-runner / orchestrator wiring.
 - Environmental cycles do not count against progress or budget: a transient
   environmental fault never accrues toward the no-progress quarantine streak
-  (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue
-  budget is counted per attempt chain, not over the job's whole lifetime -
-  `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
-  most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
-  card gets a fresh budget instead of escalating on the first new concern.
+  (`RunQuarantineBreaker.CountsAsNoProgressFailure`). The shared reissue budget
+  belongs to a review-attempt epoch. Only an explicit human move out of
+  `5-human-review` / `5e-escalated` opens the next epoch and rotates stale
+  verdict artefacts; automatic verdicts and moves retain the current epoch and
+  cannot replenish the ceiling. `OperatorReviewRequeueService` owns the epoch
+  boundary, history rotation, decision-journal row, and timeline event.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed
@@ -208,13 +316,28 @@ state.
   a failed auto-commit leaves the branch tip at develop, which reads as "merged"
   and would force-remove the deliverable. Genuine auto-commit failures at
   integration are surfaced as a High `integration-error`, never silent.
-- Remote teardown is also fail-closed. `runner/GitWorkspace` checks status on
-  every normal, exceptional, shutdown, and crash-debris teardown. It commits a
-  dirty checkout as `wip(runner): salvage before teardown - outcome <X>` and
-  pushes run-produced commits to `runner/<runner-id>/<task-key>`. The remote ref
-  is verified before removal. A failed check or push keeps the worktree and
-  records a `worktree-blocked` gate item with host and path. Successful salvage
-  branches are linked from the card's `results/deliverables.md`.
+- Remote teardown is also fail-closed. Protocol 2 coding runs journal logs,
+  status, artifacts, Git facts, terminal facts, the immutable result envelope,
+  and server acknowledgements under
+  `$RUNNER_WORKDIR/outbox/<run-attempt-id>/`. `runner/GitWorkspace` first commits
+  dirty work, preserves the moving salvage ref without force push, and publishes
+  the exact result to
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>`. Cleanup then requires
+  the Task Server acknowledgement for the matching canonical envelope digest.
+  A process restart replays the original outbox before new claims and never
+  starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
+  worktree, and consumes no coding or completion budget.
+- The Task Server stores one result envelope per RunAttempt with repository ID
+  and URL, base and result SHA, immutable ref or source-bundle digest,
+  artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion
+  have idempotency keys plus monotonic host sequence numbers. A response lost
+  after commit therefore returns the original acknowledgement and cannot repeat
+  a lane transition. Protocol 1 cannot call the protocol 2 handoff or completion
+  path.
+- Result refs and manifests have an earliest deletion time of 30 days by
+  default. Reaching Completed or Archive extends that time to at least 30 days
+  after the terminal transition. The current store performs no automatic
+  deletion, so retention cannot end early.
 - Retained remote-runner worktree pickup reconciles the local and canonical
   salvage tips by ancestry before reuse. Equal and remote-ahead tips keep the
   canonical remote ref, and local-ahead tips advance it with a normal
@@ -227,10 +350,15 @@ state.
   an exhausted or genuinely unrecoverable git failure retains the worktree and
   uses the existing `worktree-blocked` escalation with the preserved tips and
   next safe action (AGT-2177).
+- Epic planning is the deliberate exception: its detached checkout is checked
+  for mutations and discarded without salvage. Any mutation invalidates the
+  plan and returns the Epic to Backlog because planning is source-read-only
+  (AGT-2178).
 - Remote daemon admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
-  on its client identity. A reported `read-only` identity receives no claims;
-  Remote Hosts surfaces the same state for operator repair.
+  on its client identity. A reported `read-only` identity receives no coding
+  claims, but may receive read-only Epic planning claims. Remote Hosts surfaces
+  the same state for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider

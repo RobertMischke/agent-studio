@@ -4,13 +4,11 @@ import { TaskState } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
-import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { CodeReviewActivityStore } from '../../../../services/code-review-activity.store';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import {
-  buildAutoReviewProcessBadge,
   buildCardCtxMenuItems,
   buildCodeReviewGradeBadge,
   buildDependencyChip,
@@ -46,21 +44,24 @@ import {
   type CommitChainView,
   type CommitEmptyBadge,
 } from './task-card-view-model';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
-import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
+import { ModelLevelIndicatorComponent } from '../../../../components/model-level-indicator/model-level-indicator.component';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
+import { IntegrationStatusBadgeComponent } from '../../../../components/integration-status-badge/integration-status-badge.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
+import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
 import type { DependencyChip } from './task-card-view-model';
+import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
+import { TaskTestEvidenceComponent } from '../task-test-evidence/task-test-evidence';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -71,7 +72,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent, ExecutionLocationBadgeComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -121,7 +122,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
-  private readonly autoReviewStatus = inject(AutoReviewStatusStore);
   private readonly codeReviewActivity = inject(CodeReviewActivityStore);
   private stopPolling: (() => void) | null = null;
 
@@ -226,15 +226,14 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
 
-  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick()); }
+  phaseBadge() {
+    if (this.job().state === TaskState.AutoReview) return null;
+    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick());
+  }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 
   readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
-
-  readonly autoReviewProcessBadge = computed(() =>
-    buildAutoReviewProcessBadge(this.job(), this.autoReviewStatus.status(), Date.now()),
-  );
 
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
 
@@ -311,6 +310,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly mergeSignal = computed(() => buildMergeSignal(this.job()));
 
   /**
+   * AGT-2202 — the honest integration verdict badge for accepted cards
+   * (5-human-review / 6-completed / 7-archive): "merged @sha" / "NICHT
+   * integriert" / "Konflikt" / "kein Branch". The backend only computes it for
+   * accepted lanes, so presence is the whole gate. Makes accept-without-merge
+   * impossible to miss.
+   */
+  readonly integrationStatus = computed(() => this.job().integration ?? null);
+
+  /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +
    * faint tint that visually separates an escalated / reissue card from the
    * Completed/Archive cards it shares the "Done & Decide" column with.
@@ -359,9 +367,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return t ? cliTypeIcon(t) : '🤖';
   });
 
-  readonly effectiveModelChip = computed(() =>
-    buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
-  );
+  readonly effectiveModelChip = computed(() => buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId)));
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
@@ -415,13 +421,10 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly isRunning = computed(() => this.job().state === TaskState.Progress
     && (this.job().execution?.status === 'running' || this.job().runner != null));
-
+  readonly stalledState = computed(() => deriveStalledTaskState(this.job(), nowTick()));
   /**
-   * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is
-   * holding out its infra-crash re-pickup backoff (`runActivity.failed-backoff`);
-   * renders distinctly from the "Running live" chip. Reads the shared `nowTick`
-   * so the "in Ns" countdown refreshes with every relative-time tick / poll.
-   * See {@link buildCooldownRetryBanner}.
+   * DtC CooldownRetry banner for a Progress card in rapid-crash backoff. The
+   * shared clock keeps its countdown live without another data source.
    */
   readonly cooldownBanner = computed(() => buildCooldownRetryBanner(this.job(), nowTick()));
 

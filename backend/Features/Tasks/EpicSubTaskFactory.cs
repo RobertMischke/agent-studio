@@ -24,82 +24,25 @@ public static class EpicSubTaskFactory
         TaskMutationService mutations,
         TaskInfo epic,
         IReadOnlyList<EpicSubTaskSpec>? specs,
-        string targetState,
-        string initiator = TaskCreationInitiators.Operator,
-        string? contextKey = null)
+        string targetState)
     {
         var created = new List<string>();
         if (specs is null) return created;
-        if (!EpicGoalPlanValidator.Validate(specs).IsValid) return created;
-
         var safeTargetState = ClampTargetState(targetState);
-        var pending = specs.Where(spec => !string.IsNullOrWhiteSpace(spec.Title)).ToList();
-        var processedPlanIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var createdByPlanId = new Dictionary<string, TaskInfo>(StringComparer.OrdinalIgnoreCase);
-
-        // Materialize nodes in topological order even when the authored JSON is
-        // not already sorted. A dependent is skipped if one of its prerequisite
-        // cards could not be created, so it can never run without the dependency
-        // that was meant to gate it.
-        while (pending.Count > 0)
+        foreach (var spec in specs)
         {
-            var index = pending.FindIndex(spec =>
-                EpicGoalPlanValidator.NormalizeDependencies(spec.DependsOn)
-                    .All(processedPlanIds.Contains));
-            if (index < 0) break;
-
-            var spec = pending[index];
-            pending.RemoveAt(index);
-            var dependencies = EpicGoalPlanValidator.NormalizeDependencies(spec.DependsOn);
-            var planId = spec.PlanId?.Trim();
-            var prerequisitesCreated = dependencies.All(createdByPlanId.ContainsKey);
-
-            if (prerequisitesCreated)
+            if (string.IsNullOrWhiteSpace(spec.Title)) continue;
+            var id = mutations.CreateJob(new CreateTaskRequest
             {
-                var provenance = new TaskCreationProvenance
-                {
-                    Initiator = TaskCreationInitiators.Normalize(initiator),
-                    GoalId = epic.Id,
-                    GoalKey = epic.Key,
-                    ContextKey = contextKey,
-                    Purpose = GoalTaskPurposes.Normalize(spec.Purpose),
-                };
-                var id = mutations.CreateJob(new CreateTaskRequest
-                {
-                    Title = spec.Title,
-                    WatchPath = epic.WatchPath,
-                    EpicId = epic.Id,
-                    PromptMarkdown = spec.PromptMarkdown,
-                    CliType = spec.CliType ?? epic.CliType,
-                    Model = spec.Model ?? epic.Model,
-                    TargetState = safeTargetState,
-                }, provenance);
-
-                if (id is not null)
-                {
-                    var info = mutations.FindCreatedJob(id, epic.WatchPath);
-                    if (info is not null)
-                    {
-                        if (dependencies.Count > 0)
-                        {
-                            mutations.SetTaskReferences(id, new TaskReferences
-                            {
-                                DependsOn = dependencies
-                                    .Select(dependency => createdByPlanId[dependency].Key!)
-                                    .Where(key => !string.IsNullOrWhiteSpace(key))
-                                    .ToList(),
-                            }, epic.WatchPath);
-                            info = mutations.FindCreatedJob(id, epic.WatchPath) ?? info;
-                        }
-                        if (!string.IsNullOrWhiteSpace(planId))
-                            createdByPlanId[planId] = info;
-                        created.Add(id);
-                    }
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(planId))
-                processedPlanIds.Add(planId);
+                Title = spec.Title,
+                WatchPath = epic.WatchPath,
+                EpicId = epic.Id,
+                PromptMarkdown = spec.PromptMarkdown,
+                CliType = spec.CliType ?? epic.CliType,
+                Model = spec.Model ?? epic.Model,
+                TargetState = safeTargetState,
+            });
+            if (id is not null) created.Add(id);
         }
         return created;
     }

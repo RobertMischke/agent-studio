@@ -1,3 +1,16 @@
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: design
+lifecycleState: in-progress
+editedBy: "Codex / AGT-2137"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: in-progress
+    editedBy: "Codex / AGT-2137"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Initial classification: Project Graph and mapped guides exist; the broader layer remains staged."
+---
+
 # Architecture and quality layer in Project Hub
 
 Status: operator-vision concept, 2026-07-13. This document is the umbrella

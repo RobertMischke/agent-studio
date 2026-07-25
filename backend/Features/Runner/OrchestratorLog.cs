@@ -163,6 +163,7 @@ public record OrchestratorIntervention
 
 public static class OrchestratorLogKinds
 {
+    public const string Alert = "alert";
     public const string Decision = "decision";
     public const string Action = "action";
     public const string Observation = "observation";
@@ -171,6 +172,7 @@ public static class OrchestratorLogKinds
 
 public static class OrchestratorLogTopics
 {
+    public const string PipelineHealth = "pipeline-health";
     public const string TaskQueued = "task-queued";
     public const string Watchdog = "watchdog";
     public const string Recovery = "recovery";

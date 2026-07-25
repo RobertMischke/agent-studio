@@ -7,22 +7,6 @@ import { NowTickService } from '../../services/now-tick.service';
 
 type PaneMode = 'file' | 'history';
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
-type DiffLineKind = 'add' | 'del' | 'hunk' | 'ctx';
-
-interface DiffLine {
-  kind: DiffLineKind;
-  text: string;
-}
-
-function splitUnifiedDiff(diff: string): DiffLine[] {
-  return diff.replace(/\r\n/g, '\n').split('\n').map((text) => {
-    if (text.startsWith('+++') || text.startsWith('---')) return { kind: 'hunk', text };
-    if (text.startsWith('@@')) return { kind: 'hunk', text };
-    if (text.startsWith('+')) return { kind: 'add', text };
-    if (text.startsWith('-')) return { kind: 'del', text };
-    return { kind: 'ctx', text };
-  });
-}
 
 @Component({
   selector: 'app-file-source-history',
@@ -54,18 +38,12 @@ export class FileSourceHistoryComponent {
   readonly versionContent = signal<string | null>(null);
   readonly versionState = signal<LoadState>('idle');
   readonly versionError = signal<string | null>(null);
-  readonly diffFrom = signal<string | null>(null);
-  readonly diffTo = signal<string | null>(null);
-  readonly diffText = signal<string>('');
-  readonly diffState = signal<LoadState>('idle');
-  readonly diffError = signal<string | null>(null);
 
   readonly displayContent = computed(() => {
     const value = this.content();
     return value == null ? value : this.contentTransform()(value);
   });
   readonly selectedEntry = computed(() => this.history().find((entry) => entry.sha === this.selectedSha()) ?? null);
-  readonly diffLines = computed<DiffLine[]>(() => splitUnifiedDiff(this.diffText()));
 
   private readonly resetOnFileChange = effect(() => {
     this.jobId();
@@ -80,11 +58,6 @@ export class FileSourceHistoryComponent {
     this.versionContent.set(null);
     this.versionState.set('idle');
     this.versionError.set(null);
-    this.diffFrom.set(null);
-    this.diffTo.set(null);
-    this.diffText.set('');
-    this.diffState.set('idle');
-    this.diffError.set(null);
     if (initial === 'history') this.loadHistory();
   }, { allowSignalWrites: true });
 
@@ -102,20 +75,6 @@ export class FileSourceHistoryComponent {
     if (sha) this.loadVersion(sha);
   }
 
-  onVersionSelect(event: Event): void {
-    this.selectVersion((event.target as HTMLSelectElement).value);
-  }
-
-  onDiffFromSelect(event: Event): void {
-    this.diffFrom.set((event.target as HTMLSelectElement).value || null);
-    this.loadDiff();
-  }
-
-  onDiffToSelect(event: Event): void {
-    this.diffTo.set((event.target as HTMLSelectElement).value || null);
-    this.loadDiff();
-  }
-
   formatTimestamp(iso: string | null | undefined): string {
     return formatDateTimeUtc(iso);
   }
@@ -131,12 +90,6 @@ export class FileSourceHistoryComponent {
 
   runLabel(entry: TaskFileHistoryEntry): string {
     return entry.runIndex ? `Run #${entry.runIndex}` : 'Unmapped run';
-  }
-
-  versionLabel(entry: TaskFileHistoryEntry): string {
-    const run = this.runLabel(entry);
-    const at = this.formatTimestamp(entry.at);
-    return at ? `${run} - ${at}` : `${run} - ${this.shortSha(entry.sha)}`;
   }
 
   verdictTone(verdict: string | null | undefined): string {
@@ -168,12 +121,8 @@ export class FileSourceHistoryComponent {
 
   private seedSelection(list: TaskFileHistoryEntry[]): void {
     const latest = list[0] ?? null;
-    const previous = list[1] ?? latest;
     this.selectedSha.set(latest?.sha ?? null);
-    this.diffFrom.set(previous?.sha ?? null);
-    this.diffTo.set(latest?.sha ?? null);
     if (latest) this.loadVersion(latest.sha);
-    this.loadDiff();
   }
 
   private loadVersion(sha: string): void {
@@ -189,31 +138,6 @@ export class FileSourceHistoryComponent {
       error: (err) => {
         this.versionError.set(err?.error?.error || err?.message || 'Could not load this version.');
         this.versionState.set('error');
-      },
-    });
-  }
-
-  private loadDiff(): void {
-    const jobId = this.jobId();
-    const from = this.diffFrom();
-    const to = this.diffTo();
-    if (!jobId || !this.path() || !from || !to) return;
-    if (from === to) {
-      this.diffText.set('');
-      this.diffState.set('loaded');
-      this.diffError.set(null);
-      return;
-    }
-    this.diffState.set('loading');
-    this.diffError.set(null);
-    this.jobs.diffTaskFileVersions(jobId, this.path(), from, to, this.watchPath() ?? undefined, this.scope()).subscribe({
-      next: (text) => {
-        this.diffText.set(text ?? '');
-        this.diffState.set('loaded');
-      },
-      error: (err) => {
-        this.diffError.set(err?.error?.error || err?.message || 'Could not load the version diff.');
-        this.diffState.set('error');
       },
     });
   }

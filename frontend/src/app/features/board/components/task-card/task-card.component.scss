@@ -527,7 +527,6 @@
     .task-card__loop-pill,
     .task-card__review-pill,
     .task-card__code-review-pill,
-    .task-card__auto-review-pill,
     .task-card__issue-pill,
     .task-card__human-review-pill,
     .task-card__git-state-pill,
@@ -727,49 +726,6 @@
       background: currentColor;
       flex: 0 0 auto;
       animation: pulse-running 1.3s infinite;
-    }
-    .task-card__auto-review-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--studio-spacing-1);
-      min-height: var(--studio-card-pill-height);
-      padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 7px;
-      font-size: var(--studio-card-meta-size);
-      font-weight: 650;
-      letter-spacing: 0;
-      border: 1px solid transparent;
-      cursor: help;
-    }
-    .task-card__auto-review-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: currentColor;
-      flex: 0 0 auto;
-    }
-    .task-card__auto-review-pill--active {
-      color: var(--studio-accent-warn-strong);
-      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
-    }
-    .task-card__auto-review-pill--active .task-card__auto-review-dot {
-      animation: pulse-running 1.3s infinite;
-    }
-    .task-card__auto-review-pill--queued {
-      color: var(--studio-accent-warn-strong);
-      background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
-    }
-    .task-card__auto-review-pill--done {
-      color: var(--studio-accent-success-strong);
-      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
-    }
-    .task-card__auto-review-pill--stale {
-      color: var(--studio-accent-6-strong);
-      background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
     .task-card__issue-pill {
       display: inline-flex;
@@ -1177,57 +1133,6 @@
       color: var(--studio-fg-dim);
       background: rgba(148, 163, 184, 0.08);
       border-color: rgba(148, 163, 184, 0.20);
-    }
-    .task-card__effective-model {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex: 1 1 80px;
-      font-size: var(--studio-card-meta-size);
-      color: var(--studio-fg-dim);
-      min-width: 0;
-      max-width: 100%;
-      line-height: 1.2;
-    }
-    .task-card__effective-model-icon {
-      font-size: 11px;
-      line-height: 1;
-      flex: 0 0 auto;
-    }
-    .task-card__effective-model-cli {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-weight: 600;
-      color: var(--studio-fg-dim);
-      white-space: nowrap;
-    }
-    .task-card__effective-model-cli::after {
-      content: "";
-      width: 2px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-      opacity: 0.42;
-    }
-    .task-card__effective-model-name {
-      font-family: var(--font-mono, monospace);
-      color: var(--studio-fg);
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .task-card__effective-model--default .task-card__effective-model-name {
-      font-style: italic;
-      color: var(--studio-fg-dim);
-    }
-    .task-card__effective-model--default .task-card__effective-model-cli {
-      font-style: italic;
-    }
-    .task-card__effective-model[data-model-source="fallback"] {
-      border-color: var(--studio-accent-warn-strong);
-      background: color-mix(in srgb, var(--studio-accent-warn-strong) 12%, transparent);
     }
     /* AGT-2003 runner badge next to the CLI badge. Remote = accent chip with an
        arrow + runner name so a card running on another host is recognizable at a

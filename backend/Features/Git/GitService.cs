@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -99,6 +100,13 @@ public record GitCommitInfo(
     int Added,
     int Removed);
 
+/// <summary>
+/// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
+/// The committer timestamp lets evidence consumers reject a merge that predates
+/// the card's current attributed commit.
+/// </summary>
+public record GitIntegrationMerge(string Sha, DateTime CommittedAtUtc);
+
 public record GenerateMessageResult(string? Message, string? Error);
 
 /// <summary>
@@ -125,6 +133,12 @@ public record GitRecentFileEdit(
 /// commit's <c>Co-authored-by</c> trailer, or null for a hand-authored commit).
 /// </summary>
 public record WikiDocGitInfo(List<GitCommitInfo> Commits, string? Model);
+
+/// <summary>A cached, read-only materialization of docs/ at one git ref.</summary>
+public record WikiBranchSnapshot(string Ref, string Sha, string ShortSha, string RootPath, string? Error)
+{
+    public bool Success => Error == null;
+}
 
 /// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
@@ -403,7 +417,12 @@ public class GitService
 
     private readonly ConcurrentDictionary<string, (DateTime At, string? Sha)> _headShaCache =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (DateTime At, string? Sha)> _refShaCache =
+        new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan HeadShaTtl = TimeSpan.FromSeconds(2);
+
+    private readonly object _wikiSnapshotLock = new();
+    private readonly Dictionary<string, WikiBranchSnapshot> _wikiSnapshots = new(StringComparer.Ordinal);
 
     private const int HeadKeyedCacheLimit = 256;
     private readonly object _headKeyedLock = new();
@@ -426,6 +445,70 @@ public class GitService
         var sha = ReadHeadShaAt(root);
         _headShaCache[root] = (DateTime.UtcNow, sha);
         return sha;
+    }
+
+    /// <summary>Resolves a branch or remote-tracking ref with the shared short TTL.</summary>
+    public string? GetRefShaCached(string root, string gitRef)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(gitRef)
+            || !IsLikelyBranchName(gitRef)) return null;
+        var key = root + CacheKeySep + gitRef;
+        if (_refShaCache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < HeadShaTtl)
+            return cached.Sha;
+        var (output, _, code) = RunGitArgs(root, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}");
+        var sha = code == 0 ? output.Trim() : null;
+        if (string.IsNullOrWhiteSpace(sha)) sha = null;
+        _refShaCache[key] = (DateTime.UtcNow, sha);
+        return sha;
+    }
+
+    /// <summary>
+    /// Materializes docs/ from a configured ref without changing any checkout.
+    /// The immutable SHA is the cache key, so a warm wiki request performs no
+    /// archive work and a moved branch creates exactly one new snapshot.
+    /// </summary>
+    public WikiBranchSnapshot GetWikiBranchSnapshotCached(string repoRoot, string gitRef)
+    {
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root))
+            return new(gitRef, "", "", "", "Repository not found.");
+        var sha = GetRefShaCached(root, gitRef);
+        if (sha == null)
+            return new(gitRef, "", "", "", $"Git ref '{gitRef}' was not found. Fetch it or choose another wiki source.");
+
+        var key = root + CacheKeySep + sha;
+        lock (_wikiSnapshotLock)
+        {
+            if (_wikiSnapshots.TryGetValue(key, out var hit) && Directory.Exists(hit.RootPath))
+                return hit;
+
+            var rootHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(root)))[..12];
+            var snapshotRoot = Path.Combine(Path.GetTempPath(), "agent-studio", "wiki-snapshots", rootHash, sha);
+            var docsDir = Path.Combine(snapshotRoot, "docs");
+            if (!Directory.Exists(docsDir))
+            {
+                Directory.CreateDirectory(snapshotRoot);
+                var archive = Path.Combine(snapshotRoot, "docs.tar");
+                var (_, error, code) = RunGitArgs(root, "archive", "--format=tar", $"--output={archive}", sha, "--", "docs");
+                if (code != 0)
+                    return new(gitRef, sha, sha[..Math.Min(8, sha.Length)], snapshotRoot,
+                        string.IsNullOrWhiteSpace(error) ? "The selected ref has no readable docs/ tree." : error.Trim());
+                try
+                {
+                    TarFile.ExtractToDirectory(archive, snapshotRoot, overwriteFiles: true);
+                    File.Delete(archive);
+                }
+                catch (Exception ex)
+                {
+                    return new(gitRef, sha, sha[..Math.Min(8, sha.Length)], snapshotRoot,
+                        $"Could not materialize the wiki source: {ex.Message}");
+                }
+            }
+
+            var snapshot = new WikiBranchSnapshot(gitRef, sha, sha[..Math.Min(8, sha.Length)], snapshotRoot, null);
+            _wikiSnapshots[key] = snapshot;
+            return snapshot;
+        }
     }
 
     /// <summary>
@@ -1044,6 +1127,19 @@ public class GitService
     /// </summary>
     public string? ResolveProjectRepoRoot(string projectName) => ResolveProjectRoot(projectName);
 
+    /// <summary>
+    /// Resolves one runner entry to its authoritative Git checkout root.
+    /// <c>RepositoryPath</c> wins over <c>RootPath</c>; the latter may be a
+    /// monorepo subfolder, while task storage in <c>Path</c> is never treated as
+    /// source. Returns null instead of handing a non-Git local folder to a
+    /// mutating run.
+    /// </summary>
+    public string? ResolveRepositoryRoot(WatchPathEntry entry)
+    {
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        return string.IsNullOrWhiteSpace(configured) ? null : ResolveGitToplevel(configured);
+    }
+
     /// <summary>Resolve the repository root for a job.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
     {
@@ -1135,10 +1231,10 @@ public class GitService
     }
 
     /// <summary>
-    /// True when <paramref name="path"/> lives inside a git working tree (so the
-    /// worktree machinery is available). The runner gates its "always-worktree"
-    /// requirement on this: a non-git workspace has no worktree primitives and
-    /// runs in-place. Cheap: a single <c>rev-parse --show-toplevel</c>.
+    /// True when <paramref name="path"/> lives inside a git working tree.
+    /// Diagnostic helper only: coding isolation must resolve the authoritative
+    /// repository through <see cref="ResolveRepositoryRoot"/> and fail closed
+    /// when it is absent. Cheap: a single <c>rev-parse --show-toplevel</c>.
     /// </summary>
     public bool IsGitRepo(string? path) => ResolveGitToplevel(path ?? string.Empty) != null;
 
@@ -1562,13 +1658,13 @@ public class GitService
         if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {configured}");
 
         // Scoped commit: when the caller names the task's own paths, stage and
-        // commit ONLY those. A sequential (maxParallelism==1) run shares the
-        // main checkout, so unrelated dirty changes from operator edits or an
-        // earlier task that never committed pile up there. A blanket `git add
-        // -A` would sweep all of them into THIS task's commit (the mega-blob /
+        // commit ONLY those. Always-worktree coding runs should already be
+        // isolated, but this legacy/transition path also handles read-only,
+        // operator-authored, and pre-policy state. A blanket `git add -A` could
+        // sweep unrelated dirty changes into THIS task's commit (the mega-blob /
         // mis-attribution bug). Restricting the pathspec keeps the commit - and
         // its stamped SHA - to exactly the files this task touched, and leaves
-        // the foreign changes dirty for their own owner to handle.
+        // foreign changes dirty for their own owner to handle.
         if (pathspecs is { Count: > 0 })
         {
             var addArgs = new List<string> { "add", "-A", "--" };
@@ -2154,12 +2250,12 @@ public class GitService
         return new GitWorktreeResult(false, repoRoot, err);
     }
 
-    // ADR-0052 worktree + integration primitives. These are low-level git
-    // plumbing for the parallel-task model (worktree-per-task on task/<id>
-    // branches off the integration branch). They take an explicit repo or
-    // worktree root so the orchestrator can drive them directly and so they
-    // are unit-testable against a temp repo. None of them run while
-    // maxParallelism == 1, so the sequential runner is unaffected.
+    // ADR-0052/ADR-0057 worktree + integration primitives. These are low-level
+    // git plumbing for the worktree-per-coding-task model on task/<id> branches
+    // off the integration branch. They take an explicit repo or worktree root
+    // so the orchestrator can drive them directly and so they are unit-testable
+    // against a temp repo. Coding runs use them at every slot count;
+    // maxParallelism controls admission capacity only.
 
     /// <summary>
     /// Creates a new worktree at <paramref name="worktreePath"/> with a fresh
@@ -2337,6 +2433,92 @@ public class GitService
         }
         _logger.LogInformation("Fast-forwarded {Path} to {SourceRef}", repoRoot, sourceRef);
         return new GitWorktreeResult(true, repoRoot, null);
+    }
+
+    /// <summary>
+    /// Advances an explicit target branch to an exact, already-tested source
+    /// revision using a fast-forward only. The expected SHAs close the gap
+    /// between a pre-main test run and the ref mutation: if either branch moved
+    /// while the suite was running, no merge is attempted.
+    /// </summary>
+    public MergeIntoIntegrationResult MergeBranchFastForward(
+        string repoRoot,
+        string sourceBranch,
+        string targetBranch,
+        string expectedSourceSha,
+        string expectedTargetSha)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
+        if (!IsLikelyBranchName(sourceBranch) || !IsLikelyBranchName(targetBranch))
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error, error: "Invalid source or target branch.");
+
+        var sourceSha = GetBranchTip(repoRoot, sourceBranch);
+        var targetSha = GetBranchTip(repoRoot, targetBranch);
+        if (!string.Equals(sourceSha, expectedSourceSha, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(targetSha, expectedTargetSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Source or target branch moved after the pre-main test run; release merge was not attempted.");
+        }
+
+        if (IsAncestor(repoRoot, sourceBranch, targetBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
+        if (!IsAncestor(repoRoot, targetBranch, sourceBranch))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Release source '{sourceBranch}' is not a fast-forward of '{targetBranch}'.");
+        }
+        if (RepoHasUncommittedChanges(repoRoot))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Integration working tree has uncommitted changes; refusing to merge.");
+        }
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, targetBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", targetBranch);
+            if (checkoutCode != 0)
+            {
+                return MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"Could not check out '{targetBranch}': {checkoutError.Trim()}");
+            }
+        }
+
+        // Merge the immutable revision that passed the suite, not the movable
+        // branch name. The branch-tip checks above reject movement already
+        // observed after the gate; this also closes the smaller race between
+        // those checks and the ref mutation itself.
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot, "merge", "--ff-only", expectedSourceSha);
+        if (mergeCode != 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Fast-forward release merge failed: {mergeError.Trim()}");
+        }
+
+        var mergedSha = ReadHeadShaAt(repoRoot);
+        if (!string.Equals(mergedSha, expectedSourceSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Fast-forward release merge did not land on the tested source SHA.");
+        }
+
+        _logger.LogInformation(
+            "Fast-forwarded release target {TargetBranch} to tested source {SourceBranch} at {Sha}",
+            targetBranch, sourceBranch, mergedSha);
+        return MergeIntoIntegrationResult.Of(
+            MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
     }
 
     /// <summary>
@@ -3004,6 +3186,20 @@ public class GitService
     }
 
     /// <summary>
+    /// Reads the checked-out branch at an explicit repository or worktree
+    /// root. A detached checkout returns <c>HEAD</c>; null means the path is
+    /// not a readable git repository.
+    /// </summary>
+    public string? ReadBranchAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (output, _, code) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        if (code != 0) return null;
+        var branch = output.Trim();
+        return string.IsNullOrWhiteSpace(branch) ? null : branch;
+    }
+
+    /// <summary>
     /// Lists commits in the SHA range <c>before..after</c> (exclusive of
     /// <paramref name="beforeSha"/>, inclusive of <paramref name="afterSha"/>).
     /// This is the *deterministic* commit-attribution path: the run
@@ -3477,7 +3673,7 @@ public class GitService
     /// lineage intact. Returns an empty list when the repo or path can't be
     /// resolved, mirroring the other read-only git lookups on this service.
     /// </summary>
-    public List<GitCommitInfo> GetFileHistory(string repoRoot, string repoRelPath, int limit = 50)
+    public List<GitCommitInfo> GetFileHistory(string repoRoot, string repoRelPath, int limit = 50, string? atRef = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return [];
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
@@ -3488,9 +3684,14 @@ public class GitService
         // any printable char round-trips. --follow needs exactly one pathspec
         // after `--`; args are passed verbatim so a path with spaces survives.
         const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
-        var (output, _, code) = RunGitArgs(root,
+        var args = new List<string> {
             "log", "--no-merges", $"--max-count={limit}", "--follow",
-            "--shortstat", $"--pretty=format:{fmt}", "--", repoRelPath.Replace('\\', '/'));
+            "--shortstat", $"--pretty=format:{fmt}"
+        };
+        if (!string.IsNullOrWhiteSpace(atRef)) args.Add(atRef);
+        args.Add("--");
+        args.Add(repoRelPath.Replace('\\', '/'));
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
         return ParseLogBlocks(output);
     }
@@ -3507,13 +3708,18 @@ public class GitService
     /// resolved, mirroring the other read-only git lookups on this service.
     /// </summary>
     public List<GitRecentFileEdit> GetRecentEditsUnderPath(
-        string repoRoot, string repoRelDir, int limit = 20, int commitScan = 200)
+        string repoRoot, string repoRelDir, int limit = 20, int commitScan = 200, string? atRef = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot)) return [];
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
         if (!Directory.Exists(root)) return [];
         if (limit <= 0) limit = 20;
         if (commitScan <= 0) commitScan = 200;
+        var fixedKey = !string.IsNullOrWhiteSpace(atRef) && LooksLikeImmutableSha(atRef)
+            ? string.Join(CacheKeySep, "wiki-recent-ref", root, atRef, repoRelDir, limit, commitScan)
+            : null;
+        if (fixedKey != null && TryGetShaRangeCached<List<GitRecentFileEdit>>(fixedKey, out var fixedHit))
+            return fixedHit;
 
         // Records are separated by Record Separator (0x1E); fields inside the
         // header line by Unit Separator (0x1F). --name-only lists each changed
@@ -3521,11 +3727,18 @@ public class GitService
         // first, the first time we see a path is its most-recent commit.
         const string fmt = "%x1e%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
         var pathspec = string.IsNullOrWhiteSpace(repoRelDir) ? "." : repoRelDir.Replace('\\', '/');
-        var (output, _, code) = RunGitArgs(root,
+        var args = new List<string> {
             "log", "--no-merges", $"--max-count={commitScan}",
-            "--name-only", $"--pretty=format:{fmt}", "--", pathspec);
+            "--name-only", $"--pretty=format:{fmt}"
+        };
+        if (!string.IsNullOrWhiteSpace(atRef)) args.Add(atRef);
+        args.Add("--");
+        args.Add(pathspec);
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
-        return ParseRecentEdits(output, limit);
+        var result = ParseRecentEdits(output, limit);
+        if (fixedKey != null) StoreShaRangeCached(fixedKey, result);
+        return result;
     }
 
     /// <summary>
@@ -3658,16 +3871,20 @@ public class GitService
     /// address is stripped so the wiki provenance line shows just the model
     /// name. Returns null for a hand-authored commit with no such trailer.
     /// </summary>
-    public string? GetLatestModelForPath(string repoRoot, string repoRelPath)
+    public string? GetLatestModelForPath(string repoRoot, string repoRelPath, string? atRef = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return null;
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
         if (!Directory.Exists(root)) return null;
 
-        var (output, _, code) = RunGitArgs(root,
+        var args = new List<string> {
             "log", "--no-merges", "--max-count=1",
-            "--pretty=format:%(trailers:key=Co-authored-by,valueonly,separator=%x1f)",
-            "--", repoRelPath.Replace('\\', '/'));
+            "--pretty=format:%(trailers:key=Co-authored-by,valueonly,separator=%x1f)"
+        };
+        if (!string.IsNullOrWhiteSpace(atRef)) args.Add(atRef);
+        args.Add("--");
+        args.Add(repoRelPath.Replace('\\', '/'));
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
         return ParseModelTrailer(output);
     }
@@ -3728,10 +3945,19 @@ public class GitService
     /// git spawns beyond the shared HEAD probe, instead of the two `git log`
     /// spawns (history + trailer) it used to make on every open.
     /// </summary>
-    public WikiDocGitInfo GetWikiDocGitInfoCached(string repoRoot, string repoRelPath, int limit = 50)
+    public WikiDocGitInfo GetWikiDocGitInfoCached(string repoRoot, string repoRelPath, int limit = 50, string? atCommit = null)
     {
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
-        var key = string.Join(CacheKeySep, "wiki-hist", root, repoRelPath, limit);
+        var key = string.Join(CacheKeySep, "wiki-hist", root, repoRelPath, limit, atCommit ?? "HEAD");
+        if (!string.IsNullOrWhiteSpace(atCommit) && LooksLikeImmutableSha(atCommit))
+        {
+            if (TryGetShaRangeCached<WikiDocGitInfo>(key, out var fixedHit)) return fixedHit;
+            var fixedValue = new WikiDocGitInfo(
+                GetFileHistory(root, repoRelPath, limit, atCommit),
+                GetLatestModelForPath(root, repoRelPath, atCommit));
+            StoreShaRangeCached(key, fixedValue);
+            return fixedValue;
+        }
         return MemoizeByHead(root, key, () => new WikiDocGitInfo(
             GetFileHistory(root, repoRelPath, limit),
             GetLatestModelForPath(root, repoRelPath)));
@@ -4346,6 +4572,158 @@ public class GitService
         }
         return true;
     }
+
+    /// <summary>
+    /// Commit parent graph reachable from all supplied refs in one git process.
+    /// Consumers can derive ancestry and edge distance for many ref pairs in
+    /// memory instead of spawning merge-base and rev-list once per card.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetCommitParentGraph(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var graph = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return graph;
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return graph;
+        var args = new List<string> { "rev-list", "--parents", "--ignore-missing" };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0) return graph;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0) graph[parts[0]] = parts.Skip(1).ToArray();
+        }
+        return graph;
+    }
+
+    /// <summary>
+    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
+    /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
+    /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
+    /// repo (the grep pre-filters to only the curated integrator merges, so the
+    /// output is O(accepted tasks), not O(history)). This is the authoritative
+    /// integration signal that anchor-ancestry cannot see: the async curated
+    /// integrator rewrites commits, so a task's own SHAs are frequently NOT
+    /// ancestors of develop even though its work landed under a curated merge
+    /// commit. Read-only; empty on any failure. When several merges reference the
+    /// same key the newest (first in <c>git log</c> order) wins.
+    /// </summary>
+    public Dictionary<string, string> GetIntegrationMergeShaByKey(string repoRoot, string integrationRef)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return map;
+        if (!IsLikelyBranchName(integrationRef)) return map;
+
+        // Extended-regexp grep: match a subject that starts with merge( or
+        // merge-recut( followed by a task key. --grep is ORed across the two
+        // patterns; -E makes the alternation / groups work.
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "log",
+            "--no-color",
+            "-E",
+            "--grep=^merge(-recut)?\\(",
+            "--format=%H%x1f%s",
+            integrationRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return map;
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var sep = line.IndexOf('\x1f');
+            if (sep <= 0) continue;
+            var sha = line[..sep].Trim();
+            var subject = line[(sep + 1)..];
+            var key = ParseIntegrationMergeKey(subject);
+            if (sha.Length == 0 || key == null) continue;
+            // git log is newest-first; keep the first (newest) merge per key.
+            map.TryAdd(key, sha);
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// All curated integration commits reachable from the supplied test-run
+    /// revisions, grouped by task key. The committer timestamp is part of the
+    /// result because a key alone is not revision identity: consumers must
+    /// reject integrations older than the card's current attributed commit.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> GetIntegrationMergesByKey(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var map = new Dictionary<string, List<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+
+        var args = new List<string>
+        {
+            "log",
+            "--no-color",
+            "-E",
+            "--grep=^merge(-recut)?\\(",
+            "--format=%H%x1f%cI%x1f%s",
+        };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var parts = line.Split('\x1f', 3);
+            if (parts.Length != 3) continue;
+            var sha = parts[0].Trim();
+            if (sha.Length == 0
+                || !DateTime.TryParse(
+                    parts[1],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                        | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var committedAtUtc)
+                || ParseIntegrationMergeKey(parts[2]) is not { } key)
+            {
+                continue;
+            }
+            if (!map.TryGetValue(key, out var commits))
+            {
+                commits = [];
+                map[key] = commits;
+            }
+            if (!commits.Any(commit => string.Equals(commit.Sha, sha, StringComparison.OrdinalIgnoreCase)))
+                commits.Add(new GitIntegrationMerge(sha, committedAtUtc));
+        }
+
+        return map.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<GitIntegrationMerge>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Extracts the task KEY from a curated integrator merge subject:
+    /// <c>merge(AGT-2202): ...</c> or <c>merge-recut(AGT-2202): ...</c> -&gt;
+    /// <c>AGT-2202</c>. Returns null when the subject is not a curated merge.
+    /// Case-insensitive on the <c>merge</c> prefix; the key is upper-cased so it
+    /// matches <see cref="AgentStudio.Shared.TaskInfo.Key"/>.
+    /// </summary>
+    internal static string? ParseIntegrationMergeKey(string subject)
+    {
+        if (string.IsNullOrWhiteSpace(subject)) return null;
+        var m = IntegrationMergeSubjectRegex.Match(subject.Trim());
+        return m.Success ? m.Groups["key"].Value.ToUpperInvariant() : null;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex IntegrationMergeSubjectRegex =
+        new(@"^merge(?:-recut)?\((?<key>[A-Za-z][A-Za-z0-9]*-\d+)\)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     // ----- PUB-1: publish-target derivation primitives (read-only) -----
 

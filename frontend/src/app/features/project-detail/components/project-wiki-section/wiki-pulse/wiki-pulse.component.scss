@@ -332,3 +332,8 @@
 .wpulse__seg[data-tone='muted'] .wpulse__seg-grade {
   color: var(--pwiki-paper-muted);
 }
+
+// Dead-link/warning rows are buttons now: full-width reset in card look.
+.wpulse__warning-open { --wpulse-warning-stack-gap: 2px; display: flex; flex-direction: column; gap: var(--wpulse-warning-stack-gap); width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.wpulse__warning-open:hover .wpulse__row-title { text-decoration: underline; }
+.wpulse__warning-doc { font-family: var(--studio-font-mono, monospace); font-size: 10px; color: var(--studio-fg-muted); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }

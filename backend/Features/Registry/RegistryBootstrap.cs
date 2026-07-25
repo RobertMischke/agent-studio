@@ -80,6 +80,51 @@ public static class RegistryBootstrap
             discovered++;
         }
 
+        // Initial shared-component declaration. It is seeded into the CAC
+        // project metadata once both projects are known, then behaves exactly
+        // like an operator-created Project Hub mapping. Subsequent boots do
+        // not overwrite owner edits.
+        var cac = projects.FindByShortCode("CAC");
+        var agt = projects.FindByShortCode("AGT");
+        if (cac != null && agt != null
+            && !cac.OwnershipMappings.Any(row => string.Equals(row.Id, "cac-agent-studio-chat", StringComparison.OrdinalIgnoreCase)))
+        {
+            projects.UpsertOwnershipMapping(cac.Id, new ComponentOwnershipMapping
+            {
+                Id = "cac-agent-studio-chat",
+                ObservedSurfaces = ["Agent Studio Orchestrator chat", "Agent Studio chat rendering", "chat footer", "chat message"],
+                Component = "Coding Agent Chat rendering, footer, and message components",
+                PackageOrModule = "coding-agent-chat",
+                Repository = "coding-agent-chat",
+                PrimaryProjectId = cac.Id,
+                ConsumerProjectIds = [agt.Id],
+                IntegrationHosts = ["Agent Studio"],
+                ReleaseArtifact = "coding-agent-chat npm package",
+                VersioningMechanism = "npm package version",
+                DeploymentSteps = ["Publish coding-agent-chat package", "Update Agent Studio dependency", "Build and deploy Agent Studio"],
+                Environments = ["development", "stable"],
+                AllowedTicketPrefix = cac.ShortCode,
+                Evidence = ["frontend/AGENTS.md chat surfaces contract", "Agent Studio package dependency"],
+                Confidence = 1,
+            }, "registry-bootstrap");
+        }
+        if (agt != null
+            && !agt.OwnershipMappings.Any(row => string.Equals(row.Id, "agent-studio-backend", StringComparison.OrdinalIgnoreCase)))
+        {
+            projects.UpsertOwnershipMapping(agt.Id, new ComponentOwnershipMapping
+            {
+                Id = "agent-studio-backend",
+                ObservedSurfaces = ["Agent Studio backend", "Agent Studio API", "Agent Studio orchestrator backend"],
+                Component = "Agent Studio backend and API",
+                PackageOrModule = "backend",
+                Repository = "agent-taskboard",
+                PrimaryProjectId = agt.Id,
+                AllowedTicketPrefix = agt.ShortCode,
+                Evidence = ["Agent Studio backend source and deployment ownership"],
+                Confidence = 1,
+            }, "registry-bootstrap");
+        }
+
         logger.LogInformation(
             "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} watchPathDisplayNameDivergences={Divergences}",
             workspaces.List().Count,

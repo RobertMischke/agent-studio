@@ -23,6 +23,8 @@ Run context:
 
 Rules: same as a fresh run. Work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for other tasks, and do not start another task. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push; the platform owns commit and push after the run. Do not ask what to do unless required files are missing or contradictory.
 
+Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
+
 Build-time observability (when your change affects product behavior):
 
 - Preserve existing structured logs and event names; do not silently delete instrumentation while editing nearby code.

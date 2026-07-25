@@ -374,6 +374,32 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__human-review-pill--attention');
   });
 
+  it('renders an amber Stalled signal for a failed In-Progress card with no active run', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '3-progress',
+      execution: null,
+      runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'agent did not produce a reply' },
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.stalledState()).toMatchObject({ reason: 'failed', label: 'Stalled' });
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--stalled')).toBe(true);
+    expect(host?.getAttribute('data-stalled')).toBe('failed');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-stalled"]')?.textContent).toContain('Stalled');
+  });
+
   it('stays quiet for an accepted human-review card', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
@@ -1055,6 +1081,8 @@ describe('TaskCardComponent (smoke)', () => {
         cacheReadTokens: 250_000,
         cacheCreationTokens: 12_000,
         totalTokens: 400_000,
+        estimatedApiCostUsd: 1.25,
+        allModelsPriced: true,
         lastModel: 'claude-opus-4-7',
         lastUpdate: '2026-06-09T08:30:00Z',
         entries: [],
@@ -1073,6 +1101,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
 
     fixture.destroy();
   });
@@ -1153,6 +1183,17 @@ describe('TaskCardComponent (smoke)', () => {
   it('shows no runner chip on an idle (not-running) card', async () => {
     const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, executionLocation: null }));
     expect(fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]')).toBeNull();
+  });
+
+  it('renders a compact family code and named thinking level without model text', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready', cliType: 'claude', model: 'claude-opus-4-8', thinkingLevel: 'xhigh',
+    }));
+    const indicator = fixture.nativeElement.querySelector('[data-testid="task-card-effective-model"]') as HTMLElement;
+    expect(indicator.textContent?.trim()).toBe('OP4.8xh');
+    expect(indicator.dataset['modelFamily']).toBe('opus');
+    expect(indicator.dataset['modelId']).toBe('claude-opus-4-8');
+    expect(indicator.dataset['cli']).toBe('claude');
   });
 });
 
@@ -1363,6 +1404,8 @@ describe('buildTokenBubble', () => {
       cacheReadTokens: 1000,
       cacheCreationTokens: 0,
       totalTokens: 4300,
+      estimatedApiCostUsd: 0.09,
+      allModelsPriced: true,
       lastModel: 'GPT-5 Codex',
       lastUpdate: '2026-06-09T08:05:00Z',
       entries: [
@@ -1388,6 +1431,7 @@ describe('buildTokenBubble', () => {
     });
 
     expect(bubble?.model).toBe('GPT-5 Codex');
+    expect(bubble?.costTooltip).toContain('Estimated cost: $0.09');
     expect(bubble?.entries.map((entry) => entry.model)).toEqual([
       'GPT-5 Codex',
       'Claude Haiku 4.5',

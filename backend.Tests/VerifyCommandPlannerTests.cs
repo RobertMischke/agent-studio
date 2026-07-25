@@ -298,6 +298,11 @@ public sealed class VerifyCommandPlannerTests : IDisposable
 /// end-to-end command loop driven through the build-profile override (trivial
 /// shell commands so the test needs no real toolchain).
 /// </summary>
+// MachineBound 22.07.: instanziiert einen echten BuildTestGateRunner und nimmt den
+// maschinenweiten Lock %TEMP%\agentstudio-build-test-gate.lock - laeuft die Suite IM
+// Gate, haelt das Gate den Lock bereits -> 15s-SLA -> Timeout/Collision -> Gate-Fail
+// (Selbstblockade). Klassenweit, weil jede Methode denselben Runner/Lock beruehrt.
+[Trait("Category", "MachineBound")]
 public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 {
     private readonly string _root;
@@ -347,6 +352,36 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal("no verify commands derivable", r.Reason);
         Assert.False(r.RanBackendBuild);
         Assert.False(r.RanFrontendBuild);
+    }
+
+    [Fact]
+    public async Task HealthObserverFailure_DoesNotFailGateOrRetainMachineLock()
+    {
+        var runner = new BuildTestGateRunner(
+            NullLogger<BuildTestGateRunner>.Instance,
+            health: new ThrowingPipelineHealthSensor());
+        var request = new BuildTestGateRequest(
+            _root,
+            null,
+            "health-observer-test",
+            RequireExactSubject: false)
+        {
+            Project = "Project",
+            WatchPath = _root,
+            JobId = "health-observer-card",
+        };
+
+        var first = await runner.RunAsync(
+            request,
+            changedFiles: null,
+            profile: null,
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None);
+        var second = await Run(profile: null);
+
+        Assert.Equal(BuildTestGateVerdict.Skipped, first.Verdict);
+        Assert.Equal(BuildTestGateVerdict.Skipped, second.Verdict);
     }
 
     [Fact]
@@ -686,6 +721,18 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             _firstWaitEntered.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
         }
+    }
+
+    private sealed class ThrowingPipelineHealthSensor : IPipelineHealthSensor
+    {
+        public void GateAcquired(PipelineGateContext gate)
+            => throw new IOException("synthetic acquire observer failure");
+
+        public void GateCompleted(PipelineGateCompletion completion)
+            => throw new IOException("synthetic completion observer failure");
+
+        public PipelineHealthSnapshot? Snapshot(string project, DateTime? nowUtc = null)
+            => null;
     }
 
     private string InitializeGitRepository()

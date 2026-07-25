@@ -4,8 +4,9 @@ namespace AgentStudio.Runner;
 
 /// <summary>
 /// One in-flight coding run's claim state. At <c>MaxParallelism == 1</c> there
-/// is at most one of these; the registry (<see cref="ActiveRuns"/>) generalizes
-/// to N slots (ADR-0052 slice 2) without the caller re-deriving run state.
+/// is at most one of these; every record still points at its own worktree. The
+/// registry (<see cref="ActiveRuns"/>) generalizes admission to N slots
+/// (ADR-0052 slice 2) without changing isolation.
 ///
 /// <para>
 /// Construction is two-stage: <see cref="CliType"/> is only known once the
@@ -60,11 +61,24 @@ internal sealed class ActiveRun
     public TaskParallelism Parallelism { get; set; } = TaskParallelism.Default;
 
     /// <summary>
-    /// Isolated git worktree this run executes in when in a parallel slot
-    /// (MaxParallelism &gt; 1). Null for the sequential (max==1) path, which runs
-    /// in the project's main checkout exactly as before.
+    /// Repository root of the isolated git worktree backing this run. Every
+    /// coding run has one, including the single-slot local path.
     /// </summary>
     public string? WorktreePath { get; set; }
+
+    /// <summary>
+    /// Actual CLI cwd inside <see cref="WorktreePath"/>. Usually the worktree
+    /// root; for a configured monorepo subfolder it is the equivalent subfolder
+    /// inside the worktree.
+    /// </summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>
+    /// Authoritative main-checkout repository root the worktree was cut from.
+    /// Git integration and containment checks use this path, never task storage
+    /// or a configured monorepo subfolder.
+    /// </summary>
+    public string? RepositoryRoot { get; set; }
 
     /// <summary>The ephemeral <c>task/&lt;id&gt;</c> branch backing the worktree, when isolated.</summary>
     public string? Branch { get; set; }
@@ -86,7 +100,7 @@ internal sealed class ActiveRun
     /// </summary>
     public string? MainCheckoutStatusBefore { get; set; }
 
-    /// <summary>True when this run is isolated in its own worktree (parallel slot).</summary>
+    /// <summary>True when this run is isolated in its own worktree.</summary>
     public bool IsWorktreeRun => !string.IsNullOrEmpty(WorktreePath);
 }
 

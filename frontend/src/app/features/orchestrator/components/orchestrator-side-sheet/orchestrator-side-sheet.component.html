@@ -12,6 +12,24 @@
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
+    <div class="sheet__execution-context"
+         [attr.title]="executionContextTitle()"
+         [class.sheet__execution-context--resolving]="executionContext()?.state !== 'ready'"
+         data-testid="orch-execution-context">
+      <span class="sheet__execution-dot" aria-hidden="true"></span>
+      <span class="sheet__execution-copy">
+        <strong data-testid="orch-execution-host">{{ executionHostLabel() }}</strong>
+        <small data-testid="orch-execution-ref" [attr.aria-label]="executionRefLabel()">
+          <span class="sheet__execution-repo"
+                data-testid="orch-execution-repo">{{ executionRepoLabel() }}</span>
+          @if (executionRevisionLabel(); as revision) {
+            <span class="sheet__execution-revision"
+                  data-testid="orch-execution-revision">{{ revision }}</span>
+          }
+        </small>
+      </span>
+    </div>
+
     <app-orchestrator-project-picker
       [projects]="projects()"
       [activeProject]="effectiveProject()"
@@ -121,8 +139,6 @@
                 [events]="conversationEvents()"
                 [isRunning]="sending() || loading()"
                 [showHeader]="false"
-                [virtualised]="true"
-                bodyMaxHeight="100%"
                 (openVerboseDebug)="onOpenVerboseDebug()" />
             </div>
 

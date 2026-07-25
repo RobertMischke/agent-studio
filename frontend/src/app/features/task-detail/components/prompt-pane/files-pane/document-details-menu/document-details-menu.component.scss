@@ -1,0 +1,102 @@
+:host {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.doc-details { position: relative; }
+
+.doc-details__trigger {
+  display: grid;
+  width: 26px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  list-style: none;
+
+  &::-webkit-details-marker { display: none; }
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--studio-border);
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg-strong);
+    outline: none;
+  }
+}
+
+.doc-details__menu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + var(--studio-spacing-1));
+  right: 0;
+  width: min(320px, 78vw);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border-strong, var(--studio-border));
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+  box-shadow: var(--elevation-popover);
+  cursor: default;
+}
+
+.doc-details__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+
+  div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: var(--studio-spacing-2);
+  }
+
+  dt {
+    color: var(--studio-fg-dim);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--studio-fg-strong);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.doc-details__source {
+  width: 100%;
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 4px;
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    border-color: color-mix(in srgb, var(--studio-accent) 48%, var(--studio-border));
+    color: var(--studio-fg-strong);
+    outline: none;
+  }
+}
+
+.doc-details__source + .doc-details__source {
+  margin-top: var(--studio-spacing-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-details__trigger,
+  .doc-details__source { transition-duration: 0s; }
+}

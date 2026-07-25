@@ -94,6 +94,8 @@ export interface HostTelemetrySeries {
   findings: readonly HostTelemetryFinding[];
 }
 
+export type HostLiveDataState = 'loading' | 'ready' | 'error';
+
 /** A single execution location in the registry. */
 export interface RemoteHost {
   id: string;
@@ -117,6 +119,10 @@ export interface RemoteHost {
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
   telemetry?: HostTelemetrySeries | null;
+  /** Freshness of the client/daemon projection requested for this mount. */
+  liveDataState?: HostLiveDataState;
+  /** Telemetry has a separate request so runtime truth never waits on history. */
+  telemetryLoading?: boolean;
   /** Latest daemon startup proof of origin write access. */
   gitPushStatus?: 'ready' | 'read-only' | null;
   gitPushDetail?: string | null;
@@ -125,6 +131,8 @@ export interface RemoteHost {
   lastClaimAt?: string | null;
   activeTaskCount?: number;
   availableSlots?: number;
+  activeGateCount?: number;
+  gateCapacity?: number;
   retireRequestedAt?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;

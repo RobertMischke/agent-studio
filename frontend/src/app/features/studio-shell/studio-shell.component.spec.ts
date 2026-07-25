@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -666,5 +666,90 @@ describe('StudioShellComponent hub tab label + icon', () => {
     // Tabs with no owning project fall back to the plain label.
     expect(component.tabTooltip({ kind: 'board', projectName: '__all__' }))
       .toBe('All projects · Board');
+  });
+});
+
+describe('StudioShellComponent active-tab scroll-into-view (AGT-2135)', () => {
+  function configure(): {
+    fixture: ComponentFixture<StudioShellComponent>;
+    component: StudioShellComponent;
+    tabState: StudioTabStateService;
+  } {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    return {
+      fixture,
+      component: fixture.componentInstance,
+      tabState: TestBed.inject(StudioTabStateService),
+    };
+  }
+
+  /** jsdom implements neither scrollIntoView nor real layout geometry, so we
+   *  stub both: a scroll-spy on the active tab and fixed rects on the list +
+   *  active tab so the in/out-of-view decision is deterministic. */
+  function stub(
+    root: HTMLElement,
+    activeTabKey: string,
+    tabRect: { left: number; right: number },
+  ): ReturnType<typeof vi.fn> {
+    const list = root.querySelector<HTMLElement>('.studio-tabbar__list')!;
+    const active = Array.from(list.querySelectorAll<HTMLElement>('.studio-tab'))
+      .find(el => el.getAttribute('data-tab-key') === activeTabKey)!;
+    const spy = vi.fn();
+    active.scrollIntoView = spy as unknown as HTMLElement['scrollIntoView'];
+    // Visible strip spans x ∈ [0, 200].
+    list.getBoundingClientRect = (() => ({ left: 0, right: 200, top: 0, bottom: 30, width: 200, height: 30, x: 0, y: 0, toJSON() {} }) as DOMRect);
+    active.getBoundingClientRect = (() => ({ left: tabRect.left, right: tabRect.right, top: 0, bottom: 30, width: tabRect.right - tabRect.left, height: 30, x: tabRect.left, y: 0, toJSON() {} }) as DOMRect);
+    return spy;
+  }
+
+  function openBoards(component: StudioShellComponent, names: string[]): void {
+    for (const name of names) component.openBoard(name);
+  }
+
+  it('smooth-scrolls the active tab into view when it lies outside the visible strip', async () => {
+    const { fixture, component } = configure();
+    openBoards(component, ['Project A', 'Project B', 'Project C']);
+    fixture.detectChanges();
+    await Promise.resolve(); // drain the initial (boot) scroll microtask
+
+    const root: HTMLElement = fixture.nativeElement;
+    // Activate the first board (its tab sits to the left, scrolled out of view).
+    const key = 'board:Project A';
+    const spy = stub(root, key, { left: -160, right: -60 });
+
+    component.selectTab(key);
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+  });
+
+  it('leaves an already-visible active tab untouched (no needless scroll)', async () => {
+    const { fixture, component } = configure();
+    openBoards(component, ['Project A', 'Project B', 'Project C']);
+    fixture.detectChanges();
+    await Promise.resolve(); // drain the initial (boot) scroll microtask
+
+    const root: HTMLElement = fixture.nativeElement;
+    const key = 'board:Project C';
+    // Fully inside the [0, 200] strip.
+    const spy = stub(root, key, { left: 40, right: 140 });
+
+    component.selectTab(key);
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });

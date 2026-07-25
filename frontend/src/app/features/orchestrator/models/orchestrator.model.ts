@@ -18,7 +18,7 @@ export interface OrchestratorLogEntry {
   project?: string;
   watchPath?: string;
   ts: string;
-  kind: 'decision' | 'action' | 'observation' | 'intervention';
+  kind: 'alert' | 'decision' | 'action' | 'observation' | 'intervention';
   topic: string;
   summary: string;
   reasoning?: string | null;
@@ -151,6 +151,17 @@ export interface OrchestratorChatAttachment {
 export interface OrchestratorChatResponse {
   project: string;
   turns: OrchestratorChatTurn[];
+  executionContext?: ChatExecutionContext | null;
+}
+
+export interface ChatExecutionContext {
+  executionKind: 'local' | 'remote';
+  hostName: string;
+  repoPath?: string | null;
+  branch?: string | null;
+  headSha?: string | null;
+  state: 'ready' | 'resolving' | string;
+  capturedAt: string;
 }
 
 /**
@@ -171,4 +182,10 @@ export interface ChatNavigationContext {
   currentTaskState?: string | null;
   currentLaneFilter?: string | null;
   viewportTimestamp?: string | null;
+  observedSurface?: string | null;
+  affectedComponent?: string | null;
+  pageRef?: string | null;
+  pageTitle?: string | null;
+  pageType?: string | null;
+  pageExcerpt?: string | null;
 }

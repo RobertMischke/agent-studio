@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/wiki-page-lifecycle.schema.json",
+  "title": "Wiki Page Lifecycle",
+  "description": "Shared authoring contract for lifecycle-aware designs, concepts, explorations, and Workbenches. Markdown stores these fields in leading YAML frontmatter. HTML Workbenches store the same fields in their sole workbench.json descriptor because leading YAML would invalidate HTML. Companion sidecars do not duplicate lifecycle state.",
+  "oneOf": [
+    { "$ref": "#/$defs/markdownLifecycle" },
+    { "$ref": "#/$defs/workbenchLifecycle" }
+  ],
+  "$defs": {
+    "state": {
+      "type": "string",
+      "enum": ["in-progress", "review-requested", "decided", "done"],
+      "description": "Current lifecycle state. Review-requested is the review-first dashboard state; decided and done are quiet history."
+    },
+    "pageKind": {
+      "type": "string",
+      "enum": ["design", "concept", "exploration", "workbench"],
+      "description": "Lifecycle-aware page family."
+    },
+    "historyEntry": {
+      "type": "object",
+      "required": ["state", "editedBy", "editedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "state": { "$ref": "#/$defs/state" },
+        "editedBy": { "type": "string", "minLength": 1, "description": "Person or task that made this lifecycle transition." },
+        "editedAt": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "UTC timestamp of this transition." },
+        "note": { "type": "string", "minLength": 1, "description": "Optional honest rationale for the transition." }
+      }
+    },
+    "sharedProperties": {
+      "type": "object",
+      "required": ["pageKind", "lifecycleState", "editedBy", "editedAt", "lifecycleHistory"],
+      "properties": {
+        "pageKind": { "$ref": "#/$defs/pageKind" },
+        "lifecycleState": { "$ref": "#/$defs/state" },
+        "editedBy": { "type": "string", "minLength": 1, "description": "Person or task that made the latest lifecycle transition." },
+        "editedAt": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "UTC timestamp of the latest lifecycle transition." },
+        "lifecycleHistory": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/historyEntry" }
+        }
+      }
+    },
+    "markdownLifecycle": {
+      "allOf": [
+        { "$ref": "#/$defs/sharedProperties" },
+        {
+          "type": "object",
+          "required": ["lifecycleSchema"],
+          "properties": {
+            "lifecycleSchema": {
+              "type": "string",
+              "const": "wiki-page-lifecycle/v1",
+              "description": "Frontmatter contract discriminator."
+            }
+          }
+        }
+      ]
+    },
+    "workbenchLifecycle": {
+      "allOf": [
+        { "$ref": "#/$defs/sharedProperties" },
+        {
+          "type": "object",
+          "required": ["schemaVersion", "pageKind"],
+          "not": {
+            "anyOf": [
+              { "required": ["status"] },
+              { "required": ["updatedAt"] }
+            ]
+          },
+          "properties": {
+            "schemaVersion": { "type": "integer", "const": 2, "description": "Workbench descriptor version that adopts the shared lifecycle." },
+            "pageKind": { "type": "string", "const": "workbench" }
+          }
+        }
+      ]
+    }
+  }
+}

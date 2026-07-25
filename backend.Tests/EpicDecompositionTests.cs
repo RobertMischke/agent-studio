@@ -81,123 +81,6 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
-    public void Parse_ReadsGoalGraphAndVerificationPurpose()
-    {
-        var output = """
-            ```json
-            {
-              "subTasks": [
-                { "id": "ship", "title": "Ship", "prompt": "deliver", "purpose": "delivery", "dependsOn": [] },
-                { "id": "verify", "title": "Verify", "prompt": "inspect real evidence", "purpose": "verification", "dependsOn": ["ship"] }
-              ]
-            }
-            ```
-            [[TASK_DONE]]
-            """;
-
-        var result = EpicDecompositionParser.Parse(output);
-
-        Assert.Null(result.Error);
-        Assert.Equal("ship", result.SubTasks[0].PlanId);
-        Assert.Equal(GoalTaskPurposes.Verification, result.SubTasks[1].Purpose);
-        Assert.Equal(new[] { "ship" }, result.SubTasks[1].DependsOn);
-    }
-
-    [Fact]
-    public void Parse_RejectsCyclicGoalGraphBeforeCreatingCards()
-    {
-        var output = """
-            ```json
-            { "subTasks": [
-              { "id": "a", "title": "A", "dependsOn": ["b"] },
-              { "id": "b", "title": "B", "dependsOn": ["a"] }
-            ] }
-            ```
-            """;
-
-        var result = EpicDecompositionParser.Parse(output);
-
-        Assert.False(result.HasSubTasks);
-        Assert.Contains("cycle", result.Error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void GoalPlanValidator_RejectsDuplicateUnknownAndSelfReferentialIds()
-    {
-        var invalidPlans = new[]
-        {
-            (
-                Specs: (IReadOnlyList<EpicSubTaskSpec>)
-                [
-                    new("First", PlanId: "same"),
-                    new("Second", PlanId: "same"),
-                ],
-                ErrorFragment: "duplicate"
-            ),
-            (
-                Specs: (IReadOnlyList<EpicSubTaskSpec>)
-                [
-                    new("Only", PlanId: "only", DependsOn: ["missing"]),
-                ],
-                ErrorFragment: "unknown"
-            ),
-            (
-                Specs: (IReadOnlyList<EpicSubTaskSpec>)
-                [
-                    new("Only", PlanId: "only", DependsOn: ["only"]),
-                ],
-                ErrorFragment: "itself"
-            ),
-            (
-                Specs: (IReadOnlyList<EpicSubTaskSpec>)
-                [
-                    new("Deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
-                    new("Verify", PlanId: "verify", Purpose: GoalTaskPurposes.Verification),
-                ],
-                ErrorFragment: "ordered after"
-            ),
-        };
-
-        foreach (var (specs, errorFragment) in invalidPlans)
-        {
-            var validation = EpicGoalPlanValidator.Validate(specs);
-
-            Assert.False(validation.IsValid);
-            Assert.Contains(errorFragment, validation.Error, StringComparison.OrdinalIgnoreCase);
-        }
-    }
-
-    [Fact]
-    public void GoalPlanValidator_AcceptsVerificationTransitivelyOrderedAfterDelivery()
-    {
-        var specs = new[]
-        {
-            new EpicSubTaskSpec("Deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
-            new EpicSubTaskSpec("Prepare evidence", PlanId: "evidence", DependsOn: ["delivery"]),
-            new EpicSubTaskSpec(
-                "Verify",
-                PlanId: "verify",
-                DependsOn: ["evidence"],
-                Purpose: GoalTaskPurposes.Verification),
-        };
-
-        Assert.True(EpicGoalPlanValidator.Validate(specs).IsValid);
-    }
-
-    [Fact]
-    public void EpicDecompositionPrompt_RequiresOrderedEvidenceBasedVerification()
-    {
-        var prompt = File.ReadAllText(
-            Path.Combine(FindPromptRoot(), RuntimePromptService.EpicDecomposition));
-
-        Assert.Contains("server rejects unordered verification", prompt, StringComparison.Ordinal);
-        Assert.Contains("concrete checklist", prompt, StringComparison.Ordinal);
-        Assert.Contains("name the expected evidence for each check", prompt, StringComparison.Ordinal);
-        Assert.Contains("missing, stale, or contradictory evidence", prompt, StringComparison.Ordinal);
-        Assert.Contains("keyword scans alone", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Parse_BareFencedArray_IsAccepted()
     {
         var output = """
@@ -450,52 +333,36 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
-    public void CreateSubTasks_GoalGraphPersistsDependenciesAndOrchestratorProvenance()
+    public void Finalize_RebindsMovedEpicBeforeWritingPlanningSpawnEvidence()
     {
         var (scanner, mutations) = Build();
-        var epic = CreateEpic("goal-epic");
-        var specs = new List<EpicSubTaskSpec>
-        {
-            new("Verify goal", "inspect submitted revision and real evidence",
-                PlanId: "verify", DependsOn: new[] { "delivery" }, Purpose: GoalTaskPurposes.Verification),
-            new("Implement goal", "deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
-        };
+        var machine = _machine!;
+        var ready = CreateEpic("epic-rebound", cli: "codex", model: "gpt-5");
+        Assert.Equal(MoveJobStatus.Success,
+            machine.MoveJob(ready.Id, TaskStates.Progress, _watchPath).Status);
+        var staleProgressSnapshot = scanner.FindJob(ready.Id, _watchPath)!;
+        Assert.Equal(MoveJobStatus.Success,
+            machine.MoveJob(ready.Id, TaskStates.AutoReview, _watchPath).Status);
 
-        var created = EpicSubTaskFactory.CreateSubTasks(
+        var finalized = EpicDecompositionLifecycle.Finalize(
+            staleProgressSnapshot,
+            ["{\"subTasks\":[{\"title\":\"Child\",\"prompt\":\"Implement it.\"}]}"],
+            "run-1",
+            new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, BuildConfig()),
             mutations,
-            epic,
-            specs,
-            TaskStates.Ready,
-            TaskCreationInitiators.Orchestrator,
-            "project:test-project");
+            scanner,
+            machine,
+            timeline: null,
+            chatLog: null,
+            NullLogger.Instance);
 
-        Assert.Equal(2, created.Count);
-        // The authored plan intentionally puts verification first. The factory
-        // must still create the delivery node before the dependent verifier.
-        var delivery = scanner.FindJob(created[0], _watchPath)!;
-        var verification = scanner.FindJob(created[1], _watchPath)!;
-        Assert.Equal("Implement goal", delivery.Title);
-        Assert.Equal("Verify goal", verification.Title);
-        Assert.Equal(new[] { delivery.Key }, verification.References.DependsOn);
-        Assert.Equal(TaskCreationInitiators.Orchestrator, verification.CreationProvenance?.Initiator);
-        Assert.Equal(TaskCreationMethods.GoalDecomposition, verification.CreationProvenance?.Method);
-        Assert.Equal(epic.Id, verification.CreationProvenance?.GoalId);
-        Assert.Equal(epic.Key, verification.CreationProvenance?.GoalKey);
-        Assert.Equal("project:test-project", verification.CreationProvenance?.ContextKey);
-        Assert.Equal(GoalTaskPurposes.Verification, verification.CreationProvenance?.Purpose);
-        Assert.NotEqual(default, verification.CreationProvenance?.CreatedAt);
-
-        using var persisted = System.Text.Json.JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(verification.FolderPath, "task.json")));
-        var persistedProvenance = persisted.RootElement.GetProperty("creationProvenance");
-        Assert.Equal(
-            TaskCreationInitiators.Orchestrator,
-            persistedProvenance.GetProperty("initiator").GetString());
-        Assert.Equal(epic.Id, persistedProvenance.GetProperty("goalId").GetString());
-        Assert.Equal(
-            GoalTaskPurposes.Verification,
-            persistedProvenance.GetProperty("purpose").GetString());
-        Assert.False(persistedProvenance.TryGetProperty("Initiator", out _));
+        Assert.True(finalized.Valid);
+        Assert.False(Directory.Exists(Path.Combine(
+            _watchPath, TaskStates.Progress, staleProgressSnapshot.Id)));
+        var current = scanner.FindJob(ready.Id, _watchPath)!;
+        Assert.Equal(TaskStates.AutoReview, current.State);
+        Assert.Single(File.ReadAllLines(Path.Combine(
+            current.FolderPath, ".metadata", "spawned-tasks.jsonl")));
     }
 
     // ---- harness -----------------------------------------------------------
@@ -518,6 +385,7 @@ public class EpicDecompositionTests : IDisposable
 
     private TaskScannerService? _scanner;
     private TaskMutationService? _mutations;
+    private TaskStateMachine? _machine;
 
     private (TaskScannerService scanner, TaskMutationService mutations) Build()
     {
@@ -531,6 +399,7 @@ public class EpicDecompositionTests : IDisposable
         machine.EnsureStateFoldersAndMigrate();
         _scanner = scanner;
         _mutations = mutations;
+        _machine = machine;
         return (scanner, mutations);
     }
 
@@ -544,17 +413,4 @@ public class EpicDecompositionTests : IDisposable
                 ["WatchPaths:0:RootPath"] = _watchPath,
             })
             .Build();
-
-    private static string FindPromptRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir.FullName, "prompts", "runtime");
-            if (Directory.Exists(candidate)) return candidate;
-            dir = dir.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
-    }
 }

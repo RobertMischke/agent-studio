@@ -46,6 +46,31 @@
   --studio-surface:         var(--studio-bg-elevated);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
 
+  // Wiki source provenance and its Project Settings control. Provenance is
+  // informational, so dark chrome uses the cool info family instead of the
+  // warmer brand accent. Explicit disabled colours keep the control readable
+  // without reducing the opacity of its text or border.
+  --studio-wiki-source-bg:              var(--studio-surface-muted);
+  --studio-wiki-source-fg:              var(--studio-text-muted);
+  --studio-wiki-source-border:          var(--studio-border-strong);
+  --studio-wiki-source-readonly-bg:     color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-elevated));
+  --studio-wiki-source-readonly-fg:     var(--studio-accent-3-strong);
+  --studio-wiki-source-readonly-border: color-mix(in srgb, var(--studio-accent-3) 42%, var(--studio-border-strong));
+  --studio-wiki-source-hover-border:    color-mix(in srgb, var(--studio-accent-3) 64%, var(--studio-border-strong));
+  --studio-wiki-source-card-bg:         var(--studio-card-bg);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-secondary);
+  --studio-wiki-source-card-border:     var(--studio-card-border);
+  --studio-wiki-source-label-fg:        var(--studio-text-muted);
+  --studio-wiki-source-control-bg:      var(--studio-bg-surface);
+  --studio-wiki-source-control-fg:      var(--studio-text-secondary);
+  --studio-wiki-source-control-border:  color-mix(in srgb, var(--studio-fg-dim) 58%, var(--studio-bg-surface));
+  --studio-wiki-source-control-hover:   var(--studio-accent-3-strong);
+  --studio-wiki-source-control-focus:   var(--studio-accent-3-strong);
+  --studio-wiki-source-disabled-bg:     var(--studio-surface-muted);
+  --studio-wiki-source-disabled-fg:     var(--studio-text-muted);
+  --studio-wiki-source-disabled-border: var(--studio-border-muted);
+
   // ---------------------------------------------------------------------------
   // Borders
   // ---------------------------------------------------------------------------
@@ -104,6 +129,14 @@
   --studio-mono:           var(--studio-fg-strong);
   --studio-hash:           var(--studio-accent-success-strong);
 
+  // Explorer project-row auto-pickup mini state. These tokens keep the
+  // configuration mark legible without turning manual or paused into acute
+  // signals. Shape remains a second carrier in the component.
+  --studio-auto-pickup-active:  var(--studio-accent-teal);
+  --studio-auto-pickup-paused:  var(--studio-fg-dim);
+  --studio-auto-pickup-manual:  var(--studio-fg-muted);
+  --studio-auto-pickup-blocked: var(--studio-accent-warn-strong);
+
   // F39: "Strong" text-pigment variants of the accent family. Use these for
   // text/icon foregrounds layered on a tinted background of the same accent
   // (e.g. running/active/failed pills) so the pigment stays WCAG-AA legible
@@ -121,6 +154,19 @@
   // covers teal, so this is the one flipping token for that hue: dark keeps the
   // Mocha teal; the light block darkens it so teal-on-tint clears WCAG-AA.
   --studio-accent-teal:           var(--color-mocha-teal);
+
+  // Model-family pigments shared by board/detail model-level capsules and the
+  // coding-agent-chat sibling. Consumers combine these with their own surface
+  // through color-mix; the token itself is always the readable foreground.
+  --studio-model-sol:     var(--color-mocha-blue);
+  --studio-model-ter:     var(--color-mocha-teal);
+  --studio-model-opus:    var(--color-mocha-mauve);
+  --studio-model-sonnet:  var(--color-mocha-peach);
+  --studio-model-haiku:   var(--color-mocha-yellow);
+  --studio-model-gemini:  var(--color-mocha-pink);
+  --studio-model-openai:  var(--color-mocha-sky);
+  --studio-model-human:   var(--color-slate-300);
+  --studio-model-unknown: var(--color-slate-400);
 
   // F39: "Running" state on a job-card / pill is a recurring visual that
   // needs to flip with the theme. The tint is built once here so consumers
@@ -557,6 +603,29 @@
   --studio-surface:         var(--studio-bg-surface);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-muted) 6%, var(--studio-bg-surface));
 
+  // Keep the established light provenance treatment while sharing the same
+  // named contract and explicit disabled-state hierarchy as dark mode.
+  --studio-wiki-source-bg:              var(--studio-bg-sidebar);
+  --studio-wiki-source-fg:              var(--studio-text-muted);
+  --studio-wiki-source-border:          var(--studio-border);
+  --studio-wiki-source-readonly-bg:     color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-sidebar));
+  --studio-wiki-source-readonly-fg:     var(--studio-accent-strong);
+  --studio-wiki-source-readonly-border: var(--studio-border);
+  --studio-wiki-source-hover-border:    var(--studio-border-strong);
+  --studio-wiki-source-card-bg:         var(--studio-surface-muted);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-muted);
+  --studio-wiki-source-card-border:     var(--studio-border-strong);
+  --studio-wiki-source-label-fg:        var(--studio-text-muted);
+  --studio-wiki-source-control-bg:      var(--studio-bg-elevated);
+  --studio-wiki-source-control-fg:      var(--studio-text-secondary);
+  --studio-wiki-source-control-border:  var(--studio-border-strong);
+  --studio-wiki-source-control-hover:   var(--studio-accent-3-strong);
+  --studio-wiki-source-control-focus:   var(--studio-accent-3-strong);
+  --studio-wiki-source-disabled-bg:     var(--studio-surface-muted);
+  --studio-wiki-source-disabled-fg:     var(--studio-text-muted);
+  --studio-wiki-source-disabled-border: var(--studio-border-muted);
+
   // Borders
   --studio-border:        var(--color-grey-400);
   --studio-border-strong: var(--color-grey-500);
@@ -601,6 +670,11 @@
   --studio-mono:                  var(--studio-fg-strong);
   --studio-hash:                  var(--studio-accent-success-strong);
 
+  --studio-auto-pickup-active:  var(--studio-accent-teal);
+  --studio-auto-pickup-paused:  var(--studio-fg-dim);
+  --studio-auto-pickup-manual:  var(--studio-fg-muted);
+  --studio-auto-pickup-blocked: var(--studio-accent-warn-strong);
+
   // Navigation active-item fill on the white shell. Mixed over the opaque
   // elevated grey (not the translucent orange bg-selected) so the band stays a
   // predictable, clearly-warm orange tint that reads against the near-white
@@ -611,6 +685,17 @@
 
   // Teal status pigment — darker teal so teal-on-tint stays legible on white.
   --studio-accent-teal:           var(--color-teal-700);
+
+  // Darker pigments preserve the same model-family hues on white surfaces.
+  --studio-model-sol:     var(--color-blue-700);
+  --studio-model-ter:     var(--color-teal-700);
+  --studio-model-opus:    var(--color-violet-700);
+  --studio-model-sonnet:  var(--color-orange-700);
+  --studio-model-haiku:   var(--color-yellow-700);
+  --studio-model-gemini:  var(--color-red-800);
+  --studio-model-openai:  var(--color-sky-800);
+  --studio-model-human:   var(--color-grey-800);
+  --studio-model-unknown: var(--color-grey-700);
 
   // F39: running tint is softer on the white shell (10% vs 14% on dark) so
   // the card surface stays paper-toned, not bluish-grey. Shadow ring drops

@@ -314,11 +314,10 @@
     border-top: 1px dashed var(--studio-border);
   }
 
-  // Children that must never be split across the pair-columns: the failure
-  // banner, the per-group "Source" sub-header, an explicitly wide row (Model
-  // selector, Tool chips), and the embedded agent-work detail element.
+  // Children that must never be split across the pair-columns: the per-group
+  // "Source" sub-header, an explicitly wide row (Model selector, Tool chips),
+  // and the embedded agent-work detail element.
   > .ov-row--wide,
-  > .ov-row--failure,
   > .ov-row--source,
   > app-agent-work-detail {
     grid-column: 1 / -1;
@@ -341,12 +340,6 @@
   column-gap: var(--studio-spacing-2);
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
-
-  &--failure {
-    background: color-mix(in srgb, var(--severity-high) 10%, transparent);
-    border-radius: 6px;
-    padding: 4px 8px;
-  }
 
   &--source .ov-value {
     font-size: 11px;
@@ -392,13 +385,6 @@
     color: var(--studio-fg-strong);
   }
 
-  &--failure {
-    color: var(--severity-high);
-    font-weight: 600;
-    font-size: 12px;
-    line-height: 1.4;
-    word-break: break-word;
-  }
 }
 
 .ov-dim {

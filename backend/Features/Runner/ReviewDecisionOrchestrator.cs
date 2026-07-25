@@ -94,6 +94,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int DefaultMaxParallelReviews = 4;
 
+    /// <summary>
+    /// Default per-hour budget for orchestrator LLM calls (decisions and DONE
+    /// aspect reviews share it). The budget is a runaway backstop, not a pacing
+    /// device: at ~5 calls per card, 30/h throttled healthy remote delivery
+    /// waves to ~6 cards/h and became the binding constraint of the
+    /// 4-auto-review drain. 120/h keeps the loop-protection while letting a
+    /// full wave pass. Override with <c>ReviewDecisionOrchestrator:CallsPerHour</c>.
+    /// </summary>
+    public const int DefaultCallsPerHour = 120;
+
+    /// <summary>
+    /// A boot repair must never race a newly-created card. The repair also
+    /// requires durable run provenance, but this age floor protects the short
+    /// interval between lane placement and persistence of the first run event.
+    /// </summary>
+    internal static readonly TimeSpan VerdictlessBackfillMinimumAge = TimeSpan.FromMinutes(10);
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
@@ -105,6 +122,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly ILogger<ReviewDecisionOrchestrator> _logger;
     private readonly TaskSessionLog? _sessions;
     private readonly GitService? _git;
+    private readonly AttemptAuthorityService? _attemptAuthority;
 
     /// <summary>
     /// Default aspect runner ids when <c>ReviewDecisionOrchestrator:AspectRunners</c>
@@ -126,6 +144,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     // tasks concurrently, each charging the per-hour rate budget, so the
     // sliding-window queue is mutated from multiple threads.
     private readonly object _callTimestampsLock = new();
+
+    /// <summary>
+    /// Serialises shared-checkout mutations - the lane folder moves that flow
+    /// through <see cref="GuardedMoveJob"/> - so the bounded-parallel
+    /// post-processing worker (<see cref="AutoReviewPostProcessingWorker"/>) and the
+    /// backstop sweep never mutate the working tree at the same time. Git access on
+    /// this path is otherwise read-only plumbing (diffs / SHA ranges), which is
+    /// concurrency-safe, so only the moves take the gate. The build-test-gate keeps
+    /// its own machine lock and is not funnelled through here.
+    /// </summary>
+    private readonly SemaphoreSlim _postProcessingGitGate = new(1, 1);
+
+    /// <summary>
+    /// Cards whose post-processing is currently in flight, keyed by job folder path.
+    /// Both the bounded-parallel <see cref="AutoReviewPostProcessingWorker"/> and the
+    /// backstop sweep consult this set so the same card is never post-processed twice
+    /// concurrently ("gleiche Karte nie doppelt in Flug"). Card processings for
+    /// distinct cards run in parallel; a card already in flight is skipped.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _cardsInFlight =
+        new(StringComparer.Ordinal);
 
     /// <summary>
     /// CLI runner injection point. Tests substitute a deterministic stub.
@@ -186,6 +225,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
     internal const string BuildTestGateInfrastructureReasonPrefix = "build-test-gate review infrastructure: ";
+    internal const string OperatorRequeueFreshAssessmentReason = "operator-requeue-fresh-assessment";
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
@@ -222,7 +262,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TaskSpawnerPostStepRunner? taskSpawner = null,
         WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
-        PipelineStepEconomyAdvisor? pipelineStepEconomy = null)
+        PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -252,6 +293,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _taskSpawner = taskSpawner;
         _wikiTaskCrossReferences = wikiTaskCrossReferences;
         _agentsWikiSync = agentsWikiSync;
+        _attemptAuthority = attemptAuthority;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -319,11 +361,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         // Pure data-repair, run on EVERY boot regardless of the Enabled flag:
-        // give any 5-human-review card that carries no orchestrator verdict a
-        // retroactive Escalate verdict + status.md stub so the board can explain
-        // it. These are the cards that landed there before the escalation funnel
-        // existed (the bug this fixes). Idempotent - a card with a verdict is
-        // skipped, so repeated boots are no-ops.
+        // give an old 5-human-review card with durable run provenance but no
+        // orchestrator verdict a retroactive Escalate verdict + status.md stub
+        // so the board can explain it. Age and provenance keep fresh operator
+        // cards that have never run out of this legacy migration.
         try { BackfillVerdictlessHumanReview(workspace!, stoppingToken); }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less human-review backfill failed"); }
@@ -388,7 +429,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private async Task TickOnceCoreAsync(string workspace, CancellationToken ct)
     {
-        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
@@ -417,6 +458,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 {
                     if (ct.IsCancellationRequested) return;
                     _statusSnapshot.RecordPending();
+
+                    // The bounded-parallel post-processing worker may already be
+                    // driving this card; skip it here so a card is never in flight
+                    // twice at once. The worker holds the authoritative slot via
+                    // _cardsInFlight; this is a best-effort skip on the backstop path.
+                    if (_cardsInFlight.ContainsKey(pending.Job.FolderPath))
+                        continue;
 
                     if (pending.Kind == ReviewSignalKind.Done)
                     {
@@ -505,6 +553,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
                             entry.Name, pending.Job.Id);
                     }
+                    finally
+                    {
+                        _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
+                    }
                 }
             }
 
@@ -530,6 +582,159 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     status.Escalate,
                     status.Reissue);
             }
+        }
+    }
+
+    /// <summary>
+    /// Lane move serialised through <see cref="_postProcessingGitGate"/>. Every
+    /// orchestrator lane transition routes through here so concurrent post-processing
+    /// - the bounded-parallel worker plus the backstop sweep - can never mutate the
+    /// shared checkout working tree at the same time. The move itself is fast, so the
+    /// gate costs little relative to the model/gate/aspect work that stays parallel.
+    /// </summary>
+    private MoveJobOutcome GuardedMoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
+    {
+        _postProcessingGitGate.Wait();
+        try { return _stateMachine.MoveJob(jobId, targetState, watchPath, cause); }
+        finally { _postProcessingGitGate.Release(); }
+    }
+
+    /// <summary>
+    /// Post-processes a SINGLE 4-auto-review card off the global tick gate so the
+    /// bounded-parallel <see cref="AutoReviewPostProcessingWorker"/> can drive several
+    /// cards' post-processing concurrently (Req: raise the parallelisation degree of
+    /// the auto-review lane). Per card the step order stays sequential; only ACROSS
+    /// cards is there parallelism. Safety: the same card is never in flight twice
+    /// (<see cref="_cardsInFlight"/>, shared with the backstop sweep); shared-checkout
+    /// lane moves are serialised (<see cref="GuardedMoveJob"/>); the build-test-gate
+    /// keeps its machine lock; the rate-limiter and status snapshot are already
+    /// lock-protected; a failure is isolated to the one card. The workspace-wide
+    /// <see cref="TickOnceAsync"/> remains the boot/backstop/recovery safety net.
+    /// </summary>
+    public async Task ProcessCardAsync(string workspace, string projectName, string jobId, string watchPath, CancellationToken ct)
+    {
+        if (!_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
+            return;
+
+        var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
+        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
+        var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
+        var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
+        var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
+
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
+            !string.IsNullOrWhiteSpace(e.Path) &&
+            (string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase)
+             || string.Equals(e.Name, projectName, StringComparison.Ordinal)));
+        if (entry == null || string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path))
+            return;
+
+        foreach (var pending in EnumeratePending(workspace, entry))
+        {
+            if (ct.IsCancellationRequested) return;
+            if (!string.Equals(pending.Job.Id, jobId, StringComparison.Ordinal)) continue;
+
+            // In-flight guard: never post-process the same card concurrently (another
+            // worker slot, a duplicate enqueue, or the backstop sweep). Distinct cards
+            // are independent and proceed in parallel.
+            var inflightKey = pending.Job.FolderPath;
+            if (!_cardsInFlight.TryAdd(inflightKey, 0))
+                return;
+
+            _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
+            try
+            {
+                await DispatchPendingCardAsync(
+                    workspace, entry, pending, cliBinary, model, aspectModel,
+                    TimeSpan.FromSeconds(aspectTimeoutSeconds), maxPerHour, maxReissues, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Isolate one card's failure from the rest of the parallel pool.
+                _logger.LogWarning(ex,
+                    "ReviewDecisionOrchestrator failed to post-process {Project}/{JobId}",
+                    entry.Name, pending.Job.Id);
+            }
+            finally
+            {
+                _cardsInFlight.TryRemove(inflightKey, out _);
+                _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
+            }
+            return; // handled the target card
+        }
+    }
+
+    /// <summary>
+    /// Dispatches one card's post-processing by signal kind. This mirrors the
+    /// per-card branch of the sweep loop in <see cref="TickOnceCoreAsync"/>; the
+    /// per-card path (<see cref="ProcessCardAsync"/>) runs each kind - including a
+    /// DONE aspect review - inline for its single card, since the cross-card
+    /// parallelism now lives in the worker rather than the in-tick DONE pool.
+    /// </summary>
+    private async Task DispatchPendingCardAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string cliBinary,
+        string model,
+        string aspectModel,
+        TimeSpan perAspectTimeout,
+        int maxPerHour,
+        int maxReissues,
+        CancellationToken ct)
+    {
+        switch (pending.Kind)
+        {
+            case ReviewSignalKind.StaleWithVerdict:
+                await ProcessStaleVerdictAsync(workspace, entry, pending, ct);
+                return;
+
+            case ReviewSignalKind.UnworkedNoCoreRun:
+                ProcessUnworkedCard(workspace, entry, pending);
+                _statusSnapshot.RecordReissue();
+                return;
+
+            case ReviewSignalKind.NoOp:
+                await ProcessNoOpAsync(workspace, entry, pending, maxReissues, ct);
+                _statusSnapshot.RecordReissue();
+                return;
+
+            case ReviewSignalKind.NoCompletionSignal:
+                await ProcessNoCompletionSignalAsync(
+                    workspace, entry, pending, cliBinary, model, maxPerHour, maxReissues, ct);
+                _statusSnapshot.RecordReissue();
+                return;
+
+            case ReviewSignalKind.Blocked:
+                await ProcessBlockedAsync(workspace, entry, pending, ct);
+                _statusSnapshot.RecordEscalate();
+                return;
+
+            case ReviewSignalKind.Done:
+                var aspects = ResolveAspectRunners();
+                if (aspects.Count == 0 ||
+                    !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
+                    return;
+                await ProcessDoneAsync(
+                    workspace, entry, pending, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
+                _statusSnapshot.RecordAspectsRun(aspects.Count);
+                return;
+
+            case ReviewSignalKind.NeedsInput:
+                if (!RateLimitOk(maxPerHour))
+                {
+                    _logger.LogInformation(
+                        "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId} to next tick",
+                        maxPerHour, pending.Job.Id);
+                    return;
+                }
+                await ProcessNeedsInputAsync(workspace, entry, pending, cliBinary, model, ct);
+                return;
         }
     }
 
@@ -604,6 +809,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                         _logger.LogWarning(ex,
                             "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
                             entry.Name, pending.Job.Id);
+                    }
+                    finally
+                    {
+                        _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
                     }
                 }, ct);
                 running.Add((task, slot));
@@ -757,8 +966,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <summary>
     /// One-shot boot repair for the bug
     /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
-    /// every legacy card parked in <c>5-human-review</c> whose per-project decision
-    /// journal holds NO record for that job gets a retroactive
+    /// every old card parked in <c>5-human-review</c> whose per-project decision
+    /// journal holds NO record for that job and whose task folder proves a prior
+    /// agent run gets a retroactive
     /// <see cref="ReviewDecisionKind.Escalate"/> verdict (category
     /// <see cref="HumanReviewEscalationCategories.UnknownLegacy"/>) and a minimal
     /// <c>status.md</c> stub, written through <see cref="HumanReviewEscalation"/>
@@ -766,8 +976,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// These are the cards that reached the lane through the pre-funnel
     /// ProjectRunner paths, so the board showed them as done-but-blank with
     /// <c>orchestratorVerdict == null</c>. Idempotent: the gate is "no existing
-    /// verdict record", and the status stub is never written over a real summary,
-    /// so re-running on later boots is a no-op. Public so tests can drive it.
+    /// verdict record + old enough + durable run provenance", and the status
+    /// stub is never written over a real summary, so re-running on later boots is
+    /// a no-op. A freshly-created manual card without a run is never legacy
+    /// evidence. Public so tests can drive it.
     /// </summary>
     public void BackfillVerdictlessHumanReview(string workspace, CancellationToken ct)
     {
@@ -794,6 +1006,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (ct.IsCancellationRequested) return;
             if (job.State != TaskStates.HumanReview) continue;
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+            if (DateTime.UtcNow - job.CreatedAt < VerdictlessBackfillMinimumAge) continue;
+            if (!HasRunProvenance(job)) continue;
 
             if (!decisionsByProject.TryGetValue(job.ProjectName, out var records))
             {
@@ -823,6 +1037,46 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (repaired > 0)
             _logger.LogInformation("ReviewDecisionOrchestrator: verdict-less human-review backfill repaired {Repaired} card(s).", repaired);
+    }
+
+    private bool HasRunProvenance(TaskInfo job)
+    {
+        if (job.Commits.Count > 0
+            || job.CodeActivityDetected
+            || job.SessionChain.Count > 0
+            || !string.IsNullOrWhiteSpace(job.SessionName))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (_sessions?.ReadSessionEvents(job.Id, job.WatchPath).Count > 0)
+                return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: session provenance read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+        }
+
+        try
+        {
+            return _timeline?.ReadAll(job.FolderPath)
+                .Any(evt => evt.Kind == TimelineEventKinds.AgentRunStarted) == true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: timeline provenance read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+            return false;
+        }
     }
 
     private IReadOnlyList<string> ResolveAspectRunners()
@@ -1015,7 +1269,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1246,7 +1500,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1293,7 +1547,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"Orchestrator escalated BLOCKED for human decision. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
         // BLOCKED escalations move to the decision lane, not acceptance review.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1339,7 +1593,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private void ProcessUnworkedCard(string workspace, WatchPathEntry entry, PendingDecision pending)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Ready, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Ready, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1438,7 +1692,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var targetState = verdict == ReviewDecisionKind.AcceptAsDone
             ? TaskStates.HumanReview
             : TaskStates.Escalated;
-        var move = _stateMachine.MoveJob(current.Id, targetState, entry.Path);
+        var move = GuardedMoveJob(current.Id, targetState, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1497,9 +1751,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TimeSpan perAspectTimeout,
         CancellationToken ct)
     {
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
-        var statusSummary = LoadStatusSummary(current.FolderPath);
+        // An operator-owned epoch reassesses the current subject, not the old
+        // escalation narrative. Rotation normally removes status.md, but the
+        // freshness boundary must remain true even if that best-effort file move
+        // failed. A later status written by a fresh core run is admitted again.
+        var statusPath = Path.Combine(current.FolderPath, "status.md");
+        var statusSummary = OperatorReviewRequeueService.IsArtifactFresh(
+            current.FolderPath,
+            statusPath)
+                ? LoadStatusSummary(current.FolderPath)
+                : string.Empty;
         var diffSummary = LoadDiffSummary(entry, current);
         var resultsInventory = ResultsInventory.Render(current.FolderPath);
         var cardMode = ReviewCardMode.Describe(current.Mode);
@@ -1574,6 +1839,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RecordOrchestratorReviewStep(current.FolderPath, PipelineStepStatus.Passed,
             ReviewVerdictComplete, gate.Reason);
 
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Gate);
         var buildGateResult = await RunBuildTestGatePostStepAsync(workspace, entry, current, ct);
         if (buildGateResult?.Verdict == BuildTestGateVerdict.Fail)
         {
@@ -1587,8 +1854,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // red deterministic build must stay loud and still receive that
             // evidence before the task is reissued / escalated. The aspect pool
             // is intentionally bypassed on this terminal branch.
-            await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
-            await HandleBuildTestGateFailureAsync(workspace, entry, pending, current, buildGateResult, ct);
+            _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.Grade);
+            var failedBuildGrade = await RunCodeReviewGradePostStepAsync(
+                entry, current, taskBody, buildGateResult, ct);
+            await HandleBuildTestGateFailureAsync(
+                workspace, entry, pending, current, buildGateResult, failedBuildGrade, ct);
             return;
         }
 
@@ -1645,14 +1916,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ? null
             : aspectId => PipelineStepConfigResolver.ResolvePrompt(settings, $"aspect-{aspectId}");
 
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Aspects);
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct,
             modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
 
         // Grade the settled change set before any aspect-infrastructure
-        // short-circuit. The grade is independent reporting evidence; a dead
-        // aspect reviewer must not silently erase it. Keeping the call here also
-        // preserves the normal ordering (after aspects) without running twice.
-        await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+        // short-circuit. The grade supplies council findings; a dead aspect
+        // reviewer must not silently erase that review artifact or its explicit
+        // reaction. Keeping the call here also preserves the normal ordering
+        // (after aspects) without running twice.
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Grade);
+        var gradeReport = await RunCodeReviewGradePostStepAsync(
+            entry, current, taskBody, buildGateResult, ct);
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Decision);
 
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's
@@ -1665,10 +1944,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reissue budget (an Escalate decision, which resets the attempt chain).
         if (report.HasInfraFailure)
         {
+            AgentStudio.Review.CouncilReviewReaction? infraReaction = null;
+            if (gradeReport is not null)
+            {
+                infraReaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+                infraReaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
+                    infraReaction,
+                    "aspect review infrastructure failed, so no safe automatic follow-up round can be started");
+                AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, infraReaction);
+            }
             _pipelineLog?.Complete(
                 current.FolderPath,
                 pendingStepReason: "Not run because aspect review infrastructure failed after its retry budget was exhausted.");
-            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, ct);
+            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, infraReaction, ct);
             return;
         }
 
@@ -1718,6 +2006,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Runs after the aspects settle and before the Complete mark so its step
         // record lands in the in-flight pipeline-execution.json.
         await RunTaskSpawnerPostStepAsync(entry, current, report, taskBody, statusSummary, diffSummary, resultsInventory, ct);
+
+        // Council pattern: the quality-grade reviewer is advisory, while this
+        // orchestrator owns the explicit per-finding ruling. A named deficiency
+        // cannot disappear behind a passing grade or an unrelated aspect pass.
+        // Reissue carries only the concrete finding sentences into the next run.
+        if (gradeReport is not null
+            && await HandleCouncilReviewReactionAsync(workspace, entry, current, gradeReport, ct))
+        {
+            return;
+        }
 
         _pipelineLog?.Complete(
             current.FolderPath,
@@ -1805,7 +2103,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         // Promote to 5-human-review with or without concern tags. ADR-0025:
         // accept-as-done routes to human-review, never directly to completed.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT fire the operator-facing "accepted as
@@ -1913,6 +2211,126 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             movedFolderPath);
     }
 
+    /// <summary>
+    /// Persist and apply the council reaction for one quality-grade artifact.
+    /// Returns true when the reaction is terminal for this post-processing pass
+    /// (reissue or escalation); accept reactions stay attached to the review and
+    /// allow the remaining deterministic/aspect gates to rule on their evidence.
+    /// </summary>
+    private async Task<bool> HandleCouncilReviewReactionAsync(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AgentStudio.Review.CodeReviewStepReport gradeReport,
+        CancellationToken ct)
+    {
+        var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+        var reaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+        AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, reaction);
+
+        if (reaction.Disposition == AgentStudio.Review.CouncilReactionDisposition.Accept)
+        {
+            return false;
+        }
+
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not run because the council reaction concluded this review pass.");
+
+        if (reaction.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue)
+        {
+            var followUp = AgentStudio.Review.CouncilReviewPolicy.BuildTargetedFollowUp(reaction);
+            var moved = MoveReissueToReadyTop(current, entry, "code-review council findings");
+            if (moved is null) return true;
+
+            AgentStudio.Review.CouncilReviewReactionStore.Write(moved.FolderPath, reaction);
+            RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+                DecisionVerdictReissue, reaction.Summary);
+            WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
+                summary: reaction.Summary,
+                stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+                evidenceRef: gradeReport.FileName,
+                findingRefs: new[] { gradeReport.FileName },
+                performer: PostProcessingPerformers.Orchestrator);
+            await WriteFollowUpFileAsync(moved, followUp, ct);
+
+            _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+                $"Council reaction reopened \"{(moved.Title ?? moved.Id)}\" for {reaction.Assessments.Count} named review finding(s). Next round: {moved.Id} attempt {reaction.TargetRunAttempt}.");
+            EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+                TimelineActors.QualityLoop, reaction.Summary,
+                BuildReopenDetails("code-review-council", priorReissues, followUp));
+            _statusSnapshot.RecordReissue();
+
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
+                CreatedAt: reaction.CreatedAt,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Reissue,
+                Reason: reaction.Summary,
+                Prompt: $"(council reaction to {gradeReport.FileName})",
+                Response: string.Join("\n", reaction.Assessments.Select(a => $"{a.Action}: {a.Finding}")),
+                FollowUp: followUp)
+            {
+                CouncilReaction = reaction,
+            }, current.FolderPath, moved.FolderPath);
+            return true;
+        }
+
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to escalate {JobId} after council reaction: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+            return true;
+        }
+
+        var escalatedPath = move.NewFolderPath ?? current.FolderPath;
+        var escalated = current with { FolderPath = escalatedPath, State = TaskStates.Escalated };
+        AgentStudio.Review.CouncilReviewReactionStore.Write(escalatedPath, reaction);
+        RecordOrchestratorDecisionStep(escalatedPath, PipelineStepStatus.Failed,
+            DecisionVerdictEscalate, reaction.Summary);
+        WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
+            summary: reaction.Summary,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: gradeReport.FileName,
+            findingRefs: new[] { gradeReport.FileName },
+            performer: PostProcessingPerformers.Orchestrator);
+        _chatLog.Append(escalated, OrchestratorMessageKind.Decision,
+            $"Council reaction escalated \"{(escalated.Title ?? escalated.Id)}\": {reaction.Summary}");
+        _statusSnapshot.RecordEscalate();
+
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: reaction.CreatedAt,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reaction.Summary,
+            Prompt: $"(council reaction to {gradeReport.FileName})",
+            Response: string.Join("\n", reaction.Assessments.Select(a => $"{a.Action}: {a.Finding}")),
+            FollowUp: string.Empty)
+        {
+            CouncilReaction = reaction,
+        }, current.FolderPath, escalatedPath);
+        return true;
+    }
+
+    private AgentStudio.Review.CouncilReviewReaction DeriveCouncilReviewReaction(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AgentStudio.Review.CodeReviewStepReport gradeReport)
+        => AgentStudio.Review.CouncilReviewPolicy.Derive(
+            gradeReport.FileName,
+            gradeReport.Grade,
+            gradeReport.Findings ?? Array.Empty<string>(),
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues(),
+            current.Id,
+            targetRunAttempt: (_pipelineLog?.Read(current.FolderPath)?.Attempt
+                ?? CountPriorReissues(workspace, entry.Name, current.Id) + 1) + 1,
+            executionError: gradeReport.ExecutionError);
+
     private async Task ReissueOnBlockAsync(
         string workspace,
         WatchPathEntry entry,
@@ -2005,6 +2423,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         AspectRunReport report,
+        AgentStudio.Review.CouncilReviewReaction? councilReaction,
         CancellationToken ct)
     {
         var crashedAspects = report.InfraFailures.Select(v => v.Aspect).ToList();
@@ -2022,7 +2441,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"Auto-review could not obtain an aspect verdict: the reviewing CLI died even after an environmental retry. " +
             $"This is an infrastructure crash (InfraCrash), not a problem with the change. Promoted to {TaskStates.Escalated} flagged environmental.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2032,6 +2451,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
         var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(escalatedFolder, councilReaction);
+        }
 
         RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
             "environmental", reason);
@@ -2046,8 +2469,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildInfraCrashDetails(crashedAspects, reason));
 
-        // Escalate, NOT Reissue: a chain-ending verdict that resets the reissue
-        // budget, so the environmental infra crash never counts against the card.
+        // Escalate, NOT Reissue: the environmental infra crash adds no spend to
+        // the current attempt epoch. The existing ceiling is retained until an
+        // operator explicitly requeues the card.
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
@@ -2056,7 +2480,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(multi-aspect run; reviewing CLI produced no verdict after environmental retry)",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty),
+            FollowUp: string.Empty)
+        {
+            CouncilReaction = councilReaction,
+        },
             current.FolderPath,
             escalatedFolder);
 
@@ -2134,7 +2561,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2203,7 +2630,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2268,7 +2695,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review could not verify this task's result. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -2370,7 +2797,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review could not clear solution-quality concerns. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -2629,6 +3056,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         });
     }
 
+    /// <summary>
+    /// ssh-gate bridge (AGT-2222 tranche 2): derive the ssh alias from the
+    /// project's execution runner by convention - "agent-runner-01" connects via
+    /// the "agent-runner" ssh host alias (trailing instance number stripped).
+    /// Projects without a remote runner gate locally. Removed together with the
+    /// bridge once AGT-2229 ships claimable remote gate steps.
+    /// </summary>
+    private static string? ResolveRemoteGateSshHost(ProjectSettings? settings)
+    {
+        var runner = settings?.ExecutionRunner;
+        if (string.IsNullOrWhiteSpace(runner)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(runner.Trim(), @"^(.+?)-\d+$");
+        return match.Success ? match.Groups[1].Value : runner.Trim();
+    }
+
     private async Task<BuildTestGateResult?> RunBuildTestGatePostStepAsync(
         string workspace,
         WatchPathEntry entry,
@@ -2689,7 +3131,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:QueueWaitTimeoutSeconds",
             timeoutSeconds + infrastructureTimeoutSeconds);
         var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
-        if (subject.IsRemote) changedFiles = null;
 
         var request = new BuildTestGateRequest(
             repoPath,
@@ -2699,8 +3140,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             AttemptChainId = subject.AttemptChainId,
             SubjectRef = subject.SubjectRef,
+            Project = entry.Name,
+            WatchPath = entry.Path,
+            JobId = current.Id,
+            Lane = current.State,
+            TestExecution = settings?.TestExecution,
+            JobFolderPath = current.FolderPath,
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
             QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
+            RemoteSshHost = ResolveRemoteGateSshHost(settings),
+            OnMachineGateWaiting = () => _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.GateQueued),
+            OnMachineGateAcquired = () => _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.Gate),
         };
 
         BuildTestGateResult? result = null;
@@ -2886,6 +3338,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 WriteIndented = true,
             });
+            var selectionEvidence = JsonSerializer.Serialize(result.TestSelection, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            });
             var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} signal={result.TerminationSignal ?? "n/a"} durationMs={result.DurationMs}\n" +
                        $"gateId={result.GateId} failureKind={result.FailureKind} failureFingerprint={result.FailureFingerprint ?? "n/a"}\n" +
                        $"gateRunId={result.GateRunId ?? "n/a"} startedAtUtc={result.GateStartedAtUtc?.ToString("O") ?? "n/a"} completedAtUtc={result.GateCompletedAtUtc?.ToString("O") ?? "n/a"}\n" +
@@ -2895,11 +3351,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                        $"reason={result.Reason}\n" +
                        $"backend={result.RanBackendBuild} frontend={result.RanFrontendBuild}\n" +
                        $"changedFiles={(changedFiles == null ? "unknown" : string.Join(", ", changedFiles.Take(50)))}\n" +
+                       "--- test-selection.json ---\n" +
+                       selectionEvidence + "\n" +
                        "--- process-evidence.json ---\n" +
                        processEvidence + "\n" +
                        "--- last-300-lines ---\n" +
                        result.Output;
             File.WriteAllText(path, body);
+            if (result.Findings.Count > 0)
+            {
+                var findingPath = Path.Combine(dir, $"test-findings-{index}.json");
+                File.WriteAllText(findingPath, JsonSerializer.Serialize(new
+                {
+                    gateRunId = result.GateRunId,
+                    testLevel = result.TestSelection?.Level,
+                    blocking = false,
+                    findings = result.Findings,
+                }, new JsonSerializerOptions { WriteIndented = true }));
+            }
         }
         catch (Exception ex)
         {
@@ -2964,7 +3433,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -3083,20 +3552,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     /// <summary>
     /// Run the automatic post-CORE quality-grade code-review step (ASS-1657)
-    /// and record it on the pipeline. Reporting only: it assigns an A/B/C/D
-    /// grade to the task's full change set with a quality-first model
+    /// and record it on the pipeline. It assigns an A/B/C/D grade and structured
+    /// findings to the task's full change set with a quality-first model
     /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
     /// and hangs a
     /// <c>code-review:grade-*</c> tag on the card so the grade shows in the
-    /// Overview and as a card badge. Best-effort: any runtime failure is logged,
-    /// recorded as a failed row, and swallowed so a grade hiccup never blocks
-    /// the lane decision. An unavailable service, explicit disable, or condition
+    /// Overview and as a card badge. The caller applies the council policy to
+    /// every returned report. Best-effort: any runtime failure is logged and
+    /// returned as unavailable evidence, so it never invents a work deficiency.
+    /// An unavailable service, explicit disable, or condition
     /// mismatch records an honest skipped row rather than remaining Pending.
     /// </summary>
-    private async Task RunCodeReviewGradePostStepAsync(
+    private async Task<AgentStudio.Review.CodeReviewStepReport?> RunCodeReviewGradePostStepAsync(
         WatchPathEntry entry,
         TaskInfo job,
         string taskBody,
+        BuildTestGateResult? buildGateResult,
         CancellationToken ct)
     {
         var stepId = PipelineCatalogue.CodeReviewGradeStepId;
@@ -3106,7 +3577,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality-grade service is unavailable in this runtime.");
-            return;
+            return null;
         }
 
         // Opt-out switch; default on so every pipelined task carries a grade.
@@ -3116,7 +3587,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality grade disabled by CodeReviewStep:AutoGrade=false.");
-            return;
+            return null;
         }
 
         var projectSettings = _projectSettings?.Get(entry.Name);
@@ -3136,7 +3607,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality-grade pipeline condition did not match this task.");
-            return;
+            return null;
         }
 
         var startedAt = DateTime.UtcNow;
@@ -3173,7 +3644,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 ThinkingLevel = selectedThinkingLevel,
             });
 
-            var (diff, commitLabel) = BuildGradeDiff(entry, job);
+            var (diff, commitLabel) = BuildGradeDiff(entry, job, buildGateResult);
 
             var request = new AgentStudio.Review.CodeReviewStepRequest(
                 Project: entry.Name,
@@ -3205,7 +3676,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     startedAt,
                     report.Model,
                     report.ThinkingLevel);
-                return;
+                return report;
             }
 
             var gradeToken = report.Grade is null
@@ -3240,6 +3711,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _logger.LogInformation(
                 "code-review-grade: project={Project} job={JobId} grade={Grade} model={Model} file={File}",
                 entry.Name, job.Id, gradeToken, report.Model, report.FileName);
+            return report;
         }
         catch (OperationCanceledException)
         {
@@ -3264,6 +3736,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 startedAt,
                 selectedModel,
                 selectedThinkingLevel);
+            return null;
         }
     }
 
@@ -3481,21 +3954,41 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
-    /// Build the diff text the quality-grade pass reviews: the aggregate diff
-    /// of every commit the task owns (the same per-task scoping the
-    /// user-triggered code-review endpoint and the protocol-pane change set
-    /// use), with a human-readable commit label. Falls back to HEAD, then the
-    /// live working-tree diff, so the grade never reviews nothing. Best-effort:
-    /// returns an empty diff with a "(no diff resolved)" label when git is not
-    /// wired or resolution throws.
+    /// Build the diff text the quality-grade pass reviews. A fenced remote
+    /// completion's persisted result SHA is authoritative, matching the
+    /// build/test gate subject. Its review diff spans the merge base with the
+    /// canonical task/integration branch through that result SHA, so a multi-
+    /// commit remote task is reviewed as one change set rather than as only its
+    /// final commit. Local runs use the aggregate diff of every commit the task
+    /// owns, then fall back to HEAD and the live working tree.
+    /// Best-effort: returns an empty diff with a "(no diff resolved)" label
+    /// when git is not wired or resolution throws.
     /// </summary>
-    private (string Diff, string? CommitLabel) BuildGradeDiff(WatchPathEntry entry, TaskInfo job)
+    private (string Diff, string? CommitLabel) BuildGradeDiff(
+        WatchPathEntry entry,
+        TaskInfo job,
+        BuildTestGateResult? buildGateResult)
     {
         var project = entry.Name;
         var watchPath = entry.Path;
         if (_git == null) return (string.Empty, null);
         try
         {
+            var remoteSubject = ResolveRemoteGradeSubject(job, watchPath, buildGateResult);
+            if (remoteSubject is not null)
+            {
+                var remoteRange = TryBuildRemoteGradeDiff(entry, job, remoteSubject.ResultSha);
+                if (remoteRange is not null) return remoteRange.Value;
+
+                // A missing canonical base must not make the grade fall back to
+                // an unrelated local HEAD. The exact fenced result remains the
+                // safe last-resort subject, even though it can only show the tip
+                // commit when the repository has no resolvable fork point.
+                return (
+                    _git.GetCommitDiff(job.Id, watchPath, remoteSubject.ResultSha, path: null),
+                    remoteSubject.ResultSha[..8] + " (remote result; base unresolved)");
+            }
+
             IReadOnlyList<string> taskShas = Array.Empty<string>();
             if (_sessions != null)
             {
@@ -3512,7 +4005,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             }
 
             var scope = AgentStudio.Review.CodeReviewScopeResolver.Resolve(
-                overrideCommit: null, taskShas, _git.GetHeadSha(job.Id, watchPath));
+                overrideCommit: null,
+                taskShas,
+                _git.GetHeadSha(job.Id, watchPath));
 
             var diff = scope.Mode switch
             {
@@ -3539,6 +4034,76 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 project, job.Id);
             return (string.Empty, null);
         }
+    }
+
+    private ReviewSubjectRecord? ResolveRemoteGradeSubject(
+        TaskInfo job,
+        string? watchPath,
+        BuildTestGateResult? buildTestGateResult)
+    {
+        var remote = ReviewSubjectStore.Read(job.FolderPath);
+        if (remote is null) return null;
+
+        // Once the build/test gate has selected an exact subject, carry that
+        // same fenced SHA through the later aspect and grade steps. Re-resolving
+        // from mutable session history after a long gate can otherwise switch
+        // the grade to a different local HEAD.
+        if (ReviewSubjectStore.IsValidResultSha(buildTestGateResult?.ExpectedSha))
+        {
+            return string.Equals(
+                buildTestGateResult!.ExpectedSha,
+                remote.ResultSha,
+                StringComparison.OrdinalIgnoreCase)
+                ? remote
+                : null;
+        }
+
+        var resolved = ResolveBuildTestGateSubject(job, watchPath);
+        return resolved.IsRemote
+               && string.Equals(resolved.Sha, remote.ResultSha, StringComparison.OrdinalIgnoreCase)
+            ? remote
+            : null;
+    }
+
+    private (string Diff, string CommitLabel)? TryBuildRemoteGradeDiff(
+        WatchPathEntry entry,
+        TaskInfo job,
+        string resultSha)
+    {
+        if (_git == null) return null;
+        var repoRoot = !string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RepositoryPath
+            : entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return null;
+
+        var configuredBase = _projectSettings?.Get(entry.Name)?.IntegrationBranch;
+        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, configuredBase);
+        var candidateBases = new[]
+        {
+            job.Provenance?.Branch,
+            $"task/{job.Id}",
+            integrationBranch,
+        }
+        .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+        .Select(candidate => candidate!)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidateBase in candidateBases)
+        {
+            var mergeBase = _git.GetMergeBase(repoRoot, candidateBase, resultSha);
+            if (!ReviewSubjectStore.IsValidResultSha(mergeBase)) continue;
+
+            var diff = _git.GetDiffInShaRange(
+                job.Id, entry.Path, mergeBase, resultSha, path: null);
+            if (string.IsNullOrWhiteSpace(diff)) continue;
+
+            return (
+                diff,
+                $"{mergeBase![..8]}..{resultSha[..8]} (remote task range vs {candidateBase})");
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -4158,7 +4723,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             + $"in attempt chain {result.AttemptChainId ?? "missing"} after "
             + $"{PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries} retries "
             + $"(fingerprint {result.FailureFingerprint ?? "missing"}); coding reissue budget was not consumed.";
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status == MoveJobStatus.Success)
         {
             var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
@@ -4226,16 +4791,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         BuildTestGateResult result,
+        AgentStudio.Review.CodeReviewStepReport? gradeReport,
         CancellationToken ct)
     {
+        var councilReaction = gradeReport is null
+            ? null
+            : DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, councilReaction);
+        }
+
         _pipelineLog?.Complete(
             current.FolderPath,
             pendingStepReason: "Not run because the build/test gate stopped this pipeline attempt: " + result.Reason);
 
         var decisions = ReviewDecisionLog.ReadAll(workspace, entry.Name);
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(current.FolderPath);
         var priorBuildGateReissues = decisions.Count(r =>
             r.JobId == current.Id
             && r.Kind == ReviewDecisionKind.Reissue
+            && IsInAttemptEpoch(r, currentEpoch)
             && string.Equals(r.AttemptChainId, result.AttemptChainId, StringComparison.Ordinal)
             && string.Equals(r.GateId, result.GateId, StringComparison.Ordinal)
             && string.Equals(r.SubjectSha, result.ExpectedSha, StringComparison.OrdinalIgnoreCase)
@@ -4249,11 +4825,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var reason = priorBuildGateReissues >= 1
                 ? $"build-test gate failed twice for the same product retry identity ({failureIdentity}; {result.Reason}); escalating per post-step loop guard."
                 : $"build-test gate failed and the task-level anti-churn ceiling was reached ({failureIdentity}; {result.Reason}).";
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            if (councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue)
+            {
+                councilReaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
+                    councilReaction,
+                    "the build/test gate ended this attempt at its loop guard, so no further automatic round can start");
+            }
+            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
                 var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
+                if (councilReaction is not null)
+                {
+                    AgentStudio.Review.CouncilReviewReactionStore.Write(movedFolderPath, councilReaction);
+                }
                 RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
                     DecisionVerdictEscalate, reason);
                 WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
@@ -4290,6 +4876,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 SubjectSha = result.ExpectedSha,
                 FailureFingerprint = result.FailureFingerprint,
                 FailureKind = result.FailureKind.ToString(),
+                CouncilReaction = councilReaction,
             },
                 current.FolderPath,
                 move.NewFolderPath);
@@ -4299,6 +4886,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = MoveReissueToReadyTop(current, entry, "build-test gate fail");
         if (moved == null) return;
 
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(moved.FolderPath, councilReaction);
+        }
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + failureIdentity + "; " + result.Reason);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.FailedPostProcessing,
@@ -4307,19 +4898,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             stepId: PipelineCatalogue.BuildTestGateStepId,
             evidenceRef: "post-steps/build-test-gate.log");
 
-        var followUp = BuildBuildTestGateFollowUp(result);
+        var followUp = BuildBuildTestGateFollowUp(result, councilReaction);
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var councilSuffix = councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue
+            ? $" The same round also carries {councilReaction.Assessments.Count} named council finding(s)."
+            : string.Empty;
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{title}\" back to 2-ready: build/test gate failed ({result.Reason}).");
+            $"Auto-review sent \"{title}\" back to 2-ready: build/test gate failed ({result.Reason}).{councilSuffix}");
 
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
             $"Reopened: build/test gate failed ({result.Reason}).",
             BuildReopenDetails("build-test-gate-fail",
                 CountPriorReissues(workspace, entry.Name, current.Id),
-                result.Output));
+                followUp));
 
         _statusSnapshot.RecordReissue();
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
@@ -4337,6 +4931,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             SubjectSha = result.ExpectedSha,
             FailureFingerprint = result.FailureFingerprint,
             FailureKind = result.FailureKind.ToString(),
+            CouncilReaction = councilReaction,
         },
             current.FolderPath,
             moved.FolderPath);
@@ -4345,18 +4940,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal static string BuildTestGateFailureIdentity(BuildTestGateResult result)
         => $"attempt={result.AttemptChainId ?? "missing"};subject={result.ExpectedSha ?? "missing"};gate={result.GateId};fingerprint={result.FailureFingerprint ?? "missing"}";
 
-    private static string BuildBuildTestGateFollowUp(BuildTestGateResult result)
+    private static string BuildBuildTestGateFollowUp(
+        BuildTestGateResult result,
+        AgentStudio.Review.CouncilReviewReaction? councilReaction = null)
     {
         var commands = result.RanFrontendBuild
             ? "`dotnet build backend/OrchestratorApi.csproj` and `npm run build` from `frontend/`"
             : "`dotnet build backend/OrchestratorApi.csproj`";
-        return "Auto-review re-opened this task because the deterministic build/test gate failed. " +
+        var buildFollowUp = "Auto-review re-opened this task because the deterministic build/test gate failed. " +
             "Do not rely on the previous self-reported Success. Fix only the current task diff, " +
             $"run {commands}, and end with [[TASK_DONE]] once the gate is green.\n\n" +
             "Truncated build/test output:\n" +
             "```\n" +
             result.Output + "\n" +
             "```";
+        if (councilReaction?.Disposition != AgentStudio.Review.CouncilReactionDisposition.Reissue)
+        {
+            return buildFollowUp;
+        }
+
+        return buildFollowUp + "\n\n" +
+            AgentStudio.Review.CouncilReviewPolicy.BuildTargetedFollowUp(councilReaction);
     }
 
     /// <summary>
@@ -4375,16 +4979,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         LintScssResult result,
         CancellationToken ct)
     {
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(current.FolderPath);
         var priorLintReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
             .Count(r => r.JobId == current.Id
                         && r.Kind == ReviewDecisionKind.Reissue
+                        && IsInAttemptEpoch(r, currentEpoch)
                         && r.Reason != null
                         && r.Reason.StartsWith(LintScssReissueReasonPrefix, StringComparison.Ordinal));
 
         if (priorLintReissues >= 1)
         {
             var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
@@ -4749,51 +5355,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         => CountReissuesInCurrentChain(ReviewDecisionLog.ReadAll(workspace, project), jobId);
 
     /// <summary>
-    /// Count the reissues in the job's CURRENT attempt chain - the reissues
-    /// recorded SINCE the most recent chain-ending verdict
-    /// (<see cref="ReviewDecisionKind.Escalate"/> /
-    /// <see cref="ReviewDecisionKind.AcceptAsDone"/>), not the job's whole
-    /// lifetime total.
+    /// Count the reissues in the job's current operator-owned attempt epoch.
+    /// The epoch changes only when an explicit
+    /// <see cref="ReviewDecisionKind.OperatorRequeue"/> boundary is appended.
+    /// Automatic escalate, accept, and lane moves stay in the same epoch and
+    /// therefore retain the anti-churn budget.
     ///
     /// <para>
-    /// A verdict that parks the card to human review or accepts it CLOSES the
-    /// chain: whatever happens next (a human reopens it, a follow-up moves it back
-    /// to <c>2-ready</c>) begins a fresh attempt chain that must get its own
-    /// reissue budget. Before this the count was sticky - it summed EVERY
-    /// <see cref="ReviewDecisionKind.Reissue"/> record the job ever accrued, so a
-    /// card whose budget was already spent on an earlier, already-resolved chain
-    /// could never pass a budget-gated check again: it escalated on the first new
-    /// concern instead of getting a fresh reissue (AGT-1935 sticky-budget belege).
-    /// Counting per-chain fixes that while leaving in-chain behaviour identical -
-    /// with no chain-ender in between, this returns exactly the old lifetime total.
+    /// Legacy records without <see cref="ReviewDecisionRecord.AttemptEpoch"/>
+    /// belong to epoch 0. Once an operator requeue opens epoch N, only reissues
+    /// stamped with N count. Old rows remain readable history. This deliberately
+    /// does not infer a reset from an Escalate or AcceptAsDone verdict: an
+    /// automated move must never replenish an agent loop's budget.
     /// </para>
     ///
-    /// <para><see cref="ReviewDecisionKind.Skipped"/> is not a chain boundary: it
-    /// leaves the card for the normal sentinel path, so it neither counts nor
-    /// resets. Records are consumed in append (chronological) order, the order
+    /// <para><see cref="ReviewDecisionKind.Skipped"/> is neither a count nor a
+    /// boundary. Records are consumed in append order, the order
     /// <see cref="ReviewDecisionLog.ReadAll"/> returns them.</para>
     /// </summary>
     internal static int CountReissuesInCurrentChain(IEnumerable<ReviewDecisionRecord> records, string jobId)
     {
-        var count = 0;
-        foreach (var record in records)
-        {
-            if (record.JobId != jobId) continue;
-            switch (record.Kind)
-            {
-                case ReviewDecisionKind.Reissue:
-                    count++;
-                    break;
-                case ReviewDecisionKind.Escalate:
-                case ReviewDecisionKind.AcceptAsDone:
-                    // Chain boundary: the previous attempt chain is closed. Reset
-                    // so a reopened card gets a fresh reissue budget (AGT-1935).
-                    count = 0;
-                    break;
-            }
-        }
-        return count;
+        var jobRecords = records.Where(r => r.JobId == jobId).ToList();
+        var currentEpoch = jobRecords.Count == 0
+            ? 0
+            : jobRecords.Max(r => Math.Max(0, r.AttemptEpoch ?? 0));
+        return jobRecords.Count(r =>
+            r.Kind == ReviewDecisionKind.Reissue
+            && IsInAttemptEpoch(r, currentEpoch));
     }
+
+    internal static bool IsInAttemptEpoch(ReviewDecisionRecord record, int epoch)
+        => Math.Max(0, record.AttemptEpoch ?? 0) == Math.Max(0, epoch);
 
     /// <summary>
     /// No-verdict guard (requirement 7): true when a 4-auto-review card has sat
@@ -4825,12 +5417,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         try
         {
-            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r => r.JobId == info.Id);
+            var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
+            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r =>
+                r.JobId == info.Id
+                && IsInAttemptEpoch(r, currentEpoch));
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Operator authority (AGT-2260): the current review-cycle epoch is the
+    /// card's most recent recorded transition INTO <c>4-auto-review</c> (written
+    /// by the single recording hook in <c>TaskTransitionService.MoveAsync</c>).
+    /// Verdicts older than it belong to a closed cycle - typically one the
+    /// operator ended by requeueing the escalated card - and must neither be
+    /// backfilled as "due moves" nor count as this cycle's verdict. Cards
+    /// without recorded transitions (legacy folders, unit-test fixtures) keep
+    /// the pre-epoch behavior.
+    /// </summary>
+    private static DateTime? CurrentReviewCycleEpoch(TaskInfo info)
+    {
+        var transitions = info.Provenance?.Transitions;
+        if (transitions is not { Count: > 0 }) return null;
+        for (var i = transitions.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(transitions[i].Lane, TaskStates.AutoReview, StringComparison.Ordinal))
+                return transitions[i].AtUtc;
+        }
+        return null;
     }
 
     /// <summary>
@@ -4874,11 +5491,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         catch { return null; }
 
         ReviewDecisionRecord? latest = null;
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
         for (var i = records.Count - 1; i >= 0; i--)
         {
-            if (records[i].JobId == info.Id) { latest = records[i]; break; }
+            if (records[i].JobId == info.Id
+                && IsInAttemptEpoch(records[i], currentEpoch))
+            {
+                latest = records[i];
+                break;
+            }
         }
         if (latest == null) return null;
+
+        // Operator authority (AGT-2260): a verdict recorded BEFORE the card's
+        // current review-cycle epoch has already had its move - and someone
+        // (typically the operator, requeueing an escalated card) deliberately
+        // moved the card back afterwards. Backfilling that old move would
+        // override the operator and re-escalate from stale artifacts without
+        // any new evidence (the requeue ping-pong of 23.07.). Only a verdict
+        // YOUNGER than the current lane entry is a genuinely un-executed move.
+        if (CurrentReviewCycleEpoch(info) is { } epoch && latest.CreatedAt < epoch)
+            return null;
 
         return latest.Kind switch
         {
@@ -5250,7 +5883,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // orchestrator_escalated event on that card's timeline - the timeline
         // is the explanation. No sibling human-decision-needed-<slug> card is
         // spawned: the wrapper-card pattern (ASS-30) is the bug this ADR ends.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -5311,7 +5944,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // to 6-completed. The user always gets the final say on whether a
         // task is done; the orchestrator's accept signal is "the agent's
         // answer looks complete to me, please confirm."
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT write the operator-facing "accepted as
@@ -5400,6 +6033,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? beforeMoveFolderPath,
         string? afterMoveFolderPath)
     {
+        var epochFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
+            ? afterMoveFolderPath
+            : beforeMoveFolderPath;
+        record = record with
+        {
+            AttemptEpoch = record.AttemptEpoch
+                ?? OperatorReviewRequeueService.ReadEpoch(epochFolder),
+        };
         ReviewDecisionLog.Append(workspace, record);
         var result = _workspaceArtifactCommits?.TryCommitRunBoundary(
             workspace,
@@ -5421,12 +6062,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var promptPath = Path.Combine(folder, "prompt.md");
         var task = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
         var logPath = TaskPaths.CliOutputLog(folder);
-        var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
+        var recent = ReadActiveEpochLogTail(folder, logPath);
         // The terminal sentinel, final verification summary, and CLI exit are
         // at the end of the log. Head-truncating a verbose 200-line tail kept
         // early pre-restore failures while discarding their later successful
         // restore/re-run, which made the completion gate reissue clean tasks.
         return (Truncate(task, 4_000), TruncateTail(recent, 6_000));
+    }
+
+    private static string ReadActiveEpochLogTail(string folder, string logPath)
+    {
+        if (!File.Exists(logPath)) return string.Empty;
+        var lines = File.ReadAllLines(logPath);
+        var boundary = OperatorReviewRequeueService.ReadCliLogLineBoundary(folder);
+        if (boundary is >= 0)
+        {
+            // A shorter file was replaced/truncated after the boundary, so all
+            // of its current content is fresh. Otherwise skip the consumed
+            // prefix retained by the append-only log.
+            var skip = boundary.Value <= lines.Length ? boundary.Value : 0;
+            lines = lines.Skip(skip).ToArray();
+        }
+        return TailLines(string.Join('\n', lines), 200);
     }
 
     /// <summary>
@@ -5448,17 +6105,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             && !string.IsNullOrWhiteSpace(r.HeadShaAfter));
 
     private static bool HasResultsArtifacts(string jobFolderPath)
-    {
-        try
-        {
-            var results = Path.Combine(jobFolderPath, "results");
-            return Directory.Exists(results) && Directory.EnumerateFiles(results, "*", SearchOption.AllDirectories).Any();
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => ResultsInventory.HasActiveArtifacts(jobFolderPath);
 
     private static string LoadRoadmap(string rootPath)
     {
@@ -5509,6 +6156,56 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
         foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
+            // Canonical ReviewAttempts belong to the remote review data plane.
+            // Until that executor claims the attempt, leaving the card in Auto
+            // Review is the fail-closed state. The legacy Task Server review
+            // loop must not infer a subject from session-events or inspect its
+            // own project checkout for a Remote result.
+            var authorityKey = _attemptAuthority is null
+                ? null
+                : new[] { info.Key, info.TaskKey, info.Id }
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(value => !_attemptAuthority.GetTaskProjection(value!).LegacyTask);
+            if (authorityKey is not null)
+            {
+                _logger.LogDebug(
+                    "ReviewDecisionOrchestrator skipped canonical remote review {TaskKey}; awaiting fenced ReviewAttempt executor.",
+                    authorityKey);
+                continue;
+            }
+
+            // An operator requeue is an explicit request to reassess the existing
+            // completed run from fresh evidence. Its old terminal sentinel is
+            // normally already resolved by the prior escalation follow-up, so
+            // log scanning alone would yield no work and the queued card would
+            // be skipped. While OperatorRequeue is the newest record in the
+            // active epoch, force the full DONE gate + aspect path exactly as if
+            // the completed run had just arrived. The first verdict appended by
+            // that path supersedes the boundary and makes this trigger false.
+            var pendingOperatorAssessment = false;
+            try
+            {
+                var epoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
+                ReviewDecisionLog.ReadLatestByJob(workspace, entry.Name)
+                    .TryGetValue(info.Id, out var latest);
+                pendingOperatorAssessment = IsPendingOperatorRequeueAssessment(latest, epoch);
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "operator-requeue: fresh-assessment journal probe failed");
+            }
+            if (pendingOperatorAssessment)
+            {
+                yield return new PendingDecision(
+                    info,
+                    ReviewSignalKind.Done,
+                    LineNumber: -1,
+                    Reason: OperatorRequeueFreshAssessmentReason,
+                    NeedsInput: null);
+                continue;
+            }
+
             var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
@@ -5616,6 +6313,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             ["decision"] = verdict.Reason,
         }).TrimEnd('\r', '\n');
+
+    internal static bool IsPendingOperatorRequeueAssessment(
+        ReviewDecisionRecord? latest,
+        int epoch)
+    {
+        epoch = Math.Max(0, epoch);
+        if (epoch == 0)
+        {
+            return latest?.Kind == ReviewDecisionKind.OperatorRequeue
+                && IsInAttemptEpoch(latest, epoch);
+        }
+
+        // The epoch sidecar is authoritative. If the best-effort journal
+        // boundary failed after the lane move, the latest row still belongs to
+        // an older epoch and must not resurrect its verdict. Keep forcing the
+        // full gate/aspect path until a decision from this epoch is durable.
+        if (latest is null || !IsInAttemptEpoch(latest, epoch))
+            return true;
+
+        return latest.Kind == ReviewDecisionKind.OperatorRequeue;
+    }
 
     private static string TailLines(string text, int n)
     {
@@ -5765,7 +6483,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     private TaskInfo? MoveReissueToReadyTop(TaskInfo current, WatchPathEntry entry, string causeLabel)
     {
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.Ready, entry.Path);
+        var move = GuardedMoveJob(current.Id, TaskStates.Ready, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(

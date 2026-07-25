@@ -19,6 +19,7 @@
  */
 import type { TaskDetail } from '../../../../models/task.model';
 import { formatTokens } from '../../../../services/format.util';
+import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
@@ -288,12 +289,17 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
 
   const totalTokens = info.tokenSummary?.totalTokens ?? 0;
   if (totalTokens > 0) {
+    const tokenSummary = info.tokenSummary!;
     metrics.push({
       id: 'tokens',
       icon: '🪙',
       label: 'Tokens',
       value: formatTokens(totalTokens),
-      tooltip: `${totalTokens.toLocaleString()} tokens across this task's runs.`,
+      tooltip: buildTokenCostTooltip({
+        costUsd: tokenSummary.estimatedApiCostUsd,
+        priceKnown: tokenSummary.allModelsPriced === true,
+        context: `${totalTokens.toLocaleString()} tokens across this task's runs.`,
+      }),
     });
   }
 

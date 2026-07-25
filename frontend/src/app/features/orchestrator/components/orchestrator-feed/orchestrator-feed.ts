@@ -50,6 +50,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   readonly kindFilters = [
     { id: 'signal', label: 'Signal' },
+    { id: 'alert', label: 'Alerts' },
     { id: 'decision', label: 'Decisions' },
     { id: 'action', label: 'Actions' },
     { id: 'observation', label: 'Observations' },
@@ -122,6 +123,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   kindLabel(kind: string): string {
     switch (kind) {
+      case 'alert': return 'Alert';
       case 'decision': return 'Decision';
       case 'action': return 'Action';
       case 'observation': return 'Observation';

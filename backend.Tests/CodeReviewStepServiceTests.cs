@@ -163,7 +163,9 @@ public class CodeReviewStepServiceTests : IDisposable
     {
         var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance);
         var service = BuildService((_, _, _, _, _) =>
-            Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"), index);
+            Task.FromResult("""
+                {"type":"result","result":"[[ASPECT_VERDICT: status=pass; summary=ok]]","model":"claude-haiku-4-5","usage":{"input_tokens":100,"output_tokens":25,"cache_read_input_tokens":40,"cache_creation_input_tokens":10}}
+                """), index);
 
         var report = await service.RunAsync(BuildRequest("claude-haiku-4-5"), CancellationToken.None);
 
@@ -175,6 +177,11 @@ public class CodeReviewStepServiceTests : IDisposable
         Assert.Equal("claude", generation.Cli);
         Assert.Equal("code-review-step", generation.StepId);
         Assert.Equal("0aa4c5d", generation.HeadShaAfter);
+        Assert.Equal(100, generation.TokensIn);
+        Assert.Equal(25, generation.TokensOut);
+        Assert.Equal(40, generation.CacheReadTokens);
+        Assert.Equal(10, generation.CacheCreationTokens);
+        Assert.Equal(175, generation.TokensTotal);
     }
 
     [Fact]

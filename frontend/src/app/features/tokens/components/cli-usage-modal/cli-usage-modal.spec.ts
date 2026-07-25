@@ -117,6 +117,23 @@ describe('CliUsageModalComponent', () => {
     expect(first.remainingLabel).toBe('34% left');
   });
 
+  it('labels a reported quota without a percentage as Unknown', async () => {
+    const unknownRow: CliUsageQuotaRow = {
+      ...row,
+      windows: [
+        { label: 'Quota', usedPct: null, used: null, limit: null, unit: '%', resetAt: null, resetLabel: null },
+      ],
+      primaryPct: null,
+      primaryTone: 'unknown',
+    };
+
+    const fixture = await build(unknownRow);
+    const view = fixture.componentInstance.windowViews()[0];
+
+    expect(view.pctLabel).toBe('Unknown');
+    expect(view.tone).toBe('unknown');
+  });
+
   it('does not double-count Codex cached input and hides zero-token ad-hoc rows', async () => {
     const tokens: TokenSummaryAggregate = {
       projects: 11,

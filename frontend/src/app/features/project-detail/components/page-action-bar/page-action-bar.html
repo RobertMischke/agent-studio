@@ -1,0 +1,111 @@
+<div class="page-action-bar"
+     data-testid="page-action-bar"
+     [attr.data-page-type]="context().pageType">
+  <span class="page-action-bar__type" data-testid="page-action-bar-type">
+    <app-studio-icon [name]="typeIcon()" [size]="14" />
+    <span>{{ typeLabel() }}</span>
+  </span>
+  <span class="page-action-bar__separator" aria-hidden="true"></span>
+  <div class="page-action-bar__actions" aria-label="Page actions">
+    <button class="page-action-bar__button page-action-bar__button--primary"
+            type="button"
+            data-testid="page-action-create-task"
+            (click)="createTask()">
+      <app-studio-icon name="plus" [size]="12" />
+      <span>Create Task in Project</span>
+    </button>
+    <button class="page-action-bar__button"
+            type="button"
+            data-testid="page-action-archive"
+            [disabled]="archived()"
+            [appPendingButton]="archivePending()"
+            pendingLabel="Archiving…"
+            (click)="archiveRequest.emit()">
+      <app-studio-icon name="archive" [size]="12" />
+      <span>{{ archived() ? 'Archived' : 'Archive' }}</span>
+    </button>
+    <button class="page-action-bar__button"
+            type="button"
+            data-testid="page-action-open-chat"
+            (click)="openChat()">
+      <app-studio-icon name="bot" [size]="12" />
+      <span>Open in Orchestrator Chat</span>
+    </button>
+    <button class="page-action-bar__button"
+            type="button"
+            data-testid="page-action-pin-home"
+            appTooltip="Curated entry point for everyone"
+            [attr.aria-pressed]="pinned()"
+            [appPendingButton]="pinPending() || homeLoading()"
+            [pendingLabel]="pinned() ? 'Unpinning…' : 'Loading…'"
+            (click)="togglePin()">
+      <app-studio-icon name="pin" [size]="12" />
+      <span>{{ pinned() ? 'Unpin from Home' : 'Pin to Home' }}</span>
+    </button>
+    @if (extraIntent(); as intent) {
+      <button class="page-action-bar__button page-action-bar__button--extra"
+              type="button"
+              data-testid="page-action-extra"
+              (click)="createTask(intent)">
+        <app-studio-icon name="play" [size]="12" />
+        <span>{{ extraLabel() }}</span>
+      </button>
+    }
+  </div>
+</div>
+
+@if (pinDialogOpen()) {
+  <app-dialog
+    eyebrow="Shared Wiki curation"
+    title="Pin to Home"
+    subtitle="Curated entry point for everyone. This writes docs/app/config/home.json and is visible to operators and agents."
+    testid="page-pin-dialog"
+    (closeRequest)="closePinDialog()"
+    (backdropClick)="closePinDialog()">
+    <div class="page-pin-form">
+      <label>
+        <span>Overview section</span>
+        <select data-testid="page-pin-section"
+                [value]="pinSection()"
+                (change)="updatePinSection($event)">
+          @for (section of homeSections(); track section.title) {
+            <option [value]="section.title">{{ section.title }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Label</span>
+        <input type="text"
+               data-testid="page-pin-label"
+               [value]="pinLabel()"
+               (input)="updatePinLabel($event)" />
+      </label>
+      <label>
+        <span>Note</span>
+        <textarea rows="3"
+                  data-testid="page-pin-note"
+                  [value]="pinNote()"
+                  (input)="updatePinNote($event)"></textarea>
+      </label>
+      <p class="page-pin-form__distinction">
+        <app-studio-icon name="star" [size]="13" />
+        Stars remain your personal shortlist and never change this shared navigation.
+      </p>
+      @if (pinError(); as error) {
+        <p class="page-pin-form__error" role="alert">{{ error }}</p>
+      }
+    </div>
+    <div footer class="page-pin-form__footer">
+      <button type="button"
+              class="page-pin-form__cancel"
+              [disabled]="pinPending()"
+              (click)="closePinDialog()">Cancel</button>
+      <button type="button"
+              class="page-pin-form__submit"
+              data-testid="page-pin-submit"
+              [appPendingButton]="pinPending()"
+              pendingLabel="Pinning…"
+              (click)="submitPin()">Pin to Home</button>
+    </div>
+  </app-dialog>
+}

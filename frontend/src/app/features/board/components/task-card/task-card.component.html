@@ -1,6 +1,6 @@
 <div class="task-card"
      [class]="'task-card--' + job().state"
-     [class.task-card--running]="isRunning()"
+     [class.task-card--running]="isRunning()" [class.task-card--stalled]="stalledState()"
      [class.task-card--attention]="needsAttention()"
      [class.task-card--compact]="compact()"
      [class.task-card--epic-expanded]="isEpic() && epicExpanded()"
@@ -13,6 +13,7 @@
      data-testid="task-card"
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
+     [attr.data-stalled]="stalledState()?.reason ?? null"
      [attr.data-compact]="compact() ? 'true' : null"
      tabindex="0"
      (contextmenu)="openCardContextMenu($event)"
@@ -95,6 +96,10 @@
     }
   </h3>
   <div class="task-card__badges">
+    @if (stalledState(); as stalled) {
+      <span class="task-card__stalled-pill" data-testid="task-card-stalled" [attr.data-reason]="stalled.reason"
+            [cacTooltip]="stalled.tooltip" role="status"><span aria-hidden="true">⚠</span> {{ stalled.label }}</span>
+    }
     @if (modeBadge(); as mb) {
       <span class="task-card__mode-pill"
             [class]="'task-card__mode-pill--' + mb.mode"
@@ -166,14 +171,8 @@
         {{ rb.label }}
       </span>
     }
-    @if (autoReviewProcessBadge(); as arb) {
-      <span class="task-card__auto-review-pill"
-            [class]="'task-card__auto-review-pill--' + arb.tone"
-            [cacTooltip]="arb.tooltip"
-            data-testid="task-card-auto-review-status">
-        <span class="task-card__auto-review-dot"></span>
-        {{ arb.label }}
-      </span>
+    @if (job().state === '4-auto-review') {
+      <app-post-processing-activity [job]="job()" />
     }
     @if (outcomeIssueBadge(); as oib) {
       <span class="task-card__issue-pill"
@@ -218,21 +217,21 @@
           <app-studio-icon [name]="taskTypeIconName(tt.kind)" [size]="11" [strokeWidth]="2"></app-studio-icon>
         </span>
       }
-      <span class="task-card__effective-model"
-            [class.task-card__effective-model--default]="effectiveModelChip().isDefault"
-            [cacTooltip]="effectiveModelChip().tooltip"
-            data-testid="task-card-effective-model"
-            [attr.data-model-source]="effectiveModelChip().source">
-        <span class="task-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
-        @if (effectiveModelChip().cliLabel && effectiveModelChip().fullModel) {
-          <span class="task-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
-        }
-        <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
-        @if (effectiveModelChip().thinkingLevel; as level) {
-          <app-thinking-level-indicator [indicator]="level" testId="task-card-thinking-level" />
-        }
-      </span>
+      <app-model-level-indicator
+        [model]="effectiveModelChip().fullModel"
+        [cliType]="effectiveModelChip().cliType"
+        [thinkingLevel]="effectiveModelChip().thinkingLevel?.effective ?? null"
+        [thinkingLevelOverride]="(effectiveModelChip().thinkingLevel?.differsFromDefault || effectiveModelChip().thinkingLevel?.differsFromConfigured) ?? false"
+        [fallbackLabel]="effectiveModelChip().label"
+        [tooltip]="effectiveModelChip().tooltip"
+        [source]="effectiveModelChip().source"
+        [isDefault]="effectiveModelChip().isDefault"
+        testId="task-card-effective-model"
+        levelTestId="task-card-thinking-level" />
       <app-execution-location-badge [execution]="job().executionLocation" />
+      @if (integrationStatus(); as integ) {
+        <app-integration-status-badge [integration]="integ" />
+      }
       @if (externalDoneBadge(); as edb) {
         <span class="task-card__external-pill"
               [cacTooltip]="edb.tooltip"
@@ -274,6 +273,7 @@
                 <tr><th>Last update</th><td data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</td></tr>
               </tbody>
             </table>
+            <div class="task-card__token-runs-title" data-testid="token-cost-tooltip">{{ tb.costTooltip }}</div>
             @if (tb.entries.length > 1) {
               <div class="task-card__token-runs-title">Per-run</div>
               <table class="task-card__token-table task-card__token-table--runs">
@@ -457,6 +457,9 @@
         </div>
       }
     </div>
+  }
+  @if (job().testEvidence; as evidence) {
+    <app-task-test-evidence [evidence]="evidence" />
   }
   <div class="task-card__activity">
     Last activity: {{ relativeActivity() }}

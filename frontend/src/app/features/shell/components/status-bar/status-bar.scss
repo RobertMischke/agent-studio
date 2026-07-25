@@ -148,9 +148,44 @@ app-status-bar {
   color: var(--severity-pass);
   animation: statusbar-pulse 1.4s infinite;
 }
+
+// Remote host load stays woven into the existing running pulse. Calm load is
+// only a faint green undertone, working/hot move gently toward amber, and a
+// correlation mismatch adds one static ring instead of another widget.
+.statusbar__item[data-signal-tone='calm'] .statusbar__icon {
+  color: color-mix(in srgb, var(--severity-pass) 64%, currentColor);
+}
+
+.statusbar__item[data-signal-tone='working'] .statusbar__icon {
+  color: color-mix(in srgb, var(--severity-pass) 45%, var(--severity-warn));
+}
+
+.statusbar__item[data-signal-tone='hot'] .statusbar__icon,
+.statusbar__item[data-signal-tone='mismatch'] .statusbar__icon {
+  color: var(--severity-warn);
+}
+
+.statusbar__item[data-signal-tone='mismatch'] .statusbar__icon {
+  position: relative;
+}
+
+.statusbar__item[data-signal-tone='mismatch'] .statusbar__icon::after {
+  position: absolute;
+  inset: 1px;
+  border: 1px solid color-mix(in srgb, var(--severity-warn) 52%, transparent);
+  border-radius: 50%;
+  content: '';
+}
+
 @keyframes statusbar-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusbar__icon--pulse {
+    animation-duration: 0s;
+  }
 }
 
 .statusbar__caret {

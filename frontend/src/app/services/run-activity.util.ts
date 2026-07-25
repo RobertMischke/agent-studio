@@ -11,6 +11,81 @@ export interface RunActivityBadge {
   tooltip: StructuredTooltip;
 }
 
+/**
+ * Grace period for a Progress card that has no live run and no explicit
+ * failure. It matches the backend's execution-location freshness window, so a
+ * newly claimed card or a run whose registry is briefly rebuilding is not
+ * presented as stranded.
+ */
+export const STALLED_IDLE_THRESHOLD_MS = 3 * 60_000;
+
+export interface StalledTaskState {
+  reason: 'failed' | 'idle';
+  label: 'Stalled';
+  tooltip: string;
+}
+
+function latestActivityMs(job: TaskInfo): number | null {
+  const instants = [
+    job.enteredLaneAt,
+    job.phaseEnteredAt,
+    job.executionLocation?.lastActivityAt,
+    job.executionLocation?.lastHeartbeat,
+    job.lastActivity,
+    job.createdAt,
+  ]
+    .map((value) => value ? Date.parse(value) : Number.NaN)
+    .filter(Number.isFinite);
+  return instants.length > 0 ? Math.max(...instants) : null;
+}
+
+function hasLiveRun(job: TaskInfo): boolean {
+  if (job.execution?.status === 'running' || job.runner != null || job.runActivity?.kind === 'active') {
+    return true;
+  }
+  const location = job.executionLocation;
+  return (location?.state === 'local-running' || location?.state === 'remote-running')
+    && location.connectionState === 'connected';
+}
+
+/**
+ * Pure board-level derivation of an acute stranded Progress task. A failed run
+ * needs attention immediately once no process owns it. A task with no recorded
+ * failure gets a short grace period before it is called stalled. Scheduled
+ * rapid-crash backoff is deliberately excluded because it already has a known
+ * recovery path and its own countdown banner.
+ */
+export function deriveStalledTaskState(
+  job: TaskInfo,
+  nowMs: number = Date.now(),
+  idleThresholdMs: number = STALLED_IDLE_THRESHOLD_MS,
+): StalledTaskState | null {
+  if (job.state !== TaskState.Progress || hasLiveRun(job)) return null;
+  if (job.runActivity?.kind === 'failed-backoff') return null;
+
+  const failed = job.runActivity?.kind === 'failed-idle'
+    || job.execution?.status === 'failed'
+    || ((job.outcomeIssue?.severity ?? '').toLowerCase() === 'warn')
+    || ((job.outcomeIssue?.severity ?? '').toLowerCase() === 'high');
+  if (failed) {
+    const detail = job.runActivity?.lastError || job.outcomeIssue?.summary || 'The last run ended with an error.';
+    return {
+      reason: 'failed',
+      label: 'Stalled',
+      tooltip: `Needs attention: no run is active and the last run failed. ${detail}`,
+    };
+  }
+
+  const latest = latestActivityMs(job);
+  if (latest === null || nowMs - latest <= idleThresholdMs) return null;
+  const idleMinutes = Math.max(1, Math.floor((nowMs - latest) / 60_000));
+  return {
+    reason: 'idle',
+    label: 'Stalled',
+    tooltip: `Needs attention: this task is still In Progress, but no run is active and no activity has arrived for ${idleMinutes} minutes.`,
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')

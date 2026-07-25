@@ -359,6 +359,11 @@ public sealed class ProjectRegistry
             ? ValidateRepositoryUrl(update.ClearRepositoryUrl == true ? null : update.RepositoryUrl)
             : null;
 
+        var updateWikiSourceBranch = update.WikiSourceBranch != null || update.ClearWikiSourceBranch == true;
+        var wikiSourceBranch = updateWikiSourceBranch
+            ? ValidateWikiSourceBranch(update.ClearWikiSourceBranch == true ? null : update.WikiSourceBranch)
+            : null;
+
         var updateCliDefault = update.CliDefault != null || update.ClearCliDefault == true;
         var cliDefault = update.ClearCliDefault == true || string.IsNullOrWhiteSpace(update.CliDefault)
             ? null
@@ -388,6 +393,7 @@ public sealed class ProjectRegistry
                 WorkspaceId = updateWorkspace ? workspaceId! : current.WorkspaceId,
                 RepositoryPath = updateRepositoryPath ? repositoryPath : current.RepositoryPath,
                 RootPath = updateRootPath ? rootPath : current.RootPath,
+                WikiSourceBranch = updateWikiSourceBranch ? wikiSourceBranch : current.WikiSourceBranch,
                 Urls = updateRepositoryUrl
                     ? ApplyRepositoryUrl(current.Urls, repositoryUrl)
                     : current.Urls,
@@ -483,6 +489,79 @@ public sealed class ProjectRegistry
             trimmed == null ? "repository-path-cleared" : "repository-path-set");
     }
 
+    /// <summary>
+    /// Create or replace one component ownership declaration. The declaration
+    /// must live on its primary project, carries that project's ticket prefix,
+    /// and advances an append-only audit version on every edit.
+    /// </summary>
+    public ProjectRecord UpsertOwnershipMapping(string id, ComponentOwnershipMapping mapping, string? actor = null)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+        if (string.IsNullOrWhiteSpace(mapping.Id))
+            throw new ArgumentException("mapping id is required", nameof(mapping));
+        if (string.IsNullOrWhiteSpace(mapping.Component))
+            throw new ArgumentException("component is required", nameof(mapping));
+
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {id}");
+            var owner = _state.Projects[idx];
+            if (!string.IsNullOrWhiteSpace(mapping.PrimaryProjectId)
+                && !string.Equals(mapping.PrimaryProjectId, owner.Id, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("primaryProjectId must match the storage project", nameof(mapping));
+            if (!string.IsNullOrWhiteSpace(mapping.AllowedTicketPrefix)
+                && !string.Equals(mapping.AllowedTicketPrefix, owner.ShortCode, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"allowedTicketPrefix must be '{owner.ShortCode}'", nameof(mapping));
+            foreach (var consumerId in mapping.ConsumerProjectIds)
+            {
+                if (!_state.Projects.Any(p => string.Equals(p.Id, consumerId, StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException($"Unknown consumer projectId: {consumerId}", nameof(mapping));
+            }
+
+            var previous = owner.OwnershipMappings.FirstOrDefault(row =>
+                string.Equals(row.Id, mapping.Id, StringComparison.OrdinalIgnoreCase));
+            var now = DateTime.UtcNow;
+            var changedBy = string.IsNullOrWhiteSpace(actor) ? "local-default" : actor.Trim();
+            var normalized = mapping with
+            {
+                Id = mapping.Id.Trim(),
+                Component = mapping.Component.Trim(),
+                PrimaryProjectId = owner.Id,
+                AllowedTicketPrefix = owner.ShortCode,
+                Confidence = Math.Clamp(mapping.Confidence, 0, 1),
+                Version = (previous?.Version ?? 0) + 1,
+                UpdatedAt = now,
+                UpdatedBy = changedBy,
+            };
+            var mappings = owner.OwnershipMappings
+                .Where(row => !string.Equals(row.Id, normalized.Id, StringComparison.OrdinalIgnoreCase))
+                .Append(normalized)
+                .OrderBy(row => row.Component, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var audit = owner.OwnershipMappingAudit.Append(new ComponentOwnershipMappingAudit
+            {
+                MappingId = normalized.Id,
+                Version = normalized.Version,
+                ChangedAt = now,
+                ChangedBy = changedBy,
+                Action = previous == null ? "created" : "updated",
+                Snapshot = normalized,
+            }).ToList();
+            var updated = owner with { OwnershipMappings = mappings, OwnershipMappingAudit = audit };
+            var next = _state.Projects.ToList();
+            next[idx] = updated;
+            _state = _state with { Projects = next };
+            PersistLocked();
+            _logger.LogInformation(
+                "project-ownership-mapping-upserted id={Id} mappingId={MappingId} version={Version} actor={Actor}",
+                id, normalized.Id, normalized.Version, changedBy);
+            return updated;
+        }
+    }
+
     internal static string? ValidateRepositoryPath(string? repositoryPath)
     {
         var trimmed = string.IsNullOrWhiteSpace(repositoryPath) ? null : repositoryPath.Trim();
@@ -509,6 +588,29 @@ public sealed class ProjectRegistry
             if (!Directory.Exists(Path.Combine(trimmed, ".git")) && !File.Exists(Path.Combine(trimmed, ".git")))
                 throw new ArgumentException(
                     "repositoryPath must point at a git checkout (no .git found)", nameof(repositoryPath));
+        }
+        return trimmed;
+    }
+
+    /// <summary>Sets the optional read-only git ref used by the whole wiki.</summary>
+    public ProjectRecord SetWikiSourceBranch(string id, string? branch)
+    {
+        var trimmed = ValidateWikiSourceBranch(branch);
+        return MutateLocked(id, p => p with { WikiSourceBranch = trimmed },
+            trimmed == null ? "wiki-source-checkout" : "wiki-source-branch-set");
+    }
+
+    internal static string? ValidateWikiSourceBranch(string? branch)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
+        if (trimmed != null)
+        {
+            if (trimmed.Length > 200
+                || trimmed.StartsWith("-", StringComparison.Ordinal)
+                || trimmed.Contains("..", StringComparison.Ordinal)
+                || trimmed.Any(char.IsWhiteSpace)
+                || trimmed.IndexOfAny(['~', '^', ':', '?', '*', '[', '\\']) >= 0)
+                throw new ArgumentException("wikiSourceBranch must be a plain git branch or remote-tracking ref", nameof(branch));
         }
         return trimmed;
     }

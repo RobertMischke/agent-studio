@@ -117,7 +117,7 @@
               [class.wsearch__star--active]="isStarred(result)"
               [attr.aria-pressed]="isStarred(result)"
               [attr.data-testid]="'wiki-search-star-' + result.relPath"
-              [cacTooltip]="isStarred(result) ? 'Stern entfernen' : 'Starren'"
+              cacTooltip="Your personal shortlist"
               (click)="toggleStar($event, result)">
         <app-studio-icon [name]="isStarred(result) ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
       </button>

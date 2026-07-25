@@ -61,6 +61,22 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         @"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|Let'?s\s*get\s*started|match\s*terminal|fullscreen\s*renderer|Try\s*the\s*new\s*full|Flicker-?free\s*output",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Claude Code 2.1.202 replaced the old standalone /usage panel with a
+    // tabbed Settings / Status / Config / Usage / Stats view. API-billed
+    // accounts only get session cost/token statistics in that view, not
+    // subscription utilization percentages. Treat that as a recognized
+    // "quota exists but the CLI did not report a number" shape rather than
+    // returning no windows or a parser error.
+    //
+    // PTY snapshots commonly collapse all inter-word whitespace, hence the
+    // deliberately whitespace-optional headings. The two anchors keep a
+    // random assistant response mentioning "usage" from matching.
+    private static readonly Regex TabbedSessionUsageRegex = new(
+        @"Settings\s*Status\s*Config\s*Usage\s*Stats.*?" +
+        @"Session.*?Total\s*cost\s*:.*?Total\s*duration\s*\(\s*API\s*\)\s*:.*?" +
+        @"Usage\s*:.*?(?:input|output|cache\s*read|cache\s*write)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
     private readonly IConfiguration _configuration;
 
     public ClaudeQuotaProbe(
@@ -83,7 +99,9 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             var themePattern  = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
             var upsellPattern = new Regex(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
             var readyPattern  = new Regex(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
-            var usagePattern  = new Regex(@"Current\s*session|Current\s*week", RegexOptions.IgnoreCase);
+            var usagePattern  = new Regex(
+                @"Current\s*session|Current\s*week|Settings\s*Status\s*Config\s*Usage\s*Stats",
+                RegexOptions.IgnoreCase);
 
             // Drive claude past its startup gates, THEN run /usage. Claude Code 2.1.x can
             // interpose several interactive screens between spawn and the ready REPL:
@@ -250,6 +268,20 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 Unit       = "%",
                 ResetAt    = hasDate ? ParseResetDateUtc(reset, tz) : ParseResetTimeUtc(reset, tz),
                 ResetLabel = tz != null ? $"{reset} ({tz})" : reset
+            });
+        }
+
+        // New tabbed /usage screen, but no subscription utilization block.
+        // One explicit null-valued window lets all consumers distinguish
+        // "recognized and unknown" from "probe has not produced anything".
+        // Admission already ignores windows without a usable UsedPct.
+        if (windows.Count == 0 && TabbedSessionUsageRegex.IsMatch(snap))
+        {
+            windows.Add(new QuotaWindow
+            {
+                Label = "Quota",
+                UsedPct = null,
+                Unit = "%"
             });
         }
 

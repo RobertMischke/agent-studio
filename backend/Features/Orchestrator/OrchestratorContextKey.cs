@@ -57,6 +57,24 @@ public sealed class OrchestratorContextKey : IEquatable<OrchestratorContextKey>
     {
         key = null;
         if (string.IsNullOrEmpty(raw) || raw != raw.Trim()) return false;
+
+        // Self-healing (AGT-2165): keys arriving over HTTP catch-all routes can
+        // still carry percent-escapes when a frontend encodeURIComponent'ed the
+        // whole key (task%3A...%2F...). ASP.NET leaves those escapes in the
+        // route value, the strict grammar below rejects them, and the chat died
+        // with "Invalid orchestrator context key". Unescape once and re-enter;
+        // canonical keys never contain '%', so valid input is unaffected. The
+        // parsed key's Value is the canonical decoded form either way - callers
+        // must use key.Value (not their raw input) for registry paths.
+        if (raw.Contains('%'))
+        {
+            string unescaped;
+            try { unescaped = Uri.UnescapeDataString(raw); }
+            catch (UriFormatException) { return false; }
+            if (unescaped != raw) return TryParse(unescaped, out key);
+            return false;
+        }
+
         if (raw == GlobalKind)
         {
             key = Global;

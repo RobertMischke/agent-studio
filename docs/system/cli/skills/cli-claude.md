@@ -177,6 +177,12 @@ Anthropic streams a `rate_limit_event` frame **per turn**. We render it to a sin
 
 If you change the marker format, you break the pill. Update both halves together and add a test that round-trips a captured frame.
 
+The rate-limit parser accepts both the original camelCase keys
+(`rateLimitType`, `resetsAt`, `overageStatus`, `isUsingOverage`) and snake_case
+aliases. Optional fields with an unknown type degrade to null/zero. Unknown
+fields are ignored. The stable marker tail remains camelCase-compatible so
+older downstream consumers continue to work.
+
 ## Model handling
 
 `GetModelCatalogAsync` returns a hardcoded list (Opus 4.7, Sonnet 4.6 default, Haiku 4.5). No live discovery yet — the CLI doesn't expose a `claude models list` command at the time of writing.
@@ -251,9 +257,21 @@ Live-backend retriggers (`api.sh start` → `POST /jobs/{id}/start`) are diagnos
 
 ## Quota probe
 
-[`ClaudeQuotaProbe`](../../../backend/Services/Quota/ClaudeQuotaProbe.cs) drives the `/usage` slash command via PTY in a scratch dir. It returns two windows: the 5-hour bucket (current session) and a weekly bucket. The probe runs in `%TEMP%/agent-taskboard-quota/claude/` so it doesn't pollute the user's `~/.claude/projects/` listing.
+[`ClaudeQuotaProbe`](../../../../backend/Features/Cli/Quota/ClaudeQuotaProbe.cs) drives the `/usage` slash command via PTY in a scratch dir. It returns the quota windows reported by the CLI. The probe runs in `%TEMP%/agent-taskboard-quota/claude/` so it doesn't pollute the user's `~/.claude/projects/` listing.
 
-If `/usage` output format changes, the parser in [`ClaudeQuotaParser`](../../../backend/Services/Quota/ClaudeQuotaParser.cs) is the place to update; the test fixture lives under `backend.Tests/Fixtures/quota/claude/`.
+If `/usage` output format changes, update
+[`ClaudeQuotaProbe.ParseUsageWindows`](../../../../backend/Features/Cli/Quota/ClaudeQuotaProbe.cs);
+the test fixtures live under `backend.Tests/Fixtures/quota/claude/`.
+
+Claude Code 2.1.202 introduced a tabbed
+`Settings / Status / Config / Usage / Stats` screen. On API-billed accounts the
+Usage tab can contain only session cost, duration, code-change, and token
+statistics. It has no subscription utilization percentage. This is a
+recognized format, not a failed probe: the parser returns one `Quota` window
+with `UsedPct = null`, and every Studio quota surface renders `Unknown`.
+Legacy `Current session` and `Current week` formats remain supported. The real
+2.1.202 PTY fixture is
+`backend.Tests/Fixtures/quota/claude/claude-usage-v2.1.202-api-billing.txt`.
 
 ## Common tasks
 

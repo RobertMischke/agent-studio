@@ -67,6 +67,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
 
+Task creation can carry a structured `routing` request with the observed
+surface, affected component, and navigation project. `ComponentRoutingService`
+resolves that request against versioned ownership mappings stored on project
+registry records. A confident cross-project match replaces the requested
+destination, validates the ticket prefix, and appends consumer integration and
+deployment acceptance criteria. Unknown, conflicting, or low-confidence
+ownership returns `409` with a routing question instead of silently using the
+navigation project.
+
+Cross-project `change-project` is also a re-key operation. The state machine
+reserves a destination-project key, stages source and destination folders under
+hidden names, promotes the complete destination, and rolls back on failure.
+This prevents the AGT-2166 archived-orphan/lost-task failure mode.
+
 ## Related Concepts
 
 - [../concepts/completion-review-and-remote-runner-stability.html#provenance](../../concepts/completion-review-and-remote-runner-stability.html#provenance):
@@ -86,7 +100,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 `GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
 the Files tab: Markdown, self-contained `.html` / `.htm`, and structured
 `aspect-*.json`. `status.md` remains owned by Result, and subfolders remain out
-of scope. HTML content is fetched through the existing task-file endpoint and
+of scope. A file opens on its current content without historical controls. Its
+History tab lists prior snapshots compactly by run, date, and grade; choosing a
+row loads that snapshot. Arbitrary From/To comparison between review snapshots
+is intentionally absent because it did not support an operator workflow. The
+history list remains the basis if a concrete comparison need emerges. HTML
+content is fetched through the existing task-file endpoint and
 rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
 of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
@@ -110,26 +129,6 @@ cannot erase an operator decision.
 ## Epic lifecycle
 
 - Epics are `kind=epic` task records; membership is the child's `epicId`.
-- Epic planning is the goal-decomposition boundary. Plan nodes may carry a
-  local `id`, `dependsOn`, and `purpose=delivery|verification`. The pure
-  validator rejects unknown ids, self-dependencies, duplicates, and cycles
-  before any child is created. When a plan contains delivery work, it also
-  rejects a verification node that is not transitively ordered after at least
-  one delivery node. The factory materializes valid nodes in topological order
-  and translates local dependencies into stable task keys in
-  `references.dependsOn`.
-- Children created by a planning run persist server-authored
-  `creationProvenance`: `initiator=orchestrator`,
-  `method=goal-decomposition`, the owning goal id/key, orchestrator context,
-  task purpose, and UTC creation time. Deterministic API-created children use
-  `initiator=operator`. Legacy and ordinary direct-created cards omit this
-  field.
-- Verification is first-class scheduled work, not a title convention. A
-  `purpose=verification` card waits on every delivery node it checks and its
-  prompt orders concrete checks, names their expected evidence, and inspects
-  the submitted revision and actual artifacts. See
-  [Orchestrator Supervision Loop](../../concepts/orchestrator-supervision-loop.html#goal-horizon)
-  and the [Evidence Gate analysis](../../concepts/auto-review-evidence-gate-analysis.html#plan).
 - `GET /api/epics` is archive-inclusive. A finished epic remains queryable when
   all of its children are in `6-completed` or `7-archive`.
 - The Epic overview separates active and completed rollups, shows `x / y done`,
@@ -137,6 +136,14 @@ cannot erase an operator decision.
 - Manual Epic creation requires a title and goal description. If a planning
   run parses no sub-tasks, the runner records the failed decomposition and
   returns the Epic to `0-backlog` instead of leaving an empty completion.
+- A remotely assigned Ready Epic is claimable for planning even though local
+  auto-pickup still skips Epic containers. Local and remote completion both use
+  `EpicDecompositionLifecycle`, `EpicDecompositionParser`, and
+  `EpicSubTaskFactory`. Valid plans create child coding cards with the Epic's
+  project, `epicId`, CLI, and model defaults, append
+  `.metadata/spawned-tasks.jsonl` planning-spawn evidence, and move the Epic to
+  `4-auto-review`. Empty, invalid, or source-mutating plans record a failed
+  decomposition and return the Epic to `0-backlog`.
 - Empty Epic cleanup uses the Task API to move records to `7-archive`; it never
   deletes the task folder. Archived zero-member cleanup records are omitted
   from the overview, while completed Epics with historical children remain.
@@ -156,6 +163,9 @@ cannot erase an operator decision.
 - `backend/Services/Tasks/LaneMutexRegistry.cs`: per-project lane serialization.
 - `backend/Services/Tasks/CommitAttributionService.cs` and
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
+- `backend/Features/TestRuns/TestRunService.cs`: project-wide test-run
+  lifecycle plus the read-time card evidence projection derived from the
+  latest task-owned commit and Git ancestry.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
 - `backend/Features/Registry/WorkspaceSettingsService.cs` and
@@ -171,6 +181,10 @@ cannot erase an operator decision.
 
 - The durable lane sequence is
   `1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive`.
+- Task creation defaults to `0-backlog` only when `targetState` is absent.
+  Every explicit valid `targetState` is authoritative, including review and
+  terminal lanes used by operator or automation workflows. Invalid states fail
+  creation instead of silently selecting another lane.
 - `4-auto-review` remains the disk/API key even when the UI labels it Post
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
@@ -196,6 +210,14 @@ cannot erase an operator decision.
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
+- Test evidence is never persisted on a task. A successful run proves a card
+  only when its commit equals the card commit or contains its change. Direct
+  ancestry proves ordinary commits; a reachable curated `merge(KEY)` or
+  `merge-recut(KEY)` integration anchor proves rewritten task commits only when
+  that integration postdates the card's current attributed commit.
+  Missing commit timestamps disable this fallback rather than reusing historical
+  key-only evidence. Planned and running matches are pending evidence; an older
+  green run remains visible as `diff not included` and never turns the card green.
 
 ## Execution location on task reads
 
@@ -210,6 +232,16 @@ own lease owner rather than inheriting a project-wide runner status.
 Settled session events preserve the same projection as historical run evidence.
 Historical entries never reuse disconnected warning treatment. See the
 [execution location schema](../schemas/task-execution-location.schema.json).
+
+## Outcome issue presentation contract
+
+Task reads derive `TaskInfo.outcomeIssue` from typed runner markers in
+`logs/cli-output.log`. `summary` remains a bounded compatibility value for
+compact consumers. `technicalDetails` carries the complete normalized source
+line and is restricted to explicit technical-details surfaces. User-facing
+failure cards map the issue `kind` to a complete human sentence; they never use
+`summary` or `technicalDetails` as primary copy. Unknown kinds use a generic
+failure sentence while retaining the full diagnostic under the disclosure.
 
 ## Verification
 

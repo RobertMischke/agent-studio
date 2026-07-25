@@ -51,7 +51,6 @@ Agents must not:
 - Pick another task.
 - Move task folders between state lanes.
 - Edit the `state` or `phase` fields in job.json, or write to `lifecycle.json`. These are application-owned.
-- Add or edit `creationProvenance` in job.json. Goal-decomposition provenance is server-authored evidence.
 - Start or continue another task on their own.
 - Create branches, switch branches, merge branches, or manage worktrees. When parallel mode is enabled, branch and worktree lifecycle is still application/pipeline-owned.
 
@@ -105,7 +104,7 @@ End every run with exactly one of these tokens on its own line:
 - `[[TASK_NEEDS_INPUT:<short reason>]]` - you need user input to continue.
 - `[[TASK_NOOP]]` - you intentionally did nothing (rare; explain why).
 
-Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the last one as authoritative.
+Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the terminal token in the final agent reply as authoritative. Sentinel-shaped text in tool output, diffs, file content, stderr, or fenced examples is evidence only and never a run verdict.
 
 `[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-auto-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
 

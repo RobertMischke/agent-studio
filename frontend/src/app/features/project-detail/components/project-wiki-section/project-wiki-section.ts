@@ -29,6 +29,7 @@ import {
   WikiGradingRunStatus,
   WikiNodeType,
   WikiPulse,
+  RelatedTaskReference,
   WikiSearchResponse,
   WikiSearchResult,
   WikiTree,
@@ -40,12 +41,20 @@ import { MarkdownRichEditorComponent } from '../../../../components/markdown-ric
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import {
+  PageType,
+  derivePageType,
+  pageTypeIcon,
+} from '../../../../models/page-context.model';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
+import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.component';
+import { WikiRelatedTasksComponent } from './wiki-related-tasks/wiki-related-tasks.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -65,6 +74,18 @@ import {
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
+import {
+  WikiLinkedElement,
+  extractWikiLinkedElements,
+  resolveWikiPageTarget,
+  scrollToWikiAnchor,
+  wikiLinkedElementKindLabel,
+  wikiLinkedElementTitle,
+} from './wiki-linked-element';
+import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
+import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
+import { WikiPageActionsComponent } from './wiki-page-actions/wiki-page-actions';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -80,19 +101,11 @@ type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
 interface WikiPersistedState {
   navCollapsed?: boolean;
-  contextCollapsed?: boolean;
   openedRel?: string | null;
   viewerTab?: WikiViewerTab;
   navWidth?: number;
   contextWidth?: number;
   expandedIds?: string[];
-  /**
-   * Per-page collapse memory for the right meta rail, keyed by the page's
-   * relPath. A page absent from the map falls back to `contextCollapsed`
-   * (the landing / default state), so an operator who folds the meta of one
-   * page does not silently fold it for every other page.
-   */
-  metaCollapsedByPage?: Record<string, boolean>;
 }
 
 interface WikiResizeState {
@@ -100,12 +113,6 @@ interface WikiResizeState {
   pointerId: number;
   startX: number;
   startWidth: number;
-}
-
-interface WikiDocLink {
-  label: string;
-  target: string;
-  kind: 'doc' | 'anchor' | 'external';
 }
 
 const WIKI_SEARCH_DEBOUNCE_MS = 300;
@@ -143,8 +150,13 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiDashboardComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
+    WikiMetaSectionComponent,
+    WikiRelatedTasksComponent,
+    WikiPageActionsComponent,
     WikiSearchResultsComponent,
+    WikiSourceBadgeComponent,
   ],
+  providers: [WikiMetaPanelStateService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
   styleUrl: './project-wiki-section.scss',
@@ -161,6 +173,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly notifications = inject(NotificationService);
+  private readonly taskNavigation = inject(TaskReferenceNavigationService);
+  private readonly metaPanelState = inject(WikiMetaPanelStateService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -190,13 +204,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly expanded = signal<ReadonlySet<string>>(new Set());
   readonly focusedRowId = signal<string | null>(null);
   readonly navCollapsed = signal(false);
-  // `contextCollapsed` is the *effective* meta-rail state for whatever is on
-  // screen right now (the open page, or the landing view). Its per-page memory
-  // lives in `metaCollapsedByPage`; `defaultMetaCollapsed` is the fallback for a
-  // page with no stored preference and for the landing view.
-  readonly contextCollapsed = signal(false);
-  private readonly metaCollapsedByPage = signal<Record<string, boolean>>({});
-  private readonly defaultMetaCollapsed = signal(false);
+  // One global preference covers the landing and every document. Page
+  // navigation must never alter it.
+  readonly contextCollapsed = this.metaPanelState.collapsed;
   readonly navWidth = signal(WIKI_NAV_DEFAULT_WIDTH);
   readonly contextWidth = signal(WIKI_CONTEXT_DEFAULT_WIDTH);
   readonly navWidthStyle = computed(() => `${this.navWidth()}px`);
@@ -354,6 +364,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly menuItems = computed<MenuItem[]>(() => {
     const t = this.menuTarget();
     if (!t) return [];
+    if (!this.wikiWritable())
+      return t.type === 'folder' ? [] : [{ kind: 'row', id: 'history', label: 'View history' }];
     if (t.type === 'folder') {
       return [
         { kind: 'row', id: 'new-page', label: 'New page' },
@@ -429,10 +441,14 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   });
 
   readonly canEditDoc = computed(() =>
-    this.openedType() === 'md' && !this.revisionSha());
+    this.openedType() === 'md' && !this.revisionSha() && this.wikiWritable());
+
+  readonly wikiWritable = computed(() => this.tree()?.source?.writable !== false);
 
   readonly editDisabledReason = computed(() => {
     if (this.revisionSha()) return 'Old revisions are read-only.';
+    if (!this.wikiWritable())
+      return `This Wiki is read-only because its source is ${this.tree()?.source?.branch ?? 'a git branch'}, not the checkout.`;
     if (this.openedType() !== 'md') return 'Rich editing is currently available for Markdown pages.';
     return null;
   });
@@ -445,7 +461,25 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     return raw.trim() ? raw.trim().split(/\s+/).length : 0;
   });
 
-  readonly docLinks = computed<WikiDocLink[]>(() => this.extractLinks(this.displayContent()));
+  readonly docLinks = computed<WikiLinkedElement[]>(() => extractWikiLinkedElements(this.displayContent()));
+  readonly linkedTaskReferences = computed<RelatedTaskReference[]>(() => {
+    const history = this.history();
+    const related = [...(history?.relatedTasks ?? [])];
+    const taskKey = history?.metadata.taskKey?.trim();
+    if (taskKey && !related.some(item => item.key.toUpperCase() === taskKey.toUpperCase())) {
+      related.unshift({
+        key: taskKey,
+        title: `Source task ${taskKey}`,
+        linkedAt: history?.metadata.updatedAt ?? '',
+        source: 'auto',
+        exists: null,
+      });
+    }
+    return related;
+  });
+  readonly linkedElementCount = computed(() => this.docLinks().length + this.linkedTaskReferences().length);
+  protected readonly linkKindLabel = wikiLinkedElementKindLabel;
+  protected readonly linkedElementTitle = wikiLinkedElementTitle;
 
   /**
    * Compact drift grade for the open page, surfaced in the meta rail's toggle
@@ -468,6 +502,21 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    */
   readonly openedClassification = computed<WikiClassMeta | null>(() =>
     classificationMeta(this.openedNode()?.classification));
+
+  readonly registeredWorkbenchPaths = computed<ReadonlySet<string>>(() =>
+    new Set((this.pulse()?.workbenches?.items ?? []).map(item => item.entryPath)));
+
+  pageIcon(node: WikiTreeNode): StudioIconName {
+    return pageTypeIcon(this.pageType(node));
+  }
+
+  pageType(node: WikiTreeNode): PageType {
+    return derivePageType(
+      node.relPath ?? '',
+      node.classification,
+      this.registeredWorkbenchPaths(),
+    );
+  }
 
   /** Successor link in the classification block: opens the superseding page. */
   openSupersededBy(rel: string): void {
@@ -817,7 +866,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
     this.openedRel.set(rel);
-    this.contextCollapsed.set(this.metaCollapsedFor(rel));
     this.openedType.set(type);
     this.viewerTab.set(tab);
     this.openedContent.set('');
@@ -859,7 +907,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   closeFile(): void {
     this.openedRel.set(null);
-    this.contextCollapsed.set(this.defaultMetaCollapsed());
     this.openedContent.set('');
     this.reportContent.set('');
     this.reportAnchor.set(null);
@@ -977,30 +1024,38 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
 
   toggleContext(): void {
-    this.setContextCollapsed(!this.contextCollapsed());
+    this.metaPanelState.togglePanel();
   }
 
-  /**
-   * Records the meta-rail collapse state. When a page is open the choice is
-   * remembered against that page's relPath; on the landing view it becomes the
-   * default for pages without their own stored preference.
-   */
   private setContextCollapsed(collapsed: boolean): void {
-    this.contextCollapsed.set(collapsed);
-    const rel = this.openedRel();
-    if (rel) {
-      this.metaCollapsedByPage.update(map => ({ ...map, [rel]: collapsed }));
-    } else {
-      this.defaultMetaCollapsed.set(collapsed);
-    }
-    this.persistState();
+    this.metaPanelState.setPanelCollapsed(collapsed);
   }
 
-  /** Effective collapse state for a page: its stored choice, else the default. */
-  private metaCollapsedFor(rel: string | null): boolean {
-    if (!rel) return this.defaultMetaCollapsed();
-    const map = this.metaCollapsedByPage();
-    return rel in map ? map[rel] === true : this.defaultMetaCollapsed();
+  linkedElementHref(link: WikiLinkedElement): string {
+    if (link.kind === 'external' || link.kind === 'anchor') return link.target;
+    if (link.kind === 'task') return `#task:${link.taskReference ?? link.label}`;
+    const rel = this.resolveLinkedWikiPage(link);
+    return rel
+      ? buildWikiRouteHash(this.slug(), { kind: 'page', relPath: rel })
+      : link.target;
+  }
+
+  openLinkedElement(event: MouseEvent, link: WikiLinkedElement): void {
+    if (link.kind === 'external') return;
+    event.preventDefault();
+    if (link.kind === 'task') {
+      const reference = link.taskReference ?? link.label;
+      const match = this.taskNavigation.markdownReferences()
+        .find(item => item.label.toUpperCase() === reference.toUpperCase());
+      this.taskNavigation.openTaskKey(match?.taskKey ?? reference);
+      return;
+    }
+    if (link.kind === 'anchor') {
+      scrollToWikiAnchor(this.host.nativeElement as HTMLElement, link.target);
+      return;
+    }
+    const rel = this.resolveLinkedWikiPage(link);
+    if (rel) this.openFile(rel, this.wikiTypeForRel(rel));
   }
 
   startPanelResize(event: PointerEvent, panel: WikiResizablePanel): void {
@@ -1305,7 +1360,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       case 'history':
         if (t.relPath) {
           // Viewing history implies wanting the meta rail visible: open the
-          // page, then force the rail expanded and remember that for the page.
+          // page, then force the globally remembered rail state to expanded.
           this.openFile(t.relPath, t.type);
           this.setContextCollapsed(false);
         }
@@ -1329,11 +1384,13 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // ---- create page / folder ----
 
   promptNewPage(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New page name (e.g. guide.md):', '');
     if (name) this.createPage(folderRel, name);
   }
 
   promptNewFolder(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New category name:', '');
     if (name) this.createFolder(folderRel, name);
   }
@@ -1452,6 +1509,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // persisted through the docs/app/config/wiki-order.json channel.
 
   onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
+    if (!this.wikiWritable()) return;
     if (!node.relPath || !ev.dataTransfer) return;
     if (node.type === 'folder') {
       ev.dataTransfer.setData(FOLDER_DRAG_TYPE, node.relPath);
@@ -1564,16 +1622,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private restorePersistedState(projectName: string): void {
     const state = this.readPersistedState(projectName);
     this.navCollapsed.set(state?.navCollapsed === true);
-    // Compute the default from the parsed state (a plain local), never by
-    // reading a signal: restorePersistedState runs inside the constructor
-    // effect, so a signal read here would make the effect re-fire (and refetch)
-    // every time the meta rail is toggled on the landing view.
-    const defaultCollapsed = state?.contextCollapsed === true;
-    this.defaultMetaCollapsed.set(defaultCollapsed);
-    this.metaCollapsedByPage.set(state?.metaCollapsedByPage ?? {});
-    // Effective state starts at the landing default; restorePendingOpen ->
-    // openFile applies the per-page override once a page is reopened.
-    this.contextCollapsed.set(defaultCollapsed);
+    this.metaPanelState.restore();
     this.navWidth.set(this.clampNavWidth(state?.navWidth ?? WIKI_NAV_DEFAULT_WIDTH));
     this.contextWidth.set(this.clampContextWidth(state?.contextWidth ?? WIKI_CONTEXT_DEFAULT_WIDTH));
     this.expanded.set(new Set(state?.expandedIds ?? []));
@@ -1763,13 +1812,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (!projectName) return;
     const state: WikiPersistedState = {
       navCollapsed: this.navCollapsed(),
-      contextCollapsed: this.defaultMetaCollapsed(),
       openedRel: this.openedRel(),
       viewerTab: this.viewerTab(),
       navWidth: this.navWidth(),
       contextWidth: this.contextWidth(),
       expandedIds: [...this.expanded()],
-      metaCollapsedByPage: this.metaCollapsedByPage(),
     };
     this.writePersistedState(projectName, state);
   }
@@ -1781,13 +1828,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       const parsed = JSON.parse(raw) as Partial<WikiPersistedState>;
       return {
         navCollapsed: parsed.navCollapsed === true,
-        contextCollapsed: parsed.contextCollapsed === true,
         openedRel: typeof parsed.openedRel === 'string' && parsed.openedRel.trim() ? parsed.openedRel : null,
         viewerTab: this.safeViewerTab(parsed.viewerTab),
         navWidth: this.readStoredWidth(parsed.navWidth, WIKI_NAV_MIN_WIDTH, WIKI_NAV_MAX_WIDTH),
         contextWidth: this.readStoredWidth(parsed.contextWidth, WIKI_CONTEXT_MIN_WIDTH, WIKI_CONTEXT_MAX_WIDTH),
         expandedIds: this.readStoredExpandedIds(parsed.expandedIds),
-        metaCollapsedByPage: this.readStoredMetaCollapsed(parsed.metaCollapsedByPage),
       };
     } catch {
       return null;
@@ -1857,15 +1902,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readStoredExpandedIds(value: unknown): string[] | undefined {
     if (!Array.isArray(value)) return undefined;
     return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-  }
-
-  private readStoredMetaCollapsed(value: unknown): Record<string, boolean> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    const out: Record<string, boolean> = {};
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      if (key.trim().length > 0 && typeof val === 'boolean') out[key] = val;
-    }
-    return out;
   }
 
   private resolveDriftProjectContext(after: () => void): void {
@@ -1989,6 +2025,14 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return null;
   }
 
+  private resolveLinkedWikiPage(link: WikiLinkedElement): string | null {
+    const openedRel = this.openedRel();
+    if (!openedRel) return null;
+    const rel = resolveWikiPageTarget(link.target, openedRel);
+    const node = rel ? this.findNode(this.roots(), rel) : null;
+    return node && node.type !== 'folder' ? rel : null;
+  }
+
   private expandAncestors(rel: string): void {
     const parts = rel.split('/');
     if (parts.length <= 1) return;
@@ -1997,50 +2041,6 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
       next.add(parts.slice(0, i).join('/'));
     }
     this.expanded.set(next);
-  }
-
-  private extractLinks(content: string): WikiDocLink[] {
-    const links: WikiDocLink[] = [];
-    const seen = new Set<string>();
-    const push = (label: string, target: string): void => {
-      const cleanTarget = target.trim();
-      if (!cleanTarget || cleanTarget.startsWith('mailto:')) return;
-      const key = `${label}\u0000${cleanTarget}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      links.push({
-        label: label.trim() || cleanTarget,
-        target: cleanTarget,
-        kind: this.linkKind(cleanTarget),
-      });
-    };
-
-    const markdownLink = /(!)?\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-    for (const match of content.matchAll(markdownLink)) {
-      if (match[1]) continue;
-      push(match[2] ?? '', match[3] ?? '');
-    }
-
-    const htmlLink = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gis;
-    for (const match of content.matchAll(htmlLink)) {
-      push((match[2] ?? '').replace(/<[^>]+>/g, '').trim(), match[1] ?? '');
-    }
-
-    return links.slice(0, 8);
-  }
-
-  private linkKind(target: string): WikiDocLink['kind'] {
-    if (target.startsWith('#')) return 'anchor';
-    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return 'external';
-    return 'doc';
-  }
-
-  linkKindLabel(kind: WikiDocLink['kind']): string {
-    switch (kind) {
-      case 'anchor': return 'Anchor';
-      case 'external': return 'External';
-      default: return 'Doc';
-    }
   }
 
   navPath(node: WikiTreeNode): string {

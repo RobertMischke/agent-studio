@@ -232,6 +232,13 @@ public record TaskInfo
     public DateTime? PhaseEnteredAt { get; init; }
 
     /// <summary>
+    /// Checks from the optional lifecycle sidecar while a task is in post
+    /// processing. This read-only projection lets compact board activity labels
+    /// name the running step without making the browser read workspace files.
+    /// </summary>
+    public List<LifecycleCheck> PostProcessingChecks { get; init; } = [];
+
+    /// <summary>
     /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
     /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
     /// started - read from the durable <c>steer-pending.json</c> marker. Null when
@@ -260,14 +267,6 @@ public record TaskInfo
     /// <c>"tags"</c>; absent or null on disk means an empty list.
     /// </summary>
     public List<string> Tags { get; init; } = [];
-
-    /// <summary>
-    /// Server-authored origin of a task created by goal decomposition. This is
-    /// null for legacy and ordinary user-created cards. Consumers can use the
-    /// initiator, goal, and purpose to distinguish orchestrator-planned
-    /// delivery or verification work from manual queue entries.
-    /// </summary>
-    public TaskCreationProvenance? CreationProvenance { get; init; }
 
     /// <summary>
     /// F34: structured cross-references to other tasks, keyed by F33 stable
@@ -322,6 +321,19 @@ public record TaskInfo
     public TaskMergeSignal? MergeSignal { get; init; }
 
     /// <summary>
+    /// AGT-2202 — honest, git-derived integration verdict for accepted cards
+    /// (5-human-review / 6-completed / 7-archive): is this task's work actually in
+    /// develop? Resolves the "Accept != Merge" blind spot by reading three
+    /// independent git signals (curated <c>merge(&lt;KEY&gt;)</c> log commit, anchor
+    /// ancestry, task-branch-tip ancestry) into one of four discrete states
+    /// (<see cref="IntegrationStatuses"/>). Computed batched + cached per repository
+    /// by <c>TaskIntegrationStatusService</c> (O(repos) git spawns, never per card)
+    /// and folded onto the board payload. Never persisted to <c>task.json</c>; null
+    /// on cards that are not in an accepted lane.
+    /// </summary>
+    public TaskIntegrationStatus? Integration { get; init; }
+
+    /// <summary>
     /// PUB-1 — read-time "publishable to" projection for accepted (6-completed)
     /// tasks: which publish targets (npm / NuGet / website) this task's merged work
     /// touches, so the card / task-detail renders a "publishable: npm, website"
@@ -332,6 +344,14 @@ public record TaskInfo
     /// whose work touches no derived publish target.
     /// </summary>
     public TaskPublishSignal? PublishSignal { get; init; }
+
+    /// <summary>
+    /// Commit-derived test evidence for this card. The relationship is never
+    /// persisted on the task: project test runs remain independent objects and
+    /// Git ancestry determines the best run, distance, and diff containment on
+    /// every read.
+    /// </summary>
+    public TaskTestRunEvidence? TestEvidence { get; init; }
 
     /// <summary>
     /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
@@ -392,8 +412,8 @@ public record TaskInfo
 
 /// <summary>
 /// Card-renderable projection of the runner that holds a task's active run lease
-/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
-/// lease id ride along for the tooltip / audit trail but the card only needs
+/// (AGT-2003). Sourced from the canonical persisted RunAttempt lease; the attempt,
+/// epoch, fencing token, and lease id ride along for the tooltip / audit trail but the card only needs
 /// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
 /// </summary>
 public record TaskRunnerInfo
@@ -416,6 +436,10 @@ public record TaskRunnerInfo
     public string LeaseId { get; init; } = "";
     /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
     public long FencingToken { get; init; }
+    /// <summary>Canonical persisted RunAttempt identity.</summary>
+    public string? AttemptId { get; init; }
+    /// <summary>Authority epoch that issued the current fence.</summary>
+    public long AuthorityEpoch { get; init; }
     /// <summary>UTC instant the active lease was acquired.</summary>
     public DateTime AcquiredAt { get; init; }
 }
@@ -475,7 +499,10 @@ public record TaskOutcomeIssue
     public string Kind { get; init; } = "";
     public string Label { get; init; } = "";
     public string Severity { get; init; } = "Info";
+    /// <summary>Bounded compatibility summary for compact legacy consumers.</summary>
     public string Summary { get; init; } = "";
+    /// <summary>Complete normalized source line for an explicit technical-details surface.</summary>
+    public string TechnicalDetails { get; init; } = "";
     public DateTime? LastSeenAt { get; init; }
 }
 

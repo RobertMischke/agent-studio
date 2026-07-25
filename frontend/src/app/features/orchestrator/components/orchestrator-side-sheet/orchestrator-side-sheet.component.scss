@@ -45,6 +45,68 @@
   min-width: 0;
 }
 
+.sheet__execution-context {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  max-width: 250px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+}
+
+.sheet__execution-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--studio-success);
+}
+
+.sheet__execution-context--resolving .sheet__execution-dot {
+  background: var(--studio-fg-muted);
+}
+
+.sheet__execution-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.sheet__execution-copy strong,
+.sheet__execution-repo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet__execution-copy strong {
+  color: var(--studio-fg-strong);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.sheet__execution-copy small {
+  display: flex;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  color: var(--studio-fg-muted);
+  font-family: var(--studio-font-mono, var(--font-mono));
+  font-size: 9px;
+}
+
+.sheet__execution-repo {
+  min-width: 0;
+}
+
+.sheet__execution-revision {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .sheet__context-badge {
   display: inline-flex;
   align-items: center;
@@ -249,15 +311,20 @@
 .sheet__conversation {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  // Orchestrator rows have intentionally mixed heights (short turns,
+  // multi-line Markdown, badges and status rows). Keep this host as the one
+  // real scroll container so appending a turn never swaps measured rows for
+  // a fixed-height virtual spacer and then asks sticky-to-bottom to correct
+  // the resulting height error.
+  overflow-y: auto;
+  overflow-anchor: none;
   display: flex;
   flex-direction: column;
 }
 
 .sheet__conversation cac-conversation-view {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  height: 100%;
 }
 
 .sheet__no-project {

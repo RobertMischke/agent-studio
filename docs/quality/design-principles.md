@@ -1,3 +1,16 @@
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: design
+lifecycleState: decided
+editedBy: "Codex / AGT-2137"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: decided
+    editedBy: "Codex / AGT-2137"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Initial classification: this page is the established product design direction."
+---
+
 # Design Principles
 
 The product principles that govern *how* this app feels and *what* it shows. Architectural decisions live in [architecture-decisions.md](../system/architecture/decisions/adr-archive.md). Product scope lives in [README.md](../../README.md) and [ROADMAP.md](../../ROADMAP.md). This file holds the user-experience contract that ties them together.

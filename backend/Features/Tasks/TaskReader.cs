@@ -95,6 +95,7 @@ public sealed class TaskReadModel
     public RunTimeline BuildRunTimeline()
     {
         var timeline = RunTimelineBuilder.Build(SessionEvents, CliOutputLines, NowUtc);
+        var reviewAttemptEpoch = OperatorReviewRequeueService.ReadEpoch(Info.FolderPath);
         return timeline with
         {
             PromptEntries = RunPromptTimelineBuilder.Build(
@@ -102,7 +103,12 @@ public sealed class TaskReadModel
                 Info.FolderPath,
                 Detail.PromptMarkdown,
                 Detail.PromptHistory,
-                Detail.ContextUsage)
+                Detail.ContextUsage),
+            ReviewAttemptEpoch = reviewAttemptEpoch,
+            ReviewAttemptCycles = ReviewAttemptTimelineBuilder.Build(
+                reviewAttemptEpoch,
+                Ledger,
+                timeline.FirstStartedAt ?? Info.CreatedAt)
         };
     }
 

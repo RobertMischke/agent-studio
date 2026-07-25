@@ -5,7 +5,8 @@ import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { TaskService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
-import { WorkspaceManagerService } from '../../../shell';
+// Service-only direct import avoids the Project Hub <-> shell component cycle.
+import { WorkspaceManagerService } from '../../../shell/state/workspace-manager.service';
 import type { TaskInfo, WatchPathEntry } from '../../../../models/task.model';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 

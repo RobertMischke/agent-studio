@@ -66,6 +66,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Contains("[REDACTED]", result.Cwd);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess; Dispose loescht den Temp-Root,
+    // den der noch nicht beendete Prozess unter Last haelt (IOException "used by another process" im Gate belegt).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_FailedCommandIsCommandUnavailableWithBoundedEvidence()
     {
@@ -78,6 +81,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.StderrTail.Length <= ProjectUrlProcessService.OutputTailLimit);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess (exit-Command); Temp-Root-Cleanup
+    // rennt unter Last gegen den Prozess-Exit (IOException im Gate belegt).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_ProcessExitIsNotRunning()
     {
@@ -98,6 +104,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ProcessCreated);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess und reserviert einen Port; timing-/lastabhaengig.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task TestAsync_LiveProcessWhosePortNeverOpensIsBoundedAndStopped()
     {
@@ -116,6 +124,99 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.PortReachable);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess, reserviert einen Port und misst per
+    // Wanduhr (Task.Delay 3.5s) - flakt unter Parallellast.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task StartAsync_KeepsWaitingWhileConsoleStaysActivePastIdleWindow()
+    {
+        // Idle window is 2s but the command keeps emitting output for ~5s while
+        // the port never opens. Startup must NOT be abandoned at 2s: as long as
+        // the console is active the wait continues (still "starting").
+        var service = Service();
+        var project = Project();
+        var port = ReserveUnusedPort();
+        var command = OperatingSystem.IsWindows()
+            ? "for /l %i in (1,1,6) do @(echo working %i & ping -n 2 127.0.0.1 >nul)"
+            : "for i in 1 2 3 4 5 6; do echo working $i; sleep 0.8; done";
+        var candidate = UrlAt(port) with
+        {
+            StartRule = new ProjectUrlStartRule { Command = command, Port = port, ReadinessTimeoutSeconds = 2 },
+        };
+        using var cancellation = new CancellationTokenSource();
+
+        var run = service.StartAsync(project, candidate, cancellation.Token);
+        // Wait past the 2s idle window; the active console must keep it starting.
+        await Task.Delay(3500);
+        Assert.False(run.IsCompleted, "startup was abandoned even though the console was still active");
+        Assert.Equal(ProjectUrlDiagnosisClasses.Starting, service.Latest(project, candidate)?.Classification);
+
+        cancellation.Cancel();
+        var result = await run;
+        Assert.Equal(ProjectUrlDiagnosisClasses.Timeout, result.Classification);
+        service.Stop(project.Id, candidate.Id);
+    }
+
+    // MachineBound 22.07.: startet einen echten Kindprozess, reserviert einen Port und prueft ein
+    // Wanduhr-Zeitbudget (< 30s) - lastabhaengig.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task StartAsync_SilentUnreachableProcessFailsAfterIdleWindow()
+    {
+        // A live-but-silent process whose port never opens must fail once the
+        // idle window elapses — well before the 5-minute hard cap.
+        var service = Service();
+        var project = Project();
+        var port = ReserveUnusedPort();
+        var command = OperatingSystem.IsWindows() ? "ping 127.0.0.1 -n 8 >nul" : "sleep 7";
+        var candidate = UrlAt(port) with
+        {
+            StartRule = new ProjectUrlStartRule { Command = command, Port = port, ReadinessTimeoutSeconds = 2 },
+        };
+        var started = DateTime.UtcNow;
+
+        var result = await service.TestAsync(project, candidate, CancellationToken.None);
+
+        Assert.Equal(ProjectUrlDiagnosisClasses.PortNeverOpened, result.Classification);
+        Assert.True(result.TimedOut);
+        Assert.False(result.PortReachable);
+        Assert.Contains("no console output", result.Summary);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(30), "idle failure should trip long before the hard cap");
+    }
+
+    [Fact]
+    public void StartupFailure_HardCapMessageWinsOverIdleAndCapsAtFiveMinutes()
+    {
+        var rule = new ProjectUrlStartRule { Command = "npm start", Port = 4216 };
+
+        var reachable = ProjectUrlProcessService.StartupFailure(
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: true, idleSeconds: 0, "", "");
+        var unreachable = ProjectUrlProcessService.StartupFailure(
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: false, idleSeconds: 0, "", "");
+
+        Assert.Equal(300, ProjectUrlProcessService.HardStartupCapSeconds);
+        Assert.Contains("5-minute", reachable.Summary);
+        Assert.Contains("5-minute", unreachable.Summary);
+        Assert.Equal(ProjectUrlDiagnosisClasses.Timeout, reachable.Classification);
+        Assert.Equal(ProjectUrlDiagnosisClasses.PortNeverOpened, unreachable.Classification);
+        Assert.True(reachable.TimedOut);
+    }
+
+    [Fact]
+    public void StartupFailure_IdleMessageReportsSilenceSeconds()
+    {
+        var rule = new ProjectUrlStartRule { Command = "npm start", Port = 4216 };
+
+        var result = ProjectUrlProcessService.StartupFailure(
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: false, everPortReachable: false, idleSeconds: 23, "", "");
+
+        Assert.Equal(ProjectUrlDiagnosisClasses.PortNeverOpened, result.Classification);
+        Assert.Contains("no console output for 23s", result.Summary);
+        Assert.True(result.TimedOut);
+    }
+
+    // MachineBound 22.07.: startet einen echten Kindprozess und reserviert einen Port; timing-/lastabhaengig.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_PublishesStartingWhileReadinessIsInFlight()
     {
@@ -139,6 +240,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Equal(ProjectUrlDiagnosisClasses.Timeout, result.Classification);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_HttpErrorIsNotRunning()
     {
@@ -152,6 +255,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ContentReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_ExplicitFramePolicyIsNotRenderable()
     {
@@ -171,6 +276,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Contains("X-Frame-Options", result.FramePolicy);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_BlankHtmlIsNotRenderable()
     {
@@ -184,6 +291,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.IframeReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_RenderableHtmlRequiresTcpAndHttpEvidence()
     {
@@ -198,6 +307,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.ContentReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_HttpTimeoutIsNotRunning()
     {
@@ -211,6 +322,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ContentReady);
     }
 
+    // MachineBound 22.07.: reserviert einen Port und macht einen echten TCP-Connect gegen einen freien Port.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_NoListenerIsNotStarted()
     {

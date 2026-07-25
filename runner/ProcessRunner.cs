@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace AgentRunner;
 
@@ -20,7 +21,7 @@ public static class ProcessRunner
     // copy must be capped: keep only the tail of each stream under a hard byte
     // budget. The tail is all the caller needs - the terminal sentinel and the
     // final summary an agent signs off with are emitted last, so a bounded tail
-    // keeps SentinelScanner's last-match-wins scan correct while a runaway run
+    // keeps SentinelScanner's final-agent-reply scan available while a runaway run
     // can no longer grow the runner's heap without bound.
     private const int StdOutBudgetChars = 2 * 1024 * 1024; // ~2 MB tail
     private const int StdErrBudgetChars = 256 * 1024;      // ~256 KB tail (diagnostics only)
@@ -33,11 +34,25 @@ public static class ProcessRunner
         Action<string>? onStdOut = null,
         Action<string>? onStdErr = null,
         IReadOnlyDictionary<string, string?>? environment = null,
+        bool clearEnvironment = false,
+        bool isolateProcessGroup = false,
         CancellationToken ct = default)
     {
+        var actualFileName = fileName;
+        IReadOnlyList<string> actualArguments = arguments;
+        if (isolateProcessGroup && OperatingSystem.IsLinux())
+        {
+            var setsid = File.Exists("/usr/bin/setsid") ? "/usr/bin/setsid"
+                : File.Exists("/bin/setsid") ? "/bin/setsid"
+                : throw new InvalidOperationException(
+                    "Agent CLI process-group isolation requires the Linux 'setsid' utility.");
+            actualFileName = setsid;
+            actualArguments = [fileName, .. arguments];
+        }
+
         var psi = new ProcessStartInfo
         {
-            FileName = fileName,
+            FileName = actualFileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = stdin != null,
@@ -45,7 +60,8 @@ public static class ProcessRunner
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
         };
-        foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+        if (clearEnvironment) psi.Environment.Clear();
+        foreach (var arg in actualArguments) psi.ArgumentList.Add(arg);
         if (environment != null)
             foreach (var (key, value) in environment)
                 psi.Environment[key] = value;
@@ -78,8 +94,21 @@ public static class ProcessRunner
 
         if (stdin != null)
         {
+            try
+            {
             await process.StandardInput.WriteAsync(stdin);
-            process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+                // A child may close stdin as it exits after already producing a
+                // terminal response. Preserve its captured output and exit code
+                // instead of replacing that truthful result with a pipe error.
+            }
+            finally
+            {
+                try { process.StandardInput.Close(); }
+                catch (IOException) { /* the child already closed its pipe */ }
+            }
         }
 
         try
@@ -88,7 +117,7 @@ public static class ProcessRunner
         }
         catch (OperationCanceledException)
         {
-            TryKill(process);
+            TryKill(process, isolateProcessGroup);
             throw;
         }
 
@@ -98,11 +127,28 @@ public static class ProcessRunner
         return new ProcessResult(process.ExitCode, outBuf.ToString(), errBuf.ToString());
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(Process process, bool isolatedProcessGroup)
     {
+        if (isolatedProcessGroup && OperatingSystem.IsLinux())
+        {
+            try
+            {
+                if (!process.HasExited)
+                    _ = kill(-process.Id, SigKill);
+            }
+            catch
+            {
+                // Fall through to the runtime's descendant-tree kill.
+            }
+        }
         try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
         catch { /* best effort: the run is already being torn down */ }
     }
+
+    private const int SigKill = 9;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int kill(int pid, int signal);
 }
 
 /// <summary>

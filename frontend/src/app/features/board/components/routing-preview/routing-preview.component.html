@@ -1,0 +1,11 @@
+@if (pending()) {
+  <div class="routing" data-testid="routing-preview" aria-live="polite">Resolving component ownership…</div>
+} @else if (routing(); as route) {
+  <div class="routing" [class.routing--question]="route.requiresQuestion" data-testid="routing-preview">
+    <strong>Routing</strong>
+    <span>{{ route.requiresQuestion ? route.questionReason : route.preview }}</span>
+    @if (!route.requiresQuestion && route.primaryProject) {
+      <small>Observed in {{ route.navigationProject?.displayName || 'the current view' }}; owned by {{ route.primaryProject.displayName }}. Mapping {{ route.mappingId || 'local' }} v{{ route.mappingVersion || 1 }}.</small>
+    }
+  </div>
+}

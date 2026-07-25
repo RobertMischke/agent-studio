@@ -12,10 +12,10 @@ an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.
 
 | Package | Runtime responsibility | Durable data |
 |---|---|---|
-| `contracts/TaskServer.Contracts` | Versioned resource, runner, event, artifact, management, and compatibility DTOs | None |
-| `task-server` | Stable identities, tasks, runs, events, artifacts, audit, migrations, backup/restore, leases, fences, and management API | Its configured data directory only |
+| `contracts/TaskServer.Contracts` | Versioned resource, runner, review, event, artifact, management, and compatibility DTOs | None |
+| `task-server` | Stable identities, tasks, runs, immutable review subjects, review attempts, reports, events, artifacts, audit, migrations, backup/restore, leases, fences, and management API | Its configured data directory only |
 | `studio-bff` | Optional stateless same-origin proxy for Agent Studio | None |
-| `runner` | Host probes, Git worktrees, CLI processes, bounded execution, and delivery through protocol v1 | Host worktrees and bounded delivery state only |
+| `runner` | Separately registered coding and review services, host probes, Git worktrees, CLI and review processes, bounded execution, and durable result delivery through protocol 2 | Host worktrees, fsynced outboxes, and bounded transfer state only |
 
 The Task Server project references shared contracts and SQLite persistence. It
 does not reference Angular, the legacy Studio backend, Agent Runner, coding
@@ -63,12 +63,16 @@ environment variables.
 | `TaskServer:ListenUrl` | Loopback listener when `ASPNETCORE_URLS` is absent | `http://127.0.0.1:5071` |
 | `TaskServer:MinimumLeaseSeconds` | Lower clamp for Runner leases | `30` |
 | `TaskServer:MaximumLeaseSeconds` | Upper clamp for Runner leases | `600` |
+| `TaskServer:InvariantReconciliationSeconds` | Interval for Tranche 0 invariant comparison | `30` |
+| `TaskServer:InventoryGraceSeconds` | Minimum age before inventory mismatches are actionable | `120` |
 
 - `GET /healthz` proves the process is live.
 - `GET /readyz` succeeds only after schema integrity and durable lease/fence
   authority are restored.
 - `GET /api/v1/management/status` reports server identity, version, schema,
   data root, mode, and supported protocol range.
+- `GET /api/v1/management/invariants` reports invariant definitions, recent
+  violations, and pending idempotent runner actions.
 - `GET /api/v1/protocol` publishes the compatibility range. Runner requests
   must carry `X-Task-Protocol-Version`. An unsupported or missing version gets
   HTTP 426 before registration or claim.
@@ -85,12 +89,58 @@ process and temporary data root.
 - `ReadOnly` permits observation and backup but blocks mutations.
 - `Maintenance` blocks mutations and is required for import and restore.
 
+A Runner lease release closes that attempt and atomically returns a matching
+`3-progress` task to `2-ready`. This is the normal dead-process recovery path;
+the later claim mints a higher fence. A successful completion instead closes
+the lease and moves the task to `4-auto-review`.
+
 Mode changes use `PUT /api/v1/management/mode` with a reason. On restart, every
-previously active lease becomes `process-unknown`; its task cannot be claimed by
-another Runner. An operator must submit positive containment proof to
+previously active coding lease becomes `process-unknown`; its task cannot be
+claimed by another Coding Executor. An operator must submit positive containment proof to
 `POST /api/v1/management/attempts/{runId}/resolve-unknown`. The next claim then
 uses a higher fence. Lease expiry alone never proves that the previous process
 stopped.
+
+A previously leased Remote ReviewAttempt also becomes `process-unknown`, but it
+is safely reclaimable by a Review Executor with a higher durable fence. Review
+workspaces are disposable, carry no product write credential, and cannot publish
+product changes. The old executor's renew, report, and cleanup deliveries are
+then rejected as stale. An infrastructure-only report creates a new
+ReviewAttempt for the same immutable subject and leaves the task in Auto Review.
+It never creates a coding run or returns the task to Ready.
+Draining rejects new review claims while allowing an already fenced attempt to
+renew, report, and clean up. Safe-shutdown and restore checks count unresolved
+coding and review authority, and the integrity digest inventories the review
+subject, attempt, fence, and delivery tables.
+
+## Fully remote review authority
+
+`POST /api/v1/reviews/subjects` records one immutable subject after a fenced
+coding completion has persisted the same repository identity and URL, full
+Result-SHA, and immutable ref or source-bundle digest. The review policy is a command plan:
+completion interpretation, build and tests, requirements, code quality,
+documentation, evidence, artifacts, and optional vision remain the existing
+review steps, but their processes run only on a claimed Remote Review Executor.
+
+Review lifecycle routes:
+
+- `POST /api/v1/runners/{id}/review-claims`
+- `POST /api/v1/reviews/attempts/{id}/lease/renew`
+- `POST /api/v1/reviews/attempts/{id}/report`
+- `POST /api/v1/reviews/attempts/{id}/cleanup`
+
+The fenced report binds repository identity, expected and actual HEAD, tree
+hash, dirty-before and dirty-after facts, environment, executable-digest
+toolchain identity, exact command arguments, exit or signal, output digests,
+artifacts, and typed aspect verdicts.
+The Task Server validates containment and subject identity but starts no Git,
+build, test, provider CLI, semantic, or vision process. Product and pass
+outcomes advance to Human Review, which remains the final decision surface.
+`ReviewInfra` stays in Auto Review and schedules another ReviewAttempt on the
+same subject. Coding and review capabilities require distinct registered
+identities, and a registered identity cannot be switched between those roles.
+A stale report is rejected if a newer task lifecycle or result has replaced its
+immutable review subject.
 
 After draining, `POST /api/v1/management/prepare-shutdown` verifies that no
 `active` or `process-unknown` attempt authority remains, records the operator
@@ -102,7 +152,8 @@ manager to stop the process; the API does not try to stop its own host process.
 `POST /api/v1/management/backups` creates a consistent SQLite backup, runs an
 integrity check, and returns its SHA-256. Backups contain server/workspace/
 project/task/run identities, task state, events, artifact content, audit,
-Runner records, leases, and fence counters.
+Runner records, coding and review leases, immutable review subjects, fenced
+reports, and fence counters.
 
 Verify a backup without changing data:
 

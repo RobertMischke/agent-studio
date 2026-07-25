@@ -1,6 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { test, expect } from '../fixtures/dev-backend';
 
 const JOB_ID = 'pipeline-step-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
@@ -20,6 +21,7 @@ function jobDetail() {
   return {
     info: {
       id: JOB_ID,
+      key: 'AGT-2253',
       jobKey: `${WATCH_PATH}::${JOB_ID}`,
       title: 'Pipeline step usage fixture',
       state: '4-auto-review',
@@ -200,6 +202,9 @@ function runTimeline() {
 
 async function installFixtureRoutes(page: Page) {
   await page.route('**/api/**', route => route.fulfill(json([])));
+  await page.route('**/api/auth/status', route => route.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
   await page.route('**/api/tasks/grouped**', route => route.fulfill(json({
     preparation: [], orchestratorPrep: [], ready: [], progress: [], failedPickup: [],
     autoReview: [jobDetail().info], humanReview: [], completed: [], archive: [],
@@ -214,6 +219,9 @@ async function installFixtureRoutes(page: Page) {
   await page.route('**/api/clients', route => route.fulfill(json([])));
   await page.route('**/api/cli/usage**', route => route.fulfill(json({ items: [] })));
   await page.route('**/api/cli/quota**', route => route.fulfill(json({ snapshots: [], ttlSeconds: 600 })));
+  await page.route('**/api/auth/status', route => route.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: false, user: null,
+  })));
 
   const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline())));
@@ -269,12 +277,16 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
 
   const coreRow = page.locator('[data-step-id="core-agent-run"]');
   const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
-  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toContainText('110k');
+  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toHaveText(/110(?:\.0)?k/i);
   await expect(coreRow.getByTestId('overview-pipeline-step-cost')).toContainText('$0.75');
   await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.2m');
   await expect(aspectRow.getByTestId('overview-pipeline-step-cost')).toContainText('$2.00');
   await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.3m');
   await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
+
+  await coreRow.getByTestId('overview-pipeline-step-tokens').hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('Estimated - historical list prices');
+  await saveShot(page, 'pipeline-token-cost-tooltip--mocked.png');
 
   await pipeline.screenshot({
     path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage--mocked.png') : 'test-results/pipeline-step-usage--mocked.png',
@@ -378,7 +390,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
-test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {
+test('council reaction links the targeted follow-up round and renders in both themes', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
     catch { /* ignore */ }
@@ -389,17 +401,49 @@ test('retro grading stays available on an existing card and is captured in both 
     fileName: 'code-review-grade-2026-07-11T22-15-00Z.md', verdict: 'pass', grade: 'B',
     summary: 'Solid result with one small evidence gap.', model: 'claude-opus-4-8', cliType: 'claude',
     commit: 'base..task/pipeline-step-usage-fixture', runAt: '2026-07-11T22:15:00Z',
+    inputTokens: 125000, outputTokens: 18000, cacheReadTokens: 42000, cacheCreationTokens: 6000,
+    totalTokens: 191000, estimatedApiCostUsd: 1.42, priceKnown: true,
+    councilReaction: {
+      createdAt: '2026-07-11T22:15:01Z', reviewFileName: 'code-review-grade-2026-07-11T22-15-00Z.md',
+      grade: 'B', disposition: 'Reissue', summary: 'Fix 2 review finding(s) in the next round.',
+      startsNewRound: true, targetJobId: JOB_ID, targetRunAttempt: 2,
+      assessments: [
+        {
+          finding: 'Dark-theme colors are incorrect; fix them and provide both-theme screenshots.',
+          action: 'FixNextRound', reason: 'Concrete review deficiency; provide focused evidence.',
+        },
+        {
+          finding: 'Upload rejection lacks focused test evidence; add the missing regression test.',
+          action: 'FixNextRound', reason: 'Concrete review deficiency; provide focused evidence.',
+        },
+      ],
+    },
   }] })));
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await page.getByTestId('prompt-tab-code-review').click();
 
   await expect(page.getByTestId('code-review-grade-run')).toBeVisible();
   await expect(page.getByTestId('code-review-list')).toContainText('Grade B');
+  const usage = page.getByTestId('code-review-token-usage');
+  await expect(usage).toContainText('125k in / 18k out (191k) tokens');
+  await usage.hover();
+  const tooltip = page.getByTestId('cac-tooltip');
+  await expect(tooltip).toContainText('Estimated cost: $1.42');
+  await expect(tooltip).toContainText('Estimated - historical list prices');
+  await saveShot(page, 'review-token-cost-tooltip--mocked.png');
+  const reaction = page.getByTestId('code-review-council-reaction');
+  await expect(reaction).toContainText('Orchestrator reaction');
+  await expect(reaction).toContainText('Dark-theme colors are incorrect');
+  await expect(reaction).toContainText('Upload rejection lacks focused test evidence');
+  await expect(reaction).toHaveAttribute('data-disposition', 'reissue');
+  await expect(page.getByTestId('code-review-council-round-link')).toHaveAttribute('href', /task=AGT-2253/);
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const fileName = `council-review-reaction-${theme}.png`;
     const path = RESULTS_DIR
-      ? join(RESULTS_DIR, `retro-grading-${theme}--mocked.png`)
-      : `test-results/retro-grading-${theme}--mocked.png`;
+      ? join(RESULTS_DIR, fileName)
+      : join('test-results', fileName);
     await page.getByTestId('code-review-panel').screenshot({ path });
+    await testInfo.attach(fileName, { path, contentType: 'image/png' });
   }
 });

@@ -299,6 +299,8 @@ public class TaskRunnerService : BackgroundService
             IsRemote = isRemote,
             LeaseId = lease.LeaseId,
             FencingToken = lease.FencingToken,
+            AttemptId = lease.AttemptId,
+            AuthorityEpoch = lease.AuthorityEpoch,
             AcquiredAt = lease.AcquiredAt
         };
     }
@@ -310,16 +312,12 @@ public class TaskRunnerService : BackgroundService
         foreach (var rawEntry in entries)
         {
             // The registry (set via the onboarding dialog or project settings)
-            // is the source of truth once a record exists (ADR-0042); the
-            // static WatchPaths RootPath is only the bootstrap-era fallback
-            // for projects that predate the registry field. Without this, a
-            // RootPath set through the UI after this backend last started
-            // silently has no effect until someone also hand-edits the
-            // gitignored appsettings.Local.json.
-            var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
-            var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
-                ? rawEntry
-                : rawEntry with { RootPath = registryRootPath };
+            // is the source of truth once a record exists (ADR-0042); static
+            // WatchPaths fields are bootstrap-era fallbacks. RepositoryPath is
+            // independent of task storage and also supplies the working directory
+            // when no narrower RootPath is configured.
+            var registryProject = _projectRegistry?.FindByStorageLocation(rawEntry.Path);
+            var entry = ResolveRunnerEntry(rawEntry, registryProject);
 
             if (string.IsNullOrEmpty(entry.RootPath))
             {
@@ -1228,10 +1226,8 @@ public class TaskRunnerService : BackgroundService
     {
         if (_runners.ContainsKey(rawEntry.Name)) return true;
 
-        var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
-        var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
-            ? rawEntry
-            : rawEntry with { RootPath = registryRootPath };
+        var registryProject = _projectRegistry?.FindByStorageLocation(rawEntry.Path);
+        var entry = ResolveRunnerEntry(rawEntry, registryProject);
         if (string.IsNullOrWhiteSpace(entry.RootPath) || !Directory.Exists(entry.RootPath))
         {
             _logger.LogInformation(
@@ -1278,6 +1274,33 @@ public class TaskRunnerService : BackgroundService
             catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", entry.Name); }
         });
         return true;
+    }
+
+    /// <summary>
+    /// Registry repository authority is independent of task storage. A project
+    /// with a repository but no separate working-directory setting runs from
+    /// the repository path; a configured RootPath remains the desired CLI
+    /// subfolder and is later mapped into each task worktree.
+    /// </summary>
+    internal static WatchPathEntry ResolveRunnerEntry(
+        WatchPathEntry rawEntry,
+        ProjectRecord? registryProject)
+    {
+        var repositoryPath = !string.IsNullOrWhiteSpace(registryProject?.RepositoryPath)
+            ? registryProject.RepositoryPath!
+            : rawEntry.RepositoryPath;
+        var configuredWorkingDirectory = !string.IsNullOrWhiteSpace(registryProject?.RootPath)
+            ? registryProject.RootPath!
+            : rawEntry.RootPath;
+        var effectiveWorkingDirectory = !string.IsNullOrWhiteSpace(configuredWorkingDirectory)
+            ? configuredWorkingDirectory
+            : repositoryPath;
+
+        return rawEntry with
+        {
+            RootPath = effectiveWorkingDirectory ?? string.Empty,
+            RepositoryPath = repositoryPath ?? string.Empty,
+        };
     }
 
     public bool StartRunner(string projectName)

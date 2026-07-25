@@ -1,0 +1,22 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2260",
+      "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
+      "linkedAt": "2026-07-23T12:06:50.4990917Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2258",
+      "title": "Gate testet Subject auf aktuellem develop (Stale-Branch-Falle schliessen)",
+      "linkedAt": "2026-07-23T13:23:59.4340374Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2229",
+      "title": "Eigene Orchestrator-Instanz auf dem Remote-Host: lokale Ausfuehrung entkoppeln",
+      "linkedAt": "2026-07-24T16:13:56.1639307Z",
+      "source": "auto"
+    }
+  ]
+}

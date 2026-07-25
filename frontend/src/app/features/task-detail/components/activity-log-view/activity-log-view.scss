@@ -98,26 +98,8 @@
       font-size: 13.5px;
       line-height: 1.55;
       position: relative;
-      scroll-behavior: smooth;
       display: flex;
       flex-direction: column;
-    }
-    /* Cycle 7i: CDK virtual scroll viewport for the conversation feed.
-       Takes the activity-log__body's available height; CDK does its
-       own internal scroll. The outer body's overflow-y: auto stays
-       defensive (toolbar/jump sticky elements still scroll within it)
-       but never overflows because the viewport claims the column. */
-    .activity-log__virtual {
-      flex: 1 1 auto;
-      min-height: 200px;
-      width: 100%;
-      contain: strict;
-    }
-    .activity-log__virtual ::ng-deep .cdk-virtual-scroll-content-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
     }
     .activity-log--embedded .activity-log__body {
       padding: 8px 0 0;
@@ -126,7 +108,7 @@
     .activity-log__jump {
       position: sticky;
       top: 0;
-      float: right;
+      align-self: flex-end;
       margin: 0 0 6px 8px;
       padding: 4px 10px;
       font-size: 11px;
@@ -142,6 +124,24 @@
       padding: 28px 12px;
       color: var(--studio-fg-muted);
       text-align: center;
+    }
+    .activity-log__load-older {
+      align-self: center;
+      padding: var(--studio-spacing-2) var(--studio-spacing-3);
+      color: var(--studio-fg-dim);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
+      border-radius: 999px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .activity-log__load-older:hover,
+    .activity-log__load-older:focus-visible {
+      color: var(--studio-fg-strong);
+      background: var(--studio-bg-elevated);
+      border-color: var(--studio-border-strong);
+      outline: 1px solid var(--studio-accent);
     }
 
     /* ===== Conversation mode ===== */

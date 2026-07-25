@@ -69,4 +69,25 @@ describe('buildChatNavigationContext', () => {
     expect(typeof ctx.viewportTimestamp).toBe('string');
     expect(ctx.viewportTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
+
+  it('embeds a repository page in project navigation context without inventing a task', () => {
+    const ctx = buildChatNavigationContext({
+      activeJobId: 'stale-task',
+      activeJobTitle: 'Stale task',
+      pageContext: {
+        projectName: 'PROJ-002',
+        relPath: 'concepts/action-bar.md',
+        title: 'Action bar',
+        pageType: 'concept',
+        excerpt: 'Pages are bidirectional interfaces.',
+      },
+      now: fixedNow,
+    });
+
+    expect(ctx.currentPage).toBe('repository-page');
+    expect(ctx.pageRef).toBe('page:PROJ-002/concepts/action-bar.md');
+    expect(ctx.pageType).toBe('concept');
+    expect(ctx.pageExcerpt).toBe('Pages are bidirectional interfaces.');
+    expect(ctx.currentTaskId).toBeUndefined();
+  });
 });

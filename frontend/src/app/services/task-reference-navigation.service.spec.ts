@@ -74,6 +74,16 @@ describe('TaskReferenceNavigationService', () => {
     expect(labels).toContain('human-visible-folder-slug');
   });
 
+  it('keeps the reference catalogue stable across equivalent task polls', () => {
+    const original = task({ key: 'ASS-740' });
+    const { service, jobsSignal } = setup([original]);
+    const first = service.markdownReferences();
+
+    jobsSignal.set([{ ...original }]);
+
+    expect(service.markdownReferences()).toBe(first);
+  });
+
   it('opens a known task reference through the existing task tab and detail flow', () => {
     const known = task({ taskKey: 'C:/Projects/demo::known-task' });
     const { service, openedTabs, openedDetails } = setup([known]);

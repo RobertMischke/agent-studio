@@ -15,7 +15,8 @@ import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { NotificationService } from '../../../../services/notification.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TaskService } from '../../../../services/task.service';
-import { WorkspaceManagerService } from '../../../shell';
+// Service-only direct import avoids the Project Hub <-> shell component cycle.
+import { WorkspaceManagerService } from '../../../shell/state/workspace-manager.service';
 import { ProjectOverlaysService } from '../../state/project-overlays.service';
 
 @Component({

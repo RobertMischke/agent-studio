@@ -11,6 +11,12 @@
       "title": "AGT-2155: KRITISCH Verify-/Build-Gates kollidieren bei Parallelbetrieb - serialisieren oder im Worktree bauen (2080-Wirksamkeit widerlegt, 10\u002B Falsch-Eskalationen 11./12.07.)",
       "linkedAt": "2026-07-20T13:52:25.0679626Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2182",
+      "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
+      "linkedAt": "2026-07-22T09:15:41.6668987Z",
+      "source": "auto"
     }
   ]
 }

@@ -146,7 +146,7 @@ public class TokenSummaryTests
     [Fact]
     public void SummarizePerJob_PrefersAgentModelAndUsesRegistryLabels()
     {
-        var t = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc);
+        var t = new DateTime(2026, 7, 23, 8, 0, 0, DateTimeKind.Utc);
         var entries = new[]
         {
             JobEntry("gpt-5-codex", 1_000, 100, t, participantId: "agent:codex"),
@@ -160,6 +160,32 @@ public class TokenSummaryTests
         Assert.Equal("GPT-5 Codex", summary.Entries[0].Model);
         Assert.Equal("Claude Haiku 4.5", summary.Entries[1].Model);
         Assert.Equal(t.AddMinutes(5), summary.LastUpdate);
+        Assert.False(summary.AllModelsPriced);
+        Assert.True(summary.EstimatedApiCostUsd > 0m);
+        Assert.False(summary.Entries[0].ModelPriced);
+        Assert.True(summary.Entries[1].ModelPriced);
+    }
+
+    [Fact]
+    public void SummarizePerJob_PricesEachCallAtItsRecordedTimestamp()
+    {
+        var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(price => price.ValidFrom);
+        var entries = new[]
+        {
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition.AddTicks(-1)),
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.True(summary.AllModelsPriced);
+        Assert.Equal(2, summary.Entries.Count);
+        Assert.NotEqual(
+            summary.Entries[0].EstimatedApiCostUsd,
+            summary.Entries[1].EstimatedApiCostUsd);
+        Assert.Equal(
+            summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
+            summary.EstimatedApiCostUsd);
     }
 
     [Fact]

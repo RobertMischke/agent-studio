@@ -24,7 +24,7 @@ public sealed record EpicDecompositionResult(IReadOnlyList<EpicSubTaskSpec> SubT
 /// <code>
 /// {
 ///   "subTasks": [
-///     { "id": "delivery", "title": "...", "prompt": "...", "purpose": "delivery", "dependsOn": [] }
+///     { "title": "...", "prompt": "..." }
 ///   ]
 /// }
 /// </code>
@@ -82,15 +82,9 @@ public static class EpicDecompositionParser
     }
 
     private static EpicDecompositionResult Finalize(List<EpicSubTaskSpec> specs)
-    {
-        if (specs.Count == 0)
-            return new EpicDecompositionResult([], "the planning run's plan contained no sub-tasks with a title");
-
-        var validation = EpicGoalPlanValidator.Validate(specs);
-        return validation.IsValid
-            ? new EpicDecompositionResult(specs, null)
-            : new EpicDecompositionResult([], validation.Error);
-    }
+        => specs.Count == 0
+            ? new EpicDecompositionResult([], "the planning run's plan contained no sub-tasks with a title")
+            : new EpicDecompositionResult(specs, null);
 
     /// <summary>
     /// True when <paramref name="json"/> parses and matches the expected shape
@@ -134,10 +128,7 @@ public static class EpicDecompositionParser
                     Title: title!.Trim(),
                     PromptMarkdown: GetString(item, "promptMarkdown", "prompt", "promptMd", "body"),
                     CliType: GetString(item, "cliType", "cli"),
-                    Model: GetString(item, "model"),
-                    PlanId: GetString(item, "id", "planId", "plan_id"),
-                    DependsOn: GetStrings(item, "dependsOn", "depends_on", "dependencies"),
-                    Purpose: GoalTaskPurposes.Normalize(GetString(item, "purpose", "taskPurpose", "task_purpose"))));
+                    Model: GetString(item, "model")));
             }
             return true;
         }
@@ -183,17 +174,5 @@ public static class EpicDecompositionParser
             return string.IsNullOrWhiteSpace(s) ? null : s;
         }
         return null;
-    }
-
-    private static IReadOnlyList<string> GetStrings(JsonElement obj, params string[] names)
-    {
-        if (!TryGetProp(obj, out var value, names) || value.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-
-        return value.EnumerateArray()
-            .Where(item => item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
-            .Select(item => item.GetString()!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
     }
 }

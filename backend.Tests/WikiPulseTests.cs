@@ -86,7 +86,11 @@ public class WikiPulseTests : IDisposable
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Readme\n");
         File.WriteAllText(Path.Combine(docsDir, "loose-note.md"), "# Loose note\n");
         File.WriteAllText(Path.Combine(conceptsDir, "active-stream.md"),
-            "---\ntask-key: AGT-2014\n---\n# Active stream\n");
+            "---\ntask-key: AGT-2014\nlifecycleSchema: wiki-page-lifecycle/v1\npageKind: exploration\n" +
+            "lifecycleState: review-requested\neditedBy: Robert\neditedAt: 2026-01-01T00:00:00Z\n" +
+            "lifecycleHistory:\n  - state: in-progress\n    editedBy: Codex\n    editedAt: 2025-12-31T00:00:00Z\n" +
+            "    note: Initial exploration.\n  - state: review-requested\n    editedBy: Robert\n    editedAt: 2026-01-01T00:00:00Z\n" +
+            "    note: Ready for review.\n---\n# Active stream\n");
         File.WriteAllText(Path.Combine(repoRoot, "backend", "svc.cs"), "// v0\n");
         File.WriteAllText(Path.Combine(repoRoot, "frontend", "app.ts"), "// v0\n");
         RunGit(repoRoot, "add -A");
@@ -169,6 +173,17 @@ public class WikiPulseTests : IDisposable
         Assert.Contains(pulse.Warnings.Items, w => w.Kind == "human-action"
             && w.Status == "active" && w.HumanAction.Contains("Investigate"));
         Assert.Contains(pulse.Warnings.Items, w => w.Kind == "dead-link" && w.Detail == "missing.md");
+
+        // Lifecycle-aware pages are projected from frontmatter, including their
+        // append-only history, and are sorted review-first.
+        Assert.True(pulse.Lifecycle.Available);
+        var lifecycle = Assert.Single(pulse.Lifecycle.Items);
+        Assert.Equal("exploration", lifecycle.PageKind);
+        Assert.Equal("review-requested", lifecycle.State);
+        Assert.Equal("Robert", lifecycle.EditedBy);
+        Assert.Equal(2, lifecycle.History.Count);
+        Assert.Equal("Codex", lifecycle.History[0].EditedBy);
+        Assert.Equal("Ready for review.", lifecycle.History[1].Note);
     }
 
     [Fact]

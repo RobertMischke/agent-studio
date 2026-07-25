@@ -1,3 +1,5 @@
+using AgentStudio.Registry;
+
 namespace AgentStudio.Shared;
 
 /// <summary>
@@ -102,6 +104,12 @@ public record ExternalCompletionResponse
 public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";
+    /// <summary>
+    /// Optional operator rationale for the lane move. It is persisted on the
+    /// timeline and, for a requeue out of a decision lane, on the fresh
+    /// review-attempt epoch boundary.
+    /// </summary>
+    public string? Reason { get; init; }
 
     /// <summary>
     /// Optional 0-based insertion slot in the target lane. When supplied,
@@ -189,6 +197,7 @@ public record BatchMoveItem
     public string? WatchPath { get; init; }
     public string TargetState { get; init; } = "";
     public int? TargetIndex { get; init; }
+    public string? Reason { get; init; }
 }
 
 public record BatchMoveRequest
@@ -291,6 +300,15 @@ public record CreateTaskRequest
     /// silently; the registry is the source of truth for label and colour.
     /// </summary>
     public List<string>? Tags { get; init; }
+
+    /// <summary>
+    /// Affected surface/component supplied by task-creation clients. When
+    /// present the server resolves the destination from project ownership
+    /// metadata instead of assuming the navigation project owns the fix.
+    /// </summary>
+    public ComponentRoutingRequest? Routing { get; init; }
+    /// <summary>Optional caller-derived prefix. Must match the resolved destination.</summary>
+    public string? RequestedTaskPrefix { get; init; }
 }
 
 /// <summary>

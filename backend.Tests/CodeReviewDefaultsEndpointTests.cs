@@ -13,6 +13,32 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class CodeReviewDefaultsEndpointTests
 {
+    [Fact]
+    public void ReviewUsage_UsesTheCatalogPriceAtTheRecordedRunDate()
+    {
+        var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(price => price.ValidFrom);
+        var fields = new Dictionary<string, string> { ["model"] = "claude-sonnet-5" };
+        var before = TaskCodeReviewEndpoints.ResolveReviewUsage(new FileGenerationMeta
+        {
+            Model = "claude-sonnet-5",
+            TokensIn = 1_000_000,
+            TokensTotal = 1_000_000,
+            StartedAt = transition.AddTicks(-1),
+        }, fields);
+        var after = TaskCodeReviewEndpoints.ResolveReviewUsage(new FileGenerationMeta
+        {
+            Model = "claude-sonnet-5",
+            TokensIn = 1_000_000,
+            TokensTotal = 1_000_000,
+            StartedAt = transition,
+        }, fields);
+
+        Assert.True(before.Cost.ModelKnown);
+        Assert.True(after.Cost.ModelKnown);
+        Assert.NotEqual(before.Cost.Total, after.Cost.Total);
+        Assert.NotEqual(before.Cost.PriceBasis!.ValidFrom, after.Cost.PriceBasis!.ValidFrom);
+    }
+
     private static IConfiguration Config(params (string Key, string Value)[] pairs)
     {
         var dict = new Dictionary<string, string?>();

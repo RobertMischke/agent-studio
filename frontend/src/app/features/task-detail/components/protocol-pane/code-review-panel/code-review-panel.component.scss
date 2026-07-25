@@ -21,6 +21,12 @@
   color: var(--studio-fg-dim);
 }
 
+.cr-token-usage {
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
 .cr-actions {
   display: flex;
   align-items: center;
@@ -119,7 +125,6 @@
   color: var(--studio-fg);
   font: inherit;
 }
-
 .cr-verdict {
   text-transform: uppercase;
   font-size: 0.7rem;
@@ -143,7 +148,11 @@
 
 .cr-summary {
   flex: 1;
-  min-width: 0;
+  // The meta column is nowrap and reserves its full content width first; with
+  // a 0-basis the summary only got the leftover sliver and broke one word per
+  // line. A guaranteed share overflows the row instead, which makes the meta
+  // column shrink into its ellipsis.
+  min-width: 55%;
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }

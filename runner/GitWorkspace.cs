@@ -1,3 +1,5 @@
+using AgentStudio.TaskServer.Contracts;
+
 namespace AgentRunner;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace AgentRunner;
 /// </summary>
 public sealed class GitWorkspace
 {
-    private static readonly SemaphoreSlim GitMetadataGate = new(1, 1);
+    internal static readonly SemaphoreSlim GitMetadataGate = new(1, 1);
     private readonly RunnerOptions _options;
     private readonly Action<string> _log;
     private readonly string _safeTaskKey;
@@ -42,6 +44,7 @@ public sealed class GitWorkspace
     public string SharedRepoPath => Path.Combine(ProjectCachePath, "repo");
     public string RepoPath => Path.Combine(ProjectCachePath, "worktrees", _safeTaskKey);
     public string? RepositoryUrl => _gitRemote;
+    public string? BaseSha => _startedHead;
     public SalvageReconciliationResult? PickupReconciliation => _pickupReconciliation;
 
     public async Task<string> PrepareAsync(CancellationToken ct)
@@ -118,6 +121,74 @@ public sealed class GitWorkspace
         }
     }
 
+    /// <summary>
+    /// Prepare a detached, disposable checkout for an Epic planning run. No
+    /// task branch is created or resumed and teardown never commits or pushes.
+    /// </summary>
+    public async Task<string> PrepareReadOnlyAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_gitRemote))
+            throw new InvalidOperationException("The claim has no repositoryUrl and RUNNER_GIT_REMOTE is not configured as a fallback.");
+
+        Directory.CreateDirectory(ProjectCachePath);
+        Directory.CreateDirectory(Path.Combine(ProjectCachePath, "worktrees"));
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(Path.Combine(SharedRepoPath, ".git")))
+                await Git(["clone", _gitRemote, SharedRepoPath], ProjectCachePath, ct);
+            else
+            {
+                await Git(["remote", "set-url", "origin", _gitRemote], SharedRepoPath, ct);
+                await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
+            }
+
+            if (Directory.Exists(RepoPath))
+            {
+                await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
+                await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+            }
+            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+
+            var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
+            var branch = await BranchExistsOnOrigin(requested, ct)
+                ? requested
+                : await OriginDefaultBranch(ct) ?? _baseBranch;
+            _log($"git worktree add --detach {RepoPath} from origin/{branch} for read-only Epic planning");
+            await Git(["worktree", "add", "--detach", RepoPath, $"origin/{branch}"], SharedRepoPath, ct);
+            return branch;
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Remove a planning checkout without salvage. Returns true when the agent
+    /// changed tracked or untracked product-source files, which invalidates the
+    /// planning result but is never committed or pushed.
+    /// </summary>
+    public async Task<bool> TeardownReadOnlyAsync(CancellationToken ct)
+    {
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(RepoPath)) return false;
+            var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
+            var mutated = !string.IsNullOrWhiteSpace(status);
+            _log($"epic-planning-checkout-teardown path={RepoPath} sourceMutated={mutated}");
+            await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
+            await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+            return mutated;
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
     public async Task<WorktreeTeardownResult> TeardownAsync(string outcome, CancellationToken ct)
     {
         await GitMetadataGate.WaitAsync(ct);
@@ -144,12 +215,151 @@ public sealed class GitWorkspace
         }
     }
 
+    /// <summary>
+    /// Secure the result on both the salvage ref and a run-scoped immutable ref,
+    /// but keep the worktree present until the Task Server acknowledges the
+    /// matching result envelope.
+    /// </summary>
+    public async Task<WorktreeTeardownResult> SecureForHandoffAsync(
+        string outcome,
+        string sourceRunAttemptId,
+        CancellationToken ct)
+    {
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            try
+            {
+                return await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: false, ct);
+            }
+            catch (WorktreeSalvageException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log($"worktree-transfer-failed branch={_workBranch} path={RepoPath} error={OneLine(ex.Message)}");
+                throw new WorktreeSalvageException(RepoPath, _workBranch, ex);
+            }
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    public async Task TeardownAfterHandoffAsync(
+        WorktreeTeardownResult secured,
+        ResultHandoffAck acknowledgement,
+        string expectedRunId,
+        string expectedEnvelopeDigest,
+        CancellationToken ct)
+    {
+        new DurableHandoffGate(
+            expectedRunId,
+            expectedEnvelopeDigest).RequireAcknowledged(acknowledgement);
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(RepoPath)) return;
+            var head = (await Git(["rev-parse", "HEAD"], RepoPath, ct)).StdOut.Trim();
+            if (!string.Equals(head, secured.ResultSha, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Worktree HEAD changed after handoff: expected '{secured.ResultSha}', found '{head}'.");
+            }
+            var status = (await Git(
+                ["status", "--porcelain=v1", "--untracked-files=all"],
+                RepoPath,
+                ct)).StdOut;
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                throw new InvalidOperationException(
+                    "Worktree changed after handoff acknowledgement; cleanup is blocked so the unjournaled work remains recoverable.");
+            }
+            await RemoveSecuredWorktreeAsync(secured.SecuredWork, ct);
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    public async Task<WorkspaceDependencyIdentities> ReadDependencyIdentitiesAsync(
+        CancellationToken ct)
+    {
+        var submodules = new List<ResultDependencyIdentity>();
+        if (File.Exists(Path.Combine(RepoPath, ".gitmodules")))
+        {
+            var result = await ProcessRunner.RunAsync(
+                "git",
+                ["submodule", "status", "--recursive"],
+                workingDirectory: RepoPath,
+                ct: ct);
+            if (!result.Success)
+                throw new InvalidOperationException(
+                    $"git submodule status failed ({result.ExitCode}): {result.StdErr.Trim()}");
+            foreach (var line in result.StdOut.Split(
+                         ['\r', '\n'],
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                var fields = line.TrimStart(' ', '+', '-', 'U')
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length >= 2)
+                    submodules.Add(new ResultDependencyIdentity(fields[1], fields[0]));
+            }
+        }
+
+        var lfsObjects = new List<ResultDependencyIdentity>();
+        var attributes = Directory.EnumerateFiles(
+                RepoPath,
+                ".gitattributes",
+                SearchOption.AllDirectories)
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal))
+            .ToArray();
+        var usesLfs = attributes.Any(path =>
+            File.ReadLines(path).Any(line => line.Contains("filter=lfs", StringComparison.Ordinal)));
+        if (usesLfs)
+        {
+            var result = await ProcessRunner.RunAsync(
+                "git",
+                ["lfs", "ls-files", "--long"],
+                workingDirectory: RepoPath,
+                ct: ct);
+            if (!result.Success)
+                throw new InvalidOperationException(
+                    $"git lfs ls-files failed ({result.ExitCode}): {result.StdErr.Trim()}");
+            foreach (var line in result.StdOut.Split(
+                         ['\r', '\n'],
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                var separator = line.IndexOf(" - ", StringComparison.Ordinal);
+                if (separator < 0) separator = line.IndexOf(" * ", StringComparison.Ordinal);
+                if (separator <= 0) continue;
+                var objectId = line[..separator].Trim();
+                var path = line[(separator + 3)..].Trim();
+                lfsObjects.Add(new ResultDependencyIdentity(path, objectId));
+            }
+        }
+
+        return new WorkspaceDependencyIdentities(submodules, lfsObjects);
+    }
+
     private async Task<WorktreeTeardownResult> SecureAndRemoveAsync(string outcome, CancellationToken ct)
+        => await SecureAsync(outcome, sourceRunAttemptId: null, removeAfterSecure: true, ct);
+
+    private async Task<WorktreeTeardownResult> SecureAsync(
+        string outcome,
+        string? sourceRunAttemptId,
+        bool removeAfterSecure,
+        CancellationToken ct)
     {
         if (!Directory.Exists(RepoPath))
         {
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
-            return WorktreeTeardownResult.NoWork;
+            return WorktreeTeardownResult.NoResult;
         }
 
         var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
@@ -206,20 +416,41 @@ public sealed class GitWorkspace
             }
         }
 
-        // Force-removal is permitted only after all work is present on the
-        // verified origin branch. A clean checkout has nothing to secure.
-        await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
-        await TryGit(["worktree", "prune"], SharedRepoPath, ct);
-        await TryGit(["branch", "-D", _workBranch], SharedRepoPath, ct);
-        _log($"worktree-teardown-completed path={RepoPath} secured={hasWork} branch={(hasWork ? _workBranch : "none")}");
+        string? immutableResultRef = null;
+        if (!string.IsNullOrWhiteSpace(sourceRunAttemptId))
+        {
+            immutableResultRef =
+                $"refs/heads/agent-studio/results/{SafeSegment(sourceRunAttemptId)}/{head.ToLowerInvariant()}";
+            await PushImmutableResultAndVerifyAsync(immutableResultRef, head, ct);
+        }
+        if (removeAfterSecure)
+            await RemoveSecuredWorktreeAsync(hasWork, ct);
+        else
+            _log($"worktree-handoff-secured path={RepoPath} resultSha={head} immutableRef={immutableResultRef}");
 
         return hasWork
             ? new WorktreeTeardownResult(true, _workBranch,
                 reconciliation?.AuthoritativeBaseSha ?? head,
                 BuildBranchUrl(_gitRemote!, _workBranch),
                 ResultSha: head,
-                Reconciliation: reconciliation)
-            : new WorktreeTeardownResult(false, null, null, null, ResultSha: head);
+                Reconciliation: reconciliation,
+                ImmutableResultRef: immutableResultRef)
+            : new WorktreeTeardownResult(
+                false,
+                null,
+                null,
+                null,
+                ResultSha: head,
+                ImmutableResultRef: immutableResultRef);
+    }
+
+    private async Task RemoveSecuredWorktreeAsync(bool securedWork, CancellationToken ct)
+    {
+        await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
+        await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+        await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+        await TryGit(["branch", "-D", _workBranch], SharedRepoPath, ct);
+        _log($"worktree-teardown-completed path={RepoPath} secured={securedWork} branch={(securedWork ? _workBranch : "none")}");
     }
 
     private async Task<SalvageReconciliationResult> ReconcileSalvageAsync(
@@ -289,6 +520,32 @@ public sealed class GitWorkspace
             throw new InvalidOperationException(
                 $"origin/{branch} resolved to '{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
+    }
+
+    private async Task PushImmutableResultAndVerifyAsync(
+        string immutableRef,
+        string expectedHead,
+        CancellationToken ct)
+    {
+        _log($"result-transfer-started ref={immutableRef} sha={expectedHead} path={RepoPath}");
+        await Git(["push", "origin", $"HEAD:{immutableRef}"], RepoPath, ct);
+        var result = await ProcessRunner.RunAsync(
+            "git",
+            ["ls-remote", "origin", immutableRef],
+            workingDirectory: SharedRepoPath,
+            ct: ct);
+        if (!result.Success)
+            throw new InvalidOperationException(
+                $"git ls-remote origin {immutableRef} failed ({result.ExitCode}): {result.StdErr.Trim()}");
+        var published = result.StdOut.Split(
+            (char[]?)null,
+            StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Immutable result ref '{immutableRef}' resolved to '{published ?? "missing"}', expected '{expectedHead}'.");
+        }
+        _log($"result-transfer-completed ref={immutableRef} sha={expectedHead} path={RepoPath}");
     }
 
     private async Task<bool> IsAncestorAsync(string ancestor, string descendant, CancellationToken ct)
@@ -402,9 +659,12 @@ public sealed record WorktreeTeardownResult(
     string? CommitSha,
     string? BranchUrl,
     string? ResultSha = null,
-    SalvageReconciliationResult? Reconciliation = null)
+    SalvageReconciliationResult? Reconciliation = null,
+    string? ImmutableResultRef = null)
 {
     public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null, null);
+    public static WorktreeTeardownResult NoResult { get; } = new(false, null, null, null, null);
+    public static WorktreeTeardownResult Clean(string resultSha) => new(false, null, null, null, resultSha);
 }
 
 public sealed record SalvageReconciliationResult(
@@ -416,6 +676,10 @@ public sealed record SalvageReconciliationResult(
     string? RecoveryCommitSha,
     string AuthoritativeBaseBranch,
     string AuthoritativeBaseSha);
+
+public sealed record WorkspaceDependencyIdentities(
+    IReadOnlyList<ResultDependencyIdentity> Submodules,
+    IReadOnlyList<ResultDependencyIdentity> LfsObjects);
 
 public sealed class WorktreeSalvageException : Exception
 {

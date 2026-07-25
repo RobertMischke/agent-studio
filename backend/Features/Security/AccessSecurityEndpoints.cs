@@ -11,33 +11,33 @@ public static class AccessSecurityEndpoints
             var principal = context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
                             ?? store.AuthenticateSession(context.Request.Cookies[AccessSecurityStore.SessionCookieName], touch: false);
             return Results.Ok(new AuthStatusResponse(
-                SecurityProfiles.IsNetworked(configuration) ? SecurityProfiles.Networked : SecurityProfiles.Local,
+                ActiveProfile(configuration),
                 store.BootstrapRequired,
                 principal is not null,
                 principal is null ? null : ToResponse(principal.User)));
         });
 
-        auth.MapPost("/bootstrap", (BootstrapRequest request, HttpContext context, AccessSecurityStore store) =>
+        auth.MapPost("/bootstrap", (BootstrapRequest request, HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
             Execute(() =>
             {
                 var created = store.Bootstrap(request);
                 SetSessionCookies(context, created.SessionToken, created.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(SecurityProfiles.Networked, false, true, ToResponse(created.User), created.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(created.User), created.CsrfToken));
             }));
 
-        auth.MapPost("/login", (LoginRequest request, HttpContext context, AccessSecurityStore store) =>
+        auth.MapPost("/login", (LoginRequest request, HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
             Execute(() =>
             {
                 var key = $"{(request.Username ?? string.Empty).Trim().ToLowerInvariant()}|{context.Connection.RemoteIpAddress}";
                 var result = store.Login(request.Username ?? string.Empty, request.Password ?? string.Empty, key);
                 SetSessionCookies(context, result.SessionToken, result.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(SecurityProfiles.Networked, false, true, ToResponse(result.User), result.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(result.User), result.CsrfToken));
             }));
 
-        auth.MapGet("/session", (HttpContext context) =>
+        auth.MapGet("/session", (HttpContext context, IConfiguration configuration) =>
         {
             var principal = RequireHuman(context);
-            return Results.Ok(new AuthStatusResponse(SecurityProfiles.Networked, false, true, ToResponse(principal.User)));
+            return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(principal.User)));
         });
 
         auth.MapPost("/logout", (HttpContext context, AccessSecurityStore store) =>
@@ -126,6 +126,13 @@ public static class AccessSecurityEndpoints
         catch (SecurityOperationException ex) { return Results.Json(new { error = ex.Code, message = ex.Message }, statusCode: ex.Status); }
     }
 
+    // The active security profile the client-facing AuthStatus must reflect. Login,
+    // bootstrap, and session previously hardcoded "networked"; that mislabelled the
+    // status shape when those endpoints were exercised under the local profile, so
+    // the reported profile is now derived from configuration like /status already is.
+    private static string ActiveProfile(IConfiguration configuration)
+        => SecurityProfiles.IsNetworked(configuration) ? SecurityProfiles.Networked : SecurityProfiles.Local;
+
     private static HumanPrincipal RequireHuman(HttpContext context)
         => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
            ?? throw new SecurityOperationException(401, "authentication-required", "A human session is required.");
@@ -136,6 +143,8 @@ public static class AccessSecurityEndpoints
     private static object ToRunnerResponse(RunnerServiceIdentity runner) => new
     {
         runner.Id, runner.Name, runner.CreatedAt, runner.RevokedAt,
+        runner.DrainRequestedAt, runner.RetireRequestedAt, runner.RetiredAt,
+        runner.LastSeenAt, runner.LastClaimAt, runner.ActiveSlots, runner.AvailableSlots,
         credentials = runner.Credentials.Select(x => new { x.Id, x.Scopes, x.CreatedAt, x.ExpiresAt, x.LastUsedAt, x.RevokedAt })
     };
 

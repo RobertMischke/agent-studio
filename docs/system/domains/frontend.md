@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -46,7 +46,10 @@ groups, and a failed domain reports an error without hiding successful domains.
 ## Key Code
 
 - `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,
-  filters, and task creation.
+  filters, and task creation. Post Processing cards project the live
+  auto-review status snapshot into a compact current-step or elapsed-wait
+  indicator; the lane header reconciles those visible cards as active versus
+  waiting, with machine-lock gate queueing remaining a distinct waiting state.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
   It fetches `GET /api/epics` (archive-inclusive) and splits rollups into
@@ -68,9 +71,17 @@ groups, and a failed domain reports an error without hiding successful domains.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, lists reissue
   timestamps and triggers from the timeline, and shows open gate evidence.
+  The Runs modal also shows the current operator-owned review-attempt epoch and
+  the closed cycle history, including requeue reason, lane crossing, and rotated
+  artifact count.
   Timeline and steering text is ANSI-sanitised before rendering. Code Review
   keeps the last available grade visible with its date when it belongs to an
-  older delivery.
+  older delivery. The task-detail Docs tab presents rendered result documents
+  before prompt and raw artifacts, with per-document anchors and technical file
+  metadata disclosed from the document details menu.
+  Each review row also shows its council reaction, including
+  per-finding rulings and the linked follow-up round. Reviews without a reaction
+  sidecar expose that audit gap explicitly.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree
@@ -91,7 +102,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   also writes a dated JSON envelope under `architecture/project-map-history/`.
   The former Runtime Prompts placeholder rail is intentionally removed. The Wiki / Docs rail
   (`project-detail/components/project-wiki-section/`) renders the physical
-  `docs/` folder tree directly, supports real create / move / rename / delete
+  `docs/` folder tree from the project's checkout or configured
+  `wikiSourceBranch`. The Wiki header shows the effective branch and commit;
+  non-checkout sources are read-only. Checkout sources support real create / move / rename / delete
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/system/contracts/wiki-tree.md](../contracts/wiki-tree.md).
@@ -117,6 +130,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   guided definition editor. The editor collects a repository script and typed,
   operator-labelled parameters, validates them through the deployment compiler,
   and previews the generated operator form before any definition is saved or run.
+- `frontend/src/app/features/project-detail/components/project-test-runs-panel/`:
+  the Test Quality run pipeline. It shows planned, running, and completed
+  commit-bound runs in product order, including scope, host, duration, result,
+  and cards attached by the backend ancestry projection. Board cards render the
+  same projection as perfect, diff included, diff not included, pending, or no
+  assigned run.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
@@ -201,11 +220,12 @@ previews and links to the owning detail surface. Each data request fails
 independently so one unavailable source does not blank the dashboard. Numeric
 metrics use tabular figures.
 
-The production v1 owns a read-only Deployment destination, not a deployment
-workflow. Mutating template and prompt-defined controls remain explicit
-follow-up slices. Overview and Deployment both use the DEP-1 summary contract;
-neither parses deployment history in the frontend. Publishing controls remain
-owned by the existing publishing surface.
+Overview and Deployment both use the DEP-1 summary contract; neither parses
+deployment history in the frontend. Runnable targets default to the latest
+successful test run and carry its id, exact commit, and Head distance into the
+durable visible deployment task. Selecting Head is an explicit exception that
+requires an operator reason. Publishing controls remain owned by the existing
+publishing surface.
 
 The Overview owns a compact Visual Evidence review queue over delivered task
 screenshots. Acknowledgements reuse the append-only review-evidence log, so the

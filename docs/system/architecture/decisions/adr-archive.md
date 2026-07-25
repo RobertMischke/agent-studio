@@ -1325,63 +1325,59 @@ path remain owned by the follow-up delivery tasks named in the canonical target.
 
 ---
 
-## ADR-0064 - The global orchestrator owns goal decomposition and may schedule independent verification (2026-07-22)
+## ADR-0064 - Component ownership routing is registry metadata and precedes task creation (2026-07-12)
 
-**Decision.** The global orchestrator is a watchful, goal-driven planning role,
-not only a manager of existing cards. It reuses matching work first and may
-optionally create a goal Epic when an explicit outcome requires missing work.
-The Epic planning contract emits a validated dependency DAG of delivery and
-verification tasks. Generated tasks persist server-authored creation provenance,
-and verification nodes wait on the delivery revisions they inspect.
+**Decision.** Navigation scope and implementation ownership are separate contracts. Before a routing-aware task is created, `ComponentRoutingService` resolves the observed surface and affected component against versioned mappings stored on `ProjectRecord`. A confident mapping selects the primary project, validates its short-code prefix, and adds consumer integration, package release, environment, and deployment acceptance criteria. Unknown, conflicting, low-confidence, or archived-owner results require a routing question. The initial registry mapping declares Coding Agent Chat as primary owner of Agent Studio chat rendering, footer, and message components, with Agent Studio as consumer and deployment host. Agent Studio backend/API remains AGT-owned.
 
-**Context.** The operational role had narrowed over time to queue summaries,
-lane movement, and reactions to cards already on the board. That made the board
-look like the boundary of responsibility even when the user supplied a wider
-goal. At the same time, completion and Evidence Gate incidents showed that a
-text scanner can accept claims or reject good work when it reads truncated or
-stale prose instead of the submitted revision and actual artifacts. The role
-therefore needs both an optional way to create missing work and an explicit way
-to schedule independent, evidence-based verification.
+**Context.** The in-app orchestrator previously knew only where the operator was navigating. Shared components can be visible in one product while their implementation, release artifact, and deployment chain belong to another repository. Treating the active project as owner created AGT tickets for CAC work and omitted package publication and Agent Studio integration.
 
-**Non-goals.**
+**Non-goals.** Prompt prose is not an ownership registry. Filesystem paths and secrets do not enter model context. The resolver does not guess through a conflict. A project change does not preserve an invalid source prefix: it mints a destination key and migrates through hidden staging with rollback.
 
-- No ticket-creation quota and no wrapper Epic when one existing card covers
-  the goal cleanly.
-- No unbounded workflow engine. The plan is a finite DAG backed by existing
-  Epic membership and `references.dependsOn` pickup gating.
-- No hidden task truth in the Runner. Durable task, dependency, and provenance
-  state belongs to the control plane described by ADR-0063; the current Studio
-  compatibility backend owns the write until Task Server cutover.
-- No verification by success wording, terminal sentinel, keyword scan, or a
-  truncated CLI log alone. A verification task inspects the submitted revision
-  and actual command, test, screenshot, or result evidence and discloses gaps.
-- No bypass of deterministic completion gates or human review. Planned
-  verification adds evidence; it does not become authority by itself.
+**Implementation pointers.** Registry models and audit: [backend/Shared/Models/RegistryModels.cs](../../../../backend/Shared/Models/RegistryModels.cs) and [backend/Features/Registry/ProjectRegistry.cs](../../../../backend/Features/Registry/ProjectRegistry.cs). Resolver and compact prompt block: [backend/Features/Registry/ComponentRoutingService.cs](../../../../backend/Features/Registry/ComponentRoutingService.cs). Task guard and delivery criteria: [backend/Features/Tasks/TaskCrudEndpoints.cs](../../../../backend/Features/Tasks/TaskCrudEndpoints.cs). Atomic re-key migration: [backend/Features/Tasks/TaskStateMachine.cs](../../../../backend/Features/Tasks/TaskStateMachine.cs). Project Hub editor and routing preview: [frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts](../../../../frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts) and [frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html](../../../../frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html).
 
-**Reasoning style.** Start from the desired outcome, compare it with current
-work and evidence, and create only the missing nodes. Validate the whole local
-graph before any side effect, materialize it topologically, translate local ids
-to stable task keys, and preserve who created each node and why. Separate
-delivery from independent verification when risk or proof warrants it, then let
-the normal admission, evidence, and review contracts judge the result.
+**Status.** Accepted.
 
-**Implementation pointers.** Role prompts:
-[`prompts/runtime/global-orchestrator-boot.md`](../../../../prompts/runtime/global-orchestrator-boot.md)
-and [`prompts/runtime/epic-decomposition.md`](../../../../prompts/runtime/epic-decomposition.md).
-Graph and provenance contracts:
-[`backend/Shared/Models/EpicModels.cs`](../../../../backend/Shared/Models/EpicModels.cs),
-[`backend/Shared/Models/TaskCreationProvenance.cs`](../../../../backend/Shared/Models/TaskCreationProvenance.cs),
-[`backend/Features/Tasks/EpicSubTaskFactory.cs`](../../../../backend/Features/Tasks/EpicSubTaskFactory.cs),
-and [`backend/Features/Tasks/TaskMutationService.cs`](../../../../backend/Features/Tasks/TaskMutationService.cs).
-Planning execution:
-[`backend/Features/Runner/EpicDecompositionParser.cs`](../../../../backend/Features/Runner/EpicDecompositionParser.cs)
-and [`backend/Features/Runner/ProjectRunner.cs`](../../../../backend/Features/Runner/ProjectRunner.cs).
-Role and evidence rationale:
-[`docs/concepts/orchestrator-supervision-loop.html`](../../../concepts/orchestrator-supervision-loop.html#goal-horizon),
-[`docs/concepts/drei-einheiten-architektur.html`](../../../concepts/drei-einheiten-architektur.html),
-and [`docs/concepts/auto-review-evidence-gate-analysis.html`](../../../concepts/auto-review-evidence-gate-analysis.html#plan).
+---
 
-**Status.** Accepted. Goal decomposition, dependency validation, creation
-provenance, and explicit verification-task scheduling are implemented in the
-current Studio compatibility path. The separated Task Server must carry the
-same durable fields and invariants at cutover.
+## ADR-0065 - Project chat follows project execution placement and exposes checkout identity (2026-07-23)
+
+**Decision.** Side-sheet project and task chat turns use the project's existing
+execution placement. When `remoteExecutionEnabled` and `executionRunner` assign
+a remote Runner, that Runner claims the chat work and starts Codex in a
+dedicated project-chat worktree from the same per-project git cache used by
+card runs. Projects without remote assignment remain local. Every chat read and
+send projects execution kind, actual hostname or `local`, repository path,
+branch, and HEAD revision in the compact chat header.
+
+**Context.** Running project chat on the Studio host gave the model a different
+checkout and potentially a different revision than the cards it was discussing.
+Execution location is decision-relevant context, not an implementation detail.
+The distributed target also assigns repository materialization and CLI
+processes to Agent Runner, while Studio remains a client and Task Server owns
+durable authority.
+
+**Non-goals.** Studio does not open SSH sessions into Runner hosts. Chat does
+not use the task store as a code transport. The compatibility broker is not a
+second durable authority and does not replace ADR-0063's Task Server permit
+target. Remote chat is read-only and does not share a mutable coding worktree.
+
+**Reasoning style.** Derive placement from the existing project assignment,
+execute where the repository is materialized, and report observed checkout
+identity rather than reconstructing or guessing it in Studio.
+
+**Implementation pointers.** Route selection and API projection:
+[`backend/Features/Runner/OrchestratorChat.cs`](../../../../backend/Features/Runner/OrchestratorChat.cs)
+and
+[`backend/Features/Runner/RunnerEndpoints.cs`](../../../../backend/Features/Runner/RunnerEndpoints.cs).
+Claim fencing:
+[`backend/Features/Runner/RemoteChatWorkBroker.cs`](../../../../backend/Features/Runner/RemoteChatWorkBroker.cs)
+and
+[`backend/Features/Tasks/LeaseEndpoints.cs`](../../../../backend/Features/Tasks/LeaseEndpoints.cs).
+Host checkout and Codex process:
+[`runner/RemoteProjectChatRunner.cs`](../../../../runner/RemoteProjectChatRunner.cs).
+Visible context:
+[`frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html`](../../../../frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html).
+
+**Status.** Accepted. The in-process chat-work broker is the compatibility seam
+to move into the independently hosted Task Server without changing the Runner
+pull direction or the visible execution-context contract.

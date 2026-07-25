@@ -1,0 +1,12 @@
+.routing {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  margin-block-start: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--studio-accent-4) 9%, var(--studio-bg-editor));
+  color: var(--studio-fg);
+}
+.routing--question { background: color-mix(in srgb, var(--studio-warn) 10%, var(--studio-bg-editor)); }
+.routing small { color: var(--studio-fg-muted); }

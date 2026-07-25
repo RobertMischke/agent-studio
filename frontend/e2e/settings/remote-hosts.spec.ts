@@ -33,6 +33,7 @@ async function stubBackgroundApis(page: Page) {
 
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
+  await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
@@ -40,7 +41,8 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/clients', json([
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
     { id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: now, lastSeenAt: now,
-      runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2 },
+      runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2,
+      runnerActiveGateCount: 0, runnerGateCapacity: 4 },
   ]));
   await page.route('**/api/clients/*/telemetry?window=14d', json({ clientId: 'mock', window: '14d', points: [{
     timestamp: now, cpuPercent: 7, load1: 0.1, load5: 0.1, load15: 0.1,
@@ -96,6 +98,50 @@ test.describe('Remote Hosts settings section', () => {
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
+  });
+
+  test('first mount waits for live status and then paints the daemon without reload', async ({ page }) => {
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
+    const now = new Date().toISOString();
+    await page.unroute('**/api/clients');
+    await page.unroute('**/api/clients/*/telemetry?window=14d');
+    await page.route('**/api/clients', async route => {
+      await responseGate;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
+        runnerDaemonState: 'running', runnerActiveSlots: 1, runnerAvailableSlots: 19,
+        runnerActiveGateCount: 2, runnerGateCapacity: 4,
+      }]) });
+    });
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({
+        clientId: 'agent-runner-01', window: '14d', findings: [], points: [{
+          timestamp: now, cpuPercent: 53, load1: 7.7, load5: 7.1, load15: 6.8,
+          memoryUsedBytes: 34_000_000_000, memoryTotalBytes: 64_000_000_000,
+          swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0, cpuStealPercent: 0,
+          ioWaitPercent: 2.1, cpuCores: 12, activeSlots: 1,
+        }],
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-status')).toContainText('Loading live status');
+    await expect(remote).not.toContainText('Daemonstopped');
+
+    releaseResponse();
+
+    await expect(remote.getByTestId('remote-host-status')).toContainText('Online');
+    await expect(remote.getByTestId('remote-host-activity')).toContainText('Daemonrunning');
+    await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active · 19 free · 20 max');
+    await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 4');
+    await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('GATE work does not consume a RUN slot');
+    await expect(remote.getByTestId('remote-host-vitals')).toContainText('53%');
+    await expect(remote.getByTestId('remote-host-slots-context')).toContainText('1 RUN active · host load 7.7 of 12 cores');
+    await remote.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-live-first-mount--mocked.png'), fullPage: false });
   });
 
   test('Drain and graceful Retire require confirmation and keep a revivable retired client', async ({ page }) => {
@@ -203,7 +249,8 @@ test.describe('Remote Hosts settings section', () => {
     const badge = remote.getByTestId('remote-host-git-status');
     await expect(badge).toBeVisible();
     await expect(badge).toContainText('Writable: no');
-    await expect(badge).toHaveAttribute('title', /permission denied/);
+    await badge.hover();
+    await expect(page.getByRole('tooltip')).toContainText('permission denied');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
   });
 
@@ -233,9 +280,32 @@ test.describe('Remote Hosts settings section', () => {
     await page.goto('/#/workspace/settings/remote-hosts');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expect(remote.getByTestId('remote-host-telemetry')).toBeVisible();
-    await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 active slots · load 6.4 of 12 cores');
+    await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 RUN active · host load 6.4 of 12 cores');
     await expect(remote.getByTestId('remote-host-findings')).toContainText('VM throttled');
     await expect(remote.locator('[data-chart]')).toHaveCount(4);
+
+    const inspectedIndex = 4;
+    const plots = remote.getByTestId('remote-host-telemetry-plots');
+    await plots.scrollIntoViewIfNeeded();
+    const bounds = await plots.boundingBox();
+    expect(bounds).not.toBeNull();
+    await plots.hover({ position: {
+      x: bounds!.width * inspectedIndex / (points.length - 1),
+      y: bounds!.height / 2,
+    } });
+    const tooltip = remote.getByTestId('remote-host-telemetry-tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveAttribute('data-point-timestamp', points[inspectedIndex].timestamp);
+    await expect(tooltip.locator('[data-metric="cpu"]')).toHaveText('56%');
+    await expect(tooltip.locator('[data-metric="memory"]')).toHaveText('37.2 GB');
+    await expect(tooltip.locator('[data-metric="load"]')).toHaveText('6.1 load');
+    await expect(tooltip.locator('[data-metric="slots"]')).toHaveText('6 slots');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry-tooltip--mocked.png'), fullPage: false });
+    await setTheme(page, 'light');
+    await expect(tooltip).toBeVisible();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry-tooltip-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+
     await remote.getByTestId('remote-host-window-1h').click();
     await expect(remote.getByTestId('remote-host-window-1h')).toHaveAttribute('aria-pressed', 'true');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry--mocked.png'), fullPage: false });

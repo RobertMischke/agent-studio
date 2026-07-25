@@ -23,7 +23,6 @@
                         [filterBadgeCount]="filterBadgeCount()"
                         (projectDeleted)="loadWatchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
-                        (addTaskRequested)="openCreate()"
                         (openUsageSheet)="toggleCliAdmin()"
                         (openCliAdmin)="toggleCliAdmin()"
                         (openWorkspaceScreenshots)="toggleWorkspaceScreenshots()"
@@ -57,12 +56,9 @@
           #orchSideSheet
           [projects]="projectNames()"
           [preferredProject]="orchSideSheetPreferredProject()"
-          [watchPaths]="watchPaths()"
-          [activeJobId]="selectedJob()?.info?.id ?? null"
-          [activeJobTitle]="selectedJob()?.info?.title ?? null"
-          [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
-          [activeJobKey]="selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null"
-          [activeJobState]="selectedJob()?.info?.state ?? null"
+          [watchPaths]="watchPaths()" [pageContext]="pageContext.activePage()"
+          [activeJobId]="pageContext.activePage() ? null : (selectedJob()?.info?.id ?? null)" [activeJobTitle]="pageContext.activePage() ? null : (selectedJob()?.info?.title ?? null)"
+          [activeWatchPath]="pageContext.activePage() ? null : (selectedJob()?.info?.watchPath ?? null)" [activeJobKey]="pageContext.activePage() ? null : (selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null)" [activeJobState]="pageContext.activePage() ? null : (selectedJob()?.info?.state ?? null)"
           [activeRun]="orchSideSheetActiveRun()"
           [composerContext]="orchestratorComposerContext()"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
@@ -335,22 +331,16 @@
             @case ('task') {
               @if (detailLoading()) {
                 <app-loading-surface kind="task-detail" label="Loading task details…" />
+              } @else if (detailLoadError(); as error) {
+                <app-detail-load-error [taskLabel]="error.taskLabel" [message]="error.message" (retry)="retryDetailLoad()" />
               } @else if (selectedJob(); as detail) {
                 <main class="workspace__main workspace__main--studio" data-testid="studio-task">
-                  <app-job-detail #jobDetail
-                                  [detail]="detail"
-                                  [watchPaths]="watchPaths()"
-                                  [lanePeers]="triageLanePeers()"
-                                  [mutationsBlocked]="updateClient.mutationsBlocked()"
-                                  (back)="closeDetail()"
-                                  (fileSaved)="onFileSaved()"
-                                  (projectChanged)="onProjectChanged($event)"
-                                  (deleteRequested)="onDeleteFromDetail(detail.info)"
-                                  (navigateLaneRequested)="onNavigateLane($event)"
-                                  (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
-                                  (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
-                                  (triageMoveRequested)="onTriageMove(detail.info, $event)"
-                                  (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                  <app-job-detail #jobDetail [detail]="detail" [watchPaths]="watchPaths()"
+                                  [lanePeers]="triageLanePeers()" [mutationsBlocked]="updateClient.mutationsBlocked()"
+                                  (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)"
+                                  (deleteRequested)="onDeleteFromDetail(detail.info)" (navigateLaneRequested)="onNavigateLane($event)"
+                                  (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)" (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
+                                  (triageMoveRequested)="onTriageMove(detail.info, $event)" (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                                   (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
                                   (triageStartRequested)="onTriageStart(detail.info, $event)"
                                   (nextInLaneRequested)="onTriageNext(detail.info)"
@@ -498,9 +488,9 @@
       }
       @if (showCreate()) {
         <app-create-job-dialog
-          [watchPaths]="watchPaths()"
-          [availableModels]="availableModels()"
+          [watchPaths]="watchPaths()" [availableModels]="availableModels()"
           [cliTypeDraft]="createJobForm.newCliType"
+          [routing]="createJobForm.routing()" [routingPending]="createJobForm.routingPending()"
           [(newTitle)]="createJobForm.newTitle"
           [(newWatchPath)]="createJobForm.newWatchPath"
           [(newModel)]="createJobForm.newModel"
@@ -787,12 +777,9 @@
           class="app__sidesheet"
           [projects]="projectNames()"
           [preferredProject]="orchSideSheetPreferredProject()"
-          [watchPaths]="watchPaths()"
-          [activeJobId]="selectedJob()?.info?.id ?? null"
-          [activeJobTitle]="selectedJob()?.info?.title ?? null"
-          [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
-          [activeJobKey]="selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null"
-          [activeJobState]="selectedJob()?.info?.state ?? null"
+          [watchPaths]="watchPaths()" [pageContext]="pageContext.activePage()"
+          [activeJobId]="pageContext.activePage() ? null : (selectedJob()?.info?.id ?? null)" [activeJobTitle]="pageContext.activePage() ? null : (selectedJob()?.info?.title ?? null)"
+          [activeWatchPath]="pageContext.activePage() ? null : (selectedJob()?.info?.watchPath ?? null)" [activeJobKey]="pageContext.activePage() ? null : (selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null)" [activeJobState]="pageContext.activePage() ? null : (selectedJob()?.info?.state ?? null)"
           [activeRun]="orchSideSheetActiveRun()"
           [composerContext]="orchestratorComposerContext()"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
@@ -835,9 +822,9 @@
 
       @if (showCreate()) {
         <app-create-job-dialog
-          [watchPaths]="watchPaths()"
-          [availableModels]="availableModels()"
+          [watchPaths]="watchPaths()" [availableModels]="availableModels()"
           [cliTypeDraft]="createJobForm.newCliType"
+          [routing]="createJobForm.routing()" [routingPending]="createJobForm.routingPending()"
           [(newTitle)]="createJobForm.newTitle"
           [(newWatchPath)]="createJobForm.newWatchPath"
           [(newModel)]="createJobForm.newModel"

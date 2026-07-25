@@ -41,7 +41,11 @@ function detail(opts: DetailOpts = {}): TaskDetail {
       taskType: opts.taskType ?? 'chore',
       mode: opts.mode ?? 'coding',
       tags: opts.tags ?? [],
-      tokenSummary: opts.totalTokens != null ? ({ totalTokens: opts.totalTokens } as never) : null,
+      tokenSummary: opts.totalTokens != null ? ({
+        totalTokens: opts.totalTokens,
+        estimatedApiCostUsd: 1.25,
+        allModelsPriced: true,
+      } as never) : null,
       commits: opts.commits != null ? new Array(opts.commits).fill({}) : [],
       codeActivityDetected: opts.codeActivityDetected,
     },
@@ -184,7 +188,10 @@ describe('buildResultDocument', () => {
       verdict({ duration: '4 min' }),
     );
     expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
-    expect(doc.metrics.find((x) => x.id === 'tokens')).toBeTruthy();
+    const tokens = doc.metrics.find((x) => x.id === 'tokens');
+    expect(tokens?.value).toBe('1.50M');
+    expect(tokens?.tooltip).toContain('Estimated cost: $1.25');
+    expect(tokens?.tooltip).toContain('historical list prices');
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');
   });
 

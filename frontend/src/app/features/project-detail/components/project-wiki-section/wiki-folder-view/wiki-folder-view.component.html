@@ -48,12 +48,12 @@
     <table class="wfolder__table" data-testid="wiki-folder-table">
       <thead>
         <tr>
-          <th scope="col">Titel</th>
-          <th scope="col">Datei</th>
-          <th scope="col">Typ</th>
-          <th scope="col">Status</th>
-          <th scope="col">Geändert</th>
-          <th scope="col">Größe</th>
+          <th scope="col" class="wfolder__th-title">Titel</th>
+          <th scope="col" class="wfolder__th-file">Datei</th>
+          <th scope="col" class="wfolder__th-type">Typ</th>
+          <th scope="col" class="wfolder__th-class">Status</th>
+          <th scope="col" class="wfolder__th-when">Geändert</th>
+          <th scope="col" class="wfolder__th-size">Größe</th>
         </tr>
       </thead>
       <tbody>
@@ -72,7 +72,7 @@
                           [class.wfolder__star--active]="isStarred(child)"
                           [attr.aria-pressed]="isStarred(child)"
                           [attr.data-testid]="'wiki-folder-star-' + child.relPath"
-                          [cacTooltip]="isStarred(child) ? 'Stern entfernen' : 'Starren'"
+                          cacTooltip="Your personal shortlist"
                           (click)="toggleStar($event, child)">
                     <app-studio-icon [name]="isStarred(child) ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
                   </button>
@@ -81,8 +81,13 @@
               @if (child.summary; as summary) {
                 <span class="wfolder__summary" [attr.data-testid]="'wiki-folder-summary-' + child.relPath">{{ summary }}</span>
               }
+              <!-- Narrow-panel fallback: the Datei column is hidden below the container
+                   breakpoint, its filename shown here as a second line instead. -->
+              <code class="wfolder__file-inline" [cacTooltip]="child.name">{{ child.name }}</code>
             </td>
-            <td class="wfolder__cell-file"><code>{{ child.name }}</code></td>
+            <td class="wfolder__cell-file">
+              <code [cacTooltip]="child.name">{{ child.name }}</code>
+            </td>
             <td class="wfolder__cell-type" [attr.data-testid]="'wiki-folder-type-' + child.relPath">{{ typeLabel(child) }}</td>
             <td class="wfolder__cell-class" [attr.data-testid]="'wiki-folder-class-' + child.relPath">
               @if (classBadges(child); as badges) {

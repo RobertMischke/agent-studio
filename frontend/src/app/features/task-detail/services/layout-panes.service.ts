@@ -62,12 +62,17 @@ export class LayoutPanesService {
    * this layout service does not depend on the prompt pane's tab-id type.
    */
   readonly requestedPromptTab = signal<string | null>(null);
+  readonly requestedPromptAnchor = signal<{ kind: string; requestId: number } | null>(null);
+  private promptAnchorRequestId = 0;
 
   /**
    * Reveal the prompt pane (if hidden) and ask it to focus `tab`. See
    * {@link requestedPromptTab} for why this is signal-driven.
    */
-  openPromptTab(tab: string): void {
+  openPromptTab(tab: string, artifactKind?: string): void {
+    if (artifactKind) {
+      this.requestedPromptAnchor.set({ kind: artifactKind, requestId: ++this.promptAnchorRequestId });
+    }
     if (!this.panesVisible().prompt) this.togglePane('prompt');
     this.requestedPromptTab.set(tab);
   }

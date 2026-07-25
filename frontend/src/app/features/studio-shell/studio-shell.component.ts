@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   ViewEncapsulation,
   computed,
@@ -17,7 +18,7 @@ import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
-import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
+import { StudioWelcomeComponent } from './components/studio-welcome/studio-welcome.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { ListRowComponent } from '../../components/list-row/list-row.component';
@@ -43,7 +44,10 @@ import { ThemeService } from './services/theme.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
-import { deriveProjectPulseByName, type ProjectPulseState } from './studio-shell.pulse';
+import {
+  deriveProjectAutoPickupByName,
+  type ProjectAutoPickupIndicator,
+} from './studio-shell.auto-pickup';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { AppTooltipDirective } from '../../components/tooltip/app-tooltip.directive';
@@ -90,7 +94,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, AppTooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioWelcomeComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, AppTooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -135,12 +139,48 @@ export class StudioShellComponent {
   private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
   private readonly themeService = inject(ThemeService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
   readonly activeKey = this.tabState.activeKey;
   readonly activeTab = this.tabState.activeTab;
   readonly tabKey = studioTabKey;
+
+  /**
+   * AGT-2135 — keep the active tab visible in the horizontally-scrolling
+   * tab strip. Every active-tab change (click activation, programmatic
+   * activation, or a freshly opened tab that pushed the strip past its
+   * edge) re-runs this. The measure + scroll is deferred to a microtask so
+   * the `@for` has rendered the (possibly new) active tab element before we
+   * read its geometry.
+   */
+  private readonly scrollActiveTabIntoViewFx = effect(() => {
+    this.activeKey();
+    queueMicrotask(() => this.scrollActiveTabIntoView());
+  });
+
+  /**
+   * Smooth-scroll the active tab just into view when it sits outside the tab
+   * strip's visible horizontal range. A tab already fully visible is left
+   * untouched so no needless scroll fires (`inline: 'nearest'` also matches
+   * this intent at the browser level).
+   */
+  private scrollActiveTabIntoView(): void {
+    if (typeof document === 'undefined') return;
+    const key = this.activeKey();
+    if (!key) return;
+    const list = this.host.nativeElement.querySelector<HTMLElement>('.studio-tabbar__list');
+    if (!list) return;
+    const active = Array.from(list.querySelectorAll<HTMLElement>('.studio-tab'))
+      .find(el => el.getAttribute('data-tab-key') === key);
+    if (!active || typeof active.scrollIntoView !== 'function') return;
+    const listRect = list.getBoundingClientRect();
+    const tabRect = active.getBoundingClientRect();
+    const fullyVisible = tabRect.left >= listRect.left && tabRect.right <= listRect.right;
+    if (fullyVisible) return;
+    active.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+  }
 
   /** Sidebar panel state re-exposed for the template. */
   readonly activePanel = this.panelState.active;
@@ -201,7 +241,6 @@ export class StudioShellComponent {
   /** Bubbles to app.ts so the parent can flip the orchestrator side
    *  sheet open without the shell needing a reference to it. */
   readonly chatToggle = output<void>();
-  readonly addTaskRequested = output<void>();
   readonly openUsageSheet = output<void>();
   readonly openCliAdmin = output<void>();
   readonly openWorkspaceScreenshots = output<void>();
@@ -279,10 +318,13 @@ export class StudioShellComponent {
     return this.jobService.runnerStatus().projects[name]?.mode ?? 'manual';
   }
 
-  /** AGT-2031 — project name → auto-pickup pulse state for the Explorer tree's
-   *  subtle activity indicator (derivation lives in studio-shell.pulse). */
-  readonly projectPulseByName = computed<ReadonlyMap<string, ProjectPulseState>>(() =>
-    deriveProjectPulseByName(this.jobService.runnerStatus().projects, this.projectRows()),
+  /** Project name to effective auto-pickup mode plus admission-gate reason. */
+  readonly projectAutoPickupByName = computed<ReadonlyMap<string, ProjectAutoPickupIndicator>>(() =>
+    deriveProjectAutoPickupByName(
+      this.jobService.runnerStatus().projects,
+      this.jobService.projectPickupGates(),
+      this.projectRows(),
+    ),
   );
 
   /** Short label for the auto-mode chip ("auto", "single", "paused", "manual"). */
@@ -913,7 +955,7 @@ export class StudioShellComponent {
     this.pickProject(ev.id === '__all__' ? null : ev.id);
   }
 
-  togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
+  togglePanel(panel: StudioActivityPanelKey | 'settings'): void {
     // The gear ('settings') no longer toggles a sidebar panel — it opens the
     // one consolidated Settings view as an editor tab (AGT-2035).
     if (panel === 'settings') {

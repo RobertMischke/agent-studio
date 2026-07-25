@@ -101,6 +101,7 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Management" />
     <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />
     <Using Include="AgentStudio.Pipeline" />
@@ -122,6 +123,7 @@
     <Using Include="AgentStudio.Tags" />
     <Using Include="AgentStudio.TaskAccess" />
     <Using Include="AgentStudio.Tasks" />
+    <Using Include="AgentStudio.TestRuns" />
     <Using Include="AgentStudio.Tokens" />
   </ItemGroup>
 

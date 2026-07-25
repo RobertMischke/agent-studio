@@ -166,6 +166,42 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Canonical_remote_review_attempt_is_not_run_in_task_server_checkout()
+    {
+        const string slug = "remote-result";
+        SeedReviewJobWithDone(slug);
+        var authorityConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+            })
+            .Build();
+        var authority = new AttemptAuthorityService(
+            authorityConfig, NullLogger<AttemptAuthorityService>.Instance);
+        var run = authority.AcquireRun(
+            slug, Project, null, "remote-runner", "remote-host", 60, "claim-remote").RunAttempt!;
+        authority.SettleRun(
+            new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete-remote"),
+            "done", "589c462f", null);
+        var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            slug, Project, "589c462f", run.AttemptId, "requirements", "policy", [], "create-review"));
+        Assert.Equal(AttemptWriteStatus.Accepted, review.Status);
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=accept; reason=must not run locally.]]",
+            onCall: () => calls++,
+            attemptAuthority: authority);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        Assert.Empty(ReviewDecisionLog.ReadAll(_workspace, Project));
+        Assert.Equal(review.AttemptId, authority.GetTaskProjection(slug).CurrentReviewAttempt!.AttemptId);
+    }
+
+    [Fact]
     public async Task Escalate_FlipsOriginalToEscalated_WritesSupervisorBanner_NoWrapperCard()
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
@@ -1777,6 +1813,90 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(firstCalls, calls);
     }
 
+    [Fact]
+    public async Task OperatorRequeue_WithResolvedOldSentinel_ForcesFreshAspectAssessment()
+    {
+        const string slug = "operator-fresh-assessment";
+        SeedResolvedReviewCardPastGrace(slug);
+        // This failure text belongs to the consumed pre-requeue run. Without a
+        // log freshness boundary the completion gate reissues immediately and
+        // no aspect runs, reproducing the overnight ping-pong shape.
+        File.AppendAllText(
+            Path.Combine(_watchPath, TaskStates.AutoReview, slug, "logs", "cli-output.log"),
+            $"[12:00:40.000] [stdout] Build FAILED before operator recovery.{Environment.NewLine}");
+        for (var i = 0; i < 2; i++)
+        {
+            ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow.AddMinutes(-3 + i),
+                JobId: slug,
+                Project: Project,
+                Kind: ReviewDecisionKind.Reissue,
+                Reason: "old spent attempt",
+                Prompt: string.Empty,
+                Response: string.Empty,
+                FollowUp: string.Empty)
+            {
+                AttemptEpoch = 0,
+            });
+        }
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-1),
+            JobId: slug,
+            Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "old escalation",
+            Prompt: string.Empty,
+            Response: string.Empty,
+            FollowUp: string.Empty)
+        {
+            AttemptEpoch = 0,
+        });
+
+        var requeueConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+            })
+            .Build();
+        var folder = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        new OperatorReviewRequeueService(
+            requeueConfig,
+            NullLogger<OperatorReviewRequeueService>.Instance,
+            _timeline)
+            .Apply(
+                folder,
+                slug,
+                Project,
+                TaskStates.Escalated,
+                TaskStates.AutoReview,
+                "Host recovered; run the complete assessment again.",
+                TimelineActors.Human("operator@example.com"));
+
+        var calls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ =>
+        {
+            calls++;
+            return "[[ASPECT_VERDICT: status=pass; summary=fresh pass]]\n[[TASK_DONE]]";
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(4, calls);
+        var reviewedFolder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(reviewedFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        Assert.All(
+            new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" },
+            aspect => Assert.True(File.Exists(Path.Combine(reviewedFolder, $"aspect-{aspect}.md"))));
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project)
+            .Where(r => r.JobId == slug)
+            .ToList();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, records[^1].Kind);
+        Assert.Equal(1, records[^1].AttemptEpoch);
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, slug));
+    }
+
     private void SeedHumanReviewCard(string slug, IReadOnlyList<string> tags)
     {
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
@@ -2119,7 +2239,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         string cliResponse,
         Action? onCall = null,
         OrchestratorChatLog? chatLogOverride = null,
-        string? reviewCli = null)
+        string? reviewCli = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -2144,7 +2265,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot, config,
             NullLogger<ReviewDecisionOrchestrator>.Instance,
-            timeline: _timeline);
+            timeline: _timeline,
+            attemptAuthority: attemptAuthority);
         orchestrator.CliRunner = (cli, model, prompt, timeout, ct) =>
         {
             onCall?.Invoke();

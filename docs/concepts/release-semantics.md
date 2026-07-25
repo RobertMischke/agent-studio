@@ -85,6 +85,15 @@ product never changes task lanes merely to make the dialog green.
 4. The release record stores the manifest, not only counts, so later review can
    reconstruct the decision.
 5. A failed push or merge creates no successful release record.
+6. The exact release subject must pass `PreMainTestGate` before the write to
+   `main`. This forces every declared test command at the `full` level in hard
+   fail mode. Lane settings, a small diff, Test Hub history, and model advice
+   cannot reduce this suite, and there is no release override for a red or
+   incomplete full-suite result. The existing deferred integration merge
+   enforces this when a project's configured integration target is `main`: it
+   tests the exact source, rechecks both refs, and permits only a fast-forward
+   to that tested SHA. This safety boundary does not replace the REL-1 manifest
+   and confirmation surface.
 
 ## Main is released; a stable tag is frozen
 
@@ -93,8 +102,9 @@ project calls a revision stable only through a separate freeze workflow:
 
 1. Select an exact SHA that is already reachable from `main`.
 2. Show the release manifest and any acceptance-state changes since release.
-3. Run or attach the project-specific stable checks: build, tests, deployment
-   health, visual proof, and any critical incident gate.
+3. Attach the successful commit-bound test run used as stable evidence, plus
+   deployment health, visual proof, and any critical incident gate. The test
+   run commit is explicit; an older green run does not prove a newer Head.
 4. Create an annotated tag such as `stable/2026-07-13` or the project's semver
    release tag. The project chooses one naming policy; the product does not
    create both automatically.
@@ -173,5 +183,7 @@ wrapper around every card.
 - Every included commit is visible, even when attribution is missing.
 - `main` means released; only an explicit tag plus evidence means stable.
 - Warnings and overrides are durable facts, not transient dialog copy.
+- Deployment and freeze evidence names a successful test run and its exact
+  commit. Head deployment is a durable, reasoned exception.
 - Project-specific release/freeze mechanics live in versioned Deployment
   targets, not in an operator's memory.

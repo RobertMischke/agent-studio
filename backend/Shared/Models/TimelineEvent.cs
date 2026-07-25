@@ -154,6 +154,12 @@ public static class TimelineEventKinds
     public const string QualityLoopReopened = "quality_loop_reopened";
     /// <summary>A human review verdict was recorded.</summary>
     public const string HumanReviewDecided = "human_review_decided";
+    /// <summary>
+    /// A human deliberately moved a task out of human review or escalation,
+    /// opening a fresh review-attempt epoch. Details carry the operator reason,
+    /// new epoch, and rotated artefact count.
+    /// </summary>
+    public const string OperatorRequeued = "operator_requeued";
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>
@@ -216,6 +222,17 @@ public static class TimelineEventKinds
     /// history shows the external hand-off rather than ending in a corpse.
     /// </summary>
     public const string ExternalCompletion = "external_completion";
+    /// <summary>
+    /// AGT-2202: a card was accepted (moved into 6-completed) while its work was
+    /// NOT yet integrated into develop - the "Accept != Merge" blind spot made
+    /// loud. Emitted by <c>TaskTransitionService</c> on the accept transition when
+    /// the git-derived <see cref="TaskIntegrationStatus"/> is not
+    /// <see cref="IntegrationStatuses.Integrated"/>; the card is also tagged
+    /// <c>integration:pending</c> so the completed-lane audit can list it.
+    /// <see cref="TimelineEvent.Summary"/> carries the verdict; NOT a hard block -
+    /// the acceptance still lands, this only makes the state visible.
+    /// </summary>
+    public const string IntegrationPendingWarning = "integration_pending_warning";
 }
 
 /// <summary>

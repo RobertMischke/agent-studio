@@ -1,7 +1,10 @@
 import { Directive, ElementRef, HostListener, inject } from '@angular/core';
 
-const MIN_WIDTH = 192;
-const MAX_WIDTH = 544;
+// Keep the resize contract aligned with the wider shared catalogue, including
+// AGT-2286's change/review columns. A narrow legacy rail clips that shared
+// overview and jumps on the first pointer move.
+const MIN_WIDTH = 448;
+const MAX_WIDTH = 704;
 const RESIZE_STEP = 16;
 
 interface PromptNavResizeState {

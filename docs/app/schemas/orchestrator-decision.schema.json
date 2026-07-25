@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/orchestrator-decision.schema.json",
   "title": "OrchestratorDecisionRecord",
-  "description": "One typed decision the ReviewDecisionOrchestrator made about a 4-review job that ended in [[TASK_NEEDS_INPUT]]. Append-only entry in {workspace}/logs/decisions/{project}.jsonl. Mirrors backend/Services/Runner/ReviewDecisionRecord.cs::ReviewDecisionRecord. Consumed by Layer 3 review and the planned executive-summary surface.",
+  "description": "One typed decision the ReviewDecisionOrchestrator made about an auto-review job. Append-only entry in {workspace}/logs/decisions/{project}.jsonl. Mirrors backend/Features/Runner/ReviewDecisionRecord.cs::ReviewDecisionRecord.",
   "type": "object",
   "additionalProperties": false,
   "required": ["createdAt", "jobId", "project", "kind", "reason", "prompt", "response", "followUp"],
@@ -24,8 +24,8 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["Reissue", "Escalate", "AcceptAsDone", "Skipped"],
-      "description": "Action chosen by the orchestrator. 'Skipped' covers cases where the fast-model response did not contain a parsable [[ORCHESTRATOR_DECISION]] sentinel; the task is left untouched and re-evaluated next tick."
+      "enum": ["Reissue", "Escalate", "AcceptAsDone", "Skipped", "OperatorRequeue"],
+      "description": "Action or explicit operator boundary. 'Skipped' leaves the task untouched for the next tick. 'OperatorRequeue' opens a fresh attempt epoch after a human moves a task out of Human Review or Escalated."
     },
     "reason": {
       "type": "string",
@@ -42,6 +42,59 @@
     "followUp": {
       "type": "string",
       "description": "For Reissue, the follow-up text the orchestrator wrote back into the chat log and the orchestrator-follow-up.md file in the job folder. Empty string for the other kinds."
+    },
+    "attemptChainId": {
+      "type": ["string", "null"],
+      "description": "Optional stable identity for a gate retry chain."
+    },
+    "gateId": {
+      "type": ["string", "null"],
+      "description": "Optional deterministic gate identity."
+    },
+    "subjectSha": {
+      "type": ["string", "null"],
+      "description": "Optional immutable git subject assessed by the gate."
+    },
+    "failureFingerprint": {
+      "type": ["string", "null"],
+      "description": "Optional normalized failure identity used by bounded retry guards."
+    },
+    "failureKind": {
+      "type": ["string", "null"],
+      "description": "Optional typed failure classification."
+    },
+    "attemptEpoch": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Operator-owned review-attempt epoch. Legacy rows without the field belong to epoch 0; only an explicit human requeue opens the next epoch."
+    },
+    "councilReaction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["createdAt", "reviewFileName", "grade", "disposition", "summary", "assessments", "startsNewRound", "targetJobId", "targetRunAttempt"],
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewFileName": { "type": "string" },
+        "grade": { "type": "string", "enum": ["A", "B", "C", "D", "?"] },
+        "disposition": { "type": "string", "enum": ["Accept", "Reissue", "Escalate"] },
+        "summary": { "type": "string" },
+        "assessments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["finding", "action", "reason"],
+            "properties": {
+              "finding": { "type": "string" },
+              "action": { "type": "string", "enum": ["FixNextRound", "Accept", "Escalate"] },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "startsNewRound": { "type": "boolean" },
+        "targetJobId": { "type": ["string", "null"] },
+        "targetRunAttempt": { "type": ["integer", "null"], "minimum": 1 }
+      }
     }
   }
 }

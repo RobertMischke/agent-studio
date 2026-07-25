@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { LayoutPanesService } from '../../services/layout-panes.service';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
-import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
+import { TaskArtifact, TaskArtifactKind, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
 import type { TaskScreenshot } from '../../../screenshots/models/screenshots.model';
@@ -65,7 +65,7 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
     },
     {
       id: 'description',
-      label: 'Files',
+      label: 'Docs',
       icon: 'folder',
       testid: 'prompt-tab-description',
       badge: filesCount > 1 ? filesCount : null,
@@ -140,6 +140,7 @@ export class PromptPaneComponent {
    * scope.
    */
   readonly activeTab = signal<PromptPaneTabId>('overview');
+  readonly docFocusRequest = signal<{ kind: TaskArtifactKind; requestId: number } | null>(null);
 
   /** Resets the active tab to Overview whenever the underlying task changes,
    *  so navigating between tasks always lands on Overview. Within the same
@@ -170,7 +171,10 @@ export class PromptPaneComponent {
     const requested = this.layout.requestedPromptTab();
     if (!requested) return;
     this.onPromptTabChange(requested);
+    const anchor = this.layout.requestedPromptAnchor();
+    if (anchor) this.docFocusRequest.set(anchor as { kind: TaskArtifactKind; requestId: number });
     this.layout.requestedPromptTab.set(null);
+    this.layout.requestedPromptAnchor.set(null);
   });
 
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
@@ -183,14 +187,15 @@ export class PromptPaneComponent {
   /** Total visual-evidence count for the Evidence-tab badge. */
   readonly visualEvidenceCount = computed(() => this.screenshots().length);
 
-  /** Total file count for the Files-tab badge (only shown when > 1). */
+  /** Total document count for the Docs-tab badge (only shown when > 1). */
   readonly filesCount = computed(() => this.artifacts().length);
 
   /**
    * Tab definitions for the shared {@link PaneTabsComponent}.
    * NB: the `description` id is preserved (with its `prompt-tab-description`
    * testid) for backward-compat with pre-F48 specs; the user-facing label
-   * is now "Files" since the tab carries every `.md` in the job folder.
+   * is now "Docs" since the tab leads with readable outcomes while preserving
+   * access to every supported source file in the job folder.
    */
   readonly promptTabs = computed<readonly PaneTabDef[]>(() =>
     buildPromptTabs(this.filesCount(), this.visualEvidenceCount()));

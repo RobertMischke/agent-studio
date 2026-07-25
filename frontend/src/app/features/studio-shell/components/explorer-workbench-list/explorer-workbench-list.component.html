@@ -18,6 +18,11 @@
           <span class="studio-workbench-topic__meta"><i [attr.data-status]="workbench.status"></i>{{ meta(workbench) }}</span>
         </button>
       } @empty { <span class="studio-workbench-topics__state">No open Workbenches</span> }
+      <button type="button" class="studio-workbench-history"
+              [attr.data-testid]="'studio-explorer-workbench-wiki-' + projectName()"
+              (click)="openWiki.emit()">
+        Open wiki →
+      </button>
       <button type="button" class="studio-workbench-history" [attr.aria-expanded]="historyOpen()"
               [attr.data-testid]="'studio-explorer-workbench-history-' + projectName()" (click)="toggleHistory()">
         {{ historyOpen() ? 'Hide history' : 'History' }}

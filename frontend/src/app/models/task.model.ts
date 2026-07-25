@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal, TaskIntegrationStatus } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -180,22 +180,6 @@ export interface PlanningSpawnSummary {
   contractSatisfied: boolean;
 }
 
-/**
- * Server-authored origin for a card materialized by goal decomposition.
- * Ordinary user-created and legacy cards omit it. `purpose` makes planned
- * verification work distinguishable from delivery work without inferring from
- * the title.
- */
-export interface TaskCreationProvenance {
-  initiator: 'orchestrator' | 'operator';
-  method: 'goal-decomposition';
-  goalId: string;
-  goalKey?: string | null;
-  contextKey?: string | null;
-  purpose: 'delivery' | 'verification';
-  createdAt: string;
-}
-
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -210,6 +194,8 @@ export interface TaskInfo {
   projectName: string;
   folderPath: string;
   lastActivity: string;
+  /** UTC instant when the task entered its current lane. */
+  enteredLaneAt?: string | null;
   sessionName: string | null;
   /**
    * Per-job orchestrator token rollup. The kanban card renders a small
@@ -326,6 +312,8 @@ export interface TaskInfo {
   phase?: string | null;
   /** UTC time at which the current lifecycle phase was entered. */
   phaseEnteredAt?: string | null;
+  /** Read-only checks projected from lifecycle.json while post-processing runs. */
+  postProcessingChecks?: LifecycleCheck[];
   /**
    * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
    * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
@@ -348,8 +336,6 @@ export interface TaskInfo {
    * that were soft-deleted from the registry) render as a faint ghost chip.
    */
   tags?: string[];
-  /** Traceable origin for orchestrator/operator goal-decomposition children. */
-  creationProvenance?: TaskCreationProvenance | null;
   /**
    * F34 cross-references to other tasks by F33 stable key. Always present
    * (backend surfaces an empty instance when absent on disk). Drives the
@@ -385,6 +371,17 @@ export interface TaskInfo {
   mergeSignal?: TaskMergeSignal | null;
 
   /**
+   * AGT-2202: honest, git-derived integration verdict for accepted cards
+   * (5-human-review / 6-completed / 7-archive): is the work actually in develop?
+   * Mirrors backend `TaskInfo.Integration`; one of integrated / pending /
+   * conflict-skipped / no-branch. Resolves the "Accept != Merge" blind spot -
+   * unlike `mergeSignal` it also reads the curated `merge(<KEY>)` develop-log
+   * commit, so it survives commit rewriting by the async curated integrator. Null
+   * on cards not in an accepted lane.
+   */
+  integration?: TaskIntegrationStatus | null;
+
+  /**
    * PUB-1: read-time "publishable to" signal for accepted (6-completed) cards -
    * which publish targets (npm / NuGet / website) this task's merged work
    * touches, so the card / detail renders a "publishable: npm, website" chip.
@@ -393,6 +390,9 @@ export interface TaskInfo {
    * cards and cards whose work touches no derived publish target.
    */
   publishSignal?: TaskPublishSignal | null;
+
+  /** Commit-derived test-run evidence. Never persisted on the card. */
+  testEvidence?: TaskTestRunEvidence | null;
 
   /**
    * ASS-1751: read-time run-activity classification for `3-progress` cards,
@@ -434,6 +434,14 @@ export interface TaskInfo {
    * the AGT-1915 trap. Null on every coding / research / epic card.
    */
   planningSpawn?: PlanningSpawnSummary | null;
+}
+
+export interface LifecycleCheck {
+  name: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped' | string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  detail?: string | null;
 }
 
 /**
@@ -503,6 +511,8 @@ export interface TaskOutcomeIssue {
   kind:
     | 'permission-blocked'
     | 'watchdog-timeout'
+    | 'tool-router-error'
+    | 'no-reply'
     | 'missing-terminal-sentinel'
     | 'classifier-unknown'
     | 'heuristic-done'
@@ -510,7 +520,10 @@ export interface TaskOutcomeIssue {
     | string;
   label: string;
   severity: 'Info' | 'Warn' | 'High' | string;
+  /** Bounded compatibility text for compact consumers. */
   summary: string;
+  /** Complete normalized source line, rendered only inside technical details. */
+  technicalDetails?: string | null;
   lastSeenAt: string | null;
 }
 
@@ -540,6 +553,8 @@ export interface ClientSummary {
   runnerLastClaimAt?: string | null;
   runnerActiveSlots?: number | null;
   runnerAvailableSlots?: number | null;
+  runnerActiveGateCount?: number | null;
+  runnerGateCapacity?: number | null;
 }
 
 /**
@@ -793,6 +808,8 @@ export interface FileGenerationMeta {
   cli?: string | null;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   tokensTotal: number;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -945,6 +962,9 @@ export interface CreateTaskRequest {
   mode?: TaskMode;
   /** Web access. When omitted, defaults by mode (research = on, else off). */
   allowWebAccess?: boolean;
+  /** Ownership-routing input. The backend resolves and validates the destination. */
+  routing?: ComponentRoutingRequest;
+  requestedTaskPrefix?: string;
 }
 
 /**
@@ -1072,6 +1092,62 @@ export interface RegistryProjectUrl {
   startRule: ProjectUrlStartRule | null;
 }
 
+export interface ComponentOwnershipMapping {
+  id: string;
+  observedSurfaces: string[];
+  component: string;
+  packageOrModule: string | null;
+  primaryProjectId: string;
+  repository: string | null;
+  consumerProjectIds: string[];
+  integrationHosts: string[];
+  releaseArtifact: string | null;
+  versioningMechanism: string | null;
+  deploymentSteps: string[];
+  environments: string[];
+  allowedTicketPrefix: string;
+  evidence: string[];
+  confidence: number;
+  unresolvedAlternatives: string[];
+  version: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface ComponentRoutingRequest {
+  observedSurface?: string | null;
+  component?: string | null;
+  navigationProjectId?: string | null;
+}
+
+export interface ComponentRoutingResolution {
+  observedSurface: string | null;
+  component: string | null;
+  packageOrModule: string | null;
+  navigationProject: { id: string; shortCode: string; displayName: string } | null;
+  primaryProject: { id: string; shortCode: string; displayName: string } | null;
+  primaryProjectId?: string | null;
+  projectShortCode?: string | null;
+  repository: string | null;
+  consumerProjects: { id: string; shortCode: string; displayName: string }[];
+  integrationHosts: string[];
+  releaseArtifact: string | null;
+  versioningMechanism: string | null;
+  deploymentSteps: string[];
+  environments: string[];
+  allowedTicketPrefix: string | null;
+  storageProjectId: string | null;
+  evidence: string[];
+  confidence: number;
+  routingConfidence?: number;
+  unresolvedAlternatives: string[];
+  requiresQuestion: boolean;
+  questionReason: string | null;
+  preview: string;
+  mappingId: string | null;
+  mappingVersion: number | null;
+}
+
 /** Mirrors backend `ProjectUrlSuggestion` from `GET .../url-suggestions`. */
 export interface ProjectUrlSuggestion {
   label: string;
@@ -1137,8 +1213,11 @@ export interface RegistryProjectSummary {
   rootPath: string | null;
   /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
   repositoryUrl: string | null;
+  /** Optional read-only git ref supplying the complete project Wiki. */
+  wikiSourceBranch?: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
+  ownershipMappings?: ComponentOwnershipMapping[];
   archived: boolean;
   createdAt: string;
 }
@@ -1418,6 +1497,23 @@ export interface TaskPublishSignal {
   targetIds: string[];
   /** Short labels for the chip, in target order (e.g. 'npm', 'Website'). */
   labels: string[];
+}
+
+export type TestRunMatchQuality = 'none' | 'perfect' | 'contains-diff' | 'does-not-contain-diff';
+export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven';
+
+export interface TaskTestRunEvidence {
+  runId: string | null;
+  runCommit: string | null;
+  runState: 'planned' | 'running' | 'completed' | null;
+  runResult: 'passed' | 'failed' | 'canceled' | null;
+  matchQuality: TestRunMatchQuality;
+  direction: 'none' | 'exact' | 'after' | 'before';
+  distance: number | null;
+  diffContained: boolean;
+  evidenceState: TestEvidenceState;
+  awaitingEvidence: boolean;
+  summary: string;
 }
 
 export interface CrashRecoveryPending {

@@ -458,8 +458,35 @@
             escalates flagged <code>environmental</code> / <code>cli-launch-failed</code>; environmental cycles no longer accrue
             toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
             <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
-            counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
+            counted per operator-owned attempt epoch. Only an explicit human requeue opens a fresh budget; automatic
+            Escalate / AcceptAsDone verdicts do not reset it. See
             <code>docs/system/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2260</code><br><span class="small">operator-requeue-attempt-epochs<br>(belege <code>AGT-1934/2110/2199</code>)</span></td>
+          <td>
+            An operator explicitly moved an escalated card back into <span class="lane">4-auto-review</span> with a reason.
+            Post Processing immediately consumed the previous escalation's spent retry counters and verdict artefacts, then
+            escalated the card again without a fresh gate, aspects, or decision-journal boundary. Requeue became lane ping-pong
+            and derived stale state overruled the operator.
+          </td>
+          <td>
+            Retry guards had no operator-owned epoch. The general counter inferred resets from automatic terminal verdicts,
+            while build/test and lint guards counted matching records over the full journal. Escalation summaries, aspect
+            verdicts, lifecycle state, and post-step outputs also remained in the active task root.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a human move out of <span class="lane">5-human-review</span> or
+            <span class="lane">5e-escalated</span> now increments <code>.metadata/review-attempt.json</code>, appends an
+            <code>OperatorRequeue</code> decision plus <code>operator_requeued</code> timeline event with the reason, and
+            rotates stale verdict evidence into <code>results/history/</code>. Every anti-churn guard reads only the active
+            epoch. Automatic moves retain the epoch. A direct requeue into <span class="lane">4-auto-review</span> recreates
+            Post Processing state and queues the complete gate/aspect path. The fresh pass excludes the pre-requeue status
+            and CLI-log tail from decision evidence, so another escalation requires a new gate or aspect event. The epoch
+            sidecar is authoritative: if the best-effort journal boundary cannot be written, an older-epoch verdict still
+            forces the same fresh assessment instead of reviving the stale escalation.
           </td>
         </tr>
         <tr>
@@ -810,6 +837,196 @@
             <span class="pill ok">fixed</span> runtime completion instructions now use concrete examples and explicitly require
             replacing their reason. Empty and literal placeholder BLOCKED reasons recover the final agent paragraph, and parser
             plus simulated auto-review tests prove the escalated record carries that useful text instead of the placeholder.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-13</td>
+          <td><code>AGT-2178</code><br><span class="small">remote Epic planning stdin close during completion</span></td>
+          <td>
+            The remote Epic end-to-end gate captured a valid decomposition and <code>[[TASK_DONE]]</code>, but the
+            planning CLI closed stdin while the runner was still writing the rendered prompt. The resulting broken-pipe
+            exception replaced the captured terminal response with an unknown outcome and returned the Epic to Backlog.
+          </td>
+          <td>
+            <code>runner/ProcessRunner</code> treated a child closing its stdin pipe during exit as a process-spawn failure,
+            even when stdout already contained the authoritative terminal response and the child exit code was available.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> stdin pipe closure no longer discards captured stdout, stderr, or the child
+            exit code. The fenced completion path now parses the valid plan, creates its children, and reaches
+            <span class="lane">4-auto-review</span>; the regression also proves no coding or salvage branch is created.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2290</code><br><span class="small">fresh operator cards cycled through unknown-legacy escalation<br>(also observed on <code>AGT-2291</code>, <code>AGT-2292</code>, <code>AGT-2293</code>, <code>AGT-2294</code>, and <code>AGT-2288</code>)</span></td>
+          <td>
+            Newly-created operator cards did not remain in their requested lane. Verdictless cards seen in
+            <span class="lane">5-human-review</span> were repeatedly swept into
+            <span class="lane">5e-escalated</span> as <code>unknown-legacy</code>, even though no agent run had occurred.
+          </td>
+          <td>
+            Creation silently accepted only Backlog, Preparation, or Ready and replaced every other explicit
+            <code>targetState</code>. Independently, the verdictless Human Review boot repair treated the absence of a
+            decision record as sufficient legacy evidence. It checked neither card age nor durable run provenance.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> an explicit valid creation target is now authoritative. The legacy repair
+            additionally requires a minimum age and durable evidence of an agent run before it may move a verdictless card.
+            Fresh or never-run operator cards remain in their requested lane; genuine old run-backed cards still reach the
+            explained <span class="lane">5e-escalated</span> terminal.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2253</code><br><span class="small">council reaction after quality grade<br>(evidence: <code>AGT-2108</code>)</span></td>
+          <td>
+            A Grade B review named incorrect dark-theme colours, missing focused upload-rejection tests, and ambiguous
+            Playwright evidence, but the quality-grade step was reporting-only. The task could still reach
+            <span class="lane">5-human-review</span> as accepted, leaving no explicit ruling on any named deficiency.
+          </td>
+          <td>
+            <code>RunCodeReviewGradePostStepAsync</code> persisted a grade and badge but returned no evidence to the final
+            decision path. The orchestrator therefore had no per-finding policy, targeted handoff, or durable link from the
+            review artifact to a new round.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> each automatic grade now receives a structured council reaction. Named findings
+            reissue the card to <span class="lane">2-ready</span> with only those findings as the next-round prompt while budget
+            remains; exhausted budget reaches <span class="lane">5e-escalated</span>. Grade A without findings records
+            <em>Accept, nothing open.</em> A non-clean grade that omits the required concrete finding handoff escalates instead
+            of being optimistically accepted. If the build/test gate also fails, its reissue prompt carries both the build
+            evidence and the named review findings. The review sidecar, decision journal, timeline, and task-detail review row
+            expose the complete review &rarr; reaction &rarr; round chain.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2253</code><br><span class="small">remote grade reviewed the wrong revision</span></td>
+          <td>
+            The remote build/test gate verified the fenced runner result, but the subsequent quality grade reviewed the
+            canonical task-branch HEAD. It therefore reported that the Council implementation and tests were absent even
+            though they existed on the delivered runner commit.
+          </td>
+          <td>
+            <code>BuildGradeDiff</code> derived its scope from local session attribution and HEAD only. It did not read the
+            existing <code>review-subject.json</code> that already made the remote <code>ResultSha</code> authoritative for
+            the build/test gate.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the quality-grade diff now uses the same fenced remote
+            <code>ResultSha</code> as the build/test gate. A regression keeps the canonical HEAD on an unrelated commit and
+            proves the grade prompt contains only the delivered remote Council diff. The attempt therefore terminates on
+            the actual review findings instead of revision-scope drift.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2253</code><br><span class="small">remote grade reduced a multi-commit delivery to its tip</span></td>
+          <td>
+            The first remote-subject correction selected the fenced result SHA, but represented it with
+            <code>git show</code>. A multi-commit Council delivery could therefore still appear to omit the implementation
+            when its final commit contained only evidence or documentation. A long aspect phase could also re-resolve the
+            subject from mutable session state instead of retaining the SHA already verified by the build/test gate.
+          </td>
+          <td>
+            The regression modeled only one remote commit and therefore did not distinguish an exact result SHA from the
+            complete task range ending at that SHA. The grade step also discarded the build gate's normalized
+            <code>ExpectedSha</code> before it built its review scope.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the verified remote SHA now flows from the build/test gate into grading. The
+            grade resolves its merge base against the task provenance, canonical task branch, or integration branch and
+            reviews the full range through <code>ResultSha</code>. The regression uses separate implementation and evidence
+            commits and proves that both, but not an unrelated canonical HEAD, reach the grade prompt.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2185</code><br><span class="small">generic Remote Unknown and exit-only recovery<br>(replays AGT-2070 and AGT-2148)</span></td>
+          <td>
+            Remote coding collapsed provider failures, missing sentinels, timeout, shutdown, and successful zero exits into
+            the same sentinel-only <code>Unknown</code>. Review retry precedent used a separate exit/empty-output rule, so
+            neither path exposed one recovery contract or immutable attempt identity.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> scanned stdout only after process exit. Provider events, raw final output, stderr,
+            signal, timeout/OOM, cancellation, host, lease, transport, session, and durable-output facts were not classified
+            together, and the Task Server completion stored no classifier decision.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> shared classifier <code>execution-outcome/v1</code> now emits typed outcome,
+            confidence/ambiguity, and a bounded recovery action for Coding or ReviewAttempt. A supported coding session resumes
+            at most once; invalid-session salvage fallback is also bounded once. Review infrastructure retry stays on the same
+            repository plus result SHA/digest and cannot invoke coding. Protocol v1 persists the raw decision as an idempotent
+            fenced <code>execution.outcome.classified</code> event; inconclusive remains explicit. Provider error-result frames
+            cannot masquerade as completion, an invalid provider session cannot be resumed again, and only published or
+            acknowledged salvage can authorize a fresh attempt.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2232</code><br><span class="small">planned remote-daemon restart killed jobs and adopted zombie leases<br>(observed on <code>AGT-2182/2194/2198</code>)</span></td>
+          <td>
+            Three restart incidents killed newly claimed remote jobs while the replacement daemon kept renewing their
+            leases without a corresponding host process. All slots appeared healthy but made no progress, including one
+            eight-hour stall. Deploys consequently required an idle host.
+          </td>
+          <td>
+            systemd used <code>KillMode=control-group</code>, the daemon owned CLI output through anonymous pipes, and slot
+            identity lived only in memory. Startup trusted lease presence without verifying PID generation or process cwd.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> job execution now runs behind a detached, file-logging worker. Lease, fence,
+            Task Server run/instance, PID/start time, worktree, and log sequence are atomically persisted. SIGTERM stops
+            claims and leaves workers alive; startup reattaches only after PID + worktree proof, while dead attempts are
+            released to Ready. The unit uses <code>KillMode=process</code> and bounded start limits. The recovered job reaches
+            its ordinary completion terminal; a dead job reaches the explicit release/requeue terminal instead of zombie Progress.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2208</code><br><span class="small">sentinel literal in streamed test diff</span></td>
+          <td>
+            A remote run that was testing sentinel handling streamed the fixture literal
+            <code>[[TASK_BLOCKED:missing API key]]</code> inside a diff. The runner classified that payload as a real
+            blocked verdict and incorrectly promoted the card to <span class="lane">5e-escalated</span>.
+          </td>
+          <td>
+            <code>runner/SentinelScanner</code> applied the sentinel regex to the complete raw stdout buffer. Codex
+            <code>command_execution</code>, file-change, and diagnostic JSONL therefore had the same authority as the
+            final <code>agent_message</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> structured output is reduced to the final agent reply before parsing,
+            and the token must be the terminal standalone line of that reply. Diff, code-block, file, and stderr
+            literals produce no verdict. Regression coverage pins the AGT-2208 fixture and the real final-sentinel path.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
+          <td><code>AGT-2320</code><br><span class="small">remote lease-loss requeue and deleted-cwd spiral</span></td>
+          <td>
+            A backend restart invalidated leases for active remote runs. Their cards returned to
+            <span class="lane">2-ready</span> and were claimed again while the first CLIs still ran.
+            Teardown removed those live worktrees, leaving more than 30 CLIs in deleted working
+            directories. Host load reached 178 on 12 cores; heartbeat timeouts then returned the
+            second generation and a third claim wave was imminent until the operator killed the
+            deleted-cwd processes and reduced caps.
+          </td>
+          <td>
+            Lease rejection cancelled only a token and did not guarantee OS process-group reaping;
+            worktree removal did not inspect cwd owners; boot/claim recovery treated a free lease as
+            proof that the remote process was dead; and remote claim admission used only configured
+            slot count, not host load per core.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> stale fence, changed epoch, revoked lease, or an
+            unconfirmed renewal past expiry kills the isolated CLI process group. Worktree teardown
+            terminates and verifies every cwd owner before removal. A known remote attempt requeues
+            only after a 120-second grace and the assigned runner's explicit inactive-task report.
+            New claims close above load/core 1.5. Focused tests pin all four boundaries; the run
+            terminates as fenced lease loss, never as another overlapping coding generation.
           </td>
         </tr>
       </tbody>

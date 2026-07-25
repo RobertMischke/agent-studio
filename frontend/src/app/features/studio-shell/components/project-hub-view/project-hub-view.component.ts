@@ -15,6 +15,8 @@ import {
   ProjectGitPanelComponent,
   ProjectProposalsPanelComponent,
   ProjectGraphComponent,
+  ProjectTestRunsPanelComponent,
+  OwnershipMappingPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
@@ -59,6 +61,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'settings-defaults',
   'settings-overrides',
   'orchestrator',
+  'ownership-routing',
 ]);
 
 /**
@@ -92,6 +95,8 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectGitPanelComponent,
     ProjectProposalsPanelComponent,
     ProjectGraphComponent,
+    ProjectTestRunsPanelComponent,
+    OwnershipMappingPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
     RegressionRadarComponent,

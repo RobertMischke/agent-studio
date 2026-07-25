@@ -169,6 +169,69 @@ or working directory. Restart the backend after changing any of those three
 values and before enabling local auto-pickup. A runner assignment change is
 persisted immediately.
 
+## Configure staged test execution
+
+The build profile declares the complete test inventory. The separate staged
+test policy decides how much of that inventory runs for a task lane. Configure
+it with `PUT /api/projects/{project}/test-execution`; delete the resource to
+restore the default `work-package` level.
+
+```sh
+curl -i -X PUT http://localhost:5030/api/projects/Quality%20Studio/test-execution \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "laneLevels": {
+      "2-ready": "continuous",
+      "4-auto-review": "work-package"
+    },
+    "continuousCommands": [
+      "dotnet test backend.Tests --filter FullyQualifiedName~Smoke"
+    ],
+    "impactRules": [
+      {
+        "pathPrefixes": ["frontend/src/app/features/settings"],
+        "testCommands": ["npm test -- --include settings"],
+        "reason": "settings component ownership"
+      }
+    ],
+    "testHubHistoryPath": ".test-hub/history.jsonl",
+    "llmSelectionEnabled": true,
+    "llmCliType": "codex",
+    "llmModel": "<model id from the Codex catalogue>",
+    "llmThinkingLevel": "high"
+  }'
+```
+
+The stable levels are:
+
+- `continuous`: only the fixed fast baseline;
+- `work-package`: the baseline plus impacted test projects, packages,
+  configured component rules, and safe Test Hub matches;
+- `full`: the baseline plus every test command from the build profile or
+  repository discovery.
+
+The release boundary always forces `full` and hard-fail mode. It does not honor
+a narrower lane setting. If changed-file evidence is unavailable for an
+ordinary work-package run, the planner also falls back to `full` rather than
+claiming partial coverage.
+
+Test Hub history is JSONL. A row has `testId`, `command`, optional
+`workingSubdir`, `relatedPaths`, `failedAtUtc`, and optional `failure`. History
+can select only commands already in the deterministic test inventory, so the
+history file is not an executable-command injection surface. The optional LLM
+has the same restriction: it may add candidate ids, but it cannot remove the
+diff/history selection or supply shell text.
+
+Every card's build/test pipeline reason states the effective level and whether
+the full suite ran; the passed status icon exposes this reason on hover.
+Detailed reproducibility evidence is stored under the task
+as `post-steps/build-test-gate-*.log`: diff input, history input, candidates,
+chosen ids and commands, model, and rationale. A failing baseline command that
+is outside the selected work package produces
+`post-steps/test-findings-*.json` and a visible `warn`; it does not block the
+card. A selected work-package failure and every pre-main full-suite failure
+remain blocking.
+
 ## Store convention
 
 New project task data always lives below the task-server workspace:

@@ -1,8 +1,12 @@
 using AgentRunner;
+using System.Runtime.InteropServices;
 
 // Standalone remote runner. With a task key it performs the RM-5 one-shot run;
 // without one (or with --poll) it continuously fills bounded host slots. See
 // docs/operations/setup/linux-runner-host.md.
+
+if (args is ["--detached-worker", var detachedSpec])
+    return await DurableAgentProcess.RunWorkerAsync(detachedSpec);
 
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 
@@ -15,14 +19,26 @@ if (help)
 void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [runner] {message}");
 
 var daemonMode = taskKey is null || !once;
-Log($"agent-runner starting: server={options.ServerUrl} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
+Log($"agent-runner starting: server={options.ServerUrl} role={options.Role} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
-    e.Cancel = true; // let the finally-blocks release the lease cleanly
-    Log("shutdown requested (Ctrl+C); finishing teardown...");
+    e.Cancel = true;
+    Log(daemonMode
+        ? "shutdown requested (Ctrl+C); draining daemon without stopping detached jobs..."
+        : "shutdown requested (Ctrl+C); cancelling one-shot run...");
     shutdown.Cancel();
 };
+using var sigterm = !OperatingSystem.IsWindows()
+    ? PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+    {
+        context.Cancel = true;
+        Log(daemonMode
+            ? "planned shutdown requested (SIGTERM); stopping claims and flushing durable slot state..."
+            : "shutdown requested (SIGTERM); cancelling one-shot run...");
+        shutdown.Cancel();
+    })
+    : null;
 
 using var client = new TaskServerClient(options);
 
@@ -47,6 +63,14 @@ if (options.HealthCheckOnly)
 try
 {
     await client.EnsureCompatibleAsync(shutdown.Token);
+    if (options.Role == "review")
+    {
+        if (!daemonMode)
+            throw new ArgumentException("Remote Review Executor runs as a polling service and does not accept coding task keys.");
+        await new RemoteReviewDaemon(options, client, Log).RunAsync(shutdown.Token);
+        Log("review daemon stopped");
+        return 0;
+    }
     if (daemonMode)
     {
         await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);
@@ -98,12 +122,17 @@ static void PrintUsage()
           --server <url>          Task Server base URL       (RUNNER_SERVER_URL)
           --runner-id <id>        Stable runner identity     (RUNNER_ID)
           --runner-name <name>    Board-facing runner name   (RUNNER_NAME)
+          --role <coding|review>  Separate service role      (RUNNER_ROLE)
           --client-id <id>        Attribution label only     (RUNNER_CLIENT_ID)
           --git-remote <url>      Origin the code arrives on  (RUNNER_GIT_REMOTE)
           --git-push-remote <url> Write-only origin pushurl   (RUNNER_GIT_PUSH_REMOTE)
           --branch <name>         Branch to check out         (RUNNER_BRANCH)
           --base-branch <name>    Fallback branch             (RUNNER_BASE_BRANCH)
           --workdir <path>        Checkout + results dir      (RUNNER_WORKDIR)
+          --review-workdir <path> Disposable review root      (RUNNER_REVIEW_WORKDIR)
+          --state-dir <path>      Durable slot/process state  (RUNNER_STATE_DIR)
+          RUNNER_CLAIM_MAX_LOAD_PER_CORE                      Load/core threshold (default 1.5)
+          RUNNER_LOAD_GATE_SUSTAINED_SECONDS                  High-load window (default 120)
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
           --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
           --auth-token-file <p>   Protected credential file  (RUNNER_AUTH_TOKEN_FILE)

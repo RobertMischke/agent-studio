@@ -7,37 +7,21 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import {
+  cellOrder,
+  createSmileyMask,
+  EMPTY_STATE_CELL,
+  EMPTY_STATE_COLS,
+  EMPTY_STATE_CYCLE_MS,
+  EMPTY_STATE_FRAME_MS,
+  EMPTY_STATE_GAP,
+  EMPTY_STATE_ROWS,
+  EMPTY_STATE_STEP_MS,
+  emptyStateFrame,
+  type EmptyStatePhase,
+} from './studio-empty-state.animation';
 
-/**
- * Idle empty-state for the studio editor surface, shown when every tab is
- * closed. A tiny Conway's Game of Life runs on a `<canvas>` ("code +
- * animation" in its purest form) with a rotating funny subtitle.
- *
- * Constraints (task ASS / empty-state):
- * - Pure canvas, no libraries.
- * - Pauses when off-screen (IntersectionObserver) or when the tab is in the
- *   background (`visibilitychange`); cheap when idle.
- * - Respects `prefers-reduced-motion`: renders a single static frame and
- *   never starts the animation loop or the subtitle rotation.
- * - Colours come from the central design tokens (ASS-737): the canvas
- *   inherits `--studio-accent` via CSS `color`, read back as `currentColor`,
- *   so light + dark themes are handled without per-theme JS.
- */
-const COLS = 40;
-const ROWS = 24;
-const CELL = 7; // logical px per cell
-const GAP = 1;
-const STEP_MS = 110; // ~9 fps
 const MAX_AGE = 6;
-
-const SUBTITLES: readonly string[] = [
-  'No tabs open - the cells keep themselves busy.',
-  'Idle. Even the agents are taking a break.',
-  '404 tabs found. Have some cellular automata instead.',
-  'Nothing running. The board is one click away.',
-  '// TODO: open a tab',
-  'git commit -m "nothing to do"',
-];
 
 @Component({
   selector: 'app-studio-empty-state',
@@ -49,21 +33,26 @@ const SUBTITLES: readonly string[] = [
 export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
-  readonly subtitle = signal(SUBTITLES[0]);
+  readonly phase = signal<EmptyStatePhase>('chaos');
+  readonly phaseProgress = signal(0);
   readonly reducedMotion = signal(false);
 
-  private grid = new Uint8Array(COLS * ROWS);
-  private nextGrid = new Uint8Array(COLS * ROWS);
-  private age = new Uint8Array(COLS * ROWS);
+  private grid = new Uint8Array(EMPTY_STATE_COLS * EMPTY_STATE_ROWS);
+  private nextGrid = new Uint8Array(EMPTY_STATE_COLS * EMPTY_STATE_ROWS);
+  private readonly formationGrid = new Uint8Array(EMPTY_STATE_COLS * EMPTY_STATE_ROWS);
+  private readonly smileyMask = createSmileyMask();
+  private readonly age = new Uint8Array(EMPTY_STATE_COLS * EMPTY_STATE_ROWS);
   private ctx: CanvasRenderingContext2D | null = null;
 
   private rafId = 0;
   private lastStep = 0;
+  private lastRender = 0;
+  private cycleStartedAt = 0;
   private running = false;
   private onScreen = true;
   private pageVisible = true;
   private stale = 0;
-  private subtitleTimer = 0;
+  private previousPhase: EmptyStatePhase = 'chaos';
   private io?: IntersectionObserver;
 
   private readonly onVisibility = (): void => {
@@ -78,13 +67,13 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
 
     this.setupCanvas(canvas);
     this.seed();
-    this.render();
 
-    // Reduced motion: a single static frame, no loop, no rotation.
-    if (this.reducedMotion()) return;
-
-    this.subtitle.set(SUBTITLES[Math.floor(Math.random() * SUBTITLES.length)]);
-    this.subtitleTimer = window.setInterval(() => this.rotateSubtitle(), 6000);
+    if (this.reducedMotion()) {
+      this.phase.set('smiley');
+      this.phaseProgress.set(1);
+      this.render('smiley', 1);
+      return;
+    }
 
     document.addEventListener('visibilitychange', this.onVisibility);
     this.pageVisible = document.visibilityState === 'visible';
@@ -92,7 +81,7 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
     if ('IntersectionObserver' in window) {
       this.io = new IntersectionObserver(
         entries => {
-          this.onScreen = entries.some(e => e.isIntersecting);
+          this.onScreen = entries.some(entry => entry.isIntersecting);
           this.syncRunning();
         },
         { threshold: 0.01 },
@@ -104,7 +93,6 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stop();
-    window.clearInterval(this.subtitleTimer);
     this.io?.disconnect();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.onVisibility);
@@ -113,51 +101,47 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
 
   private setupCanvas(canvas: HTMLCanvasElement): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = COLS * (CELL + GAP);
-    const h = ROWS * (CELL + GAP);
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
+    const width = EMPTY_STATE_COLS * (EMPTY_STATE_CELL + EMPTY_STATE_GAP);
+    const height = EMPTY_STATE_ROWS * (EMPTY_STATE_CELL + EMPTY_STATE_GAP);
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    canvas.style.setProperty('--empty-canvas-width', `${width}px`);
     this.ctx?.scale(dpr, dpr);
   }
 
   private seed(): void {
-    for (let i = 0; i < this.grid.length; i++) {
+    for (let index = 0; index < this.grid.length; index++) {
       const alive = Math.random() < 0.28 ? 1 : 0;
-      this.grid[i] = alive;
-      this.age[i] = alive ? 1 : 0;
+      this.grid[index] = alive;
+      this.age[index] = alive ? 1 : 0;
     }
-    // Drop a glider in the corner so there is always some motion to watch.
     this.spawnGlider(2, 2);
+    this.spawnGlider(54, 18);
     this.stale = 0;
   }
 
-  private spawnGlider(cx: number, cy: number): void {
+  private spawnGlider(originX: number, originY: number): void {
     const cells = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]];
     for (const [dx, dy] of cells) {
-      const x = (cx + dx) % COLS;
-      const y = (cy + dy) % ROWS;
-      this.grid[y * COLS + x] = 1;
+      const x = (originX + dx) % EMPTY_STATE_COLS;
+      const y = (originY + dy) % EMPTY_STATE_ROWS;
+      this.grid[y * EMPTY_STATE_COLS + x] = 1;
     }
   }
 
-  private rotateSubtitle(): void {
-    const cur = this.subtitle();
-    let next = cur;
-    while (next === cur) next = SUBTITLES[Math.floor(Math.random() * SUBTITLES.length)];
-    this.subtitle.set(next);
-  }
-
   private syncRunning(): void {
-    const should = this.onScreen && this.pageVisible && !this.reducedMotion();
-    if (should) this.start();
+    const shouldRun = this.onScreen && this.pageVisible && !this.reducedMotion();
+    if (shouldRun) this.start();
     else this.stop();
   }
 
   private start(): void {
     if (this.running) return;
     this.running = true;
+    this.cycleStartedAt = performance.now();
+    this.lastStep = this.cycleStartedAt;
+    this.phaseProgress.set(0);
+    this.render('chaos', 0);
     this.rafId = requestAnimationFrame(this.loop);
   }
 
@@ -167,41 +151,56 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
     this.rafId = 0;
   }
 
-  private readonly loop = (ts: number): void => {
+  private readonly loop = (timestamp: number): void => {
     if (!this.running) return;
     this.rafId = requestAnimationFrame(this.loop);
-    if (ts - this.lastStep < STEP_MS) return;
-    this.lastStep = ts;
-    this.step();
-    this.render();
+
+    const elapsed = (timestamp - this.cycleStartedAt) % EMPTY_STATE_CYCLE_MS;
+    const frame = emptyStateFrame(elapsed);
+    this.handlePhaseChange(frame.phase);
+    this.phaseProgress.set(Math.round(frame.progress * 10) / 10);
+
+    if (frame.phase === 'chaos' && timestamp - this.lastStep >= EMPTY_STATE_STEP_MS) {
+      this.lastStep = timestamp;
+      this.stepLife();
+    }
+    if (timestamp - this.lastRender >= EMPTY_STATE_FRAME_MS) {
+      this.lastRender = timestamp;
+      this.render(frame.phase, frame.progress);
+    }
   };
 
-  private step(): void {
+  private handlePhaseChange(nextPhase: EmptyStatePhase): void {
+    if (nextPhase === this.previousPhase) return;
+    if (nextPhase === 'forming') this.formationGrid.set(this.grid);
+    if (nextPhase === 'chaos' && this.previousPhase === 'decay') this.seed();
+    this.previousPhase = nextPhase;
+    this.phase.set(nextPhase);
+  }
+
+  private stepLife(): void {
     let live = 0;
     let changed = 0;
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const idx = y * COLS + x;
-        const n = this.neighbours(x, y);
-        const was = this.grid[idx];
-        const now = was ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
-        this.nextGrid[idx] = now;
-        if (now) {
+    for (let y = 0; y < EMPTY_STATE_ROWS; y++) {
+      for (let x = 0; x < EMPTY_STATE_COLS; x++) {
+        const index = y * EMPTY_STATE_COLS + x;
+        const neighbours = this.neighbours(x, y);
+        const wasAlive = this.grid[index];
+        const isAlive = wasAlive
+          ? (neighbours === 2 || neighbours === 3 ? 1 : 0)
+          : (neighbours === 3 ? 1 : 0);
+        this.nextGrid[index] = isAlive;
+        if (isAlive) {
           live++;
-          this.age[idx] = was ? Math.min(this.age[idx] + 1, MAX_AGE) : 1;
+          this.age[index] = wasAlive ? Math.min(this.age[index] + 1, MAX_AGE) : 1;
         } else {
-          this.age[idx] = 0;
+          this.age[index] = 0;
         }
-        if (now !== was) changed++;
+        if (isAlive !== wasAlive) changed++;
       }
     }
-    const tmp = this.grid;
-    this.grid = this.nextGrid;
-    this.nextGrid = tmp;
-
-    // Reseed when the colony dies out or freezes into a still life so the
-    // animation never settles into a boring static frame.
-    if (live < 6 || changed === 0) {
+    [this.grid, this.nextGrid] = [this.nextGrid, this.grid];
+    if (live < 8 || changed === 0) {
       if (++this.stale > 3) this.seed();
     } else {
       this.stale = 0;
@@ -209,37 +208,59 @@ export class StudioEmptyStateComponent implements AfterViewInit, OnDestroy {
   }
 
   private neighbours(x: number, y: number): number {
-    let n = 0;
+    let count = 0;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (dx === 0 && dy === 0) continue;
-        const nx = (x + dx + COLS) % COLS;
-        const ny = (y + dy + ROWS) % ROWS;
-        n += this.grid[ny * COLS + nx];
+        const nx = (x + dx + EMPTY_STATE_COLS) % EMPTY_STATE_COLS;
+        const ny = (y + dy + EMPTY_STATE_ROWS) % EMPTY_STATE_ROWS;
+        count += this.grid[ny * EMPTY_STATE_COLS + nx];
       }
     }
-    return n;
+    return count;
   }
 
-  private render(): void {
+  private render(phase: EmptyStatePhase, progress: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const canvas = this.canvasRef().nativeElement;
-    const color = getComputedStyle(canvas).color || '#e08a3c';
-    const w = COLS * (CELL + GAP);
-    const h = ROWS * (CELL + GAP);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = color;
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const idx = y * COLS + x;
-        if (!this.grid[idx]) continue;
-        // Newly born cells are brightest; survivors fade toward a dim glow,
-        // giving the colony a hypnotic "comet trail" texture.
-        ctx.globalAlpha = 0.35 + 0.65 * (1 - (this.age[idx] - 1) / MAX_AGE);
-        ctx.fillRect(x * (CELL + GAP), y * (CELL + GAP), CELL, CELL);
-      }
+    const width = EMPTY_STATE_COLS * (EMPTY_STATE_CELL + EMPTY_STATE_GAP);
+    const height = EMPTY_STATE_ROWS * (EMPTY_STATE_CELL + EMPTY_STATE_GAP);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = getComputedStyle(canvas).color;
+
+    for (let index = 0; index < this.grid.length; index++) {
+      const alpha = this.cellAlpha(index, phase, progress);
+      if (alpha <= 0) continue;
+      const x = index % EMPTY_STATE_COLS;
+      const y = Math.floor(index / EMPTY_STATE_COLS);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(
+        x * (EMPTY_STATE_CELL + EMPTY_STATE_GAP) + EMPTY_STATE_CELL / 2,
+        y * (EMPTY_STATE_CELL + EMPTY_STATE_GAP) + EMPTY_STATE_CELL / 2,
+        EMPTY_STATE_CELL / 2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
+
+  private cellAlpha(index: number, phase: EmptyStatePhase, progress: number): number {
+    const order = cellOrder(index);
+    if (phase === 'smiley') return this.smileyMask[index] ? 0.94 : 0;
+    if (phase === 'forming') {
+      const reveal = this.smileyMask[index] && progress > order * 0.82 ? Math.min(1, progress * 1.5) : 0;
+      const dissolve = this.formationGrid[index] ? Math.max(0, 1 - progress * (0.65 + order * 0.7)) : 0;
+      return Math.max(reveal, dissolve);
+    }
+    if (phase === 'decay') {
+      if (!this.smileyMask[index] || progress > order * 0.82 + 0.12) return 0;
+      return 0.94 * Math.max(0, 1 - progress);
+    }
+    if (!this.grid[index]) return 0;
+    return 0.35 + 0.65 * (1 - (this.age[index] - 1) / MAX_AGE);
   }
 }

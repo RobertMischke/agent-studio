@@ -268,9 +268,9 @@
       <li><b>Observe the gap.</b> Compare the stated goal with active cards, completed work, dependency state, and actual
           evidence. Reuse or reprioritise matching cards first.</li>
       <li><b>Create an Epic only when useful.</b> The global orchestrator may create a <code>kind=epic</code> card in
-          Ready. Its prompt records a goal-plan provenance header with the initiator, goal, observed gap, overlap check,
-          constraints, and acceptance criteria. This makes the root planning decision inspectable without adding a new
-          task schema.</li>
+          Ready. Its prompt starts with a <code>Goal-plan provenance</code> section containing
+          <code>Initiated by: global-orchestrator</code>, the goal, observed gap, overlap check, constraints, and
+          acceptance criteria. This makes the root planning decision inspectable without adding a new task schema.</li>
       <li><b>Use the shipped planning path.</b> <code>EpicDecompositionLifecycle</code>,
           <code>EpicDecompositionParser</code>, and <code>EpicSubTaskFactory</code> turn the Epic's ordered
           <code>title</code>/<code>prompt</code> plan into child cards. Each child carries <code>epicId</code>; the source
@@ -283,10 +283,13 @@
           transition anchors, merge facts, and derived landed state for executed cards. It proves where delivered work
           lives; it is not repurposed as a second task-creation record.</li>
     </ol>
-    <p>The distinction matters. The current Epic parser persists <code>title</code> and <code>prompt</code>; it does not
-       itself persist local plan ids, purpose fields, or dependency edges. Dependency intent therefore stays explicit in
-       each generated prompt until the global orchestrator translates it into the existing stable-key reference graph.
-       Documentation and prompts must not claim a parallel <code>creationProvenance</code> or plan-DAG mechanism.</p>
+    <p>The distinction matters. The current Epic parser contract has no fields for local plan ids, purpose, or
+       dependency edges; plan intent therefore travels inside each child's <code>prompt</code>. The Epic prompt's
+       initiator record,
+       each child's <code>epicId</code>, and the planning-spawn ledger together make orchestrator-created work
+       recognisable. Dependency intent stays explicit in each generated prompt until the global orchestrator translates
+       it into the existing stable-key reference graph. Documentation and prompts must not claim a parallel
+       <code>creationProvenance</code> or plan-DAG mechanism.</p>
 
     <h3>Validation is planned work</h3>
     <p>The orchestrator may include an independent verification card in the decomposition and set it to wait on every

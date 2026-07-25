@@ -1,7 +1,7 @@
 namespace AgentRunner;
 
 // Protocol-v0 compatibility declarations for the co-hosted legacy backend.
-// Separated Task Server protocol v1 uses the shared TaskServer.Contracts package.
+// Separated Task Server protocols use the shared TaskServer.Contracts package.
 // Delete these declarations when the published compatibility window drops v0;
 // they must not become a second durable model or expand with new v1 features.
 //
@@ -41,7 +41,10 @@ public sealed record RunLeaseAcquireRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? RepositoryId = null,
+    string? SourceRunAttemptId = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Runner -> Server: heartbeat to extend the lease (/api/runner/lease/renew).</summary>
 public sealed record RunLeaseHeartbeatRequest(
@@ -49,14 +52,21 @@ public sealed record RunLeaseHeartbeatRequest(
     string LeaseId,
     long FencingToken,
     string RunnerId,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null,
+    RunnerProcessInventory? Inventory = null);
 
 /// <summary>Runner -> Server: drop the lease when the run ends (/api/runner/lease/release).</summary>
 public sealed record RunLeaseReleaseRequest(
     string TaskKey,
     string LeaseId,
     long FencingToken,
-    string RunnerId);
+    string RunnerId,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(
@@ -69,7 +79,13 @@ public sealed record RunLeaseInfoDto(
     string LeaseId,
     long FencingToken,
     DateTime AcquiredAt,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    string? AttemptId = null,
+    long AuthorityEpoch = 0)
+{
+    public DateTime LastHeartbeatAt { get; init; } = AcquiredAt;
+    public string? ClientId { get; init; }
+}
 
 /// <summary>
 /// Server reply to any lease operation. <see cref="Granted"/> is the boolean the
@@ -80,7 +96,8 @@ public sealed record RunLeaseResponse(
     string Outcome,
     bool Granted,
     RunLeaseInfoDto? Lease,
-    string? Message = null);
+    string? Message = null,
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
 
 public sealed record RunnerClaimRequest(
     string RunnerId,
@@ -90,7 +107,43 @@ public sealed record RunnerClaimRequest(
     string BackendName,
     int? RequestedTtlSeconds = null,
     HostTelemetrySample? Telemetry = null,
-    int AvailableSlots = 1);
+    int AvailableSlots = 1,
+    int? ActiveSlots = null,
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? ActiveTaskKeys = null,
+    RunnerProcessInventory? Inventory = null);
+
+public sealed record RunnerProcessInventory(
+    DateTime ObservedAt,
+    IReadOnlyList<RunnerProcessInfo> Processes,
+    IReadOnlyList<RunnerInvariantReport>? Reports = null,
+    IReadOnlyList<string>? AcknowledgedActionIds = null);
+
+public sealed record RunnerProcessInfo(
+    string RunId,
+    string TaskKey,
+    int Pid,
+    string Cwd,
+    DateTime StartedAt);
+
+public sealed record RunnerInvariantReport(
+    string ReportId,
+    string Category,
+    DateTime DetectedAt,
+    string Action,
+    string Detail,
+    string? RunId = null,
+    string? TaskKey = null,
+    int? Pid = null);
+
+public sealed record RunnerReconciliationAction(
+    string ActionId,
+    string Category,
+    string Action,
+    string Detail,
+    int? Pid = null,
+    string? RunId = null,
+    string? TaskKey = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(
@@ -119,7 +172,93 @@ public sealed record RunnerClaimResponse(
     string? Message = null,
     string? ProjectId = null,
     string? RepositoryUrl = null,
-    string? DefaultBranch = null);
+    string? DefaultBranch = null,
+    string? TaskKind = null,
+    string? RunId = null,
+    string? LeaseInstanceId = null,
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
+
+public static class RemoteChatWorkKinds
+{
+    public const string Inspect = "project-chat-inspect";
+    public const string Turn = "project-chat-turn";
+}
+
+public static class RemoteChatWorkClaimStatuses
+{
+    public const string Claimed = "claimed";
+    public const string Empty = "empty";
+}
+
+public sealed record RemoteChatWorkClaimRequest(
+    string RunnerId,
+    string RunnerName,
+    string Hostname);
+
+public sealed record RemoteChatWorkClaimResponse(
+    string Status,
+    RemoteChatWorkItem? Work = null);
+
+public sealed record RemoteChatWorkItem(
+    string WorkId,
+    string ClaimToken,
+    string Kind,
+    string ProjectId,
+    string ProjectName,
+    string RepositoryUrl,
+    string DefaultBranch,
+    string? Prompt,
+    string? Model,
+    string? ThinkingLevel,
+    DateTime CreatedAt,
+    DateTime ClaimExpiresAt);
+
+public sealed record RemoteChatWorkRenewRequest(
+    string WorkId,
+    string ClaimToken,
+    string RunnerId);
+
+public sealed record RemoteChatWorkCompletionRequest(
+    string WorkId,
+    string ClaimToken,
+    string RunnerId,
+    bool Success,
+    string? ReplyText,
+    string? Model,
+    OrchestratorTokenUsage? TokenUsage,
+    string? ErrorMessage,
+    ChatExecutionContext? ExecutionContext);
+
+public sealed record OrchestratorTokenUsage
+{
+    public string? Model { get; init; }
+    public int InputTokens { get; init; }
+    public int OutputTokens { get; init; }
+    public int CacheReadTokens { get; init; }
+    public int CacheCreationTokens { get; init; }
+}
+
+public sealed record ChatExecutionContext(
+    string ExecutionKind,
+    string HostName,
+    string? RepoPath,
+    string? Branch,
+    string? HeadSha,
+    string State,
+    DateTime CapturedAt);
+
+public sealed record RemoteEpicPlanningPromptRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string WorkingDirectory);
+
+public sealed record RemoteEpicPlanningPromptResponse(
+    string Prompt,
+    string? CliType,
+    string? Model,
+    string? ThinkingLevel);
 
 /// <summary>Runner -> Server: fenced normal completion after the remote CLI exits.</summary>
 public sealed record RemoteRunCompletionRequest(
@@ -143,13 +282,25 @@ public sealed record RemoteRunCompletionRequest(
     string? SalvageRecoveryBranchUrl = null,
     string? SalvageAuthoritativeBaseBranch = null,
     string? SalvageAuthoritativeBaseSha = null,
-    string? Repository = null);
+    string? Repository = null,
+    // AGT-2178: additive Epic-planning fields; salvage fields above stay intact.
+    IReadOnlyList<string>? OutputLines = null,
+    bool SourceMutated = false,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? GateItems = null,
+    AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,
     string Outcome,
     string TargetState,
-    string? Message = null);
+    string? Message = null,
+    string? RunAttemptId = null,
+    string? ReviewAttemptId = null,
+    string? ReviewSubjectId = null,
+    string? FailureClassification = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
@@ -160,7 +311,11 @@ public sealed record LogIngestRequest(
     List<CliOutputLine> Lines,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -173,7 +328,11 @@ public sealed record ArtifactIngestRequest(
     List<RunnerArtifactUpload> Artifacts,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record ArtifactIngestResponse(
     string TaskKey,

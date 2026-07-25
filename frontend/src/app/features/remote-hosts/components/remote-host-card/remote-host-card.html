@@ -30,14 +30,33 @@
   </div>
 
   <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">
-    <div><span>Agent sessions</span><strong>{{ stale() ? '-' : sessionCount() }}</strong></div>
-    <div><span>Running tasks</span><strong>{{ stale() ? '-' : (h.activeTaskCount ?? 0) }}</strong></div>
     <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
     <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
     <div><span>Daemon</span><strong>{{ daemonLabel() }}</strong></div>
     <div><span>Last claim</span><strong>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'none' }}</strong></div>
-    <div><span>Slots</span><strong>{{ slotsLabel() }}</strong></div>
     <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
+  </section>
+
+  <section class="workloads" data-testid="remote-host-workloads" aria-label="Host workload classes">
+    <div class="workloads__head">
+      <strong>Host work</strong>
+      <span>Process and event truth; lane/claim drift is not folded into these counts.</span>
+    </div>
+    <div class="workloads__grid">
+      <article class="workload" data-testid="remote-host-run-pool">
+        <span class="workload__kind">RUN slots</span>
+        <strong>{{ runSlotsLabel() }}</strong>
+        <small>Daemon telemetry · coding and agent runs</small>
+      </article>
+      <article class="workload" data-testid="remote-host-gate-pool">
+        <span class="workload__kind">GATE work</span>
+        <strong>{{ gateWorkLabel() }}</strong>
+        <small>Gate events · SSH build/test gates outside RUN slots</small>
+      </article>
+    </div>
+    <p class="workloads__explain" data-testid="remote-host-cpu-context">
+      CPU and host load include GATE work and other processes. GATE work does not consume a RUN slot.
+    </p>
   </section>
 
   @if (stale() && !retired()) {
@@ -52,7 +71,9 @@
     </ul>
   }
 
-  @if (meters().length) {
+  @if (h.telemetryLoading) {
+    <p class="host__no-stats" data-testid="remote-host-telemetry-loading">Loading live system telemetry…</p>
+  } @else if (meters().length) {
     <div class="meters" data-testid="remote-host-vitals">
       @for (m of meters(); track m.key) {
         <div class="meter" [attr.data-meter]="m.key">
@@ -94,14 +115,59 @@
         </div>
       }
       <div class="telemetry__charts">
-        @for (row of chartRows(); track row.key) {
-          <div class="telemetry__row" [attr.data-chart]="row.key">
+        <div class="telemetry__labels" aria-hidden="true">
+          @for (row of chartRows(); track row.key) {
             <span>{{ row.label }}</span>
-            <svg viewBox="0 0 100 30" preserveAspectRatio="none" role="img" [attr.aria-label]="row.label + ' history'">
+          }
+        </div>
+        <div class="telemetry__plots"
+             data-testid="remote-host-telemetry-plots"
+             tabindex="0"
+             role="group"
+             aria-label="Performance history. Hover, tap, or use arrow keys to inspect exact values."
+             (pointerdown)="showTelemetryPoint($event)"
+             (pointermove)="showTelemetryPoint($event)"
+             (pointerleave)="hideTelemetryPoint($event)"
+             (focus)="focusTelemetry()"
+             (blur)="clearTelemetryHover()"
+             (keydown)="moveTelemetryHover($event)">
+          @for (row of chartRows(); track row.key) {
+            <svg [attr.data-chart]="row.key"
+                 viewBox="0 0 100 30"
+                 preserveAspectRatio="none"
+                 role="img"
+                 [attr.aria-label]="row.label + ' history'">
               <polyline [attr.points]="row.path"></polyline>
+              @if (row.hoverY !== null) {
+                <circle class="telemetry__point"
+                        [attr.cx]="hoveredTelemetry()?.position"
+                        [attr.cy]="row.hoverY"
+                        r="1.8"></circle>
+              }
             </svg>
-          </div>
-        }
+          }
+          @if (hoveredTelemetry(); as hovered) {
+            <span class="telemetry__crosshair"
+                  aria-hidden="true"
+                  [style.left.%]="hovered.position"></span>
+            <div class="telemetry__tooltip"
+                 [class.telemetry__tooltip--start]="hovered.position < 20"
+                 [class.telemetry__tooltip--end]="hovered.position > 80"
+                 [style.left.%]="hovered.position"
+                 [attr.data-point-index]="hovered.index"
+                 [attr.data-point-timestamp]="hovered.point.timestamp"
+                 data-testid="remote-host-telemetry-tooltip"
+                 role="tooltip">
+              <time [attr.datetime]="hovered.point.timestamp">{{ hovered.point.timestamp | date:'medium' }}</time>
+              <div class="telemetry__tooltip-values">
+                @for (detail of hovered.values; track detail.key) {
+                  <span>{{ detail.label }}</span>
+                  <strong [attr.data-metric]="detail.key">{{ detail.value }}</strong>
+                }
+              </div>
+            </div>
+          }
+        </div>
       </div>
     </section>
   }

@@ -133,9 +133,16 @@ public static class ProjectDocsEndpoints
         app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            // Pulse is the lifecycle overview, so it deliberately includes
+            // settled Workbenches. Explorer keeps its current-only default.
+            var catalogue = workbenches.List(projectName, includeHistory: true);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
+                : Results.Ok(pulse with
+                {
+                    Workbenches = catalogue,
+                    Lifecycle = ProjectDocsService.MergeWorkbenchLifecycle(pulse.Lifecycle, catalogue),
+                });
         });
 
         // One directory level of the wiki for the folder-overview surface:
@@ -177,6 +184,23 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(home);
         });
 
+        // Shared, versioned Wiki Overview curation. This is intentionally
+        // separate from operator-local stars: pins mutate home.json and are
+        // visible to everyone, including agents that use the Overview.
+        app.MapPut("/api/projects/{projectName}/wiki/home/pins/{**relPath}",
+            (string projectName, string relPath, WikiHomePinRequest body,
+                ProjectDocsService docs, GitService git) =>
+            {
+                var rel = Normalize(relPath);
+                if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+                var result = docs.SetWikiHomePin(
+                    projectName, rel, body.Pinned, body.SectionTitle, body.Label, body.Note);
+                if (!result.Success) return Results.BadRequest(new { error = result.Error });
+                return CommitWikiChange(
+                    git, projectName, result.FullPath!,
+                    body.Pinned ? $"wiki: pin {rel} to home" : $"wiki: unpin {rel} from home");
+            });
+
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
             var file = docs.ReadWikiFile(projectName, relPath);
@@ -208,6 +232,24 @@ public static class ProjectDocsEndpoints
                 ? Results.Ok(new { relPath = rel, saved = true, changed = true, sha = commit.Sha, branch })
                 : Results.BadRequest(new { error = commit.Error, branch });
         });
+
+        // Page lifecycle metadata. Archive changes classification only: the
+        // source page remains readable, linkable, and recoverable.
+        app.MapPut("/api/projects/{projectName}/wiki/classification/{**relPath}",
+            (string projectName, string relPath, WikiClassificationRequest body,
+                ProjectDocsService docs, WikiCompanionStore companions, GitService git) =>
+            {
+                var rel = Normalize(relPath);
+                if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+                var status = body.Status?.Trim().ToLowerInvariant();
+                if (status is not ("archived" or "aktuell"))
+                    return Results.BadRequest(new { error = "status must be 'archived' or 'aktuell'" });
+                var result = docs.SetWikiClassificationStatus(projectName, rel, status, companions);
+                if (!result.Success) return Results.BadRequest(new { error = result.Error });
+                return CommitWikiChange(
+                    git, projectName, result.FullPath!,
+                    $"wiki: classify {rel} as {status}");
+            });
 
         // Serves images/diagrams referenced from wiki docs so relative
         // `![](images/foo.png)` paths render in place. Markdown-only docs go
@@ -272,6 +314,8 @@ public static class ProjectDocsEndpoints
         // Move/rename a wiki node (file or folder) via git mv + commit.
         app.MapPost("/api/projects/{projectName}/wiki/move", (string projectName, WikiMoveRequest body, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var from = Normalize(body.FromRelPath);
             var to = Normalize(body.ToRelPath);
             if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
@@ -308,6 +352,8 @@ public static class ProjectDocsEndpoints
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var rel = Normalize(relPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var full = docs.ResolveWikiNodeFullPath(projectName, rel);
@@ -397,3 +443,9 @@ public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
 public record WikiFolderOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
 public record WikiSaveRequest(string? Content);
+public record WikiClassificationRequest(string? Status);
+public record WikiHomePinRequest(
+    bool Pinned,
+    string? SectionTitle,
+    string? Label,
+    string? Note);

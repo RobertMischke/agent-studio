@@ -22,37 +22,49 @@ internal static class TaskJsonFile
     /// </summary>
     internal static void UpdateField(string jobDir, string fieldName, object value, ILogger logger)
     {
-        var jobJsonPath = Path.Combine(jobDir, "task.json");
-        if (!File.Exists(jobJsonPath)) return;
-
+        if (!File.Exists(Path.Combine(jobDir, "task.json"))) return;
         try
         {
-            var json = File.ReadAllText(jobJsonPath);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
-                      ?? new Dictionary<string, JsonElement>();
-
-            var updated = new Dictionary<string, object>();
-            var inserted = false;
-            foreach (var kv in doc)
-            {
-                if (kv.Key == fieldName)
-                {
-                    updated[fieldName] = value;
-                    inserted = true;
-                }
-                else
-                {
-                    updated[kv.Key] = kv.Value;
-                }
-            }
-            if (!inserted) updated[fieldName] = value;
-
-            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+            UpdateFieldOrThrow(jobDir, fieldName, value);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update field {Field} in task.json at {Dir}", fieldName, jobDir);
         }
+    }
+
+    /// <summary>
+    /// Strict counterpart used by multi-file mutations that must roll back
+    /// when any write fails. Unlike <see cref="UpdateField"/>, this method
+    /// never turns a failed write into an apparent success.
+    /// </summary>
+    internal static void UpdateFieldOrThrow(string jobDir, string fieldName, object value)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
+        if (!File.Exists(jobJsonPath))
+            throw new FileNotFoundException("task.json was not found", jobJsonPath);
+
+        var json = File.ReadAllText(jobJsonPath);
+        var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                  ?? new Dictionary<string, JsonElement>();
+
+        var updated = new Dictionary<string, object>();
+        var inserted = false;
+        foreach (var kv in doc)
+        {
+            if (kv.Key == fieldName)
+            {
+                updated[fieldName] = value;
+                inserted = true;
+            }
+            else
+            {
+                updated[kv.Key] = kv.Value;
+            }
+        }
+        if (!inserted) updated[fieldName] = value;
+
+        File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
     }
 
     /// <summary>

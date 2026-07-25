@@ -1,11 +1,21 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "architecture-quality-layer",
   "title": "Architecture and quality layer",
   "summary": "Explore the Project Map, applicable guides, analysis history, and evidence-backed component grading contracts.",
   "entrypoint": "index.html",
-  "status": "active",
+  "pageKind": "workbench",
+  "lifecycleState": "review-requested",
   "phase": "decision-ready",
-  "updatedAt": "2026-07-13T21:45:00Z",
+  "editedBy": "Codex / AGT-2137",
+  "editedAt": "2026-07-21T05:46:33Z",
+  "lifecycleHistory": [
+    {
+      "state": "review-requested",
+      "editedBy": "Codex / AGT-2137",
+      "editedAt": "2026-07-21T05:46:33Z",
+      "note": "Migrated the active decision-ready state to the shared page lifecycle."
+    }
+  ],
   "sourceTaskKeys": ["AGT-2126", "AGT-2127", "AGT-2128"]
 }

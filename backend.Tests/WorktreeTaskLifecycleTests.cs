@@ -56,6 +56,68 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void TwoParallelLocalFolderRuns_SameProject_NeverSeeEachOthersUncommittedFiles()
+    {
+        var (repo, life) = SeedWithDevelop("parallel-isolation");
+        var taskStorage = Path.Combine(_tempDir, "central-task-storage", "PROJ-015");
+        Directory.CreateDirectory(taskStorage);
+        var entry = new WatchPathEntry
+        {
+            Name = "Token Economy",
+            Path = taskStorage,
+            RootPath = taskStorage,
+            RepositoryPath = repo,
+        };
+        var repositoryRoot = BuildGitService(repo).ResolveRepositoryRoot(entry);
+        var worktreeRoot = WorktreeRoot();
+        var first = life.Prepare(repositoryRoot!, "TE-20", "develop", worktreeRoot);
+        var second = life.Prepare(repositoryRoot!, "TE-21", "develop", worktreeRoot);
+
+        Assert.Equal(Path.GetFullPath(repo), repositoryRoot);
+        Assert.True(first.Success, first.Error);
+        Assert.True(second.Success, second.Error);
+        Assert.NotEqual(first.WorktreePath, second.WorktreePath);
+        Assert.Equal(
+            RunGit(first.WorktreePath!, "rev-parse HEAD").Out.Trim(),
+            RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
+
+        Parallel.Invoke(
+            () => File.WriteAllText(Path.Combine(first.WorktreePath!, "first-run.txt"), "first"),
+            () => File.WriteAllText(Path.Combine(second.WorktreePath!, "second-run.txt"), "second"));
+
+        Assert.True(File.Exists(Path.Combine(first.WorktreePath!, "first-run.txt")));
+        Assert.False(File.Exists(Path.Combine(first.WorktreePath!, "second-run.txt")));
+        Assert.True(File.Exists(Path.Combine(second.WorktreePath!, "second-run.txt")));
+        Assert.False(File.Exists(Path.Combine(second.WorktreePath!, "first-run.txt")));
+        Assert.False(File.Exists(Path.Combine(repositoryRoot!, "first-run.txt")));
+        Assert.False(File.Exists(Path.Combine(repositoryRoot!, "second-run.txt")));
+        Assert.False(File.Exists(Path.Combine(taskStorage, "first-run.txt")));
+        Assert.False(File.Exists(Path.Combine(taskStorage, "second-run.txt")));
+    }
+
+    [Fact]
+    public void ResolveRepositoryRoot_LocalTaskStoragePath_DoesNotBypassConfiguredRepository()
+    {
+        var (repo, _) = SeedWithDevelop("repository-resolution");
+        var taskStorage = Path.Combine(_tempDir, "central-task-storage", "PROJ-015");
+        Directory.CreateDirectory(taskStorage);
+        var git = BuildGitService(repo);
+        var entry = new WatchPathEntry
+        {
+            Name = "Token Economy",
+            Path = taskStorage,
+            RootPath = taskStorage,
+            RepositoryPath = repo,
+        };
+
+        var resolved = git.ResolveRepositoryRoot(entry);
+
+        Assert.Equal(Path.GetFullPath(repo), resolved);
+        Assert.NotEqual(Path.GetFullPath(taskStorage), resolved);
+        Assert.Null(git.ResolveRepositoryRoot(entry with { RepositoryPath = "" }));
+    }
+
+    [Fact]
     public void DirectMerge_FoldsTaskBranchIntoDevelop_ThenTeardownRemovesEverything()
     {
         var (repo, life) = SeedWithDevelop("direct");
@@ -491,6 +553,10 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         // S11: a holder (e.g. a leftover capture server) keeping the orphan dir
         // busy must yield a precise reject, NOT a confusing 'already exists'
         // collision and NOT a throw — so the runner defers to the next tick.
+        // The "busy" semantics are Windows-specific: POSIX happily removes a
+        // directory whose files are open, so the reject this test asserts can
+        // never occur there (surfaced by the remote ssh-gate on Linux).
+        if (!OperatingSystem.IsWindows()) return;
         var (repo, life) = SeedWithDevelop("por-busy");
         var wtRoot = WorktreeRoot();
         var taskId = "task-busy";

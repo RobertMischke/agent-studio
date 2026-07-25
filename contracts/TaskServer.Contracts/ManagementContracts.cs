@@ -16,7 +16,10 @@ public sealed record TaskServerStatusDto(
     bool AuthorityReady,
     string DataDirectory,
     ProtocolRangeDto Protocol,
-    DateTime StartedAt);
+    DateTime StartedAt,
+    int OutboxBacklog = 0,
+    long? OldestUnacknowledgedSequence = null,
+    IReadOnlyDictionary<string, int>? FinalHandoffStates = null);
 
 public sealed record ChangeModeRequest(TaskServerMode Mode, string Reason);
 public sealed record PrepareShutdownRequest(string Reason);
@@ -26,6 +29,18 @@ public sealed record BackupResult(string BackupId, string Path, string Sha256, D
 public sealed record RestoreRequest(string BackupId, bool VerifyOnly = false);
 public sealed record RestoreResult(string BackupId, bool Verified, bool Restored, string Sha256, string Message);
 public sealed record ResolveUnknownAttemptRequest(string ContainmentProof, string Resolution = "requeue");
+
+public sealed record InvariantDefinitionDto(
+    string Key,
+    string Category,
+    string ComparedTruths,
+    string Violation,
+    string SelfHealingAction);
+
+public sealed record InvariantRegistryDto(
+    IReadOnlyList<InvariantDefinitionDto> Definitions,
+    IReadOnlyList<AuditRecordDto> RecentViolations,
+    int PendingRunnerActions);
 
 public sealed record LegacyMigrationRequest(
     string LegacyRoot,

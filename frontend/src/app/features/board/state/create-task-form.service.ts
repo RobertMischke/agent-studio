@@ -1,12 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, PromoteToCodingResponse, TaskKind, TaskMode, TaskState, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, ComponentRoutingRequest, ComponentRoutingResolution, PromoteToCodingResponse, TaskKind, TaskMode, TaskState, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
 import { CliCatalogStore } from '../../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { sessionFetch } from '../../../services/session-fetch';
+import { PageTaskRequest, pageContextKey } from '../../../models/page-context.model';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
@@ -32,6 +33,9 @@ export class CreateTaskFormService {
   private readonly errorDialog = inject(ErrorDialogService);
 
   readonly visible = signal(false);
+  readonly routing = signal<ComponentRoutingResolution | null>(null);
+  readonly routingPending = signal(false);
+  private routingRequest: ComponentRoutingRequest | null = null;
 
   // Plain mutable fields — these are [(ngModel)]-bound by the dialog and
   // mutated directly. Keeping them as fields (not signals) preserves the
@@ -136,6 +140,100 @@ export class CreateTaskFormService {
   }
 
   /**
+   * Shared page action-bar entry point. The durable task prompt carries the
+   * canonical page reference plus a bounded excerpt so the card preserves its
+   * origin even after the operator closes the page.
+   */
+  openPageTask(
+    request: PageTaskRequest,
+    watchPaths: readonly WatchPathEntry[],
+  ): void {
+    const page = request.context;
+    const watchEntry = watchPaths.find((wp) => wp.name === page.projectName);
+    if (!watchEntry) return;
+
+    const instruction = request.intent === 'build-feature'
+      ? 'Turn the page proposal into a production feature. Reconcile it with current product and architecture contracts, then implement and verify the smallest complete slice.'
+      : request.intent === 'create-follow-up'
+        ? 'Investigate the incident or history evidence, identify the remaining prevention gap, and implement a verified follow-up.'
+        : 'Use this page as the source context for the requested project change. Verify the current implementation before changing it.';
+    const titlePrefix = request.intent === 'build-feature'
+      ? 'Build feature'
+      : request.intent === 'create-follow-up'
+        ? 'Page follow-up'
+        : 'Task from page';
+
+    this.newTargetState = TaskState.Preparation;
+    this.newWatchPath = watchEntry.path;
+    this.newTitle = `${titlePrefix}: ${page.title}`;
+    this.newPrompt = [
+      '# Page-backed task',
+      '',
+      `Source page: \`${pageContextKey(page)}\``,
+      `Page type: ${page.pageType}`,
+      `Project: ${page.projectName}`,
+      '',
+      '## Page excerpt',
+      '',
+      page.excerpt || '(No excerpt available.)',
+      '',
+      '## Requested outcome',
+      '',
+      instruction,
+    ].join('\n');
+    this.newKind = 'task';
+    this.newMode = 'coding';
+    this.loadCreateModels(this.newCliType);
+    this.visible.set(true);
+  }
+
+  /**
+   * Orchestrator-draft "Create task from this draft" action. Title is
+   * derived from the prompt's first non-empty line.
+   */
+  openOrchestratorDraftFollowUp(
+    event: { projectName: string; promptText: string },
+    watchPaths: readonly WatchPathEntry[],
+  ): void {
+    const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
+    if (!watchEntry) return;
+    this.newTargetState = TaskState.Preparation;
+    this.newWatchPath = watchEntry.path;
+    this.newPrompt = event.promptText;
+    this.newTitle = deriveDraftTitle(event.promptText);
+    this.loadCreateModels(this.newCliType);
+    this.visible.set(true);
+    this.routingPending.set(true);
+    this.routingRequest = {
+      observedSurface: 'Agent Studio Orchestrator chat',
+      component: event.promptText,
+      navigationProjectId: event.projectName,
+    };
+    this.jobService.resolveComponentRouting(this.routingRequest).subscribe({
+      next: (route) => {
+        this.routing.set(route);
+        if (route.primaryProject && !route.requiresQuestion) {
+          this.jobService.getRegistryWorkspaces({ includeArchived: true }).subscribe({
+            next: (workspaces) => {
+              const destination = workspaces.flatMap(workspace => workspace.projects)
+                .find(project => project.id === route.storageProjectId);
+              if (destination) this.newWatchPath = destination.storageLocation;
+              this.routingPending.set(false);
+            },
+            error: () => this.routingPending.set(false),
+          });
+        } else {
+          this.routingPending.set(false);
+        }
+      },
+      error: () => {
+        this.routingPending.set(false);
+        this.routing.set(null);
+      },
+    });
+  }
+
+  /**
    * "Promote to coding task" from a finished planning task's Overview. The
    * caller (overview-pane) has already fetched the pre-fill payload from
    * `GET /promote-to-coding` and turned each copyable image into a
@@ -212,6 +310,9 @@ export class CreateTaskFormService {
     this.availableModels.set([]);
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
+    this.routing.set(null);
+    this.routingPending.set(false);
+    this.routingRequest = null;
   }
 
   /**
@@ -220,6 +321,15 @@ export class CreateTaskFormService {
    * fire `submitted$` so the shell can refresh.
    */
   submit(): void {
+    const route = this.routing();
+    if (this.routingPending() || route?.requiresQuestion) {
+      this.errorDialog.show(new Error(route?.questionReason || 'Ownership routing is still being resolved.'), {
+        title: 'Resolve task ownership',
+        fallbackMessage: 'Choose the primary owner before creating this task.',
+        source: 'Task routing',
+      });
+      return;
+    }
     const attachments = this.newAttachments;
     const promptDraft = this.newPrompt.trim();
     const watchPath = this.newWatchPath;
@@ -248,6 +358,8 @@ export class CreateTaskFormService {
       epicId: this.newKind === 'task' && this.newEpicId ? this.newEpicId : undefined,
       mode: this.newMode,
       allowWebAccess: this.newAllowWebAccess,
+      routing: this.routingRequest ?? undefined,
+      requestedTaskPrefix: route?.allowedTicketPrefix ?? undefined,
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);
@@ -375,6 +487,16 @@ function readDefaultModelPref(cliType: CliType): string {
 
 function readDefaultThinkingLevelPref(cliType: CliType): string | null {
   return localStorage.getItem('defaultThinkingLevel:' + cliType) ?? null;
+}
+
+function deriveDraftTitle(text: string): string {
+  if (!text) return '';
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/^#+\s*/, '').replace(/[*_`]/g, '').trim();
+    if (line.length === 0) continue;
+    return line.length > 80 ? line.slice(0, 77).trim() + '...' : line;
+  }
+  return '';
 }
 
 function escapeRegex(s: string): string {

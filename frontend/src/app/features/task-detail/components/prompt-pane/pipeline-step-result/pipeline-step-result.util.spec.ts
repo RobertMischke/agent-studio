@@ -105,4 +105,33 @@ describe('cleanStepResultMarkdown', () => {
     expect(out).toContain('```ts');
     expect(out).toContain('const a = 1;');
   });
+
+  it('replaces a raw codex JSONL event dump with the agent_message text', () => {
+    const raw = [
+      '## Reviewer reply',
+      '',
+      '{"type":"thread.started","thread_id":"019f8c22-77c2"}',
+      '{"type":"turn.started"} {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Quality-Grade B. The change works.\\n\\n[[CODE_REVIEW_GRADE: grade=B; summary=Done.]]\\n\\n[[TASK_DONE]]"}}',
+      '{"type":"turn.completed","usage":{"input_tokens":38104,"output_tokens":8794}}',
+    ].join('\n');
+    const out = cleanStepResultMarkdown(raw);
+    expect(out).toContain('Quality-Grade B. The change works.');
+    expect(out).not.toContain('"type"');
+    expect(out).not.toContain('thread.started');
+    expect(out).not.toContain('input_tokens');
+    expect(out).not.toContain('CODE_REVIEW_GRADE');
+    expect(out).not.toContain('[[TASK_DONE]]');
+  });
+
+  it('leaves prose containing braces untouched when it is not an event dump', () => {
+    const raw = [
+      '## Reviewer reply',
+      '',
+      'Configure it via {"type": "manual"} in the settings file.',
+      'Interfaces like Foo {} stay as written.',
+    ].join('\n');
+    const out = cleanStepResultMarkdown(raw);
+    expect(out).toContain('Configure it via {"type": "manual"} in the settings file.');
+    expect(out).toContain('Interfaces like Foo {} stay as written.');
+  });
 });
