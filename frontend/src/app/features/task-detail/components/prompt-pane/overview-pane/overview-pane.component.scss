@@ -1,46 +1,22 @@
 :host { display: block; }
 
 .overview {
-  // Density overrides scoped to the meta panel. The sections (Status,
-  // Agent, Tokens, Agent Work, Runs) are read together as a
-  // scannable label/value list; the compact defaults were still leaving
-  // ~26px per row, which scrolled out useful sections before the bottom of
-  // the panel. Tightening at the local-token level lets every `.ov-row`
-  // inherit the smaller values without reaching into the global tokens.
   --studio-section-gap: 6px;
   --studio-row-gap: 2px;
   --studio-row-pad-block: 1px;
   --studio-row-min-h: 16px;
 
-  // Single source of truth for the label column. STATUS, AGENT, and the
-  // token rows all read it through `.ov-row`'s grid template, so their
-  // values share one second-column edge by construction.
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
-  // Keep the metric columns visually attached to the step row on wide panes.
-  // The surrounding `.studio-measure--tabular-compact` still owns the section
-  // cap; this track stops the step name from absorbing all spare width inside
-  // that cap and pushing time / tokens / cost to the far edge.
   --ov-pipeline-name-col: fit-content(360px);
   --ov-pipeline-meta-col: minmax(0, max-content);
-  // Slack-absorbing track between the step metadata and the right-pinned
-  // metric block. Every step is its own grid; without one flexible track the
-  // grid left-packs and the leftover space lands AFTER cost, so the
-  // Time / Duration / Tokens / Cost block sits at a different x on each row
-  // (the "krumm und schief" misalignment). A single `1fr` here eats the
-  // remainder identically on every row, anchoring the metric columns to one
-  // shared right edge across all phase groups.
   --ov-pipeline-flex-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
   --ov-pipeline-cost-col: 64px;
   --ov-pipeline-step-indent: var(--studio-spacing-3);
 
-  // Single source of truth for the per-step / header grid. Header and step
-  // rows are separate grids; sharing this one template (not redefining tracks
-  // per row) is what keeps the columns aligned. Container queries below drop
-  // trailing tracks from this list on narrow panes.
   --ov-pl-grid-cols:
     var(--ov-pipeline-status-col)
     var(--ov-pipeline-kind-col)
@@ -89,6 +65,12 @@
 
   &__heading-row > &__title {
     border-bottom: 0;
+  }
+
+  &__heading-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--studio-spacing-1);
   }
 
   &__icon-action {
@@ -565,19 +547,21 @@
   50%      { opacity: 0.4; }
 }
 
-// Pipeline block: one compact row per pre/core/post step. Stage labels use a
-// fixed gutter column, mirroring `.ov-row`'s label/value grid contract so PRE,
-// CORE, ASPECT, TOOL, DRIFT, and DECISION rows share one description edge.
 .ov-pipeline {
+  // Pipeline rows consume the canonical compact density tokens. The parent
+  // Overview carries legacy tighter overrides, so rebind this block explicitly
+  // to the shared scale instead of introducing another density implementation.
+  --studio-row-pad-block: var(--studio-row-pad-block-compact);
+  --studio-row-pad-inline: var(--studio-row-pad-inline-compact);
+  --studio-row-gap: var(--studio-row-gap-compact);
+  --studio-row-min-h: var(--studio-row-min-h-compact);
+  --studio-row-min-h-interactive: var(--studio-row-min-h-interactive-compact);
+
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--studio-row-gap);
   width: 100%;
   max-width: 100%;
-  // Drive the metric-column responsiveness off the pipeline's own width, not
-  // the viewport: this block lives inside a split task-detail pane whose width
-  // is independent of the window. Descendant header/step rows query this via
-  // the `@container ov-pipeline` rules at the bottom of the grid block.
   container-type: inline-size;
   container-name: ov-pipeline;
 
@@ -587,16 +571,19 @@
     --lane-progress: var(--studio-fg-muted); --lane-completed: var(--studio-fg-muted);
     --studio-success: var(--studio-fg-muted); --studio-error: var(--studio-fg-muted);
   }
+
+  &--no-timing { --ov-pipeline-time-col: 0; }
+  &--time-only { --ov-pipeline-time-col: 42px; }
+  &--duration-only { --ov-pipeline-time-col: 56px; }
+  &--no-tokens { --ov-pipeline-tokens-col: 0; }
+  &--no-cost { --ov-pipeline-cost-col: 0; }
 }
 
-// One collapsible pipeline section: the phase-header button plus its (optionally
-// hidden) step rows. Owns the inter-section rhythm so the header button can stay
-// a flush first child.
 .ov-pl-group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  margin-top: var(--studio-spacing-2);
+  gap: 0;
+  margin-top: var(--studio-row-gap);
 
   &:first-child {
     margin-top: 0;
@@ -611,10 +598,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--studio-spacing-2);
+  gap: var(--studio-spacing-1);
   width: 100%;
-  min-height: calc(var(--studio-row-min-h) + var(--studio-row-gap));
-  padding: var(--studio-row-pad-block) var(--studio-spacing-2);
+  min-height: var(--studio-row-min-h-interactive);
+  padding: var(--studio-row-pad-block) var(--studio-row-pad-inline);
   border: 0;
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 10%, var(--studio-bg-hover));
@@ -677,12 +664,11 @@
     cursor: help;
   }
 
-  // Aggregate section state stays readable whether open or collapsed.
   &__summary {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: var(--studio-spacing-2);
+    gap: var(--studio-spacing-1);
     margin-left: auto;
     font-size: 10px;
     color: var(--studio-fg-muted);
@@ -720,10 +706,22 @@
     color: var(--studio-fg-dim);
   }
 
-  // Aggregate tone wins over the phase-identity accent so the header reads as
-  // state first: green when the section passed, amber while it runs, red when
-  // something failed / blocked / needs a decision, dimmed when fully disabled.
-  // Neutral (nothing run yet) keeps the phase-identity accent above.
+  &__meta {
+    max-width: 132px;
+    padding: 1px var(--studio-spacing-1);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--studio-bg-elevated) 72%, transparent);
+    color: var(--studio-fg-muted);
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.ov-value--mono {
+      text-transform: none;
+    }
+  }
+
   &[data-tone='ok']     { --ov-pl-phase-accent: var(--severity-pass); }
   &[data-tone='warn']   { --ov-pl-phase-accent: var(--severity-warn); }
   &[data-tone='concern'] { --ov-pl-phase-accent: var(--severity-warn); }
@@ -734,10 +732,6 @@
   }
 }
 
-// Header row for the per-step metric columns. Sits once above the steps; its
-// cell widths and gaps mirror `.ov-pl-step`'s timing/tokens/cost cells so each
-// caption lines up over its right-aligned values. Pure presentation — quiet,
-// uppercase captions in the label idiom used elsewhere in this panel.
 .ov-pl-header {
   display: grid;
   grid-template-columns: var(--ov-pl-grid-cols);
@@ -746,7 +740,7 @@
   box-sizing: border-box;
   width: calc(100% - var(--ov-pipeline-step-indent));
   padding-block: var(--studio-row-pad-block);
-  padding-inline: var(--studio-spacing-2);
+  padding-inline: var(--studio-row-pad-inline);
   margin-left: var(--ov-pipeline-step-indent);
 
   &::before {
@@ -795,10 +789,7 @@
   width: calc(100% - var(--ov-pipeline-step-indent));
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
-  padding-inline: var(--studio-spacing-2);
-  // Steps sit one level under their phase header. Header and step rows share
-  // the same inset so the metric columns still line up, while the phase band
-  // remains the full-width parent in the hierarchy.
+  padding-inline: var(--studio-row-pad-inline);
   margin-left: var(--ov-pipeline-step-indent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
@@ -810,10 +801,6 @@
   &[data-phase='decision'] { --ov-pl-phase-accent: var(--studio-accent-4); }
   &[data-phase='drift'] { --ov-pl-phase-accent: var(--severity-warn); }
 
-  // Inactive steps: a step that was turned off in project config (disabled,
-  // e.g. "Wiki maintenance OFF") or that the run skipped (e.g. "Orchestrator
-  // prep") reads as struck-through and dimmed so it is unmistakably not part
-  // of what actually ran, without removing it from the ordered list.
   &--disabled,
   &[data-status='skipped'] {
     opacity: 0.5;
@@ -1117,6 +1104,7 @@
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--studio-fg-muted);
+    white-space: nowrap;
   }
 
   // Duration is a primary signal ("how long did this step take"): keep it at

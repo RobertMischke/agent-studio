@@ -1370,6 +1370,8 @@ export interface ProjectRunnerStatus {
   mode: string;
   activeJobId: string | null;
   activeExecution: CliExecution | null;
+  /** Server-authoritative live `3-progress` card count for this project. */
+  runningTaskCount?: number;
   quotaFallbackModel?: string | null;
   quotaFallbackReason?: string | null;
   queuedJobIds: string[];
@@ -1437,6 +1439,11 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  /**
+   * Server-authoritative count of live `3-progress` cards across the visible
+   * projects. Includes local execution slots and active fenced remote leases.
+   */
+  runningCount?: number;
 }
 
 /**

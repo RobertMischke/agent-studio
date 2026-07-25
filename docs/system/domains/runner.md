@@ -146,6 +146,11 @@ state.
   the lease and fence. A remote runner acquires the run lease; the local
   in-process runner uses the disk pickup-lock and holds none, which is exactly
   the lokal-vs-remote signal.
+- `TaskRunnerService.GetStatus` owns the status-bar running count. It counts
+  live `3-progress` cards backed by either a local execution slot or an active
+  fenced run lease, deduplicated by card. `RunnerStatus.RunningCount` is the
+  client contract; consumers do not infer it from local `ActiveJobId` or remote
+  host `ActiveSlots` telemetry.
 
 ## Invariants
 

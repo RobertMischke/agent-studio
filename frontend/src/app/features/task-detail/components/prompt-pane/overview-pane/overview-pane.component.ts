@@ -56,6 +56,10 @@ import {
   buildPipelineGroups,
   groupAriaLabel,
   groupToneLabel,
+  pipelineMetricVisibility,
+  uniformGroupActivation,
+  uniformGroupModel,
+  type PipelineGroupActivationSummary,
   type PipelineGroupVm,
 } from './pipeline-groups.util';
 import {
@@ -86,19 +90,7 @@ interface PipelineRowVm {
   phaseLabel: string;
   phaseDescription: string;
   startsPhase: boolean;
-  /**
-   * 'parallel' for the read-only aspect reviews that run concurrently in the
-   * orchestrator pool; 'sequential' for the core run and the single final
-   * verdict. Drives the "Parallel" badge so the two phases read as distinct.
-   */
   runMode: StepRunMode;
-  /**
-   * True only for the single FINAL orchestrator ruling
-   * (`post-orchestrator-decision`). Drives the "Final verdict" chip and the
-   * row divider so exactly ONE row reads as the final verdict — the post-core
-   * `post-orchestrator-review` early gate (also `orchestrator` kind) is
-   * deliberately NOT tagged, so it shows its own early-gate result instead.
-   */
   isFinalVerdict: boolean;
   /** Historical rows are read-only evidence and never use live state colour. */
   historical: boolean;
@@ -106,7 +98,6 @@ interface PipelineRowVm {
   canDisable: boolean;
   hasExecution: boolean;
   config: PipelineStepConfig | null;
-  /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
@@ -115,46 +106,16 @@ interface PipelineRowVm {
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
-  /**
-   * Whether {@link model} is the pre-run resolved effective model (no run has
-   * recorded one yet) vs the model an actual execution used. Drives a subtler
-   * "will run on" presentation before the run.
-   */
   modelIsResolved: boolean;
-  /** Tooltip explaining where {@link model} comes from (the resolution chain). */
   modelTooltip: StructuredTooltip | null;
-  /**
-   * Whether this row exposes an inline per-step agent selector. The Overview
-   * rows now only display the resolved model; per-step model changes live in
-   * project/global configuration instead of individual aspect rows.
-   */
   modelEditable: boolean;
-  /**
-   * The raw per-step model override stored for this step (`''` = inherit), as
-   * opposed to {@link model} which is the resolved effective model. Bound to
-   * the inline selector so it reflects the persisted knob, not the inherited
-   * value.
-   */
   modelOverride: string;
   thinkingLevelOverride: string | null;
   verdict: string | null;
-  /**
-   * Structured tooltip for the verdict pill, built from the per-aspect
-   * concern summary. Null unless the step flagged a concern, so a pass
-   * verdict never grows a misleading tooltip.
-   */
   concernTooltip: StructuredTooltip | null;
-  /**
-   * Always-present "what does this step do" tooltip shown on hovering the
-   * step name. Keyed by step id with a per-kind fallback so a future
-   * catalogue step still explains itself rather than rendering bare.
-   */
   explanation: StructuredTooltip;
-  /** Recorded wall-clock duration of the step in ms; 0 when not yet run. */
   durationMs: number;
-  /** ISO start stamp from the execution record; null until the step starts. */
   startedAt: string | null;
-  /** ISO end stamp; null while running or before the step is reached. */
   completedAt: string | null;
   tokenUsageSource: string | null;
   inputTokens: number;
@@ -167,10 +128,14 @@ interface PipelineRowVm {
   cacheReadCostUsd: number;
   cacheCreationCostUsd: number;
   costUsd: number;
-  /** False -> the model is not in the price table, render cost as n/a. */
   costKnown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
+}
+
+interface PipelineDisplayGroupVm extends PipelineGroupVm<PipelineRowVm> {
+  uniformModel: string | null;
+  uniformActivation: PipelineGroupActivationSummary | null;
 }
 
 /**
@@ -863,14 +828,7 @@ export class OverviewPaneComponent {
   /** Recorded run count, from the run-timeline. 0 before the first run. */
   readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
 
-  /**
-   * Per-step pipeline rows for the Overview pipeline block. Joins the
-   * static catalogue (ordered pre+core+post, gives label/kind) with the
-   * recorded execution (status/model/verdict/tokens), the derived cost,
-   * and the per-project config (enabled flag + model override). Steps the
-   * project disabled still render — as a struck-through "disabled" row —
-   * so the operator can see what was switched off, not just what ran.
-   */
+  /** Ordered catalogue joined with execution, cost, and project config. */
   readonly pipelineRows = computed<PipelineRowVm[]>(() => {
     const res = this.pipelinePoll.pipeline();
     if (res == null) return [];
@@ -999,6 +957,7 @@ export class OverviewPaneComponent {
       startsPhase: index === 0 || row.phaseKey !== rows[index - 1].phaseKey,
     }));
   });
+  readonly pipelineMetrics = computed(() => pipelineMetricVisibility(this.visiblePipelineRows()));
 
   toggleDisabledPipelineSteps(): void {
     this.hideDisabledPipelineSteps.update(value => !value);
@@ -1008,26 +967,16 @@ export class OverviewPaneComponent {
     this.pipelinePoll.refresh();
   }
 
-  /**
-   * The complete configured pipeline folded into collapsible sections — one per
-   * contiguous run of the same phase (PRE STEPS, CORE AGENT WORK, ASPECT, TOOL,
-   * DECISION, DRIFT, and the repeated TOOL/DECISION runs in the post-bracket).
-   * Each carries the aggregate tone + honest counters ({@link PipelineGroupVm})
-   * the header shows whether expanded or collapsed. Derivation lives in the
-   * dependency-free `pipeline-groups.util` so the grouping/tone/collapse rules
-   * are unit-tested in isolation from this 1800-line host.
-   */
-  readonly pipelineGroups = computed<PipelineGroupVm<PipelineRowVm>[]>(() =>
-    buildPipelineGroups(this.visiblePipelineRows()),
+  /** Contiguous phase groups with aggregate state and compact shared metadata. */
+  readonly pipelineGroups = computed<PipelineDisplayGroupVm[]>(() =>
+    buildPipelineGroups(this.visiblePipelineRows()).map(group => ({
+      ...group,
+      uniformModel: uniformGroupModel(group.rows),
+      uniformActivation: uniformGroupActivation(group.rows),
+    })),
   );
 
-  /**
-   * Explicit per-section collapse choices, keyed by group key
-   * (`${phaseKey}#${occurrence}`). Absent -> the section follows its derived
-   * {@link PipelineGroupVm.defaultCollapsed} (attention sections open, quiet
-   * finished / not-yet-reached sections collapse), so the strip reacts to the
-   * run as it progresses until the operator overrides a section by hand.
-   */
+  /** Explicit choices override derived attention-open, quiet-collapsed state. */
   private readonly groupCollapseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   /** Effective collapse state: an explicit operator choice wins over the default. */
@@ -1056,11 +1005,6 @@ export class OverviewPaneComponent {
     });
   }
 
-  /**
-   * Section-tone label + header accessible name are pure derivations kept in
-   * `pipeline-groups.util` (unit-tested there); bound here so the template can
-   * call them directly.
-   */
   readonly groupToneLabel = groupToneLabel;
   readonly groupAriaLabel = groupAriaLabel;
 

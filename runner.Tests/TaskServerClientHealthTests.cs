@@ -78,6 +78,48 @@ public class TaskServerClientHealthTests
         Assert.Single(handler.Requests);
     }
 
+    [Fact]
+    public async Task Review_plane_only_compatibility_enables_review_but_keeps_coding_on_legacy_routes()
+    {
+        const string response = """
+            {
+              "supported": true,
+              "server": {
+                "current": 2,
+                "minimumSupported": 1,
+                "maximumSupported": 2,
+                "serverVersion": "1.0.0",
+                "serverId": "orchestrator-monolith",
+                "clientKinds": ["runner", "review-runner"],
+                "capabilities": ["review-plane"]
+              }
+            }
+            """;
+        var codingHandler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(response)
+        });
+        using var codingHttp = new HttpClient(codingHandler) { BaseAddress = new Uri("http://task-server") };
+        using var coding = new TaskServerClient(codingHttp, "coding-runner");
+
+        await coding.EnsureCompatibleAsync(CancellationToken.None);
+
+        Assert.False(coding.UsesDurableTaskServer);
+        Assert.Contains("\"clientKind\":\"runner\"", codingHandler.Requests.Single().Body);
+
+        var reviewHandler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(response)
+        });
+        using var reviewHttp = new HttpClient(reviewHandler) { BaseAddress = new Uri("http://task-server") };
+        using var review = new TaskServerClient(reviewHttp, "review-runner", role: "review");
+
+        await review.EnsureCompatibleAsync(CancellationToken.None);
+
+        Assert.True(review.UsesDurableTaskServer);
+        Assert.Contains("\"clientKind\":\"review-runner\"", reviewHandler.Requests.Single().Body);
+    }
+
     /// <summary>
     /// An unreachable server (a closed loopback port stands in for a dropped
     /// reverse tunnel) must be reported as a clean, non-null health reason and
@@ -110,15 +152,16 @@ public class TaskServerClientHealthTests
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
-        public List<(HttpMethod Method, string PathAndQuery, string? ClientId)> Requests { get; } = [];
+        public List<(HttpMethod Method, string PathAndQuery, string? ClientId, string Body)> Requests { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add((
                 request.Method,
                 request.RequestUri?.PathAndQuery ?? string.Empty,
-                request.Headers.TryGetValues("X-Client-Id", out var values) ? values.SingleOrDefault() : null));
-            return Task.FromResult(respond(request));
+                request.Headers.TryGetValues("X-Client-Id", out var values) ? values.SingleOrDefault() : null,
+                request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken)));
+            return respond(request);
         }
     }
 }

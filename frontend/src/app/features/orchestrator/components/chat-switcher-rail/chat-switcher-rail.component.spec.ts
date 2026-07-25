@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { ChatSwitcherRailComponent } from './chat-switcher-rail.component';
 
 describe('ChatSwitcherRailComponent', () => {
@@ -48,5 +50,31 @@ describe('ChatSwitcherRailComponent', () => {
 
     expect(selected).toHaveBeenCalledWith('task:Alpha/A-1');
     expect(navigated).toHaveBeenCalledWith('task:Alpha/A-1');
+  });
+
+  it('explains every chat choice and location action in one sentence', () => {
+    const tooltip = (testId: string, selector: string) => fixture.debugElement
+      .query(By.css(`[data-testid="${testId}"] ${selector}`))
+      .injector.get(AppTooltipDirective)
+      .appTooltip();
+
+    expect(tooltip('chat-switcher-row-global', '.context-list__name')).toBe(
+      'Switch to the workspace-wide chat when your question spans projects and tasks.',
+    );
+    expect(tooltip('chat-switcher-row-project:Alpha', '.context-list__name')).toBe(
+      "Switch to this project's chat when your question concerns the project beyond one task.",
+    );
+    expect(tooltip('chat-switcher-row-task:Alpha/A-1', '.context-list__name')).toBe(
+      "Switch to this task's chat when your question concerns this specific piece of work.",
+    );
+    expect(tooltip('chat-switcher-row-global', '.context-list__navigate')).toBe(
+      'Return to the workspace view when you want to leave a project or task page.',
+    );
+    expect(tooltip('chat-switcher-row-project:Alpha', '.context-list__navigate')).toBe(
+      'Open this project when you want its board and project tools in view.',
+    );
+    expect(tooltip('chat-switcher-row-task:Alpha/A-1', '.context-list__navigate')).toBe(
+      'Open this task when you want to inspect or update the work behind this chat.',
+    );
   });
 });

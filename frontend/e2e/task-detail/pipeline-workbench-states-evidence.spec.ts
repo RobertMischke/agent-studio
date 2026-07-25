@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import * as path from 'path';
+import { writeFile } from 'fs/promises';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline workbench state evidence (ASS-1914).
@@ -51,7 +53,10 @@ function step(id: string, displayName: string, kind: string, runMode: string, ex
   return { id, displayName, kind, runMode, dependsOn: [], idempotent: true, stub: false, ...extra };
 }
 
-// A realistic configured shape: pre / core / two aspects / tool / decision / drift.
+// A realistic full configured shape: pre / core / four aspects / three tools /
+// two decisions / drift. Keeping repeated kinds contiguous exercises both the
+// dense rows and the group-level metadata rollups without manufacturing extra
+// phase headers.
 const pre = [
   step('pre-loop-guard', 'Loop guard', 'module', 'sequential'),
   step('pre-model-qualification', 'Model qualification', 'module', 'sequential'),
@@ -61,7 +66,12 @@ const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
   step('aspect-code-quality', 'Code quality', 'aspect', 'parallel'),
+  step('aspect-runtime-safety', 'Runtime safety', 'aspect', 'parallel'),
+  step('aspect-ux-evidence', 'UX evidence', 'aspect', 'parallel'),
   step('post-git-commit-attribution', 'Git attribution', 'tool', 'sequential'),
+  step('post-test-evidence', 'Test evidence', 'tool', 'sequential'),
+  step('post-results-inventory', 'Results inventory', 'tool', 'sequential'),
+  step('post-review-synthesis', 'Review synthesis', 'orchestrator', 'sequential'),
   step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
   step('post-drift-adr-code', 'ADR drift', 'drift', 'sequential'),
 ];
@@ -124,7 +134,12 @@ function pipelineRunning() {
         execStep('core-agent-run', 'core', 'running'),
         execStep('aspect-requirement-fit', 'aspect', 'pending'),
         execStep('aspect-code-quality', 'aspect', 'pending'),
+        execStep('aspect-runtime-safety', 'aspect', 'pending'),
+        execStep('aspect-ux-evidence', 'aspect', 'pending'),
         execStep('post-git-commit-attribution', 'tool', 'pending'),
+        execStep('post-test-evidence', 'tool', 'pending'),
+        execStep('post-results-inventory', 'tool', 'pending'),
+        execStep('post-review-synthesis', 'orchestrator', 'pending'),
         execStep('post-orchestrator-decision', 'orchestrator', 'pending'),
         execStep('post-drift-adr-code', 'drift', 'pending'),
       ],
@@ -156,7 +171,12 @@ function pipelineBlocked() {
         execStep('core-agent-run', 'core', 'failed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'concerns', verdictSummary: 'Integration test evidence is missing for the changed export path.' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-runtime-safety', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-ux-evidence', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'passed'),
+        execStep('post-test-evidence', 'tool', 'passed'),
+        execStep('post-results-inventory', 'tool', 'passed'),
+        execStep('post-review-synthesis', 'orchestrator', 'passed', { verdict: 'reissue' }),
         execStep('post-orchestrator-decision', 'orchestrator', 'failed', { verdict: 'escalate' }),
         execStep('post-drift-adr-code', 'drift', 'pending'),
       ],
@@ -189,7 +209,12 @@ function pipelineDone() {
         execStep('core-agent-run', 'core', 'passed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-runtime-safety', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-ux-evidence', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'passed'),
+        execStep('post-test-evidence', 'tool', 'passed'),
+        execStep('post-results-inventory', 'tool', 'passed'),
+        execStep('post-review-synthesis', 'orchestrator', 'passed', { verdict: 'accept' }),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', { verdict: 'accept' }),
       ],
     },
@@ -200,14 +225,23 @@ function pipelineDone() {
         costStep('core-agent-run', 248_000, 4.37),
         costStep('aspect-requirement-fit', 8_000, 0.012),
         costStep('aspect-code-quality', 9_400, 0.014),
+        costStep('aspect-runtime-safety', 7_600, 0.011),
+        costStep('aspect-ux-evidence', 8_800, 0.013),
         costStep('post-git-commit-attribution', 800, 0.001),
+        costStep('post-test-evidence', 1_100, 0.0015),
+        costStep('post-results-inventory', 900, 0.0012),
+        costStep('post-review-synthesis', 4_800, 0.0075),
         costStep('post-orchestrator-decision', 5_400, 0.0089),
       ],
-      totalTokens: 272_800, totalCostUsd: 4.41,
+      totalTokens: 296_000, totalCostUsd: 4.4452,
     },
     // ADR drift stays switched off in project config -> a muted, collapsed section.
     config: {
       'pre-model-qualification': { enabled: true, canDisable: true },
+      'aspect-requirement-fit': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
+      'aspect-code-quality': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
+      'aspect-runtime-safety': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
+      'aspect-ux-evidence': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
       'post-drift-adr-code': { enabled: false, model: null, mode: null },
     },
   };
@@ -218,8 +252,15 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+    }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -264,29 +305,36 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   const overlay = page.getByTestId('error-dialog-overlay');
   if (await overlay.isVisible().catch(() => false)) {
     await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]')?.click());
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
 async function expandAllPipelineSections(page: Page): Promise<void> {
   const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
+    const before = await collapsed.count();
+    if (before === 0) break;
     await collapsed.first().click();
+    await expect.poll(() => collapsed.count()).toBeLessThan(before);
   }
 }
 
 async function collapseAllPipelineSections(page: Page): Promise<void> {
   const expanded = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="true"]');
   for (let i = 0; i < 20; i++) {
-    if ((await expanded.count()) === 0) break;
+    const before = await expanded.count();
+    if (before === 0) break;
     await expanded.first().click();
+    await expect.poll(() => expanded.count()).toBeLessThan(before);
   }
 }
 
 async function load(page: Page, state: string, body: () => unknown) {
   await installRoutes(page, state, body);
-  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await page.goto(
+    `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    { waitUntil: 'domcontentloaded', timeout: 30_000 },
+  );
   await dismissErrorDialog(page);
   const pipeline = page.getByTestId('overview-pipeline');
   await expect(pipeline).toBeVisible({ timeout: 10_000 });
@@ -302,7 +350,9 @@ async function shot(page: Page, pipeline: ReturnType<Page['getByTestId']>, name:
 test.describe('Pipeline workbench state evidence', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); } catch { /* private mode */ }
+      try {
+        localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+      } catch { /* private mode */ }
     });
   });
 
@@ -314,6 +364,7 @@ test.describe('Pipeline workbench state evidence', () => {
     const expanded = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="true"]');
     await expect(expanded).toHaveCount(0);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(0);
+    await expect(page.getByTestId('overview-pipeline-header')).toHaveCount(0);
     await expandAllPipelineSections(page);
     await expect(page.getByTestId('pipeline-step-toggle-pre-model-qualification')).toBeVisible();
     await shot(page, pipeline, 'pipeline-state-empty--mocked.png');
@@ -350,8 +401,13 @@ test.describe('Pipeline workbench state evidence', () => {
   });
 
   test('done: multiple runs, all sections passed, drift disabled + collapsed', async ({ page }) => {
+    // Keep the expanded comparison panel clear of the fixed status bar so the
+    // before evidence is an unobstructed panel capture, even with 14 rows.
+    await page.setViewportSize({ width: 1280, height: 1200 });
     const pipeline = await load(page, '5-human-review', pipelineDone);
     await expect(page.getByTestId('overview-pipeline-run-switcher')).toBeVisible();
+    const collapsedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
+    await expect(page.getByTestId('overview-pipeline-density')).toHaveCount(0);
     await expandAllPipelineSections(page);
     // Every executable section reads ok; the disabled drift section reads muted.
     await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="core"]')).toHaveAttribute('data-tone', 'ok');
@@ -359,6 +415,41 @@ test.describe('Pipeline workbench state evidence', () => {
     // A pending project-level switch is no longer actionable from a task that
     // has already reached human review.
     await expect(page.getByTestId('pipeline-step-toggle-pre-model-qualification')).toHaveCount(0);
+    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-group-model"]')).toHaveCount(1);
+    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-group-activation"]')).toHaveCount(1);
+    await expect(page.getByTestId('overview-pipeline-group-activation').filter({ hasText: /unknown/i })).toHaveCount(0);
+    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-post-step-source"]')).toHaveCount(0);
+    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-step-model"]')).toHaveCount(0);
+    await expect(page.locator('[data-phase="tool"] [data-testid="overview-post-step-source"]')).toHaveCount(0);
+    await expect(page.getByTestId('overview-pipeline-step-details').first()).toBeVisible();
+    const expandedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
+
+    if (RESULTS_DIR) {
+      await setTheme(page, 'light');
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
+      await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'before.png') });
+    }
+
+    await collapseAllPipelineSections(page);
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(0);
+    const afterHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
+    expect(afterHeight / expandedHeight).toBeLessThan(0.5);
+    expect(Math.abs(afterHeight - collapsedHeight)).toBeLessThanOrEqual(1);
+
+    if (RESULTS_DIR) {
+      await writeFile(path.join(RESULTS_DIR, 'pipeline-density-measurement.json'), JSON.stringify({
+        beforeExpandedPx: expandedHeight,
+        compactCollapsedPx: afterHeight,
+        reductionPercent: Math.round((1 - afterHeight / expandedHeight) * 1000) / 10,
+        initialCollapsedPx: collapsedHeight,
+      }, null, 2));
+      await pipeline.scrollIntoViewIfNeeded();
+      await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'after.png') });
+      await setTheme(page, 'dark');
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+      await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'after-dark.png') });
+      await setTheme(page, 'light');
+    }
     await shot(page, pipeline, 'pipeline-state-done--mocked.png');
   });
 

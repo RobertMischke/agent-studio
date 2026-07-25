@@ -17,7 +17,7 @@ const ACTIVE: PostStepActivation = {
 
 function setup(options: {
   stepId?: string;
-  activation?: PostStepActivation;
+  activation?: PostStepActivation | null;
   attempts?: OnDemandPostStepAttempt[];
 } = {}) {
   const response = new Subject<{
@@ -51,7 +51,7 @@ function setup(options: {
   fixture.componentRef.setInput('jobId', 'AGT-2116');
   fixture.componentRef.setInput('watchPath', 'C:/tasks/project');
   fixture.componentRef.setInput('projectName', 'Agent Studio');
-  fixture.componentRef.setInput('activation', options.activation ?? ACTIVE);
+  fixture.componentRef.setInput('activation', 'activation' in options ? options.activation : ACTIVE);
   fixture.componentRef.setInput('attempts', options.attempts ?? []);
   fixture.detectChanges();
 
@@ -186,5 +186,11 @@ describe('PostStepControlsComponent', () => {
 
     expect(root.querySelector('[data-testid="overview-post-step-source"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="overview-post-step-run"]')).toBeNull();
+  });
+
+  it('does not render an unknown source chip when activation metadata is absent', () => {
+    const { root } = setup({ stepId: 'post-orchestrator-decision', activation: null });
+
+    expect(root.querySelector('[data-testid="overview-post-step-source"]')).toBeNull();
   });
 });
