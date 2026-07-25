@@ -227,11 +227,14 @@ list.
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
-- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, text
-  output on stdout that the runner scans for the `[[TASK_*]]` sentinel).
+- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, final
+  response on stdout; the runner accepts a `[[TASK_*]]` sentinel only as its
+  terminal standalone line).
 - Codex: `RUNNER_CLI_BIN=codex`, plus the non-interactive exec flags your version
-  exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
-  script instead of fighting the space-split arg parser.
+  exposes. The runner reads the last completed `agent_message`, not raw JSONL
+  tool, diff, or diagnostic payloads. When quoting gets awkward, point
+  `RUNNER_CLI_BIN` at a small wrapper script instead of fighting the space-split
+  arg parser.
 
 ### Multi-repository clone layout and eligibility
 

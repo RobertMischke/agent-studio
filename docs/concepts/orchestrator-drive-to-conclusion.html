@@ -984,6 +984,25 @@
             its ordinary completion terminal; a dead job reaches the explicit release/requeue terminal instead of zombie Progress.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2208</code><br><span class="small">sentinel literal in streamed test diff</span></td>
+          <td>
+            A remote run that was testing sentinel handling streamed the fixture literal
+            <code>[[TASK_BLOCKED:missing API key]]</code> inside a diff. The runner classified that payload as a real
+            blocked verdict and incorrectly promoted the card to <span class="lane">5e-escalated</span>.
+          </td>
+          <td>
+            <code>runner/SentinelScanner</code> applied the sentinel regex to the complete raw stdout buffer. Codex
+            <code>command_execution</code>, file-change, and diagnostic JSONL therefore had the same authority as the
+            final <code>agent_message</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> structured output is reduced to the final agent reply before parsing,
+            and the token must be the terminal standalone line of that reply. Diff, code-block, file, and stderr
+            literals produce no verdict. Regression coverage pins the AGT-2208 fixture and the real final-sentinel path.
+          </td>
+        </tr>
       </tbody>
     </table>
 
