@@ -96,6 +96,46 @@ export interface HostTelemetrySeries {
 
 export type HostLiveDataState = 'loading' | 'ready' | 'error';
 
+export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-open';
+
+export interface CapabilityRecoveryEvent {
+  occurredAt: string;
+  fromState: CapabilityHealthState;
+  toState: CapabilityHealthState;
+  reason: string;
+  claimId?: string | null;
+}
+
+export interface RemoteHostCapabilityHealth {
+  key: string;
+  category: string;
+  advertisedStatus: string;
+  healthState: CapabilityHealthState;
+  reason?: string | null;
+  advertisedAt: string;
+  freshUntil: string;
+  isFresh: boolean;
+  firstFailureAt?: string | null;
+  lastFailureAt?: string | null;
+  cooldownUntil?: string | null;
+  canaryClaimId?: string | null;
+  consecutiveFailures: number;
+  version?: string | null;
+  identity?: string | null;
+  detail?: string | null;
+  affectedClaims: readonly string[];
+  recoveryHistory: readonly CapabilityRecoveryEvent[];
+}
+
+export interface RemoteHostAdmission {
+  hostId: string;
+  admissionState: 'open' | 'automatic-draining' | 'operator-draining';
+  automaticDrainReason?: string | null;
+  automaticDrainAt?: string | null;
+  operatorDrainReason?: string | null;
+  operatorDrainAt?: string | null;
+}
+
 /** A single execution location in the registry. */
 export interface RemoteHost {
   id: string;
@@ -134,6 +174,8 @@ export interface RemoteHost {
   activeGateCount?: number;
   gateCapacity?: number;
   retireRequestedAt?: string | null;
+  capabilityHealth?: readonly RemoteHostCapabilityHealth[];
+  hostAdmission?: RemoteHostAdmission | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

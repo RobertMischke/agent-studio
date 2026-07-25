@@ -52,6 +52,19 @@ public sealed class RemoteReviewExecutor
                 summary = exception.Message;
                 evidence = InfrastructureEvidence(workspace, subject, lease, exception.Classification);
                 _log($"review infrastructure outcome attempt={attempt.AttemptId} classification={exception.Classification}: {exception.Message}");
+                var failedCapability = CapabilityFor(exception.Classification);
+                if (failedCapability is not null)
+                {
+                    await _client.ReportCapabilityFailureAsync(
+                        failedCapability,
+                        exception.Classification,
+                        exception.Message.Length <= 500 ? exception.Message : exception.Message[..500],
+                        $"review-capability:{attempt.AttemptId}:{lease.Fence}:{failedCapability}",
+                        "review",
+                        attempt.AttemptId,
+                        lease.Fence,
+                        CancellationToken.None);
+                }
             }
 
             var request = new ReviewReportRequest(
@@ -162,4 +175,16 @@ public sealed class RemoteReviewExecutor
             [],
             []);
     }
+
+    private static string? CapabilityFor(string classification)
+        => classification switch
+        {
+            "SnapshotUnavailable" or "RepositoryMismatch" or "ShaMismatch"
+                => CapabilityProtocol.RepositoryAccess,
+            "ToolUnavailable" => ReviewCapabilities.SemanticReview,
+            "VisionUnavailable" => CapabilityProtocol.Vision,
+            "DiskFull" => CapabilityProtocol.Disk,
+            "LeaseAuthorityInvalid" => CapabilityProtocol.LeaseAuthority,
+            _ => null,
+        };
 }

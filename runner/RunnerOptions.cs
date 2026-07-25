@@ -65,6 +65,14 @@ public sealed class RunnerOptions
     /// <summary>Durable daemon slot records and detached-worker logs.</summary>
     public string StateDir { get; init; } = Path.Combine(Path.GetTempPath(), "agent-runner-state");
 
+    /// <summary>
+    /// Additional host capabilities required by every claim for this service
+    /// identity, for example toolchain:dotnet, toolchain:node, or
+    /// toolchain:playwright. The Task Server combines these with the role,
+    /// provider, source, disk, and connectivity requirements.
+    /// </summary>
+    public IReadOnlyList<string> RequiredCapabilities { get; init; } = [];
+
     /// <summary>Branch to check out for the run. When empty, the runner stays on <see cref="BaseBranch"/>.</summary>
     public string? Branch { get; init; }
 
@@ -196,6 +204,13 @@ public sealed class RunnerOptions
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             StateDir = Val("state-dir", "RUNNER_STATE_DIR",
                 Path.Combine(Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")), ".runner-state")),
+            RequiredCapabilities = Val(
+                    "required-capabilities",
+                    "RUNNER_REQUIRED_CAPABILITIES")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(value => value.ToLowerInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),

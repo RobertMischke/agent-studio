@@ -543,12 +543,34 @@ public sealed class RemoteTaskRunner
                 if (result is not null)
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
+                    var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
+                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    {
+                        var provider = RunnerCapabilityProbe.Provider(_options.CliBin);
+                        var claimId = outbox?.Authority.RunId;
+                        var diagnostic = result.StdErr
+                            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                            .LastOrDefault()
+                            ?? $"{provider} exited {result.ExitCode} with an authentication failure";
+                        await _client.ReportCapabilityFailureAsync(
+                            CapabilityProtocol.ProviderAuthentication(provider),
+                            "ProviderUnauthorized",
+                            diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
+                            $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
+                            "run",
+                            claimId,
+                            slot.Lease.FencingToken,
+                            stopRun);
+                        shipper.Add(
+                            "system",
+                            $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                    }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)
                         : ClassifyProcessResult(
                             slot.Lease,
                             workspace,
-                            new ProcessResult(result.ExitCode, result.StdOut, result.StdErr),
+                            processResult,
                             sameSessionResumeAttempts);
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)

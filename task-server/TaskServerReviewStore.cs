@@ -181,6 +181,18 @@ public sealed partial class TaskServerStore
         {
             var executor = await ReadReviewExecutorAsync(
                 connection, transaction, request.ExecutorId, request.InstanceId, ct);
+            var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
+                connection,
+                transaction,
+                request.ExecutorId,
+                executor.HostId,
+                request.RequiredCapabilities,
+                ct);
+            if (!capabilityAdmission.Eligible)
+            {
+                response = new ReviewClaimResponse("empty", Message: capabilityAdmission.Message);
+                return;
+            }
             if (request.AvailableSlots <= 0)
             {
                 response = new ReviewClaimResponse("empty", Message: "Review executor has no available slot.");
@@ -189,6 +201,8 @@ public sealed partial class TaskServerStore
 
             ReviewAttemptDto? attempt = null;
             ReviewSubjectDto? subject = null;
+            string? capabilityBlock = null;
+            var candidates = new List<(ReviewAttemptDto Attempt, ReviewSubjectDto Subject)>();
             await using (var command = Command(connection, """
                 SELECT a.id, a.subject_id, a.task_id, a.attempt_number, a.status,
                        a.executor_id, a.host_id, a.fence, a.created_at, a.reported_at,
@@ -217,18 +231,39 @@ public sealed partial class TaskServerStore
                 {
                     var candidateAttempt = ReadReviewAttempt(reader);
                     var candidateSubject = ReadReviewSubjectFromClaim(reader);
-                    if (!SupportsSubject(executor, candidateSubject)) continue;
-                    attempt = candidateAttempt;
-                    subject = candidateSubject;
-                    break;
+                    if (SupportsSubject(executor, candidateSubject))
+                        candidates.Add((candidateAttempt, candidateSubject));
                 }
+            }
+            foreach (var candidate in candidates)
+            {
+                var candidateRequirements = RequiredReviewCapabilities(
+                    request.RequiredCapabilities,
+                    candidate.Subject);
+                var candidateAdmission = await EvaluateCapabilityAdmissionAsync(
+                    connection,
+                    transaction,
+                    request.ExecutorId,
+                    executor.HostId,
+                    candidateRequirements,
+                    ct);
+                if (!candidateAdmission.Eligible)
+                {
+                    capabilityBlock = candidateAdmission.Message;
+                    continue;
+                }
+                attempt = candidate.Attempt;
+                subject = candidate.Subject;
+                capabilityAdmission = candidateAdmission;
+                break;
             }
 
             if (attempt is null || subject is null)
             {
                 response = new ReviewClaimResponse(
                     "empty",
-                    Message: "No eligible immutable review subject is queued for this host failure domain.");
+                    Message: capabilityBlock
+                             ?? "No eligible immutable review subject is queued for this host failure domain.");
                 return;
             }
 
@@ -252,14 +287,25 @@ public sealed partial class TaskServerStore
                 UPDATE review_attempts
                    SET status = 'leased', executor_id = $executor, instance_id = $instance,
                        host_id = $host, lease_id = $lease, fence = $fence,
-                       acquired_at = $acquired, expires_at = $expires, port_base = $portBase
+                       acquired_at = $acquired, expires_at = $expires, port_base = $portBase,
+                       required_capabilities_json = $requiredCapabilities,
+                       canary_capabilities_json = $canaryCapabilities
                  WHERE id = $attempt;
                 UPDATE runners SET last_seen_at = $acquired WHERE id = $executor;
                 """, ct, transaction,
                 ("$subject", subject.SubjectId), ("$fence", fence), ("$executor", request.ExecutorId),
                 ("$instance", request.InstanceId), ("$host", executor.HostId), ("$lease", leaseId),
                 ("$acquired", Iso(acquired)), ("$expires", Iso(expires)),
-                ("$portBase", portBase), ("$attempt", attempt.AttemptId));
+                ("$portBase", portBase), ("$attempt", attempt.AttemptId),
+                ("$requiredCapabilities", JsonSerializer.Serialize(capabilityAdmission.Required)),
+                ("$canaryCapabilities", JsonSerializer.Serialize(capabilityAdmission.Canaries)));
+            await ReserveCanariesAsync(
+                connection,
+                transaction,
+                request.ExecutorId,
+                capabilityAdmission.Canaries,
+                attempt.AttemptId,
+                ct);
             var claimedAttempt = attempt with
             {
                 Status = "leased",
@@ -283,9 +329,43 @@ public sealed partial class TaskServerStore
                     fence,
                     resourceNamespace,
                 }), ct);
-            response = new ReviewClaimResponse("claimed", claimedAttempt, subject, lease);
+            response = new ReviewClaimResponse(
+                "claimed",
+                claimedAttempt,
+                subject,
+                lease,
+                RequiredCapabilities: capabilityAdmission.Required,
+                CanaryCapabilities: capabilityAdmission.Canaries);
         }, ct);
         return response!;
+    }
+
+    private static IReadOnlyList<string>? RequiredReviewCapabilities(
+        IReadOnlyList<string>? requested,
+        ReviewSubjectDto subject)
+    {
+        // Protocol-v2 callers did not advertise health. Keep their empty claim
+        // compatible; protocol-v3 capability-aware callers send the base set
+        // and receive subject-derived requirements additively.
+        if (requested is null || requested.Count == 0) return requested;
+        var requirements = new HashSet<string>(requested, StringComparer.Ordinal)
+        {
+            CapabilityProtocol.ReviewExecutor,
+            CapabilityProtocol.RepositoryAccess,
+        };
+        if (!string.IsNullOrWhiteSpace(subject.RepositoryUrl))
+        {
+            requirements.Add(CapabilityProtocol.GitFetch);
+            requirements.Add(ReviewCapabilities.GitMaterialization);
+        }
+        if (!string.IsNullOrWhiteSpace(subject.SourceBundleArtifactId))
+            requirements.Add(ReviewCapabilities.SourceBundleMaterialization);
+        if (subject.Plan.RequiresVisualReview)
+            requirements.Add(CapabilityProtocol.Vision);
+        if (subject.Plan.RequiredAspects.Any(aspect =>
+                aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence"))
+            requirements.Add(ReviewCapabilities.SemanticReview);
+        return requirements.Order(StringComparer.Ordinal).ToArray();
     }
 
     public async Task<ReviewLeaseDto> RenewReviewLeaseAsync(
@@ -372,6 +452,16 @@ public sealed partial class TaskServerStore
                 ("$task", attempt.TaskId));
             if (retry)
                 await InsertReviewRetryAsync(connection, transaction, attempt, received, ct);
+            if (!string.Equals(classified.Outcome, "ReviewInfra", StringComparison.Ordinal))
+            {
+                await ResolveCanarySuccessAsync(
+                    connection,
+                    transaction,
+                    request.ExecutorId,
+                    attemptId,
+                    "review canary reported an authoritative non-infrastructure outcome",
+                    ct);
+            }
             await AuditAsync(connection, transaction, actorId, "review.reported", "review-attempt", attemptId,
                 JsonSerializer.Serialize(new
                 {

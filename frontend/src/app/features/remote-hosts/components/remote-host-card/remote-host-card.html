@@ -63,6 +63,8 @@
     <p class="host__stale" data-testid="remote-host-stale">Stale: last seen {{ heartbeatLabel() }}. Historical metrics are hidden.</p>
   }
 
+  <app-capability-health [host]="h" />
+
   @if (h.capabilities.length) {
     <ul class="chips" aria-label="Capabilities">
       @for (cap of h.capabilities; track cap) {

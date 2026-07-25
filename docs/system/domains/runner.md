@@ -166,6 +166,21 @@ state.
   restart takeover changes both the durable fence and the containment namespace.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
+- Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
+  daemon-local slot reduction. Coding and review services publish versioned,
+  expiring health for provider authentication, Git fetch/push, repository
+  access, .NET, Node, Playwright, vision, disk, Task Server connectivity, and
+  platform/toolchain identity. Claims persist their required set. One
+  capability advances through `healthy -> suspect -> draining -> half-open ->
+  healthy` with bounded thresholds, exponential cooldown, and one fenced
+  canary. Matching new claims stop while unrelated capabilities and the
+  configured parallelism continue. Active leases are never revoked by this
+  admission decision. Disk full, invalid lease authority, host network
+  isolation, repository filesystem corruption, and Task Server authority
+  uncertainty use the separate automatic whole-host drain. Operator drain is a
+  distinct API, audit action, persisted field, and UI label. Capability failure
+  reports must bind the active coding or review claim and fence; stale and
+  duplicate deliveries fail closed or replay idempotently.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps

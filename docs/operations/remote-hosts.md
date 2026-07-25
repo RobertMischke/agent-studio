@@ -94,6 +94,8 @@ RUNNER_CLIENT_ID=agent-runner-01
 RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
 RUNNER_MAX_PARALLELISM=2
+# Optional repository-specific requirements:
+RUNNER_REQUIRED_CAPABILITIES=toolchain:dotnet,toolchain:node,toolchain:playwright
 ```
 
 Enable and verify the service:
@@ -109,6 +111,37 @@ The host card reports daemon state (`running`, `read-only`, or `stopped`), last
 claim, active and free slots, running task count, task inflow, last contact, and
 push status. If last contact is older than five minutes, live numbers are hidden
 and the card says when the host was last seen.
+
+## Capability admission
+
+Each coding and review service refreshes a versioned capability advertisement
+every minute. The Task Server treats an advertisement as fresh for three
+minutes. New claims declare their role, provider authentication, source,
+repository, disk, Task Server connectivity, and any configured toolchain
+requirements. Review claims also add the immutable subject's semantic, vision,
+Git, or source-bundle requirements.
+
+A first correlated fault marks one capability suspect. Repetition drains that
+capability and starts a bounded cooldown. When cooldown expires, exactly one
+matching claim becomes the half-open canary. An authoritative typed coding
+terminal, with an immutable handoff when required, or an authoritative
+non-infrastructure review report reopens normal capacity. Product findings
+prove that review infrastructure recovered without becoming a product pass.
+Canary failure returns to a longer cooldown. Do not lower
+`RUNNER_MAX_PARALLELISM` as a repair. Healthy capabilities and unrelated
+services on the same host continue using the configured slots.
+
+Remote Hosts shows the capability state, reason, first and last failure,
+cooldown, canary claim, affected coding and review attempts, and recovery
+history. A stale advertisement is explicitly stale. AGT-2142 telemetry appears
+as live meters only while both its sample and the host heartbeat are fresh.
+
+Automatic whole-host drain is reserved for shared foundations: disk full,
+invalid lease authority, host network isolation, repository filesystem
+corruption, or Task Server authority uncertainty. The UI labels it
+**Automatic whole-host drain**. An operator action is stored and labeled
+separately as **Operator-requested host drain**. Both block new claims, but
+neither kills an existing lease.
 
 ## Drain
 

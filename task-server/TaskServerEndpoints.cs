@@ -52,6 +52,28 @@ public static class TaskServerEndpoints
         runners.MapPut("/{runnerId}", async (
             HttpContext context, string runnerId, RegisterRunnerRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.RegisterRunnerAsync(runnerId, request, Actor(context), ct)));
+        runners.MapPut("/{runnerId}/capabilities", async (
+            HttpContext context,
+            string runnerId,
+            CapabilityAdvertisementRequest request,
+            TaskServerStore store,
+            CancellationToken ct) =>
+        {
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and capability runner ids differ."));
+            return await InvokeAsync(() => store.AdvertiseCapabilitiesAsync(request, Actor(context), ct));
+        });
+        runners.MapPost("/{runnerId}/capability-failures", async (
+            HttpContext context,
+            string runnerId,
+            CapabilityFailureRequest request,
+            TaskServerStore store,
+            CancellationToken ct) =>
+        {
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and capability runner ids differ."));
+            return await InvokeAsync(() => store.ReportCapabilityFailureAsync(request, Actor(context), ct));
+        });
         runners.MapPost("/{runnerId}/claims", async (
             HttpContext context, string runnerId, ClaimRequest request, TaskServerStore store, CancellationToken ct) =>
         {
@@ -169,6 +191,24 @@ public static class TaskServerEndpoints
             => await InvokeAsync(() => store.ListAuditAsync(after ?? 0, ct)));
         management.MapGet("/invariants", async (TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.GetInvariantRegistryAsync(ct)));
+        management.MapGet("/remote-hosts", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ListRunnerCapabilitySnapshotsAsync(ct)));
+        management.MapPost("/remote-hosts/{hostId}/operator-drain", async (
+            HttpContext context,
+            string hostId,
+            OperatorHostDrainRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.RequestOperatorHostDrainAsync(
+                hostId, request, Actor(context), ct)));
+        management.MapPost("/remote-hosts/{hostId}/automatic-drain/clear", async (
+            HttpContext context,
+            string hostId,
+            ClearAutomaticHostDrainRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ClearAutomaticHostDrainAsync(
+                hostId, request, Actor(context), ct)));
         management.MapPost("/migrations/legacy/inventory", async (
             LegacyMigrationRequest request, LegacyMigrationService migration, CancellationToken ct)
             => await InvokeAsync(() => migration.InventoryAsync(request, ct)));

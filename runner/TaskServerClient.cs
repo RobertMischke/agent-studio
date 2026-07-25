@@ -292,7 +292,8 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 req.RequestedTtlSeconds ?? 120,
                 req.AvailableSlots,
-                ToContract(req.Inventory)),
+                ToContract(req.Inventory),
+                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options)),
             ct);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
             || claim.Task is null || claim.Run is null || claim.Lease is null)
@@ -352,7 +353,12 @@ public sealed class TaskServerClient : IDisposable
             throw new TaskServerException(409, "Remote review execution requires the versioned Task Server.");
         return await PostJsonAsync<Contract.ReviewClaimRequest, Contract.ReviewClaimResponse>(
                    $"/api/v1/runners/{Uri.EscapeDataString(request.ExecutorId)}/review-claims",
-                   request,
+                   request with
+                   {
+                       RequiredCapabilities = request.RequiredCapabilities
+                           ?? RunnerCapabilityProbe.ReviewRequirements(
+                               _options ?? throw new InvalidOperationException("Runner options are unavailable.")),
+                   },
                    ct)
                ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
     }
@@ -452,6 +458,59 @@ public sealed class TaskServerClient : IDisposable
 
         _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
             $"/api/clients/{Uri.EscapeDataString(clientId)}/runner-git-capability", request, ct);
+    }
+
+    public async Task AdvertiseCapabilitiesAsync(
+        IReadOnlyList<Contract.AdvertisedCapabilityDto> capabilities,
+        Contract.HostTelemetrySnapshotDto? telemetry,
+        long generation,
+        CancellationToken ct)
+    {
+        if (!_useV1) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        var request = new Contract.CapabilityAdvertisementRequest(
+            options.RunnerId,
+            RunnerInstanceId,
+            Contract.CapabilityProtocol.CurrentSchemaVersion,
+            DateTime.UtcNow,
+            180,
+            generation,
+            capabilities,
+            telemetry);
+        _ = await SendJsonAsync<Contract.CapabilityAdvertisementRequest, Contract.RunnerCapabilitySnapshotDto>(
+            HttpMethod.Put,
+            $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/capabilities",
+            request,
+            ct);
+    }
+
+    public async Task ReportCapabilityFailureAsync(
+        string capabilityKey,
+        string classification,
+        string reason,
+        string idempotencyKey,
+        string? claimKind,
+        string? claimId,
+        long? fence,
+        CancellationToken ct)
+    {
+        if (!_useV1) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        var request = new Contract.CapabilityFailureRequest(
+            options.RunnerId,
+            RunnerInstanceId,
+            capabilityKey,
+            classification,
+            reason,
+            DateTime.UtcNow,
+            idempotencyKey,
+            claimKind,
+            claimId,
+            fence);
+        _ = await PostJsonAsync<Contract.CapabilityFailureRequest, Contract.CapabilityFailureResponse>(
+            $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/capability-failures",
+            request,
+            ct);
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

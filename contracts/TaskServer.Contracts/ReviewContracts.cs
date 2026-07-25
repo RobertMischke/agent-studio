@@ -86,14 +86,17 @@ public sealed record ReviewClaimRequest(
     string ExecutorId,
     string InstanceId,
     int RequestedTtlSeconds = 120,
-    int AvailableSlots = 1);
+    int AvailableSlots = 1,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 public sealed record ReviewClaimResponse(
     string Status,
     ReviewAttemptDto? Attempt = null,
     ReviewSubjectDto? Subject = null,
     ReviewLeaseDto? Lease = null,
-    string? Message = null);
+    string? Message = null,
+    IReadOnlyList<string>? RequiredCapabilities = null,
+    IReadOnlyList<string>? CanaryCapabilities = null);
 
 public sealed record ReviewLeaseRenewRequest(
     string ExecutorId,

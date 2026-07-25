@@ -392,9 +392,23 @@ public sealed partial class TaskServerStore
                 request.Inventory, actorId, ct);
             var reconciliationActions = await ReadPendingReconciliationActionsAsync(
                 connection, transaction, request.RunnerId, request.InstanceId, ct);
+            var capabilityRunner = await ReadCapabilityRunnerAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
+            var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                capabilityRunner.HostId,
+                request.RequiredCapabilities,
+                ct);
             await ExecuteAsync(connection, "UPDATE runners SET last_seen_at = $now WHERE id = $id;", ct, transaction,
                 ("$now", Iso(UtcNow)), ("$id", request.RunnerId));
 
+            if (!capabilityAdmission.Eligible)
+            {
+                response = new ClaimResponse("empty", Message: capabilityAdmission.Message);
+                return;
+            }
             if (request.AvailableSlots <= 0)
             {
                 response = new ClaimResponse(
@@ -440,14 +454,27 @@ public sealed partial class TaskServerStore
             var now = UtcNow;
             var expires = now.AddSeconds(NormalizeTtl(request.RequestedTtlSeconds));
             await ExecuteAsync(connection, """
-                INSERT INTO runs(id, task_id, status, runner_id, fence, created_at, started_at)
-                VALUES ($run, $task, 'running', $runner, $fence, $now, $now);
+                INSERT INTO runs(
+                    id, task_id, status, runner_id, fence, created_at, started_at,
+                    required_capabilities_json, canary_capabilities_json)
+                VALUES (
+                    $run, $task, 'running', $runner, $fence, $now, $now,
+                    $requiredCapabilities, $canaryCapabilities);
                 INSERT INTO leases(task_id, lease_id, run_id, runner_id, instance_id, fence, acquired_at, expires_at, status)
                 VALUES ($task, $lease, $run, $runner, $instance, $fence, $now, $expires, 'active');
                 UPDATE tasks SET state = '3-progress', version = version + 1, updated_at = $now WHERE id = $task;
                 """, ct, transaction,
                 ("$run", runId), ("$task", task.TaskId), ("$runner", request.RunnerId), ("$instance", request.InstanceId),
-                ("$fence", fence), ("$lease", leaseId), ("$now", Iso(now)), ("$expires", Iso(expires)));
+                ("$fence", fence), ("$lease", leaseId), ("$now", Iso(now)), ("$expires", Iso(expires)),
+                ("$requiredCapabilities", JsonSerializer.Serialize(capabilityAdmission.Required)),
+                ("$canaryCapabilities", JsonSerializer.Serialize(capabilityAdmission.Canaries)));
+            await ReserveCanariesAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                capabilityAdmission.Canaries,
+                runId,
+                ct);
             await AuditAsync(connection, transaction, actorId, "run.claimed", "run", runId,
                 JsonSerializer.Serialize(new { task.TaskId, request.RunnerId, request.InstanceId, fence }), ct);
 
@@ -458,7 +485,9 @@ public sealed partial class TaskServerStore
                 run,
                 task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now },
                 lease,
-                ReconciliationActions: reconciliationActions);
+                ReconciliationActions: reconciliationActions,
+                RequiredCapabilities: capabilityAdmission.Required,
+                CanaryCapabilities: capabilityAdmission.Canaries);
         }, ct);
         return response!;
     }
@@ -829,6 +858,15 @@ public sealed partial class TaskServerStore
                 ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
                 ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
                 ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
+            await ResolveCanarySuccessAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                runId,
+                RequiresResultEnvelope(request.Outcome)
+                    ? "coding canary completed with an immutable result handoff"
+                    : "coding canary reached an authoritative typed terminal without a capability failure",
+                ct);
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {
@@ -1517,6 +1555,50 @@ public sealed partial class TaskServerStore
                 registered_at TEXT NOT NULL,
                 last_seen_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS runner_capabilities(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                capability_key TEXT NOT NULL,
+                category TEXT NOT NULL,
+                schema_version INTEGER NOT NULL,
+                advertised_status TEXT NOT NULL,
+                health_state TEXT NOT NULL,
+                reason TEXT,
+                version TEXT,
+                identity_value TEXT,
+                detail TEXT,
+                advertised_at TEXT NOT NULL,
+                fresh_until TEXT NOT NULL,
+                generation INTEGER NOT NULL,
+                first_failure_at TEXT,
+                last_failure_at TEXT,
+                cooldown_until TEXT,
+                canary_claim_id TEXT,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                recovery_history_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(runner_id, capability_key)
+            );
+            CREATE TABLE IF NOT EXISTS capability_failure_deliveries(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                idempotency_key TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                PRIMARY KEY(runner_id, idempotency_key)
+            );
+            CREATE TABLE IF NOT EXISTS host_admission(
+                host_id TEXT PRIMARY KEY,
+                automatic_drain_reason TEXT,
+                automatic_drain_at TEXT,
+                operator_drain_reason TEXT,
+                operator_drain_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runner_telemetry_latest(
+                runner_id TEXT PRIMARY KEY REFERENCES runners(id),
+                payload_json TEXT NOT NULL,
+                observed_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS runs(
                 id TEXT PRIMARY KEY,
                 task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -1667,14 +1749,19 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_outbox_receipts_run ON outbox_receipts(run_id, sequence);
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
             CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
+            CREATE INDEX IF NOT EXISTS ix_runner_capabilities_state ON runner_capabilities(runner_id, health_state, fresh_until);
             """, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;
             """, ct, ("$version", CurrentSchemaVersion), ("$now", Iso(UtcNow)));
         await ApplyReviewMigrationAsync(connection, ct);
+        await EnsureColumnAsync(connection, "review_attempts", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "review_attempts", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
     }
 

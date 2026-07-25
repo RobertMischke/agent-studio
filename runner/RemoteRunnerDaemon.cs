@@ -137,12 +137,38 @@ public sealed class RemoteRunnerDaemon
         var admissionEnabled = gitCapability.CanPush;
         if (!admissionEnabled)
             _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
+        var capabilityGeneration = DateTime.UtcNow.Ticks;
+        await WithServerRetryAsync<object?>(
+            "capability advertisement",
+            async () =>
+            {
+                await _client.AdvertiseCapabilitiesAsync(
+                    RunnerCapabilityProbe.Advertise(_options, gitCapability.CanPush),
+                    null,
+                    capabilityGeneration,
+                    shutdown);
+                return null;
+            },
+            shutdown);
+        if (!gitCapability.CanPush)
+        {
+            await _client.ReportCapabilityFailureAsync(
+                AgentStudio.TaskServer.Contracts.CapabilityProtocol.GitPush,
+                "GitPushUnavailable",
+                gitCapability.Detail ?? "Git push probe failed.",
+                $"startup-git-push:{_options.RunnerId}:{capabilityGeneration}",
+                null,
+                null,
+                null,
+                shutdown);
+        }
 
         var telemetry = new HostTelemetrySampler();
         var loadGate = new RunnerLoadGate(
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         HostTelemetrySample? latestTelemetry = null;
+        var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         HostTelemetrySample? TakeTelemetry()
         {
             try
@@ -171,6 +197,16 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                {
+                    var capabilityTelemetry = TakeTelemetry();
+                    await _client.AdvertiseCapabilitiesAsync(
+                        RunnerCapabilityProbe.Advertise(_options, gitPushReady: true),
+                        RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
+                        ++capabilityGeneration,
+                        shutdown);
+                    nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+                }
                 var claimedAny = false;
                 var inventorySnapshot = inventory.Snapshot();
                 var activeTaskKeys = inventorySnapshot.Processes
