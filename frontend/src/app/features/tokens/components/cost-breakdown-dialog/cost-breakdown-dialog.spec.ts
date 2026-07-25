@@ -9,7 +9,7 @@ describe('CostBreakdownDialogComponent', () => {
   it('renders rates, counters, formula, source, effective date, and total', async () => {
     const fake = {
       open: signal(true), title: signal('Pipeline cost calculation'), loading: signal(false),
-      error: signal<string | null>(null), provider: signal('CodingAgentRunner (CAR)'),
+      error: signal<string | null>(null), provider: signal('TokenEconomy'),
       close: () => fake.open.set(false),
       items: signal([{
         model: 'claude-opus-4-7', label: 'Core agent', calculatedAt: '2026-07-11T10:00:00Z',

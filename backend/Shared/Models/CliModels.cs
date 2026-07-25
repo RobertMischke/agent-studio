@@ -151,8 +151,8 @@ public sealed record ModelMetadata(
 {
     // Pricing is intentionally a live catalog pass-through. Studio owns no
     // rates; callers that need historical cost use TokenPricing.Estimate.
-    private CodingAgentRunner.Pricing.ModelPrice? CurrentPrice =>
-        CodingAgentRunner.Pricing.ModelPriceCatalog.Default
+    private TokenEconomy.ModelPrice? CurrentPrice =>
+        TokenEconomy.ModelPriceCatalog.Default
             .ResolvePrice(Id, DateTime.UtcNow).Price;
     public decimal? InputPricePerMillion => CurrentPrice?.InputPerMTok;
     public decimal? OutputPricePerMillion => CurrentPrice?.OutputPerMTok;

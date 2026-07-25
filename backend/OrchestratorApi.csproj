@@ -45,13 +45,10 @@
     <PackageReference Include="CodingAgentRunner" Version="[0.5.0]" />
   </ItemGroup>
 
-  <!-- TokenEconomy integration seam (AGT-2146). Local co-development follows
-       the same file-reference pattern as CAR. The production pipeline calls
-       IModelEconomyAdvisor through PipelineStepEconomyAdvisor; a TokenEconomy
-       package adapter can replace the registered catalogue implementation
-       without changing runner or settings contracts. -->
-  <ItemGroup Condition="Exists('..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj')">
-    <ProjectReference Include="..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj" />
+  <!-- TokenEconomy owns the shared historical model-price catalog and cost API.
+       Keep the exact pin so pricing changes arrive as explicit dependency updates. -->
+  <ItemGroup>
+    <PackageReference Include="TokenEconomy" Version="[0.2.0]" />
   </ItemGroup>
 
   <!-- Block 6: adopt the library's types by aliasing them to the names the app
