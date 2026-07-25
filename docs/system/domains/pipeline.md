@@ -52,6 +52,14 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
+  `task-server/TaskServerOrchestrationStore.cs`, and
+  `orchestrator-engine/`: the separated flow boundary. Project flow
+  definitions are versioned Task Server data. The API-only Engine executes
+  ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
+  stages under bounded per-stage concurrency. A run snapshots the definition
+  version and ordered stages at creation, so later definition edits do not
+  rewrite in-flight work.
 - `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
   runs belong to commits rather than cards and expose planned order, scope,
   host, state, result, duration, and derived card attachments through
@@ -250,6 +258,13 @@ pipeline view.
   explicitly flag ten minutes of silence as a possible hang.
 
 ### Post-step lifecycle and ownership
+
+The separated control-plane path preserves the same ownership rule:
+definitions live in the Task Server, while execution lives in
+`orchestrator-engine`. The Engine receives the task payload and prior stage
+results only through the public API. Its `engine.env` contains bootstrap
+connectivity, identity/credential, lease timing, and concurrency caps, never
+project flow definitions, model routing, or gate policy.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**

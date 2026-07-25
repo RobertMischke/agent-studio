@@ -103,6 +103,95 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task Orchestrator_engine_negotiates_before_claiming_work()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/protocol/compatibility",
+            new ProtocolCompatibilityRequest(
+                TaskServerProtocol.EngineClientKind,
+                "0.1.0",
+                TaskServerProtocol.Current));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var compatibility = await response.Content.ReadFromJsonAsync<ProtocolCompatibilityResponse>();
+        Assert.True(compatibility!.Supported);
+        Assert.Contains(TaskServerProtocol.EngineClientKind, compatibility.Server.ClientKinds);
+    }
+
+    [Fact]
+    public async Task Public_orchestration_api_owns_definition_run_claim_and_settlement()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add("X-Client-Id", "engine-api-test");
+
+        (await client.PostAsJsonAsync(
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest("Engine API", "wsp-engine-api")))
+            .EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync(
+            "/api/v1/projects",
+            new CreateProjectRequest(
+                "wsp-engine-api", "Engine API", "EAP", "prj-engine-api")))
+            .EnsureSuccessStatusCode();
+        var taskResponse = await client.PostAsJsonAsync(
+            "/api/v1/projects/prj-engine-api/tasks",
+            new CreateTaskRequest(
+                "API-only orchestration",
+                State: "4-auto-review",
+                TaskId: "tsk-engine-api"));
+        taskResponse.EnsureSuccessStatusCode();
+        var definitionResponse = await client.PutAsJsonAsync(
+            "/api/v1/orchestration/projects/prj-engine-api/flow-definition",
+            new UpsertFlowDefinitionRequest(
+                null,
+                [OrchestrationStage.ReviewDecision, OrchestrationStage.CompletionJudge]));
+        definitionResponse.EnsureSuccessStatusCode();
+        var runResponse = await client.PostAsJsonAsync(
+            "/api/v1/orchestration/projects/prj-engine-api/runs",
+            new CreateOrchestrationRunRequest(
+                "tsk-engine-api",
+                """{"agentOutcome":"done"}""",
+                "api-run-1"));
+        runResponse.EnsureSuccessStatusCode();
+        var run = (await runResponse.Content.ReadFromJsonAsync<OrchestrationRunDto>())!;
+
+        var claimResponse = await client.PostAsJsonAsync(
+            "/api/v1/orchestration/claims",
+            new OrchestrationClaimRequest(
+                "engine-api-test",
+                "instance-1",
+                [OrchestrationStage.ReviewDecision]));
+        claimResponse.EnsureSuccessStatusCode();
+        var claim = (await claimResponse.Content.ReadFromJsonAsync<OrchestrationClaimResponse>())!;
+        Assert.Equal(run.RunId, claim.Run!.RunId);
+
+        var settlement = await client.PostAsJsonAsync(
+            $"/api/v1/orchestration/runs/{run.RunId}/stages/complete",
+            new CompleteOrchestrationStageRequest(
+                "engine-api-test",
+                "instance-1",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                OrchestrationStage.ReviewDecision,
+                OrchestrationAction.Continue,
+                """{"decision":"continue"}""",
+                "api-stage-1"));
+        settlement.EnsureSuccessStatusCode();
+        var advanced = (await settlement.Content.ReadFromJsonAsync<OrchestrationRunDto>())!;
+        Assert.Equal("pending", advanced.Status);
+        Assert.Equal(OrchestrationStage.CompletionJudge, advanced.CurrentStage);
+    }
+
+    [Fact]
     public async Task Published_contract_fixtures_pin_supported_and_unsupported_mixed_versions()
     {
         var root = RepositoryRoot();

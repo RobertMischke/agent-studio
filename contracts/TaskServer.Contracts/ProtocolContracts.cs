@@ -7,6 +7,7 @@ public static class TaskServerProtocol
     public const int MaximumSupported = 2;
     public const string HeaderName = "X-Task-Protocol-Version";
     public const string ClientVersionHeaderName = "X-Task-Client-Version";
+    public const string EngineClientKind = "engine";
 
     public static bool Supports(int version)
         => version >= MinimumSupported && version <= MaximumSupported;

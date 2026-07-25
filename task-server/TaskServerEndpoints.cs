@@ -16,7 +16,8 @@ public static class TaskServerEndpoints
         api.MapPost("/protocol/compatibility", (ProtocolCompatibilityRequest request, TaskServerStore store) =>
         {
             var supported = TaskServerProtocol.Supports(request.ProtocolVersion)
-                && request.ClientKind is "studio" or "runner" or "review-runner" or "management";
+                && request.ClientKind is "studio" or "runner" or "review-runner" or "management"
+                    or TaskServerProtocol.EngineClientKind;
             var reason = supported
                 ? null
                 : !store.Status().Protocol.ClientKinds.Contains(request.ClientKind, StringComparer.Ordinal)
@@ -177,6 +178,71 @@ public static class TaskServerEndpoints
         reviews.MapPost("/attempts/{attemptId}/cleanup", async (
             HttpContext context, string attemptId, ReviewCleanupRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CleanupReviewAsync(attemptId, request, Actor(context), ct)));
+
+        var orchestration = api.MapGroup("/orchestration");
+        orchestration.MapGet("/projects/{projectId}/flow-definition", async (
+            string projectId,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetFlowDefinitionAsync(projectId, ct)));
+        orchestration.MapPut("/projects/{projectId}/flow-definition", async (
+            HttpContext context,
+            string projectId,
+            UpsertFlowDefinitionRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.UpsertFlowDefinitionAsync(
+                projectId, request, Actor(context), ct)));
+        orchestration.MapGet("/runs", async (
+            string? projectId,
+            string? status,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ListOrchestrationRunsAsync(projectId, status, ct)));
+        orchestration.MapGet("/runs/{runId}", async (
+            string runId,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetOrchestrationRunAsync(runId, ct)));
+        orchestration.MapPost("/projects/{projectId}/runs", async (
+            HttpContext context,
+            string projectId,
+            CreateOrchestrationRunRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.CreateOrchestrationRunAsync(
+                projectId, request, Actor(context), ct), StatusCodes.Status201Created));
+        orchestration.MapPost("/claims", async (
+            HttpContext context,
+            OrchestrationClaimRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ClaimOrchestrationAsync(
+                request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/lease/renew", async (
+            HttpContext context,
+            string runId,
+            OrchestrationLeaseRenewRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.RenewOrchestrationLeaseAsync(
+                runId, request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/lease/release", async (
+            HttpContext context,
+            string runId,
+            ReleaseOrchestrationLeaseRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReleaseOrchestrationLeaseAsync(
+                runId, request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/stages/complete", async (
+            HttpContext context,
+            string runId,
+            CompleteOrchestrationStageRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.CompleteOrchestrationStageAsync(
+                runId, request, Actor(context), ct)));
 
         var management = api.MapGroup("/management");
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));

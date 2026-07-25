@@ -127,6 +127,19 @@ state.
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
   forget.
+- `orchestrator-engine/`: the separate API-only flow executor. Its bounded
+  ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
+  loops claim server-owned orchestration runs through
+  `/api/v1/orchestration/*`. It references only the shared Task Server
+  contracts and has no TaskScanner, task-folder, or store access.
+- `task-server/TaskServerOrchestrationStore.cs`: durable flow definitions,
+  orchestration runs, stage results, leases, fences, and restart recovery.
+  Expired Engine leases return the same run to `pending`; a replacement Engine
+  receives a higher fence and stale settlement is rejected.
+- `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
+  for the legacy host. `Orchestration:ExecutionMode` accepts exactly
+  `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
+  hosted services from the monolith.
 - Canonical Remote ReviewAttempts are excluded from the legacy
   `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
   fenced Remote Review Executor claims them. This is the fail-closed bootstrap

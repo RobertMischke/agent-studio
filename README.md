@@ -24,6 +24,10 @@
   branch, and revision.
 - Keeps the Task Server as the durable control plane while separately fenced
   Remote Review Executors inspect immutable result revisions.
+- Runs review decisions, council reactions, post-processing, gate dispatch, and
+  completion judging in the separate API-only Orchestrator Engine. Flow
+  definitions and in-flight runs remain durable Task Server data, so restarting
+  the Engine does not orphan work.
 
 ## Running locally
 

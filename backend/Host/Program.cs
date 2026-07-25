@@ -20,6 +20,8 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddTaskServerPlaneProxy(builder.Configuration);
+var orchestrationExecutionMode = OrchestrationExecutionModeParser.Parse(
+    builder.Configuration["Orchestration:ExecutionMode"]);
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -548,13 +550,9 @@ builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>(
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewDecisionOrchestrator>());
-builder.Services.AddHostedService<AutoReviewPostProcessingWorker>();
-// One-shot boot scan that re-drives any 4-auto-review card whose post-processing
-// enqueue was lost when the backend last restarted (the queue is a volatile
-// in-memory channel). Runs after the scanner has warmed; only touches
-// 4-auto-review and is fully idempotent (the worker self-gates per card).
-builder.Services.AddHostedService<AgentStudio.Runner.AutoReviewPostProcessingRecoveryService>();
+// Transitional single-owner boundary. Engine mode deliberately registers none
+// of the legacy review/council/post-processing hosted loops.
+builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.

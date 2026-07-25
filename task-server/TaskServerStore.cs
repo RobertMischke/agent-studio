@@ -119,6 +119,12 @@ public sealed partial class TaskServerStore
                     UPDATE review_attempts
                        SET status = 'process-unknown'
                      WHERE status = 'leased';
+                    UPDATE orchestration_runs
+                       SET status = 'pending'
+                     WHERE status = 'leased';
+                    UPDATE orchestration_leases
+                       SET status = 'server-restarted'
+                     WHERE status = 'active';
                     """, cancellationToken);
             }
 
@@ -150,8 +156,8 @@ public sealed partial class TaskServerStore
                 TaskServerProtocol.MaximumSupported,
                 version,
                 _serverId,
-                ["studio", "runner", "review-runner", "management"],
-                ["coding-plane", "review-plane", "management-plane"]),
+                ["studio", "runner", "review-runner", TaskServerProtocol.EngineClientKind, "management"],
+                ["coding-plane", "review-plane", "orchestration-plane", "management-plane"]),
             _startedAt,
             _outboxBacklog,
             _oldestUnacknowledgedSequence,
@@ -1908,6 +1914,52 @@ public sealed partial class TaskServerStore
                 received_at TEXT NOT NULL,
                 PRIMARY KEY(run_id, sequence)
             );
+            CREATE TABLE IF NOT EXISTS flow_definitions(
+                project_id TEXT PRIMARY KEY REFERENCES projects(id),
+                version INTEGER NOT NULL,
+                stages_json TEXT NOT NULL,
+                max_reissue_attempts INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_runs(
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                task_id TEXT NOT NULL REFERENCES tasks(id),
+                definition_version INTEGER NOT NULL,
+                stages_json TEXT NOT NULL,
+                max_reissue_attempts INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                current_stage TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                reissue_attempts INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_fence_counters(
+                run_id TEXT PRIMARY KEY REFERENCES orchestration_runs(id),
+                last_fence INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_leases(
+                run_id TEXT PRIMARY KEY REFERENCES orchestration_runs(id),
+                lease_id TEXT NOT NULL UNIQUE,
+                engine_id TEXT NOT NULL,
+                instance_id TEXT NOT NULL,
+                fence INTEGER NOT NULL,
+                acquired_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_stage_results(
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL REFERENCES orchestration_runs(id),
+                stage TEXT NOT NULL,
+                action TEXT NOT NULL,
+                output_json TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                completed_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS audit(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                 occurred_at TEXT NOT NULL,
@@ -1955,6 +2007,10 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
             CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
             CREATE INDEX IF NOT EXISTS ix_runner_capabilities_state ON runner_capabilities(runner_id, health_state, fresh_until);
+            CREATE INDEX IF NOT EXISTS ix_orchestration_runs_status_stage
+                ON orchestration_runs(status, current_stage, updated_at);
+            CREATE INDEX IF NOT EXISTS ix_orchestration_stage_results_run
+                ON orchestration_stage_results(run_id, sequence);
             """, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
