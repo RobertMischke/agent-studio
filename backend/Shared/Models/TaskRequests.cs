@@ -492,7 +492,20 @@ public record SetMaxParallelismRequest
 /// <summary>Body for the server-owned remote runner assignment.</summary>
 public record SetExecutionRunnerRequest
 {
+    /// <summary>
+    /// Legacy composite field. Values <c>auto-continuous</c>, <c>manual</c>,
+    /// and <c>paused</c> change pickup intent; any registered runner id means
+    /// automatic pickup at that runner; null/local selects local execution.
+    /// </summary>
     public string? ExecutionRunner { get; init; }
+
+    /// <summary>Canonical pickup dimension: auto, manual, or paused.</summary>
+    public string? PickupMode { get; init; }
+
+    /// <summary>Canonical placement dimension: local or a registered runner id.</summary>
+    public string? ExecutionLocation { get; init; }
+
+    /// <summary>Legacy compatibility input. False resolves placement to local.</summary>
     public bool? RemoteExecutionEnabled { get; init; }
 }
 

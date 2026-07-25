@@ -21,6 +21,8 @@ interface ProbeCheck {
 }
 
 interface ProjectExecutionSettings {
+  pickupMode?: 'auto' | 'manual' | 'paused';
+  executionLocation?: string;
   executionRunner?: string | null;
   remoteExecutionEnabled?: boolean;
   integrationBranch?: string;
@@ -40,6 +42,7 @@ export class ExecutionAssignmentCardComponent implements OnInit {
   readonly hostRegistry = inject(RemoteHostsService);
 
   readonly selectedHostId = signal('local');
+  readonly pickupMode = signal<'auto' | 'manual' | 'paused'>('manual');
   readonly integrationBranch = signal('develop');
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -56,6 +59,11 @@ export class ExecutionAssignmentCardComponent implements OnInit {
   readonly probePassed = computed(() =>
     this.checks().every((check) => check.state === 'passed'),
   );
+  readonly pickupModes = [
+    { id: 'auto' as const, label: 'Auto', hint: 'Offer ready tasks automatically at the selected location.' },
+    { id: 'manual' as const, label: 'Manual', hint: 'Only explicit task starts are admitted.' },
+    { id: 'paused' as const, label: 'Paused', hint: 'Hold automatic pickup while keeping the selected location.' },
+  ];
 
   ngOnInit(): void {
     this.hostRegistry.ensureLoaded();
@@ -64,8 +72,39 @@ export class ExecutionAssignmentCardComponent implements OnInit {
       .subscribe({
         next: (settings) => {
           const project = settings?.[this.projectName()];
-          this.selectedHostId.set(project?.remoteExecutionEnabled === false ? 'local' : project?.executionRunner || 'local');
+          this.pickupMode.set(project?.pickupMode || 'manual');
+          this.selectedHostId.set(
+            project?.executionLocation
+            || (project?.remoteExecutionEnabled === false ? 'local' : project?.executionRunner)
+            || 'local',
+          );
           this.integrationBranch.set(project?.integrationBranch || 'develop');
+        },
+      });
+  }
+
+  setPickupMode(mode: 'auto' | 'manual' | 'paused'): void {
+    if (mode === this.pickupMode() || this.saving()) return;
+    const previous = this.pickupMode();
+    this.pickupMode.set(mode);
+    this.saving.set(true);
+    this.saveError.set(null);
+    this.http
+      .put<ProjectExecutionSettings>(
+        `/api/projects/${encodeURIComponent(this.projectName())}/execution-runner`,
+        { pickupMode: mode },
+      )
+      .subscribe({
+        next: (response) => {
+          this.pickupMode.set(response.pickupMode || mode);
+          this.saving.set(false);
+          this.log('pickup-mode-saved', { pickupMode: this.pickupMode() });
+        },
+        error: () => {
+          this.pickupMode.set(previous);
+          this.saving.set(false);
+          this.saveError.set('Pickup mode could not be saved. The previous mode is still active.');
+          this.log('pickup-mode-failed', { requestedPickupMode: mode, restoredPickupMode: previous });
         },
       });
   }
@@ -80,13 +119,12 @@ export class ExecutionAssignmentCardComponent implements OnInit {
       .put<ProjectExecutionSettings>(
         `/api/projects/${encodeURIComponent(this.projectName())}/execution-runner`,
         {
-          executionRunner: hostId === 'local' ? null : hostId,
-          remoteExecutionEnabled: true,
+          executionLocation: hostId,
         },
       )
       .subscribe({
         next: (response) => {
-          this.selectedHostId.set(response.executionRunner || 'local');
+          this.selectedHostId.set(response.executionLocation || response.executionRunner || 'local');
           this.saving.set(false);
           this.log('assignment-saved', { hostId: this.selectedHostId() });
         },

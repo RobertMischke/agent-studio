@@ -1838,6 +1838,8 @@ export class TaskService {
           crashRecoveryEnabled: boolean;
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
+          pickupMode: 'auto' | 'manual' | 'paused';
+          executionLocation: string;
           orchestratorModel: string | null;
           buildProfilePickupAllowed?: boolean;
           buildProfile?: { status?: string | null } | null;

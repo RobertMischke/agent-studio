@@ -354,6 +354,12 @@ public class ProjectRunner
     private bool IsInRapidCrashBackoff(string jobId)
         => _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) && until > DateTime.UtcNow;
 
+    private static string? ResolveConfiguredRemoteRunnerId(ProjectSettings settings)
+    {
+        var location = ProjectExecutionPolicy.ResolveExecutionLocation(settings);
+        return location == ExecutionLocations.Local ? null : location;
+    }
+
     // Continuous decision review: while a job sits in 3-progress, we scan
     // its live output buffer every tick for an unresolved interruptive
     // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
@@ -967,16 +973,14 @@ public class ProjectRunner
         // refill a slot and move the flip point further into the future.
         if (!DeferredModePickupPolicy.AllowsAutoPickup(_pendingMode)) return;
 
-        // The project record is the single pickup-ownership truth. When it is
-        // assigned to a remote runner and is remote-capable, this in-process
-        // runner must not race it. Explicit user starts remain available.
+        // Placement decides who may claim; the live mode gate above decides
+        // whether pickup is automatic. Explicit user starts remain available.
         var pickupSettings = _projectSettings.Get(ProjectName);
-        if (pickupSettings.RemoteExecutionEnabled
-            && !string.IsNullOrWhiteSpace(pickupSettings.ExecutionRunner))
+        if (!ProjectExecutionPolicy.IsLocalExecution(pickupSettings))
         {
             _logger.LogDebug(
                 "remote-pickup-owned project={Project} runner={Runner}; local auto-pickup skipped",
-                ProjectName, pickupSettings.ExecutionRunner);
+                ProjectName, ProjectExecutionPolicy.ResolveExecutionLocation(pickupSettings));
             return;
         }
 
@@ -2648,7 +2652,7 @@ public class ProjectRunner
                     RunnerId = localRunnerId,
                     ClientId = localRunnerId,
                     HostDisplayName = executionHost,
-                    ConfiguredRunnerId = _projectSettings.Get(ProjectName).ExecutionRunner,
+                    ConfiguredRunnerId = ResolveConfiguredRemoteRunnerId(_projectSettings.Get(ProjectName)),
                     StartedAt = execution.StartedAt,
                     LastActivityAt = execution.StartedAt,
                     SessionId = effSessionToResume,

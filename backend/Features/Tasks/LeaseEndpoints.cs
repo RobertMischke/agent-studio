@@ -49,13 +49,11 @@ public static class LeaseEndpoints
                 if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal principal)
                 {
                     var settingsProject = settings.Get(task.ProjectName);
-                    var assigned = settingsProject.ExecutionRunner;
-                    if (!settingsProject.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(assigned)
-                        || !(string.Equals(assigned, principal.RunnerId, StringComparison.OrdinalIgnoreCase)
-                             || string.Equals(assigned, principal.RunnerName, StringComparison.OrdinalIgnoreCase)))
+                    if (!ProjectExecutionPolicy.IsAssignedRemote(
+                            settingsProject, principal.RunnerId, principal.RunnerName))
                         return Results.Json(new RunLeaseResponse(
                             "ProjectDenied", false, null,
-                            "The Runner is not assigned to this remote-enabled project."), statusCode: StatusCodes.Status403Forbidden);
+                            "The Runner is not assigned to this project's execution location."), statusCode: StatusCodes.Status403Forbidden);
                 }
                 var project = projects.FindByStorageLocation(task.WatchPath)
                               ?? projects.FindByIdOrDisplayName(task.ProjectName);
@@ -130,7 +128,7 @@ public static class LeaseEndpoints
         // Daemon pickup is selected server-side from the project record. The
         // gate makes scan + fenced lease + ready-to-progress move one claim
         // critical section for all remote contenders. The local runner reads
-        // the same ExecutionRunner field and therefore never enters this race.
+        // the same resolved executionLocation and therefore never enters this race.
         app.MapPost("/api/runner/claim", async (
             RunnerClaimRequest req,
             TaskScannerService scanner,
@@ -272,11 +270,8 @@ public static class LeaseEndpoints
                 foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
-                    var assigned = project.ExecutionRunner;
-                    if (!project.RemoteExecutionEnabled
-                        || string.IsNullOrWhiteSpace(assigned)
-                        || (!string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase)))
+                    if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                        || !ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName))
                         continue;
                     var interruptedKey = interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id;
                     if (leases.Peek(interruptedKey).Outcome != "Free") continue;
@@ -344,11 +339,8 @@ public static class LeaseEndpoints
                     .Where(t =>
                     {
                         var project = settings.Get(t.ProjectName);
-                        var assigned = project.ExecutionRunner;
-                        return project.RemoteExecutionEnabled
-                               && !string.IsNullOrWhiteSpace(assigned)
-                               && (string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
-                                   || string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase))
+                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
                                && AgentTypes.IsAutoPickupEligible(t.Agent)
                                && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
                                && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
@@ -453,7 +445,7 @@ public static class LeaseEndpoints
                         RunnerId = acquire.Lease.RunnerId,
                         ClientId = acquire.Lease.ClientId ?? acquire.Lease.RunnerId,
                         HostDisplayName = string.IsNullOrWhiteSpace(acquire.Lease.RunnerName) ? acquire.Lease.Hostname : acquire.Lease.RunnerName,
-                        ConfiguredRunnerId = settings.Get(candidate.ProjectName).ExecutionRunner,
+                        ConfiguredRunnerId = ProjectExecutionPolicy.ResolveExecutionLocation(settings.Get(candidate.ProjectName)),
                         StartedAt = acquire.Lease.AcquiredAt,
                         LastHeartbeat = acquire.Lease.LastHeartbeatAt,
                         LastActivityAt = acquire.Lease.LastHeartbeatAt,

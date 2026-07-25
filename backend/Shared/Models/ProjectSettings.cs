@@ -50,9 +50,25 @@ public record ProjectSettings
     public string? DesiredRunnerMode { get; init; }
 
     /// <summary>
-    /// Server-owned assignment for remote execution. A non-empty value names
-    /// the remote runner allowed to claim this project's ready cards. The local
-    /// in-process runner skips those cards while the project is remote-capable.
+    /// Canonical automatic pickup intent, independent from execution placement.
+    /// One of <see cref="PickupModes.Auto"/>, <see cref="PickupModes.Manual"/>,
+    /// or <see cref="PickupModes.Paused"/>. Null is accepted only for legacy
+    /// records and resolves through <see cref="ProjectExecutionPolicy"/>.
+    /// </summary>
+    public string? PickupMode { get; init; }
+
+    /// <summary>
+    /// Canonical execution placement, independent from pickup intent.
+    /// <see cref="ExecutionLocations.Local"/> selects the in-process runner;
+    /// any other value is the registered remote runner id. Null is accepted
+    /// only for legacy records and resolves through
+    /// <see cref="ProjectExecutionPolicy"/>.
+    /// </summary>
+    public string? ExecutionLocation { get; init; }
+
+    /// <summary>
+    /// Legacy compatibility mirror for <see cref="ExecutionLocation"/>.
+    /// New code must resolve placement through <see cref="ProjectExecutionPolicy"/>.
     /// </summary>
     public string? ExecutionRunner { get; init; }
 

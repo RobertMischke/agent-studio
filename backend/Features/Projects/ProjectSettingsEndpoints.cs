@@ -63,6 +63,8 @@ public static class ProjectSettingsEndpoints
                     crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
+                    pickupMode = ProjectExecutionPolicy.ResolvePickupMode(kv.Value),
+                    executionLocation = ProjectExecutionPolicy.ResolveExecutionLocation(kv.Value),
                     executionRunner = kv.Value.ExecutionRunner,
                     remoteExecutionEnabled = kv.Value.RemoteExecutionEnabled,
                     orchestratorModel = kv.Value.OrchestratorModel,
@@ -490,25 +492,63 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(settings.Get(projectName));
         });
 
-        // Remote runner assignment is server-owned so local and remote pickup
-        // cannot drift apart. Blank executionRunner hands the project back to
-        // the local runner. Eligibility defaults true; screenshots/headless UI
-        // work is supported remotely, while machine-bound projects opt out.
+        // Compatibility route for both the old composite executionRunner field
+        // and the canonical pickupMode + executionLocation pair.
         app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req,
-            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients) =>
+            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients,
+            TaskRunnerService runners) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             try
             {
-                var runner = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients);
-                settings.RekeyProject(
+                string? pickupMode = req.PickupMode;
+                string? executionLocation = req.ExecutionLocation;
+
+                if (pickupMode is not null && !PickupModes.IsValid(pickupMode))
+                    return Results.BadRequest(new { error = $"Unsupported pickup mode '{pickupMode}'. Allowed: auto, manual, paused." });
+
+                if (req.ExecutionLocation is null
+                    && req.ExecutionRunner is null
+                    && pickupMode is not null)
+                {
+                    executionLocation = null;
+                }
+                else if (req.ExecutionLocation is not null)
+                {
+                    executionLocation = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionLocation, clients)
+                                        ?? ExecutionLocations.Local;
+                }
+                else if (ProjectExecutionPolicy.IsLegacyComposite(req.ExecutionRunner))
+                {
+                    pickupMode = string.Equals(req.ExecutionRunner, "auto-continuous", StringComparison.OrdinalIgnoreCase)
+                        ? PickupModes.Auto
+                        : PickupModes.Normalize(req.ExecutionRunner);
+                    executionLocation = string.Equals(req.ExecutionRunner, "auto-continuous", StringComparison.OrdinalIgnoreCase)
+                        ? ExecutionLocations.Local
+                        : null;
+                }
+                else
+                {
+                    executionLocation = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients)
+                                        ?? ExecutionLocations.Local;
+                    if (executionLocation != ExecutionLocations.Local
+                        && req.RemoteExecutionEnabled != false)
+                        pickupMode ??= PickupModes.Auto;
+                }
+
+                settings.SetExecutionSettings(
                     projectName,
-                    projectName,
-                    updateExecutionRunner: true,
-                    executionRunner: runner,
-                    remoteExecutionEnabled: req.RemoteExecutionEnabled);
+                    pickupMode,
+                    executionLocation,
+                    req.RemoteExecutionEnabled);
+
+                if (pickupMode is not null)
+                    runners.RequestModeChange(
+                        projectName,
+                        PickupModes.ToRunnerMode(pickupMode),
+                        "api: PUT /api/projects/{projectName}/execution-runner");
                 return Results.Ok(settings.Get(projectName));
             }
             catch (ArgumentException ex)

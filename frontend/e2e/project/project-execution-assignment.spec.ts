@@ -13,9 +13,16 @@ test.beforeAll(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
-test('assigns a remote host and completes the guided readiness probe', async ({ page, devBackend }) => {
+test('keeps pickup mode and execution location as independent controls', async ({ page, devBackend }) => {
   expect(devBackend.workspace).toBeTruthy();
   const projectName = 'Agent Studio';
+  await page.route('**/api/crash-recovery/pending', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '[]',
+    });
+  });
   await page.route('**/api/watch-paths', async (route) => {
     await route.fulfill({
       status: 200,
@@ -29,30 +36,66 @@ test('assigns a remote host and completes the guided readiness probe', async ({ 
       contentType: 'application/json',
       body: JSON.stringify({
         [projectName]: {
-          executionRunner: null,
-          remoteExecutionEnabled: true,
+          pickupMode: 'manual',
+          executionLocation: 'local',
           integrationBranch: 'develop',
           maxParallelism: 1,
         },
       }),
     });
   });
-  await page.route('**/api/projects/*/execution-runner', async (route) => {
-    expect(route.request().method()).toBe('PUT');
-    expect(route.request().postDataJSON()).toEqual({
-      executionRunner: 'agent-runner-01',
-      remoteExecutionEnabled: true,
-    });
+  await page.route('**/api/clients', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ executionRunner: 'agent-runner-01', remoteExecutionEnabled: true }),
+      body: JSON.stringify([{
+        id: 'agent-runner-01',
+        displayName: 'agent-runner-01',
+        kind: 'service',
+        registeredAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        runnerGitStatus: 'ready',
+        runnerDaemonState: 'running',
+        runnerActiveSlots: 0,
+        runnerAvailableSlots: 2,
+      }]),
+    });
+  });
+  await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        clientId: 'agent-runner-01',
+        window: '14d',
+        points: [],
+        findings: [],
+      }),
+    });
+  });
+  await page.route('**/api/projects/*/execution-runner', async (route) => {
+    expect(route.request().method()).toBe('PUT');
+    const body = route.request().postDataJSON();
+    expect([
+      { executionLocation: 'agent-runner-01' },
+      { pickupMode: 'paused' },
+    ]).toContainEqual(body);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        pickupMode: body.pickupMode || 'manual',
+        executionLocation: 'agent-runner-01',
+      }),
     });
   });
 
   await page.goto(`/#/projects/${slugFor(projectName)}/settings`);
   const card = page.getByTestId('project-execution-card');
   await expect(card).toBeVisible({ timeout: 10_000 });
+  await expect(card.getByTestId('project-pickup-mode-manual')).toHaveAttribute('aria-pressed', 'true');
+  await expect(card.getByTestId('project-pickup-mode-auto')).toBeVisible();
+  await expect(card.getByTestId('project-pickup-mode-paused')).toBeVisible();
 
   const hostSelect = card.getByTestId('project-execution-host-select');
   await expect(hostSelect).toHaveValue('local');
@@ -60,13 +103,18 @@ test('assigns a remote host and completes the guided readiness probe', async ({ 
   await expect(hostSelect).toHaveValue('agent-runner-01');
   await expect(card.getByTestId('project-execution-selected-host')).toContainText('agent-runner');
 
-  await card.getByTestId('project-execution-probe').click();
-  for (const key of ['code', 'branch', 'toolchain', 'noop']) {
-    await expect(card.getByTestId(`project-execution-check-${key}`)).toHaveAttribute('data-state', 'passed');
-  }
-  await expect(card.getByTestId('project-execution-ready')).toContainText('Ready for project execution');
+  await card.getByTestId('project-pickup-mode-paused').click();
+  await expect(card.getByTestId('project-pickup-mode-paused')).toHaveAttribute('aria-pressed', 'true');
+  await expect(hostSelect).toHaveValue('agent-runner-01');
 
   await card.screenshot({
-    path: path.join(SCREENSHOT_DIR, 'project-execution-probe-passed--mocked.png'),
+    path: path.join(SCREENSHOT_DIR, 'project-execution-controls-separated--mocked.png'),
+  });
+  await page.evaluate(() => {
+    document.documentElement.setAttribute('data-studio-theme', 'dark');
+  });
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+  await card.screenshot({
+    path: path.join(SCREENSHOT_DIR, 'project-execution-controls-separated--dark--mocked.png'),
   });
 });

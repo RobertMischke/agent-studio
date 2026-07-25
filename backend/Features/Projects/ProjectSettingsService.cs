@@ -35,7 +35,9 @@ public class ProjectSettingsService
         lock (_lock)
         {
             var resolved = ResolveAliasLocked(projectName);
-            return _cache.TryGetValue(resolved, out var s) ? s : new ProjectSettings();
+            return _cache.TryGetValue(resolved, out var s)
+                ? ProjectExecutionPolicy.Migrate(s)
+                : ProjectExecutionPolicy.Migrate(new ProjectSettings());
         }
     }
 
@@ -44,7 +46,10 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            return new Dictionary<string, ProjectSettings>(_cache, StringComparer.OrdinalIgnoreCase);
+            return _cache.ToDictionary(
+                kv => kv.Key,
+                kv => ProjectExecutionPolicy.Migrate(kv.Value),
+                StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -125,28 +130,66 @@ public class ProjectSettingsService
     }
 
     /// <summary>
-    /// Assigns a project to one remote runner and optionally changes its remote
-    /// eligibility. Blank assignment returns pickup ownership to the local
-    /// runner. Both values are persisted in the project record in one write.
+    /// Legacy assignment helper. A remote runner id implies automatic pickup on
+    /// that runner; blank or disabled remote execution resolves to local while
+    /// preserving the current pickup mode.
     /// </summary>
     public void SetExecutionRunner(string projectName, string? executionRunner, bool? remoteExecutionEnabled = null)
+        => SetExecutionSettings(
+            projectName,
+            pickupMode: !string.IsNullOrWhiteSpace(executionRunner)
+                        && remoteExecutionEnabled != false
+                ? PickupModes.Auto
+                : null,
+            executionLocation: executionRunner,
+            remoteExecutionEnabled: remoteExecutionEnabled);
+
+    /// <summary>
+    /// Atomically writes pickup intent and execution placement. Null arguments
+    /// preserve that dimension. The legacy mirrors remain populated so older
+    /// readers keep working while every write persists the canonical fields.
+    /// </summary>
+    public void SetExecutionSettings(
+        string projectName,
+        string? pickupMode,
+        string? executionLocation,
+        bool? remoteExecutionEnabled = null)
     {
         EnsureLoaded();
-        var normalized = string.IsNullOrWhiteSpace(executionRunner) ? null : executionRunner.Trim();
+        if (pickupMode is not null && !PickupModes.IsValid(pickupMode))
+            throw new ArgumentException($"Unsupported pickup mode '{pickupMode}'.", nameof(pickupMode));
         lock (_lock)
         {
             var key = ResolveAliasLocked(projectName);
-            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var current = ProjectExecutionPolicy.Migrate(
+                _cache.TryGetValue(key, out var s) ? s : new ProjectSettings());
+            var resolvedPickup = pickupMode is null
+                ? current.PickupMode!
+                : PickupModes.Normalize(pickupMode);
+            var resolvedLocation = executionLocation is null
+                ? current.ExecutionLocation!
+                : ExecutionLocations.Normalize(executionLocation);
+            var disabledLegacyRunner = remoteExecutionEnabled == false
+                                       && ProjectExecutionPolicy.IsLegacyRemoteRunner(executionLocation)
+                ? executionLocation!.Trim()
+                : null;
+            if (remoteExecutionEnabled == false)
+                resolvedLocation = ExecutionLocations.Local;
             _cache[key] = current with
             {
-                ExecutionRunner = normalized,
-                RemoteExecutionEnabled = remoteExecutionEnabled ?? current.RemoteExecutionEnabled,
+                PickupMode = resolvedPickup,
+                ExecutionLocation = resolvedLocation,
+                RunnerMode = pickupMode is null ? current.RunnerMode : PickupModes.ToRunnerMode(resolvedPickup),
+                DesiredRunnerMode = pickupMode is null ? current.DesiredRunnerMode : PickupModes.ToRunnerMode(resolvedPickup),
+                ExecutionRunner = disabledLegacyRunner
+                                  ?? (resolvedLocation == ExecutionLocations.Local ? null : resolvedLocation),
+                RemoteExecutionEnabled = resolvedLocation != ExecutionLocations.Local,
             };
             Persist();
         }
         _logger.LogInformation(
-            "execution-runner-assignment project={Project} runner={Runner} remoteEnabled={RemoteEnabled}",
-            projectName, normalized ?? "local", remoteExecutionEnabled ?? Get(projectName).RemoteExecutionEnabled);
+            "project-execution-settings project={Project} pickupMode={PickupMode} executionLocation={ExecutionLocation}",
+            projectName, Get(projectName).PickupMode, Get(projectName).ExecutionLocation);
     }
 
     /// <summary>
@@ -185,10 +228,20 @@ public class ProjectSettingsService
 
             if (updateExecutionRunner)
             {
+                var location = remoteExecutionEnabled == false
+                    ? ExecutionLocations.Local
+                    : ExecutionLocations.Normalize(runner);
+                var pickupMode = location == ExecutionLocations.Local
+                    ? ProjectExecutionPolicy.ResolvePickupMode(settings)
+                    : PickupModes.Auto;
                 settings = settings with
                 {
-                    ExecutionRunner = runner,
-                    RemoteExecutionEnabled = remoteExecutionEnabled ?? settings.RemoteExecutionEnabled,
+                    PickupMode = pickupMode,
+                    ExecutionLocation = location,
+                    RunnerMode = PickupModes.ToRunnerMode(pickupMode),
+                    DesiredRunnerMode = PickupModes.ToRunnerMode(pickupMode),
+                    ExecutionRunner = location == ExecutionLocations.Local ? null : location,
+                    RemoteExecutionEnabled = location != ExecutionLocations.Local,
                 };
             }
 
@@ -402,6 +455,7 @@ public class ProjectSettingsService
             {
                 RunnerMode = mode,
                 DesiredRunnerMode = isUser ? mode : desired,
+                PickupMode = PickupModes.FromRunnerMode(mode),
             };
             Persist();
         }
@@ -895,7 +949,10 @@ public class ProjectSettingsService
                 var doc = JsonSerializer.Deserialize<Dictionary<string, ProjectSettings>>(
                     json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (doc != null)
-                    _cache = new Dictionary<string, ProjectSettings>(doc, StringComparer.OrdinalIgnoreCase);
+                    _cache = doc.ToDictionary(
+                        kv => kv.Key,
+                        kv => ProjectExecutionPolicy.Migrate(kv.Value),
+                        StringComparer.OrdinalIgnoreCase);
             }
             catch (Exception ex)
             {
@@ -986,7 +1043,12 @@ public class ProjectSettingsService
     }
 
     private string SerializeCache() =>
-        JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
+        JsonSerializer.Serialize(
+            _cache.ToDictionary(
+                kv => kv.Key,
+                kv => ProjectExecutionPolicy.Migrate(kv.Value),
+                StringComparer.OrdinalIgnoreCase),
+            new JsonSerializerOptions { WriteIndented = true });
 
     private string ResolveAliasLocked(string projectName)
     {
