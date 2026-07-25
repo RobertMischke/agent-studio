@@ -2,6 +2,14 @@
 
 // state
 export { ProjectOverlaysService } from './state/project-overlays.service';
+export {
+  isProjectHubRoute,
+  parseProjectHubRoute,
+  projectHubRoute,
+  withProjectHubRoute,
+  type ProjectHubRouteProject,
+  type ProjectHubRouteTarget,
+} from './state/project-hub-route';
 
 // container components
 export { ProjectOverlaysComponent } from './components/project-overlays/project-overlays.component';

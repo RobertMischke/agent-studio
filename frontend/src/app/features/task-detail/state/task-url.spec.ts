@@ -15,6 +15,15 @@ describe('task URL contract', () => {
     expect(next).not.toContain('human-title-slug');
   });
 
+  it('removes a competing shell route while preserving independent hash state', () => {
+    const current = new URL(
+      'http://localhost/?view=git#/projects/PROJ-002/wiki?page=concepts%2Foverview.md&filters=type%3Abug',
+    );
+
+    expect(taskUrl('AGT-2124', current))
+      .toBe('/?view=git#/tasks/AGT-2124&filters=type%3Abug');
+  });
+
   it('clears only task routing state and preserves shell state', () => {
     const current = new URL('http://localhost/studio?view=git#/tasks/AGT-2124&filters=type%3Abug');
     expect(withoutTaskUrl(current)).toBe('/studio?view=git#filters=type%3Abug');

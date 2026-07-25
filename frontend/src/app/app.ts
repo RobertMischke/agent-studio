@@ -54,7 +54,6 @@ import {
 } from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
-  isProjectRailKey,
   ProjectOverlaysComponent,
   ProjectOverlaysService,
   ProjectRailKey,
@@ -86,6 +85,7 @@ import {
   ProjectHubViewComponent,
   StudioDiffViewComponent,
   StudioActivityViewComponent,
+  ProjectHubUrlService,
   StudioTabStateService,
   StudioPanelStateService,
   studioTabKey,
@@ -223,6 +223,7 @@ export class App implements OnInit, OnDestroy {
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
+  readonly projectHubUrls = inject(ProjectHubUrlService);
   private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
@@ -927,6 +928,11 @@ export class App implements OnInit, OnDestroy {
       if (allowed && !this.studioInitialized) untracked(() => this.initializeStudio());
       else if (statusKnown && !allowed && this.studioInitialized) untracked(() => this.teardownStudio());
     });
+    effect(() => {
+      if (this.projectHubUrls.appliedRevision() === 0) return;
+      untracked(() => this.studioRouteReady.set(true));
+    });
+
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateTaskFormService doesn't call jobService.refresh itself
     // because that orchestration concern lives here. F2: also flag the
@@ -1106,6 +1112,9 @@ export class App implements OnInit, OnDestroy {
       if (!this.featureFlags.vsCodeLayout() || !this.studioRouteReady()) return;
       const tab = this.studioTabState.activeTab();
       if (!tab) return;
+      // Project Hub routes are owned by ProjectHubUrlService because their
+      // canonical identity is the immutable registry id, not a display slug.
+      if (tab.kind === 'hub') return;
       let publicTaskReference: string | null = null;
       if (tab.kind === 'task' || tab.kind === 'epic') {
         const selected = this.selectedJob();
@@ -1215,6 +1224,7 @@ export class App implements OnInit, OnDestroy {
     this.nowMsTickHandle = setInterval(() => this.nowMs.set(Date.now()), 1000);
     this.refresh();
     this.jobService.startLiveUpdates();
+    this.projectHubUrls.start();
     this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
@@ -1237,6 +1247,7 @@ export class App implements OnInit, OnDestroy {
     applyHash();
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
+    window.addEventListener('popstate', this.hashListener);
 
     // Keyboard shortcuts for kanban container focus-expand: 1/2/3 focus
     // the corresponding container, 0 exits focus. Suppressed while the
@@ -1293,6 +1304,7 @@ export class App implements OnInit, OnDestroy {
     this.jobService.stopLiveUpdates();
     if (this.hashListener) {
       window.removeEventListener('hashchange', this.hashListener);
+      window.removeEventListener('popstate', this.hashListener);
       this.hashListener = null;
     }
     if (this.kanbanKeyListener) {
@@ -1304,6 +1316,7 @@ export class App implements OnInit, OnDestroy {
       this.nowMsTickHandle = null;
     }
     this.studioInitialized = false;
+    this.projectHubUrls.stop();
   }
 
   ngOnDestroy() { this.teardownStudio(); }
@@ -2140,8 +2153,12 @@ export class App implements OnInit, OnDestroy {
   closeAnalysisReport(): void {
     this.projectOverlays.closeAnalysisReport();
   }
-  private applyProjectShellHash(): void {
-    this.projectOverlays.syncShellFromHash(this.watchPaths());
+  private applyProjectShellHash(fromHistory = false): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.projectHubUrls.applyHash(fromHistory);
+    } else {
+      this.projectOverlays.syncShellFromHash(this.watchPaths());
+    }
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
   }
 
@@ -2160,6 +2177,13 @@ export class App implements OnInit, OnDestroy {
     }
     this.studioRouteReady.set(false);
 
+    if (route.kind === 'hub') {
+      if (this.projectHubUrls.applyHash(false)) {
+        this.studioRouteReady.set(true);
+      }
+      return true;
+    }
+
     const projectName = 'projectSlug' in route && route.projectSlug
       ? this.watchPaths().find(entry => studioProjectSlug(entry.name) === route.projectSlug)?.name ?? null : null;
     if ('projectSlug' in route && route.projectSlug && !projectName) {
@@ -2169,10 +2193,6 @@ export class App implements OnInit, OnDestroy {
     switch (route.kind) {
       case 'board':
         this.studioTabState.open({ kind: 'board', projectName: projectName ?? '__all__' });
-        break;
-      case 'hub':
-        this.studioTabState.open({ kind: 'hub', projectName: projectName!,
-          section: isProjectRailKey(route.section) ? route.section : DEFAULT_PROJECT_RAIL_KEY });
         break;
       case 'workbench':
         this.studioTabState.open({ kind: 'workbench', projectName: projectName!, workbenchId: route.workbenchId });
@@ -2210,7 +2230,6 @@ export class App implements OnInit, OnDestroy {
   onTaskInspectorTabChange(tab: TaskInspectorRouteTab): void {
     this.routeInspectorTab.set(tab);
   }
-
   private syncEpicsTabFromHash(): void {
     const rawHash = window.location.hash || '';
     if (!rawHash.startsWith('#epics')) return;

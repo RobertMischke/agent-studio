@@ -51,6 +51,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
 | Frontend | [domains/frontend.md](../system/domains/frontend.md) |
+| Stable view URL contract | [contracts/stable-view-urls.md](../system/contracts/stable-view-urls.md) |
 | Global search palette and API | [domains/frontend.md#global-search](../system/domains/frontend.md#global-search) |
 | Frontend navigation style guide | [frontend/style-guide/navigation.md](../quality/frontend/style-guide/navigation.md) |
 | CLI | [domains/cli.md](../system/domains/cli.md) |

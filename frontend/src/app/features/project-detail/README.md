@@ -104,10 +104,13 @@ project sessions. Do not move them back into the operator Overview.
 - **Per-rail follow-ups** bubble up to the shell because they trigger the create
   task dialog whose form state is in
   `features/board/state/create-job-form.service.ts`.
-- The project-shell URL hash is `#/projects/<slug>` or
-  `#/projects/<slug>/<rail-key>`. Slug-to-name resolution requires workspace
-  watch paths. The service exposes `syncShellFromHash(watchPaths)` for the shell
-  to call on `hashchange`.
+- The Studio Project Hub URL hash is `#/projects/<project-id>` or
+  `#/projects/<project-id>/<rail-key>`. The immutable registry id is canonical;
+  the former display-name slug remains an input-only legacy alias. The complete
+  public grammar lives in
+  [the stable view URL contract](../../../../../docs/system/contracts/stable-view-urls.md).
+  The legacy overlay still exposes `syncShellFromHash(watchPaths)` for its
+  compatibility route handling.
 
 ## Focused Verification
 

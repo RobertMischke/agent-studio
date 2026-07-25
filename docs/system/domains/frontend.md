@@ -32,6 +32,8 @@ groups, and a failed domain reports an error without hiding successful domains.
 
 - [frontend/AGENTS.md](../../../frontend/AGENTS.md) contains frontend-scoped agent
   rules and wins for files under `frontend/`.
+- [Stable view URLs](../contracts/stable-view-urls.md) defines the canonical,
+  agent-constructible URL grammar and compatibility policy.
 - [frontend/e2e/README.md](../../../frontend/e2e/README.md) covers Playwright setup,
   fixtures, screenshots, and conventions.
 - [docs/quality/frontend/design-system.md](../../quality/frontend/design-system.md) defines the visual contract.
@@ -217,7 +219,7 @@ boundary, route map, and visual ownership diagram are in
 
 ## Project Overview Contract
 
-The default `#/projects/<slug>` rail is an operator dashboard. It answers what
+The default `#/projects/<project-id>` rail is an operator dashboard. It answers what
 was delivered, what changed, what is reachable, and what deserves attention.
 Machine configuration does not belong in this view. Watch path, working
 directory, repository path, CLI readiness and status, clean-context settings,

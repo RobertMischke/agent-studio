@@ -421,7 +421,7 @@
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
-                    [projectName]="tab.projectName"
+                    [projectName]="tab.projectName" [projectId]="projectHubUrls.projectIdForName(tab.projectName)"
                     [initialSection]="tab.section ?? 'overview'" [pipelineStepId]="tab.pipelineStepId"
                     (openTask)="onOpenTaskFromReel($event)" />
                 }

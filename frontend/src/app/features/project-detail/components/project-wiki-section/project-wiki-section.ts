@@ -163,6 +163,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
 })
 export class ProjectWikiSectionComponent implements OnDestroy {
   readonly projectName = input.required<string>();
+  readonly projectId = input<string | null>(null);
   readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
@@ -287,8 +288,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
 
-  /** Kebab slug used in the wiki rail hash (`#/projects/<slug>/wiki`). */
-  private readonly slug = computed(() => toProjectSlug(this.projectName()));
+  private readonly routeProjectRef = computed(() =>
+    this.projectId()?.trim() || toProjectSlug(this.projectName()));
   /**
    * Deep-link target captured from the URL when the project is (re)bound, held
    * until the tree finishes loading so it can open the exact page/folder. A URL
@@ -1036,7 +1037,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (link.kind === 'task') return `#task:${link.taskReference ?? link.label}`;
     const rel = this.resolveLinkedWikiPage(link);
     return rel
-      ? buildWikiRouteHash(this.slug(), { kind: 'page', relPath: rel })
+      ? buildWikiRouteHash(this.routeProjectRef(), { kind: 'page', relPath: rel })
       : link.target;
   }
 
@@ -1678,9 +1679,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    * and are ignored; a wiki route with no tree yet defers to restorePendingOpen.
    */
   private applyHashTarget(): void {
-    const slug = this.slug();
-    if (!slug) return;
-    const target = parseWikiRouteHash(window.location.hash, slug);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    const target = parseWikiRouteHash(window.location.hash, projectRef);
     if (!target) return;
     const tree = this.tree();
     if (!tree) {
@@ -1724,9 +1725,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   /** Read the shareable target from the URL, ignoring the paramless landing. */
   private captureUrlRestoreTarget(): WikiDeepLinkTarget | null {
     if (typeof window === 'undefined') return null;
-    const slug = this.slug();
-    if (!slug) return null;
-    const target = parseWikiRouteHash(window.location.hash, slug);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return null;
+    const target = parseWikiRouteHash(window.location.hash, projectRef);
     // No param (bare wiki route) leaves localStorage as the fallback.
     return target && target.kind !== 'overview' ? target : null;
   }
@@ -1747,13 +1748,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    */
   private syncDeepLinkUrl(mode: 'push' | 'replace'): void {
     if (typeof window === 'undefined') return;
-    const slug = this.slug();
-    if (!slug) return;
-    if (!isWikiRouteHash(window.location.hash, slug)) return;
-    // buildWikiRouteHash returns a `#/projects/<slug>/wiki?...` route; write it
-    // as the hash's route segment so coexisting segments (e.g. the board's
-    // `filters=...`) survive a page/folder navigation (url-hash.util.ts).
-    const nextRoute = buildWikiRouteHash(slug, this.currentDeepLinkTarget()).slice(1);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    if (!isWikiRouteHash(window.location.hash, projectRef)) return;
+    // Write the target as the route segment so coexisting state such as
+    // board filters survives page and folder navigation.
+    const nextRoute = buildWikiRouteHash(projectRef, this.currentDeepLinkTarget()).slice(1);
     const nextHash = withRouteSegment(window.location.hash, nextRoute);
     if (window.location.hash === nextHash) return;
     const url = `${window.location.pathname}${window.location.search}${nextHash}`;
@@ -1798,9 +1798,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   private copyWikiLink(target: WikiDeepLinkTarget): void {
     if (typeof window === 'undefined') return;
-    const slug = this.slug();
-    if (!slug) return;
-    const url = buildWikiRouteUrl(window.location, slug, target);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    const url = buildWikiRouteUrl(window.location, projectRef, target);
     void copyTextToClipboard(url).then(ok => {
       if (ok) this.notifications.success('Link kopiert', 'Wiki');
       else this.notifications.info('Link konnte nicht kopiert werden', 'Wiki');
