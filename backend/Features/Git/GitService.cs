@@ -1171,7 +1171,12 @@ public class GitService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return null;
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == info.ProjectName);
+        // A display name is neither immutable nor guaranteed unique. Once the
+        // scanner has resolved the task, bind the repository to the task's
+        // canonical watchPath so validation cannot drift into a same-named
+        // project's checkout.
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
+            WatchPathComparison.PathsEqual(e.Path, info.WatchPath));
         var configured = entry == null ? null : ResolveConfiguredRepositoryPath(entry);
         if (string.IsNullOrWhiteSpace(configured)) return null;
         return ResolveGitToplevel(configured) ?? configured;

@@ -145,6 +145,21 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
         Assert.Equal("legacy", ReadSinglePersistedSha());
     }
 
+    [Fact]
+    public async Task Replace_ValidatesAgainstCanonicalWatchPath_WhenProjectNamesCollide()
+    {
+        await using var factory = BuildFactory(includeSameNameDecoy: true);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var response = await client.PutAsJsonAsync(
+            $"/api/tasks/{JobId}/commits?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new ReplaceTaskCommitsRequest { Commits = [_firstSha] });
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(_firstSha, ReadSinglePersistedSha());
+    }
+
     [Theory]
     [InlineData("unknown")]
     [InlineData("unreachable")]
@@ -167,19 +182,37 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
         Assert.False(File.Exists(TaskPaths.TimelineLog(Path.Combine(_watchPath, TaskStates.Completed, JobId))));
     }
 
-    private WebApplicationFactory<Program> BuildFactory() =>
+    private WebApplicationFactory<Program> BuildFactory(bool includeSameNameDecoy = false) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Test");
             builder.ConfigureAppConfiguration((_, config) =>
-                config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                var settings = new Dictionary<string, string?>
                 {
                     ["TaskRepository"] = _root,
                     ["WatchPaths:0:Name"] = ProjectName,
                     ["WatchPaths:0:Path"] = _watchPath,
                     ["WatchPaths:0:RootPath"] = _repositoryPath,
                     ["WatchPaths:0:RepositoryPath"] = _repositoryPath,
-                }));
+                };
+                if (includeSameNameDecoy)
+                {
+                    var decoyWatchPath = Path.Combine(_root, "same-name-decoy-store");
+                    var decoyRepositoryPath = Path.Combine(_root, "same-name-decoy-repository");
+                    Directory.CreateDirectory(decoyWatchPath);
+                    Directory.CreateDirectory(decoyRepositoryPath);
+
+                    settings["WatchPaths:0:Path"] = decoyWatchPath;
+                    settings["WatchPaths:0:RootPath"] = decoyRepositoryPath;
+                    settings["WatchPaths:0:RepositoryPath"] = decoyRepositoryPath;
+                    settings["WatchPaths:1:Name"] = ProjectName;
+                    settings["WatchPaths:1:Path"] = _watchPath;
+                    settings["WatchPaths:1:RootPath"] = _repositoryPath;
+                    settings["WatchPaths:1:RepositoryPath"] = _repositoryPath;
+                }
+                config.AddInMemoryCollection(settings);
+            });
         });
 
     private async Task<string> GetProjectId(HttpClient client)
@@ -200,8 +233,9 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
     {
         var taskPath = Path.Combine(_watchPath, TaskStates.Completed, JobId, "task.json");
         using var task = JsonDocument.Parse(File.ReadAllText(taskPath));
-        return Assert.Single(task.RootElement.GetProperty("commits").EnumerateArray())
-            .GetProperty("sha")
+        return Property(
+                Assert.Single(Property(task.RootElement, "commits").EnumerateArray()),
+                "sha")
             .GetString()!;
     }
 
