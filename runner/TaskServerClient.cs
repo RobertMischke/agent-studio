@@ -24,7 +24,7 @@ public sealed class TaskServerClient : IDisposable
     private readonly RunnerOptions? _options;
     // Per-run caches, evicted on completion/release so the long-lived daemon does
     // not retain every claimed task's lease and full prompt body for its lifetime.
-    private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease, string InstanceId)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
     private readonly bool _usesServiceCredential;
@@ -305,7 +305,7 @@ public sealed class TaskServerClient : IDisposable
             claim.Lease.AcquiredAt,
             claim.Lease.ExpiresAt,
             claim.Run.RunId);
-        _v1Leases[claim.Task.TaskKey] = (claim.Run.RunId, legacyLease);
+        _v1Leases[claim.Task.TaskKey] = (claim.Run.RunId, legacyLease, RunnerInstanceId);
         if (!string.IsNullOrWhiteSpace(claim.Task.Body)) _v1TaskBodies[claim.Task.TaskKey] = claim.Task.Body;
         return new RunnerClaimResponse(
             RunnerClaimStatus.Claimed,
@@ -313,7 +313,26 @@ public sealed class TaskServerClient : IDisposable
             claim.Task.TaskId,
             ProjectName: claim.Task.ProjectId,
             Lease: legacyLease,
-            ProjectId: claim.Task.ProjectId);
+            ProjectId: claim.Task.ProjectId,
+            RunId: claim.Run.RunId,
+            LeaseInstanceId: RunnerInstanceId);
+    }
+
+    /// <summary>
+    /// Restore the v1 run-id and original attempt instance after a daemon restart.
+    /// The Task Server fences attempts by this stable instance id; the replacement
+    /// daemon process must not invent a new attempt while reattaching execution.
+    /// </summary>
+    public void RestoreRunAuthority(
+        string taskKey,
+        string? runId,
+        string? leaseInstanceId,
+        RunLeaseInfoDto lease)
+    {
+        if (!_useV1) return;
+        if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(leaseInstanceId))
+            throw new InvalidDataException($"Persisted v1 authority for task '{taskKey}' is incomplete.");
+        _v1Leases[taskKey] = (runId, lease, leaseInstanceId);
     }
 
     public async Task<Contract.ReviewClaimResponse> ClaimReviewAsync(
@@ -441,12 +460,12 @@ public sealed class TaskServerClient : IDisposable
         var authority = V1Authority(req.TaskKey);
         var response = await PostJsonAsync<Contract.LeaseRenewRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/renew",
-            new Contract.LeaseRenewRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, req.RequestedTtlSeconds ?? 120),
+            new Contract.LeaseRenewRequest(req.RunnerId, authority.InstanceId, req.LeaseId, req.FencingToken, req.RequestedTtlSeconds ?? 120),
             ct);
         if (response?.Lease is not null)
         {
             var updated = authority.Lease with { ExpiresAt = response.Lease.ExpiresAt };
-            _v1Leases[req.TaskKey] = (authority.RunId, updated);
+            _v1Leases[req.TaskKey] = (authority.RunId, updated, authority.InstanceId);
             return new RunLeaseResponse("Renewed", true, updated);
         }
         return new RunLeaseResponse(response?.Status ?? "Invalid", false, authority.Lease, response?.Message);
@@ -465,7 +484,7 @@ public sealed class TaskServerClient : IDisposable
         var authority = cached;
         var response = await PostJsonAsync<Contract.LeaseReleaseRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/release",
-            new Contract.LeaseReleaseRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, "released"),
+            new Contract.LeaseReleaseRequest(req.RunnerId, authority.InstanceId, req.LeaseId, req.FencingToken, "runner-process-missing"),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
@@ -530,11 +549,12 @@ public sealed class TaskServerClient : IDisposable
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
             new Contract.CompleteRunRequest(
                 req.RunnerId,
-                RunnerInstanceId,
+                authority.InstanceId,
                 req.LeaseId,
                 req.FencingToken,
                 typedOutcome,
                 req.Reason,
+                IdempotencyKey: req.IdempotencyKey,
                 OutcomeDecision: req.OutcomeDecision),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
@@ -691,7 +711,7 @@ public sealed class TaskServerClient : IDisposable
                 $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
                 new Contract.CompleteRunRequest(
                     authority.Lease.RunnerId,
-                    RunnerInstanceId,
+                    authority.InstanceId,
                     authority.Lease.LeaseId,
                     authority.Lease.FencingToken,
                     "blocked",
@@ -735,7 +755,7 @@ public sealed class TaskServerClient : IDisposable
         return await resp.Content.ReadFromJsonAsync<TResp>(Json, ct);
     }
 
-    private (string RunId, RunLeaseInfoDto Lease) V1Authority(string taskKey)
+    private (string RunId, RunLeaseInfoDto Lease, string InstanceId) V1Authority(string taskKey)
         => _v1Leases.TryGetValue(taskKey, out var authority)
             ? authority
             : throw new TaskServerException(409, $"No v1 run authority is cached for task '{taskKey}'.");

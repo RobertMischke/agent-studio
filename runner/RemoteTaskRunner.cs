@@ -20,12 +20,18 @@ public sealed class RemoteTaskRunner
     private readonly RunnerOptions _options;
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
+    private readonly RunnerStateStore _state;
 
-    public RemoteTaskRunner(RunnerOptions options, TaskServerClient client, Action<string> log)
+    public RemoteTaskRunner(
+        RunnerOptions options,
+        TaskServerClient client,
+        Action<string> log,
+        RunnerStateStore? state = null)
     {
         _options = options;
         _client = client;
         _log = log;
+        _state = state ?? new RunnerStateStore(options.StateDir);
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -77,9 +83,50 @@ public sealed class RemoteTaskRunner
         string? projectId = null,
         string? repositoryUrl = null,
         string? defaultBranch = null,
-        string? taskKind = null)
+        string? taskKind = null,
+        string? runId = null,
+        string? leaseInstanceId = null)
     {
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
+
+        var workspace = new GitWorkspace(
+            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
+        var slot = _state.Create(
+            taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
+            projectId, repositoryUrl, defaultBranch, taskKind);
+        return await RunPersistedAsync(slot, workspace, shutdown, reattach: false);
+    }
+
+    /// <summary>Continue a positively verified detached process from durable host state.</summary>
+    public async Task<int> ReattachAsync(PersistedRunnerSlot slot, CancellationToken stopRun)
+    {
+        _log($"reattaching task '{slot.TaskKey}' attempt {slot.AttemptId} pid={slot.ProcessId} worktree={slot.WorktreePath}");
+        var workspace = new GitWorkspace(
+            _options, slot.TaskKey, _log, slot.ProjectId, slot.RepositoryUrl, slot.DefaultBranch);
+        return await RunPersistedAsync(slot, workspace, stopRun, reattach: true);
+    }
+
+    public async Task<bool> ReleaseDeadAsync(PersistedRunnerSlot slot, string reason)
+    {
+        _log($"releasing dead persisted attempt task={slot.TaskKey} attempt={slot.AttemptId}: {reason}");
+        if (await ReleaseAsync(slot.Lease, CancellationToken.None))
+        {
+            _state.Delete(slot);
+            return true;
+        }
+
+        _log($"dead attempt state retained for release retry: {slot.TaskKey}");
+        return false;
+    }
+
+    private async Task<int> RunPersistedAsync(
+        PersistedRunnerSlot slot,
+        GitWorkspace workspace,
+        CancellationToken shutdown,
+        bool reattach)
+    {
+        var taskKey = slot.TaskKey;
+        var lease = slot.Lease;
 
         var outbox = _client.UsesDurableTaskServer
             ? DurableRunOutbox.Open(
@@ -102,27 +149,17 @@ public sealed class RemoteTaskRunner
             lease.AttemptId ?? lease.LeaseId,
             ExecutionAttemptKind.Coding,
             DurableOutputState: DurableOutputState.Missing));
-        var workspace = new GitWorkspace(
-            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
-        var epicPlanning = string.Equals(taskKind, "epic", StringComparison.OrdinalIgnoreCase);
+        var epicPlanning = string.Equals(slot.TaskKind, "epic", StringComparison.OrdinalIgnoreCase);
         IReadOnlyList<string> outputLines = [];
         var sourceMutated = false;
         var handedBack = false;
         var teardownAttempted = false;
+        var releaseOnly = false;
         try
         {
-            var execution = await ExecuteAsync(
-                taskKey,
-                lease,
-                workspace,
-                shipper,
-                outbox,
-                stopRun,
-                shutdown,
-                epicPlanning,
-                projectId,
-                defaultBranch,
-                () => heartbeat.LeaseLost);
+            var execution = reattach
+                ? await AwaitDetachedAsync(slot, workspace, shipper, outbox, stopRun.Token)
+                : await ExecuteAsync(slot, workspace, shipper, outbox, stopRun, shutdown, epicPlanning);
             outcome = execution.Outcome;
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
@@ -157,8 +194,8 @@ public sealed class RemoteTaskRunner
                     outbox,
                     shutdown);
                 var dependencyIdentities = await workspace.ReadDependencyIdentitiesAsync(shutdown);
-                var repositoryId = !string.IsNullOrWhiteSpace(projectId)
-                    ? projectId
+                var repositoryId = !string.IsNullOrWhiteSpace(slot.ProjectId)
+                    ? slot.ProjectId
                     : throw new InvalidOperationException(
                         "Durable result handoff requires the Task Server repository identity.");
                 var envelope = new ImmutableResultEnvelope(
@@ -246,6 +283,12 @@ public sealed class RemoteTaskRunner
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
             return outcome.Kind is RunOutcomeKind.Done or RunOutcomeKind.NoOp ? 0 : 1;
         }
+        catch (DetachedWorkerLostException ex)
+        {
+            releaseOnly = true;
+            _log($"detached worker lost; attempt will be released to Ready: {ex.Message}");
+            return 3;
+        }
         catch (WorktreeSalvageException ex)
         {
             if (outbox is not null)
@@ -263,7 +306,6 @@ public sealed class RemoteTaskRunner
         {
             stopRun.Cancel();
             await SafeAwait(heartbeatTask);
-            await SafeAwait(shipperTask);
             // This path covers shutdown, cancellation, quota death, and any
             // exception before the normal completion handoff. Salvage uses an
             // independent token because SIGINT has already cancelled the run.
@@ -277,7 +319,7 @@ public sealed class RemoteTaskRunner
                         : await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
                     if (epicPlanning)
                         sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
-                    if (!handedBack && !heartbeat.LeaseLost)
+                    if (!handedBack && !heartbeat.LeaseLost && !releaseOnly)
                     {
                         outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
                         await CompleteAsync(
@@ -312,24 +354,19 @@ public sealed class RemoteTaskRunner
 
             // Completion is fenced by the live lease, so release only after the
             // normal or fail-closed handoff has finished.
-            if (outbox is null || handedBack)
-                await ReleaseAsync(lease, CancellationToken.None);
+            if ((outbox is null || handedBack)
+                && await ReleaseAsync(lease, CancellationToken.None))
+                _state.Delete(slot);
         }
     }
 
     private async Task<RemoteExecutionResult> ExecuteAsync(
-        string taskKey,
-        RunLeaseInfoDto lease,
-        GitWorkspace workspace,
-        LogShipper shipper,
-        DurableRunOutbox? outbox,
-        CancellationTokenSource stopRun,
-        CancellationToken shutdown,
-        bool epicPlanning,
-        string? projectId,
-        string? defaultBranch,
-        Func<bool> leaseLost)
+        PersistedRunnerSlot slot, GitWorkspace workspace, LogShipper shipper,
+        DurableRunOutbox? outbox, CancellationTokenSource stopRun,
+        CancellationToken shutdown, bool epicPlanning)
     {
+        var taskKey = slot.TaskKey;
+        var lease = slot.Lease;
         var branch = epicPlanning
             ? await workspace.PrepareReadOnlyAsync(shutdown)
             : await workspace.PrepareAsync(shutdown);
@@ -340,11 +377,11 @@ public sealed class RemoteTaskRunner
                 "run-context",
                 JsonSerializer.Serialize(
                     new DurableRunContextPayload(
-                        projectId
+                        slot.ProjectId
                         ?? throw new InvalidOperationException(
                             "Durable coding execution requires a repository identity."),
                         workspace.RepositoryUrl,
-                        defaultBranch,
+                        slot.DefaultBranch,
                         workspace.BaseSha
                         ?? throw new InvalidOperationException(
                             "Durable coding execution has no base SHA.")),
@@ -383,135 +420,144 @@ public sealed class RemoteTaskRunner
         if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, recursive: true);
         Directory.CreateDirectory(resultsDir);
 
-        var cli = new AgentCliProcess(_options, resultsDir, _log);
         shipper.Add("system", $"[runner] spawning {_options.CliBin} {_options.CliArgs}");
+        slot = _state.Save(slot with
+        {
+            WorktreePath = workspace.RepoPath,
+            Phase = "launching",
+        });
+        var process = DurableAgentProcess.Start(
+            _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+        slot = _state.Save(slot with
+        {
+            ProcessId = process.ProcessId,
+            ProcessStartedAtUtc = process.ProcessStartedAtUtc,
+            WorktreePath = workspace.RepoPath,
+            Phase = "running",
+        });
+        _log($"detached worker started task={taskKey} pid={process.ProcessId} attempt={slot.AttemptId}");
+        return await AwaitDetachedAsync(slot, workspace, shipper, outbox, stopRun.Token);
+    }
 
-        using var runTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(_options.RunTimeoutSeconds));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(stopRun.Token, runTimeout.Token);
-
-        ProcessResult result;
+    private async Task<RemoteExecutionResult> AwaitDetachedAsync(
+        PersistedRunnerSlot slot,
+        GitWorkspace workspace,
+        LogShipper shipper,
+        DurableRunOutbox? outbox,
+        CancellationToken stopRun,
+        int sameSessionResumeAttempts = 0)
+    {
+        var process = DurableAgentProcess.Attach(slot);
+        var sequence = slot.LastOutputSequence;
         try
         {
-            result = await cli.RunAsync(
-                workspace.RepoPath, prompt,
-                onStdOut: line => shipper.Add("stdout", line),
-                onStdErr: line => shipper.Add("stderr", line),
-                ct: linked.Token);
+            while (true)
+            {
+                var lines = process.ReadAfter(sequence);
+                foreach (var line in lines)
+                {
+                    shipper.Add(line.Stream, line.Text);
+                    sequence = Math.Max(sequence, line.Sequence);
+                }
+                if (lines.Count > 0 || shipper.PendingCount > 0)
+                {
+                    if (await shipper.FlushAsync(stopRun))
+                        slot = _state.Save(slot with { LastOutputSequence = sequence });
+                }
+
+                var result = process.ReadResult();
+                if (result is not null)
+                {
+                    _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
+                    var classified = result.TimedOut
+                        ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)
+                        : ClassifyProcessResult(
+                            slot.Lease,
+                            workspace,
+                            new ProcessResult(result.ExitCode, result.StdOut, result.StdErr),
+                            sameSessionResumeAttempts);
+                    if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
+                        && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
+                    {
+                        var sessionId = classified.Decision.RawFacts.SessionId!;
+                        var resumeArgs = _options.CliResumeArgs!
+                            .Replace("{sessionId}", sessionId, StringComparison.Ordinal);
+                        shipper.Add(
+                            "system",
+                            $"[runner] bounded same-session resume 1/{ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts}; session={sessionId}");
+                        var resumeSlot = _state.Save(slot with
+                        {
+                            WorkerDirectory = Path.Combine(slot.WorkerDirectory, "resume-1"),
+                            ProcessId = null,
+                            ProcessStartedAtUtc = null,
+                            LastOutputSequence = 0,
+                            Phase = "launching",
+                        });
+                        var resumed = DurableAgentProcess.Start(
+                            _options,
+                            resumeSlot.WorkerDirectory,
+                            workspace.RepoPath,
+                            "Continue the interrupted attempt from the durable workspace state. Complete the requested work, verify it, and end with exactly one required [[TASK_*]] terminal sentinel.",
+                            ResultsDir(slot.TaskKey),
+                            AgentCliProcess.SplitArgs(resumeArgs));
+                        resumeSlot = _state.Save(resumeSlot with
+                        {
+                            ProcessId = resumed.ProcessId,
+                            ProcessStartedAtUtc = resumed.ProcessStartedAtUtc,
+                            Phase = "running",
+                        });
+                        return await AwaitDetachedAsync(
+                            resumeSlot,
+                            workspace,
+                            shipper,
+                            outbox,
+                            stopRun,
+                            sameSessionResumeAttempts + 1);
+                    }
+
+                    shipper.Add(
+                        "system",
+                        $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
+                    outbox?.Enqueue(
+                        "terminal",
+                        JsonSerializer.Serialize(
+                            new DurableTerminalPayload(
+                                classified.Decision.Outcome.ToString(),
+                                classified.Outcome.Reason),
+                            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                    return classified;
+                }
+
+                if (!DurableAgentProcess.VerifyLive(slot, out var reason))
+                    throw new DetachedWorkerLostException($"Detached worker disappeared before recording a result: {reason}");
+                await Task.Delay(TimeSpan.FromMilliseconds(250), stopRun);
+            }
         }
         catch (OperationCanceledException)
         {
-            var timedOut = runTimeout.IsCancellationRequested;
-            var lostLease = leaseLost();
-            var hostShutdown = shutdown.IsCancellationRequested;
-            var reason = timedOut
-                ? $"Runner timeout after {_options.RunTimeoutSeconds}s"
-                : lostLease
-                    ? "Runner lost its fenced lease"
-                    : hostShutdown
-                        ? "Remote host is shutting down"
-                        : "Runner execution was cancelled";
-            shipper.Add("system", $"[runner] {reason}");
-            var facts = Facts(
-                lease,
-                workspace,
-                TimedOut: timedOut,
-                HostShutdown: hostShutdown,
-                LeaseLost: lostLease,
-                OperatorCancelled: !timedOut && !hostShutdown && !lostLease);
-            var decision = ExecutionOutcomeAdapter.Classify(facts);
-            outbox?.Enqueue(
-                "terminal",
-                JsonSerializer.Serialize(
-                    new DurableTerminalPayload(decision.Outcome.ToString(), reason),
-                    new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-            return new RemoteExecutionResult(
-                new RunOutcome(RunOutcomeKind.Unknown, reason),
-                [],
-                decision);
+            process.Kill();
+            throw;
         }
-        catch (Exception ex)
-        {
-            shipper.Add("system", $"[runner] CLI launch failed: {ex.Message}");
-            var decision = ExecutionOutcomeAdapter.Classify(Facts(
-                lease,
-                workspace,
-                StdErr: ex.ToString(),
-                ExitCode: -1,
-                LaunchFailed: true));
-            return new RemoteExecutionResult(
-                new RunOutcome(RunOutcomeKind.Unknown, ex.Message),
-                [],
-                decision);
-        }
+    }
 
-        var classified = ClassifyProcessResult(lease, workspace, result, sameSessionResumeAttempts: 0);
-        if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession)
-        {
-            var sessionId = classified.Decision.RawFacts.SessionId!;
-            var resumeArgs = _options.CliResumeArgs!.Replace("{sessionId}", sessionId, StringComparison.Ordinal);
-            shipper.Add(
-                "system",
-                $"[runner] bounded same-session resume 1/{ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts}; session={sessionId}");
-            try
-            {
-                result = await cli.RunAsync(
-                    workspace.RepoPath,
-                    "Continue the interrupted attempt from the durable workspace state. Complete the requested work, verify it, and end with exactly one required [[TASK_*]] terminal sentinel.",
-                    onStdOut: line => shipper.Add("stdout", line),
-                    onStdErr: line => shipper.Add("stderr", line),
-                    ct: linked.Token,
-                    argsOverride: resumeArgs);
-                classified = ClassifyProcessResult(lease, workspace, result, sameSessionResumeAttempts: 1);
-            }
-            catch (OperationCanceledException)
-            {
-                var timedOut = runTimeout.IsCancellationRequested;
-                var lostLease = leaseLost();
-                var hostShutdown = shutdown.IsCancellationRequested;
-                var decision = ExecutionOutcomeAdapter.Classify(Facts(
-                    lease,
-                    workspace,
-                    TimedOut: timedOut,
-                    HostShutdown: hostShutdown,
-                    LeaseLost: lostLease,
-                    OperatorCancelled: !timedOut && !hostShutdown && !lostLease,
-                    SessionState: ExecutionSessionState.Invalid,
-                    SessionId: sessionId,
-                    SameSessionResumeAttempts: 1));
-                classified = new RemoteExecutionResult(
-                    new RunOutcome(RunOutcomeKind.Unknown, decision.Outcome.ToString()),
-                    [],
-                    decision);
-            }
-            catch (Exception ex)
-            {
-                var decision = ExecutionOutcomeAdapter.Classify(Facts(
-                    lease,
-                    workspace,
-                    StdErr: ex.ToString(),
-                    ExitCode: -1,
-                    LaunchFailed: true,
-                    SessionState: ExecutionSessionState.Invalid,
-                    SessionId: sessionId,
-                    SameSessionResumeAttempts: 1));
-                classified = new RemoteExecutionResult(
-                    new RunOutcome(RunOutcomeKind.Unknown, decision.Outcome.ToString()),
-                    [],
-                    decision);
-            }
-        }
-
-        shipper.Add(
-            "system",
-            $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
-        outbox?.Enqueue(
-            "terminal",
-            JsonSerializer.Serialize(
-                new DurableTerminalPayload(
-                    classified.Decision.Outcome.ToString(),
-                    classified.Outcome.Reason),
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        return classified;
+    private RemoteExecutionResult ClassifyTimedOutResult(
+        RunLeaseInfoDto lease,
+        GitWorkspace workspace,
+        DetachedJobResult result,
+        int sameSessionResumeAttempts)
+    {
+        var decision = ExecutionOutcomeAdapter.Classify(Facts(
+            lease,
+            workspace,
+            StdOut: result.StdOut,
+            StdErr: result.StdErr,
+            ExitCode: result.ExitCode,
+            TimedOut: true,
+            SameSessionResumeAttempts: sameSessionResumeAttempts));
+        return new RemoteExecutionResult(
+            new RunOutcome(RunOutcomeKind.Unknown, decision.Outcome.ToString()),
+            result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+            decision);
     }
 
     private RemoteExecutionResult ClassifyProcessResult(
@@ -783,7 +829,7 @@ public sealed class RemoteTaskRunner
         }
     }
 
-    private async Task ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)
+    private async Task<bool> ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)
     {
         try
         {
@@ -792,10 +838,13 @@ public sealed class RemoteTaskRunner
                 lease.AttemptId, lease.AuthorityEpoch,
                 $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
             _log($"lease released: {resp.Outcome}");
+            return string.Equals(resp.Outcome, "Released", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(resp.Outcome, "NotHeld", StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {
             _log($"lease release failed (server TTL will reclaim it): {ex.Message}");
+            return false;
         }
     }
 

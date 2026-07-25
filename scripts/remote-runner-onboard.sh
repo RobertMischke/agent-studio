@@ -266,6 +266,7 @@ chmod 600 "$env_tmp"
   printf 'RUNNER_GIT_REMOTE=%s\n' "$git_remote"
   printf 'RUNNER_GIT_PUSH_REMOTE=%s\n' "$git_push_remote"
   printf 'RUNNER_WORKDIR=/var/lib/agent-runner/work\n'
+  printf 'RUNNER_STATE_DIR=/var/lib/agent-runner/state\n'
   printf 'RUNNER_MAX_PARALLELISM=2\n'
 } >"$env_tmp"
 
@@ -274,6 +275,8 @@ cat >"$unit_tmp" <<EOF
 Description=Agent Studio remote runner daemon
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -287,7 +290,8 @@ ExecStart=$runner_bin --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
-KillSignal=SIGINT
+KillSignal=SIGTERM
+KillMode=process
 SyslogIdentifier=agent-runner
 StandardOutput=journal
 StandardError=journal
@@ -300,7 +304,7 @@ ReadWritePaths=/var/lib/agent-runner $runner_home
 WantedBy=multi-user.target
 EOF
 
-sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner /var/lib/agent-runner/work
+sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner /var/lib/agent-runner/work /var/lib/agent-runner/state
 sudo chown -R "$runner_user:$runner_group" /var/lib/agent-runner
 if [[ "$service_auth" == 1 ]]; then
   sudo chown root:"$runner_group" "$auth_token_file"

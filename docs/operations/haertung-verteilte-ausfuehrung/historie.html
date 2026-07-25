@@ -489,12 +489,16 @@
       und adoptierte erneut 4 Leases ohne Prozesse (~2h Stillstand). Gegenmaßnahme jetzt automatisiert:
       der Fleet-Pacer erkennt die Signatur selbst (alle 3-progress-Karten &gt;15 Min. inaktiv + null
       Host-Worktree-Prozesse via <code>/proc</code>-Scan → Lease-Break auf 2-ready, Kappe 3/Karte). Neu
-      offen: Daemon-Speicherprofil untersuchen; Crash-Sichtbarkeit (systemd-Restart maskiert OOM).</dd>
-    <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
-      <span class="pill part">strukturell entschärft</span>: Prozess-Verifikation bei Lease-Adoption
-      ist im Fleet-Pacer automatisiert; AGT-2182 liefert persistente Attempt-Authority. Offen bleiben
-      Daemon-Speicherprofil, Crash-Sichtbarkeit und das Acquire-to-Lane-Crash-Fenster.</dd>
-    <dt>Referenzen</dt><dd>AGT-2182/2194/2198 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
+      offen: Daemon-Speicherprofil untersuchen; Crash-Sichtbarkeit (systemd-Restart maskiert OOM).
+      <b>Update 22.07.:</b> The structural Runner fix persists attempt authority, PID/start time,
+      worktree, and file-backed output. Planned SIGTERM stops claims but leaves detached workers alive;
+      the replacement daemon adopts only a verified PID + worktree match. Dead or mismatched attempts
+      are actively released to Ready. The shipped unit now uses <code>KillMode=process</code> with bounded
+      start limits, so planned deploys no longer require an idle host.</dd>
+    <dt>Status</dt><dd><span class="pill done">structural fix shipped</span> — verified reattach and
+      dead-attempt release are covered by Runner and Task Server regression tests; memory profiling and
+      crash visibility remain separate follow-up work.</dd>
+    <dt>Referenzen</dt><dd>AGT-2182/2194/2198/2232 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
       (Attempt-Fencing)</dd>
   </dl>
 </div>
