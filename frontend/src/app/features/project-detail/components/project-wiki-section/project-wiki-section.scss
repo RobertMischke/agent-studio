@@ -12,14 +12,14 @@
 }
 
 .pwiki {
-  --pwiki-paper-bg: var(--color-grey-50);
-  --pwiki-paper-fg: var(--color-slate-900);
-  --pwiki-paper-muted: var(--color-slate-600);
-  --pwiki-paper-soft: var(--color-slate-50);
-  --pwiki-paper-border: var(--color-slate-200);
-  --pwiki-paper-link: var(--color-blue-500);
+  --pwiki-paper-bg: var(--studio-wiki-bg);
+  --pwiki-paper-fg: var(--studio-wiki-fg);
+  --pwiki-paper-muted: var(--studio-wiki-muted);
+  --pwiki-paper-soft: var(--studio-wiki-soft);
+  --pwiki-paper-border: var(--studio-wiki-border);
+  --pwiki-paper-link: var(--studio-wiki-link);
   --pwiki-editor-chrome: color-mix(in srgb, var(--studio-bg-sidebar) 92%, var(--studio-bg-editor));
-  --pwiki-editor-gutter: var(--color-slate-50);
+  --pwiki-editor-gutter: var(--studio-wiki-gutter);
 
   display: flex;
   flex-direction: column;
@@ -836,7 +836,7 @@
 }
 
 .pwiki__viewer-action:disabled {
-  opacity: 0.5;
+  color: var(--studio-fg-dim);
   cursor: not-allowed;
 }
 
@@ -1018,23 +1018,6 @@
 }
 
 :host ::ng-deep cac-markdown.pwiki__reader-body .markdown-body {
-  --md-fg: var(--pwiki-paper-fg);
-  --md-fg-strong: rgb(15 23 42);
-  --md-fg-em: rgb(55 65 81);
-  --md-fg-muted: var(--pwiki-paper-muted);
-  --md-fg-link: var(--pwiki-paper-link);
-  --md-fg-link-hov: rgb(29 78 216);
-  --md-fg-code: rgb(185 28 28);
-  --md-fg-h3: rgb(30 64 175);
-  --md-fg-h4: rgb(67 56 202);
-  --md-marker: rgb(79 70 229);
-  --md-border-soft: rgb(226 232 240);
-  --md-border: rgb(203 213 225);
-  --md-rule: rgb(226 232 240);
-  --md-surface-soft: rgb(241 245 249);
-  --md-surface: rgb(248 250 252);
-  --md-code-bg: rgb(248 250 252);
-
   width: 100%;
   max-width: none;
   font-size: 14px;
@@ -1141,7 +1124,7 @@
   border: 1px solid var(--pwiki-paper-border);
   border-radius: 7px;
   background: var(--pwiki-paper-soft);
-  color: var(--color-slate-800);
+  color: var(--pwiki-paper-fg);
   font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.6;
@@ -1516,7 +1499,7 @@
   padding-right: var(--studio-spacing-2);
   border-right: 1px solid var(--pwiki-paper-border);
   background: var(--pwiki-editor-gutter);
-  color: var(--color-slate-400);
+  color: var(--pwiki-paper-muted);
   text-align: right;
   user-select: none;
   font-variant-numeric: tabular-nums;
@@ -1528,7 +1511,7 @@
   padding-left: var(--studio-spacing-3);
   padding-right: var(--studio-spacing-4);
   background: transparent;
-  color: var(--color-slate-800);
+  color: var(--pwiki-paper-fg);
   white-space: pre;
 }
 
@@ -1548,24 +1531,24 @@
   align-items: center;
   gap: var(--studio-spacing-2);
   padding: var(--studio-spacing-2) var(--studio-spacing-5);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-yellow-300) 55%, transparent);
-  background: color-mix(in srgb, var(--color-yellow-300) 16%, var(--pwiki-paper-bg));
-  color: var(--color-amber-700);
+  border-bottom: 1px solid color-mix(in srgb, var(--severity-warn) 55%, transparent);
+  background: color-mix(in srgb, var(--severity-warn) 16%, var(--pwiki-paper-bg));
+  color: color-mix(in srgb, var(--severity-warn) 78%, var(--pwiki-paper-fg));
   font-size: 0.78rem;
 }
 
 .pwiki__rev-banner code {
-  color: var(--color-orange-900);
+  color: var(--pwiki-paper-fg);
 }
 
 .pwiki__rev-banner button {
   margin-left: auto;
   min-height: 24px;
   padding: 0 var(--studio-spacing-2);
-  border: 1px solid color-mix(in srgb, var(--color-yellow-300) 75%, transparent);
+  border: 1px solid color-mix(in srgb, var(--severity-warn) 75%, transparent);
   border-radius: 4px;
   background: var(--pwiki-paper-bg);
-  color: var(--color-amber-700);
+  color: color-mix(in srgb, var(--severity-warn) 78%, var(--pwiki-paper-fg));
   font-size: 0.72rem;
   font-family: inherit;
   cursor: pointer;
@@ -1577,7 +1560,7 @@
   display: grid;
   place-items: center;
   padding: var(--studio-modal-padding);
-  background: color-mix(in srgb, var(--color-slate-900) 42%, transparent);
+  background: var(--studio-scrim);
   z-index: 1200;
 }
 
@@ -1592,7 +1575,7 @@
   border-radius: 8px;
   background: var(--studio-bg-editor);
   color: var(--studio-fg);
-  box-shadow: 0 28px 70px rgb(15 23 42 / 34%);
+  box-shadow: var(--elevation-modal);
 }
 
 .pwiki__drift-head {
@@ -1719,8 +1702,8 @@
   flex-direction: column;
   border: 1px solid var(--studio-border);
   border-radius: 7px;
-  background: var(--color-slate-900);
-  color: var(--color-slate-200);
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
   overflow: hidden;
 }
 
@@ -1731,8 +1714,8 @@
   justify-content: space-between;
   min-height: 32px;
   padding: 0 var(--studio-spacing-3);
-  border-bottom: 1px solid var(--color-slate-700);
-  color: var(--color-slate-400);
+  border-bottom: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg-dim);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -1745,8 +1728,8 @@
   margin: 0;
   overflow: auto;
   padding: var(--studio-spacing-4);
-  background: var(--color-slate-900);
-  color: var(--color-slate-200);
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
   font-family: var(--font-mono);
   font-size: 0.76rem;
   line-height: 1.55;
