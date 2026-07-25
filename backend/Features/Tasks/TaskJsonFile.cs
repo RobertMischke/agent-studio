@@ -72,6 +72,42 @@ internal static class TaskJsonFile
     }
 
     /// <summary>
+    /// Replaces multiple top-level fields and removes obsolete fields with one
+    /// atomic file replacement. This keeps projections that must agree, such as
+    /// <c>commits[]</c> and legacy <c>commit</c>, from becoming partially
+    /// updated when persistence fails between separate field writes.
+    /// </summary>
+    internal static void UpdateFieldsOrThrow(
+        string jobDir,
+        IReadOnlyDictionary<string, object?> replacements,
+        IReadOnlySet<string>? removals = null)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
+        if (!File.Exists(jobJsonPath))
+            throw new FileNotFoundException("task.json was not found", jobJsonPath);
+
+        var json = File.ReadAllText(jobJsonPath);
+        var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                  ?? new Dictionary<string, JsonElement>();
+        var pending = new Dictionary<string, object?>(replacements, StringComparer.OrdinalIgnoreCase);
+        var updated = new Dictionary<string, object?>();
+
+        foreach (var kv in doc)
+        {
+            if (removals?.Contains(kv.Key) == true) continue;
+            if (pending.Remove(kv.Key, out var replacement))
+                updated[kv.Key] = replacement;
+            else
+                updated[kv.Key] = kv.Value;
+        }
+        foreach (var kv in pending)
+            updated[kv.Key] = kv.Value;
+
+        var content = JsonSerializer.Serialize(updated, WriteOpts);
+        new AtomicJsonFileWriter().Write(jobJsonPath, content);
+    }
+
+    /// <summary>
     /// Remove a top-level key from <c>task.json</c> if present. No-op when the
     /// file or key is absent. Used to clean up obsolete fields after a feature
     /// is removed (e.g. the operator-override <c>excludedCommits</c> array).

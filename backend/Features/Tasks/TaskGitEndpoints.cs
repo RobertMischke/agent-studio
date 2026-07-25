@@ -113,6 +113,12 @@ public static class TaskGitEndpoints
             if (string.IsNullOrWhiteSpace(watchPath))
                 return Results.BadRequest(new { error = "A canonical watchPath or project handle is required." });
 
+            var canonicalEntry = scanner.GetWatchPaths().FirstOrDefault(entry =>
+                WatchPathComparison.PathsEqual(entry.Path, watchPath));
+            if (canonicalEntry == null)
+                return Results.BadRequest(new { error = "The supplied watchPath does not resolve to a configured project." });
+            watchPath = canonicalEntry.Path;
+
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 

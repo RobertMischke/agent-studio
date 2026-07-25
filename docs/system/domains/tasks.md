@@ -217,6 +217,9 @@ Successful writes preserve caller order, set attribution to `operator`, mirror
 the last entry into the singular legacy `commit` projection, and append a
 `commit_attribution_replaced` event to `logs/timeline.jsonl` with the client id,
 old/new counts, and replacement SHAs. Direct `task.json` edits remain forbidden.
+The deferred AGT-2326 production backfill is encoded as a guarded, dry-run by
+default command in `scripts/backfill-agt-2326-commit-attribution.mjs`; the
+operator runs it only after this API reaches stable.
 
 ## Invariants
 

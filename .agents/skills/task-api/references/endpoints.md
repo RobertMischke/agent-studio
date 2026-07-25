@@ -222,6 +222,20 @@ last entry into the singular legacy `commit` field, and appends a
 Resolve the canonical `watchPath` through `GET /api/watch-paths`, or pass a
 registry `project` handle (`shortCode` or `PROJ-NNN`) instead.
 
+The deferred AGT-2326 one-time backfill is encoded in
+`scripts/backfill-agt-2326-commit-attribution.mjs`. It is a dry run unless the
+operator explicitly supplies both `--apply` and the deployed API base URL:
+
+```bash
+node scripts/backfill-agt-2326-commit-attribution.mjs \
+  --apply \
+  --base-url http://127.0.0.1:5031
+```
+
+The command resolves the live canonical `watchPath` first, sends one request
+per source card, and reports each success or failure. Do not run it before the
+endpoint is deployed.
+
 ### `POST /api/tasks/{jobId}/intake`
 
 Trigger the orchestrator-intake gate for a single job (when configured).

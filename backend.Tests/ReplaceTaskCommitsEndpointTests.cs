@@ -70,6 +70,7 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
             agent = "codex",
             commit = new { sha = "legacy", shortSha = "legacy", message = "old", at = "2026-01-01T00:00:00Z" },
             commits = new[] { new { sha = "legacy", shortSha = "legacy", message = "old", at = "2026-01-01T00:00:00Z" } },
+            excludedCommits = new[] { "obsolete-override" },
         }));
         File.WriteAllText(Path.Combine(taskFolder, "prompt.md"), "Replace commits.");
     }
@@ -105,6 +106,7 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
         var legacy = task.RootElement.GetProperty("commit");
         Assert.Equal(_secondSha, Property(legacy, "sha").GetString());
         Assert.Equal("fix: second reachable commit", Property(legacy, "message").GetString());
+        Assert.False(task.RootElement.TryGetProperty("excludedCommits", out _));
 
         var timeline = new TimelineLog(Microsoft.Extensions.Logging.Abstractions.NullLogger<TimelineLog>.Instance)
             .ReadAll(taskFolder);
@@ -125,6 +127,21 @@ public sealed class ReplaceTaskCommitsEndpointTests : IDisposable
             new ReplaceTaskCommitsRequest { Commits = [_firstSha] });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("legacy", ReadSinglePersistedSha());
+    }
+
+    [Fact]
+    public async Task Replace_RejectsWatchPathOutsideConfiguredProjects()
+    {
+        await using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var response = await client.PutAsJsonAsync(
+            $"/api/tasks/{JobId}/commits?watchPath={Uri.EscapeDataString(Path.Combine(_root, "not-configured"))}",
+            new ReplaceTaskCommitsRequest { Commits = [_firstSha] });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("legacy", ReadSinglePersistedSha());
     }
 

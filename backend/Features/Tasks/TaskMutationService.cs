@@ -347,11 +347,14 @@ public class TaskMutationService
                 return false;
             }
 
-            TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
-            TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
-            // Drop the obsolete operator-override array (removed feature) so the
-            // file is not left carrying a dead field after a rewrite.
-            TaskJsonFile.RemoveField(folderPath, "excludedCommits", _logger);
+            TaskJsonFile.UpdateFieldsOrThrow(
+                folderPath,
+                new Dictionary<string, object?>
+                {
+                    ["commits"] = chain,
+                    ["commit"] = chain.Count > 0 ? chain[^1] : null,
+                },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "excludedCommits" });
             return Updated();
         }
         catch (Exception ex)
