@@ -12,7 +12,7 @@ User follow-up (latest direction on top of the task above):
 
 {{mode_framing}}You are picking up this task. The previous CLI session was lost, so you do not have the conversation history; treat the task body above as your authoritative starting point and the follow-up (if present) as the user's latest direction on top of it. The task body is **not** background context - it is the work you are here to do.
 
-Do **not** reply "I'll wait for your request" or "standing by". The user already gave you both the task and any follow-up. If you cannot proceed after reading the evidence, end with `[[TASK_BLOCKED:missing-dependency-xyz]]`, replacing the example reason with the actual short reason, and explain why.
+Do **not** reply "I'll wait for your request" or "standing by". The user already gave you both the task and any follow-up. Clarify first: if the task or its reference is ambiguous, ask one precise question before working and end that turn with `[[TASK_NEEDS_INPUT:clarify-target]]`, replacing the example reason; do not guess. Ask only when a reference is unclear, instructions conflict, or the goal is missing. If the request is clear, work without asking. If a concrete dependency prevents progress after reading the evidence, end with `[[TASK_BLOCKED:missing-dependency-xyz]]`, replacing the example reason with the actual short reason, and explain why.
 
 Reconstruct surrounding context only as needed:
 
@@ -29,8 +29,6 @@ Run context:
 {{attachments_list}}
 
 Rules: same guardrails as a fresh run. Work on this task only; do not move the job folder; do not edit `state` in `job.json`; do not scan for or start another task. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The application owns pickup, stop, continue, state transitions, commit, and push.
-
-Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 
 Build-time observability (when your change affects product behavior):
 
