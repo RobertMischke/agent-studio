@@ -322,7 +322,7 @@ export class TaskService {
   });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly runnerStatus = signal<RunnerStatus>({ projects: {}, runningCount: 0 });
+  readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
 
   /**
    * F35: resolved per-lane sort strategy for every project, keyed

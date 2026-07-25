@@ -181,10 +181,7 @@ public sealed record RemoteRunCompletionRequest(
     string? AttemptId = null,
     long? AuthorityEpoch = null,
     string? IdempotencyKey = null,
-    IReadOnlyList<string>? GateItems = null,
-    string? BaseSha = null,
-    string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    IReadOnlyList<string>? GateItems = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

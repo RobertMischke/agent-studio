@@ -5,12 +5,9 @@ import {
   groupTone,
   groupToneLabel,
   pipelineComplete,
-  pipelineMetricVisibility,
   pipelineStarted,
   rowHasConcern,
   rowIsRisk,
-  uniformGroupActivation,
-  uniformGroupModel,
   type PipelineGroupRowLike,
 } from './pipeline-groups.util';
 
@@ -156,38 +153,6 @@ describe('buildPipelineGroups aggregate counters', () => {
     expect(group.riskCount).toBe(2); // concerns + failed
     expect(group.totalTokens).toBe(2000);
     expect(group.tone).toBe('danger');
-  });
-});
-
-describe('compact pipeline projection', () => {
-  it('shows only metric columns backed by real row data', () => {
-    expect(pipelineMetricVisibility([
-      { status: 'pending', startedAt: null, durationMs: 0, totalTokens: 0, costKnown: true },
-    ])).toEqual({ time: false, duration: false, tokens: false, cost: false, any: false });
-    expect(pipelineMetricVisibility([
-      {
-        status: 'passed',
-        startedAt: '2026-07-22T10:00:00Z',
-        durationMs: 800,
-        totalTokens: 1200,
-        costKnown: true,
-      },
-    ])).toEqual({ time: true, duration: true, tokens: true, cost: true, any: true });
-    expect(pipelineMetricVisibility([
-      { status: 'passed', startedAt: null, durationMs: 0, totalTokens: 1200, costKnown: false },
-    ])).toEqual({ time: false, duration: false, tokens: true, cost: false, any: true });
-  });
-
-  it('lifts only metadata shared by multiple rows', () => {
-    const activation = { state: 'active', source: 'global', reason: 'Workspace default' };
-    const rows = [
-      { model: 'gpt-5.4-mini', thinkingLevel: 'high', config: { activation } },
-      { model: 'gpt-5.4-mini', thinkingLevel: 'high', config: { activation } },
-    ];
-    expect(uniformGroupModel(rows)).toBe('gpt-5.4-mini · high');
-    expect(uniformGroupActivation(rows)).toEqual(activation);
-    expect(uniformGroupModel([...rows, { ...rows[0], model: 'gpt-5.6-sol' }])).toBeNull();
-    expect(uniformGroupActivation(rows.map(meta => ({ ...meta, config: null })))).toBeNull();
   });
 });
 

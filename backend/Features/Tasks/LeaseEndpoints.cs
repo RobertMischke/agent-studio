@@ -552,7 +552,6 @@ public static class LeaseEndpoints
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
-            AgentStudio.Registry.ProjectRegistry projects,
             TaskMutationService mutations,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
@@ -623,28 +622,6 @@ public static class LeaseEndpoints
             // evidence, but it must never be promoted into the review subject.
             var resultSha = req.ResultSha;
             var completionKey = req.IdempotencyKey.Trim();
-            AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? resultEnvelope = null;
-            string? resultEnvelopeDigest = null;
-            var leasedRun = authority.GetRun(attemptId);
-            if (!isEpicPlanning
-                && resultSha is not null
-                && leasedRun is not null
-                && !string.IsNullOrWhiteSpace(req.BaseSha)
-                && !string.IsNullOrWhiteSpace(req.ImmutableResultRef)
-                && !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest))
-            {
-                resultEnvelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
-                    leasedRun.RepositoryId,
-                    attemptId,
-                    req.BaseSha,
-                    resultSha,
-                    req.ImmutableResultRef,
-                    null,
-                    req.ArtifactManifestDigest,
-                    RepositoryUrl: req.Repository);
-                resultEnvelopeDigest =
-                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
-            }
             var settled = authority.SettleRun(
                 new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
                 outcome,
@@ -653,9 +630,7 @@ public static class LeaseEndpoints
                 req.RunnerId,
                 req.LeaseId,
                 req.TaskKey,
-                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"),
-                resultEnvelope: resultEnvelope,
-                resultEnvelopeDigest: resultEnvelopeDigest);
+                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"));
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(
@@ -673,18 +648,6 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
-                var registryProject = projects.FindByStorageLocation(task.WatchPath)
-                                      ?? projects.FindByIdOrDisplayName(task.ProjectName);
-                var remoteRepository = RemoteProjectRepositoryResolver.Resolve(
-                    registryProject,
-                    projectSettings.Get(task.ProjectName).IntegrationBranch);
-                var repositoryUrl = remoteRepository?.RepositoryUrl ?? req.Repository;
-                var resultRef = string.IsNullOrWhiteSpace(req.SalvageBranch)
-                    ? run.ResultSha
-                    : req.SalvageBranch;
-                var reviewPlan = BuildRemoteReviewPlan(
-                    registryProject?.RepositoryPath,
-                    projectSettings.Get(task.ProjectName).BuildProfile);
                 var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
@@ -693,10 +656,7 @@ public static class LeaseEndpoints
                     AttemptAuthorityService.Hash(requirements),
                     AttemptAuthorityService.Hash("remote-review-policy:v1"),
                     run.EvidenceDigests,
-                    $"review-subject:{run.AttemptId}:{run.ResultSha}",
-                    RepositoryUrl: repositoryUrl,
-                    ResultRef: resultRef,
-                    Plan: reviewPlan));
+                    $"review-subject:{run.AttemptId}:{run.ResultSha}"));
                 if (!review.Accepted)
                 {
                     return Results.Conflict(new RemoteRunCompletionResponse(
@@ -705,19 +665,6 @@ public static class LeaseEndpoints
                         FailureClassification: review.Status.ToString()));
                 }
                 reviewAttempt = review.ReviewAttempt;
-                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
-                {
-                    TaskKey = req.TaskKey,
-                    Project = task.ProjectName,
-                    Repository = repositoryUrl ?? run.RepositoryId,
-                    ResultSha = run.ResultSha!,
-                    AttemptChainId = req.AttemptChainId!,
-                    Executor = req.RunnerId,
-                    LeaseId = req.LeaseId,
-                    FencingToken = req.FencingToken,
-                    ResultRef = resultRef,
-                    CompletedAtUtc = DateTimeOffset.UtcNow,
-                });
             }
 
             if (!isEpicPlanning
@@ -1095,44 +1042,6 @@ public static class LeaseEndpoints
         File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
         return relativePath;
     }
-
-    private static AgentStudio.TaskServer.Contracts.ReviewPlanDto BuildRemoteReviewPlan(
-        string? repositoryPath,
-        BuildProfile? profile)
-    {
-        var verifyPlan = VerifyCommandPlanner.Plan(repositoryPath ?? string.Empty, profile);
-        var commands = verifyPlan.Commands
-            .Select((command, index) =>
-            {
-                var shellCommand = string.IsNullOrWhiteSpace(command.WorkingSubdir)
-                    ? command.Command
-                    : $"cd -- {ShellQuote(command.WorkingSubdir)} && {command.Command}";
-                var aspect = command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests";
-                return new AgentStudio.TaskServer.Contracts.ReviewCommandDto(
-                    $"verify-{index + 1}",
-                    aspect,
-                    "sh",
-                    ["-lc", shellCommand]);
-            })
-            .ToList();
-        if (commands.Count == 0)
-        {
-            commands.Add(new AgentStudio.TaskServer.Contracts.ReviewCommandDto(
-                "verify-subject",
-                "completion",
-                "git",
-                ["rev-parse", "--verify", "HEAD"]));
-        }
-
-        return new AgentStudio.TaskServer.Contracts.ReviewPlanDto(
-            commands,
-            commands.Select(command => command.Aspect)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList());
-    }
-
-    private static string ShellQuote(string value)
-        => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     private static bool CanonicalLeaseWritePresent(
         string? attemptId,

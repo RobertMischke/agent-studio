@@ -80,8 +80,7 @@ public sealed record ReviewLeaseDto(
     DateTime ExpiresAt,
     string Status,
     string ResourceNamespace,
-    int PortBase,
-    long AuthorityEpoch = 0);
+    int PortBase);
 
 public sealed record ReviewClaimRequest(
     string ExecutorId,
@@ -105,8 +104,7 @@ public sealed record ReviewLeaseRenewRequest(
     string LeaseId,
     long Fence,
     string IdempotencyKey,
-    int RequestedTtlSeconds = 120,
-    long AuthorityEpoch = 0);
+    int RequestedTtlSeconds = 120);
 
 public sealed record ReviewCommandEvidenceDto(
     string StepId,
@@ -168,8 +166,7 @@ public sealed record ReviewReportRequest(
     ReviewEnvironmentDto Environment,
     IReadOnlyList<ReviewCommandEvidenceDto> Commands,
     IReadOnlyList<ReviewArtifactEvidenceDto> Artifacts,
-    IReadOnlyList<ReviewVerdictDto> Verdicts,
-    long AuthorityEpoch = 0);
+    IReadOnlyList<ReviewVerdictDto> Verdicts);
 
 public sealed record ReviewReportDto(
     string ReportId,
@@ -190,8 +187,7 @@ public sealed record ReviewCleanupRequest(
     long Fence,
     string IdempotencyKey,
     bool WorkspaceRemoved,
-    string? FailureClassification = null,
-    long AuthorityEpoch = 0);
+    string? FailureClassification = null);
 
 public sealed record ReviewCleanupResponse(
     string Status,

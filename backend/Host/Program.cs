@@ -385,7 +385,6 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 // back the productive /api/runner/lease API (§8.2C), the prepared successor to
 // the disk-backed .pickup-lock.json guard.
 builder.Services.AddSingleton<AttemptAuthorityService>();
-builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));

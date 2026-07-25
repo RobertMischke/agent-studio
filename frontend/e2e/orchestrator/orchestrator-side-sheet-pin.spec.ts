@@ -1,6 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'node:path';
-import { setTheme } from '../helpers/theme';
 
 /**
  * MC-2 (Concept §4): the orchestrator side sheet follows the operator's
@@ -45,14 +44,14 @@ async function stubWorkspace(page: Page) {
     });
   });
 
-  await page.route('**/api/auth/status', async (route) => {
+  await page.route(/\/api\/auth\/status$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         profile: 'local',
         bootstrapRequired: false,
-        authenticated: false,
+        authenticated: true,
         user: null,
       }),
     });
@@ -241,25 +240,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
 
     if (resultsDir) {
-      const pin = page.getByTestId('orch-side-sheet-pin');
-      await setTheme(page, 'light');
-      await pin.hover();
-      await expect(page.getByRole('tooltip')).toHaveText(
-        'Pin this context when you want the chat to stay on the current project or task while you navigate elsewhere.',
-      );
-      await page.screenshot({
-        path: path.join(resultsDir, 'orchestrator-context-option-explanations-light--mocked.png'),
-        fullPage: false,
-      });
-      await setTheme(page, 'dark');
-      await pin.hover();
-      await expect(page.getByRole('tooltip')).toHaveText(
-        'Pin this context when you want the chat to stay on the current project or task while you navigate elsewhere.',
-      );
-      await page.screenshot({
-        path: path.join(resultsDir, 'orchestrator-context-option-explanations-dark--mocked.png'),
-        fullPage: false,
-      });
+      await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });
     }
 
     const forcedRefresh = page.waitForRequest((request) =>

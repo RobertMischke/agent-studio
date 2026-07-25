@@ -520,63 +520,12 @@ public class TaskRunnerService : BackgroundService
 
     public RunnerStatus GetStatus()
     {
-        var projects = new Dictionary<string, ProjectRunnerStatus>(StringComparer.OrdinalIgnoreCase);
+        var projects = new Dictionary<string, ProjectRunnerStatus>();
         foreach (var (name, runner) in _runners)
         {
             projects[name] = runner.GetStatus();
         }
-
-        var runningByProject = CountRunningTasksByProject(
-            _scanner.ScanAllJobs(),
-            task => _runners.TryGetValue(task.ProjectName, out var local)
-                    && local.GetRunActivity(task.Id).SlotActive,
-            taskKey => _runLeases?.Peek(taskKey).Lease is not null);
-
-        foreach (var (name, count) in runningByProject)
-        {
-            if (projects.TryGetValue(name, out var project))
-            {
-                projects[name] = project with { RunningTaskCount = count };
-            }
-        }
-
-        return new RunnerStatus
-        {
-            Projects = projects,
-            RunningCount = runningByProject.Values.Sum(),
-        };
-    }
-
-    /// <summary>
-    /// Counts live cards rather than runner sources. Lane membership prevents a
-    /// stale slot or lease from leaking beyond <c>3-progress</c>; the OR keeps a
-    /// locally-owned lease from double-counting the same card.
-    /// </summary>
-    internal static Dictionary<string, int> CountRunningTasksByProject(
-        IEnumerable<AgentStudio.Shared.TaskInfo> tasks,
-        Func<AgentStudio.Shared.TaskInfo, bool> hasLocalExecutionSlot,
-        Func<string, bool> hasActiveRunLease)
-    {
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var task in tasks)
-        {
-            if (!string.Equals(
-                    task.State,
-                    AgentStudio.Shared.TaskStates.Progress,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (!hasLocalExecutionSlot(task) && !hasActiveRunLease(task.TaskKey))
-            {
-                continue;
-            }
-
-            counts[task.ProjectName] = counts.GetValueOrDefault(task.ProjectName) + 1;
-        }
-
-        return counts;
+        return new RunnerStatus { Projects = projects };
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)

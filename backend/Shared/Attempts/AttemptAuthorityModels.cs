@@ -42,10 +42,7 @@ public sealed record ReviewSubjectDto(
     string TaskRequirementsHash,
     string ReviewPolicyHash,
     IReadOnlyList<string> EvidenceDigestInputs,
-    DateTime CreatedAt,
-    string? RepositoryUrl = null,
-    string? ResultRef = null,
-    AgentStudio.TaskServer.Contracts.ReviewPlanDto? Plan = null);
+    DateTime CreatedAt);
 
 public sealed record RunAttemptDto(
     string AttemptId,
@@ -61,9 +58,7 @@ public sealed record RunAttemptDto(
     string? ResultSha,
     string? TerminalOutcome,
     string? TerminalReason,
-    IReadOnlyList<string> EvidenceDigests,
-    AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? ResultEnvelope = null,
-    string? ResultEnvelopeDigest = null);
+    IReadOnlyList<string> EvidenceDigests);
 
 public sealed record ReviewAttemptDto(
     string AttemptId,
@@ -134,10 +129,7 @@ public sealed record CreateReviewAttemptRequest(
     string ReviewPolicyHash,
     IReadOnlyList<string>? EvidenceDigestInputs,
     string IdempotencyKey,
-    string? SourceReviewAttemptId = null,
-    string? RepositoryUrl = null,
-    string? ResultRef = null,
-    AgentStudio.TaskServer.Contracts.ReviewPlanDto? Plan = null);
+    string? SourceReviewAttemptId = null);
 
 public sealed record ClaimReviewAttemptRequest(
     string AttemptId,

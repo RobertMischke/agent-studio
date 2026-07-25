@@ -80,8 +80,7 @@ public sealed class RemoteReviewExecutor
                 workspace.EnvironmentEvidence(),
                 evidence.Commands,
                 evidence.Artifacts,
-                evidence.Verdicts,
-                lease.AuthorityEpoch);
+                evidence.Verdicts);
             report = await _client.ReportReviewAsync(attempt.AttemptId, request, CancellationToken.None);
             _log($"review report accepted attempt={attempt.AttemptId} outcome={report.Outcome} classification={report.FailureClassification ?? "none"} taskState={report.TaskState}");
             return report.Outcome == "Pass" ? 0 : report.Outcome == "ProductFailure" ? 2 : 3;
@@ -116,8 +115,7 @@ public sealed class RemoteReviewExecutor
                         removed,
                         removed ? null : report is null
                             ? "ExecutorStoppedBeforeReport"
-                            : "WorkspaceCleanupFailed",
-                        lease.AuthorityEpoch),
+                            : "WorkspaceCleanupFailed"),
                     CancellationToken.None);
                 _log($"review cleanup recorded attempt={attempt.AttemptId} status={cleanup.Status} retry={cleanup.RetryScheduled}");
             }
@@ -146,8 +144,7 @@ public sealed class RemoteReviewExecutor
                     lease.LeaseId,
                     lease.Fence,
                     $"review-renew:{attemptId}:{lease.Fence}:{++sequence}",
-                    _options.TtlSeconds,
-                    lease.AuthorityEpoch),
+                    _options.TtlSeconds),
                 stop);
         }
     }

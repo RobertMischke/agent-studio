@@ -63,6 +63,7 @@
     <app-planning-spawn-panel [job]="job()" (changed)="referencesChanged.emit()" />
   </section>
 
+  <!-- Compact status + agent block -->
   <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-status">
     <h3 class="ov-section__title">Status + Agent</h3>
     <div class="ov-grid ov-grid--definition">
@@ -124,9 +125,17 @@
       </div>
     </div>
   </section>
+
   <div class="studio-measure studio-measure--tabular">
     <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
   </div>
+
+  <!-- Pipeline block: ordered steps with status, usage, and cost. Configuration of
+       which steps run and on which model lives in project Settings; this
+       block is the read-only "what ran, on which model, what did it cost"
+       view the feature spec asks for. The completion loop (verdict / attempt
+       / re-open counters) is consolidated into this section's header as a
+       strip rather than a separate block — it is the pipeline's outcome. -->
   @if (hasPipelineSection()) {
     <section class="ov-section studio-measure studio-measure--tabular-compact" data-testid="overview-pipeline">
       <div class="ov-section__heading-row">
@@ -145,8 +154,7 @@
             </span>
           }
         </h3>
-        <span class="ov-section__heading-actions">
-          @if (disabledPipelineStepCount() > 0) {
+        @if (disabledPipelineStepCount() > 0) {
           <button type="button"
                   class="ov-section__icon-action"
                   data-testid="overview-pipeline-toggle-disabled"
@@ -161,17 +169,31 @@
                   (click)="toggleDisabledPipelineSteps()">
             <span aria-hidden="true">⊘</span>
           </button>
-          }
-        </span>
+        }
       </div>
+
+      <!-- Completion-loop attempt-cycle strip (ADR-0049 / ASS-566): latest
+           verdict + Attempt N/M + re-open counter + gap, consolidated under
+           the Pipeline title. Self-renders (and hides) off the shared
+           task-timeline poll. The full reopen->retry->verdict story lives
+           in the Timeline tab. -->
       <app-completion-loop-indicator />
+
       @if (pipelineRunOptions().length > 1) {
+        <!-- Runs chip strip (ASS-1735): one line regardless of run count. The
+             current run is written out (status dot, number, Current badge,
+             OK/fail counter, duration); prior runs read as compact clickable
+             mini chips, newest first. Past RUN_HISTORY_COLLAPSED_LIMIT they fold
+             behind a "+N more" toggle that expands the chip row by wrapping,
+             never a card grid. A chip click swaps the step table below to that
+             run; the instant hover tooltip carries the per-run summary. -->
         <div class="ov-runs-strip"
              [class.ov-runs-strip--expanded]="runSwitcherExpanded()"
              role="group"
              aria-label="Pipeline runs"
              data-testid="overview-pipeline-run-switcher">
           <span class="ov-runs-strip__label">Runs</span>
+
           @if (currentRunOption(); as cur) {
             <button type="button"
                     class="ov-runs-strip__current"
@@ -205,6 +227,7 @@
               }
             </button>
           }
+
           @if (historyRunOptions().length > 0) {
             <span class="ov-runs-strip__chips" role="tablist">
               @for (run of visibleHistoryChips(); track run.attempt) {
@@ -236,38 +259,26 @@
           }
         </div>
       }
+
       @if (hasPipeline()) {
       @if (!selectedPipelineIsCurrent()) {
         <app-pipeline-history-notice [attempt]="selectedPipelineAttemptNumber()" [currentAttempt]="pipelineAttempt()" />
       }
       <div class="ov-pipeline"
            [class.ov-pipeline--historical]="!selectedPipelineIsCurrent()"
-           [class.ov-pipeline--no-timing]="!pipelineMetrics().time && !pipelineMetrics().duration"
-           [class.ov-pipeline--time-only]="pipelineMetrics().time && !pipelineMetrics().duration"
-           [class.ov-pipeline--duration-only]="!pipelineMetrics().time && pipelineMetrics().duration"
-           [class.ov-pipeline--no-tokens]="!pipelineMetrics().tokens"
-           [class.ov-pipeline--no-cost]="!pipelineMetrics().cost"
            data-testid="overview-pipeline-steps">
-        @if (pipelineMetrics().any) {
+        <!-- Column headers for the right-aligned per-step metric cells. Widths
+             and gaps mirror `.ov-pl-step`'s timing / tokens / cost columns so
+             each caption sits over its values. Introduced once at the top so the
+             bare numbers (clock, duration, token count, cost) are interpretable. -->
         <div class="ov-pl-header" data-testid="overview-pipeline-header">
-          @if (pipelineMetrics().time || pipelineMetrics().duration) {
           <span class="ov-pl-header__timing">
-            @if (pipelineMetrics().time) {
             <span class="ov-pl-header__cell ov-pl-header__time">Time</span>
-            }
-            @if (pipelineMetrics().duration) {
             <span class="ov-pl-header__cell ov-pl-header__duration">Duration</span>
-            }
           </span>
-          }
-          @if (pipelineMetrics().tokens) {
           <span class="ov-pl-header__cell ov-pl-header__tokens">Tokens</span>
-          }
-          @if (pipelineMetrics().cost) {
           <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
-          }
         </div>
-        }
         @for (group of pipelineGroups(); track group.key) {
           <div class="ov-pl-group"
                [attr.data-phase]="group.phaseKey"
@@ -297,9 +308,9 @@
                 <span class="ov-pl-phase__status" [attr.data-tone]="group.tone">{{ groupToneLabel(group.tone) }}</span>
                 @if (group.ranCount > 0) {
                   <span class="ov-pl-phase__count"
-                        data-testid="overview-pipeline-phase-ran">{{ group.ranCount }}/{{ group.stepCount }} ran</span>
+                        data-testid="overview-pipeline-phase-ran">{{ group.ranCount }}/{{ group.stepCount }}</span>
                 } @else {
-                  <span class="ov-pl-phase__count">{{ group.stepCount - group.offCount }} active</span>
+                  <span class="ov-pl-phase__count">{{ group.stepCount }} {{ group.stepCount === 1 ? 'step' : 'steps' }}</span>
                 }
                 @if (group.concernCount > 0) {
                   <span class="ov-pl-phase__concern"
@@ -317,12 +328,6 @@
                 }
                 @if (group.totalTokens > 0) {
                   <span class="ov-pl-phase__tokens ov-value--mono">{{ formatTokens(group.totalTokens) }}</span>
-                }
-                @if (group.uniformActivation; as activation) {
-                  <span class="ov-pl-phase__meta" data-testid="overview-pipeline-group-activation">{{ activation.state }} · {{ activation.source }}</span>
-                }
-                @if (group.uniformModel; as model) {
-                  <span class="ov-pl-phase__meta ov-value--mono" data-testid="overview-pipeline-group-model">{{ model }}</span>
                 }
               </span>
             </button>
@@ -375,7 +380,7 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
-              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [showSource]="!group.uniformActivation" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
+              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
@@ -411,6 +416,9 @@
                 [tooltip]="agentRunTooltip()" />
             }
             @if (decisionBadgeForRow(row); as badge) {
+              <!-- Compact decision badge (ASS-1706): the orchestrator's final
+                   Accept / Re-issue / Escalate ruling inline, with the full
+                   reasoning in the tooltip instead of an expanded block. -->
               <span class="ov-pl-step__decision"
                     tabindex="0"
                     [attr.data-tone]="badge.tone"
@@ -427,7 +435,7 @@
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}@if (row.historical) { · superseded }</span>
             }
-            @if (row.model && !group.uniformModel) {
+            @if (row.model) {
               <span class="ov-pl-step__model"
                     [class.ov-pl-step__model--resolved]="row.modelIsResolved"
                     data-testid="overview-pipeline-step-model"
@@ -449,23 +457,16 @@
                 [pickerTestidPrefix]="'overview-pipeline-step-agent-picker-' + row.id"
                 (commit)="onStepAgentCommit(row.id, $event)" />
             }
-            @if (pipelineMetrics().time || pipelineMetrics().duration) {
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"
                   [cacTooltip]="stepTimingTooltip(row)">
-              @if (pipelineMetrics().time) {
               <span class="ov-pl-step__started"
                     data-testid="overview-pipeline-step-started"
                     aria-label="Step start time">{{ row.startedAt ? formatClock(row.startedAt) : '—' }}</span>
-              }
-              @if (pipelineMetrics().duration) {
               <span class="ov-pl-step__duration ov-value--mono"
                     [class.ov-pl-step__duration--live]="row.status === 'running'"
                     data-testid="overview-pipeline-step-duration">{{ formatStepDuration(liveStepDurationMs(row)) }}</span>
-              }
             </span>
-            }
-            @if (pipelineMetrics().tokens) {
             @if (row.totalTokens > 0) {
               <button type="button"
                       class="ov-pl-step__tokens ov-pl-step__tokens-button ov-value--mono"
@@ -479,8 +480,6 @@
               <span class="ov-pl-step__tokens ov-value--mono"
                     data-testid="overview-pipeline-step-tokens">—</span>
             }
-            }
-            @if (pipelineMetrics().cost) {
             <button type="button" class="ov-pl-step__cost ov-pl-step__cost-button ov-value--mono" data-testid="overview-pipeline-step-cost" [cacTooltip]="row.costTooltip"
                   [disabled]="row.totalTokens <= 0 || !row.costKnown" [attr.aria-label]="'Open cost calculation for ' + row.label"
                   [appCostBreakdownTrigger]="[row]" [costBreakdownTitle]="row.label + ' cost calculation'" [costBreakdownRecordedAt]="pipelineStartedAt()">
@@ -492,7 +491,6 @@
                 {{ formatCost(row.costUsd) }}
               }
             </button>
-            }
           </div>
             }
             }
@@ -635,6 +633,9 @@
     </app-dialog>
   }
 
+  <!-- Agent Work block (replaces the raw SESSION row).
+       Aggregates session-events.jsonl + tool-calls.jsonl for a meaningful
+       at-a-glance "what did the agent actually do" view. -->
   @if (hasAgentWork()) {
     <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-agent-work">
       <h3 class="ov-section__title"
@@ -705,10 +706,17 @@
     </section>
   }
 
+  <!-- Regression Radar block -->
   <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-regression-radar">
     <app-regression-radar [jobId]="job().id" [watchPath]="job().watchPath" />
   </section>
 
+  <!-- Runs block: the single home for CLI-run info — count, total elapsed,
+       and the per-run status strip. Consolidates the former Tokens &
+       Performance "Runs" / "Total Duration" rows with the run-icon strip so
+       run data has one representation instead of two. The Pipeline section's
+       "Attempt N/M" is a distinct counter (the auto-review completion loop),
+       not a CLI-run count, and stays there. -->
   @if (hasRunsSection()) {
     <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-runs">
       <h3 class="ov-section__title">Runs</h3>
