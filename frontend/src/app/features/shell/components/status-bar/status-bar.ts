@@ -14,6 +14,11 @@ import { TaskService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
+import {
+  clearVisibleInterval,
+  setVisibleInterval,
+  type VisibleIntervalHandle,
+} from '../../../../utils/visible-interval';
 import { UsageHoverPanelComponent } from '../../../tokens';
 import { RemoteHostsService } from '../../../remote-hosts';
 
@@ -39,7 +44,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
-  private hostLoadRefreshHandle: ReturnType<typeof setInterval> | null = null;
+  private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);
 
@@ -99,8 +104,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    this.remoteHosts.ensureLoaded();
-    this.hostLoadRefreshHandle = setInterval(
+    this.remoteHosts.refresh();
+    this.hostLoadRefreshHandle = setVisibleInterval(
       () => this.remoteHosts.refresh(),
       HOST_LOAD_REFRESH_MS,
     );
@@ -113,7 +118,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.hostLoadRefreshHandle) clearInterval(this.hostLoadRefreshHandle);
+    clearVisibleInterval(this.hostLoadRefreshHandle);
   }
 
   runningTooltip(): string {

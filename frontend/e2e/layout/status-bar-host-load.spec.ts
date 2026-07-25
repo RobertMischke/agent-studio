@@ -25,6 +25,23 @@ async function stubHostLoad(page: Page, runningCount: number, load1: number): Pr
     },
   ]));
 
+  await page.route('**/api/auth/status', json({
+    profile: 'local',
+    bootstrapRequired: false,
+    authenticated: true,
+    user: null,
+  }));
+  await page.route('**/api/environment**', json({ isDev: false, devTools: {} }));
+  await page.route('**/api/watch-paths', json([]));
+  await page.route('**/api/tasks/grouped', json({
+    preparation: [],
+    ready: [],
+    progress: [],
+    review: [],
+    completed: [],
+    archive: [],
+  }));
+  await page.route('**/api/tasks', json([]));
   await page.route('**/api/runner/status', json({ projects }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
@@ -37,9 +54,9 @@ async function stubHostLoad(page: Page, runningCount: number, load1: number): Pr
     runnerActiveSlots: runningCount,
     runnerAvailableSlots: Math.max(0, 8 - runningCount),
   }]));
-  await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', json({
+  await page.route('**/api/clients/agent-runner-01/telemetry?window=1h', json({
     clientId: 'agent-runner-01',
-    window: '14d',
+    window: '1h',
     points: [{
       timestamp: now,
       cpuPercent: 68,

@@ -32,13 +32,19 @@ export class RemoteHostsService {
     this.reload();
   }
 
-  /** Refresh live client and telemetry data without replacing the visible registry seed. */
+  /**
+   * Refresh the compact live view without replacing a longer telemetry series
+   * already loaded by the Remote Hosts page.
+   */
   refresh(): void {
-    if (!this.loaded) {
-      this.reload();
-      return;
+    if (this.hosts().length === 0) {
+      this.hosts.set(seedRemoteHosts(Date.now()).map(host => ({
+        ...host,
+        liveDataState: 'loading',
+        telemetryLoading: false,
+      })));
     }
-    this.hydrateClientRegistry();
+    this.hydrateClientRegistry('1h', true);
   }
 
   reload(): void {
@@ -60,7 +66,10 @@ export class RemoteHostsService {
     }
   }
 
-  private hydrateClientRegistry(): void {
+  private hydrateClientRegistry(
+    telemetryWindow: '1h' | '14d' = '14d',
+    preserveLongTelemetry = false,
+  ): void {
     if (!this.http) {
       this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
       this.loading.set(false);
@@ -93,7 +102,10 @@ export class RemoteHostsService {
               : now - seenMs <= RemoteHostsService.DEGRADED_CLIENT_MS
                 ? 'degraded'
                 : 'offline';
-          return projectClient(host, client, client.drainRequestedAt ? 'draining' : status);
+          const projectedHost = projectClient(host, client, client.drainRequestedAt ? 'draining' : status);
+          return preserveLongTelemetry && host.telemetry?.window === '14d'
+            ? { ...projectedHost, stats: host.stats, telemetry: host.telemetry }
+            : projectedHost;
           });
           const known = new Set(projected.map(host => host.clientId));
           const discovered = (clients ?? [])
@@ -111,13 +123,10 @@ export class RemoteHostsService {
           durationMs: Math.round(performance.now() - startedAt),
         });
         for (const host of this.hosts().filter(host => byId.has(host.clientId) && host.status !== 'retired')) {
-          this.patch(host.id, current => ({
-            ...current,
-            stats: null,
-            telemetry: null,
-            telemetryLoading: true,
-          }));
-          this.hydrateTelemetry(host.id, host.clientId);
+          this.patch(host.id, current => preserveLongTelemetry && current.telemetry?.window === '14d'
+            ? { ...current, telemetryLoading: true }
+            : { ...current, stats: null, telemetry: null, telemetryLoading: true });
+          this.hydrateTelemetry(host.id, host.clientId, telemetryWindow, preserveLongTelemetry);
         }
       },
       error: error => {
@@ -132,10 +141,17 @@ export class RemoteHostsService {
     });
   }
 
-  private hydrateTelemetry(hostId: string, clientId: string): void {
+  private hydrateTelemetry(
+    hostId: string,
+    clientId: string,
+    telemetryWindow: '1h' | '14d' = '14d',
+    preserveLongTelemetry = false,
+  ): void {
     if (!this.http) return;
     const startedAt = performance.now();
-    this.http.get<HostTelemetrySeries>(`/api/clients/${encodeURIComponent(clientId)}/telemetry?window=14d`).subscribe({
+    this.http.get<HostTelemetrySeries>(
+      `/api/clients/${encodeURIComponent(clientId)}/telemetry?window=${telemetryWindow}`,
+    ).subscribe({
       next: telemetry => {
         this.patch(hostId, host => {
           const latest = telemetry.points.at(-1);
@@ -152,9 +168,12 @@ export class RemoteHostsService {
                   : 0,
                 diskTotalGb: 0,
                 diskFreeGb: 0,
-              }
+            }
             : null;
-          return { ...host, stats, telemetry, telemetryLoading: false };
+          const nextTelemetry = preserveLongTelemetry && host.telemetry?.window === '14d'
+            ? mergeRecentTelemetry(host.telemetry, telemetry)
+            : telemetry;
+          return { ...host, stats, telemetry: nextTelemetry, telemetryLoading: false };
         });
         this.log('telemetry-hydrated', { hostId, points: telemetry.points.length, findings: telemetry.findings.length,
           durationMs: Math.round(performance.now() - startedAt) });
@@ -273,6 +292,24 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
 
 function isRunnerIdentity(client: ClientSummary): boolean {
   return client.kind === 'retired' || !!client.runnerGitStatus || /runner|host/i.test(`${client.id} ${client.displayName}`);
+}
+
+function mergeRecentTelemetry(
+  existing: HostTelemetrySeries,
+  recent: HostTelemetrySeries,
+): HostTelemetrySeries {
+  const points = new Map(
+    [...existing.points, ...recent.points].map(point => [point.timestamp, point]),
+  );
+  const findings = new Map(
+    [...existing.findings, ...recent.findings]
+      .map(finding => [`${finding.kind}:${finding.since}:${finding.until}`, finding]),
+  );
+  return {
+    ...existing,
+    points: [...points.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    findings: [...findings.values()],
+  };
 }
 
 function tryInjectHttpClient(): HttpClient | null {
