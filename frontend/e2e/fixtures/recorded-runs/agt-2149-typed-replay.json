@@ -1,0 +1,102 @@
+{
+  "target": {
+    "id": "agt-2149-typed-replay",
+    "watchPath": "C:/fixtures/agt-2149-replay"
+  },
+  "output": [
+    {
+      "timestamp": "2026-07-20T08:00:01.000Z",
+      "stream": "user",
+      "text": "Replay the recorded implementation and pipeline run."
+    },
+    {
+      "timestamp": "2026-07-20T08:00:03.000Z",
+      "stream": "stdout",
+      "text": "I am validating the implementation before the post-processing pipeline starts."
+    },
+    {
+      "timestamp": "2026-07-20T08:04:00.000Z",
+      "stream": "stdout",
+      "text": "Added the replay adapter and exercised mixed-height conversation rows.\n\n- Typed lifecycle rows\n- Structured metadata\n- Trace-only diagnostics"
+    },
+    {
+      "timestamp": "2026-07-20T08:06:51.000Z",
+      "stream": "stdout",
+      "text": "Turn completed (tokens: 82,523)"
+    },
+    {
+      "timestamp": "2026-07-20T08:06:54.000Z",
+      "stream": "stdout",
+      "text": "Implementation is complete. Pipeline post-processing is still running."
+    }
+  ],
+  "runnerEvents": [
+    {
+      "id": "session-started-1",
+      "kind": "session.started",
+      "timestamp": "2026-07-20T08:00:00.000Z",
+      "sessionId": "sess-agt-2149-7f3a",
+      "runIndex": 1,
+      "cli": "codex",
+      "model": "gpt-5.4-mini",
+      "thinkingLevel": "high"
+    },
+    {
+      "id": "turn-started-1",
+      "kind": "turn.started",
+      "timestamp": "2026-07-20T08:00:02.000Z",
+      "sessionId": "sess-agt-2149-7f3a",
+      "turnId": "turn-7",
+      "runIndex": 1,
+      "cli": "codex",
+      "model": "gpt-5.4-mini",
+      "thinkingLevel": "high"
+    },
+    {
+      "id": "diagnostic-path",
+      "kind": "diagnostic",
+      "timestamp": "2026-07-20T08:00:04.000Z",
+      "severity": "warning",
+      "code": "cli-path",
+      "message": "PATH did not include the configured Codex directory"
+    },
+    {
+      "id": "diagnostic-plugin",
+      "kind": "diagnostic",
+      "timestamp": "2026-07-20T08:00:05.000Z",
+      "severity": "warning",
+      "code": "plugin-load",
+      "message": "Optional replay plugin could not be loaded"
+    },
+    {
+      "id": "turn-completed-1",
+      "kind": "turn.completed",
+      "timestamp": "2026-07-20T08:06:52.000Z",
+      "sessionId": "sess-agt-2149-7f3a",
+      "turnId": "turn-7",
+      "runIndex": 1,
+      "cli": "codex",
+      "model": "gpt-5.4-mini",
+      "thinkingLevel": "high",
+      "durationMs": 412000,
+      "inputTokens": 74192,
+      "outputTokens": 8331,
+      "reasoningTokens": 1024,
+      "implementationStatus": "completed",
+      "pipelineStatus": "post-processing"
+    },
+    {
+      "id": "session-completed-1",
+      "kind": "session.completed",
+      "timestamp": "2026-07-20T08:06:53.000Z",
+      "sessionId": "sess-agt-2149-7f3a",
+      "runIndex": 1,
+      "cli": "codex",
+      "model": "gpt-5.4-mini",
+      "thinkingLevel": "high",
+      "durationMs": 413000,
+      "implementationStatus": "completed",
+      "pipelineStatus": "post-processing"
+    }
+  ]
+}

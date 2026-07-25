@@ -64,7 +64,9 @@ import {
   rateLimitTooltip,
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
-import { presentActivityEvents } from '../activity-event-presentation';
+import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
+import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
+import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -122,6 +124,7 @@ interface InterimSummaryState {
     ProtocolVerdictBannerComponent,
     PaneHeaderComponent,
     PaneTabsComponent,
+    RunnerReplayMetadataComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -219,6 +222,12 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly claudeRateLimit = this.claudePoll.rateLimit;
   readonly cliOutput = this.cliPoll.output;
   readonly runTimeline = this.runTimelinePoll.timeline;
+  readonly runnerEvents = computed(() => this.runTimeline()?.runnerEvents ?? []);
+  readonly runnerReplay = computed(() => projectRunnerReplay(this.runnerEvents(), this.detail().info.id));
+  readonly runnerTraceLines = computed(() => [
+    ...this.filteredCliOutput(),
+    ...this.runnerReplay().diagnosticLines,
+  ].sort((a, b) => a.timestamp.localeCompare(b.timestamp)));
   readonly screenshots = this.screenshotsPoll.screenshots;
   readonly plan = this.planPoll.plan;
 
@@ -873,23 +882,28 @@ export class ProtocolPaneComponent implements OnDestroy {
       sourceTool: 'screenshot',
       timestamp: s.timestampUtc,
     }));
+    const replay = this.runnerReplay();
+    const typedLifecycle = this.runnerEvents().some(event => event.kind === 'turn.completed');
     const projected = projectConversation({
       source: info.id,
       // Guard the next-gen projection the same way the legacy path is guarded:
       // strip raw stream-json transport frames before the library classifies
       // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
-      lines: sanitizeProjectionLines(filtered),
+      lines: sanitizeProjectionLines(stripLegacyCompletionLines(filtered, typedLifecycle)),
       task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,
       screenshots,
-      emitRunMarkers: true,
+      emitRunMarkers: replay.timelineEvents.length === 0,
       emitWorkbenchSummary: false,
       emitWorkbenchPreviews: false,
       emitTraceLink: false,
       emitDebugAggregate: false,
     });
-    return presentActivityEvents(projected, info.id, info.watchPath);
+    const presented = presentActivityEvents(projected, info.id, info.watchPath, {
+      typedTurnCompletions: typedLifecycle,
+    });
+    return mergeReplayEvents(presented, replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {

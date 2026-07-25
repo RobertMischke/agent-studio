@@ -462,6 +462,7 @@ builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
 builder.Services.AddSingleton<AgentStudio.Persistence.IJsonlAppender, AgentStudio.Persistence.JsonlAppender>();
+builder.Services.AddSingleton<AgentStudio.Diagnostics.RunnerEventJournal>();
 builder.Services.AddSingleton<AgentStudio.Runtime.ProductRuntimeEventStore>();
 builder.Services.AddSingleton<AgentStudio.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<AgentStudio.State.SupervisorInterventionStore>();

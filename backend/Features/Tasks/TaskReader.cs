@@ -50,8 +50,9 @@ public sealed class TaskReader
         var sessionEvents = _sessions.ReadSessionEvents(jobId, watchPath);
         var cliOutputLines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var ledger = _timeline.ReadAll(info.FolderPath);
+        var runnerEvents = AgentStudio.Projection.RunnerEventSource.ReadRecords(info);
 
-        return new TaskReadModel(detail, sessionEvents, cliOutputLines, ledger, nowUtc ?? DateTime.UtcNow);
+        return new TaskReadModel(detail, sessionEvents, cliOutputLines, ledger, nowUtc ?? DateTime.UtcNow, runnerEvents);
     }
 }
 
@@ -72,19 +73,22 @@ public sealed class TaskReadModel
     /// <summary>The raw <c>timeline.jsonl</c> rows, untouched. Use <see cref="BuildLedger"/> for the meshed projection.</summary>
     public IReadOnlyList<TimelineEvent> Ledger { get; }
     public DateTime NowUtc { get; }
+    public IReadOnlyList<RunnerRecordedEvent> RunnerEvents { get; }
 
     public TaskReadModel(
         TaskDetail detail,
         IReadOnlyList<SessionEvent> sessionEvents,
         IReadOnlyList<CliOutputLine> cliOutputLines,
         IReadOnlyList<TimelineEvent> ledger,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        IReadOnlyList<RunnerRecordedEvent>? runnerEvents = null)
     {
         Detail = detail;
         SessionEvents = sessionEvents ?? [];
         CliOutputLines = cliOutputLines ?? [];
         Ledger = ledger ?? [];
         NowUtc = nowUtc;
+        RunnerEvents = runnerEvents ?? [];
     }
 
     /// <summary>
@@ -98,6 +102,7 @@ public sealed class TaskReadModel
         var reviewAttemptEpoch = OperatorReviewRequeueService.ReadEpoch(Info.FolderPath);
         return timeline with
         {
+            RunnerEvents = RunnerEvents.ToList(),
             PromptEntries = RunPromptTimelineBuilder.Build(
                 timeline.Runs,
                 Info.FolderPath,

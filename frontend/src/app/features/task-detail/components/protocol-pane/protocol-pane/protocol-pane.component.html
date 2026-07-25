@@ -399,13 +399,14 @@
                 [visible]="gitViewerRun() !== null"
                 (closeRequest)="closeGitViewer()" />
 
-              @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
+              @if (cliOutput().length > 0 || runnerEvents().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
                 @switch (activityView()) {
                   @case ('plan') {
                     <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
                   }
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
+                      <app-runner-replay-metadata [events]="runnerEvents()" />
                       <!-- Virtualised: the transcript can grow into the thousands of
                            events for a long-running task, so the view windows its own
                            DOM and owns its own scroll container (bounded by the
@@ -444,7 +445,7 @@
                                 (click)="exitConversationTraceFallback()">Back to CLI</button>
                       </div>
                     }
-                    <app-activity-log-view [lines]="filteredCliOutput()"
+                    <app-activity-log-view [lines]="runnerTraceLines()"
                                            [bodyMaxHeight]="'none'"
                                            [isRunning]="isRunning()"
                                            [defaultMode]="'trace'"
@@ -547,7 +548,7 @@
 @if (verboseDebugOpen()) {
   <app-verbose-debug-overlay
     data-testid="protocol-verbose-debug"
-    [lines]="cliOutput()"
+    [lines]="runnerTraceLines()"
     [runTimeline]="runTimeline()"
     [screenshots]="screenshots()"
     [tokenSummary]="detail().info.tokenSummary ?? null"

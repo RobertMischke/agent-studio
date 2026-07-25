@@ -6,10 +6,21 @@ import type {
   ToolBurstEvent,
   ToolCommandExecution,
 } from 'coding-agent-chat/core';
+import type { CliOutputLine } from '../../../../models/task.model';
 import { resolveProtocolImageSrc } from './protocol-image-resolver';
 
 const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const TOKEN_TOTAL = /\bTurn completed\s*\(tokens:\s*([\d,_]+)\)/i;
+const FREE_COMPLETION_LINE = /^\s*(?:Session|Turn) completed(?:\s*\(tokens:\s*[\d,_]+\))?[.!]?\s*$/i;
+
+/** Remove transport-era completion prose when the typed lifecycle is authoritative. */
+export function stripLegacyCompletionLines(
+  lines: readonly CliOutputLine[],
+  typedLifecycle: boolean,
+): CliOutputLine[] {
+  if (!typedLifecycle) return [...lines];
+  return lines.filter(line => !FREE_COMPLETION_LINE.test(line.text));
+}
 
 /**
  * Product-specific cleanup between the shared conversation projector and the
@@ -20,6 +31,7 @@ export function presentActivityEvents(
   events: readonly ConversationEvent[],
   jobId: string,
   watchPath: string | null | undefined,
+  options: { typedTurnCompletions?: boolean } = {},
 ): ConversationEvent[] {
   const presented: ConversationEvent[] = [];
 
@@ -57,7 +69,12 @@ export function presentActivityEvents(
       continue;
     }
 
-    presented.push(event.kind === 'system.status' ? formatCompletion(event) : event);
+    if (event.kind === 'system.status' && TOKEN_TOTAL.test(`${event.label} ${event.explanation}`)) {
+      if (!options.typedTurnCompletions) presented.push(...formatCompletion(event));
+      continue;
+    }
+
+    presented.push(event);
   }
 
   return presented;
@@ -115,18 +132,32 @@ function artifactImage(
   };
 }
 
-function formatCompletion(event: SystemStatusEvent): SystemStatusEvent {
+function formatCompletion(event: SystemStatusEvent): ConversationEvent[] {
   const match = TOKEN_TOTAL.exec(`${event.label} ${event.explanation}`);
-  if (!match) return event;
+  if (!match) return [event];
   const total = Number(match[1].replace(/[, _]/g, ''));
-  if (!Number.isFinite(total)) return event;
-  return {
-    ...event,
-    category: 'result',
-    label: 'Turn completed',
-    explanation: `${formatCompactTokens(total)} tokens`,
-    nextStep: undefined,
-  };
+  if (!Number.isFinite(total)) return [event];
+  return [
+    {
+      ...event,
+      category: 'result',
+      label: 'Turn completed',
+      explanation: '',
+      nextStep: undefined,
+    },
+    {
+      id: `${event.id}:usage`,
+      kind: 'metric.token',
+      timestamp: event.timestamp,
+      runId: event.runId,
+      model: event.model,
+      thinkingLevel: event.thinkingLevel,
+      rawRange: event.rawRange,
+      scope: 'turn',
+      inputTokens: total,
+      outputTokens: 0,
+    },
+  ];
 }
 
 export function formatCompactTokens(value: number): string {

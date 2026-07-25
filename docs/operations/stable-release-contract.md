@@ -81,11 +81,18 @@ not a releasable candidate. Record its current commit as the initial rollback
 anchor, then deploy the first tagged Agent Studio release through the normal
 preflight.
 
-The current CAC `dist` must not be copied into that release. This work depends
-on the CAC versioned-release ticket publishing an immutable package plus tag,
-commit, and integrity. The task relationship must also mark AGT-2170 as
-`relatedTo`. Until the board API and CAC artifact are available, those two
-relationship/artifact steps remain explicit release blockers.
+CAC `0.3.2` is the immutable replay release consumed by Agent Studio. It is
+exact-pinned from the npm registry with package commit
+`e1183176aa55964986181b894180983793c4f055` and integrity
+`sha512-O4pH+zJdIaTNP7FcNwqSMQcX+y05C9tEkBh9AkiguvxHVTPMFWqf/fR7GpTHNgh7wgclrxD3BnkoWad3Gn7aAw==`.
+Do not copy a local CAC `dist` into a release or relax that pin to a range.
+
+A task worktree does not update Stable directly. After the integration commit
+is accepted, the release owner creates the immutable Agent Studio tag,
+generates the build manifest with the CAC identity above, deploys it through
+the normal preflight, and records the observed Agent Studio tag, commit, and
+CAC version in deployment history. The reissued integration task retains the
+original AGT-2170 relationship for audit continuity.
 
 ## Three-component topology gate
 

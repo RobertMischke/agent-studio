@@ -6,7 +6,11 @@ import {
   type ToolBurstEvent,
 } from 'coding-agent-chat/core';
 import { sanitizeProjectionLines } from '../conversation-projection';
-import { formatCompactTokens, presentActivityEvents } from './activity-event-presentation';
+import {
+  formatCompactTokens,
+  presentActivityEvents,
+  stripLegacyCompletionLines,
+} from './activity-event-presentation';
 
 const range = { source: 'AGT-2088', start: 10, end: 12 };
 const burst: ToolBurstEvent = {
@@ -36,12 +40,14 @@ describe('presentActivityEvents', () => {
     });
   });
 
-  it('renders a compact completion total', () => {
+  it('upgrades legacy completion prose into a typed label and turn metric', () => {
     const result = presentActivityEvents([{
       id: 'done', kind: 'system.status', timestamp: '2026-07-11T10:00:02Z', rawRange: range,
       category: 'result', label: 'Result', explanation: 'Turn completed (tokens: 14587328)',
     }], 'AGT-2088', null);
-    expect(result[0]).toMatchObject({ label: 'Turn completed', explanation: '14,6M tokens' });
+    expect(result[0]).toMatchObject({ label: 'Turn completed', explanation: '' });
+    expect(result[1]).toMatchObject({ kind: 'metric.token', scope: 'turn', inputTokens: 14_587_328 });
+    expect(JSON.stringify(result)).not.toContain('Turn completed (tokens:');
     expect(formatCompactTokens(14_587_328)).toBe('14,6M');
   });
 
@@ -91,5 +97,26 @@ describe('presentActivityEvents', () => {
       kind: 'message.taskAgent',
       body: expect.stringContaining('Its second line is preserved in that same turn.'),
     }));
+  });
+
+  it('drops legacy completion prose when a typed runner completion exists', () => {
+    const result = presentActivityEvents([{
+      id: 'done', kind: 'system.status', timestamp: '2026-07-11T10:00:02Z', rawRange: range,
+      category: 'result', label: 'Result', explanation: 'Turn completed (tokens: 1200)',
+    }], 'AGT-2088', null, { typedTurnCompletions: true });
+    expect(result).toEqual([]);
+  });
+
+  it('removes free completion transport lines only when typed lifecycle events exist', () => {
+    const lines = [
+      { timestamp: '2026-07-11T10:00:00Z', stream: 'stdout', text: 'Turn completed (tokens: 1,200)' },
+      { timestamp: '2026-07-11T10:00:01Z', stream: 'stdout', text: 'Session completed.' },
+      { timestamp: '2026-07-11T10:00:02Z', stream: 'stdout', text: 'Implementation completed the turn safely.' },
+    ];
+
+    expect(stripLegacyCompletionLines(lines, true).map(line => line.text)).toEqual([
+      'Implementation completed the turn safely.',
+    ]);
+    expect(stripLegacyCompletionLines(lines, false)).toEqual(lines);
   });
 });

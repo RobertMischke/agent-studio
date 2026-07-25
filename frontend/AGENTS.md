@@ -197,9 +197,9 @@ CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc
 
 ## Chat surfaces (`coding-agent-chat` — `<cac-chat>` is canonical)
 
-The chat stack lives in the standalone **`coding-agent-chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
+The chat stack lives in the standalone **`coding-agent-chat`** Angular library. The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
 
-Dependency: `"coding-agent-chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`. The registry version replaces the `file:` path after the library's first npm publish. `.npmrc` sets `install-links=true` so the `file:` dep is installed as a physical copy (a symlink would make the bundler/vitest resolve a second `@angular/core` from the library workspace). After rebuilding the library dist, re-run `npm install` here to pick up changes.
+Dependency: use an exact published registry version of `coding-agent-chat`. Never restore a local `file:` / `dist` dependency: Stable release identity and reproducible installs depend on the pinned version plus lockfile integrity.
 
 Entry points and what the app uses from them:
 - `coding-agent-chat/composer` — `<cac-chat>` (`ChatComponent`), `RoleBadgeComponent` (`<cac-role-badge>`), workforce-role catalogue + `resolveRole`, `groupIntoPhases`/`groupIntoSuperPhases` (`ChatPhase`).
