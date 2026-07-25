@@ -458,6 +458,9 @@
       }
     </div>
   }
+  @if (job().testEvidence; as evidence) {
+    <app-task-test-evidence [evidence]="evidence" />
+  }
   <div class="task-card__activity">
     Last activity: {{ relativeActivity() }}
   </div>

@@ -91,6 +91,9 @@ code { font-family: var(--font-mono); font-size: 0.9em; }
 .deployment__option input { width: 16px; height: 16px; margin: var(--studio-spacing-1) 0 0; accent-color: var(--studio-accent); }
 .deployment__option span { display: grid; gap: var(--studio-spacing-1); }
 .deployment__option small { color: var(--studio-fg-dim); }
+.deployment__option + .deployment__option { margin-top: var(--studio-spacing-3); }
+.deployment__exception { display: grid; gap: var(--studio-spacing-1); margin-top: var(--studio-spacing-3); color: var(--studio-fg-strong); font-weight: 600; }
+.deployment__exception input { width: 100%; min-height: 36px; padding: var(--studio-spacing-2) var(--studio-spacing-3); border: 1px solid var(--studio-border-strong); border-radius: 6px; background: var(--studio-bg-elevated); color: var(--studio-fg-strong); font: inherit; font-weight: 400; }
 .deployment__execution-row { align-items: center; justify-content: space-between; gap: var(--studio-spacing-4); }
 .deployment__execution-guidance { margin-top: var(--studio-spacing-3); color: var(--studio-fg-dim); font-size: 12px; }
 

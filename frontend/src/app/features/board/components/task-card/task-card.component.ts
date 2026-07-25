@@ -44,7 +44,6 @@ import {
   type CommitChainView,
   type CommitEmptyBadge,
 } from './task-card-view-model';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
@@ -62,6 +61,7 @@ import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
 import type { DependencyChip } from './task-card-view-model';
 import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
+import { TaskTestEvidenceComponent } from '../task-test-evidence/task-test-evidence';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -72,7 +72,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, PostProcessingActivityComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's

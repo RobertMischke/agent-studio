@@ -1,0 +1,55 @@
+<section class="test-runs" data-testid="project-test-runs-panel">
+  <header class="test-runs__header">
+    <div>
+      <p class="test-runs__eyebrow">Commit-bound evidence</p>
+      <h1>Test runs</h1>
+      <p>Planned, active, and completed runs. Card attachments are derived from Git ancestry.</p>
+    </div>
+    <button type="button" [appPendingButton]="loading()" pendingLabel="Refreshing..." (click)="refresh()">Refresh</button>
+  </header>
+
+  @if (failed()) {
+    <div class="test-runs__empty" role="status">Test runs are temporarily unavailable.</div>
+  } @else if (!loading() && response(); as data) {
+    <div class="test-runs__summary" data-testid="test-run-pipeline-summary">
+      <span><strong>{{ planned().length }}</strong> planned</span>
+      <span><strong>{{ running().length }}</strong> running</span>
+      <span><strong>{{ completed().length }}</strong> completed</span>
+      @if (data.headCommit) { <span>Head <code>{{ shortSha(data.headCommit) }}</code></span> }
+    </div>
+
+    @for (group of [{ key: 'planned', title: 'Coming next', items: planned() }, { key: 'running', title: 'Running now', items: running() }, { key: 'completed', title: 'Completed', items: completed() }]; track group.key) {
+      <section class="test-runs__lane" [attr.data-state]="group.key" [attr.data-testid]="'test-run-lane-' + group.key">
+        <header><h2>{{ group.title }}</h2><span>{{ group.items.length }}</span></header>
+        @if (group.items.length === 0) {
+          <p class="test-runs__empty">No {{ group.key }} runs.</p>
+        } @else {
+          <ol>
+            @for (item of group.items; track item.run.id) {
+              <li [attr.data-result]="item.run.result || item.run.state">
+                <div class="test-runs__identity">
+                  <span class="test-runs__dot" aria-hidden="true"></span>
+                  <div><strong>{{ item.run.id }}</strong><small>{{ item.run.trigger }} · {{ item.run.host || 'host pending' }}</small></div>
+                </div>
+                <dl>
+                  @if (item.run.state === 'planned') {
+                    <div data-testid="test-run-planned-order"><dt>Queue</dt><dd>#{{ item.run.plannedOrder }}</dd></div>
+                  }
+                  <div><dt>Commit</dt><dd><code>{{ shortSha(item.run.commit) }}</code> on {{ item.run.branch }}</dd></div>
+                  <div><dt>Scope</dt><dd>{{ item.run.scope.level }} · {{ item.run.scope.testSet }}</dd></div>
+                  <div><dt>Result</dt><dd>{{ item.run.result || item.run.state }}</dd></div>
+                  <div><dt>Duration</dt><dd>{{ item.run.durationSeconds === null ? 'Pending' : ((item.run.durationSeconds | number:'1.0-1') + ' s') }}</dd></div>
+                </dl>
+                <div class="test-runs__cards">
+                  <span>{{ item.attachedTasks.length }} attached card{{ item.attachedTasks.length === 1 ? '' : 's' }}</span>
+                  @for (task of item.attachedTasks; track task.taskKey) { <span class="test-runs__card">{{ task.taskKey }}</span> }
+                </div>
+                <small class="test-runs__time">{{ (item.run.completedAt || item.run.startedAt || item.run.createdAt) | date:'medium' }}</small>
+              </li>
+            }
+          </ol>
+        }
+      </section>
+    }
+  }
+</section>

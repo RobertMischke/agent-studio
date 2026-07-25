@@ -100,6 +100,13 @@ public record GitCommitInfo(
     int Added,
     int Removed);
 
+/// <summary>
+/// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
+/// The committer timestamp lets evidence consumers reject a merge that predates
+/// the card's current attributed commit.
+/// </summary>
+public record GitIntegrationMerge(string Sha, DateTime CommittedAtUtc);
+
 public record GenerateMessageResult(string? Message, string? Error);
 
 /// <summary>
@@ -4554,7 +4561,32 @@ public class GitService
     }
 
     /// <summary>
-    /// AGT-2202 — the curated-merge map for an integration ref: task KEY -&gt; the
+    /// Commit parent graph reachable from all supplied refs in one git process.
+    /// Consumers can derive ancestry and edge distance for many ref pairs in
+    /// memory instead of spawning merge-base and rev-list once per card.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetCommitParentGraph(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var graph = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return graph;
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return graph;
+        var args = new List<string> { "rev-list", "--parents", "--ignore-missing" };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0) return graph;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0) graph[parts[0]] = parts.Skip(1).ToArray();
+        }
+        return graph;
+    }
+
+    /// <summary>
+    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
     /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
     /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
     /// repo (the grep pre-filters to only the curated integrator merges, so the
@@ -4597,6 +4629,68 @@ public class GitService
             map.TryAdd(key, sha);
         }
         return map;
+    }
+
+    /// <summary>
+    /// All curated integration commits reachable from the supplied test-run
+    /// revisions, grouped by task key. The committer timestamp is part of the
+    /// result because a key alone is not revision identity: consumers must
+    /// reject integrations older than the card's current attributed commit.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> GetIntegrationMergesByKey(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var map = new Dictionary<string, List<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+
+        var args = new List<string>
+        {
+            "log",
+            "--no-color",
+            "-E",
+            "--grep=^merge(-recut)?\\(",
+            "--format=%H%x1f%cI%x1f%s",
+        };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var parts = line.Split('\x1f', 3);
+            if (parts.Length != 3) continue;
+            var sha = parts[0].Trim();
+            if (sha.Length == 0
+                || !DateTime.TryParse(
+                    parts[1],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                        | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var committedAtUtc)
+                || ParseIntegrationMergeKey(parts[2]) is not { } key)
+            {
+                continue;
+            }
+            if (!map.TryGetValue(key, out var commits))
+            {
+                commits = [];
+                map[key] = commits;
+            }
+            if (!commits.Any(commit => string.Equals(commit.Sha, sha, StringComparison.OrdinalIgnoreCase)))
+                commits.Add(new GitIntegrationMerge(sha, committedAtUtc));
+        }
+
+        return map.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<GitIntegrationMerge>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

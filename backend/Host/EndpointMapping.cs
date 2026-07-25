@@ -62,6 +62,7 @@ public static class EndpointMapping
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
         app.MapProjectOperatorDashboardEndpoints();
+        app.MapTestRunEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
         if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();

@@ -391,6 +391,9 @@ export interface TaskInfo {
    */
   publishSignal?: TaskPublishSignal | null;
 
+  /** Commit-derived test-run evidence. Never persisted on the card. */
+  testEvidence?: TaskTestRunEvidence | null;
+
   /**
    * ASS-1751: read-time run-activity classification for `3-progress` cards,
    * distinguishing a live run, a failed run waiting out the rapid-crash
@@ -1494,6 +1497,23 @@ export interface TaskPublishSignal {
   targetIds: string[];
   /** Short labels for the chip, in target order (e.g. 'npm', 'Website'). */
   labels: string[];
+}
+
+export type TestRunMatchQuality = 'none' | 'perfect' | 'contains-diff' | 'does-not-contain-diff';
+export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven';
+
+export interface TaskTestRunEvidence {
+  runId: string | null;
+  runCommit: string | null;
+  runState: 'planned' | 'running' | 'completed' | null;
+  runResult: 'passed' | 'failed' | 'canceled' | null;
+  matchQuality: TestRunMatchQuality;
+  direction: 'none' | 'exact' | 'after' | 'before';
+  distance: number | null;
+  diffContained: boolean;
+  evidenceState: TestEvidenceState;
+  awaitingEvidence: boolean;
+  summary: string;
 }
 
 export interface CrashRecoveryPending {

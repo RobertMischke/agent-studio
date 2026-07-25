@@ -14,6 +14,7 @@ import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
 import { ProjectPipelinePanelComponent } from '../project-pipeline-panel/project-pipeline-panel.component';
+import { ProjectTestRunsPanelComponent } from '../project-test-runs-panel/project-test-runs-panel';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
 import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
@@ -52,6 +53,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
     ProjectPipelinePanelComponent,
+    ProjectTestRunsPanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,

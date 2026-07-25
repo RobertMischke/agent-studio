@@ -46,6 +46,11 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
+  runs belong to commits rather than cards and expose planned order, scope,
+  host, state, result, duration, and derived card attachments through
+  `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
+  step telemetry.
 - `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
   `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when

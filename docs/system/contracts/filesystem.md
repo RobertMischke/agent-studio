@@ -11,6 +11,8 @@ canonical layout:
   .metadata/
     projects.json
     workspaces.json
+    test-runs/
+      PROJ-023.json
   projects/
     PROJ-023/
       tasks/
@@ -42,6 +44,14 @@ Per-project task counters move out of the sidecar `.task-counter.json` and onto 
 Projects created through `POST /api/projects` use `<TaskRepository>/projects/PROJ-NNN/tasks/` as their watched task-store root. The product repository remains a separate `RepositoryPath` and never receives a new `.orchestrator/jobs` store. Legacy projects can retain their existing storage location until a controlled migration.
 
 The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string.
+
+Project test runs are independent, commit-bound evidence objects stored in
+`<TaskRepository>/.metadata/test-runs/<PROJ-NNN>.json`. The schema-versioned
+file contains the run lifecycle and never stores card assignments. Task reads
+derive their best run, commit distance, direction, and diff containment from
+Git ancestry, so moving or completing a card cannot rewrite test evidence.
+Normal writers use `POST /api/projects/{project}/test-runs` and
+`PUT /api/projects/{project}/test-runs/{runId}`.
 
 ## Operational Boundary
 

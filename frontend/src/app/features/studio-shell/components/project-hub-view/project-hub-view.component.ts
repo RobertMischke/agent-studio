@@ -15,6 +15,7 @@ import {
   ProjectGitPanelComponent,
   ProjectProposalsPanelComponent,
   ProjectGraphComponent,
+  ProjectTestRunsPanelComponent,
   OwnershipMappingPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
@@ -94,6 +95,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectGitPanelComponent,
     ProjectProposalsPanelComponent,
     ProjectGraphComponent,
+    ProjectTestRunsPanelComponent,
     OwnershipMappingPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,

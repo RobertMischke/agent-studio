@@ -91,6 +91,32 @@
           </div>
         }
 
+        <fieldset class="deployment__option-group" data-testid="deployment-revision-choice">
+          <legend>Deployment revision</legend>
+          @if (deployment.defaultEvidenceRun; as evidence) {
+            <label class="deployment__option" for="deployment-tested-revision">
+              <input id="deployment-tested-revision" type="radio" name="deployment-revision" value="tested"
+                [checked]="revisionMode() === 'tested'" (change)="revisionMode.set('tested')" />
+              <span><strong>Last green test run (recommended)</strong><small>Run {{ evidence.id }} · <code>{{ shortSha(evidence.commit) }}</code> · {{ headDistanceLabel(evidence.distanceToHead, evidence.headDirection) }}</small></span>
+            </label>
+            <label class="deployment__option" for="deployment-head-revision">
+              <input id="deployment-head-revision" type="radio" name="deployment-revision" value="head"
+                [checked]="revisionMode() === 'head'" (change)="revisionMode.set('head')" />
+              <span><strong>Deploy Head as an exception</strong><small>Head may include changes that the selected successful run did not test.</small></span>
+            </label>
+          } @else {
+            <p class="deployment__notice">No successful test run is available. Head deployment is an explicit exception and cannot claim green evidence.</p>
+          }
+          @if (revisionMode() === 'head') {
+            <label class="deployment__exception" for="deployment-head-reason">
+              <span>Required exception reason</span>
+              <input id="deployment-head-reason" data-testid="deployment-head-reason" type="text"
+                [ngModel]="headExceptionReason()" (ngModelChange)="headExceptionReason.set($event)"
+                placeholder="Why is deploying untested Head justified?" />
+            </label>
+          }
+        </fieldset>
+
         <fieldset class="deployment__option-group">
           <legend>Execution</legend>
           <div class="deployment__execution-row">
