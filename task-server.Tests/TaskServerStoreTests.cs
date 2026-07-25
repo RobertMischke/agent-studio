@@ -1,10 +1,11 @@
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentStudio.TaskServer;
 using AgentStudio.TaskServer.Contracts;
-using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace TaskServer.Tests;
@@ -126,84 +127,118 @@ public sealed class TaskServerStoreTests
     [Fact]
     public async Task Backup_restore_preserves_resources_events_artifacts_audit_identity_and_fences()
     {
-        using var temp = new TempDirectory();
-        var store = Store(temp.Path);
-        await store.InitializeAsync();
-        var (_, project, task) = await SeedReadyTaskAsync(store);
-        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
-        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
-        var lease = claim.Lease!;
-        var runId = claim.Run!.RunId;
+        await TempDirectory.RunAsync(async temp =>
+        {
+            var store = Store(temp.Path);
+            await store.InitializeAsync();
+            var (_, project, task) = await SeedReadyTaskAsync(store);
+            await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+            var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+            var lease = claim.Lease!;
+            var runId = claim.Run!.RunId;
 
-        await store.IngestEventAsync(runId, new EventIngestRequest("evt-1", "runner.output", "{\"text\":\"hello\"}", "event-1", lease.Fence), "runner-a", default);
-        var bytes = Encoding.UTF8.GetBytes("evidence");
-        var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        await store.IngestArtifactAsync(runId, new ArtifactIngestRequest("art-1", "result.txt", "text/plain", Convert.ToBase64String(bytes), sha, "artifact-1", lease.Fence), "runner-a", default);
-        var handoff = await store.AcknowledgeResultHandoffAsync(
-            runId, Handoff(runId, lease, sequence: 3), "runner-a", default);
-        await store.CompleteRunAsync(runId, new CompleteRunRequest(
-            "runner-a", "instance-a", lease.LeaseId, lease.Fence, "success",
-            ResultEnvelopeDigest: handoff.EnvelopeDigest,
-            IdempotencyKey: $"completion:{runId}",
-            Sequence: 4), "runner-a", default);
+            await store.IngestEventAsync(runId, new EventIngestRequest("evt-1", "runner.output", "{\"text\":\"hello\"}", "event-1", lease.Fence), "runner-a", default);
+            var bytes = Encoding.UTF8.GetBytes("evidence");
+            var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            await store.IngestArtifactAsync(runId, new ArtifactIngestRequest("art-1", "result.txt", "text/plain", Convert.ToBase64String(bytes), sha, "artifact-1", lease.Fence), "runner-a", default);
+            var handoff = await store.AcknowledgeResultHandoffAsync(
+                runId, Handoff(runId, lease, sequence: 3), "runner-a", default);
+            await store.CompleteRunAsync(runId, new CompleteRunRequest(
+                "runner-a", "instance-a", lease.LeaseId, lease.Fence, "success",
+                ResultEnvelopeDigest: handoff.EnvelopeDigest,
+                IdempotencyKey: $"completion:{runId}",
+                Sequence: 4), "runner-a", default);
 
-        var serverId = store.ServerId;
-        var backup = await store.CreateBackupAsync(new BackupRequest("acceptance"), "operator", default);
-        await store.CreateTaskAsync(project.ProjectId, new CreateTaskRequest("must disappear after restore"), "test", default);
-        await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "restore rehearsal"), "operator", default);
-        var restored = await store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default);
+            var serverId = store.ServerId;
+            var backup = await store.CreateBackupAsync(new BackupRequest("acceptance"), "operator", default);
+            await store.CreateTaskAsync(project.ProjectId, new CreateTaskRequest("must disappear after restore"), "test", default);
+            await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "restore rehearsal"), "operator", default);
+            var restored = await store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default);
 
-        Assert.True(restored.Verified);
-        Assert.True(restored.Restored);
-        Assert.Equal(TaskServerMode.Maintenance, store.Mode);
-        Assert.Equal(serverId, store.ServerId);
-        Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
-        Assert.Single(await store.ListEventsAsync(runId, 0, default));
-        Assert.Single(await store.ListArtifactsAsync(runId, default));
-        Assert.Contains(await store.ListAuditAsync(0, default), record => record.Action == "run.claimed");
-        Assert.Equal(task.TaskId, (await store.GetTaskAsync(project.ProjectId, task.TaskKey, default))!.TaskId);
+            Assert.True(restored.Verified);
+            Assert.True(restored.Restored);
+            Assert.Equal(TaskServerMode.Maintenance, store.Mode);
+            Assert.Equal(serverId, store.ServerId);
+            Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
+            Assert.Single(await store.ListEventsAsync(runId, 0, default));
+            Assert.Single(await store.ListArtifactsAsync(runId, default));
+            Assert.Contains(await store.ListAuditAsync(0, default), record => record.Action == "run.claimed");
+            Assert.Equal(task.TaskId, (await store.GetTaskAsync(project.ProjectId, task.TaskKey, default))!.TaskId);
+        });
+    }
+
+    [Fact]
+    public async Task Backup_and_restore_release_database_file_handles_before_cleanup()
+    {
+        await TempDirectory.RunAsync(async temp =>
+        {
+            var store = Store(temp.Path);
+            await store.InitializeAsync();
+            await SeedReadyTaskAsync(store);
+
+            var backup = await store.CreateBackupAsync(new BackupRequest("handle-check"), "operator", default);
+            AssertCanOpenExclusively(backup.Path);
+
+            await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "restore handle check"), "operator", default);
+            var restored = await store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default);
+
+            Assert.True(restored.Restored);
+            AssertCanOpenExclusively(backup.Path);
+            AssertCanOpenExclusively(store.DatabasePath);
+        });
     }
 
     [Fact]
     public async Task Legacy_migration_rehearses_inventory_freeze_import_integrity_and_evidence_git_preservation()
     {
-        using var data = new TempDirectory();
-        using var legacy = new TempDirectory();
-        var taskDirectory = Path.Combine(legacy.Path, "projects", "agent-studio", "2-ready", "AGT-1");
-        Directory.CreateDirectory(Path.Combine(taskDirectory, "results"));
-        Directory.CreateDirectory(Path.Combine(legacy.Path, ".git"));
-        await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".git", "HEAD"), "ref: refs/heads/main\n");
-        await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
-            {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
-            """);
-        await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
-        await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
-        await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
+        await TempDirectory.RunAsync(async data =>
+        {
+            await TempDirectory.RunAsync(async legacy =>
+            {
+                var taskDirectory = Path.Combine(legacy.Path, "projects", "agent-studio", "2-ready", "AGT-1");
+                Directory.CreateDirectory(Path.Combine(taskDirectory, "results"));
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".git"));
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".git", "HEAD"), "ref: refs/heads/main\n");
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
+                    {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
 
-        var store = Store(data.Path);
-        await store.InitializeAsync();
-        var migration = new LegacyMigrationService(store);
-        var request = new LegacyMigrationRequest(legacy.Path, "Agent Studio for Software", true);
-        var inventory = await migration.InventoryAsync(request, default);
-        Assert.Equal(1, inventory.Projects);
-        Assert.Equal(1, inventory.Tasks);
-        Assert.Equal(1, inventory.Events);
-        Assert.Equal(1, inventory.Artifacts);
+                var store = Store(data.Path);
+                await store.InitializeAsync();
+                var migration = new LegacyMigrationService(store);
+                var request = new LegacyMigrationRequest(legacy.Path, "Agent Studio for Software", true);
+                var inventory = await migration.InventoryAsync(request, default);
+                Assert.Equal(1, inventory.Projects);
+                Assert.Equal(1, inventory.Tasks);
+                Assert.Equal(1, inventory.Events);
+                Assert.Equal(1, inventory.Artifacts);
 
-        request = request with { ExpectedMigrationId = inventory.MigrationId };
-        await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
-        var result = await migration.ImportAsync(request, "operator", default);
-        Assert.True(result.Imported);
-        Assert.False(string.IsNullOrWhiteSpace(result.IntegritySha256));
-        Assert.Contains("Restore backup", result.RollbackBoundary);
-        Assert.True(Directory.Exists(Path.Combine(data.Path, "migration-evidence", result.MigrationId)));
+                request = request with { ExpectedMigrationId = inventory.MigrationId };
+                await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
+                var result = await migration.ImportAsync(request, "operator", default);
+                Assert.True(result.Imported);
+                Assert.False(string.IsNullOrWhiteSpace(result.IntegritySha256));
+                Assert.Contains("Restore backup", result.RollbackBoundary);
+                Assert.True(Directory.Exists(Path.Combine(data.Path, "migration-evidence", result.MigrationId)));
 
-        var project = Assert.Single(await store.ListProjectsAsync(null, default));
-        var migrated = Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
-        Assert.Equal("AGT-1", migrated.TaskKey);
-        Assert.Equal("Migrated prompt", migrated.Body);
-        Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
-        Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+                var project = Assert.Single(await store.ListProjectsAsync(null, default));
+                var migrated = Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
+                Assert.Equal("AGT-1", migrated.TaskKey);
+                Assert.Equal("Migrated prompt", migrated.Body);
+                Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
+                Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+
+                var migrationBackup = Assert.Single(Directory.EnumerateFiles(
+                    store.BackupDirectory,
+                    "*-before-legacy-import-*.db",
+                    SearchOption.TopDirectoryOnly));
+                AssertCanOpenExclusively(migrationBackup);
+                AssertCanOpenExclusively(store.DatabasePath);
+            });
+        });
     }
 
     [Fact]
@@ -239,33 +274,37 @@ public sealed class TaskServerStoreTests
     [Fact]
     public async Task Failed_restore_rolls_back_to_the_live_store_and_remains_ready_in_maintenance()
     {
-        using var temp = new TempDirectory();
-        var store = Store(temp.Path);
-        await store.InitializeAsync();
-        var (_, project, _) = await SeedReadyTaskAsync(store);
-        var backup = await store.CreateBackupAsync(new BackupRequest("future-schema"), "operator", default);
-        await store.CreateTaskAsync(project.ProjectId, new CreateTaskRequest("must survive failed restore"), "test", default);
-
-        await using (var connection = new SqliteConnection($"Data Source={backup.Path};Pooling=False"))
+        await TempDirectory.RunAsync(async temp =>
         {
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE meta SET value = '999' WHERE key = 'schema_version';";
-            await command.ExecuteNonQueryAsync();
-            command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
-            await command.ExecuteNonQueryAsync();
-        }
+            var store = Store(temp.Path);
+            await store.InitializeAsync();
+            var (_, project, _) = await SeedReadyTaskAsync(store);
+            var backup = await store.CreateBackupAsync(new BackupRequest("future-schema"), "operator", default);
+            await store.CreateTaskAsync(project.ProjectId, new CreateTaskRequest("must survive failed restore"), "test", default);
 
-        var serverId = store.ServerId;
-        await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "restore rehearsal"), "operator", default);
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default));
+            await using (var connection = new SqliteConnection($"Data Source={backup.Path};Pooling=False"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE meta SET value = '999' WHERE key = 'schema_version';";
+                await command.ExecuteNonQueryAsync();
+                command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                await command.ExecuteNonQueryAsync();
+            }
 
-        Assert.Contains("newer than this service supports", error.Message);
-        Assert.True(store.AuthorityReady);
-        Assert.Equal(TaskServerMode.Maintenance, store.Mode);
-        Assert.Equal(serverId, store.ServerId);
-        Assert.Equal(2, (await store.ListTasksAsync(project.ProjectId, default)).Count);
+            var serverId = store.ServerId;
+            await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "restore rehearsal"), "operator", default);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default));
+
+            Assert.Contains("newer than this service supports", error.Message);
+            Assert.True(store.AuthorityReady);
+            Assert.Equal(TaskServerMode.Maintenance, store.Mode);
+            Assert.Equal(serverId, store.ServerId);
+            Assert.Equal(2, (await store.ListTasksAsync(project.ProjectId, default)).Count);
+            AssertCanOpenExclusively(backup.Path);
+            AssertCanOpenExclusively(store.DatabasePath);
+        });
     }
 
     [Fact]
@@ -747,6 +786,13 @@ public sealed class TaskServerStoreTests
     private static RegisterRunnerRequest Runner(string instance)
         => new("runner", "host-a", instance, "1.0.0", TaskServerProtocol.Current);
 
+    private static void AssertCanOpenExclusively(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.True(stream.CanRead);
+        Assert.True(stream.CanWrite);
+    }
+
     private static async Task<(WorkspaceDto Workspace, ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(TaskServerStore store)
     {
         var workspace = await store.CreateWorkspaceAsync(new CreateWorkspaceRequest("Workspace"), "test", default);
@@ -770,8 +816,47 @@ internal sealed class TempDirectory : IDisposable
     public TempDirectory() => Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "task-server-tests", Guid.NewGuid().ToString("N"));
     public string Path { get; }
 
+    public static async Task RunAsync(Func<TempDirectory, Task> action)
+    {
+        var temp = new TempDirectory();
+        Exception? failure = null;
+        try
+        {
+            await action(temp);
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        try
+        {
+            temp.Dispose();
+        }
+        catch (Exception cleanupException)
+        {
+            failure = failure is null
+                ? cleanupException
+                : new AggregateException(
+                    "The test body and temporary-directory cleanup both failed.",
+                    failure,
+                    cleanupException);
+        }
+
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
     public void Dispose()
     {
-        if (Directory.Exists(Path)) Directory.Delete(Path, recursive: true);
+        if (!Directory.Exists(Path)) return;
+        try
+        {
+            Directory.Delete(Path, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"Failed to clean temporary test directory '{Path}'.", exception);
+        }
     }
 }
