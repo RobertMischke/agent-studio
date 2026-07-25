@@ -107,6 +107,8 @@ Each job folder uses this structure:
   prompt.md         # Task description for the CLI agent
   status.md         # Generated review protocol
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
+  completion-acceptance.json
+                    # Optional: structured requirements, evidence, blockers, and completion lifecycle
   post-processing-outcomes.jsonl
                     # Optional: typed Post Processing outcomes
   .metadata/        # Application-owned sidecars (pipeline-execution.json, files.json, ...)
@@ -213,6 +215,12 @@ Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes.
 ```
 
 Valid `outcome` values are `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`. Valid `performer` values are `orchestrator`, `supporting-agent`, and `tool`. `performerCliType` is optional and should be one of the supported CLI values when a supporting CLI performed the check.
+
+### completion-acceptance.json (optional)
+
+The completion gate writes this structured sidecar before aspect review. It preserves the complete requirement source plus every evidence item and explicit blocker with its source and reason. Its lifecycle object keeps four separate facts: `turnComplete`, `implementationComplete`, `taskAccepted`, and `deploymentPushPending`. A successful `TASK_DONE`/process terminal can therefore complete implementation while acceptance is still under review and platform-owned commit, push, or deployment remains pending.
+
+The gate does not derive open work from `status.md` bullets or narrative. Only structured terminal/process evidence and explicit `TASK_BLOCKED` or `TASK_NEEDS_INPUT` terminals drive the pre-review completion ruling. The structured aspect verdict updates `taskAccepted`; deployment/push pending never masquerades as incomplete implementation.
 
 ### results/review-evidence.jsonl (optional)
 
