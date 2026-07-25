@@ -199,7 +199,7 @@ describe('CodeReviewPanelComponent', () => {
     expect(reaction?.querySelectorAll('.council-reaction__findings li')).toHaveLength(2);
     const round = reaction?.querySelector('[data-testid="code-review-council-round-link"]') as HTMLAnchorElement;
     expect(round.textContent).toContain('Open round 2');
-    expect(round.getAttribute('href')).toContain('task=AGT-2108');
+    expect(round.getAttribute('href')).toContain('#/tasks/AGT-2108');
     httpCtrl.verify();
   });
 

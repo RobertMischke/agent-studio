@@ -54,7 +54,7 @@ describe('TaskSelectionService · stable task URLs', () => {
   });
 
   it('round-trips a canonical key without a watch path or URL normalization', () => {
-    history.replaceState(null, '', '/studio?task=AGT-2124&view=git#diff');
+    history.replaceState(null, '', '/studio?view=git#/tasks/AGT-2124');
 
     selection.restoreFromUrl();
 
@@ -64,7 +64,7 @@ describe('TaskSelectionService · stable task URLs', () => {
 
     expect(selection.selected()?.info.key).toBe('AGT-2124');
     expect(`${location.pathname}${location.search}${location.hash}`)
-      .toBe('/studio?task=AGT-2124&view=git#diff');
+      .toBe('/studio?view=git#/tasks/AGT-2124');
   });
 
   it('accepts a legacy locator once and replaces it with the stable key', () => {
@@ -81,7 +81,7 @@ describe('TaskSelectionService · stable task URLs', () => {
     request.flush(detail);
 
     expect(`${location.pathname}${location.search}${location.hash}`)
-      .toBe('/?view=git&task=AGT-2124#diff');
+      .toBe('/?view=git#/tasks/AGT-2124&diff');
     expect(location.href).not.toContain('watchPath');
   });
 
@@ -95,7 +95,7 @@ describe('TaskSelectionService · stable task URLs', () => {
     expect(request.request.params.get('project')).toBe('Agent Studio');
     request.flush(detail);
     expect(push).toHaveBeenCalled();
-    expect(location.search).toBe('?task=AGT-2124');
+    expect(location.hash).toBe('#/tasks/AGT-2124');
 
     history.replaceState(null, '', '/?view=board');
     window.dispatchEvent(new PopStateEvent('popstate'));

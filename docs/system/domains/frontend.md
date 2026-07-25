@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-24
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -42,6 +42,25 @@ groups, and a failed domain reports an error without hiding successful domains.
   playbook.
 - [docs/quality/frontend/audits/architecture-review-2026-05-09.md](../../quality/frontend/audits/architecture-review-2026-05-09.md)
   is the maintainability map for large components and service extraction.
+
+## Studio route restoration
+
+The active Studio surface is described by one canonical hash path. Board and
+project scope, Hub rail, Wiki page or folder, Workbench id, public task key and
+active detail tabs, Epics scope, and Settings section restore from that route.
+The top-level query string is no longer an application routing surface. Legacy
+`task`, `job`, and `watchPath` query parameters remain read-only migration
+inputs and canonicalize after resolution.
+
+Route hydration wins over the locally persisted tab collection. State-to-route
+mirroring is enabled only after public project slugs or task keys have resolved,
+preventing a stale local tab from erasing a copied route during cold boot.
+Surface and subview synchronization uses `replaceState`; board filters remain an
+orthogonal sibling hash segment. Workspace Settings sections use the same
+`#/workspace/settings[/<section>]` path convention; older loose token and
+screenshot routes remain migration inputs. The full schema, transient-state
+boundary, route map, and visual ownership diagram are in
+[Studio Route Restoration](../../concepts/studio-route-restoration.md).
 
 ## Key Code
 

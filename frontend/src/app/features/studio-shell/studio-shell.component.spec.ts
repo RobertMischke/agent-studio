@@ -706,8 +706,8 @@ describe('StudioShellComponent active-tab scroll-into-view (AGT-2135)', () => {
     const spy = vi.fn();
     active.scrollIntoView = spy as unknown as HTMLElement['scrollIntoView'];
     // Visible strip spans x ∈ [0, 200].
-    list.getBoundingClientRect = (() => ({ left: 0, right: 200, top: 0, bottom: 30, width: 200, height: 30, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect);
-    active.getBoundingClientRect = (() => ({ left: tabRect.left, right: tabRect.right, top: 0, bottom: 30, width: tabRect.right - tabRect.left, height: 30, x: tabRect.left, y: 0, toJSON: () => ({}) }) as DOMRect);
+    list.getBoundingClientRect = (() => ({ left: 0, right: 200, top: 0, bottom: 30, width: 200, height: 30, x: 0, y: 0, toJSON() { return {}; } }) as DOMRect);
+    active.getBoundingClientRect = (() => ({ left: tabRect.left, right: tabRect.right, top: 0, bottom: 30, width: tabRect.right - tabRect.left, height: 30, x: tabRect.left, y: 0, toJSON() { return {}; } }) as DOMRect);
     return spy;
   }
 

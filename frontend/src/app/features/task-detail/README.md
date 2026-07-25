@@ -8,7 +8,7 @@ Imports via `from './features/job-detail'`. See [`index.ts`](./index.ts).
 
 **State services**:
 
-- `TaskSelectionService` (Cycle 9j) — `selected` signal, triage toast, `triageLanePeers` computed, stable path-free URL sync (`?task=<AGT-NNN>`), legacy deep-link redirect, browser-history handling, and open-detail request token guard.
+- `TaskSelectionService` (Cycle 9j) - `selected` signal, triage toast, `triageLanePeers` computed, stable path-free URL sync (`#/tasks/<AGT-NNN>`), legacy query deep-link redirect, browser-history handling, and open-detail request token guard.
 - `TriageController` (Cycle 10c) — triage panel actions (move / move-to-top / delete / start), j/k peer navigation, auto-advance after mutation or external move, complete-and-next-review.
 
 **Container components**:

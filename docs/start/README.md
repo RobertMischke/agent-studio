@@ -87,6 +87,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](../concepts/deployment-first-class.md) · [interactive mockup](../concepts/mockups/deployment-first-class.html) |
 | Release semantics (integration vs acceptance vs release vs stable freeze; transparent watering-can model) | [concept](../concepts/release-semantics.md) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](../concepts/project-overview-dashboard/README.md) · [interactive mockup](../concepts/project-overview-dashboard/ui.html) |
+| Studio route restoration (Board, Hub, Wiki pages, Workbenches, Task tabs, Epics, Settings) | [concept and route map](../concepts/studio-route-restoration.md) · [ownership diagram](../concepts/studio-route-restoration-diagram.html) |
 | Wiki classification | [product/wiki-document-classification.md](./wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](./wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |

@@ -5,6 +5,20 @@ export { StudioActivityViewComponent } from './components/activity-tab-view/acti
 export { StudioTabStateService } from './services/studio-tab-state.service';
 export { StudioPanelStateService } from './services/studio-panel-state.service';
 export { ThemeService } from './services/theme.service';
+export {
+  TASK_DETAIL_TABS,
+  isTaskDetailTab,
+  isTaskInspectorTab,
+  parseStudioRoute,
+  replaceStudioRoute,
+  replaceStudioRouteQuery,
+  replaceTaskViewRoute,
+  studioProjectSlug,
+  studioRouteForTab,
+  type StudioRoute,
+  type TaskDetailRouteTab,
+  type TaskInspectorRouteTab,
+} from './services/studio-route';
 // NB: AppearanceSettingsComponent is intentionally NOT re-exported here. The
 // consolidated settings view (shell feature) mounts it via a direct path so it
 // does not pull StudioShellComponent through this barrel and re-form the

@@ -112,6 +112,8 @@ export class PromptPaneComponent {
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
   readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
+  /** Canonical route state supplied by the task-detail host. */
+  readonly routeTab = input<PromptPaneTabId | null>(null);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -128,16 +130,14 @@ export class PromptPaneComponent {
    *  task-detail can re-fetch the job and let the optimistic override
    *  drop. */
   readonly titleSaved = output<void>();
+  readonly activeTabChange = output<PromptPaneTabId>();
 
   /**
    * overview | description | timeline | evidence | code-review.
    *
-   * The active tab is per-task and lives only in-memory: opening a task or
-   * switching to a different one snaps back to Overview so the operator
-   * always lands on the same first impression. Switching tabs within the
-   * same task persists (the signal stays) until the user navigates away to
-   * another task. Persistence across page reloads is intentionally out of
-   * scope.
+   * The active tab is reset to Overview on an ordinary task switch. The Studio
+   * shell may then apply canonical route state, which makes a copied URL or
+   * reload restore the requested tab after the task has mounted.
    */
   readonly activeTab = signal<PromptPaneTabId>('overview');
   readonly docFocusRequest = signal<{ kind: TaskArtifactKind; requestId: number } | null>(null);
@@ -155,8 +155,16 @@ export class PromptPaneComponent {
     this.lastJobKey = key;
   });
 
+  private applyRouteTab = effect(() => {
+    const routeTab = this.routeTab();
+    if (routeTab && this.activeTab() !== routeTab) {
+      this.activeTab.set(routeTab);
+    }
+  });
+
   setTab(tab: PromptPaneTabId): void {
     this.activeTab.set(tab);
+    this.activeTabChange.emit(tab);
   }
 
   /**

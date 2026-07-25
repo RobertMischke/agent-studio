@@ -47,7 +47,7 @@ import { shouldShowFailureToast } from './services/run-outcome.util';
 import { GitPaneComponent } from './components/git-pane/git-pane/git-pane.component';
 import { CliOutputPollService } from '../polling/services/cli-output-poll.service';
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
-import { PromptPaneComponent } from './components/prompt-pane/prompt-pane.component';
+import { PromptPaneComponent, type PromptPaneTabId } from './components/prompt-pane/prompt-pane.component';
 import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
 import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
@@ -119,7 +119,6 @@ export class TaskDetailComponent implements OnDestroy {
   private errorDialog = inject(ErrorDialogService);
   private clientService = inject(ClientService);
   private undo = inject(UndoController);
-
   readonly detail = input.required<TaskDetail>();
   readonly defaultThinkingLevel = computed(() =>
     this.clientService.resolve(this.detail().info.ownerClientId).defaultThinkingLevel ?? null
@@ -128,6 +127,8 @@ export class TaskDetailComponent implements OnDestroy {
   /** Peers in the same on-disk lane as the current job, in kanban order. */
   readonly lanePeers = input<TaskInfo[]>([]);
   readonly selectedSubTaskId = input<string | null>(null);
+  readonly routeDetailTab = input<PromptPaneTabId | null>(null);
+  readonly routeInspectorTab = input<'protocol' | 'activity' | null>(null);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -137,7 +138,6 @@ export class TaskDetailComponent implements OnDestroy {
    *  task by id (app.onOpenJobDetailFromSheet). */
   readonly openEpicRequested = output<{ jobId: string; watchPath: string }>();
   readonly openSubTaskRequested = output<{ jobId: string; watchPath: string }>();
-
   /** Forwarded from the prompt-pane Evidence tab into the existing job
    *  service mutation endpoint; the protocol pane no longer hosts the
    *  panel after the user moved Evidence into the left-pane tab. */
@@ -152,7 +152,6 @@ export class TaskDetailComponent implements OnDestroy {
         },
       });
   }
-
   onEvidenceCreateFollowup(entry: ReviewEvidenceEntry): void {
     const job = this.detail().info;
     this.jobService.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
@@ -180,7 +179,8 @@ export class TaskDetailComponent implements OnDestroy {
   readonly nextInLaneRequested = output<void>();
   /** Walk to the previous peer in the current lane (k / ↑ / ← / Prev button). */
   readonly prevInLaneRequested = output<void>();
-
+  readonly detailTabChange = output<PromptPaneTabId>();
+  readonly inspectorTabChange = output<'protocol' | 'activity'>();
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
   private readonly jobSelection = inject(TaskSelectionService);
@@ -213,9 +213,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly pagerLaneState = computed(
     () => this.lanePager.snapshot()?.lane ?? this.detail().info.state,
   );
-
   readonly editingPrompt = signal(false);
-
   // Three-pane layout state + resize handlers — owned by LayoutPanesService
   // (provided locally on this component); fields below re-expose as facades.
   private readonly layout = inject(LayoutPanesService);
@@ -492,8 +490,9 @@ export class TaskDetailComponent implements OnDestroy {
       // an existing summary keeps Result primary in every settled lane.
       const opensOnResult = d.info.state !== TaskState.Progress &&
         (!!d.statusMarkdown || d.info.state === TaskState.HumanReview || d.info.state === TaskState.Escalated);
-      this.activeInspectorTab.set(opensOnResult ? 'protocol' : 'activity');
-      this.userTouchedInspectorTab = false;
+      const routeInspectorTab = this.routeInspectorTab();
+      this.activeInspectorTab.set(routeInspectorTab ?? (opensOnResult ? 'protocol' : 'activity'));
+      this.userTouchedInspectorTab = routeInspectorTab !== null;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
       this.editingPrompt.set(false);
@@ -562,6 +561,19 @@ export class TaskDetailComponent implements OnDestroy {
         this.showError(err);
       },
     });
+  });
+
+  private routeInspectorEffect = effect(() => {
+    const routeTab = this.routeInspectorTab();
+    void this.detail().info.taskKey;
+    if (!routeTab) return;
+    // An explicit deep-link choice is user intent even when it already
+    // matches the initial tab. Mark it before the progress-state default can
+    // demote Protocol to Activity and make the two effects fight each other.
+    this.userTouchedInspectorTab = true;
+    if (this.activeInspectorTab() !== routeTab) {
+      this.activeInspectorTab.set(routeTab);
+    }
   });
   private cliConfigEffect = effect(() => {
     const requestId = this.errorDialog.cliConfigRequest();
@@ -1253,6 +1265,7 @@ export class TaskDetailComponent implements OnDestroy {
   onInspectorTabChange(tab: 'protocol' | 'activity') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
+    this.inspectorTabChange.emit(tab);
   }
 
   /** Flips the setup bar between compact (default while running) and the full

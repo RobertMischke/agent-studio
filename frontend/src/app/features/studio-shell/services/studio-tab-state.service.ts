@@ -248,6 +248,8 @@ export class StudioTabStateService {
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
         case 'hub':
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'workbench':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
         case 'url-preview':
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
         default:

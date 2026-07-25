@@ -116,6 +116,7 @@
         [cliTypeOverride]="cliTypeDraft()"
         [modelOverride]="modelDraft()"
         [thinkingLevelOverride]="thinkingLevelDraft()"
+        [routeTab]="routeDetailTab()"
         (maximizeToggle)="toggleMaximize('prompt')"
         (hide)="togglePane('prompt')"
         (save)="saveFileContent('prompt.md', $event)"
@@ -123,7 +124,8 @@
         (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)"
         (agentConfigCommit)="onAgentConfigCommit($event)"
         (referencesChanged)="fileSaved.emit()"
-        (titleSaved)="fileSaved.emit()" />
+        (titleSaved)="fileSaved.emit()"
+        (activeTabChange)="detailTabChange.emit($event)" />
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
