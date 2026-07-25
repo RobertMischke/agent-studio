@@ -26,11 +26,61 @@ public sealed class ProtocolTests
         Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.Equal("protocol-unsupported", error!.Code);
+        Assert.Contains("supported range", error.Message, StringComparison.OrdinalIgnoreCase);
 
         var claim = await client.PostAsJsonAsync(
             "/api/v1/runners/old-runner/claims",
             new ClaimRequest("old-runner", "old-instance"));
         Assert.Equal(HttpStatusCode.UpgradeRequired, claim.StatusCode);
+    }
+
+    [Fact]
+    public async Task Versioned_resource_request_without_protocol_header_is_honestly_rejected()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/workspaces");
+
+        Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("protocol-unsupported", error!.Code);
+        Assert.Contains("missing", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Bearer_mode_protects_resources_but_keeps_handshake_available()
+    {
+        using var temp = new TempDirectory();
+        const string token = "task-server-test-token-000000000000000000000001";
+        await using var factory = new TaskServerFactory(
+            temp.Path,
+            new Dictionary<string, string?>
+            {
+                ["TaskServer:AuthMode"] = "bearer",
+                ["TaskServer:AuthToken"] = token,
+            });
+        using var client = factory.CreateClient();
+
+        var handshake = await client.PostAsJsonAsync(
+            "/api/v1/protocol/compatibility",
+            new ProtocolCompatibilityRequest(
+                "runner",
+                "1.0.0",
+                TaskServerProtocol.Current));
+        Assert.Equal(HttpStatusCode.OK, handshake.StatusCode);
+
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        var denied = await client.GetAsync("/api/v1/management/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        var accepted = await client.GetAsync("/api/v1/management/status");
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
     }
 
     [Fact]
@@ -89,7 +139,13 @@ public sealed class ProtocolTests
 
         var register = await client.PutAsJsonAsync(
             "/api/v1/runners/runner-outcome",
-            new RegisterRunnerRequest("runner-outcome", "host-a", "instance-a", "1.0.0", 1));
+            new RegisterRunnerRequest(
+                "runner-outcome",
+                "host-a",
+                "instance-a",
+                "1.0.0",
+                1,
+                [ReviewCapabilities.CodingExecutor]));
         register.EnsureSuccessStatusCode();
         var claimResponse = await client.PostAsJsonAsync(
             "/api/v1/runners/runner-outcome/claims",
@@ -132,17 +188,26 @@ public sealed class ProtocolTests
         return current?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
     }
 
-    private sealed class TaskServerFactory(string dataDirectory) : WebApplicationFactory<Program>
+    private sealed class TaskServerFactory(
+        string dataDirectory,
+        IReadOnlyDictionary<string, string?>? overrides = null)
+        : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
             builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                var values = new Dictionary<string, string?>
                 {
                     ["TaskServer:DataDirectory"] = dataDirectory,
                     ["TaskServer:ListenUrl"] = string.Empty,
-                }));
+                };
+                if (overrides is not null)
+                    foreach (var (key, value) in overrides)
+                        values[key] = value;
+                configuration.AddInMemoryCollection(values);
+            });
         }
     }
 }

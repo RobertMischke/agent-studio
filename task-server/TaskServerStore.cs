@@ -34,13 +34,21 @@ public sealed partial class TaskServerStore
 
     public string DataDirectory => _options.ResolveDataDirectory();
     public string DatabasePath => Path.Combine(DataDirectory, "task-server.db");
-    public string BackupDirectory => Path.Combine(DataDirectory, "backups");
+    public string BackupDirectory => _options.ResolveBackupDirectory();
     public bool AuthorityReady { get; private set; }
     public string ServerId => _serverId;
     public TaskServerMode Mode => _mode;
     private DateTime UtcNow => _clock.GetUtcNow().UtcDateTime;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        => await InitializeCoreAsync(quarantineActiveAuthority: true, cancellationToken);
+
+    public async Task InitializeForBackupAsync(CancellationToken cancellationToken = default)
+        => await InitializeCoreAsync(quarantineActiveAuthority: false, cancellationToken);
+
+    private async Task InitializeCoreAsync(
+        bool quarantineActiveAuthority,
+        CancellationToken cancellationToken)
     {
         AuthorityReady = false;
         Directory.CreateDirectory(DataDirectory);
@@ -60,55 +68,59 @@ public sealed partial class TaskServerStore
                 : TaskServerMode.Maintenance;
             await RefreshOutboxSummaryAsync(connection, cancellationToken);
 
-            // A server restart cannot infer that an old runner process stopped.
-            // Preserve its fence and fail the attempt closed until an explicit,
-            // audited recovery releases it.
-            var restartMarker = Guid.NewGuid().ToString("N");
-            await ExecuteAsync(connection, """
-                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
-                SELECT 'evt_unavailable_' || id || '_' || $marker,
-                       id,
-                       task_id,
-                       $unavailableKind,
-                       $payload,
-                       'task-server-unavailable:' || id || ':' || $marker,
-                       fence,
-                       $now
-                  FROM runs
-                 WHERE status = 'running';
-                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
-                SELECT 'evt_restart_' || id || '_' || $marker,
-                       id,
-                       task_id,
-                       $kind,
-                       $payload,
-                       'task-server-restart:' || id || ':' || $marker,
-                       fence,
-                       $now
-                  FROM runs
-                 WHERE status = 'running';
-                """, cancellationToken,
-                ("$marker", restartMarker),
-                ("$unavailableKind", LifecycleEventKinds.TaskServerUnavailable),
-                ("$kind", LifecycleEventKinds.ProcessUnknown),
-                ("$payload", JsonSerializer.Serialize(new
-                {
-                    failure = "task-server-unavailable",
-                    authority = "fail-closed",
-                    replacementAdmission = "positive-no-overlap-evidence-required",
-                })),
-                ("$now", Iso(UtcNow)));
-            await ExecuteAsync(connection, """
-                UPDATE leases
-                   SET status = 'process-unknown'
-                 WHERE status = 'active';
-                UPDATE runs
-                   SET status = 'process-unknown'
-                 WHERE status = 'running';
-                UPDATE review_attempts
-                   SET status = 'process-unknown'
-                 WHERE status = 'leased';
-                """, cancellationToken);
+            if (quarantineActiveAuthority)
+            {
+                // A server restart cannot infer that an old runner process stopped.
+                // Preserve its fence and fail the attempt closed until an explicit,
+                // audited recovery releases it. Offline backup deliberately skips
+                // both the lifecycle evidence and the authority transition.
+                var restartMarker = Guid.NewGuid().ToString("N");
+                await ExecuteAsync(connection, """
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    SELECT 'evt_unavailable_' || id || '_' || $marker,
+                           id,
+                           task_id,
+                           $unavailableKind,
+                           $payload,
+                           'task-server-unavailable:' || id || ':' || $marker,
+                           fence,
+                           $now
+                      FROM runs
+                     WHERE status = 'running';
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    SELECT 'evt_restart_' || id || '_' || $marker,
+                           id,
+                           task_id,
+                           $kind,
+                           $payload,
+                           'task-server-restart:' || id || ':' || $marker,
+                           fence,
+                           $now
+                      FROM runs
+                     WHERE status = 'running';
+                    """, cancellationToken,
+                    ("$marker", restartMarker),
+                    ("$unavailableKind", LifecycleEventKinds.TaskServerUnavailable),
+                    ("$kind", LifecycleEventKinds.ProcessUnknown),
+                    ("$payload", JsonSerializer.Serialize(new
+                    {
+                        failure = "task-server-unavailable",
+                        authority = "fail-closed",
+                        replacementAdmission = "positive-no-overlap-evidence-required",
+                    })),
+                    ("$now", Iso(UtcNow)));
+                await ExecuteAsync(connection, """
+                    UPDATE leases
+                       SET status = 'process-unknown'
+                     WHERE status = 'active';
+                    UPDATE runs
+                       SET status = 'process-unknown'
+                     WHERE status = 'running';
+                    UPDATE review_attempts
+                       SET status = 'process-unknown'
+                     WHERE status = 'leased';
+                    """, cancellationToken);
+            }
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
             if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
@@ -124,7 +136,7 @@ public sealed partial class TaskServerStore
 
     public TaskServerStatusDto Status()
     {
-        var version = typeof(TaskServerStore).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+        var version = TaskServerBuildIdentity.Current.DisplayVersion;
         return new TaskServerStatusDto(
             _serverId,
             version,
@@ -138,7 +150,8 @@ public sealed partial class TaskServerStore
                 TaskServerProtocol.MaximumSupported,
                 version,
                 _serverId,
-                ["studio", "runner", "management"]),
+                ["studio", "runner", "review-runner", "management"],
+                ["coding-plane", "review-plane", "management-plane"]),
             _startedAt,
             _outboxBacklog,
             _oldestUnacknowledgedSequence,

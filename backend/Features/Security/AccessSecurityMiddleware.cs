@@ -46,6 +46,17 @@ public sealed class AccessSecurityMiddleware
             return;
         }
 
+        // A service bearer presented to the proxied versioned plane belongs to
+        // the standalone Task Server. Do not interpret it against the monolith's
+        // credential store; the upstream remains fail-closed and authoritative.
+        if (TaskServerPlaneProxy.IsConfigured(_configuration)
+            && path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
+            && context.Request.Headers.ContainsKey("Authorization"))
+        {
+            await _next(context);
+            return;
+        }
+
         context.Items[AttributionClientIdItem] = context.Request.Headers["X-Client-Id"].FirstOrDefault();
         if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase))
             context.Response.Headers.CacheControl = "no-store";

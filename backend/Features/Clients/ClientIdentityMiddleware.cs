@@ -23,6 +23,7 @@ public class ClientIdentityMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ClientIdentityStore _store;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ClientIdentityMiddleware> _logger;
 
     private static readonly string[] OpenPathPrefixes =
@@ -36,11 +37,24 @@ public class ClientIdentityMiddleware
         "/_vs"
     };
 
-    public ClientIdentityMiddleware(RequestDelegate next, ClientIdentityStore store, ILogger<ClientIdentityMiddleware> logger)
+    public ClientIdentityMiddleware(
+        RequestDelegate next,
+        ClientIdentityStore store,
+        IConfiguration configuration,
+        ILogger<ClientIdentityMiddleware> logger)
     {
         _next = next;
         _store = store;
+        _configuration = configuration;
         _logger = logger;
+    }
+
+    internal ClientIdentityMiddleware(
+        RequestDelegate next,
+        ClientIdentityStore store,
+        ILogger<ClientIdentityMiddleware> logger)
+        : this(next, store, new ConfigurationBuilder().Build(), logger)
+    {
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -50,7 +64,8 @@ public class ClientIdentityMiddleware
 
         // Skip the boundary for non-/api traffic, registration, hubs, health.
         if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
-            || OpenPathPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+            || OpenPathPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+            || IsExternallyOwnedV1(path))
         {
             await _next(context);
             return;
@@ -90,6 +105,20 @@ public class ClientIdentityMiddleware
         _store.RecordSeen(clientId);
         context.Items["ClientId"] = clientId;
         await _next(context);
+    }
+
+    private bool IsExternallyOwnedV1(string path)
+    {
+        if (TaskServerPlaneProxy.IsConfigured(_configuration))
+            return path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase);
+
+        // AGT-2325's interim Runner and Review adapters own their fenced
+        // attribution. Legacy monolith management remains behind this
+        // middleware until the standalone proxy replaces the whole v1 plane.
+        return path.StartsWith("/api/v1/protocol", StringComparison.OrdinalIgnoreCase)
+               || path.StartsWith("/api/v1/runners", StringComparison.OrdinalIgnoreCase)
+               || path.StartsWith("/api/v1/runs", StringComparison.OrdinalIgnoreCase)
+               || path.StartsWith("/api/v1/reviews", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task Reject(HttpContext context, string code, string message)

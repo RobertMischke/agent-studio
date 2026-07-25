@@ -5,6 +5,7 @@ public sealed class TaskServerOptions
     public const string SectionName = "TaskServer";
 
     public string DataDirectory { get; set; } = "data";
+    public string? BackupDirectory { get; set; }
     public string ListenUrl { get; set; } = "http://127.0.0.1:5071";
     public int MinimumLeaseSeconds { get; set; } = 30;
     public int MaximumLeaseSeconds { get; set; } = 600;
@@ -27,4 +28,11 @@ public sealed class TaskServerOptions
             ? DataDirectory
             : Path.Combine(AppContext.BaseDirectory, DataDirectory));
     }
+
+    public string ResolveBackupDirectory()
+        => string.IsNullOrWhiteSpace(BackupDirectory)
+            ? Path.Combine(ResolveDataDirectory(), "backups")
+            : Path.GetFullPath(Path.IsPathRooted(BackupDirectory)
+                ? BackupDirectory
+                : Path.Combine(AppContext.BaseDirectory, BackupDirectory));
 }

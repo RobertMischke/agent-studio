@@ -63,6 +63,60 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Repeated_startup_applies_each_schema_migration_once()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var second = Store(temp.Path);
+        await second.InitializeAsync();
+
+        await using var connection = new SqliteConnection(
+            $"Data Source={first.DatabasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"SELECT count(*) FROM schema_migrations WHERE version = {TaskServerStore.CurrentSchemaVersion};";
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
+    public async Task Backup_initialization_does_not_quarantine_live_authority()
+    {
+        using var temp = new TempDirectory();
+        var servingStore = Store(temp.Path);
+        await servingStore.InitializeAsync();
+        await SeedReadyTaskAsync(servingStore);
+        await servingStore.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-a"),
+            "test",
+            default);
+        var claim = await servingStore.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+
+        var backupProcessStore = Store(temp.Path);
+        await backupProcessStore.InitializeForBackupAsync();
+        await backupProcessStore.CreateBackupAsync(
+            new BackupRequest("timer"),
+            "timer",
+            default);
+
+        var renewed = await servingStore.RenewLeaseAsync(
+            claim.Run!.RunId,
+            new LeaseRenewRequest(
+                "runner-a",
+                "instance-a",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence),
+            "runner-a",
+            default);
+        Assert.Equal("active", renewed.Lease!.Status);
+    }
+
+    [Fact]
     public async Task Restart_restores_fence_authority_and_quarantines_the_attempt()
     {
         using var temp = new TempDirectory();

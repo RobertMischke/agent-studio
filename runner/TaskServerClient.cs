@@ -19,6 +19,8 @@ namespace AgentRunner;
 public sealed class TaskServerClient : IDisposable
 {
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
+    private static readonly JsonSerializerOptions TaskServerContractJson =
+        new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
     private readonly RunnerOptions? _options;
@@ -428,9 +430,16 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RemoteChatWorkClaimResponse> ClaimProjectChatWorkAsync(
         RemoteChatWorkClaimRequest request,
         CancellationToken ct)
-        => await PostJsonAsync<RemoteChatWorkClaimRequest, RemoteChatWorkClaimResponse>(
-               "/api/runner/project-chat/claim", request, ct)
-           ?? new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+    {
+        // Project chat is still a legacy monolith surface. A Runner connected
+        // to the standalone v1 owner must not probe an endpoint that the Task
+        // Server deliberately does not own.
+        if (_useV1)
+            return new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+        return await PostJsonAsync<RemoteChatWorkClaimRequest, RemoteChatWorkClaimResponse>(
+                   "/api/runner/project-chat/claim", request, ct)
+               ?? new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+    }
 
     public async Task<bool> RenewProjectChatWorkAsync(
         RemoteChatWorkRenewRequest request,
@@ -918,9 +927,14 @@ public sealed class TaskServerClient : IDisposable
 
     private async Task<TResp?> SendJsonAsync<TReq, TResp>(HttpMethod method, string url, TReq body, CancellationToken ct)
     {
+        // The standalone Task Server's established HTTP contract uses numeric
+        // enum values. Legacy monolith DTOs continue to use string enums.
+        var requestJson = typeof(TReq).Assembly == typeof(Contract.ProtocolRangeDto).Assembly
+            ? TaskServerContractJson
+            : Json;
         using var request = new HttpRequestMessage(method, url)
         {
-            Content = JsonContent.Create(body, options: Json),
+            Content = JsonContent.Create(body, options: requestJson),
         };
         using var resp = await _http.SendAsync(request, ct);
         if (!resp.IsSuccessStatusCode)

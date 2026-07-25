@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Agent Orchestrator Task Server backups
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=10m
+Unit=agent-task-server-backup.service
+
+[Install]
+WantedBy=timers.target

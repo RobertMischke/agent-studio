@@ -17,6 +17,8 @@ public static class EndpointMapping
 {
     public static void MapAllEndpoints(this WebApplication app)
     {
+        var mapsLocalV1 = MapsLocalV1(app.Configuration);
+        if (!mapsLocalV1) app.MapTaskServerPlaneProxy();
         app.MapAccessSecurityEndpoints();
         var tasks = app.MapGroup("/api/tasks")
             .AddEndpointFilter<TaskOperationTimingFilter>();
@@ -86,6 +88,12 @@ public static class EndpointMapping
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
         app.MapGlobalSearchEndpoints();
-        app.MapManagementEndpoints();
+        // Interim v1 adapters such as AGT-2325's review plane must remain
+        // inside this ownership branch. Never mount a local v1 writer beside
+        // the standalone proxy.
+        if (mapsLocalV1) app.MapManagementEndpoints();
     }
+
+    internal static bool MapsLocalV1(IConfiguration configuration)
+        => !TaskServerPlaneProxy.IsConfigured(configuration);
 }

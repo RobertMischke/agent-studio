@@ -7,7 +7,7 @@ var taskServerUrl = builder.Configuration["TaskServer:BaseUrl"]
 builder.Services.AddHttpClient("task-server", client =>
 {
     client.BaseAddress = new Uri(taskServerUrl);
-    var bearerToken = builder.Configuration["TaskServer:BearerToken"];
+    var bearerToken = ReadTaskServerToken(builder.Configuration);
     if (!string.IsNullOrWhiteSpace(bearerToken))
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
     client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, TaskServerProtocol.Current.ToString());
@@ -58,5 +58,30 @@ app.Map("/api/v1/{**path}", async context =>
 });
 
 await app.RunAsync();
+
+static string? ReadTaskServerToken(IConfiguration configuration)
+{
+    var legacy = configuration["TaskServer:BearerToken"]?.Trim();
+    var direct = configuration["TaskServer:AuthToken"]?.Trim();
+    var file = configuration["TaskServer:AuthTokenFile"]?.Trim();
+    if (!string.IsNullOrWhiteSpace(direct) && !string.IsNullOrWhiteSpace(file))
+        throw new InvalidOperationException(
+            "Configure only one of TaskServer:AuthToken or TaskServer:AuthTokenFile.");
+    if (!string.IsNullOrWhiteSpace(file))
+    {
+        var resolved = Path.GetFullPath(file);
+        if (!File.Exists(resolved))
+            throw new InvalidOperationException(
+                $"TaskServer:AuthTokenFile does not exist: {resolved}");
+        direct = File.ReadAllText(resolved).Trim();
+    }
+    if (!string.IsNullOrWhiteSpace(direct)
+        && !string.IsNullOrWhiteSpace(legacy))
+    {
+        throw new InvalidOperationException(
+            "Configure TaskServer:AuthToken or the legacy TaskServer:BearerToken, not both.");
+    }
+    return string.IsNullOrWhiteSpace(direct) ? legacy : direct;
+}
 
 public partial class Program;

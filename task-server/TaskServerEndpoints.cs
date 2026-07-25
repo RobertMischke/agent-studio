@@ -16,11 +16,18 @@ public static class TaskServerEndpoints
         api.MapPost("/protocol/compatibility", (ProtocolCompatibilityRequest request, TaskServerStore store) =>
         {
             var supported = TaskServerProtocol.Supports(request.ProtocolVersion)
-                && request.ClientKind is "studio" or "runner" or "management";
+                && request.ClientKind is "studio" or "runner" or "review-runner" or "management";
+            var reason = supported
+                ? null
+                : !store.Status().Protocol.ClientKinds.Contains(request.ClientKind, StringComparer.Ordinal)
+                    ? $"Client kind '{request.ClientKind}' is not supported. Supported client kinds: " +
+                      $"{string.Join(", ", store.Status().Protocol.ClientKinds)}."
+                    : $"Client protocol {request.ProtocolVersion} is outside the supported range " +
+                      $"{TaskServerProtocol.MinimumSupported}-{TaskServerProtocol.MaximumSupported}.";
             var response = new ProtocolCompatibilityResponse(
                 supported,
                 store.Status().Protocol,
-                supported ? null : $"{request.ClientKind} protocol {request.ProtocolVersion} is not supported.");
+                reason);
             return supported ? Results.Ok(response) : Results.Json(response, statusCode: StatusCodes.Status426UpgradeRequired);
         });
 

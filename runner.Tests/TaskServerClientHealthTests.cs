@@ -108,6 +108,25 @@ public class TaskServerClientHealthTests
             () => client.ProbeHealthAsync(cancelled.Token));
     }
 
+    [Fact]
+    public async Task Durable_task_server_does_not_probe_legacy_project_chat()
+    {
+        var handler = new RecordingHandler(_ =>
+            throw new InvalidOperationException("The legacy endpoint must not be called."));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true);
+
+        var claim = await client.ClaimProjectChatWorkAsync(
+            new RemoteChatWorkClaimRequest("runner-v1", "Runner v1", "host-a"),
+            CancellationToken.None);
+
+        Assert.Equal(RemoteChatWorkClaimStatuses.Empty, claim.Status);
+        Assert.Empty(handler.Requests);
+    }
+
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<(HttpMethod Method, string PathAndQuery, string? ClientId)> Requests { get; } = [];

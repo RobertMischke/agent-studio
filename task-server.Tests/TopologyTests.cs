@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
@@ -34,7 +35,7 @@ public sealed class TopologyTests
         using var server = StartBuilt(
             root,
             "task-server",
-            "agent-task-server.dll",
+            "task-server.dll",
             "--urls", serverUrl,
             "--TaskServer:DataDirectory", data.Path,
             "--TaskServer:MinimumLeaseSeconds", "5",
@@ -184,7 +185,7 @@ public sealed class TopologyTests
         using var firstServer = StartBuilt(
             root,
             "task-server",
-            "agent-task-server.dll",
+            "task-server.dll",
             "--urls", serverUrl,
             "--TaskServer:DataDirectory", data.Path,
             "--TaskServer:MinimumLeaseSeconds", "5",
@@ -228,7 +229,7 @@ public sealed class TopologyTests
         using var restartedServer = StartBuilt(
             root,
             "task-server",
-            "agent-task-server.dll",
+            "task-server.dll",
             "--urls", serverUrl,
             "--TaskServer:DataDirectory", data.Path,
             "--TaskServer:MinimumLeaseSeconds", "5",
@@ -340,7 +341,7 @@ public sealed class TopologyTests
         using var server = StartBuilt(
             root,
             "task-server",
-            "agent-task-server.dll",
+            "task-server.dll",
             "--urls", serverUrl,
             "--TaskServer:DataDirectory", data.Path,
             "--TaskServer:MinimumLeaseSeconds", "5",
@@ -448,7 +449,7 @@ public sealed class TopologyTests
         using var server = StartBuilt(
             root,
             "task-server",
-            "agent-task-server.dll",
+            "task-server.dll",
             new Dictionary<string, string?>
             {
                 ["ASPNETCORE_Kestrel__Certificates__Default__Path"] = certificatePath,
@@ -542,6 +543,74 @@ public sealed class TopologyTests
             $"/api/v1/runs/{run.RunId}/events");
         Assert.NotNull(authenticatedEvents);
         Assert.Equal(history.Events.Count, authenticatedEvents.Count);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Standalone_binary_honors_version_env_migration_and_backup_contracts()
+    {
+        var root = ProtocolTests.RepositoryRoot();
+        using var data = new TempDirectory();
+        using var backups = new TempDirectory();
+        var serverUrl = $"http://127.0.0.1:{FreePort()}";
+        var environment = new Dictionary<string, string?>
+        {
+            ["LISTEN_URL"] = serverUrl,
+            ["STORE_PATH"] = data.Path,
+            ["BACKUP_PATH"] = backups.Path,
+            ["AUTH"] = "none",
+        };
+
+        using var version = StartBuilt(
+            root,
+            "task-server",
+            "task-server.dll",
+            "--version");
+        await version.WaitForExitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(0, version.Process.ExitCode);
+        Assert.Matches(
+            @"task-server 1\.0\.0\+sha\.[0-9a-f]{40}",
+            version.ToString());
+
+        using (var first = StartBuilt(
+                   root,
+                   "task-server",
+                   "task-server.dll",
+                   environment))
+        {
+            await WaitForHttpAsync(serverUrl + "/readyz", first);
+            using var client = ProtocolClient(serverUrl);
+            var status = await client.GetFromJsonAsync<TaskServerStatusDto>(
+                "/api/v1/management/status");
+            Assert.Equal(Path.GetFullPath(data.Path), status!.DataDirectory);
+            Assert.Contains("+sha.", status.ServerVersion, StringComparison.Ordinal);
+        }
+
+        using (var restarted = StartBuilt(
+                   root,
+                   "task-server",
+                   "task-server.dll",
+                   environment))
+        {
+            await WaitForHttpAsync(serverUrl + "/readyz", restarted);
+            using var backup = StartBuilt(
+                root,
+                "task-server",
+                "task-server.dll",
+                environment,
+                "backup",
+                "--name",
+                "topology");
+            await backup.WaitForExitAsync(TimeSpan.FromSeconds(20));
+            Assert.Equal(0, backup.Process.ExitCode);
+            var json = backup.OutputLines.Last(line => line.StartsWith('{'));
+            var result = JsonSerializer.Deserialize<BackupResult>(
+                json,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            Assert.NotNull(result);
+            Assert.True(File.Exists(result.Path));
+            Assert.StartsWith(Path.GetFullPath(backups.Path), result.Path);
+            Assert.Equal(64, result.Sha256.Length);
+        }
     }
 
     private static async Task<(ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(
@@ -930,6 +999,13 @@ public sealed class TopologyTests
     {
         private readonly List<string> _output = [];
         public Process Process { get; } = process;
+        public IReadOnlyList<string> OutputLines
+        {
+            get
+            {
+                lock (_output) return _output.ToArray();
+            }
+        }
 
         public void Append(string? line)
         {
@@ -951,6 +1027,20 @@ public sealed class TopologyTests
         }
 
         public void Dispose() => Stop();
+
+        public async Task WaitForExitAsync(TimeSpan timeout)
+        {
+            using var cancellation = new CancellationTokenSource(timeout);
+            try
+            {
+                await Process.WaitForExitAsync(cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException(
+                    $"Process {Process.Id} did not exit within {timeout}. Output: {this}");
+            }
+        }
 
         public override string ToString()
         {
