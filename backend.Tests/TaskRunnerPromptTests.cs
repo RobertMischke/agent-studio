@@ -478,6 +478,8 @@ public class TaskRunnerPromptTests
         var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
         {
             ["diff"] = "diff --git a/x b/x",
+            ["diff_summary"] = "1 file changed",
+            ["candidate_manifest"] = "[{\"Path\":\"x\",\"Included\":true}]",
             ["task_title"] = "Git-Problem",
             ["task_prompt_first_paragraph"] = "Orchestrator should commit and push when a task finishes.",
             ["last_user_continue"] = "Please also enrich the commit message."
@@ -488,6 +490,10 @@ public class TaskRunnerPromptTests
         Assert.Contains("Orchestrator should commit and push", rendered);
         Assert.Contains("Please also enrich the commit message.", rendered);
         Assert.Contains("diff --git a/x b/x", rendered);
+        Assert.Contains("candidate manifest", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COMMIT_REVIEW: ALLOW", rendered);
+        Assert.Contains("COMMIT_REVIEW: SUSPICIOUS", rendered);
+        Assert.Contains("Never reproduce a credential", rendered);
 
         // Structural guard: the template must instruct the model to prefer
         // intent over a literal diff summary, otherwise enriching the prompt
@@ -511,6 +517,8 @@ public class TaskRunnerPromptTests
         var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
         {
             ["diff"] = "diff --git a/x b/x",
+            ["diff_summary"] = "1 file changed",
+            ["candidate_manifest"] = "[]",
             ["task_title"] = "",
             ["task_prompt_first_paragraph"] = "",
             ["last_user_continue"] = ""
@@ -519,6 +527,8 @@ public class TaskRunnerPromptTests
         Assert.DoesNotContain("{{task_title}}", rendered);
         Assert.DoesNotContain("{{task_prompt_first_paragraph}}", rendered);
         Assert.DoesNotContain("{{last_user_continue}}", rendered);
+        Assert.DoesNotContain("{{candidate_manifest}}", rendered);
+        Assert.DoesNotContain("{{diff_summary}}", rendered);
         Assert.Contains("diff --git a/x b/x", rendered);
     }
 

@@ -1274,7 +1274,8 @@ public class ProjectRunner
             //    the agent itself does not commit, so without this the branch tip
             //    stays at develop and Integrate would merge nothing.
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
-                $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
+                $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}",
+                run.JobId, info.Runner?.RunnerId, run.Branch);
             if (commit.Success)
             {
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
@@ -1810,7 +1811,8 @@ public class ProjectRunner
             }
 
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
-                $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]");
+                $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]",
+                run.JobId, info.Runner?.RunnerId, run.Branch);
             if (commit.Success)
                 _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
                     run.JobId, commit.Sha ?? "<unknown>");

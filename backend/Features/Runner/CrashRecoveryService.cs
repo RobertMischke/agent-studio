@@ -281,7 +281,10 @@ public sealed class CrashRecoveryService
             return;
         }
 
-        var pathspecs = scope.Scope == CrashRecoveryCommitScope.Scoped ? scope.Paths : null;
+        // Bind operator confirmation to the exact paths visible when recovery
+        // was queued. Legacy/unknown recovery must never widen to a later dirty
+        // tree merely because it lacks a session window.
+        var pathspecs = scope.Paths;
         if (pathspecs is { Count: > 0 })
         {
             _logger.LogInformation(
@@ -324,7 +327,9 @@ public sealed class CrashRecoveryService
         if (pending == null)
             return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.NotFound, Error: "Pending crash recovery item not found.");
 
-        var commit = _git.CrashRecoveryCommit(pending.ProjectName, pending.RepoRoot, pending.Message, pending.Pathspecs);
+        var commit = _git.CrashRecoveryCommit(
+            pending.ProjectName, pending.RepoRoot, pending.Message, pending.Pathspecs,
+            pending.JobId, runnerId: "crash-recovery");
         if (!commit.Success)
         {
             if (commit.Error != null && commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
@@ -527,7 +532,16 @@ public sealed class CrashRecoveryService
         string? jobFolder,
         string repoRoot)
     {
-        var all = new CrashRecoveryCommitPlan(CrashRecoveryCommitScope.All, []);
+        var status = _git.GetStatusForRepoRoot(repoRoot);
+        var allPaths = status.IsRepo
+            ? status.Files
+                .Select(file => file.Path)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+        var all = new CrashRecoveryCommitPlan(CrashRecoveryCommitScope.Scoped, allPaths);
         if (string.IsNullOrWhiteSpace(jobId) || string.IsNullOrWhiteSpace(jobFolder))
             return all;
 
@@ -535,7 +549,6 @@ public sealed class CrashRecoveryService
         if (firstActivityUtc == null)
             return all;
 
-        var status = _git.GetStatusForRepoRoot(repoRoot);
         if (!status.IsRepo || status.Files.Count == 0)
             return all;
 

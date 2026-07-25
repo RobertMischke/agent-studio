@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -19,7 +20,7 @@ public record GitStatusResult(
     string? Error,
     bool IsWorktree = false);
 
-public record GitCommitResult(bool Success, string? Sha, string? Error);
+public record GitCommitResult(bool Success, string? Sha, string? Error, CommitGateResult? Gate = null);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
@@ -110,7 +111,7 @@ public record GitCommitInfo(
 /// </summary>
 public record GitIntegrationMerge(string Sha, DateTime CommittedAtUtc);
 
-public record GenerateMessageResult(string? Message, string? Error);
+public record GenerateMessageResult(string? Message, string? Error, string? SuspiciousReason = null);
 
 /// <summary>
 /// The most-recent commit that touched a single file under a directory walk.
@@ -314,6 +315,7 @@ public class GitService
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
     private readonly ProjectRegistry _registry;
+    private readonly CommitCandidateGate _commitGate;
 
     public GitService(
         ILogger<GitService> logger,
@@ -321,7 +323,8 @@ public class GitService
         IConfiguration config,
         RuntimePromptService? prompts = null,
         AdHocUsageRecorder? usage = null,
-        ProjectRegistry? registry = null)
+        ProjectRegistry? registry = null,
+        IEnumerable<ICommitCandidateScanner>? commitCandidateScanners = null)
     {
         _logger = logger;
         _scanner = scanner;
@@ -329,6 +332,7 @@ public class GitService
         _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         _usage = usage;
         _registry = registry ?? new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        _commitGate = new CommitCandidateGate(logger, commitCandidateScanners);
         // Give the ambient git-spawn telemetry a logger for out-of-scope
         // slow-spawn warnings (the per-request rollup uses its own logger).
         GitProcessTelemetry.Logger ??= logger;
@@ -1567,54 +1571,18 @@ public class GitService
         string projectName,
         string repoRoot,
         string message,
-        IReadOnlyCollection<string>? pathspecs = null)
+        IReadOnlyCollection<string>? pathspecs = null,
+        string? taskId = null,
+        string? runnerId = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return new GitCommitResult(false, null, $"Repo root missing: {repoRoot}");
-
-        if (pathspecs is { Count: > 0 })
-        {
-            var addArgs = new List<string> { "add", "-A", "--" };
-            addArgs.AddRange(pathspecs);
-            var (_, scopedAddErr, scopedAddCode) = RunGitArgs(repoRoot, addArgs.ToArray());
-            if (scopedAddCode != 0)
-                return new GitCommitResult(false, null, $"git add failed: {scopedAddErr.Trim()}");
-
-            const string scopedAuthor = "Crash Recovery <crash-recovery@agent-taskboard>";
-            var commitArgs = new List<string> { "commit", $"--author={scopedAuthor}", "-F", "-", "--" };
-            commitArgs.AddRange(pathspecs);
-            var (_, scopedCommitErr, scopedCommitCode) = RunGitArgs(repoRoot, commitArgs.ToArray(), stdin: message);
-            if (scopedCommitCode != 0)
-            {
-                if (scopedCommitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                    return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-                return new GitCommitResult(false, null, scopedCommitErr.Trim());
-            }
-
-            var (scopedSha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
-            return new GitCommitResult(true, scopedSha.Trim(), null);
-        }
-
-        var (_, addErr, addCode) = RunGit(repoRoot, "add -A");
-        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
-
-        var (stagedOut, _, _) = RunGit(repoRoot, "diff --cached --name-only");
-        if (string.IsNullOrWhiteSpace(stagedOut))
-            return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-
-        const string author = "Crash Recovery <crash-recovery@agent-taskboard>";
-        var (_, commitErr, commitCode) = RunGit(
-            repoRoot,
-            $"commit --author=\"{author}\" -F -",
-            stdin: message);
-        if (commitCode != 0)
-        {
-            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-            return new GitCommitResult(false, null, commitErr.Trim());
-        }
-        var (sha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
-        return new GitCommitResult(true, sha.Trim(), null);
+        var gate = InspectCommitCandidates(
+            "crash-recovery", projectName, repoRoot, taskId, runnerId, pathspecs,
+            requireTaskWorktree: false, expectedBranch: null, explicitlyReviewed: true,
+            requireExplicitPaths: pathspecs is not { Count: > 0 });
+        return CommitBoundManifest(repoRoot, message, gate,
+            author: "Crash Recovery <crash-recovery@agent-taskboard>");
     }
 
     /// <summary>
@@ -1638,28 +1606,17 @@ public class GitService
     public GitCommitResult WorktreeRunCommit(
         string projectName,
         string repoRoot,
-        string message)
+        string message,
+        string? taskId = null,
+        string? runnerId = null,
+        string? expectedBranch = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return new GitCommitResult(false, null, $"Repo root missing: {repoRoot}");
-
-        var (_, addErr, addCode) = RunGit(repoRoot, "add -A");
-        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
-
-        var (stagedOut, _, _) = RunGit(repoRoot, "diff --cached --name-only");
-        if (string.IsNullOrWhiteSpace(stagedOut))
-            return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-
-        // No --author override: the configured git identity owns the landing.
-        var (_, commitErr, commitCode) = RunGit(repoRoot, "commit -F -", stdin: message);
-        if (commitCode != 0)
-        {
-            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-            return new GitCommitResult(false, null, commitErr.Trim());
-        }
-        var (sha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
-        return new GitCommitResult(true, sha.Trim(), null);
+        var gate = InspectCommitCandidates(
+            "worktree-run", projectName, repoRoot, taskId ?? projectName, runnerId, null,
+            requireTaskWorktree: true, expectedBranch, explicitlyReviewed: false);
+        return CommitBoundManifest(repoRoot, message, gate);
     }
 
     public GitCommitResult Commit(string jobId, string? watchPath, string message,
@@ -1673,59 +1630,139 @@ public class GitService
         var root = ResolveGitToplevel(configured);
         if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {configured}");
 
-        // Scoped commit: when the caller names the task's own paths, stage and
-        // commit ONLY those. Always-worktree coding runs should already be
-        // isolated, but this legacy/transition path also handles read-only,
-        // operator-authored, and pre-policy state. A blanket `git add -A` could
-        // sweep unrelated dirty changes into THIS task's commit (the mega-blob /
-        // mis-attribution bug). Restricting the pathspec keeps the commit - and
-        // its stamped SHA - to exactly the files this task touched, and leaves
-        // foreign changes dirty for their own owner to handle.
-        if (pathspecs is { Count: > 0 })
-        {
-            var addArgs = new List<string> { "add", "-A", "--" };
-            addArgs.AddRange(pathspecs);
-            var (_, sAddErr, sAddCode) = RunGitArgs(root, addArgs.ToArray());
-            if (sAddCode != 0) return new GitCommitResult(false, null, $"git add failed: {sAddErr.Trim()}");
+        var task = _scanner.FindJob(jobId, watchPath);
+        var gate = InspectCommitCandidates(
+            "manual-or-auto", task?.ProjectName ?? jobId, root, jobId,
+            task?.Runner?.RunnerId, pathspecs, requireTaskWorktree: false,
+            expectedBranch: null, explicitlyReviewed: false,
+            requireExplicitPaths: pathspecs is not { Count: > 0 });
+        return CommitBoundManifest(root, message, gate);
+    }
 
-            // `commit -- <pathspec>` performs a partial commit from those paths
-            // only, so even a (policy-violating) pre-staged foreign change in
-            // the index cannot ride along. Message via stdin (-F -).
-            var commitArgs = new List<string> { "commit", "-F", "-", "--" };
-            commitArgs.AddRange(pathspecs);
-            var (_, sCommitErr, sCommitCode) = RunGitArgs(root, commitArgs.ToArray(), stdin: message);
-            if (sCommitCode != 0)
+    private CommitGateResult InspectCommitCandidates(
+        string operation,
+        string projectId,
+        string repoRoot,
+        string? taskId,
+        string? runnerId,
+        IReadOnlyCollection<string>? expectedPaths,
+        bool requireTaskWorktree,
+        string? expectedBranch,
+        bool explicitlyReviewed,
+        bool requireExplicitPaths = false)
+    {
+        string? evidenceDirectory = null;
+        if (!string.IsNullOrWhiteSpace(taskId))
+        {
+            try
             {
-                if (sCommitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                    return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-                return new GitCommitResult(false, null, sCommitErr.Trim());
+                var task = _scanner.FindJob(taskId);
+                if (!string.IsNullOrWhiteSpace(task?.FolderPath))
+                    evidenceDirectory = Path.Combine(task.FolderPath, "results");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Commit gate could not resolve evidence folder for {TaskId}", taskId);
+            }
+        }
+
+        var gate = _commitGate.Inspect(new CommitGateRequest(
+            operation, projectId, repoRoot, taskId, runnerId, expectedPaths,
+            requireTaskWorktree, expectedBranch, explicitlyReviewed, evidenceDirectory,
+            requireExplicitPaths));
+        _logger.LogInformation(
+            "Commit candidate gate {Decision} for {Operation} project={Project} task={TaskId} runner={RunnerId} candidates={Candidates} included={Included} findings={Findings} evidence={Evidence}",
+            gate.Decision, operation, projectId, taskId ?? "<none>", runnerId ?? "<none>",
+            gate.Candidates.Count, gate.IncludedPaths.Count, gate.Findings.Count,
+            gate.EvidencePath ?? "<unavailable>");
+        return gate;
+    }
+
+    private GitCommitResult CommitBoundManifest(
+        string repoRoot,
+        string message,
+        CommitGateResult gate,
+        string? author = null)
+    {
+        if (gate.Candidates.Count == 0)
+            return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.", gate);
+        if (!gate.CanCommit)
+        {
+            var codes = string.Join(", ", gate.Findings.Select(f => f.Code).Distinct(StringComparer.Ordinal));
+            return new GitCommitResult(false, null,
+                $"Commit candidate gate {gate.Decision}: {codes}.", gate);
+        }
+        if (!_commitGate.TryPrepareBoundIndex(gate, out var boundIndex, out var stageError)
+            || boundIndex == null)
+            return new GitCommitResult(false, null, stageError, gate);
+
+        using (boundIndex)
+        {
+            var environment = new Dictionary<string, string?>
+            {
+                ["GIT_INDEX_FILE"] = boundIndex.FilePath
+            };
+            if (!string.IsNullOrWhiteSpace(author))
+            {
+                var match = Regex.Match(author, @"^(?<name>.+?)\s*<(?<email>[^<>]+)>$");
+                if (!match.Success)
+                    return new GitCommitResult(false, null, "Invalid platform commit author.", gate);
+                environment["GIT_AUTHOR_NAME"] = match.Groups["name"].Value.Trim();
+                environment["GIT_AUTHOR_EMAIL"] = match.Groups["email"].Value.Trim();
             }
 
-            var (scopedSha, _, _) = RunGit(root, "rev-parse --short HEAD");
-            return new GitCommitResult(true, scopedSha.Trim(), null);
+            var (parent, parentErr, parentCode) = RunGitArgs(repoRoot, "rev-parse", "HEAD");
+            if (parentCode != 0)
+                return new GitCommitResult(false, null, parentErr.Trim(), gate);
+
+            var (tree, treeErr, treeCode) = RunGitArgs(
+                repoRoot, ["write-tree"], stdin: null, environment: environment);
+            if (treeCode != 0)
+                return new GitCommitResult(false, null, treeErr.Trim(), gate);
+
+            var boundMessage = AppendCommitGateProvenance(message, gate);
+            var (sha, commitErr, commitCode) = RunGitArgs(
+                repoRoot, ["commit-tree", tree.Trim(), "-p", parent.Trim(), "-F", "-"],
+                stdin: boundMessage, environment: environment);
+            if (commitCode != 0)
+                return new GitCommitResult(false, null, commitErr.Trim(), gate);
+
+            // Compare-and-swap the branch tip so a concurrent commit cannot be
+            // overwritten after candidate inspection.
+            var (_, updateErr, updateCode) = RunGitArgs(
+                repoRoot, "update-ref", "HEAD", sha.Trim(), parent.Trim());
+            if (updateCode != 0)
+                return new GitCommitResult(false, null,
+                    $"Branch changed after candidate inspection: {updateErr.Trim()}", gate);
+
+            // Keep the user's real index coherent with the new HEAD for only
+            // the committed paths. Concurrent working-tree edits remain dirty,
+            // and unrelated staged entries remain untouched.
+            var resetArgs = new List<string> { "reset", "-q", "HEAD", "--" };
+            resetArgs.AddRange(gate.IncludedPaths);
+            RunGitArgs(repoRoot, resetArgs.ToArray());
+
+            return new GitCommitResult(true, sha.Trim(), null, gate);
         }
+    }
 
-        var (_, addErr, addCode) = RunGit(root, "add -A");
-        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
-
-        // Multi-line message via stdin avoids shell escaping landmines.
-        var (_, commitErr, commitCode) = RunGit(root, "commit -F -", stdin: message);
-        if (commitCode != 0)
-        {
-            // "nothing to commit" is a soft success-with-info, not an error.
-            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
-            return new GitCommitResult(false, null, commitErr.Trim());
-        }
-
-        var (sha, _, _) = RunGit(root, "rev-parse --short HEAD");
-        return new GitCommitResult(true, sha.Trim(), null);
+    private static string AppendCommitGateProvenance(string message, CommitGateResult gate)
+    {
+        var sb = new StringBuilder(message.TrimEnd());
+        sb.AppendLine().AppendLine();
+        if (!string.IsNullOrWhiteSpace(gate.Provenance.TaskId))
+            sb.Append("Task-Id: ").AppendLine(gate.Provenance.TaskId);
+        if (!string.IsNullOrWhiteSpace(gate.Provenance.RunnerId))
+            sb.Append("Runner-Id: ").AppendLine(gate.Provenance.RunnerId);
+        sb.Append("Commit-Gate: ").Append(gate.Decision)
+            .Append(" (candidates=").Append(gate.Candidates.Count)
+            .Append(", included=").Append(gate.IncludedPaths.Count).AppendLine(")");
+        return sb.ToString().TrimEnd();
     }
 
     /// <summary>
-    /// Sends the working-tree diff to Claude Haiku and asks for a Conventional
-    /// Commit message. Only the subject + short body are returned; we strip
-    /// leading code-fence noise.
+    /// Sends the inspected candidate manifest and working-tree diff summary to
+    /// Codex gpt-5.4-mini for additive semantic review and commit-message text.
     /// <para>
     /// Beyond the diff, the prompt is anchored on the task's stated intent so
     /// the resulting subject line reflects *why* the change is being recorded,
@@ -1739,7 +1776,8 @@ public class GitService
     /// </summary>
     public async Task<GenerateMessageResult> GenerateCommitMessageAsync(
         string jobId, string? watchPath, CancellationToken ct = default,
-        IReadOnlyCollection<string>? pathspecs = null)
+        IReadOnlyCollection<string>? pathspecs = null,
+        CommitGateResult? gate = null)
     {
         var configured = ResolveRepoRoot(jobId, watchPath);
         if (configured == null) return new GenerateMessageResult(null, "Could not resolve repo root.");
@@ -1755,7 +1793,7 @@ public class GitService
         if (code != 0 || string.IsNullOrWhiteSpace(diff))
             return new GenerateMessageResult(null, "No diff against HEAD. Nothing to summarise.");
 
-        // Bound the prompt size. Haiku handles plenty but huge diffs
+        // Bound the prompt size. Codex handles plenty but huge diffs
         // just waste latency for a commit message.
         if (diff.Length > 60_000) diff = diff[..60_000] + "\n[truncated]";
 
@@ -1764,17 +1802,24 @@ public class GitService
             new Dictionary<string, string?>
             {
                 ["diff"] = diff,
+                ["diff_summary"] = BuildDiffSummary(root, pathspecs),
+                ["candidate_manifest"] = gate == null
+                    ? "Candidate manifest unavailable. Deterministic enforcement still runs before staging."
+                    : JsonSerializer.Serialize(gate.Candidates.Select(c => new
+                    {
+                        c.Path, c.Status, c.Size, c.Sha256, c.Binary, c.Included, c.ExclusionReason
+                    })),
                 ["task_title"] = intent.Title,
                 ["task_prompt_first_paragraph"] = intent.PromptFirstParagraph,
                 ["last_user_continue"] = intent.LastUserContinue
             });
 
-        var claudePath = _config["ClaudeCli:Path"] ?? "claude";
-        var model = _config["ClaudeCli:CommitMsgModel"] ?? ModelIds.ClaudeHaiku45;
+        var codexPath = _config["CodexCli:Path"] ?? "codex";
+        var model = ModelIds.Gpt54Mini;
 
         var psi = new ProcessStartInfo
         {
-            FileName = GenericCliExecutionService.ResolveExecutable(claudePath),
+            FileName = GenericCliExecutionService.ResolveExecutable(codexPath),
             WorkingDirectory = root,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -1785,7 +1830,8 @@ public class GitService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "exec", "--experimental-json", "--sandbox", "read-only", "-m", model, "-" })
+            psi.ArgumentList.Add(arg);
 
         var sw = Stopwatch.StartNew();
         try
@@ -1804,22 +1850,73 @@ public class GitService
             if (p.ExitCode != 0)
             {
                 AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.CommitMessage, model, null, sw.ElapsedMilliseconds, ok: false, jobId: jobId);
-                return new GenerateMessageResult(null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
+                return new GenerateMessageResult(null, $"codex exited {p.ExitCode}: {stderr.Trim()}");
             }
 
-            var (text, callUsage) = AdHocClaudeInvoker.ParseOrFallback(stdout, model);
-            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.CommitMessage, model, callUsage, sw.ElapsedMilliseconds, ok: true, jobId: jobId);
+            var text = ParseCodexAgentMessage(stdout);
+            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.CommitMessage, model, null, sw.ElapsedMilliseconds, ok: true, jobId: jobId);
 
-            var msg = SanitizeCommitMessage(text);
+            var (msg, suspicious) = ParseCommitReview(text);
+            if (!string.IsNullOrWhiteSpace(suspicious))
+                return new GenerateMessageResult(null, "Codex semantic reviewer reported a suspicious or unrelated candidate.", suspicious);
             if (string.IsNullOrWhiteSpace(msg))
-                return new GenerateMessageResult(null, "claude returned an empty message.");
+                return new GenerateMessageResult(null, "codex returned an empty message or omitted the required sentinel.");
             return new GenerateMessageResult(msg, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to invoke claude for commit message");
+            _logger.LogError(ex, "Failed to invoke Codex for commit message review");
             return new GenerateMessageResult(null, ex.Message);
         }
+    }
+
+    private string BuildDiffSummary(string root, IReadOnlyCollection<string>? pathspecs)
+    {
+        var args = new List<string> { "diff", "HEAD", "--stat", "--summary", "--" };
+        if (pathspecs is { Count: > 0 }) args.AddRange(pathspecs);
+        var (summary, _, code) = RunGitArgs(root, args.ToArray());
+        return code == 0 ? summary.Trim() : "Diff summary unavailable.";
+    }
+
+    internal static string ParseCodexAgentMessage(string stdout)
+    {
+        string? finalReply = null;
+        foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("type", out var type) && type.GetString() == "item.completed"
+                    && root.TryGetProperty("item", out var item)
+                    && item.TryGetProperty("type", out var itemType) && itemType.GetString() == "agent_message"
+                    && item.TryGetProperty("text", out var text) && !string.IsNullOrWhiteSpace(text.GetString()))
+                    finalReply = text.GetString();
+            }
+            catch (JsonException ex)
+            {
+                // Non-JSON diagnostics are ignored; exit status remains authoritative.
+                SilentCatch.Note(ex, "Commit-message Codex output contained a non-JSON diagnostic line.");
+            }
+        }
+        // Codex may emit progress agent_message items before its final answer.
+        // Only the final agent message owns the strict COMMIT_REVIEW sentinel;
+        // concatenating progress text in front of it makes a valid review look
+        // malformed and silently drops the additive semantic gate.
+        return finalReply ?? "";
+    }
+
+    private static (string? Message, string? SuspiciousReason) ParseCommitReview(string raw)
+    {
+        var clean = SanitizeCommitMessage(raw);
+        var lines = clean.Split('\n');
+        if (lines.Length == 0) return (null, null);
+        if (string.Equals(lines[0].Trim(), "COMMIT_REVIEW: ALLOW", StringComparison.Ordinal))
+            return (string.Join("\n", lines.Skip(1)).Trim(), null);
+        const string suspiciousPrefix = "COMMIT_REVIEW: SUSPICIOUS ";
+        if (lines[0].StartsWith(suspiciousPrefix, StringComparison.Ordinal))
+            return (null, lines[0][suspiciousPrefix.Length..].Trim());
+        return (null, null);
     }
 
     /// <summary>
@@ -2052,19 +2149,75 @@ public class GitService
         if (statusBefore.FilesChanged == 0)
             return (new GitCommitResult(false, null, "Nothing to commit. Working tree is clean."), "");
 
-        // When scoped, the deterministic-fallback count must reflect the task's
-        // own paths, not the (possibly larger) whole-tree dirty count.
-        var fileCount = pathspecs is { Count: > 0 } ? pathspecs.Count : statusBefore.FilesChanged;
+        var root = ResolveRepoRootForWatchPath(watchPath);
+        if (root == null)
+            return (new GitCommitResult(false, null, "Could not resolve repo root."), "");
+        var task = _scanner.FindJob(jobId, watchPath);
+        var gate = InspectCommitCandidates(
+            "auto-commit", task?.ProjectName ?? jobId, root, jobId,
+            task?.Runner?.RunnerId, pathspecs, requireTaskWorktree: false,
+            expectedBranch: null, explicitlyReviewed: false,
+            requireExplicitPaths: pathspecs is not { Count: > 0 });
+        if (!gate.CanCommit)
+            return (new GitCommitResult(false, null,
+                $"Commit candidate gate {gate.Decision}: {string.Join(", ", gate.Findings.Select(f => f.Code).Distinct())}.", gate), "");
 
-        var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct, pathspecs);
+        // The deterministic fallback count reflects the manifest that can
+        // actually commit, never the larger dirty tree.
+        var fileCount = gate.IncludedPaths.Count;
+
+        var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct, gate.IncludedPaths, gate);
+        if (!string.IsNullOrWhiteSpace(msg.SuspiciousReason))
+        {
+            gate = AddSemanticGateFinding(gate, msg.SuspiciousReason);
+            return (new GitCommitResult(false, null,
+                "Commit semantic review reported a suspicious or unrelated candidate; review the gate evidence.", gate), "");
+        }
         var message = msg.Message;
         if (string.IsNullOrWhiteSpace(message))
         {
             // Fall back to a deterministic message so an LLM hiccup does not block the auto-commit.
             message = $"chore: snapshot for review ({fileCount} file{(fileCount == 1 ? "" : "s")} changed)";
         }
-        var result = Commit(jobId, watchPath, message, pathspecs);
+        var result = CommitBoundManifest(root, message, gate);
         return (result, message);
+    }
+
+    private static CommitGateResult AddSemanticGateFinding(CommitGateResult gate, string reason)
+    {
+        // The reason is model-authored metadata only. The prompt forbids secret
+        // bodies and the deterministic gate never supplies detected values.
+        var reasonBytes = Encoding.UTF8.GetBytes(reason);
+        var containsSecret = new BuiltInCommitCandidateScanner()
+            .Scan("", ".", reasonBytes, binary: false).Count > 0;
+        var safeReason = containsSecret
+            ? "Codex reported a possible secret; the model explanation was redacted."
+            : reason.Length > 500 ? reason[..500] : reason;
+        var findings = gate.Findings.Concat([
+            new CommitGateFinding("semantic-suspicious", CommitGateSeverities.Warning, ".",
+                safeReason, "codex-gpt-5.4-mini")
+        ]).ToArray();
+        var updated = gate with { Decision = CommitGateDecisions.Warn, CanCommit = false, Findings = findings };
+        if (!string.IsNullOrWhiteSpace(updated.EvidencePath))
+        {
+            try
+            {
+                File.WriteAllText(updated.EvidencePath,
+                    JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }));
+                var evidenceDirectory = Path.GetDirectoryName(updated.EvidencePath)!;
+                var operation = Regex.Replace(updated.Provenance.Operation, "[^A-Za-z0-9_.-]", "-");
+                var historyPath = Path.Combine(evidenceDirectory,
+                    $"commit-candidate-gate-{updated.Provenance.InspectedAtUtc:yyyyMMddTHHmmssfffZ}-{operation}.json");
+                File.WriteAllText(historyPath,
+                    JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                // Commit remains blocked even when best-effort evidence refresh fails.
+                SilentCatch.Note(ex, "Commit semantic-review evidence refresh failed.");
+            }
+        }
+        return updated;
     }
 
     public Task<GitPushResult> PushShaAsync(string sha, string? watchPath, CancellationToken ct = default, string targetBranch = "main")
@@ -4639,6 +4792,13 @@ public class GitService
         => RunGitArgs(cwd, args, stdin: null);
 
     private static (string Out, string Err, int Code) RunGitArgs(string cwd, string[] args, string? stdin)
+        => RunGitArgs(cwd, args, stdin, environment: null);
+
+    private static (string Out, string Err, int Code) RunGitArgs(
+        string cwd,
+        string[] args,
+        string? stdin,
+        IReadOnlyDictionary<string, string?>? environment)
     {
         var psi = new ProcessStartInfo
         {
@@ -4651,6 +4811,14 @@ public class GitService
             CreateNoWindow = true
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
+        if (environment != null)
+        {
+            foreach (var (key, value) in environment)
+            {
+                if (value == null) psi.Environment.Remove(key);
+                else psi.Environment[key] = value;
+            }
+        }
 
         return RunGitProcess(psi, stdin);
     }
