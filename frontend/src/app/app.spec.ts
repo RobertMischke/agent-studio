@@ -70,18 +70,17 @@ describe('App epic tab navigation', () => {
     TestBed.resetTestingModule();
     localStorage.removeItem(TAB_STORAGE_KEY);
     localStorage.setItem(VSCODE_FLAG_KEY, '0');
-    await TestBed.configureTestingModule({
-      imports: [App],
+    TestBed.configureTestingModule({
       providers: [
+        App,
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
       ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(App);
+    });
     return {
-      app: fixture.componentInstance,
+      app: TestBed.inject(App),
       taskService: TestBed.inject(TaskService),
       http: TestBed.inject(HttpTestingController),
     };
@@ -264,16 +263,16 @@ describe('App studio-tab mirror (pager reuse)', () => {
     TestBed.resetTestingModule();
     localStorage.removeItem(TAB_STORAGE_KEY);
     localStorage.setItem(VSCODE_FLAG_KEY, '1');
-    await TestBed.configureTestingModule({
-      imports: [App],
+    TestBed.configureTestingModule({
       providers: [
+        App,
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
       ],
-    }).compileComponents();
-    return TestBed.createComponent(App).componentInstance;
+    });
+    return TestBed.inject(App);
   }
 
   function taskDetail(id: string): TaskDetail {

@@ -94,6 +94,7 @@ describe('RemoteHostCardComponent', () => {
       .query(By.css('[data-testid="remote-host-git-status"]'))
       .injector.get(AppTooltipDirective);
     expect(tooltip.appTooltip()).toContain('permission denied');
+    expect(badge?.getAttribute('data-tone')).toBe('error');
   });
 
   it('emits an action event with the host id when a control is clicked', () => {

@@ -524,9 +524,8 @@ describe('StudioShellComponent epic tabs', () => {
 
     const root: HTMLElement = fixture.nativeElement;
     const tab = root.querySelector<HTMLElement>('[data-tab-key="task:watch::task-a"]');
-    const title = tab?.querySelector<HTMLElement>('.studio-tab__title');
-    expect(tab?.getAttribute('title')).toContain('Task One');
-    expect(title?.getAttribute('title')).toContain('Task One');
+    expect(tab?.getAttribute('aria-label')).toContain('Task One');
+    expect(fixture.componentInstance.tabTooltip(tabState.activeTab()!)).toContain('Task One');
   });
 
   it('renders the Epic icon inside an epic detail tab', () => {
@@ -707,8 +706,8 @@ describe('StudioShellComponent active-tab scroll-into-view (AGT-2135)', () => {
     const spy = vi.fn();
     active.scrollIntoView = spy as unknown as HTMLElement['scrollIntoView'];
     // Visible strip spans x ∈ [0, 200].
-    list.getBoundingClientRect = (() => ({ left: 0, right: 200, top: 0, bottom: 30, width: 200, height: 30, x: 0, y: 0, toJSON() {} }) as DOMRect);
-    active.getBoundingClientRect = (() => ({ left: tabRect.left, right: tabRect.right, top: 0, bottom: 30, width: tabRect.right - tabRect.left, height: 30, x: tabRect.left, y: 0, toJSON() {} }) as DOMRect);
+    list.getBoundingClientRect = (() => ({ left: 0, right: 200, top: 0, bottom: 30, width: 200, height: 30, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect);
+    active.getBoundingClientRect = (() => ({ left: tabRect.left, right: tabRect.right, top: 0, bottom: 30, width: tabRect.right - tabRect.left, height: 30, x: tabRect.left, y: 0, toJSON: () => ({}) }) as DOMRect);
     return spy;
   }
 

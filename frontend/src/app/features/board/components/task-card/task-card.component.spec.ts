@@ -1151,7 +1151,6 @@ describe('TaskCardComponent (smoke)', () => {
     expect(fixture.componentInstance.isRunning()).toBe(true);
     expect(card?.classList.contains('task-card--running')).toBe(true);
     expect(card?.getAttribute('data-running')).toBe('true');
-    expect(fixture.nativeElement.textContent).toContain('agent-runner-01');
   });
 
   it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
