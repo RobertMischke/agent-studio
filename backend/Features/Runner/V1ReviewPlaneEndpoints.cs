@@ -59,7 +59,7 @@ public static class V1ReviewPlaneEndpoints
             }
         });
 
-        api.MapPost("/runners/{runnerId}/review-claims", (
+        api.MapPost("/runners/{runnerId}/review-claims", async (
             HttpContext context,
             string runnerId,
             Contract.ReviewClaimRequest request,
@@ -67,7 +67,9 @@ public static class V1ReviewPlaneEndpoints
             AttemptAuthorityService authority,
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
-            AgentStudio.Projects.ProjectSettingsService settings) =>
+            AgentStudio.Projects.ProjectSettingsService settings,
+            HumanReviewEscalation escalation,
+            CancellationToken ct) =>
         {
             if (!RunnerMatches(context, runnerId)
                 || !string.Equals(runnerId, request.ExecutorId, StringComparison.Ordinal))
@@ -79,6 +81,29 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-executor-not-registered",
                     "Register this identity with the review-executor capability before claiming."));
+
+            foreach (var legacy in authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope())
+            {
+                var task = FindTask(scanner, legacy.TaskKey);
+                if (task is null
+                    || !string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var moved = await escalation.EscalateAsync(
+                    task.Id,
+                    task.WatchPath,
+                    task.ProjectName,
+                    HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
+                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized.",
+                    ct);
+                if (moved.Status != MoveJobStatus.Success)
+                {
+                    return Results.Json(
+                        new Contract.ApiError(
+                            "review-subject-escalation-failed",
+                            $"Legacy ReviewSubject was terminalized, but its Escalated lane write failed: {moved.Status} {moved.Message}"),
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+            }
 
             var claimed = authority.ClaimNextReview(
                 runnerId,
@@ -150,6 +175,7 @@ public static class V1ReviewPlaneEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
             TaskTransitionService transitions,
+            HumanReviewEscalation escalation,
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, request.ExecutorId))
@@ -201,7 +227,12 @@ public static class V1ReviewPlaneEndpoints
             if (!settled.Accepted || settled.ReviewAttempt is null)
                 return AttemptError(settled);
 
-            var retry = string.Equals(request.Outcome, "ReviewInfra", StringComparison.OrdinalIgnoreCase);
+            var infrastructureFailure = string.Equals(
+                request.Outcome,
+                "ReviewInfra",
+                StringComparison.OrdinalIgnoreCase);
+            var retry = infrastructureFailure
+                        && authority.HasReviewInfrastructureRetryBudget(settled.ReviewAttempt.AttemptId);
             var taskState = TaskStates.AutoReview;
             if (retry)
             {
@@ -222,7 +253,7 @@ public static class V1ReviewPlaneEndpoints
                 if (!created.Accepted)
                     return AttemptError(created);
             }
-            else
+            else if (!infrastructureFailure)
             {
                 var task = FindTask(scanner, settled.ReviewAttempt.TaskKey);
                 if (task is null)
@@ -253,6 +284,34 @@ public static class V1ReviewPlaneEndpoints
                     }
                 }
                 taskState = TaskStates.HumanReview;
+            }
+            else
+            {
+                var review = settled.ReviewAttempt;
+                var task = FindTask(scanner, review.TaskKey);
+                if (task is null)
+                    return Results.Json(
+                        new Contract.ApiError("task-not-found", "Review task was not found in the monolith store."),
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                if (!string.Equals(task.State, TaskStates.Escalated, StringComparison.OrdinalIgnoreCase))
+                {
+                    var moved = await escalation.EscalateAsync(
+                        task.Id,
+                        task.WatchPath,
+                        task.ProjectName,
+                        HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
+                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized.",
+                        ct);
+                    if (moved.Status != MoveJobStatus.Success)
+                    {
+                        return Results.Json(
+                            new Contract.ApiError(
+                                "review-subject-escalation-failed",
+                                $"Review result is durable, but the Escalated lane write failed: {moved.Status} {moved.Message}"),
+                            statusCode: StatusCodes.Status503ServiceUnavailable);
+                    }
+                }
+                taskState = TaskStates.Escalated;
             }
 
             var payload = JsonSerializer.Serialize(request, Json);

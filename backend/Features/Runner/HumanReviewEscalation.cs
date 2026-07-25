@@ -103,6 +103,11 @@ public static class HumanReviewEscalationCategories
     /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
     public const string SteerUnanswered = "steer-unanswered";
 
+    /// <summary>A review subject can never be materialized - either because the
+    /// pre-plane source completion has no immutable Result-Envelope, or because
+    /// all bounded infrastructure retries for that subject were exhausted.</summary>
+    public const string ReviewSubjectUnmaterializable = "review-subject-unmaterialisierbar";
+
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>
     public const string UnknownLegacy = "unknown-legacy";
