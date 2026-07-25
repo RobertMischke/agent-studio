@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -6,6 +6,59 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ActivityLogViewComponent } from './activity-log-view';
 import { CliOutputLine } from '../../../../models/task.model';
+
+const standardProviders = [
+  provideZonelessChangeDetection(),
+  provideHttpClient(),
+  provideHttpClientTesting(),
+  provideRouter([]),
+];
+
+async function renderConversation(lines: CliOutputLine[]): Promise<ComponentFixture<ActivityLogViewComponent>> {
+  await TestBed.configureTestingModule({
+    imports: [ActivityLogViewComponent],
+    providers: standardProviders,
+  }).compileComponents();
+  const fixture = TestBed.createComponent(ActivityLogViewComponent);
+  fixture.componentRef.setInput('lines', lines);
+  fixture.componentRef.setInput('defaultMode', 'conversation');
+  fixture.detectChanges();
+  return fixture;
+}
+
+function alternatingTurns(count: number): CliOutputLine[] {
+  return Array.from({ length: count }, (_, index) => ({
+    timestamp: new Date(Date.UTC(2026, 6, 25, 10, 0, index)).toISOString(),
+    stream: index % 2 === 0 ? 'user' : 'stdout',
+    text: index % 2 === 0 ? `Question ${index}` : `Answer ${index}`,
+  }));
+}
+
+function mockAnimationFrames(): { flush: () => void } {
+  const callbacks: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    callbacks.push(cb);
+    return callbacks.length;
+  });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const realGetComputedStyle = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation(((el: Element, pseudo?: string | null) => {
+    if (el instanceof HTMLElement && el.dataset['testid'] === 'activity-log-body') {
+      return { overflowY: 'auto' } as CSSStyleDeclaration;
+    }
+    return realGetComputedStyle(el, pseudo);
+  }) as typeof window.getComputedStyle);
+  return {
+    flush: () => {
+      while (callbacks.length > 0) callbacks.shift()!(performance.now());
+    },
+  };
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -151,12 +204,7 @@ describe('ActivityLogViewComponent — internal-event rendering (Trace)', () => 
     expect(host.textContent ?? '').not.toContain('"type":"assistant"');
     expect(host.textContent ?? '').not.toContain('secret reasoning');
 
-    // Assert the conversation VIEW-MODEL (the turns handed to the template),
-    // not the DOM: the CDK virtual-scroll viewport has no height under the test
-    // harness, so it renders zero rows and a DOM-only check would pass even if
-    // the pipeline dropped everything. Reading visibleConversation() proves the
-    // Conversation surface (the exact surface the bug was reported on) carries
-    // the redacted marker text and never the raw frame body.
+    // Assert the conversation view-model as well as the DOM boundary.
     const convoText = fixture.componentInstance
       .visibleConversation()
       .map((item) => item.turn.text ?? '')
@@ -164,6 +212,121 @@ describe('ActivityLogViewComponent — internal-event rendering (Trace)', () => 
     expect(convoText).toContain('[internal event]');
     expect(convoText).not.toContain('"type":"assistant"');
     expect(convoText).not.toContain('secret reasoning');
+    fixture.destroy();
+  });
+});
+
+describe('ActivityLogViewComponent — conversation history window', () => {
+  it('renders the latest 100 turns and loads older turns in bounded pages', async () => {
+    const frames = mockAnimationFrames();
+    const fixture = await renderConversation(alternatingTurns(260));
+    frames.flush();
+    const component = fixture.componentInstance;
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(component.filteredConversationTurns().length).toBe(260);
+    expect(component.visibleConversation().length).toBe(100);
+    expect(component.olderConversationCount()).toBe(160);
+    expect(host.querySelectorAll('.convo-turn')).toHaveLength(100);
+    expect(host.querySelector('cdk-virtual-scroll-viewport')).toBeNull();
+    expect(host.textContent).not.toContain('Question 0');
+    expect(host.textContent).toContain('Answer 259');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="activity-log-load-older"]')?.click();
+    fixture.detectChanges();
+    frames.flush();
+
+    expect(component.visibleConversation().length).toBe(200);
+    expect(component.olderConversationCount()).toBe(60);
+    expect(host.querySelectorAll('.convo-turn')).toHaveLength(200);
+    fixture.destroy();
+  });
+
+  it('preserves the reading position by compensating the prepended height', async () => {
+    const frames = mockAnimationFrames();
+    const fixture = await renderConversation(alternatingTurns(220));
+    frames.flush();
+    const body = fixture.nativeElement.querySelector('[data-testid="activity-log-body"]') as HTMLElement;
+    const metrics = { scrollHeight: 4_000, scrollTop: 3_400, clientHeight: 600 };
+    Object.defineProperties(body, {
+      scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => metrics.scrollTop,
+        set: (value: number) => { metrics.scrollTop = value; },
+      },
+      clientHeight: { configurable: true, get: () => metrics.clientHeight },
+    });
+    body.dispatchEvent(new Event('scroll'));
+    metrics.scrollTop = 300;
+    body.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.stickToBottom()).toBe(false);
+
+    fixture.componentInstance.loadOlderConversation();
+    fixture.detectChanges();
+    metrics.scrollHeight = 6_500;
+    frames.flush();
+
+    expect(metrics.scrollTop).toBe(2_800);
+    expect(fixture.componentInstance.stickToBottom()).toBe(false);
+    fixture.destroy();
+  });
+
+  it('releases Follow from the body scroller and Jump to latest writes back to it', async () => {
+    const frames = mockAnimationFrames();
+    const fixture = await renderConversation(alternatingTurns(120));
+    const component = fixture.componentInstance;
+    const host: HTMLElement = fixture.nativeElement;
+    const body = host.querySelector('[data-testid="activity-log-body"]') as HTMLElement;
+    const conversation = host.querySelector('[data-testid="activity-log-conversation"]') as HTMLElement;
+    const metrics = { scrollHeight: 5_000, scrollTop: 0, clientHeight: 500 };
+    Object.defineProperties(body, {
+      scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => metrics.scrollTop,
+        set: (value: number) => { metrics.scrollTop = value; },
+      },
+      clientHeight: { configurable: true, get: () => metrics.clientHeight },
+    });
+    frames.flush();
+    metrics.scrollTop = 3_900;
+    body.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
+
+    expect(component.stickToBottom()).toBe(false);
+    expect(host.querySelector('[data-testid="activity-log-jump-bottom"]')).toBeTruthy();
+    conversation.dispatchEvent(new Event('scroll'));
+    expect(component.stickToBottom()).toBe(false);
+
+    component.jumpToBottom();
+    frames.flush();
+    expect(metrics.scrollTop).toBe(metrics.scrollHeight);
+    expect(component.stickToBottom()).toBe(true);
+    fixture.destroy();
+  });
+
+  it('keeps short and very tall Markdown turns rendered while scrolling upward', async () => {
+    const frames = mockAnimationFrames();
+    const hugeMarkdown = `\`\`\`diff\n${Array.from({ length: 400 }, (_, i) => `+ line ${i}`).join('\n')}\n\`\`\``;
+    const fixture = await renderConversation([
+      { timestamp: '2026-07-25T10:00:00Z', stream: 'user', text: 'Short question' },
+      { timestamp: '2026-07-25T10:00:01Z', stream: 'stdout', text: hugeMarkdown },
+      { timestamp: '2026-07-25T10:00:02Z', stream: 'user', text: 'Tiny follow-up' },
+      { timestamp: '2026-07-25T10:00:03Z', stream: 'stdout', text: 'Short answer' },
+    ]);
+    frames.flush();
+    const host: HTMLElement = fixture.nativeElement;
+    const body = host.querySelector('[data-testid="activity-log-body"]') as HTMLElement;
+    body.scrollTop = 0;
+    body.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
+
+    expect(host.querySelector('cdk-virtual-scroll-viewport')).toBeNull();
+    expect(host.querySelectorAll('.convo-turn')).toHaveLength(4);
+    expect(host.textContent).toContain('line 399');
+    expect(host.textContent).toContain('Tiny follow-up');
     fixture.destroy();
   });
 });

@@ -37,9 +37,9 @@
 
       <div #body
            class="activity-log__body"
+           cacStickToBottom
            [style.max-height]="bodyMaxHeight()"
-           data-testid="activity-log-body"
-           (scroll)="onBodyScroll()">
+           data-testid="activity-log-body">
         @if (!stickToBottom()) {
           <button type="button"
                   class="activity-log__jump"
@@ -48,21 +48,18 @@
         }
 
         @if (mode() === 'conversation') {
-          <!-- Cycle 7i: CDK virtual scroll. itemSize=180 is an estimate
-               for the average non-compact turn; CDK FixedSize uses it
-               for scroll math. Real turns vary wildly (a one-line user
-               message vs a 50-line agent code block); the math is
-               imperfect but the perf win is huge - 2000-turn
-               conversations scroll at 60 FPS instead of 24, and the
-               render cost on detail open scales with VISIBLE turn
-               count instead of total. Keeps data-testid="activity-log-
-               conversation" for the existing measurement spec. -->
-          <cdk-virtual-scroll-viewport class="convo activity-log__virtual"
-                                       [itemSize]="180"
-                                       [minBufferPx]="540"
-                                       [maxBufferPx]="1080"
-                                       data-testid="activity-log-conversation">
-            <article *cdkVirtualFor="let item of visibleConversation(); trackBy: trackByTurnId"
+          <div class="convo"
+               data-testid="activity-log-conversation">
+            @if (olderConversationCount() > 0) {
+              <button type="button"
+                      class="activity-log__load-older"
+                      data-testid="activity-log-load-older"
+                      (click)="loadOlderConversation()">
+                Load {{ olderConversationCount() < 100 ? olderConversationCount() : 100 }} older turns
+              </button>
+            }
+            @for (item of visibleConversation(); track item.turn.id) {
+              <article
                      class="convo-turn"
                      [class.convo-turn--user]="item.turn.kind === 'user'"
                      [class.convo-turn--agent]="item.turn.kind === 'agent'"
@@ -198,7 +195,8 @@
                   }
                 }
               </article>
-          </cdk-virtual-scroll-viewport>
+            }
+          </div>
           @if (visibleConversation().length === 0) {
             <div class="activity-log__empty">
               {{ lines().length === 0 ? 'No activity output yet.' : 'Conversation is empty - try switching to Trace.' }}
