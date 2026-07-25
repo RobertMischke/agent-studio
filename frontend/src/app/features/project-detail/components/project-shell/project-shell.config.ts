@@ -65,7 +65,7 @@ export interface ProjectRailItem {
 
 export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
-  // Order matches the current Project Hub IA:
+  // Order matches the current Deck IA:
   // Overview · Visual Evidence · Drift · Observability · Token Usage.
   // Architecture used to live here; it now sits in Context (ASS-1711)
   // because it is thematically a doc surface, not a live-health surface.
@@ -342,7 +342,7 @@ export function isProjectRailKey(value: string | null | undefined): value is Pro
 
 export const DEFAULT_PROJECT_RAIL_KEY: ProjectRailKey = 'overview';
 
-/** Canonical user-facing label for a Project Hub rail section. */
+/** Canonical user-facing label for a Deck rail section. */
 export function projectRailLabel(section: string | null | undefined): string {
   const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
   return PROJECT_RAIL_ITEMS.find(item => item.key === key)?.label ?? 'Overview';

@@ -65,7 +65,7 @@ export function buildComposerLocationContext(
     case 'hub':
       return {
         project: tab.projectName,
-        surface: tab.section ? projectRailLabel(tab.section) : 'Project Hub',
+        surface: tab.section ? projectRailLabel(tab.section) : 'Deck',
       };
     case 'url-preview':
       return { project: tab.projectName, surface: 'URL preview', detail: tab.urlId };

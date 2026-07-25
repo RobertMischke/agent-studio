@@ -264,11 +264,15 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     const root: HTMLElement = fixture.nativeElement;
     const board = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-Alpha"]');
     const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+    const deck = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-deck-Alpha"]');
 
     expect(board?.classList.contains('tree-row--active')).toBe(false);
     expect(board?.getAttribute('aria-current')).toBeNull();
     expect(hub?.classList.contains('tree-row--active')).toBe(true);
     expect(hub?.getAttribute('aria-current')).toBe('page');
+    expect(deck?.textContent).toContain('Deck');
+    expect(deck?.querySelector('button')?.getAttribute('aria-label')).toBe('Deck, Alpha');
+    expect(deck?.querySelector('[data-testid="studio-explorer-project-hub-Alpha"]')).toBe(hub);
     // The destinations are the third tree level: they render as `tree-row--child`
     // (one indent step below the project row), never flush `--root`. Guards the
     // AGT-2057 regression where AGT-2037 flattened them to `--root`.
@@ -279,7 +283,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
 
   it('insets every project destination one level below the project row (AGT-2057 regression)', () => {
     // Explorer hierarchy is workspace -> project -> destinations. The project
-    // row is `level="root"`; its Board / Project Hub / Wiki / Epics (+ URL)
+    // row is `level="root"`; its Board / Deck / Wiki / Epics (+ URL)
     // destinations must be `level="child"` so they nest visibly one step in and
     // the project reads as clearly superordinate. AGT-2037 flattened them to
     // `level="root"`, so they rendered flush beside the project ("Kuddelmuddel",
@@ -315,7 +319,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     ).toBeGreaterThanOrEqual(4);
   });
 
-  it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {
+  it('renders a Wiki row under Deck that emits openWikiRequest', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
     fixture.componentRef.setInput('registryWorkspaces', []);
@@ -330,7 +334,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     const rows = Array.from(
       root.querySelectorAll<HTMLElement>('.studio-tree-children .tree-row[data-testid^="studio-explorer-project-"]'),
     ).map(el => el.getAttribute('data-testid'));
-    // Wiki sits directly after Project Hub in the per-project child list.
+    // Wiki sits directly after Deck in the per-project child list.
     expect(rows).toEqual([
       'studio-explorer-project-board-Alpha',
       'studio-explorer-project-hub-Alpha',

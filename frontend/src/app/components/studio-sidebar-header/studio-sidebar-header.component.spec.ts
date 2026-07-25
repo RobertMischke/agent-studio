@@ -10,14 +10,14 @@ describe('StudioSidebarHeaderComponent', () => {
       providers: [provideZonelessChangeDetection()],
     });
     const fixture = TestBed.createComponent(StudioSidebarHeaderComponent);
-    fixture.componentRef.setInput('title', 'Project Hub');
+    fixture.componentRef.setInput('title', 'Deck');
     fixture.componentRef.setInput('subtitle', 'Agent Task Processor');
     fixture.componentRef.setInput('testid', 'shared-header');
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="shared-header"]')).toBeTruthy();
-    expect(host.textContent).toContain('Project Hub');
+    expect(host.textContent).toContain('Deck');
     expect(host.textContent).toContain('Agent Task Processor');
   });
 });
