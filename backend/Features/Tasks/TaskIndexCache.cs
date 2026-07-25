@@ -46,6 +46,7 @@ public sealed class TaskIndexCache
     // once per refresh, so we keep them here for the dedicated paged archive
     // read (ASS-1727) instead of re-walking disk for that endpoint.
     private ImmutableList<TaskInfo> _archiveSnapshot = ImmutableList<TaskInfo>.Empty;
+    private TaskReferenceIndex _referenceIndex = TaskReferenceIndex.Build(Array.Empty<TaskInfo>());
     private DateTime _snapshotAtUtc = DateTime.MinValue;
     private bool _dirty = true;
     private bool _hasSnapshot;
@@ -136,6 +137,28 @@ public sealed class TaskIndexCache
     {
         EnsureFresh();
         lock (_lock) return (_snapshot, _archiveSnapshot);
+    }
+
+    /// <summary>
+    /// Returns the reference graph published with the current live/archive
+    /// partitions. Claim polling and endpoint overlays share this instance, so
+    /// the O(N) graph build happens once per snapshot refresh, not per request.
+    /// </summary>
+    public TaskReferenceIndex GetReferenceIndex()
+    {
+        EnsureFresh();
+        lock (_lock) return _referenceIndex;
+    }
+
+    /// <summary>
+    /// Atomically captures the live partition and reference graph from one
+    /// published generation for runner pickup and remote claim decisions.
+    /// </summary>
+    public (ImmutableList<TaskInfo> Live, TaskReferenceIndex References)
+        GetLiveSnapshotWithReferenceIndex()
+    {
+        EnsureFresh();
+        lock (_lock) return (_snapshot, _referenceIndex);
     }
 
     /// <summary>
@@ -246,11 +269,13 @@ public sealed class TaskIndexCache
                 else
                     board.Add(job);
             }
+            var referenceIndex = TaskReferenceIndex.Build(fresh);
 
             lock (_lock)
             {
                 _snapshot = board.ToImmutableList();
                 _archiveSnapshot = archive.ToImmutableList();
+                _referenceIndex = referenceIndex;
                 _snapshotAtUtc = DateTime.UtcNow;
                 _hasSnapshot = true;
                 _publishedMutationGen = Math.Max(_publishedMutationGen, mutationGenBefore);

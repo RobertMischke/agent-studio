@@ -34,6 +34,10 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private TaskIndexCache? _indexCache;
     private JobStatsMetadataCache? _statsMetadataCache;
+    private readonly ConcurrentDictionary<string, ArchivedFolderSnapshot> _archivedFolders =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    private sealed record ArchivedFolderSnapshot(long TaskJsonLength, DateTime TaskJsonWriteUtc, TaskInfo Task);
 
     /// <summary>
     /// Watch paths that resolved to a non-existent folder and have already
@@ -269,6 +273,34 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// Returns the reverse-reference graph built for the current task snapshot.
+    /// Production reads reuse the graph published by <see cref="TaskIndexCache"/>
+    /// instead of rebuilding it on every claim poll or endpoint request.
+    /// </summary>
+    public TaskReferenceIndex GetReferenceIndex()
+    {
+        return _indexCache?.GetReferenceIndex()
+               ?? TaskReferenceIndex.Build(ScanAllJobsRaw());
+    }
+
+    /// <summary>
+    /// Returns live tasks and their archive-inclusive reference graph from one
+    /// cache generation. The uncached compatibility path also performs only
+    /// one raw scan.
+    /// </summary>
+    public (IReadOnlyList<TaskInfo> Live, TaskReferenceIndex References)
+        GetLiveSnapshotWithReferenceIndex()
+    {
+        if (_indexCache != null)
+            return _indexCache.GetLiveSnapshotWithReferenceIndex();
+
+        var all = ScanAllJobsRaw();
+        return (
+            all.Where(task => !string.Equals(task.State, TaskStates.Archive, StringComparison.Ordinal)).ToList(),
+            TaskReferenceIndex.Build(all));
+    }
+
+    /// <summary>
     /// The uncached disk walk. Always reads from disk; used by
     /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).
@@ -323,8 +355,8 @@ public class TaskScannerService : ITaskScanner
         // (the only write is a rare divergent-id self-heal that targets that
         // folder's own task.json, so distinct folders never contend) and returns
         // an independent TaskInfo. The dominant per-folder cost is
-        // GetLastActivityTime's recursive file walk plus the JSON parse — both
-        // CPU/IO that overlap well across the dev host's cores. A full board
+        // bounded metadata probes plus JSON parsing are independent per folder
+        // and overlap well across the dev host's cores. A full board
         // (~1k folders, each with logs/ + results/ subtrees) walked
         // sequentially was the "Neuladen ist langsam" cost the user reported:
         // every cache miss (a reorder that dirtied the index, or the
@@ -337,6 +369,18 @@ public class TaskScannerService : ITaskScanner
             .Where(j => j != null)
             .Select(j => j!)
             .ToList();
+
+        // Archived tasks are terminal and remain memoized across live snapshot
+        // refreshes. Drop entries only when their folder disappeared (archive
+        // move/delete), so the memo cannot grow with historical locations.
+        var candidatePaths = candidates
+            .Select(candidate => candidate.jobDir)
+            .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var archivedPath in _archivedFolders.Keys)
+        {
+            if (!candidatePaths.Contains(archivedPath))
+                _archivedFolders.TryRemove(archivedPath, out _);
+        }
 
         sw.Stop();
         // Only log when the walk is slow enough to matter, so steady-state
@@ -358,6 +402,14 @@ public class TaskScannerService : ITaskScanner
 
         try
         {
+            var taskJsonInfo = new FileInfo(jobJsonPath);
+            if (_archivedFolders.TryGetValue(jobDir, out var archived)
+                && archived.TaskJsonLength == taskJsonInfo.Length
+                && archived.TaskJsonWriteUtc == taskJsonInfo.LastWriteTimeUtc)
+            {
+                return archived.Task;
+            }
+
             var json = File.ReadAllText(jobJsonPath);
             var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
 
@@ -422,7 +474,7 @@ public class TaskScannerService : ITaskScanner
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
             var (commitChain, legacyCommit) = ReadCommitChain(raw);
 
-            return new TaskInfo
+            var info = new TaskInfo
             {
                 Id = resolvedId,
                 TaskKey = TaskIdentity.CreateKey(entry.Path, resolvedId),
@@ -483,6 +535,19 @@ public class TaskScannerService : ITaskScanner
                 Provenance = ReadProvenance(raw),
                 ExternalCompletion = ReadExternalCompletion(raw)
             };
+            if (isArchive)
+            {
+                taskJsonInfo.Refresh();
+                _archivedFolders[jobDir] = new ArchivedFolderSnapshot(
+                    taskJsonInfo.Length,
+                    taskJsonInfo.LastWriteTimeUtc,
+                    info);
+            }
+            else
+            {
+                _archivedFolders.TryRemove(jobDir, out _);
+            }
+            return info;
         }
         catch (Exception ex)
         {
@@ -504,7 +569,20 @@ public class TaskScannerService : ITaskScanner
         // stable project key shown on cards. Remote runners receive that key
         // from the claim endpoint, so every subsequent prompt/log/completion
         // lookup must resolve the same identity after a lane move.
-        var matches = ScanAllJobs().Where(j => MatchesTaskIdentity(j, jobId));
+        IReadOnlyList<TaskInfo>? archivedSnapshot = null;
+        IEnumerable<TaskInfo> liveSnapshot;
+        if (_indexCache != null)
+        {
+            var partitions = _indexCache.GetSnapshotPartitions();
+            liveSnapshot = partitions.Live;
+            archivedSnapshot = partitions.Archive;
+        }
+        else
+        {
+            liveSnapshot = ScanAllJobs();
+        }
+
+        var matches = liveSnapshot.Where(j => MatchesTaskIdentity(j, jobId));
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
             // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
@@ -530,7 +608,15 @@ public class TaskScannerService : ITaskScanner
 
         if (_indexCache != null)
         {
-            resolved = FindArchivedJobs(jobId, watchPath);
+            // Archive is part of the same published cache generation. Never
+            // fall back to raw archive enumeration here: that path parsed every
+            // archived folder for each archived detail lookup,
+            // bypassing the cache on V1 review and task-reference requests.
+            resolved = archivedSnapshot!
+                .Where(j => MatchesTaskIdentity(j, jobId))
+                .Where(j => string.IsNullOrWhiteSpace(watchPath)
+                            || WatchPathComparison.PathsEqual(j.WatchPath, watchPath))
+                .ToList();
             if (resolved.Count == 1) return resolved[0];
             if (resolved.Count > 1)
             {
@@ -542,54 +628,11 @@ public class TaskScannerService : ITaskScanner
         return null;
     }
 
-    private List<TaskInfo> FindArchivedJobs(string jobId, string? watchPath)
-    {
-        var matches = new List<TaskInfo>();
-        if (string.IsNullOrWhiteSpace(jobId)) return matches;
-
-        foreach (var entry in GetWatchPaths())
-        {
-            if (!string.IsNullOrWhiteSpace(watchPath)
-                && !WatchPathComparison.PathsEqual(entry.Path, watchPath))
-            {
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
-
-            foreach (var jobDir in EnumerateArchiveCandidateDirs(entry.Path))
-            {
-                var info = ScanJobFolder(jobDir, entry, TaskStates.Archive);
-                if (info == null) continue;
-                if (!string.Equals(info.State, TaskStates.Archive, StringComparison.Ordinal)) continue;
-                if (MatchesTaskIdentity(info, jobId)) matches.Add(info);
-            }
-        }
-
-        return matches;
-    }
-
     private static bool MatchesTaskIdentity(TaskInfo info, string identity)
         => string.Equals(info.Id, identity, StringComparison.OrdinalIgnoreCase)
            || string.Equals(info.TaskKey, identity, StringComparison.OrdinalIgnoreCase)
            || string.Equals(info.Key, identity, StringComparison.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> EnumerateArchiveCandidateDirs(string watchPath)
-    {
-        var flatJobs = TaskStorageLayout.EnumerateJobDirs(watchPath).ToList();
-        if (flatJobs.Count > 0)
-        {
-            foreach (var jobDir in flatJobs) yield return jobDir;
-            yield break;
-        }
-
-        var archiveDir = Path.Combine(watchPath, TaskStates.Archive);
-        if (!Directory.Exists(archiveDir)) yield break;
-        foreach (var jobDir in Directory.EnumerateDirectories(archiveDir))
-        {
-            if (Path.GetFileName(jobDir).StartsWith('_')) continue;
-            yield return jobDir;
-        }
-    }
 
     public TaskDetail? GetJobDetail(string jobId, string? watchPath = null)
     {
@@ -693,6 +736,8 @@ public class TaskScannerService : ITaskScanner
     /// HEAD-moving session range with no stamped commit, which the terminal lane
     /// does not surface anyway.</para>
     /// </summary>
+    private const int SessionEventScanBytes = 256 * 1024;
+
     private static bool DetectCodeActivity(JsonElement raw, string jobFolder, bool scanSessionLog = true)
     {
         if (raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object)
@@ -703,7 +748,11 @@ public class TaskScannerService : ITaskScanner
         var sessionLog = TaskPaths.SessionEventsLog(jobFolder);
         if (!File.Exists(sessionLog)) return false;
 
-        foreach (var line in File.ReadLines(sessionLog))
+        // The latest run is the useful signal and session logs can grow for the
+        // lifetime of a task. Bound scanner work to a tail window instead of
+        // parsing an unbounded JSONL file on every snapshot refresh.
+        var tail = ReadTailUtf8(sessionLog, SessionEventScanBytes);
+        foreach (var line in tail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             SessionEvent? evt;
@@ -1611,12 +1660,33 @@ public class TaskScannerService : ITaskScanner
     {
         try
         {
-            return Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
-                .Select(f => File.GetLastWriteTime(f))
-                .DefaultIfEmpty(Directory.GetLastWriteTime(dir))
-                .Max();
+            // Directory mtimes plus the small set of files that drive card
+            // freshness are a bounded approximation. The former recursive
+            // walk visited every result and log artifact in every live task,
+            // making one snapshot refresh proportional to workspace history.
+            var latest = Directory.GetLastWriteTimeUtc(dir);
+            foreach (var subdirectory in new[] { "logs", "results", "attachments" })
+            {
+                var path = Path.Combine(dir, subdirectory);
+                if (Directory.Exists(path))
+                    latest = Max(latest, Directory.GetLastWriteTimeUtc(path));
+            }
+            foreach (var path in new[]
+                     {
+                         Path.Combine(dir, "task.json"),
+                         Path.Combine(dir, "status.md"),
+                         TaskPaths.CliOutputLog(dir),
+                         TaskPaths.SessionEventsLog(dir),
+                     })
+            {
+                if (File.Exists(path))
+                    latest = Max(latest, File.GetLastWriteTimeUtc(path));
+            }
+            return latest.ToLocalTime();
         }
         catch { return Directory.GetLastWriteTime(dir); }
+
+        static DateTime Max(DateTime left, DateTime right) => left >= right ? left : right;
     }
 
 }

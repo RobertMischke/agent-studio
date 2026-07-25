@@ -256,8 +256,9 @@ public static class LeaseEndpoints
                     }
                 }
 
-                var allWithArchive = scanner.ScanAllJobsWithArchive();
-                var waitsOn = TaskReferenceIndex.Build(allWithArchive);
+                var claimSnapshot = scanner.GetLiveSnapshotWithReferenceIndex();
+                var liveSnapshot = claimSnapshot.Live;
+                var waitsOn = claimSnapshot.References;
                 var recoveredSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 var activeTaskKeys = req.ActiveTaskKeys is null
                     ? null
@@ -273,7 +274,7 @@ public static class LeaseEndpoints
                 // enough to requeue: wait through the authority grace and require
                 // this assigned runner poll to answer that the task is absent
                 // from its active process set.
-                foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
+                foreach (var interrupted in liveSnapshot.Where(t => t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
                     var assigned = project.ExecutionRunner;
@@ -343,7 +344,7 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty,
                         Message: "runner status recorded; no free host slots"));
 
-                var eligible = scanner.ScanAllJobs()
+                var eligible = liveSnapshot
                     .Where(t => t.State == TaskStates.Ready)
                     .Where(t =>
                     {

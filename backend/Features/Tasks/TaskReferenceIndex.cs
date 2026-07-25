@@ -2,9 +2,10 @@
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// F34 reverse-index over the cross-reference graph. Built on demand from a
-/// scanner snapshot (itself cached) so there is no separate cache to
-/// invalidate: O(N) per build, answered queries are O(1) / O(deg).
+/// F34 reverse-index over the cross-reference graph. Built once when
+/// <see cref="TaskIndexCache"/> publishes a scanner snapshot, so claim polls
+/// and request overlays share the same generation. Answered queries are
+/// O(1) / O(deg).
 ///
 /// <para>It answers two questions the endpoints need:</para>
 /// <list type="bullet">

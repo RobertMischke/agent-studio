@@ -718,7 +718,7 @@ public static class TaskCrudEndpoints
             if (info == null) return Results.NotFound();
 
             var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+            var index = scanner.GetReferenceIndex();
             var validation = TaskReferenceValidator.Validate(
                 info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
 
@@ -764,7 +764,7 @@ public static class TaskCrudEndpoints
             if (string.IsNullOrWhiteSpace(info.Key))
                 return Results.Ok(Array.Empty<TaskReferenceLink>());
 
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            var index = scanner.GetReferenceIndex();
             return Results.Ok(index.Dependents(info.Key, kind));
         });
     }
