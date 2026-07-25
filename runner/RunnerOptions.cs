@@ -105,6 +105,9 @@ public sealed class RunnerOptions
     /// <summary>New claims stop when the one-minute load average divided by CPU cores exceeds this value.</summary>
     public double ClaimMaxLoadPerCore { get; init; } = 1.5;
 
+    /// <summary>Continuous high-load duration required before claim admission closes.</summary>
+    public int LoadGateSustainedSeconds { get; init; } = 120;
+
     /// <summary>
     /// When set (<c>--health-check</c>), the runner only probes the Task Server's
     /// liveness and exits: 0 when the server is reachable, 4 when it is not. No task
@@ -217,6 +220,7 @@ public sealed class RunnerOptions
                                       && maxLoadValue > 0
                 ? maxLoadValue
                 : EnvDouble("RUNNER_CLAIM_MAX_LOAD_PER_CORE", 1.5),
+            LoadGateSustainedSeconds = EnvInt("RUNNER_LOAD_GATE_SUSTAINED_SECONDS", 120),
             HealthCheckOnly = healthCheck,
         };
 

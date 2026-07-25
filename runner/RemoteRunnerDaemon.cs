@@ -87,12 +87,18 @@ public sealed class RemoteRunnerDaemon
         await handoffRecovery.RecoverAllAsync(shutdown);
 
         var state = new RunnerStateStore(_options.StateDir);
+        var inventory = new RunnerProcessInventoryTracker();
         var active = new List<ActiveSlot>();
         foreach (var persisted in state.LoadAll())
         {
             var slot = await RecoverLaunchingIdentityAsync(persisted, state);
             _client.RestoreRunAuthority(slot.TaskKey, slot.RunId, slot.LeaseInstanceId, slot.Lease);
-            var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
+            var taskRunner = new RemoteTaskRunner(
+                _options,
+                _client,
+                _log,
+                state,
+                inventory);
             var completed = DurableAgentProcess.HasCompleted(slot);
             var live = DurableAgentProcess.VerifyLive(slot, out var verification);
             if (completed || live)
@@ -133,6 +139,9 @@ public sealed class RemoteRunnerDaemon
             _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
 
         var telemetry = new HostTelemetrySampler();
+        var loadGate = new RunnerLoadGate(
+            _options.ClaimMaxLoadPerCore,
+            TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         HostTelemetrySample? latestTelemetry = null;
         HostTelemetrySample? TakeTelemetry()
         {
@@ -163,55 +172,80 @@ public sealed class RemoteRunnerDaemon
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
                 var claimedAny = false;
-                var activeTaskKeys = active
-                    .Where(slot => !string.IsNullOrWhiteSpace(slot.TaskKey))
-                    .Select(slot => slot.TaskKey!)
+                var inventorySnapshot = inventory.Snapshot();
+                var activeTaskKeys = inventorySnapshot.Processes
+                    .Select(process => process.TaskKey)
+                    .Distinct(StringComparer.Ordinal)
                     .ToArray();
                 if (!admissionEnabled)
                 {
-                    _ = await _client.ClaimAsync(new RunnerClaimRequest(
+                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         TakeTelemetry(),
                         AvailableSlots: 0,
                         ActiveSlots: active.Count,
                         IdempotencyKey: $"read-only:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys), shutdown);
+                        ActiveTaskKeys: activeTaskKeys,
+                        Inventory: inventorySnapshot), shutdown);
+                    AcknowledgeInventory(inventory, inventorySnapshot, response);
                     await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
                     continue;
                 }
 
-                var admission = HostLoadAdmissionPolicy.Decide(
+                var loadDecision = loadGate.Observe(
                     TakeTelemetry(),
-                    _options.ClaimMaxLoadPerCore);
-                if (!admission.Admitted)
+                    DateTime.UtcNow);
+                if (loadDecision.EmitEvent)
+                {
+                    inventory.Report(new RunnerInvariantReport(
+                        $"inv_{Guid.NewGuid():N}",
+                        "load-invariant",
+                        DateTime.UtcNow,
+                        "claim-stopped",
+                        $"Claim admission stopped after load/core {loadDecision.LoadPerCore:0.00} remained high for {loadDecision.SustainedFor.TotalSeconds:0}s."));
+                }
+                if (loadDecision.Throttle)
                 {
                     _log(
-                        $"claim-load-gate closed loadPerCore={admission.LoadPerCore:0.00} " +
-                        $"threshold={admission.Threshold:0.00} activeSlots={active.Count}");
-                    _ = await _client.ClaimAsync(new RunnerClaimRequest(
+                        $"claim-load-gate closed loadPerCore={loadDecision.LoadPerCore:0.00} " +
+                        $"threshold={_options.ClaimMaxLoadPerCore:0.00} " +
+                        $"sustainedSeconds={loadDecision.SustainedFor.TotalSeconds:0} activeSlots={active.Count}");
+                    inventorySnapshot = inventory.Snapshot();
+                    activeTaskKeys = inventorySnapshot.Processes
+                        .Select(process => process.TaskKey)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         latestTelemetry,
                         AvailableSlots: 0,
                         ActiveSlots: active.Count,
                         IdempotencyKey: $"load-gate:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys), shutdown);
+                        ActiveTaskKeys: activeTaskKeys,
+                        Inventory: inventorySnapshot), shutdown);
+                    AcknowledgeInventory(inventory, inventorySnapshot, response);
                     await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
                     consecutiveFaults = 0;
                     continue;
                 }
                 if (active.Count >= _options.HostMaxParallelism)
                 {
-                    var sample = TakeTelemetry();
-                    if (sample is not null)
-                        _ = await _client.ClaimAsync(new RunnerClaimRequest(
+                    inventorySnapshot = inventory.Snapshot();
+                    activeTaskKeys = inventorySnapshot.Processes
+                        .Select(process => process.TaskKey)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
                             _options.RunnerId, _options.RunnerName, _options.Hostname,
                             Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                            sample, AvailableSlots: 0,
+                            TakeTelemetry(), AvailableSlots: 0,
                             ActiveSlots: active.Count,
                             IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}",
-                            ActiveTaskKeys: activeTaskKeys), shutdown);
+                            ActiveTaskKeys: activeTaskKeys,
+                            Inventory: inventorySnapshot), shutdown);
+                    AcknowledgeInventory(inventory, inventorySnapshot, response);
                 }
                 while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
@@ -233,9 +267,10 @@ public sealed class RemoteRunnerDaemon
                         continue;
                     }
 
-                    activeTaskKeys = active
-                        .Where(slot => !string.IsNullOrWhiteSpace(slot.TaskKey))
-                        .Select(slot => slot.TaskKey!)
+                    inventorySnapshot = inventory.Snapshot();
+                    activeTaskKeys = inventorySnapshot.Processes
+                        .Select(process => process.TaskKey)
+                        .Distinct(StringComparer.Ordinal)
                         .ToArray();
                     var claim = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
@@ -244,19 +279,26 @@ public sealed class RemoteRunnerDaemon
                         AvailableSlots: _options.HostMaxParallelism - active.Count,
                         ActiveSlots: active.Count,
                         IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys),
+                        ActiveTaskKeys: activeTaskKeys,
+                        Inventory: inventorySnapshot),
                     // A claim is an atomic server-side mutation. Once sent, do
                     // not cancel the HTTP request on SIGTERM: the server may
                     // already have committed it, leaving the replacement with
                     // no durable slot evidence. The HttpClient timeout still
                     // bounds this handoff below systemd's TimeoutStopSec.
                         CancellationToken.None);
+                    AcknowledgeInventory(inventory, inventorySnapshot, claim);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)
                         || claim.Lease is null)
                         break;
 
-                    var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
+                    var taskRunner = new RemoteTaskRunner(
+                        _options,
+                        _client,
+                        _log,
+                        state,
+                        inventory);
                     if (shutdown.IsCancellationRequested)
                     {
                         var workspace = new GitWorkspace(
@@ -353,6 +395,16 @@ public sealed class RemoteRunnerDaemon
     {
         try { await Task.Delay(delay, shutdown); }
         catch (OperationCanceledException) { /* shutting down; the loop condition ends it */ }
+    }
+
+    private void AcknowledgeInventory(
+        RunnerProcessInventoryTracker inventory,
+        RunnerProcessInventory snapshot,
+        RunnerClaimResponse response)
+    {
+        if (_client.UsesDurableTaskServer)
+            inventory.AcknowledgeReports(snapshot);
+        inventory.Apply(response.ReconciliationActions);
     }
 
     private sealed record ActiveSlot(string? TaskKey, Task<int> Execution);

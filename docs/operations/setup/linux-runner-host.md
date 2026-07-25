@@ -615,3 +615,9 @@ The host card raises these sustained findings after at least three consecutive s
 - **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.
+
+Claim admission uses the same one-minute load sample. New claims stop only
+after load divided by logical CPU cores remains above
+`RUNNER_CLAIM_MAX_LOAD_PER_CORE` (default `1.5`) for
+`RUNNER_LOAD_GATE_SUSTAINED_SECONDS` (default `120`). Existing runs continue,
+and one recovery event is reported per sustained high-load interval.

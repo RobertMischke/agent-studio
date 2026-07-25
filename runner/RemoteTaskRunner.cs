@@ -22,17 +22,20 @@ public sealed class RemoteTaskRunner
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
+    private readonly RunnerProcessInventoryTracker _inventory;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
-        RunnerStateStore? state = null)
+        RunnerStateStore? state = null,
+        RunnerProcessInventoryTracker? inventory = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
+        _inventory = inventory ?? new RunnerProcessInventoryTracker();
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -128,6 +131,13 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
+        var inventoryRunId = slot.RunId ?? slot.AttemptId;
+        using var inventoryRegistration = _inventory.Track(
+            inventoryRunId,
+            taskKey,
+            workspace.RepoPath);
+        if (slot.ProcessId is > 0)
+            _inventory.AttachProcess(inventoryRunId, slot.ProcessId.Value);
 
         var outbox = _client.UsesDurableTaskServer
             ? DurableRunOutbox.Open(
@@ -136,7 +146,12 @@ public sealed class RemoteTaskRunner
             : null;
         using var activeOutbox = outbox?.MarkActive();
         using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
-        var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
+        var heartbeat = new LeaseHeartbeat(
+            _client,
+            _options,
+            lease,
+            _log,
+            inventory: _inventory);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
         outbox?.Enqueue("status", JsonSerializer.Serialize(
@@ -481,6 +496,7 @@ public sealed class RemoteTaskRunner
             WorktreePath = workspace.RepoPath,
             Phase = "running",
         });
+        _inventory.AttachProcess(slot.RunId ?? slot.AttemptId, process.ProcessId);
         _log($"detached worker started task={taskKey} pid={process.ProcessId} attempt={slot.AttemptId}");
         return await AwaitDetachedAsync(slot, workspace, shipper, outbox, stopRun.Token);
     }
@@ -552,6 +568,9 @@ public sealed class RemoteTaskRunner
                             ProcessStartedAtUtc = resumed.ProcessStartedAtUtc,
                             Phase = "running",
                         });
+                        _inventory.AttachProcess(
+                            resumeSlot.RunId ?? resumeSlot.AttemptId,
+                            resumed.ProcessId);
                         return await AwaitDetachedAsync(
                             resumeSlot,
                             workspace,

@@ -63,12 +63,16 @@ environment variables.
 | `TaskServer:ListenUrl` | Loopback listener when `ASPNETCORE_URLS` is absent | `http://127.0.0.1:5071` |
 | `TaskServer:MinimumLeaseSeconds` | Lower clamp for Runner leases | `30` |
 | `TaskServer:MaximumLeaseSeconds` | Upper clamp for Runner leases | `600` |
+| `TaskServer:InvariantReconciliationSeconds` | Interval for Tranche 0 invariant comparison | `30` |
+| `TaskServer:InventoryGraceSeconds` | Minimum age before inventory mismatches are actionable | `120` |
 
 - `GET /healthz` proves the process is live.
 - `GET /readyz` succeeds only after schema integrity and durable lease/fence
   authority are restored.
 - `GET /api/v1/management/status` reports server identity, version, schema,
   data root, mode, and supported protocol range.
+- `GET /api/v1/management/invariants` reports invariant definitions, recent
+  violations, and pending idempotent runner actions.
 - `GET /api/v1/protocol` publishes the compatibility range. Runner requests
   must carry `X-Task-Protocol-Version`. An unsupported or missing version gets
   HTTP 426 before registration or claim.

@@ -9,6 +9,8 @@ public sealed class TaskServerOptions
     public int MinimumLeaseSeconds { get; set; } = 30;
     public int MaximumLeaseSeconds { get; set; } = 600;
     public int ResultRetentionDays { get; set; } = 30;
+    public int InvariantReconciliationSeconds { get; set; } = 30;
+    public int InventoryGraceSeconds { get; set; } = 120;
 
     public string ResolveDataDirectory()
     {

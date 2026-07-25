@@ -14,6 +14,7 @@ public sealed class LeaseHeartbeat
     private readonly RunnerOptions _options;
     private readonly RunLeaseInfoDto _lease;
     private readonly Action<string> _log;
+    private readonly RunnerProcessInventoryTracker? _inventory;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
     public LeaseHeartbeat(
@@ -21,12 +22,14 @@ public sealed class LeaseHeartbeat
         RunnerOptions options,
         RunLeaseInfoDto lease,
         Action<string> log,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        RunnerProcessInventoryTracker? inventory = null)
     {
         _client = client;
         _options = options;
         _lease = lease;
         _log = log;
+        _inventory = inventory;
         _delay = delay ?? Task.Delay;
     }
 
@@ -49,11 +52,15 @@ public sealed class LeaseHeartbeat
                 RunLeaseResponse resp;
                 try
                 {
+                    var inventory = _inventory?.Snapshot();
                     var req = new RunLeaseHeartbeatRequest(
                         _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds,
                         _lease.AttemptId, _lease.AuthorityEpoch,
-                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}");
+                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}",
+                        inventory);
                     resp = await _client.RenewLeaseAsync(req, shutdown);
+                    if (_client.UsesDurableTaskServer && inventory is not null)
+                        _inventory!.AcknowledgeReports(inventory);
                 }
                 catch (TaskServerException ex) when (IsDefinitiveLeaseRejection(ex))
                 {
@@ -87,6 +94,7 @@ public sealed class LeaseHeartbeat
                 }
                 if (resp.Lease is not null)
                     authorityExpiresAt = resp.Lease.ExpiresAt;
+                _inventory?.Apply(resp.ReconciliationActions);
                 await _delay(interval, stopRun.Token);
             }
         }
