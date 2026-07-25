@@ -1839,11 +1839,22 @@ export class App implements OnInit, OnDestroy {
 
   onOpenEpicFromTaskAnchor(currentTask: TaskInfo, event: { jobId: string; watchPath: string }): void {
     const requestToken = ++this.relatedOpenToken;
-    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+    this.jobService.getDetailByProject(
+      event.jobId,
+      currentTask.projectName,
+      event.watchPath,
+    ).subscribe({
       next: (detail) => {
         if (requestToken !== this.relatedOpenToken) return;
         if (detail.info.kind !== 'epic') {
-          this.selectFetchedDetail(detail);
+          this.errorDialog.show(
+            new Error(`Task ${event.jobId} is not an epic.`),
+            {
+              title: 'Failed to open epic',
+              fallbackMessage: 'The selected parent is not an epic.',
+              source: `task ${event.jobId}`,
+            },
+          );
           return;
         }
         this.openEpicDetailFromTaskAnchor(detail, currentTask.taskKey);
@@ -1900,7 +1911,7 @@ export class App implements OnInit, OnDestroy {
 
   private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {
     this.epicTabTaskDetail.set(null);
-    const target = { kind: 'epic' as const, epicKey: detail.info.taskKey, viewTaskKey: anchorTaskKey };
+    const target = { kind: 'epic' as const, epicKey: detail.info.taskKey };
     const active = this.studioTabState.activeTab();
     const sourceKey =
       active?.kind === 'task' && active.taskKey === anchorTaskKey

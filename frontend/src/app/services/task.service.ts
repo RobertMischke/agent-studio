@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { finalize, map } from 'rxjs';
+import { catchError, finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
   CreateTaskRequest,
@@ -619,6 +619,24 @@ export class TaskService {
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
       params.keys().length ? { params } : {},
     );
+  }
+
+  /**
+   * Resolve a task through the registry-backed project handle. The watch-path
+   * request is retained only as a compatibility fallback while callers migrate
+   * away from filesystem-addressed task lookups.
+   */
+  getDetailByProject(jobId: string, project: string, fallbackWatchPath?: string) {
+    const handle = project.trim();
+    if (!handle) return this.getDetail(jobId, fallbackWatchPath);
+
+    const request = this.http.get<TaskDetail>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
+      { params: new HttpParams().set('project', handle) },
+    );
+    return fallbackWatchPath
+      ? request.pipe(catchError(() => this.getDetail(jobId, fallbackWatchPath)))
+      : request;
   }
 
   updateState(jobId: string, state: string, watchPath?: string) {
