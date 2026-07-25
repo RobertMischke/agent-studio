@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace AgentStudio.Docs;
@@ -410,7 +411,8 @@ public class ProjectDocsService
             fullWikiDir,
             LoadWikiMetadataIndex(wikiDir),
             _titleCache,
-            LoadWikiFolderOrder(fullWikiDir));
+            LoadWikiFolderOrder(fullWikiDir),
+            LoadRegisteredWorkbenchEntryPaths(fullWikiDir));
         var tree = new WikiTree(projectName, "docs", true, root, source.Info);
         var etag = FormatETag("wiki-tree-" + sourceKey + "-" + (signature ?? "nosig"));
 
@@ -1369,7 +1371,8 @@ public class ProjectDocsService
         string docsRoot,
         IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath,
         ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent)
+        IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent,
+        IReadOnlySet<string> registeredWorkbenchEntryPaths)
     {
         var nodes = new List<WikiTreeNode>();
 
@@ -1378,7 +1381,9 @@ public class ProjectDocsService
             if (sub.Name.StartsWith('.')) continue;
             var subRel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             if (IsWikiAppPath(subRel)) continue; // docs/app/ is code contract, not a wiki page
-            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache, folderOrderByParent);
+            var children = BuildTreeNodes(
+                sub, docsRoot, metadataByRelPath, titleCache, folderOrderByParent,
+                registeredWorkbenchEntryPaths);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
@@ -1408,7 +1413,8 @@ public class ProjectDocsService
                     metadata?.ClassificationStatus,
                     metadata?.ClassificationSupersededBy,
                     metadata?.ClassificationType,
-                    metadata?.ClassificationAnalyzedAt)));
+                    metadata?.ClassificationAnalyzedAt,
+                    registeredWorkbenchEntryPaths.Contains(rel) ? "workbench" : null)));
         }
 
         var dirRel = Path.GetRelativePath(docsRoot, dir.FullName).Replace('\\', '/');
@@ -1567,14 +1573,72 @@ public class ProjectDocsService
     /// classification (null), so the UI renders nothing rather than noise.
     /// </summary>
     internal static WikiClassification? BuildClassification(
-        string relPath, string? status, string? supersededBy, string? type, string? analyzedAt)
+        string relPath,
+        string? status,
+        string? supersededBy,
+        string? type,
+        string? analyzedAt,
+        string? registeredPageType = null)
     {
         status = NormalizeClassificationValue(status);
         supersededBy = NormalizeClassificationValue(supersededBy);
         type = NormalizeClassificationValue(type) ?? DefaultClassificationType(relPath);
         analyzedAt = NormalizeClassificationValue(analyzedAt);
-        if (status == null && supersededBy == null && type == null && analyzedAt == null) return null;
-        return new WikiClassification(status, supersededBy, type, analyzedAt);
+        var pageType = NormalizeClassificationValue(registeredPageType)
+            ?? CanonicalPageType(relPath, type);
+        return new WikiClassification(status, supersededBy, type, analyzedAt, pageType);
+    }
+
+    /// <summary>Maps curation metadata and path families to the five UI page kinds.</summary>
+    internal static string CanonicalPageType(string relPath, string? curatedType)
+    {
+        var type = curatedType?.Trim().ToLowerInvariant();
+        if (type == "workbench") return "workbench";
+        if (type is "konzept" or "concept") return "concept";
+        if (type is "incident" or "history" or "incident/history") return "incident";
+        if (type is "report" or "analyse" or "analysis" or "generiert") return "report";
+
+        var rel = relPath.Replace('\\', '/').TrimStart('/');
+        if (Regex.IsMatch(rel, @"(^|/)(incident|incidents|history|historie)(/|[.-])", RegexOptions.IgnoreCase))
+            return "incident";
+        if (Regex.IsMatch(rel, @"(^|/)(report|reports)(/|[.-])|\.report\.", RegexOptions.IgnoreCase))
+            return "report";
+        if (Regex.IsMatch(rel, @"(^|/)(workbench|workbenches)(/|[.-])", RegexOptions.IgnoreCase))
+            return "workbench";
+        if (Regex.IsMatch(rel, @"(^|/)(concept|concepts)(/|[.-])", RegexOptions.IgnoreCase))
+            return "concept";
+        return "doc";
+    }
+
+    /// <summary>
+    /// Resolves Workbench entry pages from their colocated registrations. This
+    /// is the registry half of page-type derivation and keeps the Wiki tree's
+    /// eye icon aligned with Explorer and the Workbench tab.
+    /// </summary>
+    private static IReadOnlySet<string> LoadRegisteredWorkbenchEntryPaths(string docsRoot)
+    {
+        var entries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var descriptor in Directory.EnumerateFiles(docsRoot, "workbench.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllText(descriptor));
+                if (!json.RootElement.TryGetProperty("entrypoint", out var value)) continue;
+                var entrypoint = value.GetString();
+                if (string.IsNullOrWhiteSpace(entrypoint) || Path.IsPathRooted(entrypoint)) continue;
+                var full = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(descriptor)!, entrypoint));
+                var rootWithSeparator = docsRoot.EndsWith(Path.DirectorySeparatorChar)
+                    ? docsRoot
+                    : docsRoot + Path.DirectorySeparatorChar;
+                if (!full.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)) continue;
+                entries.Add(Path.GetRelativePath(docsRoot, full).Replace('\\', '/'));
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+            {
+                SilentCatch.Note(ex, "ProjectDocsService: unreadable Workbench registration during page-type derivation.");
+            }
+        }
+        return entries;
     }
 
     /// <summary>
@@ -1979,6 +2043,29 @@ public class ProjectDocsService
             wikiDir, docsRel, title, seed, DefaultClassificationType(docsRel), DateTime.UtcNow);
 
         return WikiMutationResult.Ok(full, new[] { companion.CompanionAbsPath });
+    }
+
+    /// <summary>Writes a lifecycle status into the page's adjacent companion.</summary>
+    public WikiMutationResult SetWikiClassificationStatus(
+        string projectName,
+        string relPath,
+        string status,
+        WikiCompanionStore companions)
+    {
+        if (status is not ("archived" or "aktuell"))
+            return WikiMutationResult.Fail("Status must be 'archived' or 'aktuell'.");
+        var full = ResolveWikiDocFullPath(projectName, relPath);
+        if (full == null || !File.Exists(full)) return WikiMutationResult.Fail("Page not found or path rejected.");
+
+        var content = File.ReadAllText(full);
+        var wikiDir = Path.GetFullPath(Path.Combine(ResolveBaseDir(projectName)!, WikiRel));
+        var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+        var title = ExtractDocTitle(full, Path.GetExtension(full))
+            ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
+        var result = companions.WriteClassificationStatus(
+            wikiDir, docsRel, title, content, status, DateTime.UtcNow);
+        InvalidateWikiTreeCache();
+        return WikiMutationResult.Ok(result.CompanionAbsPath);
     }
 
     private static string DefaultPageSeed(string relPath, string ext)
@@ -2507,6 +2594,106 @@ public class ProjectDocsService
         }
     }
 
+    /// <summary>
+    /// Adds, moves, updates, or removes one shared curated entry in
+    /// <c>docs/app/config/home.json</c>. Personal stars are deliberately not
+    /// part of this contract: a pin is repository state shared with operators
+    /// and agents, so the endpoint writes the versioned home configuration.
+    /// </summary>
+    public WikiMutationResult SetWikiHomePin(
+        string projectName,
+        string relPath,
+        bool pinned,
+        string? sectionTitle,
+        string? label,
+        string? note)
+    {
+        var target = ResolveWikiDocFullPath(projectName, relPath);
+        if (target == null || !File.Exists(target))
+            return WikiMutationResult.Fail("Page not found or path rejected.");
+
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return WikiMutationResult.Fail("Unknown project.");
+        var homePath = Path.Combine(baseDir, WikiRel, WikiHomeRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(homePath))
+            return WikiMutationResult.Fail("Wiki home configuration was not found.");
+
+        JsonObject root;
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            root = JsonNode.Parse(File.ReadAllText(homePath)) as JsonObject
+                ?? throw new JsonException("home.json must contain an object.");
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return WikiMutationResult.Fail("Wiki home configuration is malformed or unreadable.");
+        }
+
+        if (root["sections"] is not JsonArray sections)
+            return WikiMutationResult.Fail("Wiki home configuration has no sections.");
+
+        var normalizedRel = Path.GetRelativePath(
+            Path.GetFullPath(Path.Combine(baseDir, WikiRel)), target).Replace('\\', '/');
+        JsonObject? destination = null;
+        foreach (var sectionNode in sections)
+        {
+            if (sectionNode is not JsonObject section) continue;
+            if (pinned
+                && string.Equals(
+                    section["title"]?.GetValue<string>()?.Trim(),
+                    sectionTitle?.Trim(),
+                    StringComparison.Ordinal))
+            {
+                destination = section;
+            }
+
+            if (section["links"] is not JsonArray links) continue;
+            for (var i = links.Count - 1; i >= 0; i--)
+            {
+                if (links[i] is not JsonObject link) continue;
+                var existingRel = link["relPath"]?.GetValue<string>()?.Replace('\\', '/').Trim().TrimStart('/');
+                if (string.Equals(existingRel, normalizedRel, StringComparison.OrdinalIgnoreCase))
+                    links.RemoveAt(i);
+            }
+        }
+
+        if (pinned)
+        {
+            if (string.IsNullOrWhiteSpace(sectionTitle))
+                return WikiMutationResult.Fail("A home section is required.");
+            if (destination == null)
+                return WikiMutationResult.Fail("The selected home section does not exist.");
+
+            if (destination["links"] is not JsonArray links)
+            {
+                links = [];
+                destination["links"] = links;
+            }
+            var resolvedLabel = string.IsNullOrWhiteSpace(label)
+                ? ExtractDocTitle(target, Path.GetExtension(target))
+                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(target))
+                : label.Trim();
+            var link = new JsonObject
+            {
+                ["relPath"] = normalizedRel,
+                ["label"] = resolvedLabel,
+            };
+            if (!string.IsNullOrWhiteSpace(note)) link["note"] = note.Trim();
+            links.Add(link);
+        }
+
+        try
+        {
+            File.WriteAllText(homePath, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return WikiMutationResult.Fail("Wiki home configuration could not be written.");
+        }
+        return WikiMutationResult.Ok(homePath);
+    }
+
     // -------- Architecture decisions --------
 
     public ArchitectureOverview? GetArchitectureOverview(string projectName)
@@ -2673,7 +2860,8 @@ public record WikiClassification(
     string? Status,
     string? SupersededBy,
     string? Type,
-    string? AnalyzedAt);
+    string? AnalyzedAt,
+    string PageType);
 
 public record WikiTreeNode(
     string Name,

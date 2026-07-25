@@ -131,4 +131,25 @@ public class OrchestratorChatNavigationContextTests
         // Still asks the agent to refuse invention when no task is in scope.
         Assert.Contains("do NOT invent", rendered, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void AppendNavigationContext_RepositoryPage_RendersPageReferenceAndExcerpt()
+    {
+        var nav = new ChatNavigationContext(
+            CurrentPage: "repository-page",
+            PageRef: "page:PROJ-002/concepts/action-bar.md",
+            PageTitle: "Action bar",
+            PageType: "concept",
+            PageExcerpt: "Pages are bidirectional interfaces.");
+
+        var sb = new StringBuilder();
+        OrchestratorChatService.AppendNavigationContext(sb, nav);
+        var rendered = sb.ToString();
+
+        Assert.Contains("pageRef: page:PROJ-002/concepts/action-bar.md", rendered);
+        Assert.Contains("pageTitle: Action bar", rendered);
+        Assert.Contains("pageType: concept", rendered);
+        Assert.Contains("pageExcerpt: Pages are bidirectional interfaces.", rendered);
+        Assert.Contains("asking from THAT repository page", rendered);
+    }
 }

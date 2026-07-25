@@ -10,6 +10,7 @@ Operator-facing index of the **canonical UI vocabulary** the shell uses: tokens,
 This folder is the **second-look** for any visual or styling change. The first stop is still [`docs/quality/frontend/design-system.md`](../design-system.md) (the "why" of the shell: Material 3 mapping, color philosophy, type ramp, motion grammar). The style guide is the **"what to grab"** for a concrete change:
 
 - "I need a small button" → [buttons.md](./buttons.md)
+- "I need predictable actions in a repository page head" → [page action Workbench](../../visual-styleguide-workbench-wiki/index.html)
 - "I need a pill / badge / chip" → [pills.md](./pills.md)
 - "I need a card surface" → [cards.md](./cards.md)
 - "I need a modal" → [modals.md](./modals.md)
@@ -41,6 +42,7 @@ A change at layer N must not duplicate a fact at layer N-1. A button never hardc
 | Tab strip          | [`<app-pane-tabs>`](../../../../frontend/src/app/components/pane-tabs/pane-tabs.component.ts)                         | `variant=header\|pill`            | ✅ shipped (F38)  |
 | Sidebar navigation | [`<app-section-header>`](../../../../frontend/src/app/components/section-header/section-header.component.ts) + [`<app-tree-row>`](../../../../frontend/src/app/components/tree-row/tree-row.component.ts) | static/collapsible groups + root/child rows | ✅ shipped |
 | Side sheet         | [`<app-sidesheet>`](../../../../frontend/src/app/components/sidesheet/sidesheet.component.ts)                         | `[width]`                         | ✅ shipped        |
+| Page action bar    | [`<app-page-action-bar>`](../../../../frontend/src/app/features/project-detail/components/page-action-bar/page-action-bar.ts) | document / concept / Workbench / incident / report | ✅ shipped |
 | Menu               | [`<app-menu>`](../../../../frontend/src/app/components/menu/menu.component.ts)                                        | text-only rows                    | ✅ shipped        |
 | Notification       | [`<app-notification>`](../../../../frontend/src/app/components/notification/notification.component.ts)                | toast / banner                    | ✅ shipped (F37)  |
 | Tooltip            | `[appTooltip]` directive on [`<app-tooltip>`](../../../frontend/src/app/components/tooltip/tooltip.component.ts)   | instant HTML body                 | ✅ shipped        |

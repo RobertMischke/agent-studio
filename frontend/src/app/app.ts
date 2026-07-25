@@ -113,6 +113,7 @@ import { projectIdentity } from './services/project-identity.util';
 import { displayStateToLaneKey, allowsDragReorder } from './services/lane-sort.util';
 import { buildRunActivityBadge } from './services/run-activity.util';
 import { NowTickService } from './services/now-tick.service';
+import { PageContextService } from './services/page-context.service';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
@@ -218,6 +219,7 @@ export class App implements OnInit, OnDestroy {
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
+  readonly pageContext = inject(PageContextService);
   readonly orchestratorComposerContext = computed(() => buildComposerLocationContext(
     this.studioTabState.activeTab(),
     this.jobService.jobs(),
@@ -931,6 +933,14 @@ export class App implements OnInit, OnDestroy {
       }, 2500);
     });
 
+    this.pageContext.createTaskRequests$.subscribe(request => {
+      this.createJobForm.openPageTask(request, this.watchPaths());
+    });
+    this.pageContext.openChatRequests$.subscribe(context => {
+      this.orchSideSheetRef?.setActiveProject(context.projectName);
+      this.orchSideSheetRef?.show();
+    });
+
     // Cycle 10c: bridge TriageController to the TaskDetailComponent's
     // "acting" highlight via a closure so the ViewChild can resolve
     // lazily at call time. The closure is fine to register here because
@@ -1635,6 +1645,8 @@ export class App implements OnInit, OnDestroy {
    * project the same way the feed overlay does.
    */
   readonly orchSideSheetPreferredProject = computed<string | null>(() => {
+    const page = this.pageContext.activePage();
+    if (page?.projectName) return page.projectName;
     const detail = this.selectedJob();
     if (detail?.info?.projectName) return detail.info.projectName;
     const active = [...this.activeProjects()];

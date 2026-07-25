@@ -149,6 +149,23 @@ export class ProjectDocsService {
     );
   }
 
+  /** Add/update/move or remove one shared, versioned Wiki Overview pin. */
+  setWikiHomePin(
+    projectName: string,
+    relPath: string,
+    pin: {
+      pinned: boolean;
+      sectionTitle?: string | null;
+      label?: string | null;
+      note?: string | null;
+    },
+  ) {
+    return this.http.put<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/home/pins/${this.encodeRelPath(relPath)}`,
+      pin,
+    );
+  }
+
   getWorkbenches(projectName: string, history = false) {
     return this.http.get<WorkbenchCatalogue>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches`,
@@ -172,6 +189,14 @@ export class ProjectDocsService {
     return this.http.put<WikiFileSaveResult>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`,
       { content }
+    );
+  }
+
+  /** Update page lifecycle metadata without moving or deleting the source. */
+  setWikiClassification(projectName: string, relPath: string, status: 'archived' | 'aktuell') {
+    return this.http.put<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/classification/${this.encodeRelPath(relPath)}`,
+      { status },
     );
   }
 

@@ -182,6 +182,52 @@ public sealed class WikiCompanionStore
         return new WikiCompanionWriteResult(changed, companionAbs);
     }
 
+    /// <summary>
+    /// Updates only the lifecycle status in a page companion. Existing grading,
+    /// drift, review, type, and relationship blocks are preserved. A page with
+    /// no companion receives the same minimal schema-valid identity used at
+    /// creation time.
+    /// </summary>
+    public WikiCompanionWriteResult WriteClassificationStatus(
+        string wikiDir,
+        string docsRelPath,
+        string title,
+        string content,
+        string status,
+        DateTime nowUtc)
+    {
+        var companionAbs = CompanionPathFor(wikiDir, docsRelPath);
+        var iso = nowUtc.ToString("o");
+        var root = ReadExistingRoot(companionAbs)
+            ?? BuildCreationCompanion(docsRelPath, title, content, iso);
+
+        if (root["classification"] is not JsonObject classification)
+        {
+            classification = new JsonObject
+            {
+                ["owner"] = docsRelPath.Split('/', 2)[0],
+                ["documentMode"] = "documentation",
+                ["temporalState"] = "present",
+                ["implementationState"] = "unknown",
+            };
+            root["classification"] = classification;
+        }
+
+        classification["status"] = status;
+        classification["analyzedAt"] = iso[..10];
+
+        var serialized = root.ToJsonString(WriteOpts) + "\n";
+        var changed = !File.Exists(companionAbs)
+            || !string.Equals(File.ReadAllText(companionAbs), serialized, StringComparison.Ordinal);
+        if (changed)
+        {
+            var dir = Path.GetDirectoryName(companionAbs);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(companionAbs, serialized);
+        }
+        return new WikiCompanionWriteResult(changed, companionAbs);
+    }
+
     /// <summary>A schema-valid minimal companion (no report/review/drift blocks yet).</summary>
     private static JsonObject BuildCreationCompanion(string docsRelPath, string title, string content, string iso)
     {

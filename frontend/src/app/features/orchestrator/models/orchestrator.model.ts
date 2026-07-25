@@ -184,4 +184,8 @@ export interface ChatNavigationContext {
   viewportTimestamp?: string | null;
   observedSurface?: string | null;
   affectedComponent?: string | null;
+  pageRef?: string | null;
+  pageTitle?: string | null;
+  pageType?: string | null;
+  pageExcerpt?: string | null;
 }

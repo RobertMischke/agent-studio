@@ -10,6 +10,24 @@ Three button families in the shell. Pick the one that matches the use case; do *
 
 See [audit-buttons.md](./audit-buttons.md) for the inventory of every existing variant in the codebase and where they live.
 
+## Page-head action bar
+
+Repository pages use the shared `<app-page-action-bar>` rather than assembling
+their own button group. The four standard actions are always Create Task in
+Project, Archive, Open in Orchestrator Chat, and Pin to Home. A page type may
+append one specific action after those standards.
+
+Pin to Home uses the pin icon and the tooltip "Curated entry point for
+everyone." It must not reuse the star icon or the Starred collection. Star
+controls use the tooltip "Your personal shortlist."
+
+The component reads semantic Studio surfaces, borders, foregrounds, accent,
+hover, spacing, and elevation. Its production variants and both themes are
+shown in the
+[Visual StyleGuide page action Workbench](../../visual-styleguide-workbench-wiki/index.html).
+The interaction contract and page-context decision are documented in
+[Wiki as a Cognitive Interface](../../../concepts/wiki-as-cognitive-interface.md).
+
 ## Icon-only button
 
 ```scss

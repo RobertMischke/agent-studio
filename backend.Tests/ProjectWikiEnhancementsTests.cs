@@ -290,9 +290,11 @@ public class ProjectWikiEnhancementsTests : IDisposable
             .Children.Single(n => n.Name == "adr-0099-example.md");
         Assert.Equal("adr", adr.Classification!.Type);
 
-        // No sidecar + no folder default -> no classification at all.
+        // No sidecar + no curated folder default still receives the canonical
+        // interactive page kind so every page can render a type icon.
         var runbook = tree.Root.Single(n => n.Name == "operations").Children.Single(n => n.Name == "runbook.md");
-        Assert.Null(runbook.Classification);
+        Assert.NotNull(runbook.Classification);
+        Assert.Equal("doc", runbook.Classification!.PageType);
         // Folder nodes never carry a classification.
         Assert.Null(tree.Root.Single(n => n.Name == "proposals").Classification);
     }
@@ -318,6 +320,118 @@ public class ProjectWikiEnhancementsTests : IDisposable
     public void DefaultClassificationType_MapsAgreedFolders(string relPath, string? expected)
     {
         Assert.Equal(expected, ProjectDocsService.DefaultClassificationType(relPath));
+    }
+
+    [Theory]
+    [InlineData("README.md", null, "doc")]
+    [InlineData("concepts/action-bar.md", "konzept", "concept")]
+    [InlineData("operations/incidents/history.md", null, "incident")]
+    [InlineData("reports/quality.md", null, "report")]
+    [InlineData("quality/action-bar/index.html", "workbench", "workbench")]
+    public void CanonicalPageType_MapsMetaAndPathFamilies(
+        string relPath, string? curatedType, string expected)
+    {
+        Assert.Equal(expected, ProjectDocsService.CanonicalPageType(relPath, curatedType));
+    }
+
+    [Fact]
+    public void GetWikiTree_WorkbenchRegistrationTypesEntryPage()
+    {
+        var projectRoot = Path.Combine(_tempDir, "registered-workbench");
+        var workbenchDir = Path.Combine(projectRoot, "docs", "quality", "action-bar");
+        Directory.CreateDirectory(workbenchDir);
+        File.WriteAllText(Path.Combine(workbenchDir, "index.html"), "<h1>Action bar</h1>");
+        File.WriteAllText(Path.Combine(workbenchDir, "workbench.json"),
+            """{ "entrypoint": "index.html" }""");
+
+        var tree = BuildDocsService(("Workbench", projectRoot)).GetWikiTree("Workbench");
+        var entry = tree!.Root.Single(node => node.Name == "quality")
+            .Children.Single(node => node.Name == "action-bar")
+            .Children.Single(node => node.Name == "index.html");
+
+        Assert.Equal("workbench", entry.Classification!.PageType);
+    }
+
+    [Fact]
+    public void SetWikiClassificationStatus_PreservesPageAndWritesArchivedCompanion()
+    {
+        var projectRoot = Path.Combine(_tempDir, "archive-page");
+        var pagePath = Path.Combine(projectRoot, "docs", "guide.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(pagePath)!);
+        File.WriteAllText(pagePath, "# Guide\n\nRetained content.\n");
+        var docs = BuildDocsService(("Archive", projectRoot));
+
+        var result = docs.SetWikiClassificationStatus(
+            "Archive", "guide.md", "archived", new WikiCompanionStore());
+
+        Assert.True(result.Success, result.Error);
+        Assert.True(File.Exists(pagePath));
+        var companion = File.ReadAllText(pagePath + ".meta.json");
+        Assert.Contains("\"status\": \"archived\"", companion);
+        Assert.Equal("archived", docs.GetWikiTree("Archive")!.Root.Single().Classification!.Status);
+    }
+
+    [Fact]
+    public void SetWikiHomePin_AddsMovesAndRemovesSharedCuratedEntry()
+    {
+        var projectRoot = Path.Combine(_tempDir, "pin-home");
+        var docsRoot = Path.Combine(projectRoot, "docs");
+        var configDir = Path.Combine(docsRoot, "app", "config");
+        Directory.CreateDirectory(configDir);
+        Directory.CreateDirectory(Path.Combine(docsRoot, "concepts"));
+        File.WriteAllText(
+            Path.Combine(docsRoot, "concepts", "action-bar.md"),
+            "# Action bar\n\nA bidirectional page interface.\n");
+        File.WriteAllText(
+            Path.Combine(configDir, "home.json"),
+            """
+            {
+              "sections": [
+                { "title": "Start", "links": [] },
+                { "title": "Concepts", "links": [] }
+              ]
+            }
+            """);
+        var docs = BuildDocsService(("Pin", projectRoot));
+
+        var added = docs.SetWikiHomePin(
+            "Pin", "concepts/action-bar.md", true, "Start", "Action bar", "Shared entry.");
+        Assert.True(added.Success, added.Error);
+        var first = docs.GetWikiHome("Pin")!;
+        Assert.Equal("concepts/action-bar.md", first.Sections[0].Links.Single().RelPath);
+        Assert.Equal("Shared entry.", first.Sections[0].Links.Single().Note);
+
+        var moved = docs.SetWikiHomePin(
+            "Pin", "concepts/action-bar.md", true, "Concepts", "Page actions", null);
+        Assert.True(moved.Success, moved.Error);
+        var second = docs.GetWikiHome("Pin")!;
+        Assert.Empty(second.Sections[0].Links);
+        Assert.Equal("Page actions", second.Sections[1].Links.Single().Label);
+
+        var removed = docs.SetWikiHomePin(
+            "Pin", "concepts/action-bar.md", false, null, null, null);
+        Assert.True(removed.Success, removed.Error);
+        Assert.All(docs.GetWikiHome("Pin")!.Sections, section => Assert.Empty(section.Links));
+        Assert.True(File.Exists(Path.Combine(docsRoot, "concepts", "action-bar.md")));
+    }
+
+    [Fact]
+    public void SetWikiHomePin_RejectsUnknownSectionWithoutChangingConfig()
+    {
+        var projectRoot = Path.Combine(_tempDir, "pin-home-invalid");
+        var docsRoot = Path.Combine(projectRoot, "docs");
+        var configDir = Path.Combine(docsRoot, "app", "config");
+        Directory.CreateDirectory(configDir);
+        File.WriteAllText(Path.Combine(docsRoot, "guide.md"), "# Guide\n");
+        var homePath = Path.Combine(configDir, "home.json");
+        File.WriteAllText(homePath, """{ "sections": [{ "title": "Start", "links": [] }] }""");
+        var before = File.ReadAllText(homePath);
+        var docs = BuildDocsService(("Pin", projectRoot));
+
+        var result = docs.SetWikiHomePin("Pin", "guide.md", true, "Missing", "Guide", null);
+
+        Assert.False(result.Success);
+        Assert.Equal(before, File.ReadAllText(homePath));
     }
 
     // ---- CreateWikiPage / CreateWikiFolder + commit ----

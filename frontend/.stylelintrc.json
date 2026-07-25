@@ -203,6 +203,7 @@
         "src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.scss",
         "src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss",
         "src/app/features/project-detail/components/pipeline-health-block/pipeline-health-block.scss",
+        "src/app/features/project-detail/components/page-action-bar/page-action-bar.scss",
         "src/app/features/project-detail/components/project-style-guides-panel/project-style-guides-panel.scss",
         "src/app/features/project-detail/components/project-graph/project-graph.component.scss",
         "src/app/features/project-detail/components/project-test-runs-panel/project-test-runs-panel.scss",

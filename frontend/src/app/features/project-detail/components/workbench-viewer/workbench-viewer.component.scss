@@ -17,6 +17,12 @@
   gap: var(--studio-spacing-4);
   padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-3);
   border-bottom: 1px solid var(--studio-border);
+  flex-wrap: wrap;
+}
+
+.workbench-viewer__actions {
+  flex: 1 0 100%;
+  width: 100%;
 }
 
 .workbench-viewer__identity { min-width: 0; }

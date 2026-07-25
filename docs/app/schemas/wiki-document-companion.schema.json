@@ -76,8 +76,8 @@
         },
         "status": {
           "type": "string",
-          "enum": ["aktuell", "veraltet", "ueberholt"],
-          "description": "Curated consolidation status (konsolidierung-analyse): aktuell = current, veraltet = dated with no direct successor, ueberholt = superseded by a newer page."
+          "enum": ["aktuell", "veraltet", "ueberholt", "archived"],
+          "description": "Curated lifecycle status: aktuell = current, veraltet = dated with no direct successor, ueberholt = superseded by a newer page, archived = retained as quiet history."
         },
         "supersededBy": {
           "type": ["string", "null"],

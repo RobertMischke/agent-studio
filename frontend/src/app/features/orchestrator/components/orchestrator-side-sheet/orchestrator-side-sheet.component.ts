@@ -46,6 +46,8 @@ import {
   buildOrchestratorConversationEvents,
   sameOrchestratorChatTurns,
 } from './orchestrator-side-sheet.util';
+import type { PageContext } from '../../../../models/page-context.model';
+import { pageContextKey } from '../../../../models/page-context.model';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -88,6 +90,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * the library exposes a first-class `composerContext` input).
    */
   readonly composerContext = input<ComposerLocationContext | null>(null);
+  /** Active repository page carried inside the existing project chat. */
+  readonly pageContext = input<PageContext | null>(null);
 
   /**
    * Phase 6 inputs: when a task detail is open, the host passes the
@@ -196,7 +200,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       ? null
       : this.selectedSession()
       ? this.selectedSession()?.projectId ?? null
-      : (this.pinned() ? (this.pinnedSnapshot()?.project ?? null) : this.activeProject()));
+      : (this.pinned()
+        ? (this.pinnedSnapshot()?.project ?? null)
+        : (this.pageContext()?.projectName ?? this.activeProject())));
   readonly effectiveJobId = computed<string | null>(() =>
     this.selectedContextKey() === 'global'
       ? null
@@ -350,7 +356,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextChipText = computed<string | null>(() => {
     const proj = this.effectiveProject();
     if (!proj) return null;
-    const tail = this.contextKind() === 'task'
+    const page = this.pageContext();
+    const tail = page
+      ? `${page.pageType} '${page.title}'`
+      : this.contextKind() === 'task'
       ? `Task '${this.effectiveJobTitle()}'`
       : 'Board';
     return `Context: ${proj} · ${tail}`;
@@ -381,6 +390,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     effect(() => {
       const proj = this.effectiveProject();
       this.effectiveJobId();
+      this.pageContext();
       untracked(() => {
         if (this.contextDismissed()) this.contextDismissed.set(false);
         if (proj !== this.lastSentProjectForSignature) {
@@ -591,7 +601,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const proj = (this.effectiveProject() ?? '').trim();
     const jobId = (this.effectiveJobId() ?? '').trim();
     const jobTitle = (this.effectiveJobTitle() ?? '').trim();
-    return `${proj}|${jobId}|${jobTitle}`;
+    const page = this.pageContext();
+    return `${proj}|${jobId}|${jobTitle}|${page ? pageContextKey(page) : ''}`;
   }
 
   onOpenVerboseDebug(): void {
@@ -729,7 +740,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const contextPayload = shouldShipContext
       ? buildChatNavigationContext({
           activeJobId: this.effectiveJobId(),
-          activeJobTitle: this.effectiveJobTitle()
+          activeJobTitle: this.effectiveJobTitle(),
+          pageContext: this.pageContext(),
         })
       : null;
 
