@@ -22,6 +22,7 @@ public record GitStatusResult(
 public record GitCommitResult(bool Success, string? Sha, string? Error);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
+public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
 
 /// <summary>
 /// Result of a single-file content lookup that backs the git-pane's
@@ -3233,6 +3234,63 @@ public class GitService
     }
 
     /// <summary>
+    /// Folds a worker-created linear commit range back into the working tree so
+    /// the normal platform commit step can record it. This is deliberately a
+    /// soft reset: file content and index state are preserved. The operation
+    /// refuses stale observations and non-linear history, so it cannot discard
+    /// a concurrent commit or rewrite work that predates the run.
+    /// </summary>
+    public GitWorkerCommitCleanupResult FoldWorkerCommitsIntoPlatformCommit(
+        string worktreePath,
+        string? headBefore,
+        string? observedHeadAfter)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorkerCommitCleanupResult(false, "needs-cleanup", "Worktree path does not exist.");
+        if (string.IsNullOrWhiteSpace(headBefore) || !IsLikelyShaOrRef(headBefore))
+            return new GitWorkerCommitCleanupResult(false, "needs-cleanup", "Run-start HEAD is missing or invalid.");
+        if (string.IsNullOrWhiteSpace(observedHeadAfter) || !IsLikelyShaOrRef(observedHeadAfter))
+            return new GitWorkerCommitCleanupResult(false, "needs-cleanup", "Run-end HEAD is missing or invalid.");
+
+        var current = ReadHeadShaAt(worktreePath);
+        if (!string.Equals(current, observedHeadAfter, StringComparison.OrdinalIgnoreCase))
+        {
+            return new GitWorkerCommitCleanupResult(
+                false,
+                "needs-cleanup",
+                "HEAD changed again after the worker finished; automatic cleanup was skipped.");
+        }
+
+        if (!IsAncestor(worktreePath, headBefore, observedHeadAfter))
+        {
+            return new GitWorkerCommitCleanupResult(
+                false,
+                "unsafe-history",
+                "The worker HEAD is not a linear descendant of the run-start HEAD.");
+        }
+
+        var (_, error, code) = RunGitArgs(worktreePath, "reset", "--soft", headBefore);
+        if (code != 0)
+        {
+            return new GitWorkerCommitCleanupResult(
+                false,
+                "needs-cleanup",
+                string.IsNullOrWhiteSpace(error) ? "git reset --soft failed." : error.Trim());
+        }
+
+        var resetHead = ReadHeadShaAt(worktreePath);
+        if (!string.Equals(resetHead, headBefore, StringComparison.OrdinalIgnoreCase))
+        {
+            return new GitWorkerCommitCleanupResult(
+                false,
+                "needs-cleanup",
+                "Soft reset returned success but HEAD did not return to the run-start commit.");
+        }
+
+        return new GitWorkerCommitCleanupResult(true, "platform-commit-ready", null);
+    }
+
+    /// <summary>
     /// Removes untracked files and directories from the worktree while PRESERVING
     /// <c>node_modules</c> (<c>git clean -fd -e node_modules</c>). Slice A
     /// invariant: <b>NEVER</b> <c>-x</c> - ignored build artefacts AND the
@@ -3306,6 +3364,19 @@ public class GitService
         if (code != 0) return null;
         var branch = output.Trim();
         return string.IsNullOrWhiteSpace(branch) ? null : branch;
+    }
+
+    /// <summary>
+    /// Reads the local branch checked out at an explicit repo or worktree root.
+    /// Returns null for detached HEAD or when the path is not a repository.
+    /// </summary>
+    public string? ReadCurrentBranchAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (output, _, code) = RunGitArgs(root, "symbolic-ref", "--quiet", "--short", "HEAD");
+        if (code != 0) return null;
+        var branch = output.Trim();
+        return string.IsNullOrWhiteSpace(branch) || !IsLikelyBranchName(branch) ? null : branch;
     }
 
     /// <summary>

@@ -28,7 +28,7 @@ Run context:
 - Attachments folder (relative `attachments/<file>` paths resolve under the job folder):
 {{attachments_list}}
 
-Rules: same guardrails as a fresh run. Work on this task only; do not move the job folder; do not edit `state` in `job.json`; do not scan for or start another task. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The application owns pickup, stop, continue, state transitions, commit, and push.
+Rules: same guardrails as a fresh run. Work on this task only; do not move the job folder; do not edit `state` in `job.json`; do not scan for or start another task. Please do not commit or push yourself; the platform commits after review. If you did commit, that is not a problem: it will be shown and cleaned up where safe. Never push to a protected branch or rewrite history that existed before this run. The application owns pickup, stop, continue, and state transitions.
 
 Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 

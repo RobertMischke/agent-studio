@@ -293,7 +293,7 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
-    public void AllRunnerTemplates_ForbidAgentCommitAndPush()
+    public void AllRunnerTemplates_UseCalmPlatformCommitOwnership()
     {
         var prompts = Prompts();
         foreach (var template in new[]
@@ -320,9 +320,10 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
 
-            Assert.Contains("Do not run `git commit`", rendered);
-            Assert.Contains("`git push`", rendered);
-            Assert.Contains("unless this individual task explicitly asks", rendered);
+            Assert.Contains("Please do not commit or push yourself", rendered);
+            Assert.Contains("that is not a problem", rendered);
+            Assert.Contains("shown and cleaned up", rendered);
+            Assert.Contains("Never push to a protected branch", rendered);
         }
     }
 

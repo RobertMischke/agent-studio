@@ -28,6 +28,30 @@ internal sealed class ActiveRun
     public int ReissueAttempt { get; init; }
 
     /// <summary>
+    /// HEAD in the actual CLI working directory immediately before process
+    /// start. Unlike the session event's integration-range SHA, this remains
+    /// task-worktree-specific and lets post-processing distinguish a harmless
+    /// linear worker commit from a rewrite of pre-existing history.
+    /// </summary>
+    public string? WorkerHeadShaBefore { get; set; }
+
+    /// <summary>
+    /// Local branch checked out in the worker directory before process start.
+    /// The post-run check reads this ref directly so a harmless checkout of
+    /// another branch is not mistaken for a rewrite of pre-existing history.
+    /// Null means the run started detached or the branch could not be read.
+    /// </summary>
+    public string? WorkerBranchBefore { get; set; }
+
+    /// <summary>
+    /// Remote-tracking tips for protected branches captured immediately before
+    /// the CLI starts. A changed tip is only treated as worker damage when the
+    /// worker output also contains a push command/claim.
+    /// </summary>
+    public Dictionary<string, string?> ProtectedRemoteTipsBefore { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// True only while a coding CLI process is alive. The record remains in the
     /// registry during finalisation so run-scoped data stays addressable, but
     /// loop waits and post-processing do not consume an execution slot.

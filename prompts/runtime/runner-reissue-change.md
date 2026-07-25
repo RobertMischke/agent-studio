@@ -31,7 +31,7 @@ If a finding cannot be resolved, stop and end with `[[TASK_BLOCKED:missing-depen
 
 Before editing, run git status and git diff in `{{repository_path}}`. Read `orchestrator-follow-up.md`, `code-review-*.md`, and `aspect-*.md` from the job folder when present; they are the review evidence behind the findings above.
 
-Rules: work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for or start another task. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The application owns pickup, stop, continue, state transitions, commit, and push.
+Rules: work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for or start another task. Please do not commit or push yourself; the platform commits after review. If you did commit, that is not a problem: it will be shown and cleaned up where safe. Never push to a protected branch or rewrite history that existed before this run. The application owns pickup, stop, continue, and state transitions.
 
 Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 

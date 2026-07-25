@@ -75,6 +75,9 @@ public class ProjectRunner
     private static readonly Regex NegatedGitMutationRegex = new(
         @"\b(?:did not|didn't|do not|don't|without|not going to|never)\b.{0,60}\b(?:git\s+)?(?:commit|push|committed|pushed)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex GitPushCommandOrClaimRegex = new(
+        @"(?:^|[`""'\s>$:])git\s+(?:-C\s+\S+\s+)?push\b|\b(?:i(?:'ve| have)?|changes?\s+(?:were|are)?|work\s+(?:was|is)?)\s*pushed\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private sealed record CoreAgentUsage(
         string? Model,
@@ -2483,6 +2486,12 @@ public class ProjectRunner
             // wall-clock window. See docs/quality/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
+            if (_activeRuns.Get(jobId) is { } activeRunAtSpawn)
+            {
+                activeRunAtSpawn.WorkerHeadShaBefore = _git.ReadHeadShaAt(runWorkingDir);
+                activeRunAtSpawn.WorkerBranchBefore = _git.ReadCurrentBranchAt(runWorkingDir);
+                activeRunAtSpawn.ProtectedRemoteTipsBefore = CaptureProtectedRemoteTips();
+            }
 
             // Capture the exact context handed to the agent for this run so the
             // run timeline can show *what* the run was started with (prompt +
@@ -4808,18 +4817,54 @@ public class ProjectRunner
                 "Job {JobId} finished in project '{Project}' on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s",
                 jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
+            var cli = _router.Get(cliType);
+            var earlyOutputSnapshot = cli.GetOutput(jobKey);
+            var runInfo = _scanner.FindJob(jobId, Entry.Path);
+            var runGitRoot = run.IsWorktreeRun ? run.WorktreePath! : Entry.RootPath;
+            var workerHeadAfter = _git.ReadHeadShaAt(runGitRoot);
+            var workerHeadChanged = !string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore)
+                && !string.IsNullOrWhiteSpace(workerHeadAfter)
+                && !string.Equals(run.WorkerHeadShaBefore, workerHeadAfter, StringComparison.OrdinalIgnoreCase);
+            var workerHeadLinear = workerHeadChanged
+                && _git.IsAncestor(runGitRoot, run.WorkerHeadShaBefore!, workerHeadAfter!);
+            var preExistingHistoryRewritten = PreExistingWorkerHistoryWasRewritten(runGitRoot, run);
+            var agentGitMutationClaim = DetectAgentGitMutationClaim(earlyOutputSnapshot);
+            var agentGitPushClaim = DetectAgentGitPushClaim(earlyOutputSnapshot);
+            var protectedRemoteChanged = agentGitPushClaim != null && ProtectedRemoteChanged(run);
+            var agentGitDecision = AgentGitMutationPolicy.Decide(
+                run.WorkerHeadShaBefore,
+                workerHeadAfter,
+                workerHeadLinear,
+                preExistingHistoryRewritten,
+                protectedRemoteChanged,
+                agentGitMutationClaim != null);
+            var workerCommitsDetected = workerHeadChanged && workerHeadLinear
+                ? _git.GetCommitsInRangeAtRoot(runGitRoot, run.WorkerHeadShaBefore!, workerHeadAfter!).Count
+                : 0;
+            GitWorkerCommitCleanupResult? workerGitCleanup = null;
+            if (agentGitDecision.Disposition == AgentGitMutationDisposition.Info
+                && agentGitDecision.CleanupEligible
+                && runInfo != null
+                && !TaskModes.IsReadOnly(runInfo.Mode)
+                && !IsAgentGitMutationAllowed(runInfo))
+            {
+                workerGitCleanup = _git.FoldWorkerCommitsIntoPlatformCommit(
+                    runGitRoot,
+                    run.WorkerHeadShaBefore,
+                    workerHeadAfter);
+            }
+
             WorktreeCommitRange? worktreeCommitRange = null;
             // ADR-0052/0057: every coding worktree run commits its edits on the
             // task branch and integrates them into the work branch BEFORE the
             // post-run review reads the result; a merge conflict is left for the
             // review to escalate. Slot count does not select this path.
-            if (run.IsWorktreeRun)
+            if (run.IsWorktreeRun
+                && agentGitDecision.Disposition != AgentGitMutationDisposition.Escalate)
             {
-                var wtInfo = _scanner.FindJob(jobId, Entry.Path);
+                var wtInfo = runInfo ?? _scanner.FindJob(jobId, Entry.Path);
                 if (wtInfo != null) worktreeCommitRange = await IntegrateWorktreeRunAsync(run, wtInfo);
             }
-
-            var cli = _router.Get(cliType);
 
             // Persist last token/usage summary (best-effort)
             var usage = cli.GetLastUsage(jobKey);
@@ -5051,7 +5096,7 @@ public class ProjectRunner
             // outcome analyzer needs the buffer to classify the run, and the
             // post-run policy may re-issue another run on top before we let
             // the regular review/summary pipeline proceed.
-            var liveOutputSnapshot = cli.GetOutput(jobKey);
+            var liveOutputSnapshot = earlyOutputSnapshot;
 
             // Strict-iteration progress-first pickup bookkeeping: only
             // autopickup runs feed the per-slug silent-attempt counter.
@@ -5087,6 +5132,26 @@ public class ProjectRunner
             if (activeInfo != null)
             {
                 _mutations.SetJobLastProgressAt(activeInfo.FolderPath, DateTime.UtcNow);
+            }
+
+            if (activeInfo != null
+                && agentGitDecision.Disposition == AgentGitMutationDisposition.Info
+                && !IsAgentGitMutationAllowed(activeInfo))
+            {
+                var cleanupDetail = workerGitCleanup?.Success == true
+                    ? "cleanup=platform-commit-ready; the worker commit was folded back and its file changes were preserved for the platform commit"
+                    : workerHeadChanged
+                        ? $"worker advanced HEAD - needs cleanup; pipeline continues ({workerGitCleanup?.Error ?? "automatic cleanup was not safe or not available"})"
+                        : "worker reported a commit/push, but no protected-ref or HEAD damage was verified; pipeline continues";
+                var message = $"[worker-head-advanced] INFO: {cleanupDetail}.";
+                _logger.LogInformation(
+                    "worker-head-advanced job={JobId} cli={Cli} commits={Commits} cleanup={Cleanup} claim={Claim}",
+                    jobId,
+                    cliType,
+                    workerCommitsDetected,
+                    workerGitCleanup?.Status ?? "not-attempted",
+                    agentGitMutationClaim ?? "<head-changed>");
+                _chatLog.Append(activeInfo, OrchestratorMessageKind.WorkerHeadAdvanced, message);
             }
 
             // Apply the orchestrator's post-run policy. The policy is pure;
@@ -5127,7 +5192,7 @@ public class ProjectRunner
             // by the watchdog (exitCode=-1 on Windows) - must not be hard-failed
             // and re-looped; the commit-aware classifier routes it to review as
             // an honest "committed-partial" instead. See the run-outcome contract.
-            int commitsDuringRun = 0;
+            int commitsDuringRun = workerCommitsDetected;
             try
             {
                 var beforeSha = _sessions.ReadSessionEvents(jobId, Entry.Path).LastOrDefault()?.HeadShaBefore;
@@ -5135,7 +5200,9 @@ public class ProjectRunner
                     && !string.IsNullOrWhiteSpace(headShaAfter)
                     && !string.Equals(beforeSha, headShaAfter, StringComparison.OrdinalIgnoreCase))
                 {
-                    commitsDuringRun = _git.GetCommitsInShaRange(jobId, Entry.Path, beforeSha, headShaAfter).Count;
+                    commitsDuringRun = Math.Max(
+                        commitsDuringRun,
+                        _git.GetCommitsInShaRange(jobId, Entry.Path, beforeSha, headShaAfter).Count);
                 }
             }
             catch (Exception ex)
@@ -5143,24 +5210,26 @@ public class ProjectRunner
                 _logger.LogDebug(ex, "commit-count for {JobId} failed; treating as 0", jobId);
             }
 
-            var agentGitMutationClaim = DetectAgentGitMutationClaim(liveOutputSnapshot);
             if (activeInfo != null
-                && (commitsDuringRun > 0 || agentGitMutationClaim != null)
-                && _activeRuns.Get(jobId)?.IsWorktreeRun != true
-                && !IsAgentGitMutationAllowed(activeInfo))
+                && agentGitDecision.Disposition == AgentGitMutationDisposition.Escalate)
             {
-                var message = commitsDuringRun > 0
-                    ? $"[agent-git-violation] Worker CLI advanced git HEAD during the run ({commitsDuringRun} commit(s)) before the platform-owned commit step. Worker agents must not run git commit or git push."
-                    : $"[agent-git-violation] Worker CLI output suggests it ran or claimed a git commit/push command before the platform-owned commit step: {agentGitMutationClaim}. Worker agents must not run git commit or git push.";
+                var message =
+                    $"[agent-git-violation] Genuine git damage detected: {agentGitDecision.Reason}. "
+                    + "The run is being escalated because protected remote history changed or pre-existing work was rewritten.";
                 _logger.LogWarning(
-                    "agent-git-violation job={JobId} cli={Cli} commits={Commits} claim={Claim} status={Status}",
-                    jobId, cliType, commitsDuringRun, agentGitMutationClaim ?? "<head-changed>", execution.Status);
+                    "agent-git-violation job={JobId} cli={Cli} reason={Reason} commits={Commits} claim={Claim} status={Status}",
+                    jobId,
+                    cliType,
+                    agentGitDecision.Reason,
+                    commitsDuringRun,
+                    agentGitPushClaim ?? agentGitMutationClaim ?? "<head-rewritten>",
+                    execution.Status);
                 _chatLog.Append(activeInfo, OrchestratorMessageKind.AgentGitViolation, message);
                 outcome = outcome with
                 {
                     IssueKind = RunIssueKind.AgentGitViolation,
                     Summary = message,
-                    Reason = "worker agent changed git history during its run"
+                    Reason = agentGitDecision.Reason
                 };
             }
 
@@ -5981,6 +6050,61 @@ public class ProjectRunner
     private static bool IsAgentGitMutationAllowed(TaskInfo info)
         => info.Tags.Any(tag => string.Equals(tag, "allow-agent-git-mutation", StringComparison.OrdinalIgnoreCase));
 
+    private Dictionary<string, string?> CaptureProtectedRemoteTips()
+    {
+        var repoRoot = Entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        var settings = _projectSettings.Get(ProjectName);
+        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, settings.IntegrationBranch);
+        if (integrationBranch.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            integrationBranch = integrationBranch["origin/".Length..];
+
+        var branches = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            integrationBranch,
+            "main",
+            "master",
+        };
+
+        return branches
+            .Where(branch => !string.IsNullOrWhiteSpace(branch))
+            .ToDictionary(
+                branch => branch,
+                branch => _git.GetBranchTip(repoRoot, $"origin/{branch}"),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool ProtectedRemoteChanged(ActiveRun run)
+    {
+        if (run.ProtectedRemoteTipsBefore.Count == 0) return false;
+        var repoRoot = Entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+
+        foreach (var (branch, before) in run.ProtectedRemoteTipsBefore)
+        {
+            var after = _git.GetBranchTip(repoRoot, $"origin/{branch}");
+            if (!string.Equals(before, after, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool PreExistingWorkerHistoryWasRewritten(string repoRoot, ActiveRun run)
+    {
+        if (string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore)
+            || string.IsNullOrWhiteSpace(run.WorkerBranchBefore))
+        {
+            return false;
+        }
+
+        var branchTipAfter = _git.GetBranchTip(repoRoot, run.WorkerBranchBefore);
+        return string.IsNullOrWhiteSpace(branchTipAfter)
+            || !_git.IsAncestor(repoRoot, run.WorkerHeadShaBefore, branchTipAfter);
+    }
+
     private static string? DetectAgentGitMutationClaim(IReadOnlyList<CliOutputLine> lines)
     {
         foreach (var line in lines)
@@ -5992,6 +6116,23 @@ public class ProjectRunner
             if (string.Equals(line.Stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
             if (NegatedGitMutationRegex.IsMatch(text)) continue;
             if (!GitMutationCommandRegex.IsMatch(text) && !GitMutationClaimRegex.IsMatch(text)) continue;
+            return text.Length <= 180 ? text : text[..177] + "...";
+        }
+
+        return null;
+    }
+
+    private static string? DetectAgentGitPushClaim(IReadOnlyList<CliOutputLine> lines)
+    {
+        foreach (var line in lines)
+        {
+            var text = (line.Text ?? string.Empty).Trim();
+            if (text.Length == 0) continue;
+            if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "user", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
+            if (NegatedGitMutationRegex.IsMatch(text)) continue;
+            if (!GitPushCommandOrClaimRegex.IsMatch(text)) continue;
             return text.Length <= 180 ? text : text[..177] + "...";
         }
 

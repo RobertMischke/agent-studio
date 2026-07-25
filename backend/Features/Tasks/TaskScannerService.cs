@@ -998,6 +998,8 @@ public class TaskScannerService : ITaskScanner
 
             if (line.Contains("[agent-git-violation]", StringComparison.OrdinalIgnoreCase))
                 return BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
+            if (line.Contains("[worker-head-advanced]", StringComparison.OrdinalIgnoreCase))
+                return BuildOutcomeIssue("worker-head-advanced", "Worker advanced HEAD", "Info", line, lastSeenAt);
 
             // Never derive an outcome issue from an orchestrator decision/reissue/
             // meta line or a supervisor line. Those carry prose - e.g. an accept
@@ -1134,6 +1136,11 @@ public class TaskScannerService : ITaskScanner
         if (lower.Contains("[agent-git-violation]"))
         {
             issue = BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[worker-head-advanced]"))
+        {
+            issue = BuildOutcomeIssue("worker-head-advanced", "Worker advanced HEAD", "Info", line, lastSeenAt);
             return true;
         }
         if (lower.Contains("[integration-conflict]"))
