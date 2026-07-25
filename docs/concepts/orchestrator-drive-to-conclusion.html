@@ -1005,6 +1005,47 @@
         </tr>
         <tr>
           <td>2026-07-25</td>
+          <td><code>AGT-2341</code><br><span class="small">blocked sentinel overridden by diagnostic narrative<br>(observed on <code>AGT-2280</code>)</span></td>
+          <td>
+            The CLI exited zero with the honest terminal
+            <code>[[TASK_BLOCKED:deck-panel-v1-decision-missing]]</code>. Diagnostic narrative mentioned an OOM scenario,
+            so the shared classifier emitted <code>OutOfMemory</code> with <code>TerminateHonestly</code> while the legacy
+            outcome remained <code>Unknown</code>. No real OOM fact existed.
+          </td>
+          <td>
+            The diagnostic-regex guard covered only exit-zero <code>TASK_DONE</code> and <code>TASK_NOOP</code>.
+            <code>TASK_BLOCKED</code> therefore remained vulnerable to narrative OOM, quota, authentication, session, and
+            configuration matches. The typed blocker also discarded the sentinel's reason slug.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every explicit exit-zero terminal now suppresses diagnostic-only
+            infrastructure regex matches, while authoritative facts such as <code>OomKilled</code> still win.
+            <code>ExplicitAgentBlocker</code> remains the stable typed terminal and carries the exact reason slug in its
+            additive <code>Detail</code> field for Task Server and board consumers.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
+          <td><code>AGT-2335</code><br><span class="small">expired dead-attempt release kept daemon in startup retry<br>(observed on <code>AGT-2326</code>)</span></td>
+          <td>
+            Startup found a dead persisted Drain-Stop attempt. The Task Server answered its release with
+            <code>Expired</code>, but the runner retained the durable slot and threw the fail-closed startup exception.
+            systemd repeatedly restarted the unit while it remained activating. Operations recovered by quarantining the
+            durable runner state.
+          </td>
+          <td>
+            <code>RemoteTaskRunner.ReleaseAsync</code> recognized only <code>Released</code> and <code>NotHeld</code> as
+            successful release terminals. It treated the idempotent lease-absent outcomes <code>Expired</code>,
+            <code>NotFound</code>, and <code>AlreadyReleased</code> like release failures even though no lease remained.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> all explicit lease-absent outcomes now delete the dead persisted slot and let
+            daemon startup continue. Unknown outcomes and request failures still retain the slot and reach the fail-closed
+            retry terminal. The restart regression pins the observed <code>Expired</code> response.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
           <td><code>AGT-2320</code><br><span class="small">remote lease-loss requeue and deleted-cwd spiral</span></td>
           <td>
             A backend restart invalidated leases for active remote runs. Their cards returned to

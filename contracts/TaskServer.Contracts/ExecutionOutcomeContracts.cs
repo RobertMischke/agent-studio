@@ -124,7 +124,8 @@ public sealed record ExecutionOutcomeDecision(
     bool ConsumesCompletionBudget,
     bool ConsumesCodingReworkBudget,
     bool InvokesCodingModel,
-    ExecutionRawFacts RawFacts);
+    ExecutionRawFacts RawFacts,
+    string? Detail = null);
 
 public sealed record ProviderOutputEvidence(
     string? TerminalEvent,
@@ -197,14 +198,13 @@ public static class ExecutionOutcomeAdapter
                 ? facts.StdOut ?? string.Empty
                 : facts.FinalAssistantOutput);
 
-        // A clean completion (exit 0 + explicit DONE/NOOP sentinel) must never be
-        // overridden by REGEX matches on the diagnostic text: agent CLIs stream
-        // their working narrative over stderr, so a run that merely *talks about*
-        // "out of memory" or "quota" would otherwise be misclassified as an
-        // infrastructure failure (seen live 25.07.: TASK_DONE run typed as
-        // OutOfMemory). Hard facts (OomKilled, LeaseLost, timeouts, transport)
-        // still win - those are observations, not text.
-        var cleanCompletion = facts.ExitCode == 0 && sentinel is "DONE" or "NOOP";
+        // An honest terminal (exit 0 + any explicit sentinel) must never be
+        // overridden by regex matches on diagnostic narrative. Agent CLIs stream
+        // their working text over stderr, so a run that merely discusses "out of
+        // memory" or "quota" would otherwise be misclassified as infrastructure.
+        // Hard facts such as OomKilled, LeaseLost, timeout, and transport loss
+        // still win because they are observations rather than text.
+        var honestTerminal = facts.ExitCode == 0 && sentinel is not null;
 
         if (facts.LeaseLost)
             return Decide(facts, ExecutionOutcomeKind.LeaseLoss, OutcomeConfidence.High,
@@ -217,23 +217,29 @@ public static class ExecutionOutcomeAdapter
             return Decide(facts, ExecutionOutcomeKind.TransportLoss, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.TimedOut)
             return Decide(facts, ExecutionOutcomeKind.Timeout, OutcomeConfidence.High, null, infrastructure: true);
-        if (facts.OomKilled || (!cleanCompletion && OutOfMemory.IsMatch(diagnostic)))
+        if (facts.OomKilled || (!honestTerminal && OutOfMemory.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.OutOfMemory, OutcomeConfidence.High, null, infrastructure: true);
-        if (facts.SessionState == ExecutionSessionState.Invalid || (!cleanCompletion && InvalidSession.IsMatch(diagnostic)))
+        if (facts.SessionState == ExecutionSessionState.Invalid || (!honestTerminal && InvalidSession.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.InvalidSession, OutcomeConfidence.High, null, infrastructure: true);
-        if (!cleanCompletion && Authentication.IsMatch(diagnostic))
+        if (!honestTerminal && Authentication.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
-        if (!cleanCompletion && Quota.IsMatch(diagnostic))
+        if (!honestTerminal && Quota.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
-        if (!cleanCompletion && InvalidConfiguration.IsMatch(diagnostic))
+        if (!honestTerminal && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.LaunchFailed)
             return Decide(facts, ExecutionOutcomeKind.LaunchFailure, OutcomeConfidence.High, null, infrastructure: true);
 
-        if (sentinel is "BLOCKED" or "NEEDS_INPUT")
-            return Decide(facts, ExecutionOutcomeKind.ExplicitAgentBlocker, OutcomeConfidence.High, null, infrastructure: false);
+        if (sentinel?.Keyword is "BLOCKED" or "NEEDS_INPUT")
+            return Decide(
+                facts,
+                ExecutionOutcomeKind.ExplicitAgentBlocker,
+                OutcomeConfidence.High,
+                null,
+                infrastructure: false,
+                detail: sentinel.Reason);
 
-        if (sentinel is "DONE" or "NOOP")
+        if (sentinel?.Keyword is "DONE" or "NOOP")
             return Decide(facts, ExecutionOutcomeKind.SuccessfulCompletion, OutcomeConfidence.High, null, infrastructure: false);
 
         var providerCompleted = !providerFailed
@@ -266,7 +272,8 @@ public static class ExecutionOutcomeAdapter
         ExecutionOutcomeKind outcome,
         OutcomeConfidence confidence,
         string? ambiguity,
-        bool infrastructure)
+        bool infrastructure,
+        string? detail = null)
     {
         var recovery = SelectRecovery(facts, outcome);
         var invokesCoding = facts.AttemptKind == ExecutionAttemptKind.Coding
@@ -283,7 +290,8 @@ public static class ExecutionOutcomeAdapter
             ConsumesCompletionBudget: false,
             ConsumesCodingReworkBudget: false,
             InvokesCodingModel: invokesCoding,
-            RawFacts: facts);
+            RawFacts: facts,
+            Detail: detail);
     }
 
     private static ExecutionRecoveryAction SelectRecovery(
@@ -338,16 +346,22 @@ public static class ExecutionOutcomeAdapter
         return ExecutionRecoveryAction.TerminateHonestly;
     }
 
-    private static string? LastSentinel(string text)
+    private static SentinelEvidence? LastSentinel(string text)
     {
         Match? last = null;
         foreach (Match match in Sentinel.Matches(text)) last = match;
         if (last is null) return null;
-        return Regex.Replace(last.Groups["keyword"].Value, @"[\s_-]+", "_").ToUpperInvariant();
+        var keyword = Regex.Replace(last.Groups["keyword"].Value, @"[\s_-]+", "_").ToUpperInvariant();
+        var reason = last.Groups["reason"].Success && last.Groups["reason"].Value.Length > 0
+            ? last.Groups["reason"].Value.Trim()
+            : null;
+        return new SentinelEvidence(keyword, reason);
     }
 
     private static string Join(params string?[] values)
         => string.Join('\n', values.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private sealed record SentinelEvidence(string Keyword, string? Reason);
 }
 
 /// <summary>Extracts provider terminal, final reply, and session evidence without interpreting product prose.</summary>
