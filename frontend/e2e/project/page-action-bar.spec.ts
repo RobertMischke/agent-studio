@@ -412,6 +412,7 @@ test('shared page action bar preserves placement, task source, chat context, and
     sectionTitle: 'UI & Wiki',
     label: 'Action bar contract',
   }));
+  await page.getByTestId('notification-success').getByTestId('notification-close').click();
 
   await page.getByTestId('page-action-create-task').click();
   const prompt = page.getByTestId('create-prompt');
