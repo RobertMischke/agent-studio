@@ -59,11 +59,15 @@ public static class LeaseEndpoints
                 }
                 var project = projects.FindByStorageLocation(task.WatchPath)
                               ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                var repository = RemoteProjectRepositoryResolver.Resolve(
+                    project,
+                    settings.Get(task.ProjectName).IntegrationBranch);
                 var clientId = context.Items["ClientId"] as string
                                ?? context.Request.Headers["X-Client-Id"].ToString();
                 var canonical = StampIdentity(req, identity) with
                 {
-                    RepositoryId = string.IsNullOrWhiteSpace(project?.Id) ? task.ProjectName : project.Id,
+                    RepositoryId = repository?.RepositoryId
+                                   ?? (string.IsNullOrWhiteSpace(project?.Id) ? task.ProjectName : project.Id),
                     ClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
                 };
                 return Results.Ok(leases.TryAcquire(canonical));
@@ -349,7 +353,7 @@ public static class LeaseEndpoints
                 var acquire = leases.TryAcquire(new RunLeaseAcquireRequest(
                     taskKey, req.RunnerId.Trim(), req.RunnerName.Trim(), req.Hostname,
                     req.Pid, req.BackendName, req.RequestedTtlSeconds,
-                    repository.ProjectId,
+                    repository.RepositoryId,
                     SourceRunAttemptId: recoveredSources.GetValueOrDefault(taskKey),
                     IdempotencyKey: claimKey)
                 {

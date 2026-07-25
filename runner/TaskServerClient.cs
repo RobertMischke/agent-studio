@@ -793,12 +793,7 @@ public sealed class TaskServerClient : IDisposable
             .ToLowerInvariant()[..32];
 
     internal static string? RepositoryIdentity(string? repositoryUrl)
-    {
-        if (string.IsNullOrWhiteSpace(repositoryUrl)) return null;
-        var canonical = repositoryUrl.Trim().TrimEnd('/').ToLowerInvariant();
-        return "repo_" + Convert.ToHexString(
-            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
-    }
+        => RepositoryIdentityContract.FromUrl(repositoryUrl);
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 

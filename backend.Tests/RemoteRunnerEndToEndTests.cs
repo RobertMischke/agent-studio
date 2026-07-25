@@ -426,6 +426,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(claim.Lease!.Fence > 0);
         Assert.True(claim.Lease.AuthorityEpoch > 0);
         Assert.Equal(resultSha, claim.Subject!.ExpectedResultSha);
+        Assert.Equal(
+            Contract.RepositoryIdentityContract.FromUrl(
+                "https://example.invalid/agent-studio.git"),
+            claim.Subject.RepositoryId);
+        Assert.NotEqual("PROJ-001", claim.Subject.RepositoryId);
 
         var renewed = await reviewClient.RenewReviewLeaseAsync(
             claim.Attempt.AttemptId,
@@ -471,35 +476,82 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             [],
             [new Contract.ReviewVerdictDto("build-tests", "pass", "GatePassed", "Focused gate passed.")],
             claim.Lease.AuthorityEpoch);
-        var report = await reviewClient.ReportReviewAsync(
+        var infrastructureReportRequest = reportRequest with
+        {
+            IdempotencyKey = "v1-review-repository-mismatch",
+            Outcome = "ReviewInfra",
+            FailureClassification = "RepositoryMismatch",
+            Summary = "Legacy project handle was not materializable.",
+        };
+        var infrastructureReport = await reviewClient.ReportReviewAsync(
             claim.Attempt.AttemptId,
-            reportRequest,
+            infrastructureReportRequest,
             ct);
-        Assert.Equal("Pass", report.Outcome);
-        Assert.Equal(TaskStates.HumanReview, report.TaskState);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)));
+        Assert.Equal("ReviewInfra", infrastructureReport.Outcome);
+        Assert.True(infrastructureReport.RetryScheduled);
+        Assert.Equal(TaskStates.AutoReview, infrastructureReport.TaskState);
 
-        var duplicate = await reviewClient.ReportReviewAsync(
-            claim.Attempt.AttemptId,
-            reportRequest,
-            ct);
-        Assert.Equal(report.ReportId, duplicate.ReportId);
-
-        var reportedAttempt = await http.GetFromJsonAsync<Contract.ReviewAttemptDto>(
-            $"/api/v1/reviews/attempts/{claim.Attempt.AttemptId}",
-            ct);
-        Assert.Equal("Pass", reportedAttempt!.Outcome);
-
-        var cleanup = await reviewClient.CleanupReviewAsync(
+        var infrastructureCleanup = await reviewClient.CleanupReviewAsync(
             claim.Attempt.AttemptId,
             new Contract.ReviewCleanupRequest(
                 reviewRunnerId,
                 reviewInstance,
                 claim.Lease.LeaseId,
                 claim.Lease.Fence,
-                "v1-review-cleanup",
+                "v1-review-infrastructure-cleanup",
                 true,
                 AuthorityEpoch: claim.Lease.AuthorityEpoch),
+            ct);
+        Assert.Equal("cleaned", infrastructureCleanup.Status);
+
+        var retryClaim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            ct);
+        Assert.Equal("claimed", retryClaim.Status);
+        Assert.NotEqual(claim.Attempt.AttemptId, retryClaim.Attempt!.AttemptId);
+        Assert.Equal(claim.Subject.SubjectId, retryClaim.Subject!.SubjectId);
+        Assert.Equal(claim.Subject.RepositoryId, retryClaim.Subject.RepositoryId);
+
+        var retryReportRequest = reportRequest with
+        {
+            LeaseId = retryClaim.Lease!.LeaseId,
+            Fence = retryClaim.Lease.Fence,
+            Workspace = reportRequest.Workspace with
+            {
+                RepositoryId = retryClaim.Subject.RepositoryId,
+                ResourceNamespace = retryClaim.Lease.ResourceNamespace,
+            },
+            AuthorityEpoch = retryClaim.Lease.AuthorityEpoch,
+        };
+        var report = await reviewClient.ReportReviewAsync(
+            retryClaim.Attempt.AttemptId,
+            retryReportRequest,
+            ct);
+        Assert.Equal("Pass", report.Outcome);
+        Assert.Equal(TaskStates.HumanReview, report.TaskState);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)));
+
+        var duplicate = await reviewClient.ReportReviewAsync(
+            retryClaim.Attempt.AttemptId,
+            retryReportRequest,
+            ct);
+        Assert.Equal(report.ReportId, duplicate.ReportId);
+
+        var reportedAttempt = await http.GetFromJsonAsync<Contract.ReviewAttemptDto>(
+            $"/api/v1/reviews/attempts/{retryClaim.Attempt.AttemptId}",
+            ct);
+        Assert.Equal("Pass", reportedAttempt!.Outcome);
+
+        var cleanup = await reviewClient.CleanupReviewAsync(
+            retryClaim.Attempt.AttemptId,
+            new Contract.ReviewCleanupRequest(
+                reviewRunnerId,
+                reviewInstance,
+                retryClaim.Lease.LeaseId,
+                retryClaim.Lease.Fence,
+                "v1-review-cleanup",
+                true,
+                AuthorityEpoch: retryClaim.Lease.AuthorityEpoch),
             ct);
         Assert.Equal("cleaned", cleanup.Status);
 
@@ -796,6 +848,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("https://github.com/agent-orc/agent-studio.git", claim.RepositoryUrl);
         Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal(TaskKinds.Task, claim.TaskKind);
+        var attemptProjection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{claim.TaskKey}", ApiJson, CancellationToken.None);
+        Assert.Equal(
+            Contract.RepositoryIdentityContract.FromUrl(claim.RepositoryUrl),
+            attemptProjection!.CurrentRunAttempt!.RepositoryId);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
         var laneTimeline = File.ReadAllText(Path.Combine(
@@ -823,6 +880,26 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var runner = Assert.Single(clients!, item => item.Id == client.ClientId);
         Assert.Equal(1, runner.RunnerActiveSlots);
         Assert.Equal(19, runner.RunnerAvailableSlots);
+
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            claim.TaskKey!,
+            claim.Lease.LeaseId,
+            claim.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            ResultSha: resultSha,
+            AttemptChainId: claim.Lease.LeaseId,
+            Repository: claim.RepositoryUrl,
+            AttemptId: claim.Lease.AttemptId,
+            AuthorityEpoch: claim.Lease.AuthorityEpoch,
+            IdempotencyKey: "daemon-claim-completion"), CancellationToken.None);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var completedProjection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{claim.TaskKey}", ApiJson, CancellationToken.None);
+        Assert.Equal(
+            attemptProjection.CurrentRunAttempt.RepositoryId,
+            completedProjection!.CurrentReviewSubject!.RepositoryId);
     }
 
     [Fact]
