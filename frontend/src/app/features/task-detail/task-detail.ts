@@ -52,6 +52,8 @@ import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-roll
 import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
+import { deriveProtocolVerdict } from './components/protocol-pane/protocol-verdict';
+import { classifyLatestActivityOutcome } from './components/agent-outcome.util';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
@@ -283,7 +285,6 @@ export class TaskDetailComponent implements OnDestroy {
       && !status.error
       && status.files.length > 0;
   });
-  // CLI output buffer + run-state lives in CliOutputPollService.
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
@@ -692,25 +693,40 @@ export class TaskDetailComponent implements OnDestroy {
     this.planPoll.syncTo(this.detail()?.info ?? null);
   });
 
-  // ...and for the per-job pipeline poller (10 s cadence). Drives the
-  // Overview tab's pipeline block (pre/post steps + per-step tokens/cost
-  // + task total). The overview pane injects the service for its signals.
   private readonly taskPipelinePoll = inject(TaskPipelinePollService);
   private readonly taskPipelineEffect = effect(() => {
     this.taskPipelinePoll.syncTo(this.detail()?.info ?? null);
   });
+  readonly statusIsSuperseded = computed<boolean>(() => {
+    const generation = this.detail().statusGeneration;
+    const execution = this.taskPipelinePoll.pipeline()?.execution;
+    const currentAttempt = execution?.attempt;
+    if (currentAttempt == null) return false;
+    if (generation?.runIndex != null) return generation.runIndex < currentAttempt;
+    return currentAttempt > 1
+      && execution?.completedAt == null
+      && !!this.detail().statusMarkdown?.trim();
+  });
+  readonly runOutcomePresentation = computed(() => deriveProtocolVerdict({
+    isRunning: this.isRunning(),
+    summaryStatus: this.detail().summaryState?.status ?? 'none',
+    statusMarkdown: this.detail().statusMarkdown,
+    outcomeIssue: this.detail().info.outcomeIssue,
+    hasActivity: this.cliOutput().length > 0,
+    laneState: this.detail().info.state,
+    orchestratorVerdict: this.detail().info.orchestratorVerdict,
+    statusSuperseded: this.statusIsSuperseded(),
+    execution: this.detail().info.execution,
+    pipelineExecution: this.taskPipelinePoll.pipeline()?.execution ?? null,
+    activityOutcome: classifyLatestActivityOutcome(this.cliOutput()),
+  }));
 
-  // ...and for the per-job screenshots poller (10 s cadence). The
-  // protocol pane reads its signal directly via inject(); the prompt
-  // pane (for the Visual Evidence section inside its Evidence tab)
-  // reads it via the `screenshots` getter below.
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
   readonly screenshots = this.screenshotsPoll.screenshots;
   private readonly screenshotsEffect = effect(() => {
     this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
 
-  // F48: Files-tab manifest is owned by TaskArtifactsService.
   private readonly artifactsService = inject(TaskArtifactsService);
   readonly artifacts = this.artifactsService.artifacts;
   private readonly artifactsEffect = effect(() => {

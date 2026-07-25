@@ -23,7 +23,7 @@ import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
 import { buildConversationTurns, parseActivityLog, sanitizeProjectionLines } from '../../activity-log.parser';
-import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
+import { classifyLatestActivityOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { sessionFetch } from '../../../../../services/session-fetch';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
@@ -51,16 +51,13 @@ import { SourceViewerComponent, type SourceViewerRequest } from '../../source-vi
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
-import { deriveVerdictChain, type ChainEvidenceLink, type VerdictChain } from '../protocol-verdict-chain';
 import { ProtocolVerdictBannerComponent } from '../protocol-verdict-banner/protocol-verdict-banner.component';
 import {
   buildInspectorTabs,
   claudeSessionTooltip,
-  formatIssueTime,
   formatRateWindow,
   formatResetIn,
   formatTokens,
-  outcomeIssueExplanation,
   rateLimitTooltip,
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
@@ -144,6 +141,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly queuedFollowUp = input<boolean>(false);
 
   readonly regenerating = input(false);
+  readonly runOutcome = input<ProtocolVerdict | null>(null);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -173,12 +171,9 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
   private readonly layout = inject(LayoutPanesService);
 
-  @ViewChild('outcomeIssuePortalRoot')
-  private outcomeIssuePortalRoot?: ElementRef<HTMLDivElement>;
   @ViewChild('runsPortalRoot')
   private runsPortalRoot?: ElementRef<HTMLDivElement>;
 
-  private outcomeIssuePortalRef: OverlayPortalRef | null = null;
   private runsPortalRef: OverlayPortalRef | null = null;
 
   /** Tracks the job whose Activity sub-view override is currently held. */
@@ -196,13 +191,6 @@ export class ProtocolPaneComponent implements OnDestroy {
       }
     });
     effect(() => {
-      if (this.outcomeIssueModalOpen()) {
-        queueMicrotask(() => this.acquireOutcomeIssuePortal());
-      } else {
-        this.releaseOutcomeIssuePortal();
-      }
-    });
-    effect(() => {
       if (this.runsModalOpen()) {
         queueMicrotask(() => this.acquireRunsPortal());
       } else {
@@ -210,7 +198,6 @@ export class ProtocolPaneComponent implements OnDestroy {
       }
     });
     this.destroyRef.onDestroy(() => {
-      this.releaseOutcomeIssuePortal();
       this.releaseRunsPortal();
     });
   }
@@ -404,16 +391,9 @@ export class ProtocolPaneComponent implements OnDestroy {
       && !!this.detail().statusMarkdown?.trim();
   });
 
-  /**
-   * Three-state simplified verdict shown at the very top of the protocol
-   * pane. Pure derivation from the existing signals - see protocol-verdict.ts
-   * for the priority table. `laneState`/`orchestratorVerdict` let the current
-   * lane / review decision lead the head verdict so a Blocked from a superseded
-   * run is demoted to collapsed history (BEFUND 2); the banner rendering lives
-   * in <app-protocol-verdict-banner>. Recomputes on any input change.
-   */
+  /** Shared authoritative outcome, with a local fallback for isolated tests. */
   readonly protocolVerdict = computed<ProtocolVerdict>(() =>
-    deriveProtocolVerdict({
+    this.runOutcome() ?? deriveProtocolVerdict({
       isRunning: this.isRunning(),
       summaryStatus: this.summaryStatus(),
       statusMarkdown: this.detail().statusMarkdown,
@@ -422,35 +402,11 @@ export class ProtocolPaneComponent implements OnDestroy {
       laneState: this.detail().info.state,
       orchestratorVerdict: this.detail().info.orchestratorVerdict,
       statusSuperseded: this.statusIsSuperseded(),
+      execution: this.detail().info.execution,
+      pipelineExecution: this.pipelinePoll.pipeline()?.execution ?? null,
+      activityOutcome: this.outcome(),
     }),
   );
-
-  /**
-   * The visible verdict chain (Run → Gate → Review aspects → Lane decision)
-   * shown beneath the pill (BEFUND 2), plus the causal narrative that links the
-   * earlier steps to the leading decision (BEFUND 3). Null while there is no run
-   * outcome or lane decision to narrate. Derived from the same signals as the
-   * head verdict so the two never disagree.
-   */
-  readonly verdictChain = computed<VerdictChain | null>(() =>
-    deriveVerdictChain({
-      verdict: this.protocolVerdict(),
-      laneState: this.detail().info.state,
-      orchestratorVerdict: this.detail().info.orchestratorVerdict,
-      reviewEvidence: this.detail().reviewEvidence,
-    }),
-  );
-
-  /**
-   * A user clicked an evidence link in the verdict chain. The status.md link
-   * opens the source viewer; review-evidence / lane links are informational for
-   * now (the review-evidence panel lives in the prompt pane's Evidence tab).
-   */
-  onVerdictChainEvidence(link: ChainEvidenceLink): void {
-    if (link.target === 'status') {
-      this.openSource({ path: 'status.md', line: null });
-    }
-  }
 
   onResultMetricNavigate(metricId: string): void {
     if (metricId === 'grade') this.layout.openPromptTab('description', 'codeReview');
@@ -510,13 +466,6 @@ export class ProtocolPaneComponent implements OnDestroy {
       now: new Date(this.nowTick()),
     }),
   );
-  readonly outcomeIssue = computed(() => this.detail().info.outcomeIssue ?? null);
-  readonly outcomeIssueModalOpen = signal(false);
-  readonly outcomeIssueTone = computed<'info' | 'warn' | 'high'>(() => {
-    const severity = (this.outcomeIssue()?.severity ?? '').toLowerCase();
-    return severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
-  });
-
   /** The open task is implicit; a running task is paused by the Send flow. */
   composePlaceholder(): string {
     return this.isRunning()
@@ -566,53 +515,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    */
   readonly outcome = computed<OutcomeAssessment | null>(() => {
     if (this.isRunning()) return null;
-    const lines = this.cliOutput();
-    if (lines.length === 0) return null;
-    const groups = parseActivityLog(lines);
-    const turns = buildConversationTurns(groups);
-    // Walk from the end. We are looking for the agent's most recent reply,
-    // but we must not jump past a *newer* failed-run signal: a system-error
-    // turn (e.g. claude's "No conversation found with session ID ..." +
-    // error_during_execution) means the latest run never produced a real
-    // agent reply, even though earlier runs did. Returning the stale agent
-    // text from a previous run would make the chip banner claim "Agent is
-    // mid-task" for a run that actually errored. The orchestrator already
-    // posted a [capture-fail] decision in that case; keep the banner
-    // honest by surfacing the failed-run state instead of the old reply.
-    let lastAgent: string | null = null;
-    let sawErrorAfterAgent = false;
-    for (let i = turns.length - 1; i >= 0; i--) {
-      const t = turns[i];
-      if (t.kind === 'agent') {
-        lastAgent = t.text;
-        break;
-      }
-      if (t.kind === 'system' && t.status === 'error') {
-        sawErrorAfterAgent = true;
-      }
-    }
-    if (sawErrorAfterAgent) {
-      // Surface the failed-run state explicitly so the user gets a
-      // verbindliches Signal that something went wrong on this turn,
-      // rather than a silent or misleading "mid-task" banner. The chips
-      // pre-fill the chat input; the backend's capture-fail handling
-      // already cleared the dead session id, so a normal "Continue"
-      // follow-up routes through Recovery on the next run.
-      return {
-        kind: 'failed',
-        summary: 'Last run ended with an error — agent did not produce a reply.',
-        question: null,
-        suggestions: [
-          {
-            label: 'Continue (rebuild)',
-            prompt:
-              'Continue from where the previous run left off — rebuild context from the job folder.',
-          },
-          { label: 'Retry as new task', prompt: 'Treat this as a fresh request and start over: ' },
-        ],
-      };
-    }
-    return classifyOutcome(lastAgent ?? '');
+    return classifyLatestActivityOutcome(this.cliOutput());
   });
 
   /** True when the auto-eval banner should be visible. */
@@ -622,26 +525,6 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (o.kind === 'unknown' && !o.question) return false;
     return o.suggestions.length > 0;
   });
-
-  /** Maps outcome kind to a short emoji glyph for the banner badge. */
-  outcomeEmoji(kind: string): string {
-    switch (kind) {
-      case 'done':
-        return '✓';
-      case 'blocked':
-        return '⚠';
-      case 'failed':
-        return '✗';
-      case 'question':
-        return '?';
-      case 'needs_input':
-        return '?';
-      case 'progress':
-        return '⏳';
-      default:
-        return 'i';
-    }
-  }
 
   // "There is or was activity for this job" — drives the live-dot indicator.
   // True when CLI is running OR we have any output buffered OR the job has a
@@ -933,21 +816,9 @@ export class ProtocolPaneComponent implements OnDestroy {
       clearTimeout(this.copyResetTimer);
       this.copyResetTimer = null;
     }
-    this.releaseOutcomeIssuePortal();
     this.releaseRunsPortal();
   }
 
-  private acquireOutcomeIssuePortal(): void {
-    if (!this.outcomeIssueModalOpen() || this.outcomeIssuePortalRef) return;
-    const root = this.outcomeIssuePortalRoot?.nativeElement;
-    if (!root) return;
-    this.outcomeIssuePortalRef = this.overlayPortal.attachModal(root);
-  }
-
-  private releaseOutcomeIssuePortal(): void {
-    this.outcomeIssuePortalRef?.dispose();
-    this.outcomeIssuePortalRef = null;
-  }
 
   private acquireRunsPortal(): void {
     if (!this.runsModalOpen() || this.runsPortalRef) return;
@@ -1128,8 +999,6 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly formatTokens = formatTokens;
   readonly formatRateWindow = formatRateWindow;
-  readonly formatIssueTime = formatIssueTime;
-  readonly outcomeIssueExplanation = outcomeIssueExplanation;
 
   formatResetIn(epoch: number): string {
     return formatResetIn(epoch, this.nowTick());

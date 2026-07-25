@@ -67,10 +67,6 @@
   <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-status">
     <h3 class="ov-section__title">Status + Agent</h3>
     <div class="ov-grid ov-grid--definition">
-      @if (job().outcomeIssue; as issue) {
-        <app-overview-failure [issue]="issue" />
-      }
-
       <div class="ov-row">
         <span class="ov-label">Last Activity</span>
         <span class="ov-value">

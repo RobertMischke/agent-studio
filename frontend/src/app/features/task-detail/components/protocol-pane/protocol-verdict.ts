@@ -1,26 +1,24 @@
-import type { TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
+import type { CliExecution, TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
+import type { PipelineExecutionRecord } from '../../../task-pipeline';
+import type { OutcomeAssessment } from '../agent-outcome.util';
 
-/**
- * Three-state simplified verdict shown at the very top of the protocol pane.
- * The user does not want shades of grey: every signal collapses to one of
- * good / bad / unclear so a glance answers the question "is this fine?".
- */
+/** Legacy visual tone retained for selectors and color-token compatibility. */
 export type ProtocolVerdictKind = 'ok' | 'problem' | 'unclear';
+export type AuthoritativeRunOutcomeStatus = 'failed' | 'needs-decision' | 'unclear' | 'succeeded';
 
-/**
- * A run-outcome problem (Blocked / Failed) that the current leading lane
- * state has already overtaken. Instead of shouting as the head banner it is
- * demoted to a collapsed "history" line beneath the leading verdict, so the
- * user can still read what an earlier, superseded run reported without the
- * stale blocker contradicting the accepted stand (BEFUND 2).
- */
-export interface SupersededBlocker {
+export interface RunOutcomeSignal {
+  source: 'runner' | 'execution' | 'pipeline' | 'status' | 'activity' | 'review' | 'lane' | 'summary';
+  status: AuthoritativeRunOutcomeStatus;
   label: string;
   detail: string;
 }
 
 export interface ProtocolVerdict {
   kind: ProtocolVerdictKind;
+  /** Canonical four-state status shared by banner, Result, and Pipeline. */
+  status: AuthoritativeRunOutcomeStatus;
+  /** Raw evidence exposed only inside the "Why this status?" disclosure. */
+  signals: RunOutcomeSignal[];
   emoji: string;
   label: string;
   detail: string;
@@ -31,13 +29,6 @@ export interface ProtocolVerdict {
    * body. Null when status.md has no Duration line yet.
    */
   duration: string | null;
-  /**
-   * Present only when the run-derived verdict was a Blocked/Failed that the
-   * leading lane state (accepted / completed) has superseded. The head verdict
-   * then leads with the accepted stand and this carries the demoted blocker
-   * for the collapsed history line.
-   */
-  superseded: SupersededBlocker | null;
 }
 
 export interface ProtocolVerdictInputs {
@@ -48,181 +39,214 @@ export interface ProtocolVerdictInputs {
   outcomeIssue: TaskOutcomeIssue | null | undefined;
   /** Has any cli-output / log activity been observed for this job at all? */
   hasActivity: boolean;
-  /**
-   * Canonical lane key the card currently lives in (`TaskInfo.state`, e.g.
-   * `6-completed`). The current lane leads the head verdict; a run outcome
-   * from a superseded context is subordinate history (BEFUND 2). Optional so
-   * callers/tests that only exercise the status.md derivation stay untouched.
-   */
+  /** Canonical lane key, used as one raw signal. */
   laneState?: string | null;
-  /**
-   * Latest orchestrator-review verdict for the card (`TaskInfo.orchestratorVerdict`).
-   * `accept` marks an accepted stand that overtakes an earlier Blocked run.
-   */
+  /** Latest orchestrator-review verdict, used as one raw signal. */
   orchestratorVerdict?: 'pending' | 'reissue' | 'escalate' | 'accept' | null;
   /**
    * True when status.md provenance points at an older pipeline attempt than
    * the current execution. Its outcome is history and cannot lead the banner.
    */
   statusSuperseded?: boolean;
+  execution?: CliExecution | null;
+  pipelineExecution?: PipelineExecutionRecord | null;
+  activityOutcome?: OutcomeAssessment | null;
 }
 
 /**
- * Map the existing protocol-pane signals to a single 3-state verdict.
- *
- * Priority (top wins):
- *   1. isRunning                        -> Unclear ("Läuft … Stand offen")
- *   2. summaryStatus failed             -> Problem
- *   3. outcomeIssue High                -> Problem
- *   4. trailing sentinel                -> Done/NoOp = OK, Blocked = Problem, NeedsInput = Unclear
- *   5. Result: Success + Notes/Open Items/What Was Done contains a blocker phrase
- *                                       -> Problem (downgraded; matched sentence becomes detail)
- *   6. Result: line                     -> Success/NoOp = OK, Failed/Blocked = Problem, Partial/NeedsInput = Unclear
- *   7. outcomeIssue Warn                -> Unclear
- *   8. hasActivity                      -> Unclear (ran but nothing classifiable yet)
- *   9. default                          -> Unclear ("No run yet")
- *
- * Step 5 exists because the `Result:` line is deterministically rewritten by the
- * runner from the terminal exit, not by Haiku, so it can read `Success` while the
- * body Notes describe a blocker the agent hit (sandbox denied, access denied,
- * external verification required, etc.). The downgrade is intentionally narrow
- * to `Result: Success`; sentinels and explicit non-success Result lines still
- * win at their original priority.
- *
- * Precedence reconciliation (BEFUND 2): the *current lane state leads* the head
- * verdict; a run outcome is subordinate history. After the base derivation above
- * runs over status.md, {@link reconcileWithLeadingState} demotes a Blocked/Failed
- * base to a collapsed history line when the card already lives in an accepted
- * stand (`orchestratorVerdict === 'accept'`, or lane `6-completed` / `7-archive`).
- * A stale Blocked from a superseded context must never be the head banner once
- * the work was accepted; it is kept only as history (`superseded`).
- *
- * Pure function so the protocol-pane component can wrap it in a `computed()`
- * and unit tests can hammer every branch without a fixture.
+ * Collapse current-run signals with one strict precedence:
+ * failed > needs-decision > unclear > succeeded. While a run is active, stale
+ * terminal records are excluded and the current run remains Running.
  */
 export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVerdict {
-  if (input.statusSuperseded && !input.isRunning) {
-    const historical = computeVerdictBase({ ...input, statusSuperseded: false });
-    const superseded = historical.kind === 'problem'
-      ? { label: historical.label, detail: historical.detail }
-      : null;
-    return {
-      kind: 'unclear',
-      emoji: emojiFor('unclear'),
-      label: 'Current attempt',
-      detail: 'A newer attempt is active. The previous run outcome is kept as superseded history.',
-      duration: null,
-      superseded,
-    };
-  }
-  const base = computeVerdictBase(input);
-  const reconciled = reconcileWithLeadingState(base, input);
-  return { ...reconciled, duration: parseDuration(input.statusMarkdown) };
-}
-
-/** Lane keys that represent an accepted / done stand — the work is behind us. */
-const ACCEPTED_LANE_STATES = new Set(['6-completed', '7-archive']);
-
-/**
- * Decide whether the card's current lane state represents an accepted stand
- * that should lead the head verdict over a stale run-outcome blocker.
- */
-export function isAcceptedStand(input: ProtocolVerdictInputs): boolean {
-  if (input.orchestratorVerdict === 'accept') return true;
-  return !!input.laneState && ACCEPTED_LANE_STATES.has(input.laneState);
-}
-
-/**
- * When the status.md-derived base verdict is a run-outcome Blocked/Failed but
- * the card already lives in an accepted stand, lead with the accepted state and
- * demote the blocker to `superseded` history. Only run-outcome problems (labels
- * `Blocked` / `Failed`) are demoted; a `Summary failed` render error or a
- * high-severity runner outcome issue stays leading because it is orthogonal to
- * review acceptance. Every non-demoted verdict passes through with
- * `superseded: null`.
- */
-function reconcileWithLeadingState(
-  base: Omit<ProtocolVerdict, 'duration' | 'superseded'>,
-  input: ProtocolVerdictInputs,
-): Omit<ProtocolVerdict, 'duration'> {
-  const isRunOutcomeProblem = base.kind === 'problem' && (base.label === 'Blocked' || base.label === 'Failed');
-  if (!isRunOutcomeProblem || !isAcceptedStand(input)) {
-    return { ...base, superseded: null };
-  }
-  return {
-    kind: 'ok',
-    emoji: emojiFor('ok'),
-    label: 'Accepted',
-    detail: 'Current stand: accepted by review. An earlier run reported a blocker, kept as history below.',
-    superseded: { label: base.label, detail: base.detail },
-  };
-}
-
-function computeVerdictBase(input: ProtocolVerdictInputs): Omit<ProtocolVerdict, 'duration' | 'superseded'> {
   if (input.isRunning) {
-    return verdict('unclear', 'Running', 'Agent is still working - click Interim status to peek.');
+    return presentation('unclear', 'Running', 'Agent is still working. No terminal outcome exists for this run yet.', [
+      signal('execution', 'unclear', 'Run is active', 'The current CLI process is still running.'),
+    ], input.statusMarkdown);
+  }
+
+  const signals = collectSignals(input);
+  if (signals.length === 0) {
+    signals.push(signal(
+      input.hasActivity ? 'activity' : 'status',
+      'unclear',
+      input.hasActivity ? 'Unclear' : 'No run yet',
+      input.hasActivity
+        ? 'The last run produced output but no classifiable terminal signal.'
+        : 'No run outcome has been recorded yet.',
+    ));
+  }
+  const leading = resolveAuthoritativeRunOutcome(signals)!;
+  return presentation(leading.status, leading.label, leading.detail, signals, input.statusMarkdown);
+}
+
+const OUTCOME_RANK: Record<AuthoritativeRunOutcomeStatus, number> = {
+  failed: 4,
+  'needs-decision': 3,
+  unclear: 2,
+  succeeded: 1,
+};
+
+/**
+ * Select the one primary signal for a run. Severity always wins over source
+ * order; equal-status ties keep the first signal so the caller can define a
+ * stable source priority while collecting evidence.
+ */
+export function resolveAuthoritativeRunOutcome(
+  signals: readonly RunOutcomeSignal[],
+): RunOutcomeSignal | null {
+  if (signals.length === 0) return null;
+  return signals.reduce((winner, candidate) =>
+    OUTCOME_RANK[candidate.status] > OUTCOME_RANK[winner.status] ? candidate : winner,
+  );
+}
+
+function collectSignals(input: ProtocolVerdictInputs): RunOutcomeSignal[] {
+  const signals: RunOutcomeSignal[] = [];
+  const issue = input.outcomeIssue;
+  if (issue) {
+    const severity = (issue.severity ?? '').toLowerCase();
+    const status: AuthoritativeRunOutcomeStatus = severity === 'high'
+      ? 'failed'
+      : severity === 'warn' ? 'needs-decision' : 'unclear';
+    signals.push(signal('runner', status, issue.label || issue.kind, issue.summary || issue.kind));
+  }
+
+  const executionStatus = executionOutcome(input.execution);
+  if (executionStatus) signals.push(executionStatus);
+
+  const pipeline = input.pipelineExecution;
+  if (pipeline) {
+    const failed = (pipeline.steps ?? []).filter(step => step.status === 'failed');
+    if (failed.length > 0) {
+      signals.push(signal(
+        'pipeline',
+        'failed',
+        'Pipeline failure',
+        `${failed.length} pipeline step${failed.length === 1 ? '' : 's'} failed: ${failed.map(step => step.stepId).join(', ')}.`,
+      ));
+    } else if (pipeline.completedAt) {
+      signals.push(signal('pipeline', 'succeeded', 'Pipeline completed', 'All recorded pipeline steps completed without failure.'));
+    } else if ((pipeline.steps ?? []).some(step => step.status === 'running' || step.status === 'pending')) {
+      signals.push(signal('pipeline', 'unclear', 'Pipeline incomplete', 'The current pipeline has not reached a terminal result.'));
+    }
+  }
+
+  if (input.statusSuperseded) {
+    signals.push(signal(
+      'status',
+      'unclear',
+      'Current attempt',
+      'A newer attempt is active. The previous status document is retained as historical evidence only.',
+    ));
+  }
+  const statusSignal = input.statusSuperseded ? null : markdownOutcome(input.statusMarkdown);
+  if (statusSignal) signals.push(statusSignal);
+
+  const activity = input.activityOutcome;
+  if (activity) signals.push(activitySignal(activity));
+
+  switch (input.orchestratorVerdict) {
+    case 'accept':
+      signals.push(signal('review', 'succeeded', 'Review accepted', 'The orchestrator accepted the reviewed stand.'));
+      break;
+    case 'escalate':
+    case 'reissue':
+    case 'pending':
+      signals.push(signal('review', 'needs-decision', 'Review decision', `The orchestrator verdict is ${input.orchestratorVerdict}.`));
+      break;
+  }
+
+  if (input.laneState === '5-human-review' || input.laneState === '5e-escalated') {
+    signals.push(signal('lane', 'needs-decision', 'Human review lane', 'The task is waiting for a human decision.'));
+  } else if (input.laneState === '6-completed' || input.laneState === '7-archive') {
+    signals.push(signal('lane', 'succeeded', 'Completed lane', `The task is in ${input.laneState}.`));
   }
 
   if (input.summaryStatus === 'failed') {
-    return verdict('problem', 'Summary failed', 'Haiku could not summarise this run. See banner below.');
+    signals.push(signal('summary', 'unclear', 'Result summary failed', 'The result summary could not be generated.'));
   }
-
-  if (input.outcomeIssue?.severity?.toLowerCase() === 'high') {
-    return verdict(
-      'problem',
-      input.outcomeIssue.label || 'Runner issue',
-      input.outcomeIssue.summary || input.outcomeIssue.kind || 'Runner reported a high-severity issue.'
-    );
-  }
-
-  const sentinel = parseSentinel(input.statusMarkdown);
-  if (sentinel) {
-    switch (sentinel.kind) {
-      case 'done': return verdict('ok', 'Done', sentinel.reason || 'Agent reported the task as complete.');
-      case 'noop': return verdict('ok', 'No action needed', sentinel.reason || 'Agent decided no work was required.');
-      case 'blocked': return verdict('problem', 'Blocked', sentinel.reason || 'Agent reported a hard blocker.');
-      case 'needs_input': return verdict('unclear', 'Needs input', sentinel.reason || 'Agent is waiting for clarification.');
-    }
-  }
-
-  const result = parseResultLine(input.statusMarkdown);
-  if (result) {
-    if (result === 'success') {
-      const blocker = scanForBlockers(input.statusMarkdown);
-      if (blocker) {
-        const detail = blocker.sentence
-          ? `${blocker.section}: ${blocker.sentence}`
-          : `${blocker.section} flagged a blocker (matched "${blocker.phrase}").`;
-        return verdict('problem', 'Blocked', detail);
-      }
-    }
-    switch (result) {
-      case 'success': return verdict('ok', 'Success', 'Last run completed successfully.');
-      case 'noop': return verdict('ok', 'No action needed', 'Last run produced no changes.');
-      case 'failed': return verdict('problem', 'Failed', 'Last run failed - see protocol for details.');
-      case 'blocked': return verdict('problem', 'Blocked', 'Last run is blocked.');
-      case 'partial': return verdict('unclear', 'Partial', 'Last run did some of the work but not all.');
-      case 'needsinput': return verdict('unclear', 'Needs input', 'Last run is waiting for clarification.');
-    }
-  }
-
-  if (input.outcomeIssue?.severity?.toLowerCase() === 'warn') {
-    return verdict(
-      'unclear',
-      input.outcomeIssue.label || 'Runner warning',
-      input.outcomeIssue.summary || input.outcomeIssue.kind || 'Runner attached a warning to this task.'
-    );
-  }
-
-  if (input.hasActivity) {
-    return verdict('unclear', 'Unclear', 'The last run produced output but no clear verdict.');
-  }
-
-  return verdict('unclear', 'No run yet', 'Start the task to see how it goes.');
+  return signals;
 }
 
-function verdict(kind: ProtocolVerdictKind, label: string, detail: string): Omit<ProtocolVerdict, 'duration' | 'superseded'> {
-  return { kind, emoji: emojiFor(kind), label, detail };
+function executionOutcome(execution: CliExecution | null | undefined): RunOutcomeSignal | null {
+  if (!execution) return null;
+  switch ((execution.runOutcome ?? '').toLowerCase()) {
+    case 'failed':
+    case 'interrupted':
+      return signal('execution', 'failed', 'Execution failed', `The terminal run outcome is ${execution.runOutcome}.`);
+    case 'blocked':
+    case 'needs-input':
+      return signal('execution', 'needs-decision', 'Execution needs a decision', `The terminal run outcome is ${execution.runOutcome}.`);
+    case 'success':
+    case 'noop':
+      return signal('execution', 'succeeded', 'Execution succeeded', `The terminal run outcome is ${execution.runOutcome}.`);
+    case 'committed-partial':
+      return signal(
+        'execution',
+        'needs-decision',
+        'Partial result',
+        'The run committed work but did not produce a conclusive terminal verdict.',
+      );
+    case 'unknown':
+      return signal('execution', 'unclear', 'Execution unclear', 'The runner could not classify the terminal outcome.');
+    default:
+      if (execution.status === 'failed') return signal('execution', 'failed', 'Execution failed', 'The process ended with failed status.');
+      if (execution.status === 'completed') return signal('execution', 'succeeded', 'Execution completed', 'The process ended with completed status.');
+      return null;
+  }
+}
+
+function markdownOutcome(markdown: string | null | undefined): RunOutcomeSignal | null {
+  const sentinel = parseSentinel(markdown);
+  if (sentinel) {
+    const detail = sentinel.reason || `Agent emitted TASK_${sentinel.kind.toUpperCase()}.`;
+    if (sentinel.kind === 'done') return signal('status', 'succeeded', 'Done', detail);
+    if (sentinel.kind === 'noop') return signal('status', 'succeeded', 'No action needed', detail);
+    if (sentinel.kind === 'blocked') return signal('status', 'needs-decision', 'Blocked', detail);
+    return signal('status', 'needs-decision', 'Needs input', detail);
+  }
+  const result = parseResultLine(markdown);
+  if (!result) return null;
+  if (result === 'failed') return signal('status', 'failed', 'Failed', 'status.md records Result: Failed.');
+  if (result === 'blocked') return signal('status', 'needs-decision', 'Blocked', 'status.md records Result: Blocked.');
+  if (result === 'partial') return signal('status', 'needs-decision', 'Partial', 'status.md records Result: Partial.');
+  if (result === 'needsinput') return signal('status', 'needs-decision', 'Needs input', 'status.md records Result: NeedsInput.');
+  if (result === 'success') {
+    const blocker = scanForBlockers(markdown);
+    if (blocker) return signal(
+      'status',
+      'needs-decision',
+      'Blocked',
+      blocker.sentence ? `${blocker.section}: ${blocker.sentence}` : `${blocker.section} contains "${blocker.phrase}".`,
+    );
+  }
+  return signal('status', 'succeeded', result === 'noop' ? 'No action needed' : 'Success', `status.md records Result: ${result}.`);
+}
+
+function activitySignal(activity: OutcomeAssessment): RunOutcomeSignal {
+  if (activity.kind === 'failed') return signal('activity', 'failed', 'Activity error', activity.summary);
+  if (activity.kind === 'blocked' || activity.kind === 'question' || activity.kind === 'needs_input') {
+    return signal('activity', 'needs-decision', 'Agent reply needs a decision', activity.summary);
+  }
+  if (activity.kind === 'done') return signal('activity', 'succeeded', 'Agent reply completed', activity.summary);
+  return signal('activity', 'unclear', 'Agent reply unclear', activity.summary || 'The agent reply has no clear terminal verdict.');
+}
+
+function signal(source: RunOutcomeSignal['source'], status: AuthoritativeRunOutcomeStatus, label: string, detail: string): RunOutcomeSignal {
+  return { source, status, label, detail };
+}
+
+function presentation(
+  status: AuthoritativeRunOutcomeStatus,
+  label: string,
+  detail: string,
+  signals: RunOutcomeSignal[],
+  markdown: string | null | undefined,
+): ProtocolVerdict {
+  const kind: ProtocolVerdictKind = status === 'failed' ? 'problem' : status === 'succeeded' ? 'ok' : 'unclear';
+  const emoji = status === 'failed' ? '🔴' : status === 'succeeded' ? '🟢' : status === 'needs-decision' ? '🟠' : '🟡';
+  return { kind, status, signals, emoji, label, detail, duration: parseDuration(markdown) };
 }
 
 const DURATION_RE = /^\s*-\s*Duration:\s*(.+?)\s*$/im;
@@ -271,14 +295,6 @@ export function stripStatusHeader(markdown: string | null | undefined): string {
   let start = 0;
   while (start < out.length && out[start].trim() === '') start++;
   return out.slice(start).join('\n');
-}
-
-function emojiFor(kind: ProtocolVerdictKind): string {
-  switch (kind) {
-    case 'ok':      return '🟢';
-    case 'problem': return '🔴';
-    case 'unclear': return '🟡';
-  }
 }
 
 type SentinelKind = 'done' | 'blocked' | 'needs_input' | 'noop';

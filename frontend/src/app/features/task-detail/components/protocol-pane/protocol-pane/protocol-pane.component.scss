@@ -137,8 +137,7 @@
   font-weight: 700;
 }
 
-// The compact verdict banner + its superseded-history strip moved into
-// `<app-protocol-verdict-banner>` (protocol-verdict-banner.component.scss).
+// The compact outcome banner lives in `<app-protocol-verdict-banner>`.
 
 .interim-summary {
   // Match the verdict bar's inset so stacked banners keep one left edge.
@@ -759,13 +758,7 @@
   to { transform: rotate(360deg); }
 }
 
-/*
- * Auto-eval banner: a one-line read of where the agent landed (done /
- * blocked / question / progress) plus quick-reply chips that pre-fill the
- * follow-up input. Sits between the activity log and the chat-compose
- * box so it's the natural next thing the user looks at after reading the
- * agent's reply.
- */
+/* Secondary follow-up actions. Outcome semantics live only in the banner. */
 .auto-eval {
   display: flex;
   flex-direction: column;
@@ -773,16 +766,8 @@
   margin: 8px 0 0;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(30, 41, 59, 0.45);
-
-  &[data-kind="done"]    { border-color: rgba(74, 222, 128, 0.45); background: rgba(34, 197, 94, 0.10); }
-  &[data-kind="blocked"] { border-color: rgba(251, 113, 133, 0.45); background: rgba(190, 18, 60, 0.12); }
-  &[data-kind="failed"]  { border-color: rgba(248, 113, 113, 0.55); background: rgba(220, 38, 38, 0.16); }
-  &[data-kind="question"], &[data-kind="needs_input"] {
-    border-color: rgba(196, 181, 253, 0.45); background: rgba(124, 58, 237, 0.12);
-  }
-  &[data-kind="progress"] { border-color: rgba(148, 163, 184, 0.30); }
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-elevated);
 }
 
 .run-filter-banner {
@@ -810,40 +795,10 @@
   &__clear:hover { background: rgba(125, 211, 252, 0.16); }
 }
 
-.auto-eval__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--studio-fg);
-}
-
-.auto-eval__badge {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  background: rgba(148, 163, 184, 0.22);
-  color: var(--studio-fg-strong);
-  flex: 0 0 18px;
-
-  &[data-kind="done"]    { background: rgba(34, 197, 94, 0.30); color: #bbf7d0; }
-  &[data-kind="blocked"] { background: rgba(251, 113, 133, 0.30); color: #fecaca; }
-  &[data-kind="failed"]  { background: rgba(220, 38, 38, 0.40); color: #fecaca; }
-  &[data-kind="question"], &[data-kind="needs_input"] {
-    background: rgba(196, 181, 253, 0.30); color: #ede9fe;
-  }
-}
-
 .auto-eval__summary {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--studio-fg-dim);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .auto-eval__chips {

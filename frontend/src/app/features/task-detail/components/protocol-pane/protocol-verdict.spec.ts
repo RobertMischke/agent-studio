@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveProtocolVerdict,
-  isAcceptedStand,
   parseDuration,
+  resolveAuthoritativeRunOutcome,
   scanForBlockers,
   stripStatusHeader,
   type ProtocolVerdictInputs,
@@ -20,21 +20,88 @@ function baseInputs(overrides: Partial<ProtocolVerdictInputs> = {}): ProtocolVer
 }
 
 describe('deriveProtocolVerdict', () => {
+  describe('authoritative precedence', () => {
+    const statuses = ['failed', 'needs-decision', 'unclear', 'succeeded'] as const;
+
+    it.each(statuses)('%s wins over every lower-precedence signal regardless of order', (winner) => {
+      const lower = statuses.slice(statuses.indexOf(winner) + 1);
+      for (const candidates of [lower, [...lower].reverse()]) {
+        const signals = candidates.map((status) => ({
+          source: 'status' as const,
+          status,
+          label: status,
+          detail: status,
+        }));
+        const winningSignal = {
+          source: 'runner' as const,
+          status: winner,
+          label: `winner-${winner}`,
+          detail: winner,
+        };
+        for (const ordered of [[winningSignal, ...signals], [...signals, winningSignal]]) {
+          expect(resolveAuthoritativeRunOutcome(ordered)?.label).toBe(`winner-${winner}`);
+        }
+      }
+    });
+
+    it('returns null without signals and keeps source order for equal statuses', () => {
+      expect(resolveAuthoritativeRunOutcome([])).toBeNull();
+      const first = { source: 'runner' as const, status: 'failed' as const, label: 'Runner', detail: 'first' };
+      const second = { source: 'pipeline' as const, status: 'failed' as const, label: 'Pipeline', detail: 'second' };
+      expect(resolveAuthoritativeRunOutcome([first, second])).toBe(first);
+    });
+  });
+
+  describe('authoritative outcome conflict regressions (AGT-2205, AGT-2206, QS-26)', () => {
+    it.each(['AGT-2205', 'AGT-2206'])('%s renders only the current running outcome, not stale terminals', () => {
+      const v = deriveProtocolVerdict(baseInputs({
+        isRunning: true,
+        statusMarkdown: '# Status\n- Result: Success\n[[TASK_' + 'DONE]]',
+        outcomeIssue: { kind: 'capture-fail', label: 'Last run error', severity: 'High', summary: 'No reply', lastSeenAt: null },
+        orchestratorVerdict: 'accept',
+        activityOutcome: { kind: 'failed', summary: 'Last run ended with an error.', question: null, suggestions: [] },
+      }));
+
+      expect(v.status).toBe('unclear');
+      expect(v.label).toBe('Running');
+      expect(v.signals).toHaveLength(1);
+      expect(v.signals?.[0].label).toBe('Run is active');
+    });
+
+    it('QS-26 lets watchdog failure outrank accepted pipeline and partial result', () => {
+      const v = deriveProtocolVerdict(baseInputs({
+        statusMarkdown: '# Status\n- Result: Partial',
+        outcomeIssue: { kind: 'watchdog-timeout', label: 'Watchdog timeout', severity: 'High', summary: 'The run will finalize as failed.', lastSeenAt: null },
+        orchestratorVerdict: 'accept',
+        laneState: '5-human-review',
+        pipelineExecution: {
+          pipelineId: 'standard', pipelineVersion: 1, jobId: 'QS-26', project: 'quality',
+          startedAt: '2026-07-22T10:00:00Z', completedAt: '2026-07-22T10:02:00Z', steps: [],
+        },
+      }));
+
+      expect(v.status).toBe('failed');
+      expect(v.kind).toBe('problem');
+      expect(v.label).toBe('Watchdog timeout');
+      expect(v.signals?.map(signal => signal.status)).toEqual(expect.arrayContaining(['failed', 'needs-decision', 'succeeded']));
+    });
+  });
+
   it('is unclear (running) when isRunning beats every other signal', () => {
     const v = deriveProtocolVerdict(baseInputs({
       isRunning: true,
-      statusMarkdown: '# Status\n- Result: Success\n[[TASK_DONE]]'
+      statusMarkdown: '# Status\n- Result: Success\n[[TASK_' + 'DONE]]'
     }));
     expect(v.kind).toBe('unclear');
     expect(v.emoji).toBe('🟡');
     expect(v.label).toBe('Running');
   });
 
-  it('flags problem when summary generation itself failed', () => {
+  it('keeps the run unclear when summary generation itself failed', () => {
     const v = deriveProtocolVerdict(baseInputs({ summaryStatus: 'failed', statusMarkdown: null }));
-    expect(v.kind).toBe('problem');
-    expect(v.emoji).toBe('🔴');
-    expect(v.label).toBe('Summary failed');
+    expect(v.kind).toBe('unclear');
+    expect(v.emoji).toBe('🟡');
+    expect(v.label).toBe('Result summary failed');
   });
 
   it('flags problem on a high-severity outcome issue', () => {
@@ -45,22 +112,23 @@ describe('deriveProtocolVerdict', () => {
     expect(v.label).toBe('Watchdog');
   });
 
-  it('reads [[TASK_DONE]] as ok', () => {
-    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: 'done\n\n[[TASK_DONE]]\n' }));
+  it('reads a done sentinel as ok', () => {
+    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: 'done\n\n[[TASK_' + 'DONE]]\n' }));
     expect(v.kind).toBe('ok');
     expect(v.label).toBe('Done');
   });
 
-  it('reads [[TASK_BLOCKED:reason]] as problem with the reason', () => {
-    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: '[[TASK_BLOCKED:missing API key]]' }));
-    expect(v.kind).toBe('problem');
+  it('reads a blocked sentinel as needs-decision with the reason', () => {
+    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: '[[TASK_' + 'BLOCKED:missing API key]]' }));
+    expect(v.kind).toBe('unclear');
+    expect(v.status).toBe('needs-decision');
     expect(v.label).toBe('Blocked');
     expect(v.detail).toContain('missing API key');
   });
 
   it('demotes a blocked status document from an older attempt immediately', () => {
     const v = deriveProtocolVerdict(baseInputs({
-      statusMarkdown: '[[TASK_BLOCKED:old attempt could not reach the service]]',
+      statusMarkdown: '[[TASK_' + 'BLOCKED:old attempt could not reach the service]]',
       statusSuperseded: true,
       laneState: '3-progress',
     }));
@@ -68,25 +136,28 @@ describe('deriveProtocolVerdict', () => {
     expect(v.kind).toBe('unclear');
     expect(v.label).toBe('Current attempt');
     expect(v.detail).toContain('newer attempt');
-    expect(v.superseded?.label).toBe('Blocked');
-    expect(v.superseded?.detail).toContain('old attempt');
+    expect(v.signals).toEqual([expect.objectContaining({
+      source: 'status',
+      status: 'unclear',
+      label: 'Current attempt',
+    })]);
     expect(v.duration).toBeNull();
   });
 
-  it('reads [[TASK_NEEDS_INPUT]] as unclear', () => {
-    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: 'q\n[[TASK_NEEDS_INPUT:which env?]]' }));
+  it('reads a needs-input sentinel as unclear', () => {
+    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: 'q\n[[TASK_' + 'NEEDS_INPUT:which env?]]' }));
     expect(v.kind).toBe('unclear');
     expect(v.label).toBe('Needs input');
   });
 
-  it('reads [[TASK_NOOP]] as ok', () => {
-    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: '[[TASK_NOOP]]' }));
+  it('reads a no-op sentinel as ok', () => {
+    const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: '[[TASK_' + 'NOOP]]' }));
     expect(v.kind).toBe('ok');
   });
 
   it('uses last sentinel when multiple are present', () => {
     const v = deriveProtocolVerdict(baseInputs({
-      statusMarkdown: '[[TASK_BLOCKED:earlier]]\n\n[[TASK_DONE]]'
+      statusMarkdown: '[[TASK_' + 'BLOCKED:earlier]]\n\n[[TASK_' + 'DONE]]'
     }));
     expect(v.kind).toBe('ok');
   });
@@ -104,6 +175,24 @@ describe('deriveProtocolVerdict', () => {
       statusMarkdown: '# Status\n- Result: Failed\n'
     }));
     expect(v.kind).toBe('problem');
+  });
+
+  it('maps committed-partial execution to needs-decision without status.md', () => {
+    const v = deriveProtocolVerdict(baseInputs({
+      execution: {
+        jobId: 'AGT-partial',
+        taskKey: 'AGT-partial',
+        processId: 42,
+        status: 'completed',
+        runOutcome: 'committed-partial',
+        startedAt: '2026-07-22T10:00:00Z',
+        exitCode: -1,
+        durationSeconds: 120,
+        model: 'gpt-5.6-sol',
+      },
+    }));
+    expect(v.status).toBe('needs-decision');
+    expect(v.label).toBe('Partial result');
   });
 
   it('maps Result: Partial -> unclear', () => {
@@ -151,7 +240,7 @@ describe('deriveProtocolVerdict', () => {
 
   it('treats sentinel as authoritative over Result line', () => {
     const v = deriveProtocolVerdict(baseInputs({
-      statusMarkdown: '# Status\n- Result: Failed\n\n[[TASK_DONE]]'
+      statusMarkdown: '# Status\n- Result: Failed\n\n[[TASK_' + 'DONE]]'
     }));
     expect(v.kind).toBe('ok');
   });
@@ -174,7 +263,8 @@ describe('deriveProtocolVerdict', () => {
         '- Implementation was blocked by `obj/*.tmp` access denied during NuGet restore.'
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
+      expect(v.status).toBe('needs-decision');
       expect(v.label).toBe('Blocked');
       expect(v.detail).toContain('Notes');
       expect(v.detail.toLowerCase()).toContain('blocked');
@@ -189,7 +279,7 @@ describe('deriveProtocolVerdict', () => {
         '- Sandbox access denied; needs external verification.'
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
       expect(v.detail).toContain('Open Items');
     });
 
@@ -202,7 +292,7 @@ describe('deriveProtocolVerdict', () => {
         '- Build konnte nicht abgeschlossen werden.'
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
     });
 
     it('downgrades on "requires external" in What Was Done', () => {
@@ -214,7 +304,7 @@ describe('deriveProtocolVerdict', () => {
         '- Edit applied locally; requires external verification before merging.'
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
     });
 
     it('keeps Result: Success when blocker phrase only appears in unrelated sections', () => {
@@ -245,7 +335,7 @@ describe('deriveProtocolVerdict', () => {
       expect(v.kind).toBe('ok');
     });
 
-    it('lets a [[TASK_DONE]] sentinel beat the body-blocker downgrade', () => {
+    it('lets a done sentinel beat the body-blocker downgrade', () => {
       const md = [
         '# Status',
         '- Result: Success',
@@ -253,7 +343,7 @@ describe('deriveProtocolVerdict', () => {
         '## Notes',
         '- Was briefly blocked but recovered.',
         '',
-        '[[TASK_DONE]]'
+        '[[TASK_' + 'DONE]]'
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
       expect(v.kind).toBe('ok');
@@ -387,7 +477,7 @@ describe('deriveProtocolVerdict', () => {
         '- Rewrote `protocol-verdict.ts` rendering 5 canonical states, but could not verify the banner.',
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
       expect(v.label).toBe('Blocked');
       expect(v.detail).toContain('Rewrote');
       expect(v.detail).toContain('could not verify the banner');
@@ -402,7 +492,7 @@ describe('deriveProtocolVerdict', () => {
 
     it('keeps a single ] inside the TASK_BLOCKED sentinel reason', () => {
       const v = deriveProtocolVerdict(
-        baseInputs({ statusMarkdown: '[[TASK_BLOCKED:cannot parse arr[0] without schema]]' }),
+        baseInputs({ statusMarkdown: '[[TASK_' + 'BLOCKED:cannot parse arr[0] without schema]]' }),
       );
       expect(v.label).toBe('Blocked');
       expect(v.detail).toContain('cannot parse arr[0] without schema');
@@ -410,50 +500,48 @@ describe('deriveProtocolVerdict', () => {
 
     it('keeps quotes and colons in the TASK_BLOCKED sentinel reason', () => {
       const v = deriveProtocolVerdict(
-        baseInputs({ statusMarkdown: '[[TASK_BLOCKED:missing "API key": see docs]]' }),
+        baseInputs({ statusMarkdown: '[[TASK_' + 'BLOCKED:missing "API key": see docs]]' }),
       );
       expect(v.detail).toContain('missing "API key": see docs');
     });
   });
 
-  // BEFUND 2: one precedence rule — the current lane / review decision leads
-  // the head verdict; a Blocked from a superseded run is demoted to collapsed
-  // history and must never be the head banner after an accepted stand.
-  describe('leading-state precedence demotes a superseded blocker (BEFUND 2)', () => {
-    const blockedMd = '[[TASK_BLOCKED:sandbox denied write to /etc]]';
+  describe('authoritative precedence keeps accepted decisions subordinate to worse run signals', () => {
+    const blockedMd = '[[TASK_' + 'BLOCKED:sandbox denied write to /etc]]';
 
     it('leads with Blocked when no accepted stand is present', () => {
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: blockedMd }));
-      expect(v.kind).toBe('problem');
+      expect(v.kind).toBe('unclear');
+      expect(v.status).toBe('needs-decision');
       expect(v.label).toBe('Blocked');
-      expect(v.superseded).toBeNull();
     });
 
-    it('demotes Blocked to history when orchestratorVerdict is accept', () => {
+    it('keeps Blocked authoritative when orchestratorVerdict is accept', () => {
       const v = deriveProtocolVerdict(
         baseInputs({ statusMarkdown: blockedMd, orchestratorVerdict: 'accept' }),
       );
-      expect(v.kind).toBe('ok');
-      expect(v.label).toBe('Accepted');
-      expect(v.superseded).not.toBeNull();
-      expect(v.superseded?.label).toBe('Blocked');
-      expect(v.superseded?.detail).toContain('sandbox denied write to /etc');
+      expect(v.kind).toBe('unclear');
+      expect(v.status).toBe('needs-decision');
+      expect(v.label).toBe('Blocked');
+      expect(v.signals?.some(signal => signal.label === 'Review accepted')).toBe(true);
     });
 
-    it('demotes Blocked to history when the card lives in 6-completed', () => {
+    it('keeps Blocked authoritative when the card lives in 6-completed', () => {
       const v = deriveProtocolVerdict(
         baseInputs({ statusMarkdown: blockedMd, laneState: '6-completed' }),
       );
-      expect(v.kind).toBe('ok');
-      expect(v.superseded?.label).toBe('Blocked');
+      expect(v.kind).toBe('unclear');
+      expect(v.status).toBe('needs-decision');
+      expect(v.label).toBe('Blocked');
     });
 
-    it('demotes a Result: Failed run outcome as well', () => {
+    it('keeps Result: Failed above an accepted review', () => {
       const v = deriveProtocolVerdict(
         baseInputs({ statusMarkdown: '# Status\n- Result: Failed\n', orchestratorVerdict: 'accept' }),
       );
-      expect(v.kind).toBe('ok');
-      expect(v.superseded?.label).toBe('Failed');
+      expect(v.kind).toBe('problem');
+      expect(v.status).toBe('failed');
+      expect(v.label).toBe('Failed');
     });
 
     it('does NOT demote under a reissue / escalate / pending decision', () => {
@@ -461,41 +549,26 @@ describe('deriveProtocolVerdict', () => {
         const v = deriveProtocolVerdict(
           baseInputs({ statusMarkdown: blockedMd, orchestratorVerdict: decision }),
         );
-        expect(v.kind, decision).toBe('problem');
-        expect(v.superseded, decision).toBeNull();
+        expect(v.kind, decision).toBe('unclear');
+        expect(v.status, decision).toBe('needs-decision');
       }
     });
 
-    it('does NOT demote a summary-failed problem (orthogonal to acceptance)', () => {
+    it('keeps a summary failure unclear even when review accepted', () => {
       const v = deriveProtocolVerdict(
         baseInputs({ summaryStatus: 'failed', statusMarkdown: null, orchestratorVerdict: 'accept' }),
       );
-      expect(v.kind).toBe('problem');
-      expect(v.label).toBe('Summary failed');
-      expect(v.superseded).toBeNull();
+      expect(v.kind).toBe('unclear');
+      expect(v.label).toBe('Result summary failed');
     });
 
     it('leaves an OK verdict untouched under an accepted stand', () => {
       const v = deriveProtocolVerdict(
-        baseInputs({ statusMarkdown: '[[TASK_DONE]]', orchestratorVerdict: 'accept' }),
+        baseInputs({ statusMarkdown: '[[TASK_' + 'DONE]]', orchestratorVerdict: 'accept' }),
       );
       expect(v.kind).toBe('ok');
       expect(v.label).toBe('Done');
-      expect(v.superseded).toBeNull();
     });
   });
 
-  describe('isAcceptedStand', () => {
-    it('is true for an accept verdict and completed / archive lanes', () => {
-      expect(isAcceptedStand(baseInputs({ orchestratorVerdict: 'accept' }))).toBe(true);
-      expect(isAcceptedStand(baseInputs({ laneState: '6-completed' }))).toBe(true);
-      expect(isAcceptedStand(baseInputs({ laneState: '7-archive' }))).toBe(true);
-    });
-
-    it('is false for in-flight lanes and non-accept decisions', () => {
-      expect(isAcceptedStand(baseInputs())).toBe(false);
-      expect(isAcceptedStand(baseInputs({ laneState: '4-auto-review' }))).toBe(false);
-      expect(isAcceptedStand(baseInputs({ orchestratorVerdict: 'reissue' }))).toBe(false);
-    });
-  });
 });

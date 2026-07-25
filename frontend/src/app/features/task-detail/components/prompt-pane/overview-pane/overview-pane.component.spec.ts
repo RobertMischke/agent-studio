@@ -1482,6 +1482,11 @@ describe('OverviewPaneComponent (smoke)', () => {
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentRef.setInput('runOutcome', {
+      kind: 'problem', status: 'failed', emoji: '🔴', label: 'Watchdog timeout',
+      detail: 'The run will finalize as failed.', duration: null,
+      signals: [],
+    });
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const c = fixture.componentInstance;
@@ -1516,6 +1521,9 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl).not.toBeNull();
     expect(decisionEl!.classList.contains('ov-pl-step--final-verdict')).toBe(true);
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
+    const authoritative = decisionEl!.querySelector('[data-testid="overview-pipeline-step-decision"]');
+    expect(authoritative?.textContent).toContain('Watchdog timeout');
+    expect(authoritative?.getAttribute('data-verdict')).toBe('failed');
   });
 
   it('decision badge: only the final ruling projects the latest steering verdict, with reasoning in the tooltip (ASS-1706)', async () => {

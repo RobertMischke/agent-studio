@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOutcome } from './agent-outcome.util';
+import { classifyLatestActivityOutcome, classifyOutcome } from './agent-outcome.util';
 
 describe('classifyOutcome', () => {
   it('returns unknown for empty input', () => {
@@ -67,5 +67,28 @@ describe('classifyOutcome', () => {
     ].join('\n'));
 
     expect(r.kind).toBe('done');
+  });
+});
+
+describe('classifyLatestActivityOutcome', () => {
+  it('lets a newer system error override an older successful agent reply', () => {
+    const result = classifyLatestActivityOutcome([
+      { timestamp: '2026-07-22T10:00:00Z', stream: 'stdout', text: 'Implemented the fix. Done.' },
+      { timestamp: '2026-07-22T10:01:00Z', stream: 'stderr', text: 'Error: exit_during_execution' },
+    ]);
+
+    expect(result?.kind).toBe('failed');
+    expect(result?.suggestions.map(suggestion => suggestion.label)).toEqual([
+      'Continue (rebuild)',
+      'Retry as new task',
+    ]);
+  });
+
+  it('classifies the latest agent reply when no later system error exists', () => {
+    const result = classifyLatestActivityOutcome([
+      { timestamp: '2026-07-22T10:00:00Z', stream: 'stdout', text: 'Implemented the fix. Done.' },
+    ]);
+
+    expect(result?.kind).toBe('done');
   });
 });

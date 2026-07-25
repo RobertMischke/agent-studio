@@ -37,7 +37,6 @@ import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-ru
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
-import { OverviewFailureComponent } from '../overview-failure/overview-failure.component';
 import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
@@ -77,6 +76,8 @@ import {
   stepStatusLabel,
 } from './overview-pane-formatters';
 import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
+import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
+import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
 
 interface PipelineRowVm {
   id: string;
@@ -92,13 +93,7 @@ interface PipelineRowVm {
    * verdict. Drives the "Parallel" badge so the two phases read as distinct.
    */
   runMode: StepRunMode;
-  /**
-   * True only for the single FINAL orchestrator ruling
-   * (`post-orchestrator-decision`). Drives the "Final verdict" chip and the
-   * row divider so exactly ONE row reads as the final verdict — the post-core
-   * `post-orchestrator-review` early gate (also `orchestrator` kind) is
-   * deliberately NOT tagged, so it shows its own early-gate result instead.
-   */
+  /** True only for `post-orchestrator-decision`. */
   isFinalVerdict: boolean;
   /** Historical rows are read-only evidence and never use live state colour. */
   historical: boolean;
@@ -171,25 +166,6 @@ interface PipelineRowVm {
   costKnown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
-}
-
-/**
- * Compact decision badge for the single final orchestrator ruling row. Carries
- * the steering verdict (Accept / Re-issue / Escalate) as an inline pill and the
- * full reasoning in a tooltip, so the DECISION phase reads as one terse badge
- * instead of an expanded steering block repeated on every orchestrator row
- * (ASS-1706).
- */
-interface DecisionBadgeVm {
-  verdict: SteeringInfo['verdict'];
-  /** Human label (e.g. "Re-issue"); uppercased to ACCEPT / REISSUE / ESCALATE via CSS. */
-  label: string;
-  /** Central severity tone driving the pill colour. */
-  tone: SteeringInfo['tone'];
-  /** Tooltip accent matched to the tone. */
-  severity: TooltipSeverity;
-  /** Reasoning surfaced on hover / focus instead of inline. */
-  tooltip: StructuredTooltip;
 }
 
 type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
@@ -491,7 +467,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -512,20 +488,12 @@ export class OverviewPaneComponent {
   readonly promptMarkdown = input<string | null | undefined>('');
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
-  /** Optimistic CLI + model values from the parent task-detail. The badge
-   *  uses these (when set) so it re-renders synchronously after the picker
-   *  fires `agentConfigCommit`, ahead of the parent's detail re-fetch.
-   *  Falls back to `job().cliType` / `job().model` when the parent has not
-   *  populated the override yet. Matches the chat-composer wiring at the
-   *  protocol-pane, see ADR-0046. */
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
   readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
+  readonly runOutcome = input<ProtocolVerdict | null>(null);
 
-  /** Atomic CLI + model commit from the unified <app-cli-model-selector>
-   *  picker. The parent task-detail handler issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
-  /** Re-emitted from the embedded References section after a successful write. */
   readonly referencesChanged = output<void>();
   /** Fired after a successful title PUT so the parent can re-fetch the
    *  detail and let the optimistic override drop back to the canonical
@@ -1231,16 +1199,12 @@ export class OverviewPaneComponent {
     return null;
   });
 
-  /**
-   * Compact decision badge for the single FINAL orchestrator ruling row
-   * (`isFinalVerdict`). Projects the latest steering trace into a terse
-   * Accept / Re-issue / Escalate pill whose tooltip carries the full reasoning,
-   * so the DECISION phase no longer repeats an expanded steering block on every
-   * orchestrator row (ASS-1706). Null for non-final rows or before any steering
-   * event, in which case the row falls back to its generic verdict pill.
-   */
+  private readonly authoritativeDecisionBadge = computed(() => outcomeDecisionBadge(this.runOutcome()));
+
   decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
     if (!row.isFinalVerdict) return null;
+    const authoritative = this.authoritativeDecisionBadge();
+    if (authoritative) return authoritative;
     const info = this.latestSteeringInfo();
     if (info == null) return null;
     return {

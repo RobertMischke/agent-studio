@@ -14,6 +14,7 @@ import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/
 import { FilesPaneComponent } from './files-pane/files-pane.component';
 import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
 import { TaskTimelinePaneComponent } from '../../../task-timeline/components/task-timeline-pane/task-timeline-pane.component';
+import type { ProtocolVerdict } from '../protocol-pane/protocol-verdict';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -114,6 +115,7 @@ export class PromptPaneComponent {
   readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
   /** Canonical route state supplied by the task-detail host. */
   readonly routeTab = input<PromptPaneTabId | null>(null);
+  readonly runOutcome = input<ProtocolVerdict | null>(null);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();

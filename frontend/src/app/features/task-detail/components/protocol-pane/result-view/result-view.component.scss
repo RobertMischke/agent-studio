@@ -42,6 +42,7 @@
   &[data-tone="accent"]  { --result-tone: var(--studio-accent); }
   &[data-tone="warn"]    { --result-tone: var(--studio-accent-warn); }
   &[data-tone="info"]    { --result-tone: var(--studio-accent-3); }
+  &[data-tone="problem"] { --result-tone: var(--severity-high); }
   &[data-tone="neutral"] { --result-tone: var(--studio-fg-muted); }
 }
 

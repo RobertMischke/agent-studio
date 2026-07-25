@@ -4,11 +4,12 @@
          metric row (frontend/AGENTS.md "Result view"), not a metrics grid. -->
     <header class="result__head">
       <span class="result__case"
-            [attr.data-tone]="caseMeta().tone"
+            [attr.data-tone]="outcomeTone()"
+            [attr.data-outcome]="verdict().status || verdict().kind"
             data-testid="result-case-badge"
-            [cacTooltip]="d.case.reason">
-        <span class="result__case-glyph" aria-hidden="true">{{ caseMeta().glyph }}</span>
-        <span class="result__case-label">{{ caseMeta().label }}</span>
+            [cacTooltip]="verdict().detail">
+        <span class="result__case-glyph" aria-hidden="true">{{ verdict().emoji }}</span>
+        <span class="result__case-label">{{ verdict().label }}</span>
       </span>
       <div class="result__metrics" role="group" aria-label="Run metrics">
         @for (m of d.metrics; track m.id) {
