@@ -28,6 +28,7 @@ async function stubWorkspace(page: Page) {
   // the ones below whose consumers read a nested array (`.length`/`Object.keys`)
   // or that are list-shaped need a minimally-valid empty body so nothing throws.
   const emptyBodyFor = (path: string): string => {
+    if (path === '/api/v1/management/remote-hosts' || path.startsWith('/api/bus/')) return '[]';
     if (/\/api\/(tags|workspaces|clients)\/?$/.test(path)) return '[]';
     if (/\/api\/runner\/status$/.test(path)) return '{"projects":{}}';
     if (/\/api\/cli\/quota$/.test(path)) return '{"snapshots":[]}';
@@ -40,6 +41,19 @@ async function stubWorkspace(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: emptyBodyFor(path),
+    });
+  });
+
+  await page.route(/\/api\/auth\/status$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
     });
   });
 
@@ -106,6 +120,27 @@ async function stubWorkspace(page: Page) {
     });
   });
 
+  await page.route(new RegExp(`/api/orchestrator/context/task:${PROJECT}/AGT-1933(?:/refresh)?$`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contextKey: `task:${PROJECT}/AGT-1933`,
+        capturedAt: new Date().toISOString(),
+        digest: 'task focus: AGT-1933',
+        sources: [],
+      }),
+    });
+  });
+
+  await page.route(new RegExp(`/api/runner/task:${PROJECT}/AGT-1933/orchestrator-chat$`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ contextKey: `task:${PROJECT}/AGT-1933`, project: PROJECT, turns: [] }),
+    });
+  });
+
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
@@ -143,6 +178,26 @@ async function openSideSheet(page: Page) {
 }
 
 test.describe('Orchestrator side sheet · navigation context + pin', () => {
+  test('a session selection resets to the navigation key when the project is reselected', async ({ page }) => {
+    await stubWorkspace(page);
+    await openSideSheet(page);
+
+    await page.getByTestId('orch-context-badge').click();
+    const taskRow = page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`);
+    await taskRow.getByRole('button').first().click();
+
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-header'))
+      .toHaveAttribute('data-context-key', `task:${PROJECT}/AGT-1933`);
+
+    const picker = page.getByTestId('orch-side-sheet-project-combo');
+    await picker.click();
+    await page.getByTestId(`orch-side-sheet-project-combo-option-${PROJECT}`).click();
+
+    await expect(page.getByTestId('orch-context-header'))
+      .toHaveAttribute('data-context-key', `project:${PROJECT}`);
+  });
+
   test('board scope derives a project context key and pin toggles the frozen state', async ({ page }) => {
     await stubWorkspace(page);
     await openSideSheet(page);
