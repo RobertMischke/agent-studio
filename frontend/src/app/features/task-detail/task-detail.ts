@@ -54,6 +54,7 @@ import { LogOverlayComponent } from './components/log-overlay/log-overlay.compon
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
+import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -78,6 +79,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     ProtocolPaneComponent,
     EscalationSummaryComponent,
     DetailHeaderComponent,
+    TaskLiveStatusComponent,
     PaneToggleBarComponent,
     TooltipDirective,
   ],

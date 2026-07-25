@@ -284,6 +284,19 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
+    /// Folds the newest-attempt live pipeline projection onto board/detail
+    /// tasks. The lookup is built once per request; this method is an O(1)
+    /// dictionary read per task.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithLiveStatus(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskLiveStatus> liveByJobKey)
+        => jobs.Select(job =>
+            liveByJobKey.TryGetValue(job.TaskKey, out var status)
+                ? job with { LiveStatus = status }
+                : job);
+
+    /// <summary>
     /// AGT-2202 — folds the batched per-task integration verdict onto each accepted
     /// card. The lookup is built ONCE per request by
     /// <see cref="TaskIntegrationStatusService"/> (O(repos) git spawns, never per

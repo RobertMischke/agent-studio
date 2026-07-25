@@ -38,6 +38,8 @@
     (generateCommitMessage)="generateCommitMessage()"
     (addCommit)="addCommitFromMenu()" />
 
+  <app-task-live-status [task]="detail().info" variant="detail" />
+
   @if (detail().info.epicId && detail().info.kind !== 'epic') {
     <app-epic-membership-banner
       [epicId]="detail().info.epicId!"

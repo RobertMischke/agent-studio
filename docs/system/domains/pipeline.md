@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-24
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -166,6 +166,10 @@ pipeline view.
 - `backend/Features/Tasks/TaskPipelineEndpoints.cs`: API surface for task
   pipeline data, including `GET /{jobId}/step-prompts`, the read-model the
   Overview "Prompt" affordance parses from `.metadata/prompts.jsonl`.
+- `backend/Features/Tasks/TaskLiveStatusProjection.cs`: board and detail
+  read-model for the current pipeline step, recorded CLI/model provenance,
+  enabled upcoming steps, current runner/review queue position, and latest
+  activity time. It reads the current execution root only.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
 
@@ -227,6 +231,17 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+- Board cards and task detail share one live-status projection. The active step
+  comes from the newest root `PipelineExecutionRecord`; `PreviousAttempts` is
+  never eligible for a current-work or inactivity signal. CLI/model labels come
+  from the recorded step or matching `StepPromptLog` entry, host identity comes
+  from the existing execution-location projection, and queue positions come
+  from the runner and post-processing queues that already schedule the work.
+  The projection is read-only and introduces no telemetry or persisted task
+  state. A Ready task treats an existing completed root as the previous attempt
+  and previews the fresh enabled chain. Without an active step or queue
+  position, active-lane cards report the newest recorded activity time and
+  explicitly flag ten minutes of silence as a possible hang.
 
 ### Post-step lifecycle and ownership
 

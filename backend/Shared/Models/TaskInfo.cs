@@ -372,6 +372,16 @@ public record TaskInfo
     public TaskRunActivity? RunActivity { get; init; }
 
     /// <summary>
+    /// Read-time projection of what the newest pipeline attempt is doing now
+    /// and which enabled steps come next. Built exclusively from the current
+    /// <c>pipeline-execution.json</c> record, recorded step-prompt provenance,
+    /// and the existing runner/post-processing queues. Previous attempts are
+    /// deliberately excluded so stale execution history can never become a
+    /// live card signal.
+    /// </summary>
+    public TaskLiveStatus? LiveStatus { get; init; }
+
+    /// <summary>
     /// Set when the task was completed out-of-band (operator chat, external
     /// agent, remote host) and reconciled through
     /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
@@ -416,6 +426,45 @@ public record TaskInfo
     /// accept-dialog guard against the AGT-1915 trap.
     /// </summary>
     public PlanningSpawnSummary? PlanningSpawn { get; init; }
+}
+
+/// <summary>Compact current-step projection used by board and task detail.</summary>
+public sealed record TaskLiveStep
+{
+    public string StepId { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public DateTime? StartedAt { get; init; }
+    public string? Model { get; init; }
+    public string? CliType { get; init; }
+}
+
+/// <summary>One enabled pipeline step that has not reached a terminal state.</summary>
+public sealed record TaskLiveStepPreview
+{
+    public string StepId { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+}
+
+/// <summary>Existing queue membership for a task waiting on an execution slot.</summary>
+public sealed record TaskLiveQueue
+{
+    /// <summary><c>runner</c> or <c>review</c>.</summary>
+    public string Kind { get; init; } = string.Empty;
+    public int Position { get; init; }
+}
+
+/// <summary>
+/// Current-attempt liveness read model. It carries no new telemetry and is
+/// never persisted to task metadata.
+/// </summary>
+public sealed record TaskLiveStatus
+{
+    public int Attempt { get; init; } = 1;
+    public TaskLiveStep? ActiveStep { get; init; }
+    public List<TaskLiveStepPreview> NextSteps { get; init; } = [];
+    public TaskLiveQueue? Queue { get; init; }
+    public DateTime? LatestEventAt { get; init; }
 }
 
 /// <summary>

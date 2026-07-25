@@ -95,6 +95,7 @@
       </span>
     }
   </h3>
+  <app-task-live-status [task]="job()" [dense]="compact()" />
   <div class="task-card__badges">
     @if (stalledState(); as stalled) {
       <span class="task-card__stalled-pill" data-testid="task-card-stalled" [attr.data-reason]="stalled.reason"

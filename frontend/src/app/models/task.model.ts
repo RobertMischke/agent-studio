@@ -411,6 +411,12 @@ export interface TaskInfo {
   runActivity?: TaskRunActivity | null;
 
   /**
+   * Current-attempt pipeline liveness projected from existing run/step events
+   * and queue membership. Previous attempts are never included.
+   */
+  liveStatus?: TaskLiveStatus | null;
+
+  /**
    * Set when the task was completed out-of-band (operator chat, external
    * agent, remote host) and reconciled through
    * `POST /api/tasks/{id}/external-completion` instead of a runner run.
@@ -1307,6 +1313,33 @@ export interface TaskRunActivity {
   attempt: number;
   /** One-line last-error summary mirrored from the outcome issue; null when unknown. */
   lastError?: string | null;
+}
+
+export interface TaskLiveStep {
+  stepId: string;
+  displayName: string;
+  kind: string;
+  startedAt?: string | null;
+  model?: string | null;
+  cliType?: string | null;
+}
+
+export interface TaskLiveStepPreview {
+  stepId: string;
+  displayName: string;
+}
+
+export interface TaskLiveQueue {
+  kind: 'runner' | 'review' | string;
+  position: number;
+}
+
+export interface TaskLiveStatus {
+  attempt: number;
+  activeStep?: TaskLiveStep | null;
+  nextSteps: TaskLiveStepPreview[];
+  queue?: TaskLiveQueue | null;
+  latestEventAt?: string | null;
 }
 
 export interface CliOutputLine {

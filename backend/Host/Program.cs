@@ -490,6 +490,7 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineHealthSensor>(sp =>
     sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
+builder.Services.AddSingleton<AgentStudio.Tasks.TaskLiveStatusProjection>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
