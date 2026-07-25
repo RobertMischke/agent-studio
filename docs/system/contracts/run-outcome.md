@@ -27,6 +27,30 @@ attempt from durable salvage; exhausted chains terminate visibly. Infrastructure
 outcomes set every product-defect, completion, and coding-rework budget flag to
 false.
 
+### Repository identity
+
+`RepositoryIdentity` is the materializable Git repository identity, not the
+task-board project handle. `PROJ-016` identifies a project and is never a valid
+repository identity in a new RunAttempt, result envelope, ReviewSubject, or
+review workspace proof.
+
+The shared `RepositoryIdentityContract.FromUrl` function is the single
+derivation rule. It trims the resolved repository URL, removes trailing `/`,
+lowercases it invariantly, hashes the UTF-8 value with SHA-256, and prefixes the
+lowercase hex digest with `repo_`. Repository resolution uses the registry
+`repo` URL when present. Otherwise it reads the `origin` URL from the project's
+configured repository path. Both project shapes therefore produce the same
+kind of URL-based identity before the coding lease is acquired, and completion
+copies that identity unchanged into the result and review subjects.
+
+For already persisted ReviewAttempts created with a project handle, the review
+plane resolves the subject's repository URL, or the current project registry
+binding when the URL is absent, and publishes the canonical URL-based identity
+to the Review Executor. Reports are checked against that same resolved identity.
+A `ReviewInfra` report still creates a new ReviewAttempt on the exact persisted
+subject and never creates a coding attempt, so incident retries can recover
+without weakening the Result-SHA or subject fences.
+
 Provider terminal frames are normalized before classification. In particular, a
 Claude-style `type=result` frame with `is_error=true`, an `error_*` subtype, or
 an error status is failure evidence, never provider completion. When several

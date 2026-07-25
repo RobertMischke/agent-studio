@@ -147,6 +147,8 @@ public static class V1ReviewPlaneEndpoints
             Contract.ReviewReportRequest request,
             AttemptAuthorityService authority,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Projects.ProjectSettingsService settings,
             TaskTransitionService transitions,
             CancellationToken ct) =>
         {
@@ -164,13 +166,16 @@ public static class V1ReviewPlaneEndpoints
                     out var error,
                     allowTerminal: true))
                 return error!;
+            var currentReview = current!;
+            var materializableRepository = MaterializableRepository(
+                currentReview, scanner, projects, settings);
             if (!string.Equals(
                     request.Workspace.RepositoryId,
-                    current!.RepositoryId,
+                    materializableRepository.RepositoryId,
                     StringComparison.Ordinal)
                 || !string.Equals(
                     request.Workspace.ExpectedResultSha,
-                    current.Subject.ExpectedResultSha,
+                    currentReview.Subject.ExpectedResultSha,
                     StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new Contract.ApiError(
@@ -323,6 +328,36 @@ public static class V1ReviewPlaneEndpoints
         AgentStudio.Registry.ProjectRegistry projects,
         AgentStudio.Projects.ProjectSettingsService settings)
     {
+        var materializableRepository = MaterializableRepository(
+            review, scanner, projects, settings);
+        var task = FindTask(scanner, review.TaskKey);
+        var project = task is null
+            ? null
+            : projects.FindByStorageLocation(task.WatchPath)
+              ?? projects.FindByIdOrDisplayName(task.ProjectName);
+        var plan = review.Subject.Plan ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings);
+        return new Contract.ReviewSubjectDto(
+            review.Subject.SubjectId,
+            task?.Id ?? review.TaskKey,
+            review.SourceRunAttemptId,
+            materializableRepository.RepositoryId,
+            materializableRepository.RepositoryUrl,
+            review.Subject.ExpectedResultSha,
+            review.Subject.ResultRef ?? review.Subject.ExpectedResultSha,
+            null,
+            null,
+            null,
+            review.Subject.ReviewPolicyHash,
+            plan,
+            review.Subject.CreatedAt);
+    }
+
+    private static (string RepositoryId, string? RepositoryUrl) MaterializableRepository(
+        ReviewAttemptDto review,
+        TaskScannerService scanner,
+        AgentStudio.Registry.ProjectRegistry projects,
+        AgentStudio.Projects.ProjectSettingsService settings)
+    {
         var task = FindTask(scanner, review.TaskKey);
         var project = task is null
             ? null
@@ -333,21 +368,10 @@ public static class V1ReviewPlaneEndpoints
             : RemoteProjectRepositoryResolver.Resolve(
                 project,
                 settings.Get(task.ProjectName).IntegrationBranch);
-        var plan = review.Subject.Plan ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings);
-        return new Contract.ReviewSubjectDto(
-            review.Subject.SubjectId,
-            task?.Id ?? review.TaskKey,
-            review.SourceRunAttemptId,
-            review.RepositoryId,
-            review.Subject.RepositoryUrl ?? repository?.RepositoryUrl,
-            review.Subject.ExpectedResultSha,
-            review.Subject.ResultRef ?? review.Subject.ExpectedResultSha,
-            null,
-            null,
-            null,
-            review.Subject.ReviewPolicyHash,
-            plan,
-            review.Subject.CreatedAt);
+        var repositoryUrl = review.Subject.RepositoryUrl ?? repository?.RepositoryUrl;
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)
+                           ?? review.RepositoryId;
+        return (repositoryId, repositoryUrl);
     }
 
     private static Contract.ReviewPlanDto FallbackPlan(

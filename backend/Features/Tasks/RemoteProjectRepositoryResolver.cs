@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Tasks;
 
@@ -39,6 +40,7 @@ public static class RemoteProjectRepositoryResolver
 
         return new RemoteProjectRepository(
             project.Id,
+            RepositoryIdentityContract.FromUrl(resolvedUrl)!,
             resolvedUrl.Trim(),
             defaultBranch,
             source);
@@ -122,6 +124,7 @@ public static class RemoteProjectRepositoryResolver
 
 public sealed record RemoteProjectRepository(
     string ProjectId,
+    string RepositoryId,
     string RepositoryUrl,
     string DefaultBranch,
     string Source);
