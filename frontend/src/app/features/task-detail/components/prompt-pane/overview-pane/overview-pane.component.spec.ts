@@ -14,7 +14,6 @@ import type { AgentWorkSummary } from '../../../../session-events';
 import type { PipelineCostSummary, PipelineStepCost, TaskPipelineResponse } from '../../../../task-pipeline';
 import type { RunRecord, RunTimeline } from '../../../../run-timeline';
 import type { TaskTimelineEvent } from '../../../../task-timeline';
-import { PIPELINE_DENSITY_STORAGE_KEY } from './pipeline-panel-density.util';
 
 /** A pipeline catalogue + execution with a single core Agent-execution row. */
 function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipelineResponse {
@@ -135,23 +134,10 @@ async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
 }
 
 afterEach(() => {
-  localStorage.removeItem(PIPELINE_DENSITY_STORAGE_KEY);
   TestBed.resetTestingModule();
 });
 
 describe('OverviewPaneComponent (smoke)', () => {
-  it('pipeline density defaults compact, toggles, and persists for the next instance', async () => {
-    localStorage.removeItem(PIPELINE_DENSITY_STORAGE_KEY);
-    const compact = await build(baseJob());
-    expect(compact.componentInstance.pipelineDensity()).toBe('compact');
-    compact.componentInstance.togglePipelineDensity();
-    expect(compact.componentInstance.pipelineDensity()).toBe('comfortable');
-    expect(localStorage.getItem(PIPELINE_DENSITY_STORAGE_KEY)).toBe('comfortable');
-
-    const restored = await build(baseJob());
-    expect(restored.componentInstance.pipelineDensity()).toBe('comfortable');
-  });
-
   it('pipeline metrics omit empty columns and render only recorded measures', async () => {
     const fixture = await build(baseJob());
     const pending = agentPipeline();
@@ -180,7 +166,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelector('[data-testid="overview-pipeline-step-cost"]')).toBeNull();
   });
 
-  it('compact groups lift uniform model and activation metadata; comfortable rows expose it', async () => {
+  it('lifts uniform model and activation metadata once per group', async () => {
     const fixture = await build(baseJob({ state: TaskState.AutoReview }));
     const pipe: TaskPipelineResponse = {
       pipeline: { id: 'standard', displayName: 'Standard', version: 1, pre: [], core: [], post: [], allSteps: [
@@ -206,12 +192,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelectorAll('[data-testid="overview-pipeline-group-activation"]').length).toBe(1);
     expect(host.querySelectorAll('[data-testid="overview-pipeline-step-model"]').length).toBe(0);
     expect(host.querySelectorAll('[data-testid="overview-post-step-source"]').length).toBe(0);
-
-    fixture.componentInstance.togglePipelineDensity();
-    fixture.detectChanges();
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-model"]').length).toBe(0);
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-step-model"]').length).toBe(2);
-    expect(host.querySelectorAll('[data-testid="overview-post-step-source"]').length).toBe(2);
+    expect(host.querySelector('[data-testid="overview-pipeline-density"]')).toBeNull();
   });
 
   it('compiles + instantiates without throwing', async () => {

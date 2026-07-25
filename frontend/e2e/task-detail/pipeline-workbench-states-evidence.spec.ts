@@ -352,10 +352,6 @@ test.describe('Pipeline workbench state evidence', () => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
-        if (sessionStorage.getItem('pipeline-density-seeded') !== '1') {
-          localStorage.removeItem('taskboard.overview.pipelineDensity');
-          sessionStorage.setItem('pipeline-density-seeded', '1');
-        }
       } catch { /* private mode */ }
     });
   });
@@ -410,9 +406,8 @@ test.describe('Pipeline workbench state evidence', () => {
     await page.setViewportSize({ width: 1280, height: 1200 });
     const pipeline = await load(page, '5-human-review', pipelineDone);
     await expect(page.getByTestId('overview-pipeline-run-switcher')).toBeVisible();
-    const density = page.getByTestId('overview-pipeline-density');
-    await expect(density).toHaveAttribute('data-density', 'compact');
     const collapsedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
+    await expect(page.getByTestId('overview-pipeline-density')).toHaveCount(0);
     await expandAllPipelineSections(page);
     // Every executable section reads ok; the disabled drift section reads muted.
     await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="core"]')).toHaveAttribute('data-tone', 'ok');
@@ -424,16 +419,10 @@ test.describe('Pipeline workbench state evidence', () => {
     await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-group-activation"]')).toHaveCount(1);
     await expect(page.getByTestId('overview-pipeline-group-activation').filter({ hasText: /unknown/i })).toHaveCount(0);
     await expect(page.locator('[data-phase="aspect"] [data-testid="overview-post-step-source"]')).toHaveCount(0);
-    const compactExpandedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
-
-    await density.click();
-    await expect(density).toHaveAttribute('data-density', 'comfortable');
-    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-group-model"]')).toHaveCount(0);
-    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-step-model"]')).toHaveCount(4);
-    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-post-step-source"]')).toHaveCount(4);
+    await expect(page.locator('[data-phase="aspect"] [data-testid="overview-pipeline-step-model"]')).toHaveCount(0);
     await expect(page.locator('[data-phase="tool"] [data-testid="overview-post-step-source"]')).toHaveCount(0);
-    const comfortableExpandedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
-    expect(compactExpandedHeight).toBeLessThan(comfortableExpandedHeight);
+    await expect(page.getByTestId('overview-pipeline-step-details').first()).toBeVisible();
+    const expandedHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
 
     if (RESULTS_DIR) {
       await setTheme(page, 'light');
@@ -441,29 +430,24 @@ test.describe('Pipeline workbench state evidence', () => {
       await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'before.png') });
     }
 
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await dismissErrorDialog(page);
-    await expect(page.getByTestId('overview-pipeline-density')).toHaveAttribute('data-density', 'comfortable');
-    await page.getByTestId('overview-pipeline-density').click();
-    await expect(page.getByTestId('overview-pipeline-density')).toHaveAttribute('data-density', 'compact');
-    const reloadedPipeline = page.getByTestId('overview-pipeline');
+    await collapseAllPipelineSections(page);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(0);
-    const afterHeight = await reloadedPipeline.evaluate(el => el.getBoundingClientRect().height);
-    expect(afterHeight / comfortableExpandedHeight).toBeLessThan(0.5);
+    const afterHeight = await pipeline.evaluate(el => el.getBoundingClientRect().height);
+    expect(afterHeight / expandedHeight).toBeLessThan(0.5);
+    expect(Math.abs(afterHeight - collapsedHeight)).toBeLessThanOrEqual(1);
 
     if (RESULTS_DIR) {
       await writeFile(path.join(RESULTS_DIR, 'pipeline-density-measurement.json'), JSON.stringify({
-        beforeExpandedPx: comfortableExpandedHeight,
-        compactExpandedPx: compactExpandedHeight,
+        beforeExpandedPx: expandedHeight,
         compactCollapsedPx: afterHeight,
-        reductionPercent: Math.round((1 - afterHeight / comfortableExpandedHeight) * 1000) / 10,
+        reductionPercent: Math.round((1 - afterHeight / expandedHeight) * 1000) / 10,
         initialCollapsedPx: collapsedHeight,
       }, null, 2));
-      await reloadedPipeline.scrollIntoViewIfNeeded();
-      await reloadedPipeline.screenshot({ path: path.join(RESULTS_DIR, 'after.png') });
+      await pipeline.scrollIntoViewIfNeeded();
+      await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'after.png') });
       await setTheme(page, 'dark');
       await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
-      await reloadedPipeline.screenshot({ path: path.join(RESULTS_DIR, 'after-dark.png') });
+      await pipeline.screenshot({ path: path.join(RESULTS_DIR, 'after-dark.png') });
       await setTheme(page, 'light');
     }
     await shot(page, pipeline, 'pipeline-state-done--mocked.png');

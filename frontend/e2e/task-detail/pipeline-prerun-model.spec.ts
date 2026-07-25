@@ -185,7 +185,7 @@ async function installRoutes(page: Page, state: string, mock: MockState): Promis
       body: JSON.stringify({
         profile: 'local',
         bootstrapRequired: false,
-        authenticated: false,
+        authenticated: true,
         user: null,
       }),
     }),

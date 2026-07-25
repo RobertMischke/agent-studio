@@ -240,17 +240,16 @@ card-level addition is a separate execution-plan fact, not an activation source
 or a new arbitrary executable definition; it can only reference a known
 catalogue step.
 
-The task Overview pipeline uses progressive disclosure. Compact density is the
-default and the operator's compact or comfortable choice persists as a UI
-preference. Quiet groups start collapsed, while danger, warning, and concern
-groups start open. Every group header retains the aggregate status, ran/total
-count, disabled and concern counts, and token total. Uniform activation and
-model metadata appears once on the compact group header. Metric headers and
-cells exist only when at least one visible row has real data for that metric.
-Expanding a group keeps step details, enable/disable, post-step controls, token
-details, cost breakdown, and resolved per-step model context reachable. The
-existing Agent model picker remains outside the collapsible pipeline rows;
-durable per-step overrides remain on Project Hub -> Pipeline.
+The task Overview pipeline uses progressive disclosure and the shared compact
+row-density tokens. Quiet groups start collapsed, while danger, warning, and
+concern groups start open. Every group header retains the aggregate status,
+ran/total count, disabled and concern counts, and token total. Uniform
+activation and model metadata appears once on the group header. Metric headers
+and cells exist only when at least one visible row has real data for that
+metric. Expanding a group keeps step details, enable/disable, post-step
+controls, token details, cost breakdown, and non-uniform per-step model context
+reachable. The existing Agent model picker remains outside the collapsible
+pipeline rows; durable per-step overrides remain on Project Hub -> Pipeline.
 
 On-demand execution is bounded to post-steps that declare themselves
 idempotent and have an implemented runner. It is allowed after the main run and

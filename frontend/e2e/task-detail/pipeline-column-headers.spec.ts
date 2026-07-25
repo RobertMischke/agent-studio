@@ -205,7 +205,7 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
     }),
   );
   await page.route('**/api/tasks/grouped**', (route) =>

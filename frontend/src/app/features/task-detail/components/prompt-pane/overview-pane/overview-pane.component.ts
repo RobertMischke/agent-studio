@@ -59,6 +59,10 @@ import {
   buildPipelineGroups,
   groupAriaLabel,
   groupToneLabel,
+  pipelineMetricVisibility,
+  uniformGroupActivation,
+  uniformGroupModel,
+  type PipelineGroupActivationSummary,
   type PipelineGroupVm,
 } from './pipeline-groups.util';
 import {
@@ -69,16 +73,6 @@ import {
   formatPipelineCost,
   formatPipelineTokens,
 } from './pipeline-cost-tooltip.util';
-import {
-  pipelineMetricVisibility,
-  readPipelineDensity,
-  uniformGroupActivation,
-  uniformGroupModel,
-  writePipelineDensity,
-  type PipelineGroupActivationSummary,
-  type PipelinePanelDensity,
-} from './pipeline-panel-density.util';
-
 interface PipelineRowVm {
   id: string;
   label: string;
@@ -503,7 +497,6 @@ export class OverviewPaneComponent {
   readonly savingTitle = signal(false);
   readonly selectedTokenStepId = signal<string | null>(null);
   readonly selectedPipelineAttempt = signal<number | null>(null);
-  readonly pipelineDensity = signal<PipelinePanelDensity>(readPipelineDensity());
   private readonly optimisticTitle = signal<string | null>(null);
   private modalStackDisposer: (() => void) | null = null;
   private tokenModalStackDisposer: (() => void) | null = null;
@@ -935,12 +928,6 @@ export class OverviewPaneComponent {
   });
   readonly pipelineMetrics = computed(() => pipelineMetricVisibility(this.visiblePipelineRows()));
 
-  togglePipelineDensity(): void {
-    const next = this.pipelineDensity() === 'compact' ? 'comfortable' : 'compact';
-    this.pipelineDensity.set(next);
-    writePipelineDensity(next);
-  }
-
   toggleDisabledPipelineSteps(): void {
     this.hideDisabledPipelineSteps.update(value => !value);
   }
@@ -954,9 +941,7 @@ export class OverviewPaneComponent {
     buildPipelineGroups(this.visiblePipelineRows()).map(group => ({
       ...group,
       uniformModel: uniformGroupModel(group.rows),
-      uniformActivation: group.phaseKey === 'pre' || group.phaseKey === 'core'
-        ? null
-        : uniformGroupActivation(group.rows),
+      uniformActivation: uniformGroupActivation(group.rows),
     })),
   );
 

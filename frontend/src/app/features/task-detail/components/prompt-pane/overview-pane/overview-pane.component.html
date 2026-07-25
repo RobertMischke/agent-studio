@@ -146,13 +146,6 @@
           }
         </h3>
         <span class="ov-section__heading-actions">
-          <button type="button" class="ov-density-toggle" data-testid="overview-pipeline-density"
-                  [attr.data-density]="pipelineDensity()"
-                  [attr.aria-label]="pipelineDensity() === 'compact' ? 'Use comfortable pipeline density' : 'Use compact pipeline density'"
-                  [cacTooltip]="pipelineDensity() === 'compact' ? 'Compact rows. Switch to comfortable density.' : 'Comfortable rows. Switch to compact density.'"
-                  (click)="togglePipelineDensity()">
-            <span aria-hidden="true">↕</span>{{ pipelineDensity() === 'compact' ? 'Compact' : 'Comfortable' }}
-          </button>
           @if (disabledPipelineStepCount() > 0) {
           <button type="button"
                   class="ov-section__icon-action"
@@ -252,7 +245,6 @@
       }
       @if (hasPipeline()) {
       <div class="ov-pipeline" data-testid="overview-pipeline-steps"
-           [attr.data-density]="pipelineDensity()"
            [class.ov-pipeline--no-timing]="!pipelineMetrics().time && !pipelineMetrics().duration"
            [class.ov-pipeline--time-only]="pipelineMetrics().time && !pipelineMetrics().duration"
            [class.ov-pipeline--duration-only]="!pipelineMetrics().time && pipelineMetrics().duration"
@@ -328,10 +320,10 @@
                 @if (group.totalTokens > 0) {
                   <span class="ov-pl-phase__tokens ov-value--mono">{{ formatTokens(group.totalTokens) }}</span>
                 }
-                @if (pipelineDensity() === 'compact' && group.uniformActivation; as activation) {
+                @if (group.uniformActivation; as activation) {
                   <span class="ov-pl-phase__meta" data-testid="overview-pipeline-group-activation">{{ activation.state }} · {{ activation.source }}</span>
                 }
-                @if (pipelineDensity() === 'compact' && group.uniformModel; as model) {
+                @if (group.uniformModel; as model) {
                   <span class="ov-pl-phase__meta ov-value--mono" data-testid="overview-pipeline-group-model">{{ model }}</span>
                 }
               </span>
@@ -382,7 +374,7 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
-              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [showSource]="pipelineDensity() === 'comfortable' || !group.uniformActivation" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
+              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [showSource]="!group.uniformActivation" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
@@ -434,7 +426,7 @@
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
             }
-            @if (row.model && (pipelineDensity() === 'comfortable' || !group.uniformModel)) {
+            @if (row.model && !group.uniformModel) {
               <span class="ov-pl-step__model"
                     [class.ov-pl-step__model--resolved]="row.modelIsResolved"
                     data-testid="overview-pipeline-step-model"
