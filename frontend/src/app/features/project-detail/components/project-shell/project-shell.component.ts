@@ -118,7 +118,7 @@ export class ProjectShellComponent {
   /**
    * Rail items as a collapsible-segment → tree-node structure. Top-level nodes
    * are items without a `parent`; each carries the children that point back at
-   * its key. Group order follows the canonical Project Hub taxonomy:
+   * its key. Group order follows the canonical Deck taxonomy:
    * Insight → Quality → Context → Config.
    */
   readonly railGroups = computed<readonly ProjectRailGroupView[]>(() => {

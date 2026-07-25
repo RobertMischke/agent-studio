@@ -133,7 +133,7 @@
               </div>
             } @else {
               <!-- Label / chevron click toggles expand/collapse; double-click
-                   opens the board; the inline icon opens the Project Hub;
+                   opens the board; the inline icon opens the Deck;
                    right-click opens the project context menu. The visible label
                    is the registry displayName (p.displayLabel) so a rename shows
                    immediately; the row stays keyed by p.name everywhere else. -->
@@ -156,15 +156,15 @@
                   [testid]="'studio-explorer-project-auto-pickup-' + p.name" />
                 <button type="button"
                         class="studio-tree-row__hub-link"
-                        cacTooltip="Open Project Hub"
-                        aria-label="Open Project Hub"
+                        cacTooltip="Open Deck"
+                        aria-label="Open Deck"
                         (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
                   <app-studio-icon name="grid" [size]="10"></app-studio-icon>
                 </button>
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- Fixed project-scoped rows for Board (kanban), Project Hub,
+              <!-- Fixed project-scoped rows for Board (kanban), Deck,
                    Wiki, and Epics (overview), followed by 0..N dynamic
                    Project URL rows (see the @for below). These are the third
                    tree level: `level="child"` insets them one step under the
@@ -185,9 +185,11 @@
                     [projectName]="p.name" />
                 </app-tree-row>
                 <app-tree-row level="child" glyph="layout"
-                              label="Project Hub"
+                              [attr.data-testid]="'studio-explorer-project-deck-' + p.name"
+                              label="Deck"
                               [active]="p.isActive && activeProjectSurface() === 'hub'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'hub' ? 'page' : null"
+                              [ariaLabel]="'Deck, ' + p.displayLabel"
                               [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="book"

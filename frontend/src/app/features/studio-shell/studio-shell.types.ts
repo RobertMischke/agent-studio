@@ -26,7 +26,7 @@ export interface EpicTab { kind: 'epic'; epicKey: string; viewTaskKey?: string; 
 /** Task-detail tab — one per opened job; key `task:<taskKey>`. */
 export interface TaskTab { kind: 'task'; taskKey: string; }
 
-/** Project Hub tab — per project; key `hub:<projectName>`. Section is the initial Hub side-nav anchor. */
+/** Deck tab. Per project; key `hub:<projectName>`. Section is the initial Deck side-nav anchor. */
 export interface HubTab {
   kind: 'hub';
   projectName: string;

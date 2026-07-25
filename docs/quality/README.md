@@ -15,7 +15,7 @@ Frontend-Designsystem und Audits, Architektur-/Qualitäts-Layer, Prinzipien.
 `app/`.
 
 This folder is the single navigation entry for repository coding guidance that
-depends on a project's technology stack. The Project Hub reads the frontmatter
+depends on a project's technology stack. The Deck reads the frontmatter
 from this family, shows only applicable guides in Wiki Pulse, and the existing
 Preparation intake selector adds those same guides to coding-task prompt
 context.
@@ -33,7 +33,7 @@ entry surface.
 
 The [UI hard rules](./design/style-guide-hard-rules.md) remain the
 non-negotiable visual baseline. This index is the one place from which a human,
-Project Hub, and prompt enrichment discover that baseline together with the
+Deck, and prompt enrichment discover that baseline together with the
 technology-specific guidance around it.
 
 ## Applicability contract
@@ -46,7 +46,7 @@ machine-readable `appliesTo` object:
 styleGuideId: angular-components
 title: Angular component guide
 version: 1
-summary: Short Project Hub description.
+summary: Short Deck description.
 promptSummary: Bounded rules copied into task prompt context.
 appliesTo: {"projects":["*"],"technologies":["angular"],"taskAreas":["frontend"]}
 ---

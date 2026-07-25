@@ -4,7 +4,7 @@ import * as path from 'path';
 
 /**
  * AGT-2023 regression — switching between the Project (Overview) and Wiki
- * sections when the Project-Hub tab is ALREADY open must actually move the
+ * sections when the Deck tab is ALREADY open must actually move the
  * rail, not silently do nothing.
  *
  * Root cause fixed: {@link StudioTabStateService.open} keyed a Hub tab on
@@ -45,6 +45,25 @@ async function installMocks(page: Page): Promise<void> {
     if (route.request().method() !== 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
+  await page.route('**/api/crash-recovery/pending', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ pending: [] }),
+    }),
+  );
+  await page.route('**/api/auth/status', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
 
   // SignalR negotiate / socket — never let it reach a real backend.
   await page.route('**/hubs/**', (route: Route) => route.abort());
@@ -77,7 +96,7 @@ async function installMocks(page: Page): Promise<void> {
   );
 
   const STORAGE = 'C:/repos/agent-taskboard';
-  // The Project Hub Overview panel reads a per-project snapshot and dereferences
+  // The Deck Overview panel reads a per-project snapshot and dereferences
   // `snap.settings.autoCommit`; an empty `[]`/`{}` would throw and pop the
   // global error dialog over the surface we're screenshotting.
   await page.route('**/api/projects/*/snapshot', (route: Route) =>
@@ -98,6 +117,100 @@ async function installMocks(page: Page): Promise<void> {
         reviewDecisionsPending: [],
         runnerPendingDecisions: [],
         queueHealth: { severity: 'ok', issueCount: 0, missingJobJson: [], duplicates: [], stateMismatches: [] },
+      }),
+    }),
+  );
+  await page.route('**/api/projects/*/visual-evidence', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        project: PROJECT,
+        capturedAt: '2026-01-01T00:00:00Z',
+        unseenCount: 0,
+        items: [],
+      }),
+    }),
+  );
+  await page.route('**/api/projects/*/token-usage/summary', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        project: PROJECT,
+        hasData: false,
+        lifetimeTotalTokens: 0,
+        lifetimeJobTokens: 0,
+        lifetimeSupportingTokens: 0,
+        lifetimeOrchestratorTokens: 0,
+        lifetimeCalls: 0,
+        last24hTotalTokens: 0,
+        last24hJobTokens: 0,
+        last24hSupportingTokens: 0,
+        last24hOrchestratorTokens: 0,
+        last24hCalls: 0,
+        last7dTotalTokens: 0,
+        last7dJobTokens: 0,
+        last7dSupportingTokens: 0,
+        last7dOrchestratorTokens: 0,
+        last7dCalls: 0,
+        firstActivity: null,
+        lastActivity: null,
+        fetchedAt: '2026-01-01T00:00:00Z',
+        disclaimer: '',
+      }),
+    }),
+  );
+  await page.route('**/api/projects/*/deployment/summary', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        project: PROJECT,
+        available: false,
+        reason: 'No history.',
+        source: 'logs/stable-restarts.jsonl',
+        lastDeployment: null,
+        pendingCount: null,
+        pendingCommits: [],
+      }),
+    }),
+  );
+  await page.route('**/api/projects/*/wiki/pulse**', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        projectName: PROJECT,
+        baseDir: STORAGE,
+        exists: true,
+        generatedAtUtc: '2026-01-01T00:00:00Z',
+        feed: { available: true, reason: null, items: [] },
+        inbox: { available: true, reason: null, count: 0, items: [] },
+        drift: {
+          available: true,
+          reason: null,
+          overallGrade: 'Fresh',
+          areas: [],
+          counts: { fresh: 0, aging: 0, stale: 0, graded: 0 },
+        },
+        critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+      }),
+    }),
+  );
+  await page.route('**/api/git/inventory**', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        projectName: PROJECT,
+        repositoryPath: STORAGE,
+        isRepo: true,
+        currentBranch: 'develop',
+        worktrees: [],
+        recentCommits: [],
+        branches: [],
+        error: null,
       }),
     }),
   );
@@ -172,7 +285,7 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     await expect(rail(page, 'wiki')).toHaveAttribute('aria-current', 'page', { timeout: 5_000 });
     await shot(page, '01-wiki-open--mocked.png');
 
-    // 2) The bug: with the Hub tab already open, clicking "Project Hub" used
+    // 2) The bug: with the Deck tab already open, clicking "Deck" used
     //    to do nothing. It must now move the rail to Overview.
     await hubRow(page).click();
     await expect(hubRow(page)).toHaveAttribute('aria-current', 'page', { timeout: 5_000 });
@@ -191,7 +304,7 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(1);
   });
 
-  test('existing Project Hub plus Explorer Wiki produces two distinct editor tabs', async ({ page }) => {
+  test('existing Deck plus Explorer Wiki produces two distinct editor tabs', async ({ page }) => {
     await gotoStudio(page);
     await expandProject(page);
 
@@ -202,7 +315,7 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     await expect(rail(page, 'wiki')).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(1);
     await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}:wiki`)).toHaveCount(1);
-    await expect(page.getByRole('tab', { name: 'AGT · Overview' })).toHaveCount(1);
+    await expect(page.getByRole('tab', { name: 'AGT · Deck' })).toHaveCount(1);
     await expect(page.getByRole('tab', { name: 'AGT · Wiki' })).toHaveCount(1);
     await shot(page, '04-hub-and-wiki-separate-tabs--mocked.png');
   });

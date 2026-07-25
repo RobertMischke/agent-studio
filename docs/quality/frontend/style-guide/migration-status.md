@@ -79,7 +79,7 @@ Tracker for the design-system convergence work. Each row is a **queueable task**
 | Slice                                                             | Status | Notes                                                                                       |
 | ----------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
 | Sidebar / rail navigation canonical                               | 🟢     | `<app-section-header>` + `<app-tree-row>`; documented in [navigation.md](./navigation.md) |
-| Project Hub rail uses shared navigation controls                   | 🟢     | `project-shell` renders grouped rails through section-header + tree-row |
+| Deck rail uses shared navigation controls                          | 🟢     | `project-shell` renders grouped rails through section-header + tree-row |
 | Deck-style Workspace Settings variant                              | 🟢     | General / Global / Workspace groups reuse section-header + tree-row with monochrome glyphs |
 | Prompts registry inventory uses shared navigation controls         | 🟢     | Workspace and project views mount one `prompt-catalogue-nav` with shared origin, stale, and telemetry metadata |
 | Audit remaining per-feature navigation lists                       | ⚪     | Opportunistic sweep before adding a separate audit-navigation page |

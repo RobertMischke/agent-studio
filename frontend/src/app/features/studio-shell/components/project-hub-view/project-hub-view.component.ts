@@ -65,7 +65,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
 ]);
 
 /**
- * Project Hub tab — the per-project landing surface inside the studio
+ * Deck tab. The per-project landing surface inside the studio
  * editor. Embeds the legacy <app-project-shell> directly so the full
  * project navigation is reachable from the tab — no separate overlay —
  * and every rail uses its real content panel where one exists.
@@ -178,7 +178,7 @@ export class ProjectHubViewComponent {
     this.tabState.open({ kind: 'workbench', projectName: this.projectName(), workbenchId: workbench.id, title: workbench.title });
   }
 
-  /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */
+  /** Deck closes when the user closes the editor tab; the in-rail button only collapses navigation. */
   closeShell(): void {
     /* legacy output hook: ProjectShell owns navigation collapse internally */
   }
