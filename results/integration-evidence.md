@@ -47,6 +47,7 @@ pre-existing lifecycle defect was not widened into the file-scoped integration.
 
 - AGT-2212 `f1a18ea4c2dd60f925067fcddef1d23c1416cd4f`
 - AGT-2218 `b5f277aeb5b03961e4352725a0171ebfe448ef48`
+- AGT-2225 `27ae6317effb2ad4f221d3c31288e1e0d4bf9a78`
 
 AGT-2212 was already present as the final platform WIP commit before this
 integration run. Its focused component, utility, and triage unit gate passed
@@ -57,3 +58,8 @@ AGT-2218 passed 18/18 Runner URL/claim tests and 4/4 focused Backend
 resolver/claim tests. The reconciled lane behavior leaves a project without a
 registered repository URL in Ready while returning a clear not-remote-capable
 claim response.
+
+AGT-2225 passed 10/10 focused route and task URL units, its immutable-project-id
+Wiki restore test, TypeScript typecheck, frontend lint, and 2/2 Playwright
+deep-link cases covering reload, browser history, and legacy-slug
+canonicalization.
