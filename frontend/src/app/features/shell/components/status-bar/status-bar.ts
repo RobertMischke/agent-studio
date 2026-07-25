@@ -80,8 +80,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
 
   readonly runningCount = computed(() => {
-    const status = this.jobService.runnerStatus();
-    return Object.values(status.projects).filter(p => !!p.activeJobId).length;
+    return this.jobService.runnerStatus().runningCount ?? 0;
   });
 
   readonly hostLoad = computed(() =>
