@@ -1003,6 +1003,26 @@
             literals produce no verdict. Regression coverage pins the AGT-2208 fixture and the real final-sentinel path.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-25</td>
+          <td><code>AGT-2335</code><br><span class="small">expired dead-attempt release kept daemon in startup retry<br>(observed on <code>AGT-2326</code>)</span></td>
+          <td>
+            Startup found a dead persisted Drain-Stop attempt. The Task Server answered its release with
+            <code>Expired</code>, but the runner retained the durable slot and threw the fail-closed startup exception.
+            systemd repeatedly restarted the unit while it remained activating. Operations recovered by quarantining the
+            durable runner state.
+          </td>
+          <td>
+            <code>RemoteTaskRunner.ReleaseAsync</code> recognized only <code>Released</code> and <code>NotHeld</code> as
+            successful release terminals. It treated the idempotent lease-absent outcomes <code>Expired</code>,
+            <code>NotFound</code>, and <code>AlreadyReleased</code> like release failures even though no lease remained.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> all explicit lease-absent outcomes now delete the dead persisted slot and let
+            daemon startup continue. Unknown outcomes and request failures still retain the slot and reach the fail-closed
+            retry terminal. The restart regression pins the observed <code>Expired</code> response.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -849,7 +849,10 @@ public sealed class RemoteTaskRunner
                 $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
             _log($"lease released: {resp.Outcome}");
             return string.Equals(resp.Outcome, "Released", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(resp.Outcome, "NotHeld", StringComparison.OrdinalIgnoreCase);
+                   || string.Equals(resp.Outcome, "NotHeld", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(resp.Outcome, "Expired", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(resp.Outcome, "NotFound", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(resp.Outcome, "AlreadyReleased", StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {
