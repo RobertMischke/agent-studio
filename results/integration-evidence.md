@@ -42,3 +42,12 @@ failed twice because the existing `projectClient` projection preserves
 `busyAction: "drain"` after a successful reload and therefore keeps Retire
 disabled. AGT-2332 changes only setup terminology in that component, so this
 pre-existing lifecycle defect was not widened into the file-scoped integration.
+
+## Legacy waves 3 and 4
+
+- AGT-2212 `f1a18ea4c2dd60f925067fcddef1d23c1416cd4f`
+
+AGT-2212 was already present as the final platform WIP commit before this
+integration run. Its focused component, utility, and triage unit gate passed
+60/60. The explicit follow-up integration boundary records adoption without
+replaying its stale salvage basis.
