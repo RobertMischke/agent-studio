@@ -300,6 +300,14 @@ public record TaskInfo
     public WaitsOnStatus? WaitsOn { get; init; }
 
     /// <summary>
+    /// Read-time decision-backlog impact for cards in <c>5-human-review</c>.
+    /// Contains every active task that transitively waits on this task through
+    /// <see cref="References"/>.<c>DependsOn</c>. The traversal is workspace-wide,
+    /// de-duplicated and cycle-safe. Null when no active task waits on it.
+    /// </summary>
+    public TransitiveWaitersStatus? TransitiveWaiters { get; init; }
+
+    /// <summary>
     /// Append-only commit-provenance record (ASS-1724): the task's worktree
     /// branch, its fork-point base, the per-lane-transition anchors, and the
     /// develop-merge block. Written by the single recording hook in

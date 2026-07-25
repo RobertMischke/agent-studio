@@ -140,6 +140,12 @@ export interface WaitsOnStatus {
   cycleDetected: boolean;
 }
 
+/** Server-computed active cards that transitively wait on a human decision. */
+export interface TransitiveWaitersStatus {
+  keys: string[];
+  count: number;
+}
+
 /**
  * Response body of `PUT /api/tasks/{id}/references` (AGT-2029). The write now
  * persists even when a referenced key is unknown; those edges come back as
@@ -352,6 +358,8 @@ export interface TaskInfo {
    * board card. Null/absent means "no dependencies".
    */
   waitsOn?: WaitsOnStatus | null;
+  /** Active cards that reach this human-review card through dependsOn edges. */
+  transitiveWaiters?: TransitiveWaitersStatus | null;
   /**
    * Append-only commit-provenance record (ASS-1724). Mirrors backend
    * `TaskInfo.Provenance` and ships on every board card so the git-state pill

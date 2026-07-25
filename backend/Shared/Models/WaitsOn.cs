@@ -84,6 +84,18 @@ public record WaitsOnItem
 }
 
 /// <summary>
+/// Read-time impact projection for a human-review task: every still-open task
+/// that reaches it through one or more <c>dependsOn</c> edges. Keys are unique
+/// and sorted so the board can render a stable count and tooltip. Never
+/// persisted to <c>task.json</c>.
+/// </summary>
+public record TransitiveWaitersStatus
+{
+    public List<string> Keys { get; init; } = [];
+    public int Count => Keys.Count;
+}
+
+/// <summary>
 /// Pure, dependency-free evaluation of a task's waits-on state. Lives in the
 /// Shared library so it is unit-testable without the web host and is shared by
 /// the endpoint overlay and the runner pickup gate. Cross-project resolution is

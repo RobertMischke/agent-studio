@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { AutoLoopSnapshot, TaskInfo, PendingIntent, EpicRollup } from '../../../../models/task.model';
+import type { AutoLoopSnapshot, TaskExecutionLocation, TaskInfo, PendingIntent, EpicRollup } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
@@ -19,7 +19,6 @@ import {
   buildEffectiveModelChip,
   buildExecutionBadge,
   buildGitStateBadge,
-  buildHumanReviewBadge,
   buildExternalDoneBadge,
   buildLoopTooltip,
   buildMergeSignal,
@@ -51,6 +50,7 @@ import { StudioIconComponent, type StudioIconName } from '../../../../components
 import { ModelLevelIndicatorComponent } from '../../../../components/model-level-indicator/model-level-indicator.component';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
 import { IntegrationStatusBadgeComponent } from '../../../../components/integration-status-badge/integration-status-badge.component';
+import { ReviewDecisionBadgesComponent } from '../review-decision-badges/review-decision-badges.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -72,7 +72,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -233,9 +233,26 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 
-  readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
+  readonly displayedExecutionLocation = computed<TaskExecutionLocation | null>(() => {
+    const job = this.job();
+    if (job.executionLocation) return job.executionLocation;
+    const runner = job.state === TaskState.Progress ? job.runner : null;
+    if (!runner?.isRemote) return null;
+    return {
+      state: 'remote-running',
+      executionKind: 'remote',
+      runnerId: runner.runnerName || runner.runnerId,
+      hostDisplayName: runner.hostname,
+      startedAt: runner.acquiredAt,
+      lastHeartbeat: runner.acquiredAt,
+      lastActivityAt: runner.acquiredAt,
+      connectionState: 'connected',
+      leaseState: 'active',
+      trustReason: 'The task server holds the fenced run lease.',
+    };
+  });
 
-  readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
+  readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
 
   /**
    * "extern erledigt" badge for a task completed out-of-band and reconciled via

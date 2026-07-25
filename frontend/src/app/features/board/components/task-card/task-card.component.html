@@ -120,17 +120,7 @@
         <span class="task-card__waiting-glyph" aria-hidden="true">{{ dep.glyph }}</span> {{ dep.label }}
       </button>
     }
-    @if (humanReviewBadge(); as hrb) {
-      <span class="task-card__human-review-pill"
-            [class]="'task-card__human-review-pill--' + hrb.tone"
-            [cacTooltip]="hrb.tooltip"
-            data-testid="task-card-human-review">
-        @if (hrb.tone === 'attention') {
-          <span class="task-card__human-review-glyph" aria-hidden="true">⚠</span>
-        }
-        {{ hrb.label }}
-      </span>
-    }
+    <app-review-decision-badges [job]="job()" />
     @if (phaseBadge(); as pb) {
       <span class="task-card__phase-pill"
             [class]="'task-card__phase-pill--' + pb.tone"
@@ -228,7 +218,7 @@
         [isDefault]="effectiveModelChip().isDefault"
         testId="task-card-effective-model"
         levelTestId="task-card-thinking-level" />
-      <app-execution-location-badge [execution]="job().executionLocation" />
+      <app-execution-location-badge [execution]="displayedExecutionLocation()" />
       @if (integrationStatus(); as integ) {
         <app-integration-status-badge [integration]="integ" />
       }

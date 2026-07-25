@@ -95,7 +95,7 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null, transitiveWaitersByJobKey: null);
 
     internal static TaskInfo WithRuntime(
         TaskInfo job,
@@ -103,7 +103,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null, transitiveWaitersByJobKey: null);
 
     /// <summary>
     /// Overlay variant that also folds in per-job orchestrator token totals,
@@ -119,7 +119,8 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey,
-        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus>? transitiveWaitersByJobKey)
     {
         // Lane is the single source of truth for "is this card live". A job
         // outside 3-progress has finished or been moved on; surfacing a stale
@@ -159,6 +160,12 @@ internal static class TaskEndpointHelpers
         if (waitsOnByJobKey != null && waitsOnByJobKey.TryGetValue(job.TaskKey, out var w))
         {
             waitsOn = w;
+        }
+        TransitiveWaitersStatus? transitiveWaiters = null;
+        if (transitiveWaitersByJobKey != null
+            && transitiveWaitersByJobKey.TryGetValue(job.TaskKey, out var impact))
+        {
+            transitiveWaiters = impact;
         }
         // Reconcile a stale Warn-class outcome chip against the final verdict: an
         // accepted card must not surface a classifier-unknown/heuristic-done/
@@ -220,6 +227,7 @@ internal static class TaskEndpointHelpers
             TokenSummary = tokens,
             OrchestratorVerdict = verdict,
             WaitsOn = waitsOn,
+            TransitiveWaiters = transitiveWaiters,
             PlanningSpawn = planningSpawn
         };
     }
@@ -313,22 +321,44 @@ internal static class TaskEndpointHelpers
     /// per request. Cards without dependencies are skipped, keeping the common
     /// case free.
     /// </summary>
-    internal static Dictionary<string, WaitsOnStatus> BuildWaitsOnLookup(
+    internal static DependencyGraphLookups BuildDependencyGraphLookups(
         IEnumerable<TaskInfo> jobs,
-        TaskScannerService scanner)
+        TaskScannerService scanner,
+        IEnumerable<TaskInfo>? eligibleWaiters = null)
     {
-        var result = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
-        var withDeps = jobs.Where(j => j.References?.DependsOn.Count > 0).ToList();
-        if (withDeps.Count == 0) return result;
+        var snapshot = jobs as IReadOnlyCollection<TaskInfo> ?? jobs.ToList();
+        var withDeps = snapshot.Where(j => j.References?.DependsOn.Count > 0).ToList();
+        var humanReview = snapshot.Where(j => j.State == TaskStates.HumanReview).ToList();
+        if (withDeps.Count == 0 && humanReview.Count == 0) return new();
 
         // One archive-inclusive index for the whole request; keys are globally
         // unique across projects, so this resolves cross-project targets too.
         var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+        var eligibleKeys = (eligibleWaiters ?? snapshot)
+            .Where(j => !string.IsNullOrWhiteSpace(j.Key))
+            .Select(j => j.Key!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var waitsOn = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
         foreach (var job in withDeps)
         {
-            result[job.TaskKey] = index.EvaluateWaitsOn(job);
+            waitsOn[job.TaskKey] = index.EvaluateWaitsOn(job);
         }
-        return result;
+        var transitiveWaiters = new Dictionary<string, TransitiveWaitersStatus>(StringComparer.Ordinal);
+        foreach (var job in humanReview)
+        {
+            var impact = index.FindTransitiveWaiters(job.Key, eligibleKeys);
+            if (impact.Count > 0) transitiveWaiters[job.TaskKey] = impact;
+        }
+        return new(waitsOn, transitiveWaiters);
+    }
+
+    internal sealed record DependencyGraphLookups(
+        IReadOnlyDictionary<string, WaitsOnStatus> WaitsOn,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus> TransitiveWaiters)
+    {
+        public DependencyGraphLookups() : this(
+            new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal),
+            new Dictionary<string, TransitiveWaitersStatus>(StringComparer.Ordinal)) { }
     }
 
     /// <summary>
@@ -422,7 +452,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null) };
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null, transitiveWaitersByJobKey: null) };
 
     internal static TaskDetail WithRuntime(
         TaskDetail detail,
@@ -430,6 +460,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey,
-        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey) };
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus>? transitiveWaitersByJobKey)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey, transitiveWaitersByJobKey) };
 }

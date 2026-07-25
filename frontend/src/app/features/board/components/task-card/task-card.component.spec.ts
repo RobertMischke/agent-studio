@@ -9,6 +9,7 @@ import { MODEL_IDS } from '../../../cli';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
+  buildDecisionDamBadge,
   buildModeBadge,
   buildTagChips,
   buildReviewBadge,
@@ -364,14 +365,13 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(true);
-    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('attention');
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(true);
 
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
     expect(pill?.textContent).toContain('Escalated');
-    expect(pill?.className).toContain('task-card__human-review-pill--attention');
+    expect(pill?.className).toContain('review-decision-badge--attention');
   });
 
   it('renders an amber Stalled signal for a failed In-Progress card with no active run', async () => {
@@ -419,7 +419,6 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(false);
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(false);
@@ -444,14 +443,12 @@ describe('TaskCardComponent (smoke)', () => {
     // Human review with no verdict yet → no pill, no attention.
     fixture.componentRef.setInput('job', makeJob({ state: '5-human-review', orchestratorVerdict: null }));
     fixture.detectChanges();
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]')).toBeNull();
 
     // Completed lane is out of scope even if a stale verdict rides along.
     fixture.componentRef.setInput('job', makeJob({ state: '6-completed', orchestratorVerdict: 'escalate' }));
     fixture.detectChanges();
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
   });
 
@@ -1630,6 +1627,27 @@ describe('buildHumanReviewBadge — action-required verdicts only', () => {
 
   it('stays quiet for an undecided human-review card (no lane mirror)', () => {
     expect(buildHumanReviewBadge(makeJob({ state: '5-human-review' }))).toBeNull();
+  });
+});
+
+describe('buildDecisionDamBadge', () => {
+  it('shows the transitive dam impact and every waiting key', () => {
+    const badge = buildDecisionDamBadge(makeJob({
+      state: '5-human-review',
+      transitiveWaiters: { count: 3, keys: ['AGT-2201', 'AGT-2202', 'AGT-2203'] },
+    }));
+    expect(badge?.label).toBe('Dams 3 cards');
+    expect(badge?.tooltip).toContain('AGT-2201, AGT-2202, AGT-2203');
+  });
+
+  it('does not hide an action-required review verdict', () => {
+    const job = makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'escalate',
+      transitiveWaiters: { count: 1, keys: ['AGT-2201'] },
+    });
+    expect(buildDecisionDamBadge(job)?.label).toBe('Dams 1 card');
+    expect(buildHumanReviewBadge(job)?.label).toBe('Escalated');
   });
 });
 

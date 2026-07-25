@@ -1308,6 +1308,17 @@ const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.E
 
 export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
 
+/** Decision-backlog impact is independent of the orchestrator review verdict. */
+export function buildDecisionDamBadge(job: TaskInfo): HumanReviewBadge | null {
+  const impact = job.transitiveWaiters;
+  if (job.state !== TaskState.HumanReview || !impact || impact.count <= 0) return null;
+  return {
+    label: `Dams ${impact.count} ${impact.count === 1 ? 'card' : 'cards'}`,
+    tone: 'attention',
+    tooltip: `Transitive decision backlog (${impact.count}): ${impact.keys.join(', ')}. These cards wait directly or indirectly on this decision.`,
+  };
+}
+
 /**
  * Human-decision badge. An escalated / reissue card parked in 5-human-review
  * used to render identically to a Completed card, hiding that a human still has

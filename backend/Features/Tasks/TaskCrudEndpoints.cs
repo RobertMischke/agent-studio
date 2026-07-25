@@ -77,12 +77,12 @@ public static class TaskCrudEndpoints
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
             var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
             var testRunLookup = testRuns.BuildLookup(raw);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithMergeSignal(mergeLookup)
                           .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
@@ -104,12 +104,12 @@ public static class TaskCrudEndpoints
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
             var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
             var testRunLookup = testRuns.BuildLookup(raw);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithMergeSignal(mergeLookup)
                           .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
@@ -260,7 +260,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns) =>
+        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, HttpContext context, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var detail = scanner.GetJobDetail(jobId, watchPath);
@@ -274,8 +274,11 @@ public static class TaskCrudEndpoints
             detail = JobCommitsAggregation.WithReconstructedInProgressCommits(detail, sessions, watchPath, git);
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(new[] { detail.Info }, scanner);
-            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup);
+            var eligibleWaiters = ProjectAccessAuthorization
+                .FilterTasks(context, scanner.ScanAllJobs(), projects)
+                .Where(job => !job.Fixture);
+            var dependencyLookups = BuildDependencyGraphLookups(new[] { detail.Info }, scanner, eligibleWaiters);
+            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters);
             // AGT-2046: fold the batched merge signal onto the detail's info too, so
             // a card opened from the board keeps the same [develop|main] indicator.
             var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
