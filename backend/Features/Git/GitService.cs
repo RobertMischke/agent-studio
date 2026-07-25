@@ -143,10 +143,10 @@ public record WikiBranchSnapshot(string Ref, string Sha, string ShortSha, string
 /// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
 /// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
-/// so an agent co-author is detected even when the operator is the author)
-/// and whether the commit is a merge (&gt;1 parent).
+/// so an agent co-author is detected even when the operator is the author),
+/// whether the commit is a merge (&gt;1 parent), and its author timestamp.
 /// </summary>
-public record CommitMeta(string Body, bool IsMerge);
+public record CommitMeta(string Body, bool IsMerge, DateTime AuthorDateUtc);
 
 public record GitProjectSummary(
     string ProjectName,
@@ -3376,7 +3376,7 @@ public class GitService
 
         const char US = '';
         const char RS = '';
-        var args = "show -s --no-patch --pretty=format:\"%H%x1f%P%x1f%B%x1e\" " + string.Join(' ', list);
+        var args = "show -s --no-patch --pretty=format:\"%H%x1f%P%x1f%aI%x1f%B%x1e\" " + string.Join(' ', list);
         var (output, _, code) = RunGit(root, args);
         if (code != 0 || string.IsNullOrEmpty(output)) return result;
 
@@ -3391,9 +3391,22 @@ public class GitService
             var secondUs = rest.IndexOf(US);
             if (secondUs < 0) continue;
             var parents = rest[..secondUs];
-            var body = rest[(secondUs + 1)..];
+            rest = rest[(secondUs + 1)..];
+            var thirdUs = rest.IndexOf(US);
+            if (thirdUs < 0) continue;
+            if (!DateTime.TryParse(
+                    rest[..thirdUs],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var authoredAt))
+                continue;
+            var body = rest[(thirdUs + 1)..];
             var parentCount = parents.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            result[sha] = new CommitMeta(body, parentCount > 1);
+            result[sha] = new CommitMeta(
+                body,
+                parentCount > 1,
+                DateTime.SpecifyKind(authoredAt, DateTimeKind.Utc));
         }
         return result;
     }
