@@ -64,7 +64,7 @@ public sealed class TopologyTests
         using var runner = StartBuilt(
             root,
             "runner",
-            "agent-runner.dll",
+            "agent-host.dll",
             new Dictionary<string, string?>
             {
                 ["RUNNER_HEARTBEAT_SECONDS"] = "5",
@@ -197,7 +197,7 @@ public sealed class TopologyTests
         using var originalRunner = StartBuilt(
             root,
             "runner",
-            "agent-runner.dll",
+            "agent-host.dll",
             new Dictionary<string, string?>
             {
                 ["RUNNER_HEARTBEAT_SECONDS"] = "5",
@@ -278,7 +278,7 @@ public sealed class TopologyTests
         using var replacementRunner = StartBuilt(
             root,
             "runner",
-            "agent-runner.dll",
+            "agent-host.dll",
             new Dictionary<string, string?>
             {
                 ["RUNNER_HEARTBEAT_SECONDS"] = "5",
@@ -359,7 +359,7 @@ public sealed class TopologyTests
         using var runner = StartBuilt(
             root,
             "runner",
-            "agent-runner.dll",
+            "agent-host.dll",
             new Dictionary<string, string?>
             {
                 ["RUNNER_HEARTBEAT_SECONDS"] = "5",
@@ -487,7 +487,7 @@ public sealed class TopologyTests
         using var runner = StartBuilt(
             root,
             "runner",
-            "agent-runner.dll",
+            "agent-host.dll",
             new Dictionary<string, string?>
             {
                 ["RUNNER_AUTH_TOKEN"] = runnerToken,

@@ -51,7 +51,7 @@ describe('runner setup model', () => {
   it('builds the exact idempotent remote setup and OAuth contract', () => {
     const request = buildRunnerSetupRequest(HOST, VALID);
 
-    expect(request.title).toBe('Set up runner on agent-runner-01');
+    expect(request.title).toBe('Set up agent host on agent-runner-01');
     expect(request.command).toContain('bash scripts/remote-runner-onboard.sh');
     expect(request.command).toContain("--host 'agent-runner'");
     expect(request.command).toContain("--server 'https://tasks.example.test'");
@@ -69,6 +69,8 @@ describe('runner setup model', () => {
     expect(request.prompt).toContain('CodingAgentRunner');
     expect(request.prompt).toContain('[0.5.0,)');
     expect(request.prompt).toContain('systemd');
+    expect(request.prompt).toContain('agent-host.service');
+    expect(request.prompt).toContain('Preserve the existing runner identity `agent-runner-01`');
     expect(request.prompt).toContain('codex login --device-auth');
     expect(request.prompt).toContain('codex login status');
     expect(request.prompt).toContain('claude auth status');

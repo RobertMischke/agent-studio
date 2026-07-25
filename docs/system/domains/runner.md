@@ -91,7 +91,7 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
-- `runner/*`: the standalone remote runner daemon. A dependency-free console
+- `runner/*`: the standalone `agent-host` daemon. A dependency-free console
   process that runs as either a separately registered `coding` or `review`
   service. Coding continuously claims server-assigned projects with bounded
   host slots (default 2), fenced leases + heartbeat, per-task linked git
@@ -153,8 +153,9 @@ state.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
   persisted RunAttempt lease onto `TaskInfo.Runner`
-  for `3-progress` cards, so the board can show which runner executes a card
-  (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
+  for `3-progress` cards, so the board can show which host executes a card
+  (remote `Host · <runner-id>` from the lease owner vs a quiet `Local`
+  in-process run).
   The projection includes canonical Attempt ID and authority epoch alongside
   the lease and fence. A remote runner acquires the run lease; the local
   in-process runner uses the disk pickup-lock and holds none, which is exactly
@@ -224,7 +225,7 @@ state.
   card runs. A project without a remote assignment executes chat locally. Each
   response projects the actual local or remote hostname, repository path,
   branch, and HEAD; a reassignment invalidates a cached host context.
-- A planned remote-daemon restart is an execution handoff, not an attempt
+- A planned `agent-host` daemon restart is an execution handoff, not an attempt
   boundary. The daemon persists lease, fence, Task Server run/instance,
   worktree, detached-worker PID/start time, and file-log progress below
   `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
@@ -392,7 +393,7 @@ state.
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only
   (AGT-2178).
-- Remote daemon admission is write-capability gated. Startup keeps the fetch URL
+- Remote `agent-host` admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
   on its client identity. A reported `read-only` identity receives no coding
   claims, but may receive read-only Epic planning claims. Remote Hosts surfaces
@@ -422,7 +423,7 @@ The projection distinguishes `local-running`, `remote-running`,
 missed heartbeat becomes acute only after the stale window. A renewed lease
 returns to healthy without a page reload through the normal task push/poll path.
 Run-start session events capture the execution projection so finished run
-history keeps its runner attribution with `historical: true` and renders
+history keeps its stable runner-id attribution with `historical: true` and renders
 quietly. The wire contract is
 [task-execution-location.schema.json](../schemas/task-execution-location.schema.json).
 

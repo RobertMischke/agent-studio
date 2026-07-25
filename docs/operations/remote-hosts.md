@@ -1,7 +1,7 @@
 # Remote hosts runbook
 
 This runbook is the operator path for adding, connecting, draining, retiring,
-reviving, and permanently removing a remote runner host. The detailed Linux
+reviving, and permanently removing a remote agent host. The detailed Linux
 installation reference remains [linux-runner-host.md](setup/linux-runner-host.md).
 
 ## Add a host
@@ -10,7 +10,7 @@ Open **Workspace Settings > Remote hosts > Add host**. The wizard introduced in
 AGT-1922 asks for a stable runner name such as `agent-runner-01` and an SSH
 target such as `runner@host.example.com`.
 
-On Ubuntu, install the base tools and the runner dependencies:
+On Ubuntu, install the base tools and the agent host dependencies:
 
 ```bash
 sudo apt-get update
@@ -53,9 +53,9 @@ Host github-agent-studio
 ```
 
 ```bash
-git -C /opt/agent-runner/source remote set-url origin https://github.com/ORG/REPO.git
-git -C /opt/agent-runner/source remote set-url --push origin git@github-agent-studio:ORG/REPO.git
-git -C /opt/agent-runner/source push --dry-run origin HEAD
+git -C /opt/agent-host/source remote set-url origin https://github.com/ORG/REPO.git
+git -C /opt/agent-host/source remote set-url --push origin git@github-agent-studio:ORG/REPO.git
+git -C /opt/agent-host/source push --dry-run origin HEAD
 ```
 
 Set the same URLs for the daemon:
@@ -101,9 +101,9 @@ RUNNER_REQUIRED_CAPABILITIES=toolchain:dotnet,toolchain:node,toolchain:playwrigh
 Enable and verify the service:
 
 ```bash
-sudo systemctl enable --now agent-runner
-sudo systemctl is-active agent-runner
-sudo journalctl -u agent-runner -n 100 --no-pager
+sudo systemctl enable --now agent-host
+sudo systemctl is-active agent-host
+sudo journalctl -u agent-host -n 100 --no-pager
 curl -sS https://tasks.example.com/api/clients/agent-runner-01
 ```
 
@@ -180,7 +180,7 @@ afterward so `LastSeenAt`, daemon state, and the push probe become fresh again.
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/revive \
   -H 'X-Client-Id: local-default'
-sudo systemctl restart agent-runner
+sudo systemctl restart agent-host
 ```
 
 ## Remove permanently

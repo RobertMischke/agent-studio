@@ -239,12 +239,12 @@ export function managementActionLabel(kind: ManagementActionKind): string {
     case 'maintenance-read-only': return 'Enter read-only';
     case 'maintenance-exit': return 'Exit maintenance';
     case 'shutdown-prepare': return 'Prepare shutdown';
-    case 'runner-enrollment-create': return 'Create Runner enrollment';
-    case 'runner-credential-rotate': return 'Rotate Runner credential';
-    case 'runner-credential-revoke': return 'Revoke Runner credential';
-    case 'runner-revoke': return 'Revoke Runner';
-    case 'runner-drain': return 'Drain Runner';
-    case 'runner-retire': return 'Retire Runner';
+    case 'runner-enrollment-create': return 'Create host enrollment';
+    case 'runner-credential-rotate': return 'Rotate host credential';
+    case 'runner-credential-revoke': return 'Revoke host credential';
+    case 'runner-revoke': return 'Revoke host';
+    case 'runner-drain': return 'Drain host';
+    case 'runner-retire': return 'Retire host';
   }
 }
 

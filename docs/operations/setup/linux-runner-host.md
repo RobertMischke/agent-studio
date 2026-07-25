@@ -1,6 +1,6 @@
-# Linux runner host (standalone remote runner)
+# Linux agent host (`agent-host`)
 
-Status: Remote daemon runbook. The runner continuously executes server-assigned
+Status: Remote daemon runbook. `agent-host` continuously executes server-assigned
 projects on a Linux host while retaining the RM-5 one-task diagnostic mode.
 
 Related work: AGT-2092 (runner operations baseline) and AGT-2094 (Admin UI
@@ -15,9 +15,9 @@ and the binding lease contract in
 the Runner API surface added by RM-3 (fenced lease) and RM-4 (log + artifact
 upload).
 
-## What the standalone runner is
+## What the agent host is
 
-A single self-contained .NET console process (`agent-runner`) that runs on a
+A single self-contained .NET console process (`agent-host`) that runs on a
 Linux host and fills a bounded set of task slots without owning task state:
 
 - **Code arrives and leaves via git `origin`** - the runner fetches over the
@@ -93,8 +93,8 @@ The tunnel procedure and health gate are documented in
 
 ## Product onboarding from Remote Hosts
 
-The primary setup path is **Workspace Settings -> Remote hosts -> Set up
-runner**. The action creates a normal visible CLI task, so the existing task
+The primary setup path is **Workspace Settings -> Remote hosts -> Set up agent
+host**. The action creates a normal visible CLI task, so the existing task
 conversation owns live output, operator input, completion, and durable history.
 The local controller then runs
 [`scripts/remote-runner-onboard.sh`](../../../scripts/remote-runner-onboard.sh);
@@ -131,13 +131,14 @@ The controller is intentionally repeatable after a host wipe:
    then `codex login status` and `claude auth status --text` report the active
    account. Credential files are never copied as the normal path.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
-   runner identity, optional `RUNNER_CLIENT_ID`, credential-file path, and fallback git origin. Install and start the
-   service through systemd. The SSH session never owns the daemon process.
-5. Prove `systemctl is-enabled`, `systemctl is-active`, Runner health, and an
+   stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
+   and fallback git origin. Install and start `agent-host.service` through
+   systemd. The SSH session never owns the daemon process.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, and an
    authenticated claim or empty-queue response before setup completes.
 
 The NuGet package must be published with package type `DotnetTool` and expose
-the `agent-runner` command. A library-only `CodingAgentRunner` package cannot be
+the `agent-host` command. A library-only `CodingAgentRunner` package cannot be
 installed with `dotnet tool`; setup reports that packaging mismatch explicitly
 and does not silently switch to a source build. The source-publish procedure
 below remains a troubleshooting and development fallback, not the product
@@ -184,20 +185,31 @@ for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 [`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
 
-## 2. Build the runner
+## 2. Build agent-host
 
 ```bash
 git clone <origin> agent-taskboard && cd agent-taskboard
-dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-runner
+sudo dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host
+if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
+  sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
+fi
+sudo ln -sfnT /opt/agent-host /opt/agent-runner
 ```
 
-The output binary is `agent-runner`.
+The output binary is `/opt/agent-host/agent-host`. `/opt/agent-runner` is a
+transition symlink for existing automation; new deployments and units use only
+`/opt/agent-host`.
 
 ## 3. Configure
 
 Every value has an environment-variable default (systemd-friendly); the per-task
-identifiers can also be passed as flags. `agent-runner --help` prints the full
+identifiers can also be passed as flags. `agent-host --help` prints the full
 list.
+
+`RUNNER_*` remains the bootstrap-compatible canonical prefix. Every variable
+also accepts the matching `AGENT_HOST_*` alias, for example
+`AGENT_HOST_SERVER_URL`; when both forms are set, `RUNNER_*` wins. Stable
+identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 
 | Env var | Flag | Default | Meaning |
 |---|---|---|---|
@@ -343,7 +355,7 @@ Start the foreground daemon with no task argument or with `--poll`:
 export RUNNER_SERVER_URL=http://<studio-host>:5030
 export RUNNER_NAME=agent-runner-01
 export RUNNER_MAX_PARALLELISM=2
-/opt/agent-runner/agent-runner --poll
+/opt/agent-host/agent-host --poll
 ```
 
 The daemon registers once, polls `POST /api/runner/claim`, and fills free host
@@ -384,18 +396,23 @@ autonomous task store on the Runner.
 Install the shipped unit and an environment file, then enable it:
 
 ```bash
-sudo install -D -m 0644 deploy/systemd/agent-runner.service /etc/systemd/system/agent-runner.service
+sudo systemctl stop agent-runner.service 2>/dev/null || true
+sudo install -D -m 0644 deploy/systemd/agent-host.service /etc/systemd/system/agent-host.service
+sudo ln -sfnT agent-host.service /etc/systemd/system/agent-runner.service
 sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner
 sudoedit /etc/agent-runner/runner.env
 sudo systemctl daemon-reload
-sudo systemctl enable --now agent-runner
-sudo journalctl -u agent-runner -f
+sudo systemctl enable --now agent-host
+sudo journalctl -u agent-host -f
 ```
 
 At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
 `RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
 sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
-protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
+protected file. `RUNNER_CLIENT_ID` remains optional attribution. Enabling the
+unit creates the transitional `agent-runner.service` alias declared by the
+unit; new operations target `agent-host.service`. The unit restarts after
+failures, logs to journald,
 requests graceful SIGTERM drain, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
@@ -413,8 +430,8 @@ A planned Runner deploy no longer waits for host idle. Replace the published
 files and restart the main service process:
 
 ```bash
-sudo systemctl restart agent-runner
-sudo journalctl -u agent-runner --since '-2 minutes' \
+sudo systemctl restart agent-host
+sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
 ```
 
@@ -441,7 +458,7 @@ contracts.
    export RUNNER_SERVER_URL=http://<studio-host>:5030
    export RUNNER_GIT_REMOTE=<origin>
    export RUNNER_BRANCH=task/<the-task-branch>     # optional; falls back to base
-   /opt/agent-runner/agent-runner <TASK-KEY>
+   /opt/agent-host/agent-host <TASK-KEY>
    ```
 
 The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
@@ -456,7 +473,7 @@ Exit code `0` means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
 
-For unattended operation, run `agent-runner --health-check` as a readiness probe
+For unattended operation, run `agent-host --health-check` as a readiness probe
 (exit `0` reachable, `4` not) before assigning a task, and keep the tunnel up as
 a service. Both are covered in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
@@ -560,7 +577,7 @@ Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
 status outputs, and the runner client id from `GET /api/clients`. Its
 `lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
 Ready probe task through the normal project execution setting and verify that
-the remote runner badge, fenced lease timeline, CLI log upload, result upload,
+the remote host badge, fenced lease timeline, CLI log upload, result upload,
 and runner completion all name the same runner. This is the AGT-1923 probe
 mechanic; do not substitute the static frontend readiness fixture for this
 proof.
@@ -577,7 +594,7 @@ proof.
   the task. The daemon claim path normally avoids this before launch.
 - **`connection lost: cannot reach the task server ...` at startup** - the
   preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
-  Confirm with `agent-runner --health-check`; if it also exits `4`, restart the
+  Confirm with `agent-host --health-check`; if it also exits `4`, restart the
   tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
   The runner refuses at preflight by design, so no half-started lease or CLI is
   left behind.

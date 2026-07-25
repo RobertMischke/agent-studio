@@ -202,7 +202,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         // The connectivity preflight hits the server's open /healthz route. A live
         // server returns a null reason (reachable); the runbook's readiness check
-        // (agent-runner --health-check) and the run preflight both branch on this.
+        // (agent-host --health-check) and the run preflight both branch on this.
         var reason = await client.ProbeHealthAsync(CancellationToken.None);
 
         Assert.Null(reason);

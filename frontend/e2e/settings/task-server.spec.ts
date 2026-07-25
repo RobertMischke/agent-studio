@@ -9,7 +9,7 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  * The new "Task Server" section of the consolidated Workspace-settings home is
  * the operator's read-context for the durable task server the platform talks
  * to: the connected URL (localhost today, a central URL in Phase 2), the
- * workspace store it owns, the evidence status, the authoritative Runner
+ * workspace store it owns, the evidence status, the authoritative host
  * identities, and the management commands.
  *
  * The page renders from the authenticated management API, shared with the
@@ -106,6 +106,8 @@ test.describe('Task Server settings section', () => {
     await expect(page.getByTestId('task-server-store')).toBeVisible();
     await expect(page.getByTestId('task-server-evidence')).toBeVisible();
     await expect(page.getByTestId('task-server-management')).toBeVisible();
+    await expect(page.getByTestId('task-server-clients-section')).toContainText('Host registry');
+    await expect(page.getByTestId('task-server-clients-section')).toContainText('Enroll host');
 
     await expect(page.getByTestId('task-server-url')).toContainText('http://localhost:4010');
 
@@ -114,6 +116,7 @@ test.describe('Task Server settings section', () => {
     const count = await rows.count();
     expect(count).toBeGreaterThanOrEqual(2);
     await expect(page.getByTestId('task-server-summary')).toContainText(String(count));
+    await expect(page.getByTestId('task-server-summary')).toContainText('Hosts');
 
     await page.screenshot({ path: join(SHOT_DIR, 'task-server-section--mocked.png'), fullPage: false });
   });

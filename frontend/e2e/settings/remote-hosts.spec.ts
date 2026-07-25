@@ -221,7 +221,7 @@ test.describe('Remote Hosts settings section', () => {
 
     await expect.poll(() => createBody).not.toBeNull();
     expect(createBody).toMatchObject({
-      title: 'Set up runner on agent-runner-01',
+      title: 'Set up agent host on agent-runner-01',
       agent: 'codex',
       targetState: '2-ready',
       watchPath: 'C:/projects/agent-taskboard',

@@ -3,7 +3,7 @@
     <header class="wizard__header">
       <div>
         <span class="wizard__kicker">Remote execution</span>
-        <h2 id="add-host-title">Add a runner host</h2>
+        <h2 id="add-host-title">Add an agent host</h2>
       </div>
       <button class="wizard__close" type="button" aria-label="Close add host wizard" (click)="cancelled.emit()">×</button>
     </header>
@@ -32,8 +32,8 @@
             <label class="check-card"><input type="checkbox" data-testid="add-host-connect-check" [ngModel]="connectionChecked()" (ngModelChange)="connectionChecked.set($event)" /><span><strong>Connection verified</strong><small>SSH key accepted · Ubuntu LTS · sudo available</small></span></label>
           }
           @case (1) {
-            <div class="command"><span>Provisioning plan</span><code>git + curl + build-essential<br />.NET 10 · Node 22 · Claude · Codex<br />Playwright Chromium · /opt/agent-runner</code></div>
-            <label class="check-card"><input type="checkbox" data-testid="add-host-provision-check" [ngModel]="provisioned()" (ngModelChange)="provisioned.set($event)" /><span><strong>Runner published</strong><small>Dependencies installed and release binary built</small></span></label>
+            <div class="command"><span>Provisioning plan</span><code>git + curl + build-essential<br />.NET 10 · Node 22 · Claude · Codex<br />Playwright Chromium · /opt/agent-host</code></div>
+            <label class="check-card"><input type="checkbox" data-testid="add-host-provision-check" [ngModel]="provisioned()" (ngModelChange)="provisioned.set($event)" /><span><strong>Agent host published</strong><small>Dependencies installed and release binary built</small></span></label>
           }
           @case (2) {
             <div class="command"><span>Host write identity</span><code>ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -N ''<br />Register .pub as write-enabled repository deploy key<br />Set RUNNER_GIT_PUSH_REMOTE to the SSH repository URL</code></div>
@@ -48,8 +48,8 @@
           }
           @case (4) {
             <ul class="smoke-list">
-              <li><span>01</span><div><strong>Connectivity</strong><small><code>agent-runner --health-check</code> reaches /healthz</small></div></li>
-              <li><span>02</span><div><strong>Identity</strong><small>Runner self-registers its X-Client-Id</small></div></li>
+              <li><span>01</span><div><strong>Connectivity</strong><small><code>agent-host --health-check</code> reaches /healthz</small></div></li>
+              <li><span>02</span><div><strong>Identity</strong><small>Host self-registers its X-Client-Id</small></div></li>
               <li><span>03</span><div><strong>Daemon</strong><small>systemd service is enabled and polling</small></div></li>
               <li><span>04</span><div><strong>Handoff</strong><small>One ready task returns an external completion</small></div></li>
             </ul>

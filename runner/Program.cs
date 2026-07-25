@@ -1,7 +1,7 @@
 using AgentRunner;
 using System.Runtime.InteropServices;
 
-// Standalone remote runner. With a task key it performs the RM-5 one-shot run;
+// Standalone agent host. With a task key it performs the RM-5 one-shot run;
 // without one (or with --poll) it continuously fills bounded host slots. See
 // docs/operations/setup/linux-runner-host.md.
 
@@ -16,10 +16,10 @@ if (help)
     return 0;
 }
 
-void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [runner] {message}");
+void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [agent-host] {message}");
 
 var daemonMode = taskKey is null || !once;
-Log($"agent-runner starting: server={options.ServerUrl} role={options.Role} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
+Log($"agent-host starting: server={options.ServerUrl} role={options.Role} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -106,13 +106,13 @@ catch (Exception ex)
 static void PrintUsage()
 {
     Console.Error.WriteLine("""
-        agent-runner - standalone remote task runner (RM-5)
+        agent-host - standalone remote task host (RM-5)
 
         Usage:
-          agent-runner <TASK-KEY> [options]
-          agent-runner --task <TASK-KEY> [options]
-          agent-runner --poll [options]
-          agent-runner --health-check [--server <url>]
+          agent-host <TASK-KEY> [options]
+          agent-host --task <TASK-KEY> [options]
+          agent-host --poll [options]
+          agent-host --health-check [--server <url>]
 
         Most configuration comes from environment variables (see the runbook,
         docs/operations/setup/linux-runner-host.md). Command-line flags override:
@@ -144,5 +144,8 @@ static void PrintUsage()
           --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)
           --poll                  Run continuously (also the default without a task key)
           -h, --help              Show this help
+
+        RUNNER_* remains the bootstrap-compatible environment prefix and takes
+        precedence. Every setting also accepts its matching AGENT_HOST_* alias.
         """);
 }

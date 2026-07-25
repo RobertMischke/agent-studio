@@ -1,10 +1,10 @@
 @if (securityAvailable()) {
   <div class="clients__enrollment" data-testid="task-server-runner-enrollment">
-    <label for="task-server-runner-name">Enroll Runner</label>
+    <label for="task-server-runner-name">Enroll host</label>
     <input id="task-server-runner-name"
            type="text"
            autocomplete="off"
-           placeholder="Runner display name"
+           placeholder="Host display name"
            [value]="enrollmentName()"
            (input)="setEnrollmentName($event)">
     <button type="button"
@@ -23,7 +23,7 @@
 }
 
 @if (clients().length) {
-  <ul class="clients" data-testid="task-server-clients" aria-label="Registered Runners">
+  <ul class="clients" data-testid="task-server-clients" aria-label="Registered hosts">
     @for (client of clients(); track client.id) {
       <li class="client"
           [class.client--retired]="retired(client)"

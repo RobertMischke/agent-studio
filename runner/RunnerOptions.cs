@@ -132,10 +132,20 @@ public sealed class RunnerOptions
     public bool HealthCheckOnly { get; init; }
 
     public static string Env(string name, string fallback = "")
-        => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : fallback;
+    {
+        if (Environment.GetEnvironmentVariable(name) is { Length: > 0 } value)
+            return value;
+
+        const string bootstrapPrefix = "RUNNER_";
+        if (name.StartsWith(bootstrapPrefix, StringComparison.Ordinal)
+            && Environment.GetEnvironmentVariable($"AGENT_HOST_{name[bootstrapPrefix.Length..]}") is { Length: > 0 } alias)
+            return alias;
+
+        return fallback;
+    }
 
     public static int EnvInt(string name, int fallback)
-        => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
+        => int.TryParse(Env(name), out var v) && v > 0 ? v : fallback;
 
     public static double EnvDouble(string name, double fallback)
         => double.TryParse(

@@ -52,7 +52,7 @@ public sealed class RemoteTaskRunner
         if (health is not null)
         {
             _log($"connection lost: cannot reach the task server at {_options.ServerUrl} ({health}). " +
-                 "Verify the reverse tunnel / autossh service is up (agent-runner --health-check) before assigning tasks.");
+                 "Verify the reverse tunnel / autossh service is up (agent-host --health-check) before assigning tasks.");
             return 4;
         }
         _log("preflight ok: task server reachable");

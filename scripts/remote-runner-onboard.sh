@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Product-owned remote runner onboarding controller (AGT-2094).
+# Product-owned agent host onboarding controller (AGT-2094).
 #
 # This controller is launched from the standard visible CLI task. All setup
 # commands run over SSH on the selected host, while stdout/stderr remain in the
-# canonical task conversation. The runner daemon is started only by systemd.
+# canonical task conversation. The agent host daemon is started only by systemd.
 set -euo pipefail
 
 host=""
@@ -16,7 +16,7 @@ runner_name=""
 git_remote=""
 git_push_remote=""
 package_id="CodingAgentRunner"
-runner_command="agent-runner"
+runner_command="agent-host"
 minimum_version="0.5.0"
 skip_auth=0
 
@@ -34,7 +34,7 @@ Usage: remote-runner-onboard.sh \
 
 Options:
   --package-id <id>       NuGet DotnetTool package (default: CodingAgentRunner)
-  --runner-command <cmd>  Installed tool command (default: agent-runner)
+  --runner-command <cmd>  Installed tool command (default: agent-host)
   --minimum-version <v>   Minimum accepted package version (default: 0.5.0)
   --auth-token-file <p>   Protected Runner credential file already on the host
   --skip-auth             Do not launch login flows; status checks still run
@@ -174,7 +174,7 @@ else
 fi
 REMOTE_PREFLIGHT
 
-printf '[onboarding] phase=install Installing/updating the runner tool and agent CLIs.\n'
+printf '[onboarding] phase=install Installing/updating the agent host tool and agent CLIs.\n'
 if ! "${ssh_base[@]}" -T "$host" bash -s -- "$package_id" "$runner_command" "$minimum_version" <<'REMOTE_INSTALL'
 set -euo pipefail
 package_id="$1"
@@ -252,6 +252,8 @@ runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
 runner_group="$(id -gn)"
 runner_home="$HOME"
+agent_host_root="/opt/agent-host"
+legacy_root="/opt/agent-runner"
 
 env_tmp="$(mktemp)"
 unit_tmp="$(mktemp)"
@@ -272,7 +274,7 @@ chmod 600 "$env_tmp"
 
 cat >"$unit_tmp" <<EOF
 [Unit]
-Description=Agent Studio remote runner daemon
+Description=Agent Studio agent host daemon
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -286,13 +288,13 @@ WorkingDirectory=/var/lib/agent-runner
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=/etc/agent-runner/runner.env
-ExecStart=$runner_bin --poll
+ExecStart=/opt/agent-host/agent-host --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
 KillSignal=SIGTERM
 KillMode=process
-SyslogIdentifier=agent-runner
+SyslogIdentifier=agent-host
 StandardOutput=journal
 StandardError=journal
 NoNewPrivileges=true
@@ -302,34 +304,52 @@ ReadWritePaths=/var/lib/agent-runner $runner_home
 
 [Install]
 WantedBy=multi-user.target
+Alias=agent-runner.service
 EOF
 
 sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner /var/lib/agent-runner/work /var/lib/agent-runner/state
 sudo chown -R "$runner_user:$runner_group" /var/lib/agent-runner
+sudo install -d -m 0755 "$agent_host_root"
+sudo ln -sfn "$runner_bin" "$agent_host_root/agent-host"
+sudo ln -sfn agent-host "$agent_host_root/agent-runner"
+if [[ -e "$legacy_root" && ! -L "$legacy_root" ]]; then
+  legacy_backup="${legacy_root}.pre-agent-host"
+  [[ ! -e "$legacy_backup" ]] || {
+    printf '[remote] Cannot preserve legacy publish directory: %s already exists.\n' "$legacy_backup" >&2
+    exit 41
+  }
+  sudo mv "$legacy_root" "$legacy_backup"
+  printf '[remote] Preserved legacy publish directory at %s.\n' "$legacy_backup"
+fi
+sudo ln -sfnT "$agent_host_root" "$legacy_root"
 if [[ "$service_auth" == 1 ]]; then
   sudo chown root:"$runner_group" "$auth_token_file"
   sudo chmod 0640 "$auth_token_file"
 fi
 sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" /etc/agent-runner/runner.env
-sudo install -m 0644 "$unit_tmp" /etc/systemd/system/agent-runner.service
+sudo install -m 0644 "$unit_tmp" /etc/systemd/system/agent-host.service
+if [[ -f /etc/systemd/system/agent-runner.service && ! -L /etc/systemd/system/agent-runner.service ]]; then
+  sudo systemctl stop agent-runner.service || true
+fi
+sudo ln -sfnT agent-host.service /etc/systemd/system/agent-runner.service
 sudo systemctl daemon-reload
-sudo systemctl enable agent-runner
-sudo systemctl restart agent-runner
+sudo systemctl enable agent-host
+sudo systemctl restart agent-host
 sleep 2
-sudo systemctl is-enabled agent-runner
-sudo systemctl is-active agent-runner
+sudo systemctl is-enabled agent-host
+sudo systemctl is-active agent-host
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
-  "$runner_bin" --health-check --server "$server_url"
+  "$agent_host_root/agent-host" --health-check --server "$server_url"
 
 git_status=""
 for _ in $(seq 1 30); do
-  journal="$(sudo journalctl -u agent-runner -n 80 --no-pager)"
+  journal="$(sudo journalctl -u agent-host -n 80 --no-pager)"
   printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
   printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
   sleep 2
 done
 [[ "$git_status" == ready ]] || {
-  sudo journalctl -u agent-runner -n 40 --no-pager >&2
+  sudo journalctl -u agent-host -n 40 --no-pager >&2
   printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
   exit 40
 }
