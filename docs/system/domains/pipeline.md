@@ -51,13 +51,18 @@ pipeline view.
   host, state, result, duration, and derived card attachments through
   `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
   step telemetry.
-- `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
+- `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
-  `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
-  the operator accepts a done-green task (the `HumanReview -> Completed`
-  transition wired in `TaskTransitionService`), then records the outcome so the
-  pending step flips to passed / failed / skipped in place. After a successful
-  merge it also pushes the integration branch itself to `origin`
+  delivery merge when the operator accepts a done-green task (the
+  `HumanReview -> Completed` transition wired in `TaskTransitionService`).
+  Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
+  `ResultSha` from `logs/review-subject.json`, fetch that exact
+  `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
+  mismatch. The configured integration ref is fetched and fast-forwarded
+  before the merge; a missing local branch is created from origin and a
+  divergent one fails visibly. The outcome is recorded so the pending step
+  flips to passed / failed / skipped in place. After a successful merge it
+  also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as
@@ -71,6 +76,14 @@ pipeline view.
   read model fed by the SSH gate start/completion events. The Remote Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
   visibility-only and never admits, cancels, or reorders a gate.
+- `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
+  deliveries after a backend restart when the durable lane move landed but the
+  merge did not. It also repairs the legacy `no-branch` outcome caused by
+  looking only for `task/<slug>`.
+- `IntegrationPushBackstopHostedService` reconstructs lost
+  `IntegrationPushQueue` work from durable passed-merge and pending-push
+  pipeline facts. The channel is a latency optimization, not the durability
+  boundary.
 - `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
   `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
   `post-task-spawner` step (AGT-2028). After a task settles it asks the best

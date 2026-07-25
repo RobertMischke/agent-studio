@@ -31,6 +31,7 @@ public static class EndpointMapping
         tasks.MapTaskRegressionRadarEndpoints();
         tasks.MapTaskPipelineEndpoints();
         tasks.MapTaskMergeEndpoints();
+        tasks.MapTaskIntegrationRecoveryEndpoints();
 
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();

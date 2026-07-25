@@ -35,6 +35,8 @@ public sealed class MergeIntoDevelopRunner
     private readonly PreMainTestGate? _preMainTestGate;
     private readonly TimeSpan _preMainTimeout;
     private readonly Func<int, TimeSpan> _environmentalBackoff;
+    private readonly SemaphoreSlim _mergeGate = new(1, 1);
+    private readonly SemaphoreSlim _pushGate = new(1, 1);
 
     public MergeIntoDevelopRunner(
         GitService git,
@@ -71,14 +73,16 @@ public sealed class MergeIntoDevelopRunner
         string jobId,
         string jobFolderPath,
         string? watchPath,
-        string integrationBranch)
+        string integrationBranch,
+        string integrationStrategy = IntegrationStrategies.DirectMerge)
         => RunAsync(
             project,
             jobId,
             jobFolderPath,
             watchPath,
             integrationBranch,
-            CancellationToken.None).GetAwaiter().GetResult();
+            CancellationToken.None,
+            integrationStrategy).GetAwaiter().GetResult();
 
     /// <summary>
     /// Async merge entry point used by the task transition. A configured
@@ -91,6 +95,29 @@ public sealed class MergeIntoDevelopRunner
         string jobFolderPath,
         string? watchPath,
         string integrationBranch,
+        CancellationToken ct,
+        string integrationStrategy = IntegrationStrategies.DirectMerge)
+    {
+        await _mergeGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await RunSerializedAsync(
+                project, jobId, jobFolderPath, watchPath,
+                integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mergeGate.Release();
+        }
+    }
+
+    private async Task<MergeIntoIntegrationResult> RunSerializedAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string? watchPath,
+        string integrationBranch,
+        string integrationStrategy,
         CancellationToken ct)
     {
         var startedAt = DateTime.UtcNow;
@@ -113,11 +140,23 @@ public sealed class MergeIntoDevelopRunner
                 return unresolved;
             }
 
-            var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
-            var taskBranch = WorktreeTaskLifecycle.BranchFor(jobId);
+            var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+            var branch = reviewSubject is { ResultRef.Length: > 0 }
+                ? string.IsNullOrWhiteSpace(integrationBranch)
+                    ? new ProjectSettings().IntegrationBranch
+                    : integrationBranch.Trim()
+                : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
+            var taskBranch = reviewSubject?.ResultRef ?? WorktreeTaskLifecycle.BranchFor(jobId);
+            var strategy = IntegrationStrategies.Normalize(integrationStrategy);
             BuildTestGateResult? preMainResult = null;
             MergeIntoIntegrationResult result;
-            if (IsReleaseBranch(branch))
+            if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.Ordinal))
+            {
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.PushedForReview,
+                    error: $"Delivery '{taskBranch}' remains outside {branch} because the project uses the pull-request integration strategy.");
+            }
+            else if (IsReleaseBranch(branch))
             {
                 (result, preMainResult) = await MergeIntoMainAsync(
                     project,
@@ -128,13 +167,21 @@ public sealed class MergeIntoDevelopRunner
                     branch,
                     ct).ConfigureAwait(false);
             }
+            else if (reviewSubject is { ResultRef.Length: > 0 })
+            {
+                result = _git.MergeRemoteDeliveryIntoIntegration(
+                    repoRoot,
+                    reviewSubject.ResultRef,
+                    reviewSubject.ResultSha,
+                    branch);
+            }
             else
             {
                 result = _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch);
             }
             _logger.LogInformation(
-                "merge-into-develop project={Project} job={JobId} task={Task} integration={Integration} outcome={Outcome}",
-                project, jobId, taskBranch, branch, result.Outcome);
+                "merge-into-develop project={Project} job={JobId} delivery={Delivery} integration={Integration} strategy={Strategy} outcome={Outcome}",
+                project, jobId, taskBranch, branch, strategy, result.Outcome);
             Record(jobFolderPath, project, jobId, branch, result, preMainResult, startedAt);
 
             // AGT-1999: once the accepted task is folded into the integration
@@ -336,6 +383,31 @@ public sealed class MergeIntoDevelopRunner
         string? watchPath,
         string integrationBranch,
         CancellationToken ct = default)
+    {
+        await _pushGate.WaitAsync(ct);
+        try
+        {
+            return await PushIntegrationBranchSerializedAsync(
+                project,
+                jobId,
+                jobFolderPath,
+                watchPath,
+                integrationBranch,
+                ct);
+        }
+        finally
+        {
+            _pushGate.Release();
+        }
+    }
+
+    private async Task<GitPushResult> PushIntegrationBranchSerializedAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string? watchPath,
+        string integrationBranch,
+        CancellationToken ct)
     {
         var startedAt = DateTime.UtcNow;
         GitPushResult result;
@@ -561,6 +633,12 @@ public sealed class MergeIntoDevelopRunner
                     null);
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
+            case MergeIntoIntegrationOutcome.PushedForReview:
+                return (
+                    PipelineStepStatus.Skipped,
+                    "pushed-for-review",
+                    result.Error ?? "The configured pull-request strategy did not merge the delivery.",
+                    null);
             case MergeIntoIntegrationOutcome.Conflict:
                 var files = result.ConflictedFiles is { Count: > 0 }
                     ? string.Join(", ", result.ConflictedFiles)
@@ -568,8 +646,8 @@ public sealed class MergeIntoDevelopRunner
                 return (
                     PipelineStepStatus.Failed,
                     "conflict",
-                    $"Merge conflict in {result.ConflictedFiles?.Count ?? 0} file(s); merge aborted, working tree left clean.",
-                    $"Conflicted: {files}");
+                    $"Merge conflict in {result.ConflictedFiles?.Count ?? 0} file(s); merge aborted, working tree left clean. Start a steer round to rebase the delivery onto the current integration branch.",
+                    $"Conflicted: {files}. Recovery: rebase the delivery onto the current integration branch, resolve the conflicts, and accept again.");
             default:
                 return (PipelineStepStatus.Failed, "error", result.Error ?? "Merge failed.", null);
         }

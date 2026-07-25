@@ -579,6 +579,11 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // as the completed-job workspace push above.
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
+// The channel is intentionally in-memory. Durable pipeline facts recover both
+// a lane-move/process crash before the merge and a successful merge whose queued
+// origin push was dropped by restart.
+builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the

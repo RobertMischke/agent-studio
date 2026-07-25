@@ -165,6 +165,17 @@ export interface CodeReviewRunResponse {
   grade?: string | null;
 }
 
+/** Reply from the accepted-delivery integration recovery action. */
+export interface IntegrationRecoveryResponse {
+  status: 'queued';
+  mode: 'steer';
+  targetState: string;
+  position: number;
+  deliveryRef: string;
+  resultSha: string;
+  integrationBranch: string;
+}
+
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
 // ADR-0026: 1a-orchestrator-prep joins the catalog. The 1b-needs-human-review
@@ -624,6 +635,19 @@ export class TaskService {
     return this.http.post(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Queue a focused steer round after an accepted remote delivery conflicted
+   * with the integration branch. The backend validates the recorded conflict
+   * and fenced delivery before moving the task back to Ready.
+   */
+  queueIntegrationRecovery(jobId: string, watchPath?: string) {
+    return this.http.post<IntegrationRecoveryResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/integration/rebase`,
+      null,
       this.withWatchPath(watchPath),
     );
   }

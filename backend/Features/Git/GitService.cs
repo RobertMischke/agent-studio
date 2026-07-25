@@ -59,6 +59,8 @@ public enum MergeIntoIntegrationOutcome
     AlreadyMerged,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
     NoTaskBranch,
+    /// <summary>The configured pull-request strategy deliberately left the delivery ref for external review.</summary>
+    PushedForReview,
     /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
     Conflict,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
@@ -2854,12 +2856,103 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
+        return MergeRefIntoIntegration(repoRoot, taskBranch, integrationBranch);
+    }
+
+    /// <summary>
+    /// Fetches and verifies the exact fenced result produced by a remote runner,
+    /// then merges that immutable commit into the configured integration branch.
+    /// The delivery branch name and SHA come from <c>review-subject.json</c>.
+    /// Acceptance must never guess <c>task/&lt;slug&gt;</c> for a remote run or
+    /// silently merge a branch head that advanced after review.
+    /// </summary>
+    public MergeIntoIntegrationResult MergeRemoteDeliveryIntoIntegration(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string integrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
+        if (!IsLikelyBranchName(deliveryBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid delivery branch '{deliveryBranch}'.");
+        if (!ReviewSubjectStore.IsValidResultSha(expectedResultSha))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery has no valid fenced result SHA.");
+        if (!IsLikelyBranchName(integrationBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid integration branch '{integrationBranch}'.");
+        if (!HasRemote(repoRoot, "origin"))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery cannot be fetched because origin is not configured.");
+
+        var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        var integrationFetchSource = $"refs/heads/{integrationBranch}";
+        var integrationFetchTarget = $"+{integrationFetchSource}:{remoteIntegrationRef}";
+        var (_, integrationFetchError, integrationFetchCode) = RunGitArgs(
+            repoRoot, "fetch", "--no-tags", "origin", integrationFetchTarget);
+        if (integrationFetchCode != 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Integration branch '{integrationBranch}' could not be fetched from origin: {integrationFetchError.Trim()}");
+        }
+
+        var fetchSource = $"refs/heads/{deliveryBranch}";
+        var fetchTarget = $"+{fetchSource}:{remoteRef}";
+        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        if (fetchCode != 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.NoTaskBranch,
+                error: $"Delivery branch '{deliveryBranch}' could not be fetched from origin: {fetchError.Trim()}");
+        }
+
+        var (fetchedSha, verifyError, verifyCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--verify", $"{remoteRef}^{{commit}}");
+        if (verifyCode != 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Fetched delivery branch '{deliveryBranch}' is not a commit: {verifyError.Trim()}");
+        }
+
+        var actualResultSha = fetchedSha.Trim();
+        if (!string.Equals(actualResultSha, expectedResultSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Fenced delivery mismatch for '{deliveryBranch}': review expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(actualResultSha)}.");
+        }
+
+        if (!BranchExists(repoRoot, integrationBranch))
+        {
+            var (_, createError, createCode) = RunGitArgs(
+                repoRoot, "branch", integrationBranch, remoteIntegrationRef);
+            if (createCode != 0)
+            {
+                return MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
+            }
+        }
+
+        return MergeRefIntoIntegration(
+            repoRoot,
+            expectedResultSha,
+            integrationBranch,
+            remoteIntegrationRef);
+    }
+
+    private static string AbbreviateSha(string sha)
+        => sha[..Math.Min(8, sha.Length)];
+
+    private MergeIntoIntegrationResult MergeRefIntoIntegration(
+        string repoRoot,
+        string sourceRef,
+        string integrationBranch,
+        string? synchronizeFromRemoteRef = null)
+    {
         if (!BranchExists(repoRoot, integrationBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Integration branch '{integrationBranch}' does not exist.");
-
-        // Idempotent: a re-trigger after a successful merge is a clean no-op.
-        if (IsAncestor(repoRoot, taskBranch, integrationBranch))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
 
         // Never merge into a dirty tree - that would entangle the operator's
         // in-flight edits with the delivery merge.
@@ -2878,7 +2971,23 @@ public class GitService
             }
         }
 
-        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", taskBranch);
+        if (!string.IsNullOrWhiteSpace(synchronizeFromRemoteRef))
+        {
+            var (_, syncError, syncCode) = RunGitArgs(
+                repoRoot, "merge", "--ff-only", synchronizeFromRemoteRef);
+            if (syncCode != 0)
+            {
+                return MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"Local integration branch '{integrationBranch}' diverged from origin; refusing to merge into a stale target: {syncError.Trim()}");
+            }
+        }
+
+        // Idempotent: a re-trigger after a successful merge is a clean no-op.
+        if (IsAncestor(repoRoot, sourceRef, integrationBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
+
+        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", sourceRef);
         if (mergeCode != 0)
         {
             var conflicted = ListUnmergedFiles(repoRoot);
@@ -2886,12 +2995,12 @@ public class GitService
             RunGitArgs(repoRoot, "merge", "--abort");
             _logger.LogWarning(
                 "Merge-into-develop: merging {Task} into {Integration} at {Path} conflicted ({Count} files), aborted: {Error}",
-                taskBranch, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
+                sourceRef, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
             return MergeIntoIntegrationResult.Conflicted(conflicted, mergeErr.Trim());
         }
 
         var mergedSha = ReadHeadShaAt(repoRoot);
-        _logger.LogInformation("Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha})", taskBranch, integrationBranch, repoRoot, mergedSha);
+        _logger.LogInformation("Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha})", sourceRef, integrationBranch, repoRoot, mergedSha);
         return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
     }
 

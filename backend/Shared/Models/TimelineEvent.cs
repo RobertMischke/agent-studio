@@ -228,11 +228,18 @@ public static class TimelineEventKinds
     /// loud. Emitted by <c>TaskTransitionService</c> on the accept transition when
     /// the git-derived <see cref="TaskIntegrationStatus"/> is not
     /// <see cref="IntegrationStatuses.Integrated"/>; the card is also tagged
-    /// <c>integration:pending</c> so the completed-lane audit can list it.
+    /// <c>integrationpending</c> so the completed-lane audit can list it.
     /// <see cref="TimelineEvent.Summary"/> carries the verdict; NOT a hard block -
     /// the acceptance still lands, this only makes the state visible.
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";
+    /// <summary>
+    /// An operator invoked the accepted-delivery recovery action after a merge
+    /// conflict. The task was queued in Ready with a focused steer prompt that
+    /// resumes its fenced delivery ref and rebases it onto the current
+    /// integration branch.
+    /// </summary>
+    public const string IntegrationRecoveryQueued = "integration_recovery_queued";
 }
 
 /// <summary>

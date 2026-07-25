@@ -24,6 +24,9 @@ public sealed record IntegrationPushRequest(
 /// channel write - so the accept transition never awaits the ~2-3 s network
 /// round-trip. <see cref="IntegrationPushWorker"/> drains it and performs the
 /// push (with the AGT-1944 environmental retry) on a background thread.
+/// <see cref="IntegrationPushBackstopHostedService"/> re-drives a successful
+/// merge whose channel item was lost during shutdown from the durable pipeline
+/// step facts after restart.
 /// <para>
 /// Unbounded and single-reader by design: volume is one item per accepted task,
 /// and the reader is serialized so two pushes of the same integration branch can
@@ -45,7 +48,7 @@ public sealed class IntegrationPushQueue
     /// <summary>
     /// Enqueue an integration-branch push. Never blocks. Returns false only if
     /// the channel has been completed (shutdown); the local merge already landed,
-    /// so the branch simply pushes on the next accept or an operator re-trigger.
+    /// so the durable backstop pushes it after restart.
     /// </summary>
     public bool Enqueue(IntegrationPushRequest request) => _channel.Writer.TryWrite(request);
 }
