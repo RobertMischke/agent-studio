@@ -150,9 +150,9 @@ public static class ProjectDocsEndpoints
         // sniffed titles, plain-text summaries, and folder child counts. An
         // empty relPath lists the wiki root. Sits before the /files catch-all
         // for path precedence, like its sibling routes.
-        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs) =>
+        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs, GitService git) =>
         {
-            var folder = docs.GetWikiFolder(projectName, relPath);
+            var folder = docs.GetWikiFolder(projectName, relPath, git);
             return folder == null
                 ? Results.NotFound(new { error = "Folder not found or path rejected" })
                 : Results.Ok(folder);

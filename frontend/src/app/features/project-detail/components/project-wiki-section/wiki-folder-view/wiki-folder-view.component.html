@@ -108,6 +108,11 @@
               @if (child.updatedAt) {
                 <time [attr.datetime]="child.updatedAt"
                       [cacTooltip]="absoluteTime(child.updatedAt)">{{ relativeTime(child.updatedAt) }}</time>
+                @if (child.updatedAtSource === 'mtime') {
+                  <abbr [attr.data-testid]="'wiki-folder-mtime-' + child.relPath"
+                        title="Filesystem time because no Git date is available yet"
+                        aria-label="Filesystem time because no Git date is available yet">*</abbr>
+                }
               } @else {
                 <span aria-hidden="true">–</span>
               }

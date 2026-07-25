@@ -3851,6 +3851,29 @@ public class GitService
     }
 
     /// <summary>
+    /// Most-recent commit metadata for every tracked file below
+    /// <paramref name="repoRelDir"/>, cached by repository HEAD. This is the
+    /// complete variant of <see cref="GetRecentEditsUnderPath"/> used by wiki
+    /// folder listings: one batch <c>git log --name-only</c> walk supplies all
+    /// page dates, and subsequent folder requests reuse the same result while
+    /// HEAD is unchanged. It deliberately has no commit-count cap because an
+    /// old page may have last changed before the dashboard feed's bounded
+    /// recent-history window.
+    /// </summary>
+    public List<GitRecentFileEdit> GetLatestFileEditsUnderPathCached(
+        string repoRoot, string repoRelDir)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot)) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        var pathspec = string.IsNullOrWhiteSpace(repoRelDir)
+            ? "."
+            : repoRelDir.Replace('\\', '/');
+        var key = string.Join(CacheKeySep, "wiki-file-dates", root, pathspec);
+        return MemoizeByHead(root, key,
+            () => GetRecentEditsUnderPath(root, pathspec, int.MaxValue, int.MaxValue));
+    }
+
+    /// <summary>
     /// Author dates (UTC, newest first) of up to <paramref name="maxCommits"/>
     /// non-merge commits that touched any of <paramref name="repoRelPaths"/>.
     /// Backs the wiki Pulse drift-grading heuristic (PULSE-1): how many code

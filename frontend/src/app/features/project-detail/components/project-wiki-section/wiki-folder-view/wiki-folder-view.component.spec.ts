@@ -14,18 +14,21 @@ const OVERVIEW: WikiFolderOverview = {
     // Pages deliberately listed before the folder: the view sorts folders first.
     {
       name: 'detail.md', relPath: 'concepts/deep/detail.md', kind: 'page', fileType: 'md',
-      title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', size: 2048, childCount: null,
+      title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', updatedAtSource: 'git',
+      size: 2048, childCount: null,
       classification: {
         status: 'ueberholt', supersededBy: 'concepts/new.md', type: 'konzept', analyzedAt: '2026-07-18',
       },
     },
     {
       name: 'viz.html', relPath: 'concepts/deep/viz.html', kind: 'page', fileType: 'html',
-      title: 'Visualisierung', summary: null, updatedAt: null, size: 500, childCount: null,
+      title: 'Visualisierung', summary: null, updatedAt: '2026-07-12T08:00:00Z', updatedAtSource: 'mtime',
+      size: 500, childCount: null,
     },
     {
       name: 'sub', relPath: 'concepts/deep/sub', kind: 'folder', fileType: null,
-      title: 'Unterbereich', summary: null, updatedAt: '2026-07-11T08:00:00Z', size: null, childCount: 1,
+      title: 'Unterbereich', summary: null, updatedAt: '2026-07-11T08:00:00Z', updatedAtSource: 'git',
+      size: null, childCount: 1,
     },
   ],
 };
@@ -98,6 +101,10 @@ describe('WikiFolderViewComponent', () => {
     expect(root.querySelector('[data-testid="wiki-folder-summary-concepts/deep/detail.md"]')!.textContent)
       .toContain('Zweite Zeile.');
     expect(root.querySelector('[data-testid="wiki-folder-row-concepts/deep/detail.md"] time')).toBeTruthy();
+    expect(root.querySelector('[data-testid="wiki-folder-mtime-concepts/deep/detail.md"]')).toBeNull();
+    const mtimeMarker = root.querySelector('[data-testid="wiki-folder-mtime-concepts/deep/viz.html"]');
+    expect(mtimeMarker?.textContent).toBe('*');
+    expect(mtimeMarker?.getAttribute('title')).toBe('Filesystem time because no Git date is available yet');
     http.verify();
   });
 
