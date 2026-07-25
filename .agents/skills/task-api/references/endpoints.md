@@ -203,6 +203,21 @@ Single-field edits. Body: `{ "title": "new" }`, `{ "cliType": "codex" }`,
 
 Trigger the orchestrator-intake gate for a single job (when configured).
 
+### `POST /api/tasks/{jobId}/commits/integration?watchPath=...`
+
+Append an already-existing integration commit to the task's `commits[]` chain
+without creating or rewriting a Git commit. The singular `commit` field is
+mirrored to the appended final entry.
+
+```json
+{ "sha": "0123456789abcdef0123456789abcdef01234567" }
+```
+
+The SHA must be the full 40-character object id, must resolve in the task's
+repository, and the commit message must name the task key. Repeating the same
+request refreshes that entry in place instead of duplicating it. Returns the
+refreshed `commit` and `commits` values.
+
 ## Runner mode
 
 ### `PUT /api/runner/{projectName}/mode`

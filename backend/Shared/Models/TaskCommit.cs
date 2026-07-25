@@ -65,12 +65,18 @@ public static class CommitAttributionKinds
     /// <summary>The deterministic rule engine attributed this commit.</summary>
     public const string Automatic = "automatic";
     /// <summary>
+    /// An operator attached an already-existing integration commit through the
+    /// API-owned integration backfill route. This is deliberately narrower
+    /// than the retired generic include/exclude override surface.
+    /// </summary>
+    public const string Manual = "manual";
+    /// <summary>
     /// Legacy entry without explicit attribution (job.json pre-dates the
     /// attribution step). Treated as "trust the existing stamp" by readers.
     /// </summary>
     public const string Legacy = "legacy";
 
-    public static readonly string[] All = [Automatic, Legacy];
+    public static readonly string[] All = [Automatic, Manual, Legacy];
 
     public static string Normalize(string? value)
     {

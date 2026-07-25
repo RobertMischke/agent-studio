@@ -66,6 +66,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [../concepts/api-project-identity-and-watchpath.md](../../concepts/api-project-identity-and-watchpath.md).
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
+- Accepted integration commits that already exist in the project repository
+  can be appended through
+  `POST /api/tasks/{id}/commits/integration?watchPath=...` with
+  `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
+  task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
+  it as the final singular `commit`, and never creates or rewrites Git history.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
