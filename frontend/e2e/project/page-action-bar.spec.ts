@@ -362,7 +362,9 @@ async function seedWiki(page: Page) {
 async function capture(page: Page, locatorTestId: string, fileName: string) {
   const target = page.getByTestId(locatorTestId);
   await expect(target).toBeVisible();
-  await target.screenshot({ path: resolve(RESULTS, fileName) });
+  const clip = await target.boundingBox();
+  expect(clip).not.toBeNull();
+  await page.screenshot({ path: resolve(RESULTS, fileName), clip: clip! });
 }
 
 test('shared page action bar preserves placement, task source, chat context, and page-type icons', async ({ page, devBackend }) => {
