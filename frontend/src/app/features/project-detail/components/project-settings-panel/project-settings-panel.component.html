@@ -211,6 +211,46 @@
         </select>
       </label>
       </article>
+      <article class="ps-settings__card" data-testid="project-settings-quota-wait">
+        <div class="ps-settings__card-head">
+          <span class="ps-settings__card-icon" aria-hidden="true">◴</span>
+          <span class="ps-settings__card-title">Quota reset wait</span>
+          <span class="ps-settings__badge">{{ projectQuotaWait()?.source === 'project' ? 'Project override' : 'Inherited' }}</span>
+        </div>
+        <p class="ps-settings__card-desc">
+          Wait on the requested model when its confirmed quota reset is nearby.
+          This decision runs before fallback model switching and throttling.
+        </p>
+        <div class="ps-settings__quota-wait-controls">
+          <label class="ps-settings__field">
+            <span class="ps-settings__field-label">Policy</span>
+            <select class="ps-settings__select"
+                    data-testid="project-settings-quota-wait-mode"
+                    [disabled]="quotaWaitSaving()"
+                    (change)="setProjectQuotaWaitOverride($any($event.target).value)">
+              <option value="inherit" [selected]="quotaWaitOverride() === 'inherit'">
+                Inherit global ({{ projectQuotaWait()?.globalEnabled ? 'enabled' : 'disabled' }})
+              </option>
+              <option value="enabled" [selected]="quotaWaitOverride() === 'enabled'">Enabled for this project</option>
+              <option value="disabled" [selected]="quotaWaitOverride() === 'disabled'">Disabled for this project</option>
+            </select>
+          </label>
+          <label class="ps-settings__field">
+            <span class="ps-settings__field-label">Nearby reset threshold</span>
+            <span class="ps-settings__number-field">
+              <input type="number"
+                     min="1"
+                     max="240"
+                     data-testid="project-settings-quota-wait-threshold"
+                     [value]="projectQuotaWait()?.projectThresholdMinutes ?? projectQuotaWait()?.thresholdMinutes ?? 30"
+                     [disabled]="quotaWaitSaving() || quotaWaitOverride() === 'inherit'"
+                     (change)="setProjectQuotaWaitThreshold(+$any($event.target).value)"
+                     aria-label="Project quota reset wait threshold in minutes" />
+              <span>minutes</span>
+            </span>
+          </label>
+        </div>
+      </article>
     </div>
 
     <app-project-detail [projectName]="projectName()" view="settings" />

@@ -77,6 +77,8 @@ public static class ProjectSettingsEndpoints
                     epicSubTasksToReady = kv.Value.EpicSubTasksToReady ?? false,
                     intakeEnabled = kv.Value.IntakeEnabled,
                     autonomyLevel = kv.Value.AutonomyLevel,
+                    waitOnQuotaEnabled = kv.Value.WaitOnQuotaEnabled,
+                    waitOnQuotaThresholdMinutes = kv.Value.WaitOnQuotaThresholdMinutes,
                     // ADR-0052: parallel-execution knobs. maxParallelism == 1
                     // means the runner stays sequential; the branch/strategy
                     // pair only matters once it is raised above 1.
@@ -744,6 +746,32 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new { level = settings.Get(projectName).AutonomyLevel ?? 2 });
         });
 
+        app.MapGet("/api/projects/{projectName}/quota-wait-policy", (
+            string projectName,
+            ProjectSettingsService settings,
+            CliQuotaWaitPolicyService waitPolicy,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            return Results.Ok(waitPolicy.Resolve(settings.Get(projectName)));
+        });
+
+        app.MapPut("/api/projects/{projectName}/quota-wait-policy", (
+            string projectName,
+            SetProjectQuotaWaitPolicyRequest req,
+            ProjectSettingsService settings,
+            CliQuotaWaitPolicyService waitPolicy,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (req.ThresholdMinutes is < CliQuotaWaitPolicyService.MinThresholdMinutes or > CliQuotaWaitPolicyService.MaxThresholdMinutes)
+                return Results.BadRequest(new { error = $"thresholdMinutes must be between {CliQuotaWaitPolicyService.MinThresholdMinutes} and {CliQuotaWaitPolicyService.MaxThresholdMinutes}" });
+            settings.SetQuotaWaitPolicy(projectName, req.Enabled, req.ThresholdMinutes);
+            return Results.Ok(waitPolicy.Resolve(settings.Get(projectName)));
+        });
+
         // F35: per-lane sort strategy. GET returns the resolved map (every
         // lane key present, defaults filled in) so the settings UI can render
         // a dropdown per lane without a second round-trip. PUT writes one
@@ -837,4 +865,10 @@ public static class ProjectSettingsEndpoints
                 .Any(s => string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase))
             || string.Equals(PipelineCatalogue.AbortReviewStep.Id, stepId, StringComparison.OrdinalIgnoreCase);
     }
+}
+
+public sealed record SetProjectQuotaWaitPolicyRequest
+{
+    public bool? Enabled { get; init; }
+    public int? ThresholdMinutes { get; init; }
 }

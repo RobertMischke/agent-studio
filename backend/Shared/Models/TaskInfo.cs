@@ -57,6 +57,12 @@ public record TaskInfo
     /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
     public QuotaFallbackStatus? QuotaFallback { get; init; }
     /// <summary>
+    /// Visible, bounded quota-reset wait. Read from the durable
+    /// <c>quota-wait.json</c> marker so a board refresh or backend restart does
+    /// not turn an intentional wait into an apparent hang.
+    /// </summary>
+    public QuotaWaitStatus? QuotaWait { get; init; }
+    /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
     /// (a container grouping sub-tasks under one overarching goal). An epic is
     /// not code-executed itself; only its sub-tasks run through the pipeline.

@@ -48,6 +48,11 @@ public static class LifecyclePhases
     /// <c>steer-pending.json</c> marker; cleared when a new run resumes the card.
     /// </summary>
     public const string SteerPending = "steer-pending";
+    /// <summary>
+    /// A CodingAgentRunner quota interrupt is waiting for a confirmed nearby
+    /// reset. The process is stopped and the same request has a scheduled wake.
+    /// </summary>
+    public const string QuotaWaiting = "quota-waiting";
     public const string PostProcessingRunning = "post-processing-running";
     public const string PostProcessingBlocked = "post-processing-blocked";
     public const string AwaitingReview = "awaiting-review";
@@ -55,7 +60,7 @@ public static class LifecyclePhases
     public static readonly string[] All =
     [
         HumanReady, IntakeRunning, IntakeBlocked, IntakePassed,
-        ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending,
+        ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, QuotaWaiting,
         PostProcessingRunning, PostProcessingBlocked, AwaitingReview
     ];
 
@@ -71,7 +76,7 @@ public static class LifecyclePhases
     public static readonly Dictionary<string, string[]> AllowedByState = new()
     {
         [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
-        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, QuotaWaiting, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
         [TaskStates.AutoReview] = [PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 

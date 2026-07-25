@@ -187,7 +187,7 @@ state.
   duplicate deliveries fail closed or replay idempotently.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
-  `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps
+  `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
   no execution seat; a continuation must pass admission again and remains
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.

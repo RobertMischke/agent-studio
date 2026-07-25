@@ -218,6 +218,14 @@ export interface TaskInfo {
     model: string | null;
     reason: string | null;
   } | null;
+  /** Intentional, bounded wait for a confirmed nearby CLI quota reset. */
+  quotaWait?: {
+    cliType: string;
+    startedAt: string;
+    resetAt: string;
+    thresholdMinutes: number;
+    reason: string;
+  } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
    * when omitted) is an ordinary card. See backend `TaskKinds`.

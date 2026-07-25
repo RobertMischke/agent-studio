@@ -118,6 +118,19 @@ public record ProjectSettings
     public int? AutonomyLevel { get; init; }
 
     /// <summary>
+    /// Per-project override for the global wait-on-quota policy. Null inherits
+    /// the global CLI/quota setting; true/false explicitly enables/disables it
+    /// for this project.
+    /// </summary>
+    public bool? WaitOnQuotaEnabled { get; init; }
+
+    /// <summary>
+    /// Per-project override for the longest nearby quota-reset delay worth
+    /// waiting for. Null inherits the global threshold.
+    /// </summary>
+    public int? WaitOnQuotaThresholdMinutes { get; init; }
+
+    /// <summary>
     /// Per-project switch for the orchestrator intake loop. When true, the
     /// coding runner waits for orchestrator intake to finish before picking
     /// up a 2-ready card (gates pickup on <c>phase == intake-passed</c>).

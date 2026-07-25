@@ -133,6 +133,7 @@ public class ProjectRunner
     private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
@@ -428,7 +429,8 @@ public class ProjectRunner
         CliQuotaFallbackService? quotaFallback = null,
         ILoadThrottleGate? loadThrottle = null,
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
-        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
+        CliQuotaWaitPolicyService? quotaWaitPolicy = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -450,6 +452,7 @@ public class ProjectRunner
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _quotaWaitPolicy = quotaWaitPolicy;
         _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
@@ -766,7 +769,32 @@ public class ProjectRunner
             _quotaFallback, _quotaCaps,
             c => string.IsNullOrWhiteSpace(c) ? null : _quotaService.GetCachedFor(c!),
             DateTime.UtcNow,
-            _activeRuns.Count);
+            _activeRuns.Count,
+            _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName)));
+
+    private void RecordNearbyQuotaWait(TaskInfo info, QuotaAdmissionPlan plan)
+    {
+        if (!plan.NearbyResetWait || plan.NextResetAt is not { } resetAt) return;
+        var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+        var existing = QuotaWaitMarker.TryRead(info.FolderPath, _logger);
+        QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+        {
+            CliType = plan.CliType,
+            StartedAt = existing?.StartedAt ?? DateTime.UtcNow,
+            ResetAt = resetAt,
+            ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+            Reason = plan.Reason,
+        }, _logger);
+    }
+
+    private void ClearQuotaWait(TaskInfo info)
+        => QuotaWaitMarker.Clear(info.FolderPath, _logger);
+
+    private async Task RefreshQuotaAfterResetAsync(TaskInfo info, string cliType)
+    {
+        try { await _quotaService.RefreshAsync(cliType); }
+        finally { ClearQuotaWait(info); }
+    }
 
     /// <summary>
     /// Emit the pre-launch load-steering decision (AGT-2055 req 3 + 7). Always a
@@ -1075,9 +1103,21 @@ public class ProjectRunner
             // next reset (the scheduler re-ticks and wakes on its own). The
             // switch/throttle/wait decision is emitted (de-duplicated per job) so
             // the load-steering is never silent.
+            if (candidate.Info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
+            {
+                _ = RefreshQuotaAfterResetAsync(candidate.Info, dueWait.CliType);
+                _lastPickReason = $"quota-reset-refresh: {candidate.Info.Id}: reset reached; refreshing {dueWait.CliType}";
+                _logger.LogInformation(
+                    "[taskboard] quota reset reached for {Job} on {Project}; refreshing {Cli} before the next admission decision",
+                    candidate.Info.Id, ProjectName, dueWait.CliType);
+                continue;
+            }
+
             var qplan = PlanQuotaAdmission(candidate.Info);
             if (qplan.Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle)
             {
+                if (qplan.NearbyResetWait) RecordNearbyQuotaWait(candidate.Info, qplan);
+                else ClearQuotaWait(candidate.Info);
                 EmitQuotaAdmissionDecision(candidate.Info, qplan);
                 _lastPickReason = $"quota-defer: {candidate.Info.Id}: {qplan.Reason}";
                 _logger.LogInformation(
@@ -2043,6 +2083,14 @@ public class ProjectRunner
                     RunRejectReason.UiIterationCapReached, reason));
             }
 
+            if (info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
+            {
+                await _quotaService.RefreshAsync(dueWait.CliType, ct);
+                ClearQuotaWait(info);
+                info = _scanner.FindJob(jobId, Entry.Path) ?? info;
+                admissionInfo = info;
+            }
+
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
@@ -2063,10 +2111,12 @@ public class ProjectRunner
             // every launch (a healthy primary or a pre-emptive model switch) is
             // documented with its burn-rate / projection numbers.
             var admissionPlan = PlanQuotaAdmission(info);
-            if (strictCap.Blocked && route?.IsFallback != true)
+            if (admissionPlan.Outcome == QuotaAdmissionOutcome.Wait)
             {
                 // Everything is exhausted: wait quietly with a reason + next
                 // reset, and record the decision. No spawn, no reissue burn.
+                if (admissionPlan.NearbyResetWait) RecordNearbyQuotaWait(info, admissionPlan);
+                else ClearQuotaWait(info);
                 EmitQuotaAdmissionDecision(info, admissionPlan);
                 _logger.LogInformation(
                     "[taskboard] {Intent} for job {JobId} deferred by quota admission: {Reason}",
@@ -2097,6 +2147,7 @@ public class ProjectRunner
             }
 
             var cli = route == null ? GetCliFor(info) : _router.Get(route.CliType);
+            ClearQuotaWait(info);
             var initialState = info.State;
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
             var jobFolder = info.FolderPath;
@@ -3047,6 +3098,70 @@ public class ProjectRunner
             _                           => prev.LastToolCommand
         };
         _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity, lastToolCommand);
+
+        // CAR 0.6 wait-on-quota lifecycle. Reuse the Run-Liveness visible
+        // substate pattern: a durable marker backs the card, while Progress
+        // receives an explicit phase instead of looking silently hung.
+        if (evt is CliRunEvent.QuotaWaitStarted quotaWaitStarted)
+        {
+            try
+            {
+                var run = _activeRuns.ByJobKey(GetJobKey, jobKey);
+                var info = run == null ? null : _scanner.FindJob(run.JobId, Entry.Path);
+                if (info != null)
+                {
+                    var cliType = run?.CliType ?? "unknown";
+                    var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+                    var reason = $"waiting for quota reset {quotaWaitStarted.ResetAt:HH:mm} UTC: {quotaWaitStarted.Reason}";
+                    QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+                    {
+                        CliType = cliType,
+                        StartedAt = quotaWaitStarted.ObservedAt,
+                        ResetAt = quotaWaitStarted.ResetAt,
+                        ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+                        Reason = reason,
+                    }, _logger);
+                    if (info.State == TaskStates.Progress)
+                        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.QuotaWaiting);
+                    _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-wait] " + reason);
+                    _timeline?.Append(
+                        info.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: reason,
+                        details: new()
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "library-quota-wait-started",
+                            ["cli"] = cliType,
+                            ["resetAt"] = quotaWaitStarted.ResetAt.ToString("o"),
+                        });
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not project quota-wait start for {TaskKey}", jobKey); }
+        }
+        else if (evt is CliRunEvent.QuotaWaitEnded)
+        {
+            try
+            {
+                var run = _activeRuns.ByJobKey(GetJobKey, jobKey);
+                var info = run == null ? null : _scanner.FindJob(run.JobId, Entry.Path);
+                if (info != null)
+                {
+                    ClearQuotaWait(info);
+                    if (info.State == TaskStates.Progress)
+                        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.ExecutionRunning);
+                    _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-wait] reset reached; restarting the same request");
+                    _timeline?.Append(
+                        info.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: "Quota reset reached; restarting the same request",
+                        details: new() { ["decision"] = "library-quota-wait-ended" });
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not project quota-wait end for {TaskKey}", jobKey); }
+        }
 
         // Surface tool-call boundaries to disk so a post-mortem of a
         // watchdog kill can answer "what was the last tool the agent

@@ -36,13 +36,10 @@
        back to the ProjectReference:
        ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj
 
-       0.5.0 is CAR-2's extended thinking-level ladder (AGT-2025 coordination):
-       it teaches the ladder the gpt-5.6-* family (sol/terra/luna) and adds the
-       new `ultra` top level, so codex reasoning-effort flags for gpt-5.6 emit
-       xhigh/ultra instead of being normalized down to medium. This card
-       (detection + default + UI) builds on that ladder. -->
+       0.6.0 adds the opt-in wait-on-quota policy, QuotaWaitStarted /
+       QuotaWaitEnded lifecycle events, and typed CLI diagnostics. -->
   <ItemGroup>
-    <PackageReference Include="CodingAgentRunner" Version="[0.5.0]" />
+    <PackageReference Include="CodingAgentRunner" Version="[0.6.0]" />
   </ItemGroup>
 
   <!-- TokenEconomy owns the shared historical model-price catalog and cost API.

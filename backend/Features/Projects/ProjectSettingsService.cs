@@ -559,6 +559,33 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Sets or clears the per-project wait-on-quota overrides. Null fields
+    /// inherit the global CLI/quota policy. Thresholds are clamped to the same
+    /// bounds as the global setting.
+    /// </summary>
+    public void SetQuotaWaitPolicy(string projectName, bool? enabled, int? thresholdMinutes)
+    {
+        EnsureLoaded();
+        int? threshold = thresholdMinutes is null
+            ? null
+            : CliQuotaWaitPolicyService.Clamp(thresholdMinutes.Value);
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with
+            {
+                WaitOnQuotaEnabled = enabled,
+                WaitOnQuotaThresholdMinutes = threshold,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Project wait-on-quota override set: project={Project} enabled={Enabled} thresholdMinutes={Threshold}",
+            projectName, enabled, threshold);
+    }
+
+    /// <summary>
     /// Sets the cadence for one analysis-report topic on this project.
     /// Cadences are validated by the caller; null or empty value clears the
     /// entry (revert to "disabled" default). Every project starts with no

@@ -27,6 +27,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ProjectSettingsService _projectSettings;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
@@ -140,7 +141,8 @@ public class TaskRunnerService : BackgroundService
         ILoadThrottleGate? loadThrottle = null,
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
-        AgentStudio.Clients.ClientIdentityStore? clients = null)
+        AgentStudio.Clients.ClientIdentityStore? clients = null,
+        CliQuotaWaitPolicyService? quotaWaitPolicy = null)
     {
         _config = config;
         _logger = logger;
@@ -183,6 +185,7 @@ public class TaskRunnerService : BackgroundService
         _runLeases = runLeases;
         _runnerIdentity = runnerIdentity;
         _clients = clients;
+        _quotaWaitPolicy = quotaWaitPolicy;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -347,6 +350,7 @@ public class TaskRunnerService : BackgroundService
                 sessionInspector: _sessionInspector,
                 orchestratorDefaults: _orchestratorDefaults,
                 quotaFallback: _quotaFallback,
+                quotaWaitPolicy: _quotaWaitPolicy,
                 loadThrottle: _loadThrottle,
                 modelQualification: _modelQualification,
                 integrationPushQueue: _integrationPushQueue);
@@ -1252,6 +1256,7 @@ public class TaskRunnerService : BackgroundService
             sessionInspector: _sessionInspector,
             orchestratorDefaults: _orchestratorDefaults,
             quotaFallback: _quotaFallback,
+            quotaWaitPolicy: _quotaWaitPolicy,
             loadThrottle: _loadThrottle);
         runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));

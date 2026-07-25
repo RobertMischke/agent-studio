@@ -164,6 +164,14 @@ public record RunnerStatus
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
 
+/// <summary>Read-time projection of a task's intentional quota-reset wait.</summary>
+public sealed record QuotaWaitStatus(
+    string CliType,
+    DateTime StartedAt,
+    DateTime ResetAt,
+    int ThresholdMinutes,
+    string Reason);
+
 public record ProjectRunnerStatus
 {
     public string ProjectName { get; init; } = "";

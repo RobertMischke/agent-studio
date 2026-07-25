@@ -52,6 +52,48 @@ public sealed class QuotaAdmissionPlannerTests : IDisposable
         Assert.Contains("Weekly", plan.Reason);
     }
 
+    [Fact]
+    public void NearbyResetWait_PrecedesUsableFallback()
+    {
+        var fallback = Routing(new CliModelRouteProfile
+        {
+            CliType = "claude", PrimaryModel = "claude-opus",
+            FallbackCliType = "codex", FallbackModel = "gpt-5.3-codex",
+        });
+        Snapshot("claude", ("5-hour", 100, Now.AddMinutes(12)));
+        Snapshot("codex", ("5-hour", 10, Now.AddHours(3)));
+
+        var plan = Plan(
+            "claude", fallback, occupiedSlots: 1,
+            new ResolvedCliQuotaWaitPolicy(true, 30, "global", null, null, true, 30));
+
+        Assert.Equal(QuotaAdmissionOutcome.Wait, plan.Outcome);
+        Assert.True(plan.NearbyResetWait);
+        Assert.Equal(Now.AddMinutes(12), plan.NextResetAt);
+        Assert.Contains("12 min remaining", plan.Reason);
+        Assert.DoesNotContain("switched", plan.Reason);
+    }
+
+    [Fact]
+    public void DistantReset_UsesFallbackBeforeThrottle()
+    {
+        var fallback = Routing(new CliModelRouteProfile
+        {
+            CliType = "claude", PrimaryModel = "claude-opus",
+            FallbackCliType = "codex", FallbackModel = "gpt-5.3-codex",
+        });
+        Snapshot("claude", ("Weekly", 100, Now.AddMinutes(31)));
+        Snapshot("codex", ("Weekly", 10, Now.AddHours(3)));
+
+        var plan = Plan(
+            "claude", fallback, occupiedSlots: 1,
+            new ResolvedCliQuotaWaitPolicy(true, 30, "project", true, 30, false, 30));
+
+        Assert.Equal(QuotaAdmissionOutcome.LaunchFallback, plan.Outcome);
+        Assert.False(plan.NearbyResetWait);
+        Assert.Equal("codex", plan.CliType);
+    }
+
     // ── acceptance scenario 2: both exhausted -> quiet wait + reason + reset ──
     [Fact]
     public void BothExhausted_Waits_WithReasonAndNextReset()
@@ -226,12 +268,16 @@ public sealed class QuotaAdmissionPlannerTests : IDisposable
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
-    private QuotaAdmissionPlan Plan(string cli, CliQuotaFallbackService? fallback, int occupiedSlots) =>
+    private QuotaAdmissionPlan Plan(
+        string cli,
+        CliQuotaFallbackService? fallback,
+        int occupiedSlots,
+        ResolvedCliQuotaWaitPolicy? waitPolicy = null) =>
         QuotaAdmissionPlanner.Plan(
             cli, requestedModel: null, requestedThinking: null,
             fallback, _caps,
             c => c != null && _snapshots.TryGetValue(c, out var s) ? s : null,
-            Now, occupiedSlots);
+            Now, occupiedSlots, waitPolicy);
 
     private CliQuotaFallbackService Routing(CliModelRouteProfile profile)
     {

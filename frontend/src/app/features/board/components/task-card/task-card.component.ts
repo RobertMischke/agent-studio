@@ -5,7 +5,7 @@ import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
 import { CodeReviewActivityStore } from '../../../../services/code-review-activity.store';
-import { cliTypeIcon } from '../../../../services/format.util';
+import { cliTypeIcon, stateLabel } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import {
@@ -42,6 +42,7 @@ import {
   DELETE_ID,
   type CommitChainView,
   type CommitEmptyBadge,
+  type DependencyChip,
 } from './task-card-view-model';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
@@ -53,14 +54,14 @@ import { IntegrationStatusBadgeComponent } from '../../../../components/integrat
 import { ReviewDecisionBadgesComponent } from '../review-decision-badges/review-decision-badges.component';
 import { TaskLiveStatusComponent } from '../../../../components/task-live-status/task-live-status.component';
 import { TokenPopoverDirective } from './token-popover.directive';
+import { TaskCardQuotaWaitComponent } from '../task-card-quota-wait/task-card-quota-wait.component';
+import { taskCardNow } from './task-card-clock';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { stateLabel } from '../../../../services/format.util';
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
-import type { DependencyChip } from './task-card-view-model';
 import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
 import { TaskTestEvidenceComponent } from '../task-test-evidence/task-test-evidence';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
@@ -73,12 +74,12 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent, TaskLiveStatusComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
   // template only reads signal inputs, computed signals, and the shared
-  // `nowTick` signal, so OnPush updates remain correct without any
+  // `taskCardNow` signal, so OnPush updates remain correct without any
   // explicit `markForCheck` calls.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
@@ -229,7 +230,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   phaseBadge() {
     if (this.job().state === TaskState.AutoReview) return null;
-    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick());
+    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, taskCardNow());
   }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
@@ -441,10 +442,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     && (this.job().execution?.status === 'running' || this.job().runner != null));
   readonly stalledState = computed(() => deriveStalledTaskState(this.job(), nowTick()));
   /**
-   * DtC CooldownRetry banner for a Progress card in rapid-crash backoff. The
-   * shared clock keeps its countdown live without another data source.
+   * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is
+   * holding out its infra-crash re-pickup backoff (`runActivity.failed-backoff`);
+   * renders distinctly from the "Running live" chip. Reads the shared `taskCardNow`
+   * so the "in Ns" countdown refreshes with every relative-time tick / poll.
+   * See {@link buildCooldownRetryBanner}.
    */
-  readonly cooldownBanner = computed(() => buildCooldownRetryBanner(this.job(), nowTick()));
+  readonly cooldownBanner = computed(() => buildCooldownRetryBanner(this.job(), taskCardNow()));
 
   /**
    * AGT-2029 waits-on dependency chip from the backend-computed `waitsOn`
@@ -455,7 +459,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;
     if (!dateStr) return 'never';
-    const diff = nowTick() - new Date(dateStr).getTime();
+    const diff = taskCardNow() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return mins + 'm ago';

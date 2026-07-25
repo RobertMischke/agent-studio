@@ -16,6 +16,7 @@ import {
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  buildQuotaWaitBadge,
   formatSteerWait,
   buildOwnerChip,
   buildPipelineDots,
@@ -1697,6 +1698,37 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     expect(pill?.tone).toBe('loop-waiting');
     expect(pill?.label).toBe('Waiting for loop continuation 0:42');
     expect(pill?.tooltip).toContain('freed its execution slot');
+  });
+});
+
+describe('buildQuotaWaitBadge', () => {
+  it('shows the confirmed reset time and a live rounded-up countdown', () => {
+    const now = Date.parse('2026-07-22T11:02:30.000Z');
+    const badge = buildQuotaWaitBadge({
+      cliType: 'codex',
+      startedAt: '2026-07-22T11:02:00.000Z',
+      resetAt: '2026-07-22T11:14:00.000Z',
+      thresholdMinutes: 30,
+      reason: 'Confirmed nearby quota reset',
+    }, now);
+
+    expect(badge?.label).toContain('12 min remaining');
+    expect(badge?.minutesLeft).toBe(12);
+    expect(badge?.tooltip).toContain('retries admission');
+  });
+
+  it('stays explicit while the due reset is being refreshed', () => {
+    const resetAt = '2026-07-22T11:14:00.000Z';
+    const badge = buildQuotaWaitBadge({
+      cliType: 'codex',
+      startedAt: '2026-07-22T11:02:00.000Z',
+      resetAt,
+      thresholdMinutes: 30,
+      reason: 'Confirmed nearby quota reset',
+    }, Date.parse(resetAt));
+
+    expect(badge?.label).toContain('reset due · refreshing');
+    expect(badge?.minutesLeft).toBe(0);
   });
 });
 
