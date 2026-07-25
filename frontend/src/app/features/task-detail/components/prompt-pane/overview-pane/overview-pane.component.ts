@@ -24,10 +24,7 @@ import type {
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { DialogComponent } from '../../../../../components/dialog/dialog.component';
-import {
-  StudioIconComponent,
-  type StudioIconName,
-} from '../../../../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
 import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
@@ -67,8 +64,19 @@ import {
   buildPipelineTotalCostTooltip,
   buildPipelineTotalTokenTooltip,
   formatPipelineCost,
-  formatPipelineTokens,
 } from './pipeline-cost-tooltip.util';
+import {
+  formatDuration,
+  formatTokens,
+  historicalStepStatusIcon,
+  laneLabel,
+  runStatusIcon,
+  stepKindIcon,
+  stepKindLabel,
+  stepStatusIcon,
+  stepStatusLabel,
+} from './overview-pane-formatters';
+import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
 
 interface PipelineRowVm {
   id: string;
@@ -92,6 +100,8 @@ interface PipelineRowVm {
    * deliberately NOT tagged, so it shows its own early-gate result instead.
    */
   isFinalVerdict: boolean;
+  /** Historical rows are read-only evidence and never use live state colour. */
+  historical: boolean;
   enabled: boolean;
   canDisable: boolean;
   hasExecution: boolean;
@@ -100,6 +110,8 @@ interface PipelineRowVm {
   status: PipelineStepStatus | 'disabled';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
+  /** Small causal note for the designed skip cascade after an early escalate. */
+  skipHint: string | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
@@ -479,11 +491,21 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
 export class OverviewPaneComponent {
+  readonly stepKindLabel = stepKindLabel;
+  readonly stepKindIcon = stepKindIcon;
+  readonly stepStatusIcon = stepStatusIcon;
+  readonly historicalStepStatusIcon = historicalStepStatusIcon;
+  readonly stepStatusLabel = stepStatusLabel;
+  readonly laneLabel = laneLabel;
+  readonly formatTokens = formatTokens;
+  readonly formatDuration = formatDuration;
+  readonly runStatusIcon = runStatusIcon;
+
   readonly job = input.required<TaskInfo>();
   /** Raw task prompt markdown (`promptMarkdown`), surfaced via the Prompt
    *  popover next to the title. Empty/absent hides the trigger. */
@@ -859,6 +881,10 @@ export class OverviewPaneComponent {
     const selectedExecution = this.selectedPipelineExecution();
     const isCurrentRun = this.selectedPipelineIsCurrent();
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
+    const chainEndedByEarlyEscalate = (selectedExecution?.steps ?? []).some(step =>
+      step.stepId !== FINAL_VERDICT_STEP_ID
+      && step.kind === 'orchestrator'
+      && step.verdict?.toLowerCase() === 'escalate');
     const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
     const cardPlan = new Set((res.onDemand?.plannedStepIds ?? []).map(id => id.toLowerCase()));
     const latestOnDemand = new Map<string, NonNullable<TaskPipelineResponse['onDemand']>['attempts'][number]>(isCurrentRun
@@ -913,12 +939,16 @@ export class OverviewPaneComponent {
         startsPhase: false,
         runMode: step.runMode,
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
+        historical: !isCurrentRun,
         enabled,
         canDisable: cfg?.canDisable ?? false,
         hasExecution: e != null || onDemand != null,
         config: cfg ?? null,
         status,
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
+        skipHint: status === 'skipped' && chainEndedByEarlyEscalate
+          ? 'skipped: chain ended by early escalate'
+          : null,
         model,
         thinkingLevel,
         cliType,
@@ -1596,7 +1626,7 @@ export class OverviewPaneComponent {
     if (durationMs > 0) parts.push(this.formatStepDuration(durationMs));
     if (startedAt) parts.push(this.formatRelativeTime(startedAt));
     return {
-      title: `Run #${attempt}${current ? ' · Current' : ''}`,
+      title: current ? `Attempt #${attempt} · Current` : `Attempt #${attempt} · superseded`,
       body: parts.join(' · '),
     };
   }
@@ -1691,74 +1721,9 @@ export class OverviewPaneComponent {
     return { title: row.label, body: lines.join('\n') };
   }
 
-  stepKindLabel(kind: StepKind): string {
-    switch (kind) {
-      case 'module':       return 'Pre steps';
-      case 'core':         return 'Core agent work';
-      case 'aspect':       return 'Aspect';
-      case 'orchestrator': return 'Decision';
-      case 'tool':         return 'Tool';
-      case 'drift':        return 'Drift';
-      default:             return kind;
-    }
-  }
-
-  stepKindIcon(kind: StepKind): StudioIconName {
-    switch (kind) {
-      case 'module':       return 'sliders';
-      case 'core':         return 'bot';
-      case 'aspect':       return 'eye';
-      case 'orchestrator': return 'branch';
-      case 'tool':         return 'cli';
-      case 'drift':        return 'diff';
-      default:             return 'dot';
-    }
-  }
-
-  stepStatusIcon(status: PipelineRowVm['status']): string {
-    switch (status) {
-      case 'passed':   return '✅';
-      case 'failed':   return '❌';
-      case 'running':  return '▶️';
-      case 'skipped':  return '⏭️';
-      case 'planned':  return '🕓';
-      case 'disabled': return '🚫';
-      default:         return '·';
-    }
-  }
-
-  stepStatusLabel(status: PipelineRowVm['status']): string {
-    switch (status) {
-      case 'passed':   return 'Passed';
-      case 'failed':   return 'Failed';
-      case 'running':  return 'Running';
-      case 'skipped':  return 'Skipped';
-      case 'planned':  return 'Planned';
-      case 'disabled': return 'Disabled';
-      default:         return 'Pending';
-    }
-  }
-
   /** USD formatting: sub-cent costs need more than 2 dp to be non-zero. */
   formatCost(usd: number): string {
     return formatPipelineCost(usd);
-  }
-
-  laneLabel(state: string): string {
-    switch (state) {
-      case TaskState.Backlog:          return 'Backlog';
-      case TaskState.Preparation:      return 'In Preparation';
-      case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
-      case '1b-needs-human-review':  return 'Needs Human Review';
-      case TaskState.Ready:            return 'Ready';
-      case TaskState.Progress:         return 'In Progress';
-      case TaskState.AutoReview:       return 'Post Processing';
-      case TaskState.HumanReview:      return 'Review';
-      case TaskState.Escalated:        return 'Escalated';
-      case TaskState.Completed:        return 'Delivered';
-      case TaskState.Archive:          return 'Archive';
-      default:                       return state ?? '';
-    }
   }
 
   formatRelativeTime(iso: string): string {
@@ -1785,20 +1750,6 @@ export class OverviewPaneComponent {
     return d.toLocaleString();
   }
 
-  formatTokens(n: number): string {
-    return formatPipelineTokens(n);
-  }
-
-  formatDuration(seconds: number): string {
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    const min = Math.floor(seconds / 60);
-    const sec = Math.round(seconds % 60);
-    if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
-    const hrs = Math.floor(min / 60);
-    const remMin = min % 60;
-    return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`;
-  }
-
   /**
    * Per-step duration for the pipeline rows. Sub-second steps (most
    * deterministic Tool steps) show in ms; longer steps fall through to the
@@ -1808,16 +1759,6 @@ export class OverviewPaneComponent {
     if (ms <= 0) return '—';
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return this.formatDuration(ms / 1000);
-  }
-
-  runStatusIcon(status: string): string {
-    switch (status) {
-      case 'completed': return '✅';
-      case 'failed':    return '❌';
-      case 'cancelled': return '⚠️';
-      case 'running':   return '▶️';
-      default:          return '❓';
-    }
   }
 
   runTooltip(run: RunRecord): string {

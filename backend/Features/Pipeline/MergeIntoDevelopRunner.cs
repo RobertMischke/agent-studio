@@ -488,10 +488,9 @@ public sealed class MergeIntoDevelopRunner
         DateTime startedAt,
         int environmentalRetries)
     {
-        if (_pipelineLog.Read(jobFolderPath) == null)
-        {
-            _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
-        }
+        var pipelineRecord = _pipelineLog.Read(jobFolderPath)
+            ?? _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
+        using var pipelineAttempt = _pipelineLog.EnterAttempt(jobFolderPath, pipelineRecord.Attempt);
 
         var completedAt = DateTime.UtcNow;
         var (status, verdict, reason, summary) = ProjectPush(result, environmentalRetries);
@@ -560,10 +559,9 @@ public sealed class MergeIntoDevelopRunner
         // none exists yet, so RecordStep is never a silent no-op. The merge step
         // only lives in the standard pipeline (the read-only variant drops every
         // git step), so the baseline uses the standard catalogue.
-        if (_pipelineLog.Read(jobFolderPath) == null)
-        {
-            _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
-        }
+        var pipelineRecord = _pipelineLog.Read(jobFolderPath)
+            ?? _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
+        using var pipelineAttempt = _pipelineLog.EnterAttempt(jobFolderPath, pipelineRecord.Attempt);
 
         var completedAt = DateTime.UtcNow;
         var (status, verdict, reason, summary) = Project(

@@ -1810,11 +1810,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
         var projectSettings = _projectSettings?.Get(entry.Name);
-        _pipelineLog?.EnsureRun(
+        var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
             ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
             entry.Name,
             current.Id);
+        using var pipelineAttempt = pipelineRecord == null
+            ? null
+            : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
 
         // Post-core completeness gate (Orchestrator-Review, the first post-step):
         // before spending the parallel aspect review, scan the run's OWN close-out

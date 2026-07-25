@@ -58,6 +58,21 @@ describe('deriveProtocolVerdict', () => {
     expect(v.detail).toContain('missing API key');
   });
 
+  it('demotes a blocked status document from an older attempt immediately', () => {
+    const v = deriveProtocolVerdict(baseInputs({
+      statusMarkdown: '[[TASK_BLOCKED:old attempt could not reach the service]]',
+      statusSuperseded: true,
+      laneState: '3-progress',
+    }));
+
+    expect(v.kind).toBe('unclear');
+    expect(v.label).toBe('Current attempt');
+    expect(v.detail).toContain('newer attempt');
+    expect(v.superseded?.label).toBe('Blocked');
+    expect(v.superseded?.detail).toContain('old attempt');
+    expect(v.duration).toBeNull();
+  });
+
   it('reads [[TASK_NEEDS_INPUT]] as unclear', () => {
     const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: 'q\n[[TASK_NEEDS_INPUT:which env?]]' }));
     expect(v.kind).toBe('unclear');

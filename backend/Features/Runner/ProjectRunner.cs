@@ -4080,13 +4080,15 @@ public class ProjectRunner
 
             if (_pipelineLog != null)
             {
-                _pipelineLog.EnsureAgentRunStart(
+                var pipelineRecord = _pipelineLog.EnsureAgentRunStart(
                     info.FolderPath,
                     AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
                         AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
                         _projectSettings.Get(ProjectName)),
                     ProjectName,
                     info.Id);
+                using var pipelineAttempt = _pipelineLog.EnterAttempt(
+                    info.FolderPath, pipelineRecord.Attempt);
                 var finishedAt = DateTime.UtcNow;
                 _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
                 {
@@ -4178,6 +4180,7 @@ public class ProjectRunner
                     settings),
                 ProjectName,
                 info.Id);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(info.FolderPath, record.Attempt);
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior
@@ -4561,6 +4564,7 @@ public class ProjectRunner
                     _projectSettings.Get(ProjectName)),
                 ProjectName,
                 jobId);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(folder, record.Attempt);
 
             var startedAt = execution.StartedAt;
             // Accumulate this run's duration onto the total carried forward from

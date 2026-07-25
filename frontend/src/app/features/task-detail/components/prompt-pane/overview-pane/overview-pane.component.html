@@ -231,32 +231,25 @@
           @if (historyRunOptions().length > 0) {
             <span class="ov-runs-strip__chips" role="tablist">
               @for (run of visibleHistoryChips(); track run.attempt) {
-                <button type="button"
-                        class="ov-runs-strip__chip"
+                <button type="button" class="ov-runs-strip__chip"
                         [class.ov-runs-strip__chip--active]="selectedPipelineAttemptNumber() === run.attempt"
-                        [attr.data-kind]="run.kind"
-                        [attr.data-attempt]="run.attempt"
-                        role="tab"
+                        [attr.data-attempt]="run.attempt" data-superseded="true" role="tab"
                         [attr.aria-selected]="selectedPipelineAttemptNumber() === run.attempt"
-                        data-testid="overview-pipeline-run-option"
-                        [cacTooltip]="run.tooltip"
+                        data-testid="overview-pipeline-run-option" [cacTooltip]="run.tooltip"
                         (click)="selectPipelineRun(run.attempt)">
-                  <span class="ov-runs-strip__chip-num">#{{ run.attempt }}</span>
-                  <span class="ov-runs-strip__chip-glyph" aria-hidden="true">{{ run.glyph }}</span>
+                  <span class="ov-runs-strip__chip-num">Attempt #{{ run.attempt }}</span><span class="ov-runs-strip__chip-state">superseded</span>
                 </button>
               }
               @if (hiddenRunCount() > 0) {
                 <span class="ov-runs-strip__ellipsis" aria-hidden="true">…</span>
-                <button type="button"
-                        class="ov-runs-strip__more"
+                <button type="button" class="ov-runs-strip__more"
                         data-testid="overview-pipeline-run-more"
                         [attr.aria-label]="'Show ' + hiddenRunCount() + ' more runs'"
                         (click)="toggleRunSwitcher()">
                   +{{ hiddenRunCount() }} more
                 </button>
               } @else if (runSwitcherExpanded() && historyRunOptions().length > runSwitcherLimit()) {
-                <button type="button"
-                        class="ov-runs-strip__more"
+                <button type="button" class="ov-runs-strip__more"
                         data-testid="overview-pipeline-run-less"
                         (click)="toggleRunSwitcher()">
                   Show fewer
@@ -268,7 +261,12 @@
       }
 
       @if (hasPipeline()) {
-      <div class="ov-pipeline" data-testid="overview-pipeline-steps">
+      @if (!selectedPipelineIsCurrent()) {
+        <app-pipeline-history-notice [attempt]="selectedPipelineAttemptNumber()" [currentAttempt]="pipelineAttempt()" />
+      }
+      <div class="ov-pipeline"
+           [class.ov-pipeline--historical]="!selectedPipelineIsCurrent()"
+           data-testid="overview-pipeline-steps">
         <!-- Column headers for the right-aligned per-step metric cells. Widths
              and gaps mirror `.ov-pl-step`'s timing / tokens / cost columns so
              each caption sits over its values. Introduced once at the top so the
@@ -335,10 +333,10 @@
             </button>
             @if (!isGroupCollapsed(group)) {
             @for (row of group.rows; track row.id) {
-          <div class="ov-pl-step"
-               [class.ov-pl-step--disabled]="row.status === 'disabled'"
+          <div class="ov-pl-step" [class.ov-pl-step--disabled]="row.status === 'disabled'"
                [class.ov-pl-step--running]="row.status === 'running'"
                [class.ov-pl-step--final-verdict]="row.isFinalVerdict"
+               [class.ov-pl-step--historical]="row.historical"
                [attr.data-step-id]="row.id"
                [attr.data-phase]="row.phaseKey"
                [attr.data-status]="row.status"
@@ -346,7 +344,7 @@
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status" data-testid="overview-pipeline-step-status"
                   [cacTooltip]="row.statusTooltip ?? stepStatusLabel(row.status)"
-                  aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
+                  aria-hidden="true">{{ row.historical ? historicalStepStatusIcon(row.status) : stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind"
                   [cacTooltip]="stepKindLabel(row.kind)"
                   role="img"
@@ -357,6 +355,9 @@
               <span class="ov-pl-step__name"
                     data-testid="overview-pipeline-step-name"
                     [cacTooltip]="row.explanation">{{ row.label }}</span>
+              @if (row.skipHint) {
+                <span class="ov-pl-step__skip-hint" data-testid="overview-pipeline-skip-hint">{{ row.skipHint }}</span>
+              }
               <app-pipeline-step-details
                 class="ov-pl-step__details"
                 [stepId]="row.id"
@@ -393,7 +394,7 @@
               <span class="ov-pl-step__final-badge"
                     data-testid="overview-pipeline-step-final-verdict"
                     [cacTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
-                Final verdict
+                Final verdict@if (row.historical) { · superseded }
               </span>
             }
             @if (row.status === 'running') {
@@ -425,14 +426,14 @@
                     [cacTooltip]="badge.tooltip"
                     [tooltipSeverity]="badge.severity"
                     [attr.aria-label]="'Decision: ' + badge.label"
-                    data-testid="overview-pipeline-step-decision">{{ badge.label }}</span>
+                    data-testid="overview-pipeline-step-decision">{{ badge.label }}@if (row.historical) { · superseded }</span>
             } @else if (row.verdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
                     [attr.data-verdict]="row.verdict"
                     [cacTooltip]="row.concernTooltip"
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
-                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
+                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}@if (row.historical) { · superseded }</span>
             }
             @if (row.model) {
               <span class="ov-pl-step__model"

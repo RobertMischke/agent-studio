@@ -534,6 +534,15 @@ describe('OverviewPaneComponent (smoke)', () => {
   it('pipeline block: run switcher shows archived attempts from pipeline history', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');
+    pipe.pipeline.allSteps!.push({
+      id: 'post-orchestrator-decision',
+      displayName: 'Orchestrator decision',
+      kind: 'orchestrator',
+      runMode: 'sequential',
+      dependsOn: [],
+      idempotent: true,
+      stub: false,
+    });
     const run1Start = '2026-06-08T08:00:00.000Z';
     const run1Done = '2026-06-08T08:03:00.000Z';
     const run2Start = '2026-06-09T09:00:00.000Z';
@@ -597,6 +606,20 @@ describe('OverviewPaneComponent (smoke)', () => {
               cacheCreationTokens: 0,
               verdict: 'concerns',
             },
+            {
+              stepId: 'post-orchestrator-decision',
+              kind: 'orchestrator',
+              model: 'claude-haiku-4-5',
+              status: 'failed',
+              startedAt: '2026-06-08T08:04:00.000Z',
+              completedAt: '2026-06-08T08:04:01.000Z',
+              durationMs: 1_000,
+              inputTokens: 5,
+              outputTokens: 7,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              verdict: 'escalate',
+            },
           ],
         },
       ],
@@ -651,6 +674,15 @@ describe('OverviewPaneComponent (smoke)', () => {
     const archivedRows = c.pipelineRows();
     expect(c.selectedPipelineAttemptNumber()).toBe(1);
     expect(c.selectedPipelineIsCurrent()).toBe(false);
+    expect(host.querySelector('[data-testid="overview-pipeline-superseded"]')?.textContent)
+      .toContain('Attempt #1 · superseded');
+    expect(host.querySelector('[data-testid="overview-pipeline-step-final-verdict"]')?.textContent)
+      .toContain('Final verdict · superseded');
+    expect(host.querySelector('[data-testid="overview-pipeline-step-verdict"]')?.textContent)
+      .toContain('superseded');
+    expect(
+      host.querySelector('[data-step-id="post-orchestrator-decision"] .ov-pl-step__status')?.textContent?.trim(),
+    ).toBe('×');
     expect(archivedRows.find(r => r.id === 'core-agent-run')!.status).toBe('passed');
     expect(archivedRows.find(r => r.id === 'core-agent-run')!.totalTokens).toBe(30);
     expect(archivedRows.find(r => r.id === 'aspect-code-quality')!.status).toBe('failed');
@@ -821,7 +853,7 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     // Terse hover summary: outcome + duration; no token/cost detail (that lives
     // in the tokens-by-model section).
-    expect(run2.tooltip.title).toBe('Run #2');
+    expect(run2.tooltip.title).toBe('Attempt #2 · superseded');
     expect(run2.tooltip.body).toContain('1 fail');
     expect(run2.tooltip.body).toContain('3m 34s');
     expect(run2.tooltip.body).not.toContain('Tokens:');
@@ -839,15 +871,18 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(current.textContent).toContain('2 OK');
     expect(current.textContent).toContain('2m');
 
-    // History renders as compact chips, newest first, each number + glyph.
+    // History renders as neutral, explicit superseded attempts. Old result
+    // colours/glyphs must not read as current state.
     const chips = Array.from(
       host.querySelectorAll<HTMLButtonElement>(
         '[data-testid="overview-pipeline-run-option"]:not([data-current="true"])',
       ),
     );
     expect(chips.map(b => b.getAttribute('data-attempt'))).toEqual(['2', '1']);
-    expect(chips[0].textContent?.replace(/\s+/g, '')).toBe('#2✗');
-    expect(chips[1].textContent?.replace(/\s+/g, '')).toBe('#1✓');
+    expect(chips[0].textContent?.replace(/\s+/g, '')).toBe('Attempt#2superseded');
+    expect(chips[1].textContent?.replace(/\s+/g, '')).toBe('Attempt#1superseded');
+    expect(chips[0].getAttribute('data-kind')).toBeNull();
+    expect(chips[1].getAttribute('data-kind')).toBeNull();
 
     // The current run is selected by default; clicking a chip swaps the detail.
     expect(c.selectedPipelineAttemptNumber()).toBe(3);
@@ -1072,6 +1107,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
         pre: [], core: [], post: [],
         allSteps: [
+          { id: 'post-orchestrator-review', displayName: 'Early completeness gate', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-subset-build-test-gate', displayName: 'Subset build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-wiki-maintenance', displayName: 'Wiki maintenance', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
@@ -1081,6 +1117,12 @@ describe('OverviewPaneComponent (smoke)', () => {
         pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
         startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T05:00:18Z',
         steps: [
+          {
+            stepId: 'post-orchestrator-review', kind: 'orchestrator', model: null, status: 'failed',
+            startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T04:47:21Z', durationMs: 1_000,
+            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            verdict: 'escalate', reason: 'Attempt budget exhausted at the early completeness gate.',
+          },
           {
             stepId: 'post-build-test-gate', kind: 'tool', model: null, status: 'failed',
             startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T05:00:18Z', durationMs: 778_000,
@@ -1121,6 +1163,13 @@ describe('OverviewPaneComponent (smoke)', () => {
       title: 'Wiki maintenance: Skipped',
       body: 'No matching wiki topic was configured.',
     });
+    expect(rows.find(row => row.id === 'post-wiki-maintenance')?.skipHint)
+      .toBe('skipped: chain ended by early escalate');
+
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-skip-hint"]')?.textContent)
+      .toContain('skipped: chain ended by early escalate');
   });
 
   it('pipeline block: per-step rows carry start/end stamps and a live-counting duration for the running step', async () => {

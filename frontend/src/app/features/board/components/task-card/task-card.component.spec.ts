@@ -1132,9 +1132,18 @@ describe('TaskCardComponent (smoke)', () => {
   });
 
   it('treats a live remote lease as running when no local execution exists', async () => {
+    const acquiredAt = new Date().toISOString();
     const fixture = await renderCard(makeJob({
       state: '3-progress',
       execution: null,
+      executionLocation: {
+        state: 'remote-running', executionKind: 'remote', runnerId: 'agent-runner-01',
+        clientId: 'runner-client-01', hostDisplayName: 'linux-host', configuredRunnerId: 'agent-runner-01',
+        startedAt: acquiredAt, lastHeartbeat: acquiredAt, lastActivityAt: acquiredAt,
+        processId: null, sessionId: null, branch: 'task/task-1', worktreePath: '/worktrees/task-1',
+        connectionState: 'connected', leaseState: 'active',
+        trustReason: 'The task server holds the fenced run lease.',
+      },
       runner: {
         runnerId: 'agent-runner-01@linux-host',
         runnerName: 'agent-runner-01',
@@ -1143,7 +1152,7 @@ describe('TaskCardComponent (smoke)', () => {
         isRemote: true,
         leaseId: 'lease-live',
         fencingToken: 9,
-        acquiredAt: '2026-07-11T13:45:00Z',
+        acquiredAt,
       },
     }));
 

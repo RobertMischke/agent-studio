@@ -580,6 +580,13 @@
   // the `@container ov-pipeline` rules at the bottom of the grid block.
   container-type: inline-size;
   container-name: ov-pipeline;
+
+  &--historical {
+    --severity-pass: var(--studio-fg-muted); --severity-warn: var(--studio-fg-muted);
+    --severity-high: var(--studio-fg-muted); --severity-pending: var(--studio-fg-muted);
+    --lane-progress: var(--studio-fg-muted); --lane-completed: var(--studio-fg-muted);
+    --studio-success: var(--studio-fg-muted); --studio-error: var(--studio-fg-muted);
+  }
 }
 
 // One collapsible pipeline section: the phase-header button plus its (optionally
@@ -943,6 +950,17 @@
     cursor: help;
   }
 
+  &__skip-hint {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--studio-fg-muted);
+    font-size: 9.5px;
+    font-style: italic;
+  }
+
   &__details,
   &__toggle {
     flex: 0 0 auto;
@@ -1149,6 +1167,28 @@
     width: 64px;
     text-align: right;
     color: var(--studio-fg-dim);
+  }
+}
+
+.ov-pipeline--historical {
+  .ov-pl-step, .ov-pl-step--final-verdict, .ov-pl-step--running {
+    background: var(--studio-surface-muted);
+    color: var(--studio-fg-muted);
+  }
+
+  .ov-pl-step__status, .ov-pl-step__running-dot { animation: none; }
+
+  .ov-pl-step__status {
+    color: var(--studio-fg-muted);
+    filter: grayscale(1);
+    opacity: 0.72;
+  }
+
+  .ov-pl-step__verdict, .ov-pl-step__decision,
+  .ov-pl-step__final-badge, .ov-pl-step__running-badge {
+    border-color: var(--studio-border);
+    background: transparent;
+    color: var(--studio-fg-muted);
   }
 }
 
@@ -1547,12 +1587,6 @@
       outline-offset: 1px;
     }
 
-    // A failed older run gets a faint red edge so a bad attempt reads at a
-    // glance without shouting over the current run.
-    &[data-kind='fail'] {
-      border-color: color-mix(in srgb, var(--studio-error) 34%, var(--studio-border-muted));
-    }
-
     &--active {
       color: var(--studio-fg-strong);
       border-color: color-mix(in srgb, var(--studio-accent) 55%, var(--studio-border-strong));
@@ -1565,12 +1599,12 @@
     color: inherit;
   }
 
-  &__chip-glyph {
-    font-weight: 700;
+  &__chip-state {
+    color: var(--studio-fg-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
-
-  &__chip[data-kind='pass'] &__chip-glyph { color: var(--studio-success); }
-  &__chip[data-kind='fail'] &__chip-glyph { color: var(--studio-error); }
 
   &__ellipsis {
     flex: 0 0 auto;

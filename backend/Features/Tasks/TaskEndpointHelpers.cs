@@ -172,8 +172,9 @@ internal static class TaskEndpointHelpers
         // missing-terminal-sentinel chip that contradicts its accept (ASS-775).
         // The scanner already clears this when the accept note is in the log; this
         // covers 5-human-review accepts whose accept note never reached the log.
-        var outcomeIssue = TaskOutcomeIssueReconciliation.ShouldSuppress(
-            job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
+        var outcomeIssue = IsOutcomeIssueFromSupersededAttempt(job)
+            || TaskOutcomeIssueReconciliation.ShouldSuppress(
+                job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
             ? null
             : job.OutcomeIssue;
         // ASS-1751: classify why a 3-progress card looks "untouched" — a live
@@ -391,6 +392,8 @@ internal static class TaskEndpointHelpers
                 byProject[job.ProjectName] = latestByJob;
             }
             if (!latestByJob.TryGetValue(job.Id, out var latest)) continue;
+            var attemptEpoch = CurrentAttemptEpoch(job);
+            if (attemptEpoch.HasValue && latest.CreatedAt < attemptEpoch.Value) continue;
             var verdict = latest.Kind switch
             {
                 ReviewDecisionKind.Reissue      => "reissue",
@@ -401,6 +404,39 @@ internal static class TaskEndpointHelpers
             if (verdict != null) verdicts[job.TaskKey] = verdict;
         }
         return verdicts;
+    }
+
+    /// <summary>
+    /// The latest transition into Progress is the claim boundary for the
+    /// currently visible attempt. A decision older than that boundary belongs
+    /// to the superseded attempt and must not drive card badges or banners.
+    /// Legacy tasks without transition provenance retain the old projection.
+    /// </summary>
+    private static DateTime? CurrentAttemptEpoch(TaskInfo job)
+    {
+        var transitions = job.Provenance?.Transitions;
+        if (transitions is not { Count: > 0 }) return null;
+        for (var i = transitions.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(transitions[i].Lane, TaskStates.Progress, StringComparison.Ordinal))
+                return transitions[i].AtUtc;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Runner outcome issues are derived from the output log and may survive a
+    /// lane-only requeue. Once a newer Progress claim exists, an issue last
+    /// observed before that boundary belongs to the superseded attempt and
+    /// must not drive the current card's Blocked banner.
+    /// </summary>
+    internal static bool IsOutcomeIssueFromSupersededAttempt(TaskInfo job)
+    {
+        var issueAt = job.OutcomeIssue?.LastSeenAt;
+        var attemptEpoch = CurrentAttemptEpoch(job);
+        return issueAt.HasValue
+            && attemptEpoch.HasValue
+            && issueAt.Value < attemptEpoch.Value;
     }
 
     /// <summary>

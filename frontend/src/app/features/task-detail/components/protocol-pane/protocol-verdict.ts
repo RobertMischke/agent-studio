@@ -60,6 +60,11 @@ export interface ProtocolVerdictInputs {
    * `accept` marks an accepted stand that overtakes an earlier Blocked run.
    */
   orchestratorVerdict?: 'pending' | 'reissue' | 'escalate' | 'accept' | null;
+  /**
+   * True when status.md provenance points at an older pipeline attempt than
+   * the current execution. Its outcome is history and cannot lead the banner.
+   */
+  statusSuperseded?: boolean;
 }
 
 /**
@@ -96,6 +101,20 @@ export interface ProtocolVerdictInputs {
  * and unit tests can hammer every branch without a fixture.
  */
 export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVerdict {
+  if (input.statusSuperseded && !input.isRunning) {
+    const historical = computeVerdictBase({ ...input, statusSuperseded: false });
+    const superseded = historical.kind === 'problem'
+      ? { label: historical.label, detail: historical.detail }
+      : null;
+    return {
+      kind: 'unclear',
+      emoji: emojiFor('unclear'),
+      label: 'Current attempt',
+      detail: 'A newer attempt is active. The previous run outcome is kept as superseded history.',
+      duration: null,
+      superseded,
+    };
+  }
   const base = computeVerdictBase(input);
   const reconciled = reconcileWithLeadingState(base, input);
   return { ...reconciled, duration: parseDuration(input.statusMarkdown) };

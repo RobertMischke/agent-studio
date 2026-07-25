@@ -30,6 +30,7 @@ import { ClaudeSessionPollService } from '../../../../polling/services/claude-se
 import { CliOutputPollService } from '../../../../polling/services/cli-output-poll.service';
 import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
+import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
 import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
 import { PlanPollService } from '../../../../polling/services/plan-poll.service';
 import { PlanStripComponent } from '../../../../plan-strip/plan-strip.component';
@@ -160,6 +161,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly cliPoll = inject(CliOutputPollService);
   private readonly sessionEventsPoll = inject(SessionEventsPollService);
   private readonly runTimelinePoll = inject(RunTimelinePollService);
+  private readonly pipelinePoll = inject(TaskPipelinePollService);
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
   private readonly planPoll = inject(PlanPollService);
   private readonly nowTick = inject(NowTickService).now;
@@ -378,6 +380,21 @@ export class ProtocolPaneComponent implements OnDestroy {
     () => this.detail().summaryState?.status ?? 'none',
   );
 
+  readonly statusIsSuperseded = computed<boolean>(() => {
+    const generation = this.detail().statusGeneration;
+    const execution = this.pipelinePoll.pipeline()?.execution;
+    const currentAttempt = execution?.attempt;
+    if (currentAttempt == null) return false;
+    if (generation?.runIndex != null) return generation.runIndex < currentAttempt;
+
+    // Legacy status files have no runIndex. While a later attempt is active,
+    // any still-visible status belongs to the already closed attempt because
+    // the current attempt has not produced its terminal summary yet.
+    return currentAttempt > 1
+      && execution?.completedAt == null
+      && !!this.detail().statusMarkdown?.trim();
+  });
+
   /**
    * Three-state simplified verdict shown at the very top of the protocol
    * pane. Pure derivation from the existing signals - see protocol-verdict.ts
@@ -395,6 +412,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       hasActivity: this.hasActivity(),
       laneState: this.detail().info.state,
       orchestratorVerdict: this.detail().info.orchestratorVerdict,
+      statusSuperseded: this.statusIsSuperseded(),
     }),
   );
 

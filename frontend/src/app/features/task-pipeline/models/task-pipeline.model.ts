@@ -45,6 +45,8 @@ export interface TaskPipeline {
 export interface PipelineStepExecution {
   stepId: string;
   kind: StepKind;
+  /** Pipeline attempt epoch that owns this row. Null only on legacy records. */
+  attempt?: number | null;
   model?: string | null;
   thinkingLevel?: string | null;
   recommendedModel?: string | null;
