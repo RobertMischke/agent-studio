@@ -94,13 +94,21 @@ public class TaskStateMachine
         string targetState,
         string? watchPath = null,
         string? cause = null,
-        AttemptWriteReference? authorityWrite = null)
+        AttemptWriteReference? authorityWrite = null,
+        string? expectedSourceState = null)
     {
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
 
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+        if (!string.IsNullOrWhiteSpace(expectedSourceState)
+            && !string.Equals(info.State, expectedSourceState, StringComparison.OrdinalIgnoreCase))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.SourceStateMismatch,
+                $"Expected source state {expectedSourceState}, current state is {info.State}.");
+        }
         if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: info.FolderPath);
 
         // F21: serialise all lane writers on this project's watch path so a
@@ -112,6 +120,13 @@ public class TaskStateMachine
 
         var recheck = _scanner.FindJob(jobId, watchPath);
         if (recheck == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+        if (!string.IsNullOrWhiteSpace(expectedSourceState)
+            && !string.Equals(recheck.State, expectedSourceState, StringComparison.OrdinalIgnoreCase))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.SourceStateMismatch,
+                $"Expected source state {expectedSourceState}, current state is {recheck.State}.");
+        }
         if (recheck.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
 
         if (IsFlatLayoutJobDir(recheck.FolderPath))

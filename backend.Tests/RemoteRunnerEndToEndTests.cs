@@ -1348,7 +1348,161 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         await GitAsync(seed, "remote", "add", "origin", origin);
         await GitAsync(seed, "push", "-u", "origin", "main");
         return origin;
-}
+    }
+
+    [Fact]
+    public async Task Monolith_v1_review_report_after_operator_acceptance_keeps_completed_lane_and_records_evidence()
+    {
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        const string repositoryUrl = "https://example.invalid/agent-studio.git";
+        const string reviewRunnerId = "review-runner-post-acceptance";
+        const string reviewInstance = "review-host:5252";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Accepted before review report", "Keep acceptance terminal.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)!;
+        var run = authority.AcquireRun(
+            TaskKey,
+            repositoryId,
+            null,
+            "coding-runner",
+            "coding-host",
+            120,
+            "post-acceptance-run").RunAttempt!;
+        authority.SettleRun(
+            new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "post-acceptance-run-complete"),
+            "done",
+            resultSha,
+            null,
+            resultEnvelope: new Contract.ImmutableResultEnvelope(
+                repositoryId,
+                run.AttemptId,
+                resultSha,
+                resultSha,
+                "refs/heads/agent-studio/results/post-acceptance",
+                null,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                RepositoryUrl: repositoryUrl));
+        var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            TaskKey,
+            repositoryId,
+            resultSha,
+            run.AttemptId,
+            "requirements",
+            "policy",
+            [],
+            "post-acceptance-review",
+            RepositoryUrl: repositoryUrl,
+            ResultRef: resultSha,
+            Plan: new Contract.ReviewPlanDto([], [])));
+        Assert.Equal(AttemptWriteStatus.Accepted, created.Status);
+
+        var registration = await http.PutAsJsonAsync(
+            $"/api/v1/runners/{reviewRunnerId}",
+            new Contract.RegisterRunnerRequest(
+                reviewRunnerId,
+                "review-host",
+                reviewInstance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [
+                    Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.GitMaterialization,
+                    Contract.ReviewCapabilities.SemanticReview,
+                ]));
+        registration.EnsureSuccessStatusCode();
+
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            CancellationToken.None);
+        Assert.Equal("claimed", claim.Status);
+
+        var moved = factory.Services.GetRequiredService<TaskStateMachine>().MoveJob(
+            TaskKey,
+            TaskStates.Completed,
+            _watchPath,
+            TimelineActors.Human("operator"));
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+
+        var reportRequest = PassingV1ReviewReport(claim, "post-acceptance-report");
+        var report = await reviewClient.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            reportRequest,
+            CancellationToken.None);
+        var replay = await reviewClient.ReportReviewAsync(
+            claim.Attempt.AttemptId,
+            reportRequest,
+            CancellationToken.None);
+
+        var completedFolder = Path.Combine(_watchPath, TaskStates.Completed, TaskKey);
+        var evidenceFile = Path.Combine(
+            completedFolder,
+            $"remote-review-grade-{claim.Attempt.AttemptId}.md");
+        Assert.Equal(TaskStates.Completed, report.TaskState);
+        Assert.Equal(report, replay);
+        Assert.False(report.RetryScheduled);
+        Assert.True(Directory.Exists(completedFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)));
+        Assert.True(File.Exists(evidenceFile));
+        Assert.Contains("Remote Review Grade", File.ReadAllText(evidenceFile), StringComparison.Ordinal);
+
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance).ReadAll(completedFolder);
+        var recorded = Assert.Single(
+            timeline,
+            item => item.Kind == TimelineEventKinds.PostAcceptanceReviewReportRecorded);
+        Assert.Equal("post-acceptance review report recorded", recorded.Summary);
+        Assert.Equal(Path.GetFileName(evidenceFile), recorded.PayloadRef);
+        Assert.DoesNotContain(
+            timeline,
+            item => item.Kind == TimelineEventKinds.LaneChanged
+                    && item.Details?.GetValueOrDefault("to") == TaskStates.HumanReview);
+    }
+
+    private static Contract.ReviewReportRequest PassingV1ReviewReport(
+        Contract.ReviewClaimResponse claim,
+        string idempotencyKey)
+    {
+        var lease = claim.Lease!;
+        var subject = claim.Subject!;
+        return new Contract.ReviewReportRequest(
+            lease.ExecutorId,
+            lease.InstanceId,
+            lease.LeaseId,
+            lease.Fence,
+            idempotencyKey,
+            "Pass",
+            null,
+            "Remote review passed after operator acceptance.",
+            new Contract.ReviewWorkspaceProofDto(
+                subject.RepositoryId,
+                subject.ExpectedResultSha,
+                subject.ExpectedResultSha,
+                "0123456789abcdef0123456789abcdef01234567",
+                false,
+                false,
+                new string('c', 64),
+                lease.ResourceNamespace),
+            new Contract.ReviewEnvironmentDto(
+                lease.HostId,
+                lease.ExecutorId,
+                lease.InstanceId,
+                "linux",
+                "x64",
+                "10.0",
+                new Dictionary<string, string>(),
+                new Dictionary<string, string>()),
+            [],
+            [],
+            [new Contract.ReviewVerdictDto("build-tests", "pass", "Verified", "Build and tests passed.")],
+            lease.AuthorityEpoch);
+    }
 
     private static async Task<LocalGitResult> GitAsync(
         string cwd, params string[] args)
