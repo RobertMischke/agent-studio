@@ -14,6 +14,47 @@ namespace AgentStudio.Tests;
 /// </summary>
 public sealed class WorktreeRunPolicyTests
 {
+    [Fact]
+    public void ResolveRunnerEntry_RepositoryOnlyProject_UsesRepositoryAsWorkingDirectory()
+    {
+        var storage = Path.Combine(Path.GetTempPath(), "task-storage", "PROJ-020");
+        var repository = Path.Combine(Path.GetTempPath(), "repos", "docs");
+        var raw = new WatchPathEntry { Name = "Docs", Path = storage };
+        var record = new ProjectRecord
+        {
+            Id = "PROJ-020",
+            DisplayName = "Docs",
+            StorageLocation = storage,
+            RepositoryPath = repository,
+        };
+
+        var resolved = TaskRunnerService.ResolveRunnerEntry(raw, record);
+
+        Assert.Equal(repository, resolved.RepositoryPath);
+        Assert.Equal(repository, resolved.RootPath);
+    }
+
+    [Fact]
+    public void ResolveRunnerEntry_ExternalConfiguredCwd_PreservesRepositoryAuthority()
+    {
+        var storage = Path.Combine(Path.GetTempPath(), "task-storage", "PROJ-021");
+        var repository = Path.Combine(Path.GetTempPath(), "repos", "patterns");
+        var raw = new WatchPathEntry { Name = "Patterns", Path = storage };
+        var record = new ProjectRecord
+        {
+            Id = "PROJ-021",
+            DisplayName = "Patterns",
+            StorageLocation = storage,
+            RepositoryPath = repository,
+            RootPath = storage,
+        };
+
+        var resolved = TaskRunnerService.ResolveRunnerEntry(raw, record);
+
+        Assert.Equal(repository, resolved.RepositoryPath);
+        Assert.Equal(storage, resolved.RootPath);
+    }
+
     // --- RequiresWorktree ---------------------------------------------------
 
     [Theory]
@@ -53,6 +94,15 @@ public sealed class WorktreeRunPolicyTests
     }
 
     [Fact]
+    public void IsMainCheckoutViolation_CodingRunInMainCheckoutSubfolder_True()
+    {
+        var main = Path.Combine(Path.GetTempPath(), "repo-main");
+        var docs = Path.Combine(main, "docs");
+        Assert.True(WorktreeRunPolicy.IsMainCheckoutViolation(
+            requiresWorktree: true, runWorkingDir: docs, mainCheckoutRoot: main));
+    }
+
+    [Fact]
     public void IsMainCheckoutViolation_ReadOnlyRunAtMainCheckout_False()
     {
         // Read-only runs (requiresWorktree == false) legitimately run in-place.
@@ -79,6 +129,35 @@ public sealed class WorktreeRunPolicyTests
             requiresWorktree: true,
             runWorkingDir: main + Path.DirectorySeparatorChar,
             mainCheckoutRoot: main));
+    }
+
+    // --- ResolveWorkingDirectory -------------------------------------------
+
+    [Fact]
+    public void ResolveWorkingDirectory_MonorepoSubfolder_MapsIntoWorktree()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), "repo-main");
+        var configured = Path.Combine(repository, "docs", "product");
+        var worktree = Path.Combine(Path.GetTempPath(), "worktrees", "task-1");
+
+        var resolved = WorktreeRunPolicy.ResolveWorkingDirectory(
+            repository, configured, worktree);
+
+        Assert.Equal(Path.Combine(worktree, "docs", "product"), resolved);
+    }
+
+    [Fact]
+    public void ResolveWorkingDirectory_TaskStorageOutsideRepository_UsesWorktreeRoot()
+    {
+        var repository = Path.Combine(Path.GetTempPath(), "repo-main");
+        var taskStorage = Path.Combine(Path.GetTempPath(), "task-storage", "PROJ-015");
+        var worktree = Path.Combine(Path.GetTempPath(), "worktrees", "TE-20");
+
+        var resolved = WorktreeRunPolicy.ResolveWorkingDirectory(
+            repository, taskStorage, worktree);
+
+        Assert.Equal(Path.GetFullPath(worktree), resolved);
+        Assert.False(WorktreeRunPolicy.PathsEqual(resolved, taskStorage));
     }
 
     // --- CanResumeSession ---------------------------------------------------

@@ -40,7 +40,11 @@ state.
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
   whether a run must be worktree-isolated, the main-checkout guard condition, and
-  the cwd-keyed session-resume gate (see ADR-0057).
+  the cwd-keyed session-resume gate (see ADR-0057). Every source-mutating run,
+  including a single-slot run, requires an authoritative Git repository and its
+  own task worktree. A non-Git project is rejected for mutating runs instead of
+  falling back to in-place execution; read-only planning and research remain
+  eligible to run in place.
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
