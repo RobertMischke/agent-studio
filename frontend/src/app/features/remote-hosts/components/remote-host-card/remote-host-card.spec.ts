@@ -97,6 +97,21 @@ describe('RemoteHostCardComponent', () => {
     expect(badge?.getAttribute('data-tone')).toBe('error');
   });
 
+  it('shows the project and reason when a delivery preflight blocks claims', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      projectPreflights: [{
+        projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
+        repositoryUrl: 'https://example.test/payments.git', fetchUrl: 'https://example.test/payments.git',
+        pushUrl: 'https://example.test/payments.git', status: 'failed',
+        detail: 'write probe failed: permission denied', checkedAt: '2026-07-10T11:59:00Z',
+      }],
+    }).nativeElement;
+    const failure = el.querySelector('[data-testid="remote-host-project-preflight-failures"]');
+    expect(failure?.textContent).toContain('Payments');
+    expect(failure?.textContent).toContain('permission denied');
+  });
+
   it('emits an action event with the host id when a control is clicked', () => {
     const fixture = mount(HOST);
     let received: { kind: string; id: string } | null = null;

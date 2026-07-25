@@ -248,6 +248,18 @@ state.
   Host-level probe and one-shot fallback URLs never flow into project clones.
   A project without a registry URL stays Ready, is reported as not
   remote-capable, and creates no clone.
+- Before the first card for one host/project pair is leased, the claim endpoint
+  returns an unleased preflight offer containing the registered repository and
+  a registration fingerprint. The host creates or refreshes the exact shared
+  project clone, verifies that both `origin` fetch and push URLs equal the
+  registration, fetches, and proves write access by creating and removing a
+  temporary runner ref. It reports the result in the next claim request. Only a
+  matching green result may cross `2-ready` to
+  `3-progress`. The server persists the result on the host identity and reuses
+  it for following cards without another offer roundtrip. Repository
+  registration and integration-branch mutations invalidate every host's cached
+  result for that project. A failure remains visible on the Remote Hosts card
+  and project execution card.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,
@@ -402,8 +414,10 @@ state.
 - Remote `agent-host` admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
   on its client identity. A reported `read-only` identity receives no coding
-  claims, but may receive read-only Epic planning claims. Remote Hosts surfaces
-  the same state for operator repair.
+  claims. The per-project delivery preflight is stricter and applies before any
+  first project claim, including Epic planning: it creates and removes a
+  temporary runner ref so server-side write policy is exercised. Remote Hosts
+  surfaces both states for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider

@@ -367,6 +367,9 @@ public static class RegistryEndpoints
                             statusCode: StatusCodes.Status500InternalServerError);
                     }
                 }
+                if (body.RepositoryUrl != null || body.ClearRepositoryUrl == true
+                    || body.RepositoryPath != null || body.ClearRepositoryPath == true)
+                    clients.InvalidateRunnerProjectPreflights(projId);
                 return Results.Ok(ProjectSummary.From(result));
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
@@ -437,12 +440,13 @@ public static class RegistryEndpoints
         });
 
         app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls",
-            (string projId, CreateProjectUrlRequest body, ProjectRegistry projects) =>
+            (string projId, CreateProjectUrlRequest body, ProjectRegistry projects, ClientIdentityStore clients) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
             try
             {
                 var updated = projects.AddUrl(projId, body.Label, body.Url, body.StartRule);
+                clients.InvalidateRunnerProjectPreflights(projId);
                 return Results.Ok(updated);
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
@@ -450,12 +454,13 @@ public static class RegistryEndpoints
         });
 
         app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
-            (string projId, string urlId, UpdateProjectUrlRequest body, ProjectRegistry projects) =>
+            (string projId, string urlId, UpdateProjectUrlRequest body, ProjectRegistry projects, ClientIdentityStore clients) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
             try
             {
                 var updated = projects.UpdateUrl(projId, urlId, body.Label, body.Url, body.StartRule);
+                clients.InvalidateRunnerProjectPreflights(projId);
                 return Results.Ok(updated);
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
@@ -463,7 +468,7 @@ public static class RegistryEndpoints
         });
 
         app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
-            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
+            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs, ClientIdentityStore clients) =>
         {
             try
             {
@@ -471,6 +476,7 @@ public static class RegistryEndpoints
                 // surface from which an operator can stop it.
                 procs.Stop(projId, urlId);
                 var updated = projects.RemoveUrl(projId, urlId);
+                clients.InvalidateRunnerProjectPreflights(projId);
                 return Results.Ok(updated);
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }

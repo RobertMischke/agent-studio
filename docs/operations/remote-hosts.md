@@ -75,6 +75,14 @@ The fallback URLs above remain startup probe inputs only. Each project clone
 uses its registry URL for both fetch and push and repairs both values on every
 refresh.
 
+The first claim for each host/project pair is a preflight offer, not a lease.
+The daemon prepares the project's real shared clone, requires its fetch and push
+URLs to match the registered repository URL, fetches, then creates and removes
+a temporary runner ref. This real write exercises server-side hooks and
+permissions that a dry-run can miss. The green result is cached until that
+project registration changes. A failure keeps the card Ready and appears with
+its reason on both the host card and the project's Execution card.
+
 ## Connect the daemon
 
 Register the host identity once and use its returned `id` as

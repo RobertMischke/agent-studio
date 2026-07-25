@@ -580,12 +580,17 @@ public static class ProjectSettingsEndpoints
 
         // ADR-0052: integration branch parallel task worktrees branch off and
         // merge back into. Blank reverts to the default (develop).
-        app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req,
+            ProjectSettingsService settings, TaskScannerService scanner, ProjectRegistry projects,
+            ClientIdentityStore clients) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetIntegrationBranch(projectName, req.Branch);
+            var project = projects.FindByIdOrDisplayName(projectName);
+            if (project is not null)
+                clients.InvalidateRunnerProjectPreflights(project.Id);
             return Results.Ok(settings.Get(projectName));
         });
 

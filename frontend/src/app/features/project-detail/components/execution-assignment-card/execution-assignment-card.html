@@ -61,6 +61,13 @@
     </div>
   }
 
+  @if (deliveryPreflight(); as preflight) {
+    <p class="execution-card__delivery" [attr.data-status]="preflight.status" data-testid="project-delivery-preflight">
+      <strong>Delivery preflight {{ preflight.status === 'ready' ? 'passed' : 'blocked' }}.</strong>
+      {{ preflight.detail }}
+    </p>
+  }
+
   @if (saveError()) {
     <p class="execution-card__error" role="alert">{{ saveError() }}</p>
   }

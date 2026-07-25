@@ -78,7 +78,6 @@ public sealed class GitWorkspace
                 _log("git fetch origin --prune");
                 await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
             }
-
             // Reclaim debris from a process crash before creating the new
             // linked checkout. A crashed process may have left its only copy of
             // the work here, so the same salvage invariant as normal teardown
@@ -127,6 +126,96 @@ public sealed class GitWorkspace
             GitMetadataGate.Release();
         }
     }
+
+    /// <summary>
+    /// Proves the registered fetch and push path before the server leases the
+    /// first card for this host/project pair. It prepares the same shared clone
+    /// later task worktrees use, so a green result is not a disposable probe of
+    /// a different path.
+    /// </summary>
+    public static async Task<ProjectDeliveryPreflightResult> PreflightProjectAsync(
+        RunnerOptions options,
+        string projectId,
+        string repositoryUrl,
+        string defaultBranch,
+        Action<string> log,
+        CancellationToken ct)
+    {
+        var expected = repositoryUrl.Trim();
+        if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(expected)
+            || string.IsNullOrWhiteSpace(defaultBranch))
+            return new(false, expected, expected, "project id and repository URL are required");
+
+        var projectPath = CachePathForProject(options.WorkDir, projectId);
+        var sharedRepoPath = Path.Combine(projectPath, "repo");
+        Directory.CreateDirectory(projectPath);
+
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(Path.Combine(sharedRepoPath, ".git")))
+            {
+                log($"project-delivery-preflight clone project={projectId} repository={expected}");
+                var clone = await ProcessRunner.RunAsync(
+                    "git", ["clone", "--no-checkout", expected, sharedRepoPath], projectPath, ct: ct);
+                if (!clone.Success) return Failed("clone", clone, expected, expected);
+            }
+
+            var fetchSet = await ProcessRunner.RunAsync(
+                "git", ["remote", "set-url", "origin", expected], sharedRepoPath, ct: ct);
+            if (!fetchSet.Success) return Failed("set fetch URL", fetchSet, expected, expected);
+            var pushSet = await ProcessRunner.RunAsync(
+                "git", ["remote", "set-url", "--push", "origin", expected], sharedRepoPath, ct: ct);
+            if (!pushSet.Success) return Failed("set push URL", pushSet, expected, expected);
+
+            var fetch = await ProcessRunner.RunAsync(
+                "git", ["remote", "get-url", "origin"], sharedRepoPath, ct: ct);
+            if (!fetch.Success) return Failed("read fetch URL", fetch, expected, expected);
+            var push = await ProcessRunner.RunAsync(
+                "git", ["remote", "get-url", "--push", "origin"], sharedRepoPath, ct: ct);
+            if (!push.Success) return Failed("read push URL", push, fetch.StdOut.Trim(), expected);
+            var fetchUrl = fetch.StdOut.Trim();
+            var pushUrl = push.StdOut.Trim();
+            if (!SameRemote(fetchUrl, expected) || !SameRemote(pushUrl, expected))
+                return new(false, fetchUrl, pushUrl,
+                    $"fetch/push URL mismatch: registered={expected}, fetch={fetchUrl}, push={pushUrl}");
+
+            var fetchResult = await ProcessRunner.RunAsync(
+                "git", ["fetch", "origin", "--prune"], sharedRepoPath, ct: ct);
+            if (!fetchResult.Success) return Failed("fetch", fetchResult, fetchUrl, pushUrl);
+
+            var probeRef = $"refs/heads/runner/{SafeSegment(options.RunnerId)}/delivery-preflight-{Guid.NewGuid():N}";
+            var sourceRef = $"refs/remotes/origin/{defaultBranch.Trim()}";
+            var source = await ProcessRunner.RunAsync(
+                "git", ["rev-parse", "--verify", sourceRef], sharedRepoPath, ct: ct);
+            if (!source.Success) return Failed($"resolve registered branch {defaultBranch.Trim()}", source, fetchUrl, pushUrl);
+            var writable = await ProcessRunner.RunAsync(
+                "git", ["push", "origin", $"{sourceRef}:{probeRef}"], sharedRepoPath, ct: ct);
+            if (!writable.Success) return Failed("write probe", writable, fetchUrl, pushUrl);
+
+            var cleanup = await ProcessRunner.RunAsync(
+                "git", ["push", "origin", $":{probeRef}"], sharedRepoPath, ct: ct);
+            return cleanup.Success
+                ? new(true, fetchUrl, pushUrl, $"clone/fetch URLs match registration; write probe created and removed {probeRef}")
+                : Failed("write probe cleanup", cleanup, fetchUrl, pushUrl);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new(false, expected, expected, $"preflight exception: {OneLine(ex.Message)}");
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    private static ProjectDeliveryPreflightResult Failed(
+        string stage, ProcessResult result, string fetchUrl, string pushUrl) =>
+        new(false, fetchUrl, pushUrl,
+            $"{stage} failed ({result.ExitCode}): {OneLine(string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr)}");
+
+    private static bool SameRemote(string actual, string expected) =>
+        string.Equals(actual.Trim().TrimEnd('/'), expected.Trim().TrimEnd('/'), StringComparison.Ordinal);
 
     /// <summary>
     /// Prepare a detached, disposable checkout for an Epic planning run. No
@@ -685,6 +774,12 @@ public sealed class GitWorkspace
             ? workDir
             : Path.Combine(workDir, SafeSegment(projectId));
 }
+
+public sealed record ProjectDeliveryPreflightResult(
+    bool Succeeded,
+    string FetchUrl,
+    string PushUrl,
+    string Detail);
 
 public sealed record WorktreeTeardownResult(
     bool SecuredWork,

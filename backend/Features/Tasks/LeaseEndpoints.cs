@@ -357,6 +357,9 @@ public static class LeaseEndpoints
 
                 TaskInfo? candidate = null;
                 RemoteProjectRepository? repository = null;
+                TaskInfo? failedPreflightCandidate = null;
+                RemoteProjectRepository? failedPreflightRepository = null;
+                RunnerProjectPreflight? failedProjectPreflight = null;
                 var readOnlyCodingSkipped = false;
                 string? nonRemoteCapableProject = null;
                 foreach (var task in eligible)
@@ -378,6 +381,20 @@ public static class LeaseEndpoints
                         settings.Get(task.ProjectName).IntegrationBranch);
                     if (repository is not null)
                     {
+                        var cached = string.IsNullOrWhiteSpace(clientId)
+                            ? null
+                            : clients.FindRunnerProjectPreflight(clientId, repository.ProjectId);
+                        if (cached is not null
+                            && string.Equals(cached.RegistrationFingerprint,
+                                ProjectDeliveryPreflightFingerprint.Create(repository), StringComparison.Ordinal)
+                            && !string.Equals(cached.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                        {
+                            failedPreflightCandidate ??= task;
+                            failedPreflightRepository ??= repository;
+                            failedProjectPreflight ??= cached;
+                            repository = null;
+                            continue;
+                        }
                         candidate = task;
                         break;
                     }
@@ -389,6 +406,22 @@ public static class LeaseEndpoints
                         task.Key ?? task.TaskKey ?? task.Id);
                 }
 
+                if ((candidate is null || repository is null)
+                    && failedPreflightCandidate is not null
+                    && failedPreflightRepository is not null
+                    && failedProjectPreflight is not null)
+                {
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightFailed,
+                        ProjectName: failedPreflightCandidate.ProjectName,
+                        Message: $"Project delivery preflight failed: {failedProjectPreflight.Detail}",
+                        ProjectId: failedPreflightRepository.ProjectId,
+                        RepositoryUrl: failedPreflightRepository.RepositoryUrl,
+                        DefaultBranch: failedPreflightRepository.DefaultBranch,
+                        TaskKind: failedPreflightCandidate.Kind,
+                        RegistrationFingerprint: ProjectDeliveryPreflightFingerprint.Create(failedPreflightRepository)));
+                }
+
                 if (candidate is null || repository is null)
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
@@ -397,6 +430,80 @@ public static class LeaseEndpoints
                             : nonRemoteCapableProject is not null
                                 ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
                                 : null));
+
+                if (string.IsNullOrWhiteSpace(clientId))
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Invalid,
+                        Message: "A registered host client identity is required for project delivery preflight."));
+
+                var registrationFingerprint = ProjectDeliveryPreflightFingerprint.Create(repository);
+                if (req.ProjectPreflight is not null)
+                {
+                    if (!string.Equals(req.ProjectPreflight.ProjectId, repository.ProjectId, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(req.ProjectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
+                    {
+                        return Results.Ok(new RunnerClaimResponse(
+                            RunnerClaimStatus.Invalid,
+                            ProjectName: candidate.ProjectName,
+                            Message: "The project registration changed while delivery preflight was running. Retry the claim.",
+                            ProjectId: repository.ProjectId,
+                            RepositoryUrl: repository.RepositoryUrl,
+                            DefaultBranch: repository.DefaultBranch,
+                            RegistrationFingerprint: registrationFingerprint));
+                    }
+
+                    var urlsMatch = SameRepositoryUrl(req.ProjectPreflight.FetchUrl, repository.RepositoryUrl)
+                                    && SameRepositoryUrl(req.ProjectPreflight.PushUrl, repository.RepositoryUrl);
+                    var succeeded = req.ProjectPreflight.Succeeded && urlsMatch;
+                    var detail = urlsMatch
+                        ? OneLine(req.ProjectPreflight.Detail)
+                        : $"fetch and push URL must both match registered repository '{repository.RepositoryUrl}'";
+                    clients.SetRunnerProjectPreflight(clientId, new RunnerProjectPreflight
+                    {
+                        ProjectId = repository.ProjectId,
+                        ProjectName = candidate.ProjectName,
+                        RegistrationFingerprint = registrationFingerprint,
+                        RepositoryUrl = repository.RepositoryUrl,
+                        FetchUrl = req.ProjectPreflight.FetchUrl?.Trim() ?? "",
+                        PushUrl = req.ProjectPreflight.PushUrl?.Trim() ?? "",
+                        Status = succeeded ? "ready" : "failed",
+                        Detail = detail,
+                        CheckedAt = req.ProjectPreflight.CheckedAt.ToUniversalTime(),
+                    });
+                    logger.Log(succeeded ? LogLevel.Information : LogLevel.Warning,
+                        "remote-runner-project-preflight project={Project} projectId={ProjectId} runner={Runner} status={Status} detail={Detail}",
+                        candidate.ProjectName, repository.ProjectId, req.RunnerName, succeeded ? "ready" : "failed", detail);
+                }
+
+                var projectPreflight = clients.FindRunnerProjectPreflight(clientId, repository.ProjectId);
+                if (projectPreflight is null
+                    || !string.Equals(projectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
+                {
+                    if (projectPreflight is not null)
+                        clients.InvalidateRunnerProjectPreflights(repository.ProjectId);
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightRequired,
+                        ProjectName: candidate.ProjectName,
+                        Message: "Project delivery preflight is required before the first claim.",
+                        ProjectId: repository.ProjectId,
+                        RepositoryUrl: repository.RepositoryUrl,
+                        DefaultBranch: repository.DefaultBranch,
+                        TaskKind: candidate.Kind,
+                        RegistrationFingerprint: registrationFingerprint));
+                }
+
+                if (!string.Equals(projectPreflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightFailed,
+                        ProjectName: candidate.ProjectName,
+                        Message: $"Project delivery preflight failed: {projectPreflight.Detail}",
+                        ProjectId: repository.ProjectId,
+                        RepositoryUrl: repository.RepositoryUrl,
+                        DefaultBranch: repository.DefaultBranch,
+                        TaskKind: candidate.Kind,
+                        RegistrationFingerprint: registrationFingerprint));
+                }
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
@@ -1049,6 +1156,15 @@ public static class LeaseEndpoints
         !string.IsNullOrWhiteSpace(attemptId)
         && authorityEpoch is > 0
         && !string.IsNullOrWhiteSpace(idempotencyKey);
+
+    private static bool SameRepositoryUrl(string? actual, string expected) =>
+        string.Equals(actual?.Trim().TrimEnd('/'), expected.Trim().TrimEnd('/'), StringComparison.Ordinal);
+
+    private static string OneLine(string? value)
+    {
+        var clean = (value ?? "preflight failed").Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return clean.Length <= 1000 ? clean : clean[..1000];
+    }
 
     /// <summary>
     /// Fill a partial acquire request with this backend's runner identity so a

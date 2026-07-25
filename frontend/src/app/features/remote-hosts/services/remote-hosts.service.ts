@@ -279,7 +279,16 @@ export class RemoteHostsService {
     this.log('wizard-completed', { hostId: id, address: host.address });
   }
 
-  reprobe(id: string): void { this.log('reprobe-requested', { hostId: id }); this.reload(); }
+  reprobe(id: string): void {
+    const host = this.hosts().find(item => item.id === id);
+    if (!host || host.busyAction || !this.http) return;
+    this.log('reprobe-requested', { hostId: id });
+    this.patch(id, item => ({ ...item, busyAction: 'reprobe' }));
+    this.http.post(`/api/clients/${encodeURIComponent(host.clientId)}/runner-project-preflights/invalidate`, {}).subscribe({
+      next: () => this.reload(),
+      error: error => this.actionFailed(id, error),
+    });
+  }
 
   /** Ask a host to finish current work and stop taking more. */
   drain(id: string): void {
@@ -391,6 +400,7 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     liveDataState: 'ready', telemetryLoading: status !== 'retired',
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
+    projectPreflights: client.runnerProjectPreflights ?? [],
     daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? (client.runnerGitStatus === 'read-only' ? 'read-only' : 'running'),
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,

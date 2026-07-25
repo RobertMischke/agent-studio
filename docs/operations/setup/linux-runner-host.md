@@ -376,6 +376,16 @@ export RUNNER_MAX_PARALLELISM=2
 The daemon registers once, polls `POST /api/runner/claim`, and fills free host
 slots. The server only returns pickup-eligible `2-ready` cards from assigned,
 remote-capable projects and moves a successful fenced claim to `3-progress`.
+Before the first lease for each host/project pair, the server offers the
+registered repository without moving the card. The daemon creates or refreshes
+`$RUNNER_WORKDIR/<project-id>/repo`, sets both `origin` URLs to the registered
+URL, verifies them with `git remote get-url`, fetches, and runs
+a real write probe that creates and removes a temporary
+`runner/<runner-id>/delivery-preflight-*` ref. It reports that result in a
+second claim request. A failed probe refuses the claim with its Git error and
+leaves the card in `2-ready`. A successful result is cached for following
+cards. Changing the project's repository registration or integration branch
+invalidates it automatically.
 
 Ready Epic containers are eligible for a special remote planning claim. They
 consume one slot and use the normal lease, heartbeat, telemetry, drain, and
@@ -405,6 +415,11 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+The per-project probe additionally gates the first claim, including an Epic
+planning claim, because a project must have a proven delivery path before the
+host takes any of its work. After a daemon interruption, the next claim requeues
+assigned Progress work once its lease is free and issues a higher fencing token.
 
 ### systemd deployment
 
@@ -607,6 +622,12 @@ proof.
   intentionally skips the same assigned project.
 - **`lease not granted: Held` in one-task mode** - another runner already holds
   the task. The daemon claim path normally avoids this before launch.
+- **`Project delivery preflight failed`** - read the full reason on both the
+  Remote Hosts card and the project's Execution card. Run the printed failing
+  Git operation on the host against the registered repository URL. Repair its
+  credential or registration, then choose **Re-Probe** on the host card or
+  update the repository registration so the failed cached result is cleared and
+  probed again.
 - **`connection lost: cannot reach the task server ...` at startup** - the
   preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
   Confirm with `agent-host --health-check`; if it also exits `4`, restart the

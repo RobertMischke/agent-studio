@@ -1,4 +1,5 @@
 import type { CliType } from '../../../models/task.model';
+import type { RunnerProjectPreflight } from '../../../models/task.model';
 
 /**
  * Remote-hosts registry model (AGT-1921).
@@ -167,6 +168,8 @@ export interface RemoteHost {
   gitPushStatus?: 'ready' | 'read-only' | null;
   gitPushDetail?: string | null;
   gitPushCheckedAt?: string | null;
+  /** Last server-accepted delivery proof for every project offered to this host. */
+  projectPreflights?: readonly RunnerProjectPreflight[];
   daemonState?: 'running' | 'read-only' | 'stopped';
   lastClaimAt?: string | null;
   activeTaskCount?: number;

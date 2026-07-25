@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 const SCREENSHOT_DIR = process.env.PROJECT_SHELL_RESULTS_DIR?.trim()
   || path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'project-execution-assignment');
@@ -23,6 +24,10 @@ test('keeps pickup mode and execution location as independent controls', async (
       body: '[]',
     });
   });
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
   await page.route('**/api/watch-paths', async (route) => {
     await route.fulfill({
       status: 200,
@@ -90,7 +95,7 @@ test('keeps pickup mode and execution location as independent controls', async (
     });
   });
 
-  await page.goto(`/#/projects/${slugFor(projectName)}/settings`);
+  await page.goto(`/#/projects/${slugFor(projectName)}/settings`, { waitUntil: 'domcontentloaded' });
   const card = page.getByTestId('project-execution-card');
   await expect(card).toBeVisible({ timeout: 10_000 });
   await expect(card.getByTestId('project-pickup-mode-manual')).toHaveAttribute('aria-pressed', 'true');
@@ -117,4 +122,48 @@ test('keeps pickup mode and execution location as independent controls', async (
   await card.screenshot({
     path: path.join(SCREENSHOT_DIR, 'project-execution-controls-separated--dark--mocked.png'),
   });
+});
+
+test('shows the assigned host project delivery failure', async ({ page, devBackend }) => {
+  const projectName = 'Agent Studio';
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ name: projectName, path: devBackend.workspace, rootPath: devBackend.workspace }]),
+  }));
+  await page.route('**/api/projects/settings', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      [projectName]: { pickupMode: 'auto', executionLocation: 'agent-runner-01', integrationBranch: 'develop' },
+    }),
+  }));
+  await page.route('**/api/clients', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+      registeredAt: '2026-07-22T10:00:00Z', lastSeenAt: new Date().toISOString(),
+      runnerGitStatus: 'ready',
+      runnerProjectPreflights: [{
+        projectId: 'PROJ-001', projectName, registrationFingerprint: 'b'.repeat(64),
+        repositoryUrl: 'https://github.com/example/agent-studio.git',
+        fetchUrl: 'https://github.com/example/agent-studio.git',
+        pushUrl: 'https://github.com/example/agent-studio.git', status: 'failed',
+        detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
+      }],
+    }]),
+  }));
+
+  await page.goto(`/#/projects/${slugFor(projectName)}/settings`, { waitUntil: 'domcontentloaded' });
+  const card = page.getByTestId('project-execution-card');
+  const failure = card.getByTestId('project-delivery-preflight');
+  await expect(failure).toContainText('blocked');
+  await expect(failure).toContainText('permission denied');
+  await setTheme(page, 'light');
+  await card.screenshot({ path: path.join(SCREENSHOT_DIR, 'project-delivery-preflight-failed--mocked.png') });
+  await setTheme(page, 'dark');
+  await expect(failure).toContainText('permission denied');
+  await card.screenshot({ path: path.join(SCREENSHOT_DIR, 'project-delivery-preflight-failed-dark--mocked.png') });
 });

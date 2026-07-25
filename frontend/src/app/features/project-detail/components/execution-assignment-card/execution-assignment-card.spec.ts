@@ -3,6 +3,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ExecutionAssignmentCardComponent } from './execution-assignment-card';
+import { RemoteHostsService } from '../../../remote-hosts';
 
 describe('ExecutionAssignmentCardComponent', () => {
   it('loads and persists the project-dedicated host assignment', () => {
@@ -127,6 +128,41 @@ describe('ExecutionAssignmentCardComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('shows the assigned project delivery failure and reason', () => {
+    TestBed.configureTestingModule({
+      imports: [ExecutionAssignmentCardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(ExecutionAssignmentCardComponent);
+    fixture.componentRef.setInput('projectName', 'Agent Studio');
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/projects/settings').flush({
+      'Agent Studio': { pickupMode: 'auto', executionLocation: 'agent-runner-01' },
+    });
+    const clients = http.match('/api/clients');
+    clients.forEach(request => request.flush([]));
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    TestBed.inject(RemoteHostsService).hosts.set([{
+      id: 'agent-runner-01', name: 'Runner 01', role: 'remote', address: null,
+      clientId: 'agent-runner-01', status: 'online', os: 'Linux', lastHeartbeatAt: null,
+      uptimeLabel: null, capabilities: ['git'], cliQuotas: [], stats: null,
+      projectPreflights: [{
+        projectId: 'PROJ-001', projectName: 'Agent Studio', registrationFingerprint: 'b'.repeat(64),
+        repositoryUrl: 'https://example.test/studio.git', fetchUrl: 'https://example.test/studio.git',
+        pushUrl: 'https://example.test/studio.git', status: 'failed',
+        detail: 'write probe failed: permission denied', checkedAt: '2026-07-22T10:00:00Z',
+      }],
+    }]);
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector('[data-testid="project-delivery-preflight"]');
+    expect(status?.textContent).toContain('blocked');
+    expect(status?.textContent).toContain('permission denied');
+    http.verify();
   });
 });
 

@@ -363,6 +363,33 @@ test.describe('Remote Hosts settings section', () => {
     await expect(operatorAdmission).not.toContainText('Automatic');
   });
 
+  test('shows a failed project delivery preflight and its claim refusal reason', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: '2026-07-22T10:00:00Z', lastSeenAt: new Date().toISOString(),
+        runnerGitStatus: 'ready',
+        runnerProjectPreflights: [{
+          projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
+          repositoryUrl: 'https://github.com/example/payments.git',
+          fetchUrl: 'https://github.com/example/payments.git',
+          pushUrl: 'https://github.com/example/payments.git', status: 'failed',
+          detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
+        }],
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const failure = remote.getByTestId('remote-host-project-preflight-failures');
+    await expect(failure).toContainText('Payments');
+    await expect(failure).toContainText('permission denied');
+    await remote.screenshot({ path: join(SHOT_DIR, 'remote-host-project-preflight-failed--mocked.png') });
+  });
+
   test('shows persisted performance history, slot context, and a throttling finding', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({

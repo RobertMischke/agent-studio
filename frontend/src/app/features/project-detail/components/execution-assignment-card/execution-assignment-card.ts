@@ -56,6 +56,11 @@ export class ExecutionAssignmentCardComponent implements OnInit {
   readonly selectedHost = computed(() =>
     this.assignableHosts().find((host) => host.id === this.selectedHostId()) ?? null,
   );
+  readonly deliveryPreflight = computed(() =>
+    (this.selectedHost()?.projectPreflights ?? []).find(preflight =>
+      preflight.projectName.localeCompare(this.projectName(), undefined, { sensitivity: 'accent' }) === 0,
+    ) ?? null,
+  );
   readonly probePassed = computed(() =>
     this.checks().every((check) => check.state === 'passed'),
   );

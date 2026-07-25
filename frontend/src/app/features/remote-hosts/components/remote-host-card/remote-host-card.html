@@ -9,6 +9,7 @@
     @if (h.role === 'remote') {
       <span class="host__badge" [attr.data-tone]="h.gitPushStatus === 'ready' ? 'ok' : 'error'"
             data-testid="remote-host-git-status"
+            [attr.title]="h.gitPushDetail || 'No successful push probe has been reported'"
             [appTooltip]="h.gitPushDetail || 'No successful push probe has been reported'">
         Writable: {{ h.gitPushStatus === 'ready' ? 'yes' : 'no' }}
       </span>
@@ -64,6 +65,15 @@
   }
 
   <app-capability-health [host]="h" />
+
+  @if (failedProjectPreflights().length) {
+    <section class="host__delivery-failures" data-testid="remote-host-project-preflight-failures" aria-label="Blocked project delivery paths">
+      <strong>Project delivery blocked</strong>
+      @for (preflight of failedProjectPreflights(); track preflight.projectId) {
+        <p><span>{{ preflight.projectName }}</span> {{ preflight.detail }}</p>
+      }
+    </section>
+  }
 
   @if (h.capabilities.length) {
     <ul class="chips" aria-label="Capabilities">

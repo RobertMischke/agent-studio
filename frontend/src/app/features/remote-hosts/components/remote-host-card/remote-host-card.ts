@@ -172,6 +172,9 @@ export class RemoteHostCardComponent {
     const capacity = this.host().gateCapacity ?? 0;
     return capacity > 0 ? `${active} running · pool ${capacity}` : `${active} running`;
   });
+  readonly failedProjectPreflights = computed(() =>
+    (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
+  );
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

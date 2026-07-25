@@ -569,6 +569,7 @@ export interface ClientSummary {
   runnerGitStatus?: 'ready' | 'read-only' | null;
   runnerGitDetail?: string | null;
   runnerGitCheckedAt?: string | null;
+  runnerProjectPreflights?: RunnerProjectPreflight[];
   drainRequestedAt?: string | null;
   retireRequestedAt?: string | null;
   runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
@@ -577,6 +578,18 @@ export interface ClientSummary {
   runnerAvailableSlots?: number | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
+}
+
+export interface RunnerProjectPreflight {
+  projectId: string;
+  projectName: string;
+  registrationFingerprint: string;
+  repositoryUrl: string;
+  fetchUrl: string;
+  pushUrl: string;
+  status: 'ready' | 'failed';
+  detail: string;
+  checkedAt: string;
 }
 
 /**

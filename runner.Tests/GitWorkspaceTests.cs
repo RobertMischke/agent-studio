@@ -105,6 +105,60 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Project_preflight_creates_shared_clone_verifies_urls_and_proves_push()
+    {
+        await SeedOriginAsync();
+        var result = await GitWorkspace.PreflightProjectAsync(
+            PreflightOptions(), "PROJ-042", _origin, "main", _ => { }, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.Detail);
+        Assert.Equal(_origin, result.FetchUrl);
+        Assert.Equal(_origin, result.PushUrl);
+        var repo = Path.Combine(_workDir, "PROJ-042", "repo");
+        Assert.True(Directory.Exists(Path.Combine(repo, ".git")));
+        Assert.Equal(_origin, (await GitAsync(repo, "remote", "get-url", "origin")).StdOut);
+        Assert.Equal(_origin, (await GitAsync(repo, "remote", "get-url", "--push", "origin")).StdOut);
+        var probeRefs = await GitAsync(_origin, "for-each-ref", "--format=%(refname)",
+            "refs/heads/runner/runner-test/delivery-preflight-*");
+        Assert.Empty(probeRefs.StdOut);
+    }
+
+    [Fact]
+    public async Task Project_preflight_fails_when_registered_clone_cannot_be_created()
+    {
+        var missing = Path.Combine(_root, "no-access", "origin.git");
+        var result = await GitWorkspace.PreflightProjectAsync(
+            PreflightOptions(), "PROJ-042", missing, "main", _ => { }, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("clone failed", result.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(_workDir, "PROJ-042", "repo", ".git")));
+    }
+
+    [Fact]
+    public async Task Project_preflight_fails_when_origin_rejects_the_write_probe()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        await SeedOriginAsync();
+        var hook = Path.Combine(_origin, "hooks", "pre-receive");
+        await File.WriteAllTextAsync(hook, """
+            #!/bin/sh
+            echo "permission denied by test origin" >&2
+            exit 1
+            """);
+        File.SetUnixFileMode(hook,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        var result = await GitWorkspace.PreflightProjectAsync(
+            PreflightOptions(), "PROJ-042", _origin, "main", _ => { }, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("write probe failed", result.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("permission denied", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Teardown_commits_and_pushes_uncommitted_changes_before_removal()
     {
         await SeedOriginAsync();
@@ -470,6 +524,19 @@ public sealed class GitWorkspaceTests : IDisposable
             CliBin = "test",
             CliArgs = "",
         }, "QS-30", log ?? (_ => { }), "PROJ-016", repositoryUrl, "main");
+
+    private RunnerOptions PreflightOptions() => new()
+    {
+        ServerUrl = "http://localhost",
+        RunnerId = "runner-test",
+        RunnerName = "runner-test",
+        Hostname = "test-host",
+        BackendName = "test",
+        WorkDir = _workDir,
+        BaseBranch = "main",
+        CliBin = "test",
+        CliArgs = "",
+    };
 
     private async Task CommitFileAsync(string repo, string path, string content, string message)
     {

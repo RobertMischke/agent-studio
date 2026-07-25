@@ -233,4 +233,20 @@ describe('RemoteHostsService client registry hydration', () => {
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
     http.verify();
   });
+
+  it('invalidates cached project proofs before reloading a re-probed host', () => {
+    TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    svc.reprobe('agent-runner-01');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('reprobe');
+    http.expectOne('/api/clients/agent-runner-01/runner-project-preflights/invalidate').flush({ id: 'agent-runner-01' });
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    http.verify();
+  });
 });

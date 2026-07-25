@@ -134,6 +134,14 @@ public static class ClientEndpoints
             return updated is null ? Results.NotFound(new { error = "client-not-found" }) : Results.Ok(ClientSummary.From(updated));
         });
 
+        clients.MapPost("/{id}/runner-project-preflights/invalidate", (string id, ClientIdentityStore store) =>
+        {
+            var updated = store.InvalidateRunnerProjectPreflightsForHost(id);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
         // Per-client default CLI + model used when the user creates new tasks
         // (and surfaced into the orchestrator chat prompt so a "create me
         // three tasks" request lands on the user's actual preferences, not a
