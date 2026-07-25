@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Distributables - packages, binaries, install &amp; run</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --bg-soft: #f6f6f7; --bg-elv: #fbfbfc;
+  --ink-1: #3c3c43; --ink-2: #67676c; --ink-3: #929295;
+  --line: #e2e2e3; --border: #c2c2c4;
+  --truth: #2a78d6;    /* task server */
+  --engine: #4a3aa7;   /* orchestrator engine */
+  --runner: #eb6834;   /* runner host */
+  --studio: #0f8a5f;   /* agent studio */
+  --libs: #b58500;     /* versioned libraries */
+  --edgec: #5b7285;    /* edge / caddy */
+  --store: #7a5c3e;    /* state on disk */
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 980px; padding: 32px 24px 80px; font: 15px/1.55 system-ui, sans-serif; color: var(--ink-1); background: var(--bg); }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 40px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+h3 { font-size: 15px; margin: 22px 0 8px; }
+.sub { color: var(--ink-2); margin: 0 0 24px; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--ink-2); margin-left: 8px; vertical-align: middle; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; background: var(--bg-soft); }
+code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+.note { border-left: 3px solid var(--border); background: var(--bg-elv); padding: 10px 14px; font-size: 13.5px; color: var(--ink-2); border-radius: 0 8px 8px 0; margin: 14px 0; }
+.diagram { border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--bg-elv); overflow-x: auto; margin: 14px 0; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+
+/* --- package map: three packages, contents, run targets --- */
+.pkgrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; min-width: 720px; }
+.pkg { border: 2px solid var(--border); border-radius: 12px; background: #fff; overflow: hidden; display: flex; flex-direction: column; }
+.pkg header { padding: 10px 14px 8px; border-bottom: 1px solid var(--line); }
+.pkg header b { font-size: 14px; display: block; }
+.pkg header span { font-size: 11.5px; color: var(--ink-2); }
+.pkg ul { list-style: none; margin: 0; padding: 10px 14px; font-size: 12.5px; flex: 1; }
+.pkg li { padding: 3px 0 3px 14px; position: relative; }
+.pkg li::before { content: ""; position: absolute; left: 0; top: 10px; width: 7px; height: 7px; border-radius: 2px; background: var(--border); }
+.pkg li.bin::before { background: currentColor; }
+.pkg li.bin { font-weight: 600; }
+.pkg footer { padding: 8px 14px 10px; font-size: 11.5px; color: var(--ink-2); background: var(--bg-soft); border-top: 1px dashed var(--line); }
+.pkg-cp { border-color: var(--truth); }
+.pkg-cp li.bin.t { color: var(--truth); }
+.pkg-cp li.bin.e { color: var(--engine); }
+.pkg-rn { border-color: var(--runner); } .pkg-rn li.bin { color: var(--runner); }
+.pkg-st { border-color: var(--studio); } .pkg-st li.bin { color: var(--studio); }
+
+/* --- release / update flow: step chain --- */
+.flow { display: flex; align-items: stretch; gap: 0; min-width: 780px; }
+.step { flex: 1; border: 1.5px solid var(--border); border-radius: 10px; background: #fff; padding: 10px 12px; position: relative; }
+.step b { display: block; font-size: 13px; }
+.step span { font-size: 11.5px; color: var(--ink-2); display: block; margin-top: 3px; }
+.step small { display: block; margin-top: 6px; font-size: 10.5px; color: var(--ink-3); }
+.arr { width: 34px; display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: 18px; flex: none; }
+
+/* --- VM deployment --- */
+.vm { border: 2px solid var(--edgec); border-radius: 14px; background: #fff; padding: 14px; min-width: 700px; }
+.vm > b { font-size: 13px; color: var(--edgec); }
+.vmgrid { display: grid; grid-template-columns: 200px 1fr 1fr; grid-template-rows: auto auto auto; gap: 12px; margin-top: 10px; }
+.unit { border: 2px solid; border-radius: 10px; padding: 10px 12px; background: #fff; }
+.unit b { display: block; font-size: 13px; }
+.unit span { font-size: 11.5px; color: var(--ink-2); }
+.unit small { display: block; margin-top: 5px; font-size: 10.5px; color: var(--ink-3); }
+.u-edge  { border-color: var(--edgec); grid-row: 1 / 4; }
+.u-truth { border-color: var(--truth); }
+.u-engine{ border-color: var(--engine); }
+.u-store { border-color: var(--store); grid-column: 2 / 4; }
+.u-timer { border-color: var(--store); border-style: dashed; grid-column: 2 / 4; }
+.outside { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; min-width: 700px; }
+.client { border: 2px dashed; border-radius: 10px; padding: 9px 12px; background: var(--bg-elv); font-size: 12px; }
+.client b { display: block; font-size: 12.5px; }
+.client span { color: var(--ink-2); font-size: 11px; }
+.c-runner { border-color: var(--runner); }
+.c-studio { border-color: var(--studio); }
+.c-ops    { border-color: var(--border); }
+.wire { text-align: center; color: var(--ink-3); font-size: 11px; padding: 6px 0 0; }
+
+/* --- version shelf / rollback --- */
+.shelf { display: flex; gap: 12px; align-items: flex-end; min-width: 620px; }
+.ver { border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; font-size: 12px; color: var(--ink-2); }
+.ver b { display: block; font-size: 13px; color: var(--ink-1); }
+.ver.current { border-color: var(--truth); box-shadow: 0 0 0 3px #2a78d61a; }
+.ver.current::after { content: "current →"; display: block; margin-top: 4px; font-size: 10.5px; color: var(--truth); font-weight: 600; }
+.symlink { font-size: 12px; color: var(--ink-2); padding-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<h1>The Distributables <span class="badge">D1–D5 signed off 25.07.</span></h1>
+<p class="sub">What actually ships, what a “binary” is here, how it is installed, started, updated
+and rolled back. Elaborates the open decision from
+<a href="distributable.md">distributable.md</a> (AGT-2277 parked until this is signed off).
+Actor model: <a href="index.html">Target Architecture</a>.</p>
+
+<!-- ----------------- 1 · PACKAGE MAP ----------------- -->
+<h2>1 · The three distributables (plus the libraries)</h2>
+<p>Everything that runs is delivered by exactly <b>three packages</b>. Each package is versioned,
+built by CI from a tag, and installable without a repo checkout. The npm libraries are the fourth
+deliverable but ship through the npm registry, not through an archive.</p>
+
+<div class="diagram">
+  <div class="pkgrow">
+    <div class="pkg pkg-cp">
+      <header><b>agent-orchestrator</b><span>control plane · one archive, two binaries</span></header>
+      <ul>
+        <li class="bin t">task-server <em style="font-weight:400;color:var(--ink-3)">(binary)</em></li>
+        <li class="bin e">orchestrator-engine <em style="font-weight:400;color:var(--ink-3)">(binary)</em></li>
+        <li>two systemd units (<code>.service</code>)</li>
+        <li>config contract: <code>server.env</code>, <code>engine.env</code></li>
+        <li>store migrations - idempotent, run on start</li>
+        <li>backup unit + timer (store + security state)</li>
+        <li>Caddy site template (edge, 80/443 only)</li>
+        <li><code>install.sh</code> / <code>update.sh</code> / <code>rollback.sh</code></li>
+      </ul>
+      <footer>runs on: the <b>control-plane host</b> (Hetzner VM - or any Linux box, incl. a local one)</footer>
+    </div>
+    <div class="pkg pkg-rn">
+      <header><b>agent-runner</b><span>execution · one binary per host</span></header>
+      <ul>
+        <li class="bin">agent-runner <em style="font-weight:400;color:var(--ink-3)">(binary)</em></li>
+        <li>one systemd unit</li>
+        <li>config: <code>runner.env</code> (server URL, token, parallelism)</li>
+        <li>work dirs: <code>runner-work/</code> per project, worktree per run</li>
+        <li>salvage snapshotting</li>
+      </ul>
+      <footer>runs on: <b>every runner host</b> (agent-runner-01, future hosts) - never on the control-plane host</footer>
+    </div>
+    <div class="pkg pkg-st">
+      <header><b>agent-studio</b><span>UI · static web bundle</span></header>
+      <ul>
+        <li class="bin">dist/ <em style="font-weight:400;color:var(--ink-3)">(compiled Angular bundle)</em></li>
+        <li>no process of its own - served by the edge</li>
+        <li>pinned library versions (e.g. <code>coding-agent-chat 0.3.x</code>)</li>
+        <li>offline indicator against the Task API</li>
+      </ul>
+      <footer>served by: <b>Caddy on the control-plane host</b> (or any static host / CDN later)</footer>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--truth)"></i>task server</span>
+    <span><i style="background:var(--engine)"></i>engine</span>
+    <span><i style="background:var(--runner)"></i>runner</span>
+    <span><i style="background:var(--studio)"></i>studio</span>
+    <span><i style="background:var(--libs)"></i>libraries → npm registry (separate channel)</span>
+  </div>
+</div>
+
+<div class="note"><b>Why the control plane is ONE archive with TWO binaries:</b> Task Server and
+Orchestrator Engine are separate processes with separate lifecycles (restart matrix), but they are
+versioned and deployed <em>together</em> - the Engine is the only API client that must always match
+the server’s API version exactly. Splitting the archive would create a compatibility matrix with no
+benefit; splitting the <em>processes</em> is what buys the restart safety.</div>
+
+<!-- ----------------- 2 · WHAT IS A BINARY ----------------- -->
+<h2>2 · What “binary” means here</h2>
+<p>A <b>self-contained .NET single-file executable</b> for <code>linux-x64</code>: no .NET runtime
+installation on the host, no DLL folder, one file per process. Each binary answers
+<code>--version</code> (the stamped release version + git SHA) and reads exactly one env file.
+Today’s <code>OrchestratorApi.exe</code> is the unsplit ancestor of the two control-plane binaries -
+it currently contains task server, engine <em>and</em> studio serving in one process. The split is
+the extraction work, not a rewrite:</p>
+
+<table>
+  <tr><th>Target binary</th><th>Today lives in</th><th>Carries over</th><th>Stays behind</th></tr>
+  <tr>
+    <td><code style="color:var(--truth)">task-server</code></td>
+    <td rowspan="2"><code>OrchestratorApi.exe</code> (one process)</td>
+    <td>store, Task API, leases/epochs, provenance, management &amp; recovery endpoints, wiki/doc serving</td>
+    <td>anything that calls an LLM or spawns a CLI</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--engine)">orchestrator-engine</code></td>
+    <td>review/council pipelines, post-processing, gate dispatch, completion judge - as a pure API client</td>
+    <td>direct store access (goes through the API instead)</td>
+  </tr>
+  <tr>
+    <td><code style="color:var(--runner)">agent-runner</code></td>
+    <td><code>agent-runner</code> (already its own daemon)</td>
+    <td>unchanged - it is the model the others follow</td>
+    <td>-</td>
+  </tr>
+</table>
+
+<!-- ----------------- 3 · RELEASE → INSTALL → RUN ----------------- -->
+<h2>3 · From tag to running system</h2>
+<p>The pipeline is the same one that already works for <code>coding-agent-chat</code>:
+tag-driven, CI-built, artifact with provenance. Nothing is built on the target host.</p>
+
+<div class="diagram">
+  <div class="flow">
+    <div class="step"><b>1 · Tag</b><span><code>v0.4.0</code> on the release branch</span><small>semver - API changes bump minor pre-1.0</small></div>
+    <div class="arr">→</div>
+    <div class="step"><b>2 · CI build</b><span>tests → publish self-contained → stamp version</span><small>GitHub Actions, linux-x64</small></div>
+    <div class="arr">→</div>
+    <div class="step"><b>3 · Release artifact</b><span><code>agent-orchestrator-0.4.0.tar.gz</code> + SHA-256 checksums</span><small>GitHub Release - the only install source</small></div>
+    <div class="arr">→</div>
+    <div class="step"><b>4 · Install</b><span><code>install.sh</code>: unpack to <code>/opt/…/0.4.0</code>, link <code>current</code>, install units</span><small>idempotent - same script for first install &amp; update</small></div>
+    <div class="arr">→</div>
+    <div class="step"><b>5 · Run</b><span><code>systemctl enable --now</code> · migrations run on start</span><small>server first, engine second</small></div>
+  </div>
+</div>
+
+<h3>On-disk layout &amp; rollback</h3>
+<p>Versions sit side by side; <code>current</code> is a symlink. An update unpacks the new version and
+switches the link; a rollback switches it back. State never lives inside a version directory, so
+switching versions never touches data.</p>
+
+<div class="diagram">
+  <div class="shelf">
+    <div class="symlink"><code>/opt/agent-orchestrator/current</code> ⟶</div>
+    <div class="ver"><b>0.3.2/</b>kept for rollback</div>
+    <div class="ver current"><b>0.4.0/</b>task-server · orchestrator-engine · install scripts</div>
+    <div class="ver" style="border-style:dashed"><b>0.4.1/</b>next update lands here</div>
+    <div class="symlink" style="padding-left:18px"><code>/var/lib/agent-orchestrator/</code><br>store · task repository · security state<br><em>(never versioned, always backed up)</em></div>
+  </div>
+</div>
+
+<table>
+  <tr><th>Operation</th><th>Command (target)</th><th>Downtime</th></tr>
+  <tr><td>First install</td><td><code>curl -fsSL …/install.sh | sh -s -- v0.4.0</code></td><td>-</td></tr>
+  <tr><td>Update</td><td><code>update.sh v0.4.1</code> → unpack, switch link, restart units</td><td>seconds; runners reconnect with backoff, runs survive (they are server state)</td></tr>
+  <tr><td>Rollback</td><td><code>rollback.sh</code> → switch link back, restart units</td><td>seconds; migrations must be backward-tolerant one step</td></tr>
+  <tr><td>Backup</td><td>systemd timer → snapshot of <code>/var/lib/agent-orchestrator</code></td><td>none (hot copy + verify)</td></tr>
+</table>
+
+<!-- ----------------- 4 · TARGET PICTURE ----------------- -->
+<h2>4 · The target picture on the VM</h2>
+<p>One public origin, one edge, two private processes, one state directory. Runners and browsers are
+<em>clients</em> of the origin - the SSH tunnel dies with this picture.</p>
+
+<div class="diagram">
+  <div class="vm">
+    <b>control-plane host - Hetzner Linux VM (e.g. tasks.agent-orchestrator.dev)</b>
+    <div class="vmgrid">
+      <div class="unit u-edge"><b>Caddy (edge)</b><span>the only public listener: 80/443, TLS, auth</span><small>serves the <span style="color:var(--studio)">agent-studio</span> bundle · proxies <code>/api</code> to the task server · <code>networked</code> security profile</small></div>
+      <div class="unit u-truth"><b>task-server.service</b><span>127.0.0.1:5031 - private</span><small>the single truth · store, API, leases, provenance</small></div>
+      <div class="unit u-engine"><b>orchestrator-engine.service</b><span>pure API client of the task server</span><small>council, reviews, gates, post-processing · may restart freely</small></div>
+      <div class="unit u-store"><b>/var/lib/agent-orchestrator</b><span>task repository · store · security state - the only stateful thing on the host</span></div>
+      <div class="unit u-timer"><b>backup.timer</b><span>scheduled snapshot + verified restore path (AGT-2194 groundwork)</span></div>
+    </div>
+  </div>
+  <div class="wire">▲ HTTPS only - no SSH tunnels, no port forwards ▲</div>
+  <div class="outside">
+    <div class="client c-runner"><b>Runner hosts</b><span>agent-runner-01, … - <code>agent-runner</code> binary polls the public origin with token + lease/epoch</span></div>
+    <div class="client c-studio"><b>Browsers</b><span>load Agent Studio from the edge; the board is a pure client</span></div>
+    <div class="client c-ops"><b>Operator / CI</b><span>same API, same auth - management &amp; recovery endpoints</span></div>
+  </div>
+</div>
+
+<!-- ----------------- 5 · CONFIG CONTRACT ----------------- -->
+<h2>5 · The config contract</h2>
+<p>Per binary exactly one env file under <code>/etc/agent-orchestrator/</code>. No config inside the
+version directories, no editing of shipped files - the contract is what makes updates mechanical.
+(Convention over settings - no host-specific overrides hidden in the package.)</p>
+
+<table>
+  <tr><th>File</th><th>Keys (core set)</th><th>Consumed by</th></tr>
+  <tr>
+    <td><code>server.env</code></td>
+    <td><code>LISTEN_URL</code> (loopback) · <code>STORE_PATH</code> · <code>AUTH_MODE</code> + client registry · backup target</td>
+    <td><code style="color:var(--truth)">task-server</code></td>
+  </tr>
+  <tr>
+    <td><code>engine.env</code></td>
+    <td><code>SERVER_URL</code> (loopback) · <code>CLIENT_ID</code>/credential · pipeline concurrency caps</td>
+    <td><code style="color:var(--engine)">orchestrator-engine</code></td>
+  </tr>
+  <tr>
+    <td><code>runner.env</code> <em>(on runner hosts)</em></td>
+    <td><code>RUNNER_SERVER_URL</code> (public origin) · <code>RUNNER_TOKEN</code> · <code>RUNNER_MAX_PARALLELISM</code></td>
+    <td><code style="color:var(--runner)">agent-runner</code></td>
+  </tr>
+</table>
+
+<!-- ----------------- 6 · CHANNELS ----------------- -->
+<h2>6 · Install channels (per audience)</h2>
+<p>Same artifacts, three doors - this is the AGT-2305 “one-command onboarding” story seen from the
+packaging side:</p>
+<table>
+  <tr><th>Channel</th><th>Audience</th><th>What it does</th></tr>
+  <tr><td><b>Release archive + <code>install.sh</code></b></td><td>production (our VM, self-hosters)</td><td>the primary path described above - versioned dirs, symlink, systemd</td></tr>
+  <tr><td><b>docker compose up</b></td><td>evaluation, first contact</td><td>compose file wraps the same binaries; state in a named volume; not the production path</td></tr>
+  <tr><td><b>dotnet tool / local dev</b></td><td>contributors</td><td>run from checkout as today - explicitly <em>not</em> a deployment method</td></tr>
+</table>
+
+<!-- ----------------- 7 · DECISIONS ----------------- -->
+<h2>7 · What this page asks Robert to decide</h2>
+<table>
+  <tr><th>#</th><th>Decision</th><th>Proposal on this page</th></tr>
+  <tr><td>D1</td><td>Package cut</td><td>3 distributables; control plane = one archive, two binaries</td></tr>
+  <tr><td>D2</td><td>Names</td><td><b>DECIDED 25.07. (Robert):</b> <code>agent-orchestrator</code> · <b><code>agent-host</code></b> · <code>agent-studio</code></td></tr>
+  <tr><td>D3</td><td>Order of work</td><td>extract + package <em>before</em> public hosting; AGT-2277 re-cut afterwards as “deploy the distributable”</td></tr>
+  <tr><td>D4</td><td>Tranche 0 scope</td><td>split the monolith along §2, release pipeline (§3), config contract (§5) - <b>extended 25.07.</b> by the protocol-version handshake (honest incompatibility refusal instead of silent 409s) and drain-before-update (lease-graceful window); both proven necessary by the 25.07. incidents</td></tr>
+  <tr><td>D5</td><td>Installer &amp; onboarding</td><td><b>DECIDED 25.07. (Robert):</b> super-simple guided installer - on Linux ideally ONE executable with guided prerequisite steps (docker for the demo path); a <b>multi-machine guide</b> is first-class; download + easy onboarding is THE marketing milestone</td></tr>
+</table>
+<p class="sub" style="margin-top:10px">Sign-off turns this page into tranche-0 cards on the
+migration path. Decision record: <a href="decision-history.md">decision-history.md</a> ·
+short decision note: <a href="distributable.md">distributable.md</a>.</p>
+
+<!-- ----------------- 8 · REVIEW ANSWERS ----------------- -->
+<h2>8 · Robert’s review (25.07.) - answers &amp; open discussion</h2>
+
+<h3>8.1 Naming: <code>agent-runner</code> collides, host level missing</h3>
+<p>Agreed. The name clashes with the <b>Coding Agent Runner</b> library (CAR, PROJ-011) and does not
+say “this is the per-host daemon”. Candidates: <code>agent-host</code> (recommended: it is the thing
+that <em>represents a host</em> - claims work, cuts worktrees, runs CLIs), <code>orchestrator-host</code>,
+<code>runner-host</code>. The binary exists today as <code>runner/AgentRunner.csproj</code> → published
+to <code>/opt/agent-runner</code> - so this is purely a naming decision, not new code.</p>
+
+<h3>8.2 Does <code>agent-orchestrator</code> require Docker/Linux? What about macOS?</h3>
+<p><b>No Docker requirement anywhere.</b> All binaries are self-contained .NET executables published
+per target (<code>linux-x64</code> first-class; <code>osx-arm64</code> and <code>win-x64</code> are
+ordinary additional publish targets). systemd units are the <em>Linux integration</em>, not a
+prerequisite - macOS would use launchd, Windows a service wrapper. Practical support matrix
+(proposal): control plane <b>linux-x64 first-class</b>; host daemon linux-x64 first-class,
+osx-arm64 supported (needs git + the agent CLIs installed), Windows dev-only. Docker appears only
+as the <em>evaluation channel</em> (§6) and possibly the local installer (§8.8).</p>
+
+<h3>8.3 Where do orchestration flows live? (alignment with the other target pictures)</h3>
+<p>Three layers, consistent with <a href="actors.md">actors.md</a> and
+<code>orchestrator-plan.md</code>:</p>
+<table>
+  <tr><th>Layer</th><th>Lives in</th><th>Examples</th></tr>
+  <tr><td><b>Flow definitions</b> (data)</td><td>Task Server store - project settings, pipeline steps, task-type-aware pipelines</td><td>which steps, which models, which gates per task type</td></tr>
+  <tr><td><b>Flow execution</b></td><td>Orchestrator Engine - reads definitions via the API, drives council/review/post-processing/gate dispatch</td><td>review pipelines, completion decisions, reissue budgets</td></tr>
+  <tr><td><b>Episodic orchestration</b> (LLM)</td><td>Sentinel/Companion sessions per <code>orchestrator-plan.md</code> - pure API clients on top</td><td>incident handling, day planning, operator dialogue</td></tr>
+</table>
+<p>So: the Engine <em>executes</em> flows, it does not own their definitions - those are server data
+and therefore editable through the normal API (see §8.7).</p>
+
+<h3>8.4 Versioning</h3>
+<p>Every binary answers <code>--version</code> (release + git SHA). The control-plane archive
+versions <b>as one unit</b> (task-server + engine always ship together - they are the tightest
+compatibility pair). Host daemon and Studio version independently. Compatibility is enforced at
+<em>runtime</em> via the protocol handshake that already exists
+(<code>POST /api/v1/protocol/compatibility</code>): an incompatible host daemon is refused with a
+clear reason - never silent 409s (the 25.07. lesson).</p>
+
+<h3>8.5 Update story - agreed, needs build-out</h3>
+<p>The symlink/rollback shelf (§3) is the skeleton. Tranche 0 adds: <b>drain-before-update</b>
+(stop claims, let leases finish or kill-on-lease-loss per AGT-2320), <b>health-gated restart</b>
+(new version must pass <code>/readyz</code> within N seconds or auto-rollback), and <b>rolling host
+updates</b> (one host at a time once there are several). These become explicit acceptance criteria
+of the tranche-0 cards.</p>
+
+<h3>8.6 Fresh install &amp; who owns Caddy</h3>
+<p>Fresh install: <code>install.sh</code> is the same script - creates user + directories, writes
+config from template (prompting for origin/credentials), installs units; the store initialises
+itself through the same migration path on first start (migrations are <em>code inside the
+task-server binary</em>, not a separate tool - see §8.9). <b>Caddy is host infrastructure, not part
+of our package</b>: our archive ships only the site config template; install.sh offers to install
+and enable the distro’s Caddy service. Alternative kept open: Kestrel terminates TLS itself and
+Caddy becomes optional - decision deferred to the deploy card of AGT-2277.</p>
+
+<h3>8.7 Configuration must stay agent-editable</h3>
+<p>Two config layers, cleanly split (this also matches “Konvention statt Settings”):</p>
+<table>
+  <tr><th>Layer</th><th>Where</th><th>Changed by</th></tr>
+  <tr><td><b>Bootstrap</b> - listen URL, store path, credentials, host identity</td><td><code>/etc/agent-orchestrator/*.env</code></td><td>host operator only; rarely changes; never by agents</td></tr>
+  <tr><td><b>Operational</b> - projects, pipelines, caps, models, flow definitions</td><td>Task Server store, via the public API</td><td>UI, operator <em>and coding agents</em> - exactly as today</td></tr>
+</table>
+<p>So yes: everything agents steer today stays editable - it lives in the store, not in shipped
+files. The env files only hold what the process needs <em>before</em> it can reach the store.</p>
+
+<h3>8.9 Store migrations / backup are not separate things</h3>
+<p>Reworded to avoid the impression of extra components: <b>migrations are code in the task-server
+binary</b> (run idempotently at startup - nothing to operate). <b>Backup is one systemd timer</b>
+invoking the task-server’s own <code>backup</code> subcommand; the “verified restore path” is a test
+of that subcommand, not a product. The §1 package table lists them as archive <em>contents</em>, not
+as runnable units of their own.</p>
+
+<h3>8.8 NEW - D5: a single local installer (discussion)</h3>
+<p>Goal: local use with one command, no source checkout, no neighbour repos (AGT-2305’s
+“one-command onboarding” as a first-class target). Two candidate shapes:</p>
+<table>
+  <tr><th></th><th>A · Docker-based (<code>docker compose up</code>)</th><th>B · Native all-in-one</th></tr>
+  <tr><td>Install</td><td>one compose file; requires Docker Desktop</td><td>one binary (the un-split monolith already exists!) via winget/brew/script</td></tr>
+  <tr><td>Cross-platform</td><td>uniform (Win/macOS/Linux)</td><td>per-RID builds, more packaging work</td></tr>
+  <tr><td><b>Repo access</b></td><td><b>the hard part:</b> coding agents must reach LOCAL repos and CLI credentials → volume mounts for every project + credential passthrough into containers; friction grows with each repo</td><td>native process sees the filesystem and installed CLIs exactly like today - zero mount friction</td></tr>
+  <tr><td>Agent CLIs</td><td>must be baked into the image (versions lag) or mounted</td><td>uses the user’s installed codex/claude directly</td></tr>
+  <tr><td>Update</td><td><code>compose pull</code></td><td>installer re-run / self-update</td></tr>
+</table>
+<p><b>Leaning:</b> B for the local developer story (the decisive factor is repo/CLI access - local
+use exists precisely to work on local repos), A for evaluation/demo (“look at the board in 2
+minutes”, no repos mounted). That would make Docker the <em>demo</em> channel and the native
+all-in-one the <em>local product</em> - both from the same release pipeline. Open for Robert’s
+call.</p>
+
+</body>
+</html>
