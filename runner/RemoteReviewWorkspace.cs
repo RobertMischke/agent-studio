@@ -107,7 +107,7 @@ public sealed class RemoteReviewWorkspace
                 "Review subject has neither an immutable result ref nor a source bundle.");
 
         var repositoryId = !string.IsNullOrWhiteSpace(_subject.RepositoryUrl)
-            ? TaskServerClient.RepositoryIdentity(_subject.RepositoryUrl)
+            ? RepositoryIdentityContract.FromUrl(_subject.RepositoryUrl)
             : _subject.RepositoryId;
         if (!string.Equals(repositoryId, _subject.RepositoryId, StringComparison.Ordinal))
             throw new ReviewInfrastructureException(

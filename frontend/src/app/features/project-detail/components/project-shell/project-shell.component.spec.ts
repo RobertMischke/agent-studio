@@ -8,7 +8,7 @@ import { ProjectShellComponent } from './project-shell.component';
 import type { ProjectRailKey } from './project-shell.config';
 
 /**
- * Render-path coverage for the Project-Hub nav IA (ASS-1711): collapsible
+ * Render-path coverage for the Deck nav IA (ASS-1711): collapsible
  * main segments, the tree-expandable Settings parent, the "Agent Docs"
  * rename, the Context main point, and the shared tree-row icon rail.
  */
@@ -60,13 +60,14 @@ describe('ProjectShellComponent rail IA', () => {
     clearProjectShellStorage();
   });
 
-  it('renders one balanced project-hub header with icon actions', () => {
+  it('renders one balanced Deck header with icon actions and legacy selector', () => {
     const host = mount().nativeElement as HTMLElement;
     const back = host.querySelector<HTMLElement>('[data-testid="project-shell-back"]')!;
     const feed = host.querySelector<HTMLElement>('[data-testid="project-shell-open-feed"]')!;
 
     expect(host.querySelector('[data-testid="project-shell-title"]')!.textContent).toContain('Demo Project');
-    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')!.textContent).toContain('Project Hub');
+    expect(host.querySelector('[data-testid="deck-sidebar-header"]')!.textContent).toContain('Deck');
+    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')!.textContent).toContain('Deck');
     expect(back.getAttribute('aria-label')).toBe('Collapse project navigation');
     expect(feed.getAttribute('aria-label')).toBe('Open project activity feed');
     expect(back.querySelector('app-studio-icon')).toBeTruthy();

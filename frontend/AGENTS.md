@@ -90,7 +90,7 @@ in both themes. The look is defined once as the `--studio-nav-active-*` tokens i
 never hard-code a hex/rgba for it (two rails used to hard-code off-brand blue and
 indigo that ignored the theme).
 
-The canonical nav item is `<app-tree-row>` (Explorer workspace tree, Project Hub
+The canonical nav item is `<app-tree-row>` (Explorer workspace tree, Deck
 rail, Prompt catalogue) with `<app-section-header>` group heads and
 `<app-count-badge>` counts; `<app-list-row>` is the flat variant (Open tabs).
 Reach for those first. When a surface genuinely needs its own row element (the

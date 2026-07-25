@@ -159,7 +159,7 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Operator choice');
   await send(page, 'Board flagship');
   await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
-  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('Project Hub');
+  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('Deck');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-url-preview:${PROJECT}:preview`).click();
   await expect(page.getByTestId('chat-toolbar-context')).toHaveText('URL preview · preview');

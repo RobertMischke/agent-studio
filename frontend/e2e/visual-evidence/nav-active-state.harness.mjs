@@ -71,7 +71,7 @@ const COMPONENT_CSS = [
 // same real tokens. Each surface's former active state was a subtle grey/tint
 // or an off-brand hard-coded colour with no side bar.
 const BEFORE_OVERRIDES = `
-/* tree-row (Explorer tree, Project Hub rail, Prompt catalogue) — former 14% grey-ish tint, no bar */
+/* tree-row (Explorer tree, Deck rail, Prompt catalogue) — former 14% grey-ish tint, no bar */
 .tree-row--active { background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-selected)); color: var(--studio-fg-strong); font-weight: 600; box-shadow: none; }
 .tree-row--active:hover { background: color-mix(in srgb, var(--studio-accent) 18%, var(--studio-bg-selected)); }
 /* list-row (Open-tabs list) — former plain grey bg-selected, no accent, no bar */
@@ -119,13 +119,13 @@ const RAIL_L1 = [
   treeRow({ label: 'Default workspace', chev: 'down', count: 3 }),
   treeRow({ label: 'Agent Studio', chev: 'down', count: 27 }),
   treeRow({ label: 'Board', level: 'child', glyph: true }),
-  treeRow({ label: 'Project Hub', level: 'child', glyph: true, active: true }),
+  treeRow({ label: 'Deck', level: 'child', glyph: true, active: true }),
   treeRow({ label: 'Wiki', level: 'child', glyph: true }),
   treeRow({ label: 'Backlog', level: 'child', glyph: true }),
   treeRow({ label: 'Epics', level: 'child', glyph: true }),
 ].join('');
 
-// Level 2 — Project Hub rail (INSIGHT / QUALITY sections).
+// Level 2 — Deck rail (INSIGHT / QUALITY sections).
 const RAIL_L2 = [
   sectionHeader('INSIGHT'),
   treeRow({ label: 'Overview', glyph: true, active: true }),
@@ -273,7 +273,7 @@ async function main() {
   const browser = await chromium.launch();
   try {
     await makeComposite(browser, { name: 'level1-explorer-tree--before-after--composite-mocked', title: 'Level 1 — Explorer workspace tree (features/studio-shell · explorer-workspace-tree)', subtitle: SUB, railHtml: RAIL_L1, railWidth: 320 });
-    await makeComposite(browser, { name: 'level2-project-hub-rail--before-after--composite-mocked', title: 'Level 2 — Project Hub rail (features/project-detail · project-shell)', subtitle: SUB, railHtml: RAIL_L2, railWidth: 320 });
+    await makeComposite(browser, { name: 'level2-project-hub-rail--before-after--composite-mocked', title: 'Level 2 — Deck rail (features/project-detail · project-shell)', subtitle: SUB, railHtml: RAIL_L2, railWidth: 320 });
     await makeComposite(browser, { name: 'level3-prompt-catalogue--before-after--composite-mocked', title: 'Level 3 — Prompt catalogue (features/orchestrator · prompt-admin-panel)', subtitle: SUB, railHtml: RAIL_L3, railWidth: 320 });
     await makeComposite(browser, { name: 'bespoke-settings-tabs-cli-task-rails--before-after--composite-mocked', title: 'Bespoke rails — Settings · Open-tabs · CLI sessions · Task rail', subtitle: SUB + ' Two of these dropped hard-coded off-brand colours (blue, indigo) that ignored the theme.', railHtml: RAIL_BESPOKE, railWidth: 300 });
   } finally {

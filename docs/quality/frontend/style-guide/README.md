@@ -7,6 +7,20 @@ navigation entry for all technology-aware engineering guides is
 
 Operator-facing index of the **canonical UI vocabulary** the shell uses: tokens, primitives, components, and the migration status that tracks how far each surface has converged onto them.
 
+## Product names
+
+**Board & Deck** is the canonical name pair for the two primary project
+surfaces:
+
+- **Board** is the task-flow surface with lanes and cards.
+- **Deck** is the project-level surface for overview, quality, context, and
+  configuration.
+
+Use **Deck** unchanged in English documentation. Do not expand it to "Project
+Deck" and do not reintroduce the former hub label. Internal compatibility keys,
+test aliases, and routes may retain `hub`; those identifiers must not leak into
+user-facing copy.
+
 This folder is the **second-look** for any visual or styling change. The first stop is still [`docs/quality/frontend/design-system.md`](../design-system.md) (the "why" of the shell: Material 3 mapping, color philosophy, type ramp, motion grammar). The style guide is the **"what to grab"** for a concrete change:
 
 - "I need a small button" → [buttons.md](./buttons.md)

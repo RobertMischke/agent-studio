@@ -15,7 +15,7 @@ Use this page as the first stop when you need the right document quickly.
 | [domains/](../system/domains/README.md) | Current system-of-record domain maps for runner, pipeline, tasks, frontend, CLI, tokens, and token pricing. |
 | [contracts/](../system/contracts/README.md) | Durable filesystem, task, protocol, run outcome, code-pattern, and wiki organization contracts. |
 | [design/](../quality/design/README.md) | Product-wide, prompt-known design hard rules (no left accent bars, full-bleed views, aggregate = sum, acute-only signals, both themes). |
-| [quality/](../quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Project Hub and intake prompts. |
+| [quality/](../quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Deck and intake prompts. |
 | [frontend/](../quality/frontend/README.md) | Frontend design system, style guide, testing contract, performance playbook, and audits. |
 | [cli/](../system/cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
 | [operations/](../operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
@@ -94,6 +94,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
 | Wiki page lifecycle schema | [schemas/wiki-page-lifecycle.schema.json](../app/schemas/wiki-page-lifecycle.schema.json) |
 | Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
+| Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |

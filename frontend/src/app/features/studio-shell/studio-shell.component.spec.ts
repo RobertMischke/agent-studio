@@ -604,12 +604,12 @@ describe('StudioShellComponent hub tab label + icon', () => {
       .toBe('ASS · Settings');
   });
 
-  it('falls back to the Overview rail when section is missing or unknown', () => {
+  it('uses Deck for the default rail when section is missing or unknown', () => {
     const component = makeComponent();
     expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio' }))
-      .toBe('ASS · Overview');
+      .toBe('ASS · Deck');
     expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'nonsense' }))
-      .toBe('ASS · Overview');
+      .toBe('ASS · Deck');
   });
 
   it('falls back to the full project name when no shortCode is registered', () => {

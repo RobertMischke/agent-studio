@@ -21,7 +21,7 @@ Run context:
 - Attachments folder:
 {{attachments_list}}
 
-Rules: same as a fresh run. Work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for other tasks, and do not start another task. Please do not commit or push yourself; the platform commits after review. If you did commit, that is not a problem: it will be shown and cleaned up where safe. Never push to a protected branch or rewrite history that existed before this run. Do not ask what to do unless required files are missing or contradictory.
+Rules: same as a fresh run. Work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for other tasks, and do not start another task. Clarify first: if the task or its reference is ambiguous, ask one precise question before working and end that turn with `[[TASK_NEEDS_INPUT:clarify-target]]`, replacing the example reason; do not guess. Ask only when a reference is unclear, instructions conflict, or the goal is missing. If the request is clear, work without asking. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push; the platform owns commit and push after the run.
 
 Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 

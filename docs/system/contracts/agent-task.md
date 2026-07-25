@@ -40,10 +40,17 @@ Agents must:
 
 - Work on exactly the task they were given.
 - Read the task prompt from the path provided by the runner.
+- Ask one precise question before working when the task or its reference is genuinely ambiguous; do not guess. Use `[[TASK_NEEDS_INPUT:<short reason>]]` for that turn.
 - Treat the job folder as task-local evidence and context.
 - Work in the project source tree for implementation changes.
 - Keep screenshots that matter for review under the job folder's results/ directory.
 - Preserve existing work when resuming or recovering a task.
+
+Clarification is deliberately narrow. Ask when a reference is unclear (for
+example, "change that one"), instructions conflict, or the requested outcome is
+missing. A clear task should proceed immediately without a confirmation
+question. Missing dependencies and environment failures remain blocked
+conditions; they are not clarification turns.
 
 Agents must not:
 
@@ -104,7 +111,7 @@ End every run with exactly one of these tokens on its own line:
 - `[[TASK_NEEDS_INPUT:<short reason>]]` - you need user input to continue.
 - `[[TASK_NOOP]]` - you intentionally did nothing (rare; explain why).
 
-Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the terminal token in the final agent reply as authoritative. Sentinel-shaped text in tool output, diffs, file content, stderr, or fenced examples is evidence only and never a run verdict.
+Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the last one as authoritative.
 
 `[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-auto-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
 

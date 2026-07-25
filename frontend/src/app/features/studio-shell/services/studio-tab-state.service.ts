@@ -69,9 +69,9 @@ export class StudioTabStateService {
    * Open the tab if it's not already there, then focus it. When a tab with
    * the same key is already open, adopt the fresh payload in place rather
    * than keeping the stale one — the tab key intentionally omits some fields
-   * (a Hub tab keys on project only, not its {@link HubTab.section}), so an
+   * (a Deck tab keys on project only, not its {@link HubTab.section}), so an
    * `open()` that carries a new section must be able to move the open tab to
-   * it. Without this, re-opening the Hub on a different section (Project vs.
+   * it. Without this, re-opening the Deck on a different section (Project vs.
    * Wiki) would silently drop the section and "do nothing".
    */
   open(tab: StudioTab): void {
