@@ -93,7 +93,7 @@ code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-si
 </head>
 <body>
 
-<h1>The Distributables <span class="badge">concept · proposal</span></h1>
+<h1>The Distributables <span class="badge">D1–D5 signed off 25.07.</span></h1>
 <p class="sub">What actually ships, what a “binary” is here, how it is installed, started, updated
 and rolled back. Elaborates the open decision from
 <a href="distributable.md">distributable.md</a> (AGT-2277 parked until this is signed off).
@@ -295,10 +295,10 @@ packaging side:</p>
 <table>
   <tr><th>#</th><th>Decision</th><th>Proposal on this page</th></tr>
   <tr><td>D1</td><td>Package cut</td><td>3 distributables; control plane = one archive, two binaries</td></tr>
-  <tr><td>D2</td><td>Names</td><td><b>open — see §8.1</b>: <code>agent-runner</code> collides with the CAR library name and hides the host level; candidates <code>agent-host</code> (recommended) · <code>orchestrator-host</code> · <code>runner-host</code></td></tr>
+  <tr><td>D2</td><td>Names</td><td><b>DECIDED 25.07. (Robert):</b> <code>agent-orchestrator</code> · <b><code>agent-host</code></b> · <code>agent-studio</code></td></tr>
   <tr><td>D3</td><td>Order of work</td><td>extract + package <em>before</em> public hosting; AGT-2277 re-cut afterwards as “deploy the distributable”</td></tr>
   <tr><td>D4</td><td>Tranche 0 scope</td><td>split the monolith along §2, release pipeline (§3), config contract (§5) — <b>extended 25.07.</b> by the protocol-version handshake (honest incompatibility refusal instead of silent 409s) and drain-before-update (lease-graceful window); both proven necessary by the 25.07. incidents</td></tr>
-  <tr><td>D5</td><td>Local installer</td><td><b>new, discussion in §8.8</b>: one-command local install; Docker-based vs. native all-in-one</td></tr>
+  <tr><td>D5</td><td>Installer &amp; onboarding</td><td><b>DECIDED 25.07. (Robert):</b> super-simple guided installer — on Linux ideally ONE executable with guided prerequisite steps (docker for the demo path); a <b>multi-machine guide</b> is first-class; download + easy onboarding is THE marketing milestone</td></tr>
 </table>
 <p class="sub" style="margin-top:10px">Sign-off turns this page into tranche-0 cards on the
 migration path. Decision record: <a href="decision-history.md">decision-history.md</a> ·
