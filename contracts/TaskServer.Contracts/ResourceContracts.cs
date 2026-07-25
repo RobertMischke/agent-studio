@@ -39,6 +39,10 @@ public sealed record RunDto(
     string? ResultSha = null,
     string? RepositoryId = null);
 
+public sealed record ExecutionAttemptTimelineDto(
+    RunDto Run,
+    ExecutionOutcomeDecision? OutcomeDecision);
+
 public sealed record CreateWorkspaceRequest(string Name, string? WorkspaceId = null);
 public sealed record CreateProjectRequest(string WorkspaceId, string Name, string TaskKeyPrefix, string? ProjectId = null);
 public sealed record CreateTaskRequest(string Title, string? Body = null, string State = "0-backlog", string? TaskId = null, string? TaskKey = null);

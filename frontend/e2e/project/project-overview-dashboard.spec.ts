@@ -60,6 +60,11 @@ const commits = [
 
 const deployment = {
   project: PROJECT_NAME, available: true, reason: null, source: 'logs/stable-restarts.jsonl',
+  defaultEvidenceRun: {
+    id: 'TR-202607110930-green', commit: '4f928ab000000000000000000000000000000000', branch: 'develop',
+    scope: { level: 'project', testSet: 'regression' }, completedAt: '2026-07-11T09:30:00Z',
+    distanceToHead: 2, headDirection: 'head-ahead',
+  },
   lastDeployment: {
     at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
     durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
@@ -92,6 +97,43 @@ const deployment = {
     targetHostId: 'agent-orchestrator-web',
     parameters: [{ name: 'branch', type: 'branch', required: true, default: 'develop', options: [] }],
   }],
+};
+
+const testRuns = {
+  project: PROJECT_NAME,
+  headCommit: '8c21d4f000000000000000000000000000000000',
+  runs: [
+    {
+      run: {
+        id: 'TR-202607111230-next', projectId: PROJECT_ID, trigger: 'pipeline',
+        commit: '8c21d4f000000000000000000000000000000000', branch: 'develop',
+        scope: { level: 'project', testSet: 'full-regression' }, state: 'planned', result: null,
+        durationSeconds: null, host: null, plannedOrder: 1, createdAt: '2026-07-11T12:30:00Z',
+        startedAt: null, completedAt: null,
+      },
+      attachedTasks: [{ taskKey: 'OPD-221', title: 'Plan deployment history detail' }],
+    },
+    {
+      run: {
+        id: 'TR-202607111200-active', projectId: PROJECT_ID, trigger: 'merge',
+        commit: '0a71c22000000000000000000000000000000000', branch: 'develop',
+        scope: { level: 'integration', testSet: 'smoke-and-contracts' }, state: 'running', result: null,
+        durationSeconds: 82, host: 'runner-02', plannedOrder: 0, createdAt: '2026-07-11T12:00:00Z',
+        startedAt: '2026-07-11T12:01:00Z', completedAt: null,
+      },
+      attachedTasks: [],
+    },
+    {
+      run: {
+        id: 'TR-202607110930-green', projectId: PROJECT_ID, trigger: 'scheduled',
+        commit: '4f928ab000000000000000000000000000000000', branch: 'develop',
+        scope: { level: 'project', testSet: 'regression' }, state: 'completed', result: 'passed',
+        durationSeconds: 194.2, host: 'runner-01', plannedOrder: 0, createdAt: '2026-07-11T09:25:00Z',
+        startedAt: '2026-07-11T09:26:00Z', completedAt: '2026-07-11T09:30:00Z',
+      },
+      attachedTasks: [{ taskKey: 'OPD-220', title: 'Visual overview delivery' }],
+    },
+  ],
 };
 
 const wikiPulse = {
@@ -176,6 +218,9 @@ async function mockDashboard(page: Page): Promise<{
   let evidenceReviewed = false;
   let validCompilePending = false;
   let releaseValidCompile: (() => void) | null = null;
+  await page.route('**/api/auth/status', route => fulfillJson(route, {
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  }));
   await page.route('http://127.0.0.1:4310/**', route => route.fulfill({ status: 200, body: 'ok' }));
   await page.route('http://127.0.0.1:4311/**', route => offlineStarted
     ? route.fulfill({ status: 200, body: 'ok' })
@@ -204,6 +249,7 @@ async function mockDashboard(page: Page): Promise<{
   await page.route('**/api/crash-recovery/pending', route => fulfillJson(route, { pending: [] }));
   await page.route('**/api/projects/*/token-usage/summary', route => fulfillJson(route, tokenSummary));
   await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
+  await page.route('**/api/projects/*/test-runs', route => fulfillJson(route, testRuns));
   await page.route('**/api/projects/*/deployment/compile', async route => {
     const request = route.request().postDataJSON() as { prompt?: string };
     if (request.prompt?.includes('Command: npm run deploy')) {
@@ -333,6 +379,53 @@ test.describe('Project Overview · operator dashboard', () => {
     }
   });
 
+  test('shows the commit-bound run pipeline in Test Quality', async ({ page, devBackend }) => {
+    await proxyBackend(page, devBackend.baseUrl);
+    await mockDashboard(page);
+    await page.setViewportSize({ width: 1536, height: 1200 });
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
+    await dismissDevErrorDialog(page);
+
+    await page.getByTestId('project-shell-rail-test-quality').click();
+    const panel = page.getByTestId('project-test-runs-panel');
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('test-run-pipeline-summary')).toContainText('1 planned');
+    await expect(page.getByTestId('test-run-pipeline-summary')).toContainText('1 running');
+    await expect(page.getByTestId('test-run-pipeline-summary')).toContainText('1 completed');
+    await expect(page.getByTestId('test-run-lane-planned')).toContainText('OPD-221');
+    await expect(page.getByTestId('test-run-lane-planned')).toContainText('Queue#1');
+    await expect(page.getByTestId('test-run-lane-running')).toContainText('runner-02');
+    await expect(page.getByTestId('test-run-lane-completed')).toContainText('passed');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await panel.screenshot({
+        path: path.join(RESULTS_DIR, `test-run-pipeline--${theme}--mocked.png`),
+      });
+    }
+  });
+
+  test('defaults deployment to the last green run and shows its directed Head distance', async ({ page, devBackend }) => {
+    await proxyBackend(page, devBackend.baseUrl);
+    await mockDashboard(page);
+    await openDashboard(page);
+
+    await page.getByTestId('project-overview-open-deployment').click();
+    const launcher = page.getByTestId('project-deployment-launcher');
+    await expect(launcher).toBeVisible();
+    await expect(launcher).toContainText('Run TR-202607110930-green');
+    await expect(launcher).toContainText('Head is 2 commits ahead');
+    await expect(page.locator('#deployment-tested-revision')).toBeChecked();
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await launcher.screenshot({
+        path: path.join(RESULTS_DIR, `deployment-test-run-evidence--${theme}--mocked.png`),
+      });
+    }
+  });
+
   test('shows exact operator signals, both themes, and reuses URL start-in-place', async ({ page, devBackend }) => {
     test.setTimeout(120_000);
     await proxyBackend(page, devBackend.baseUrl);
@@ -400,6 +493,7 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Compile typed UI');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Stable environment');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Idle required');
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Head is 2 commits ahead');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Require the stable environment to be idle before deployment');
     const visibleTask = page.getByTestId('deployment-visible-task');
     await expect(visibleTask).toBeChecked();

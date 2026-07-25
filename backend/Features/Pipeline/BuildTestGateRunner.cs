@@ -182,17 +182,20 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly ITestSelectionAdvisor? _testSelectionAdvisor;
     private readonly IPipelineHealthSensor? _health;
+    private readonly RemoteGateActivityStore? _remoteGateActivity;
 
     public BuildTestGateRunner(
         ILogger<BuildTestGateRunner> logger,
         ILoadThrottleGate? loadThrottle = null,
         ITestSelectionAdvisor? testSelectionAdvisor = null,
-        IPipelineHealthSensor? health = null)
+        IPipelineHealthSensor? health = null,
+        RemoteGateActivityStore? remoteGateActivity = null)
     {
         _logger = logger;
         _loadThrottle = loadThrottle;
         _testSelectionAdvisor = testSelectionAdvisor;
         _health = health;
+        _remoteGateActivity = remoteGateActivity;
     }
 
     public async Task<BuildTestGateResult> RunAsync(
@@ -473,6 +476,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
         var worktree = $"$HOME/gate-work/{gateRunId}";
         string? repo = null;
+        var activityStarted = false;
         try
         {
             // 1. Locate a host repo that already knows the subject SHA (second
@@ -509,6 +513,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             _logger.LogInformation(
                 "remote_gate_started gate_run_id={GateRunId} host={Host} repo={Repo} sha={Sha} queue_wait_ms={QueueWaitMs}",
                 gateRunId, sshHost, repo, sha, queueWait.ElapsedMilliseconds);
+            _remoteGateActivity?.Started(gateRunId, sshHost, DateTimeOffset.UtcNow);
+            activityStarted = true;
 
             // 3. Verify commands over ssh - same loop shape, verdicts and
             //    fingerprints as the local RunCommandsAsync.
@@ -581,6 +587,13 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         }
         finally
         {
+            if (activityStarted)
+            {
+                _remoteGateActivity?.Completed(gateRunId);
+                _logger.LogInformation(
+                    "remote_gate_completed gate_run_id={GateRunId} host={Host}",
+                    gateRunId, sshHost);
+            }
             if (repo is not null)
             {
                 try

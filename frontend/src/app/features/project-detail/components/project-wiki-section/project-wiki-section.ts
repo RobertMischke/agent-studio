@@ -41,6 +41,12 @@ import { MarkdownRichEditorComponent } from '../../../../components/markdown-ric
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import {
+  PageType,
+  derivePageType,
+  pageTypeIcon,
+} from '../../../../models/page-context.model';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
@@ -79,6 +85,7 @@ import {
 } from './wiki-linked-element';
 import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
 import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
+import { WikiPageActionsComponent } from './wiki-page-actions/wiki-page-actions';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -145,6 +152,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiFolderViewComponent,
     WikiMetaSectionComponent,
     WikiRelatedTasksComponent,
+    WikiPageActionsComponent,
     WikiSearchResultsComponent,
     WikiSourceBadgeComponent,
   ],
@@ -494,6 +502,21 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    */
   readonly openedClassification = computed<WikiClassMeta | null>(() =>
     classificationMeta(this.openedNode()?.classification));
+
+  readonly registeredWorkbenchPaths = computed<ReadonlySet<string>>(() =>
+    new Set((this.pulse()?.workbenches?.items ?? []).map(item => item.entryPath)));
+
+  pageIcon(node: WikiTreeNode): StudioIconName {
+    return pageTypeIcon(this.pageType(node));
+  }
+
+  pageType(node: WikiTreeNode): PageType {
+    return derivePageType(
+      node.relPath ?? '',
+      node.classification,
+      this.registeredWorkbenchPaths(),
+    );
+  }
 
   /** Successor link in the classification block: opens the superseding page. */
   openSupersededBy(rel: string): void {

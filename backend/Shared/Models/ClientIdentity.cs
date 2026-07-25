@@ -152,6 +152,8 @@ public record ClientSummary
     public DateTime? RunnerLastClaimAt { get; init; }
     public int? RunnerActiveSlots { get; init; }
     public int? RunnerAvailableSlots { get; init; }
+    public int RunnerActiveGateCount { get; init; }
+    public int RunnerGateCapacity { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {

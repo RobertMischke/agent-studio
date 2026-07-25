@@ -46,6 +46,11 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
+  runs belong to commits rather than cards and expose planned order, scope,
+  host, state, result, duration, and derived card attachments through
+  `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
+  step telemetry.
 - `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
   `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
@@ -62,6 +67,10 @@ pipeline view.
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
+- `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
+  read model fed by the SSH gate start/completion events. The Remote Hosts view
+  uses it to show GATE work separately from daemon RUN slots; the store is
+  visibility-only and never admits, cancels, or reorders a gate.
 - `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
   `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
   `post-task-spawner` step (AGT-2028). After a task settles it asks the best

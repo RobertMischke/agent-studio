@@ -83,6 +83,7 @@
         }
         @defer (when overlays.projectShellRail() === 'test-quality') {
           @if (overlays.projectShellRail() === 'test-quality') {
+            <app-project-test-runs-panel [projectName]="projShell" />
             <app-regression-radar scope="project" [projectName]="projShell" />
           }
         }

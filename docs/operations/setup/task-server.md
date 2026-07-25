@@ -85,6 +85,11 @@ process and temporary data root.
 - `ReadOnly` permits observation and backup but blocks mutations.
 - `Maintenance` blocks mutations and is required for import and restore.
 
+A Runner lease release closes that attempt and atomically returns a matching
+`3-progress` task to `2-ready`. This is the normal dead-process recovery path;
+the later claim mints a higher fence. A successful completion instead closes
+the lease and moves the task to `4-auto-review`.
+
 Mode changes use `PUT /api/v1/management/mode` with a reason. On restart, every
 previously active coding lease becomes `process-unknown`; its task cannot be
 claimed by another Coding Executor. An operator must submit positive containment proof to

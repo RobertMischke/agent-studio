@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Git;
 using AgentStudio.Orchestrator;
+using AgentStudio.Projects;
 using AgentStudio.Registry;
+using AgentStudio.Tasks;
 
 namespace AgentStudio.Runner;
 
@@ -389,7 +392,11 @@ public sealed record ChatNavigationContext(
     string? CurrentLaneFilter = null,
     string? ViewportTimestamp = null,
     string? ObservedSurface = null,
-    string? AffectedComponent = null);
+    string? AffectedComponent = null,
+    string? PageRef = null,
+    string? PageTitle = null,
+    string? PageType = null,
+    string? PageExcerpt = null);
 
 /// <summary>
 /// Service that turns a user message into an orchestrator reply with the
@@ -412,6 +419,10 @@ public class OrchestratorChatService
     private readonly ClientIdentityStore? _identityStore;
     private readonly OrchestratorContextDigestService? _contextDigests;
     private readonly ComponentRoutingService? _componentRouting;
+    private readonly ProjectSettingsService? _projectSettings;
+    private readonly ProjectRegistry? _projects;
+    private readonly RemoteChatWorkBroker? _remoteWork;
+    private readonly GitService? _git;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
@@ -437,7 +448,11 @@ public class OrchestratorChatService
         ILogger<OrchestratorChatService> logger,
         ClientIdentityStore? identityStore = null,
         OrchestratorContextDigestService? contextDigests = null,
-        ComponentRoutingService? componentRouting = null)
+        ComponentRoutingService? componentRouting = null,
+        ProjectSettingsService? projectSettings = null,
+        ProjectRegistry? projects = null,
+        RemoteChatWorkBroker? remoteWork = null,
+        GitService? git = null)
     {
         _chat = chat;
         _runner = runner;
@@ -447,6 +462,10 @@ public class OrchestratorChatService
         _identityStore = identityStore;
         _contextDigests = contextDigests;
         _componentRouting = componentRouting;
+        _projectSettings = projectSettings;
+        _projects = projects;
+        _remoteWork = remoteWork;
+        _git = git;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -526,12 +545,29 @@ public class OrchestratorChatService
             OrchestratorDecisionResult result;
             try
             {
-                result = await _runner.DecideCodexAsync(
-                    _bootstrap.BuildBootPrompt() + "\n\n" + prompt,
-                    requestedModel,
-                    thinkingLevel,
-                    workingDirectory,
-                    ct);
+                var fullPrompt = _bootstrap.BuildBootPrompt() + "\n\n" + prompt;
+                var remoteRoute = ResolveRemoteRoute(projectName, watchPath);
+                if (remoteRoute != null && _remoteWork != null)
+                {
+                    var remote = await _remoteWork.EnqueueTurnAsync(
+                        remoteRoute, fullPrompt, requestedModel, thinkingLevel, ct).ConfigureAwait(false);
+                    result = new OrchestratorDecisionResult(
+                        remote.Success,
+                        remote.ReplyText,
+                        string.IsNullOrWhiteSpace(remote.Model) ? requestedModel : remote.Model,
+                        remote.TokenUsage,
+                        CapturedSessionId: null,
+                        remote.ErrorMessage);
+                }
+                else
+                {
+                    result = await _runner.DecideCodexAsync(
+                        fullPrompt,
+                        requestedModel,
+                        thinkingLevel,
+                        workingDirectory,
+                        ct);
+                }
             }
             catch (Exception ex)
             {
@@ -810,7 +846,11 @@ public class OrchestratorChatService
                 && string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)
                 && string.IsNullOrWhiteSpace(nav.ViewportTimestamp)
                 && string.IsNullOrWhiteSpace(nav.ObservedSurface)
-                && string.IsNullOrWhiteSpace(nav.AffectedComponent)))
+                && string.IsNullOrWhiteSpace(nav.AffectedComponent)
+                && string.IsNullOrWhiteSpace(nav.PageRef)
+                && string.IsNullOrWhiteSpace(nav.PageTitle)
+                && string.IsNullOrWhiteSpace(nav.PageType)
+                && string.IsNullOrWhiteSpace(nav.PageExcerpt)))
         {
             sb.AppendLine("No navigation context was sent with this message.");
             sb.AppendLine("If the user asks a context-dependent question (\"what is the current task?\", \"explain this\"), say no specific task is in scope and ask which task they mean. Do NOT invent a task or hallucinate a context.");
@@ -827,8 +867,12 @@ public class OrchestratorChatService
         if (!string.IsNullOrWhiteSpace(nav.ViewportTimestamp)) sb.AppendLine($"  viewportTimestamp: {nav.ViewportTimestamp}");
         if (!string.IsNullOrWhiteSpace(nav.ObservedSurface)) sb.AppendLine($"  observedSurface: {nav.ObservedSurface}");
         if (!string.IsNullOrWhiteSpace(nav.AffectedComponent)) sb.AppendLine($"  affectedComponent: {nav.AffectedComponent}");
+        if (!string.IsNullOrWhiteSpace(nav.PageRef)) sb.AppendLine($"  pageRef: {nav.PageRef}");
+        if (!string.IsNullOrWhiteSpace(nav.PageTitle)) sb.AppendLine($"  pageTitle: {nav.PageTitle}");
+        if (!string.IsNullOrWhiteSpace(nav.PageType)) sb.AppendLine($"  pageType: {nav.PageType}");
+        if (!string.IsNullOrWhiteSpace(nav.PageExcerpt)) sb.AppendLine($"  pageExcerpt: {nav.PageExcerpt}");
         sb.AppendLine();
-        sb.AppendLine("Use this when interpreting context-dependent questions. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When currentTaskId is null, do NOT invent one; say no task is in scope and ask which task they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
+        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When neither pageRef nor currentTaskId is set, do NOT invent one; say no specific page or task is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
         sb.AppendLine();
     }
 
@@ -839,6 +883,62 @@ public class OrchestratorChatService
         return !string.IsNullOrWhiteSpace(entry?.RootPath)
             ? entry!.RootPath
             : Path.GetTempPath();
+    }
+
+    /// <summary>
+    /// Resolve the checkout identity shown in the chat header. Remote projects
+    /// queue a non-mutating host inspection when no exact runner snapshot is
+    /// cached yet; local projects read branch and HEAD directly from the same
+    /// repository root used by the local Codex one-shot.
+    /// </summary>
+    public ChatExecutionContext ResolveExecutionContext(string projectName, string watchPath)
+    {
+        var route = ResolveRemoteRoute(projectName, watchPath);
+        if (route != null && _remoteWork != null)
+        {
+            var observed = _remoteWork.GetContext(route);
+            if (observed != null) return observed;
+            _remoteWork.RequestInspection(route);
+            return new ChatExecutionContext(
+                "remote",
+                route.RunnerId,
+                RepoPath: null,
+                route.DefaultBranch,
+                HeadSha: null,
+                "resolving",
+                DateTime.UtcNow);
+        }
+
+        var root = ResolveWorkingDirectory(watchPath);
+        return new ChatExecutionContext(
+            "local",
+            "local",
+            root,
+            _git?.ReadBranchAt(root),
+            _git?.ReadHeadShaAt(root),
+            "ready",
+            DateTime.UtcNow);
+    }
+
+    private RemoteChatWorkRoute? ResolveRemoteRoute(string projectName, string watchPath)
+    {
+        if (_projectSettings == null || _projects == null) return null;
+        var settings = _projectSettings.Get(projectName);
+        if (!settings.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(settings.ExecutionRunner))
+            return null;
+
+        var project = _projects.FindByStorageLocation(watchPath)
+                      ?? _projects.FindByIdOrDisplayName(projectName);
+        var repository = RemoteProjectRepositoryResolver.Resolve(project, settings.IntegrationBranch);
+        if (repository == null)
+            throw new InvalidOperationException(
+                $"Remote project chat cannot resolve a repository URL for '{projectName}'.");
+        return new RemoteChatWorkRoute(
+            settings.ExecutionRunner!,
+            repository.ProjectId,
+            projectName,
+            repository.RepositoryUrl,
+            repository.DefaultBranch);
     }
 
     /// <summary>

@@ -72,6 +72,36 @@ public class ReviewEvidenceContextTests : IDisposable
     }
 
     [Fact]
+    public void ResultsInventory_ExcludesRotatedReviewHistory()
+    {
+        var results = Path.Combine(_jobFolder, "results");
+        Directory.CreateDirectory(results);
+        File.WriteAllText(Path.Combine(results, "current-report.md"), "fresh evidence");
+        var history = Path.Combine(results, "history", "review-epoch-0001", "operator-requeue");
+        Directory.CreateDirectory(history);
+        File.WriteAllText(Path.Combine(history, "aspect-code-quality.md"), "stale BLOCK");
+        File.WriteAllText(Path.Combine(history, "status.md"), "Result: Escalated");
+
+        var inventory = ResultsInventory.Render(_jobFolder);
+
+        Assert.Contains("results/ folder contains 1 file(s)", inventory);
+        Assert.Contains("current-report.md", inventory);
+        Assert.DoesNotContain("stale BLOCK", inventory);
+        Assert.DoesNotContain("Result: Escalated", inventory);
+        Assert.True(ResultsInventory.HasActiveArtifacts(_jobFolder));
+    }
+
+    [Fact]
+    public void ResultsInventory_HistoryAloneIsNotActiveCompletionEvidence()
+    {
+        var history = Path.Combine(_jobFolder, "results", "history", "review-epoch-0001", "operator-requeue");
+        Directory.CreateDirectory(history);
+        File.WriteAllText(Path.Combine(history, "status.md"), "Result: Escalated");
+
+        Assert.False(ResultsInventory.HasActiveArtifacts(_jobFolder));
+    }
+
+    [Fact]
     public void ResultsInventory_BlankJobFolderPath_ReportsUnavailableInsteadOfThrowing()
     {
         // Fallback path: a caller with no resolved job-folder path must get a

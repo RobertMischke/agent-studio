@@ -55,12 +55,16 @@ export class RemoteHostCardComponent {
   readonly action = output<{ kind: HostActionKind; id: string }>();
   readonly setup = output<RemoteHost>();
 
-  readonly tone = computed(() => hostStatusTone(this.host().status));
-  readonly statusLabel = computed(() => hostStatusLabel(this.host().status));
+  readonly liveLoading = computed(() => this.host().liveDataState === 'loading');
+  readonly liveError = computed(() => this.host().liveDataState === 'error');
+  readonly tone = computed(() => this.liveLoading() ? 'idle' : hostStatusTone(this.host().status));
+  readonly statusLabel = computed(() => this.liveLoading() ? 'Loading live status' : hostStatusLabel(this.host().status));
   readonly roleLabel = computed(() => hostRoleLabel(this.host().role));
-  readonly heartbeatLabel = computed(() => relativeHeartbeat(this.host().lastHeartbeatAt, this.now()));
+  readonly heartbeatLabel = computed(() => this.liveLoading()
+    ? 'loading…'
+    : relativeHeartbeat(this.host().lastHeartbeatAt, this.now()));
   readonly retired = computed(() => this.host().status === 'retired');
-  readonly stale = computed(() => hostIsStale(this.host().lastHeartbeatAt, this.now()));
+  readonly stale = computed(() => !this.liveLoading() && hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly telemetryWindow = signal<'1h' | '6h' | '48h' | '14d'>('6h');
   readonly hoveredTelemetryIndex = signal<number | null>(null);
   readonly telemetryPoints = computed(() => {
@@ -105,7 +109,7 @@ export class RemoteHostCardComponent {
   });
   readonly latestContext = computed(() => {
     const point = this.telemetryPoints().at(-1);
-    return point ? `${point.activeSlots} active slots · load ${(point.load1 ?? 0).toFixed(1)} of ${point.cpuCores} cores` : '';
+    return point ? `${point.activeSlots} RUN active · host load ${(point.load1 ?? 0).toFixed(1)} of ${point.cpuCores} cores` : '';
   });
 
   readonly meters = computed<Meter[]>(() => {
@@ -140,17 +144,33 @@ export class RemoteHostCardComponent {
     ];
   });
 
-  readonly sessionCount = computed(() => this.stale() || this.retired() ? 0 : 1);
   readonly taskInflowLabel = computed(() => {
     const host = this.host();
+    if (this.liveLoading()) return 'loading…';
+    if (this.liveError()) return 'unknown';
     if (this.retired()) return 'retired';
     if (host.status === 'draining' || host.gitPushStatus === 'read-only') return 'blocked';
     return this.stale() ? 'unknown' : 'open';
   });
-  readonly daemonLabel = computed(() => this.stale() ? 'stopped' : (this.host().daemonState ?? 'running'));
-  readonly slotsLabel = computed(() => this.stale()
-    ? '-'
-    : `${this.host().activeTaskCount ?? 0} active / ${this.host().availableSlots ?? 0} free`);
+  readonly daemonLabel = computed(() => {
+    if (this.liveLoading()) return 'loading live status…';
+    if (this.liveError()) return 'status unavailable';
+    return this.stale() ? 'stopped' : (this.host().daemonState ?? 'running');
+  });
+  readonly runSlotsLabel = computed(() => {
+    if (this.liveLoading()) return 'Loading daemon telemetry…';
+    if (this.liveError() || this.stale()) return 'Live count unavailable';
+    const active = this.host().activeTaskCount ?? 0;
+    const free = this.host().availableSlots ?? 0;
+    return `${active} active · ${free} free · ${active + free} max`;
+  });
+  readonly gateWorkLabel = computed(() => {
+    if (this.liveLoading()) return 'Loading gate events…';
+    if (this.liveError()) return 'Live count unavailable';
+    const active = this.host().activeGateCount ?? 0;
+    const capacity = this.host().gateCapacity ?? 0;
+    return capacity > 0 ? `${active} running · pool ${capacity}` : `${active} running`;
+  });
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

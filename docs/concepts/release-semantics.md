@@ -102,8 +102,9 @@ project calls a revision stable only through a separate freeze workflow:
 
 1. Select an exact SHA that is already reachable from `main`.
 2. Show the release manifest and any acceptance-state changes since release.
-3. Run or attach the project-specific stable checks: build, tests, deployment
-   health, visual proof, and any critical incident gate.
+3. Attach the successful commit-bound test run used as stable evidence, plus
+   deployment health, visual proof, and any critical incident gate. The test
+   run commit is explicit; an older green run does not prove a newer Head.
 4. Create an annotated tag such as `stable/2026-07-13` or the project's semver
    release tag. The project chooses one naming policy; the product does not
    create both automatically.
@@ -182,5 +183,7 @@ wrapper around every card.
 - Every included commit is visible, even when attribution is missing.
 - `main` means released; only an explicit tag plus evidence means stable.
 - Warnings and overrides are durable facts, not transient dialog copy.
+- Deployment and freeze evidence names a successful test run and its exact
+  commit. Head deployment is a durable, reasoned exception.
 - Project-specific release/freeze mechanics live in versioned Deployment
   targets, not in an operator's memory.

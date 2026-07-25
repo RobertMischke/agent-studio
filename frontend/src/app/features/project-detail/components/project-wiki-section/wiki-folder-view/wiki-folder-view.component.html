@@ -72,7 +72,7 @@
                           [class.wfolder__star--active]="isStarred(child)"
                           [attr.aria-pressed]="isStarred(child)"
                           [attr.data-testid]="'wiki-folder-star-' + child.relPath"
-                          [cacTooltip]="isStarred(child) ? 'Stern entfernen' : 'Starren'"
+                          cacTooltip="Your personal shortlist"
                           (click)="toggleStar($event, child)">
                     <app-studio-icon [name]="isStarred(child) ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
                   </button>

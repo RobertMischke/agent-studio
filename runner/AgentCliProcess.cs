@@ -33,9 +33,10 @@ public sealed class AgentCliProcess
         string prompt,
         Action<string> onStdOut,
         Action<string> onStdErr,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? argsOverride = null)
     {
-        var args = SplitArgs(_options.CliArgs);
+        var args = SplitArgs(argsOverride ?? _options.CliArgs);
         _log($"exec: {_options.CliBin} {string.Join(' ', args)} (cwd {repoPath}, prompt {prompt.Length} chars on stdin)");
 
         return await ProcessRunner.RunAsync(

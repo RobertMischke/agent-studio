@@ -7,6 +7,7 @@ import { TaskService } from '../../../services/task.service';
 import { CliCatalogStore } from '../../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { sessionFetch } from '../../../services/session-fetch';
+import { PageTaskRequest, pageContextKey } from '../../../models/page-context.model';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
@@ -134,6 +135,54 @@ export class CreateTaskFormService {
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.prefill;
     this.newTitle = event.title;
+    this.loadCreateModels(this.newCliType);
+    this.visible.set(true);
+  }
+
+  /**
+   * Shared page action-bar entry point. The durable task prompt carries the
+   * canonical page reference plus a bounded excerpt so the card preserves its
+   * origin even after the operator closes the page.
+   */
+  openPageTask(
+    request: PageTaskRequest,
+    watchPaths: readonly WatchPathEntry[],
+  ): void {
+    const page = request.context;
+    const watchEntry = watchPaths.find((wp) => wp.name === page.projectName);
+    if (!watchEntry) return;
+
+    const instruction = request.intent === 'build-feature'
+      ? 'Turn the page proposal into a production feature. Reconcile it with current product and architecture contracts, then implement and verify the smallest complete slice.'
+      : request.intent === 'create-follow-up'
+        ? 'Investigate the incident or history evidence, identify the remaining prevention gap, and implement a verified follow-up.'
+        : 'Use this page as the source context for the requested project change. Verify the current implementation before changing it.';
+    const titlePrefix = request.intent === 'build-feature'
+      ? 'Build feature'
+      : request.intent === 'create-follow-up'
+        ? 'Page follow-up'
+        : 'Task from page';
+
+    this.newTargetState = TaskState.Preparation;
+    this.newWatchPath = watchEntry.path;
+    this.newTitle = `${titlePrefix}: ${page.title}`;
+    this.newPrompt = [
+      '# Page-backed task',
+      '',
+      `Source page: \`${pageContextKey(page)}\``,
+      `Page type: ${page.pageType}`,
+      `Project: ${page.projectName}`,
+      '',
+      '## Page excerpt',
+      '',
+      page.excerpt || '(No excerpt available.)',
+      '',
+      '## Requested outcome',
+      '',
+      instruction,
+    ].join('\n');
+    this.newKind = 'task';
+    this.newMode = 'coding';
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
   }

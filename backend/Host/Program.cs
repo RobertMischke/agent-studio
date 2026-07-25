@@ -209,6 +209,7 @@ builder.Services.AddSingleton<AccessSecurityStore>();
 builder.Services.AddSingleton<ManagementService>();
 builder.Services.AddSingleton<MigrationStateStore>();
 builder.Services.AddSingleton<HostTelemetryStore>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteGateActivityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
@@ -275,6 +276,7 @@ builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
 builder.Services.AddSingleton<OrchestratorContextDigestService>();
+builder.Services.AddSingleton<RemoteChatWorkBroker>();
 builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
 builder.Services.AddSingleton<ProjectChatIndex>();
@@ -304,6 +306,7 @@ builder.Services.AddSingleton<BoardMergeStatusService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
 // chips). PublishTargetService derives + caches per project; TaskPublishableService
 // folds the per-task chip signal onto accepted cards (O(projects), no per-card git).
@@ -312,6 +315,8 @@ builder.Services.AddSingleton<TaskPublishableService>();
 builder.Services.AddSingleton<PublishActionService>();
 builder.Services.AddSingleton<ProjectDeploymentSummaryService>();
 builder.Services.AddSingleton<ProjectDeploymentCompiler>();
+builder.Services.AddSingleton<TestRunStore>();
+builder.Services.AddSingleton<TestRunService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.

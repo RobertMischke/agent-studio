@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AgentStudio.TaskServer.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,7 @@ public sealed partial class TaskServerStore
     private readonly TimeProvider _clock;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly DateTime _startedAt;
+    private static readonly JsonSerializerOptions OutcomeJson = CreateOutcomeJson();
     private string _serverId = string.Empty;
     private TaskServerMode _mode = TaskServerMode.Maintenance;
     private int _outboxBacklog;
@@ -222,6 +224,49 @@ public sealed partial class TaskServerStore
         await using var reader = await command.ExecuteReaderAsync(ct);
         var result = new List<TaskDto>();
         while (await reader.ReadAsync(ct)) result.Add(ReadTask(reader));
+        return result;
+    }
+
+    public async Task<IReadOnlyList<ExecutionAttemptTimelineDto>> ListAttemptsAsync(
+        string projectId,
+        string taskIdentity,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        string? taskId;
+        await using (var taskCommand = Command(connection, """
+            SELECT id FROM tasks
+             WHERE project_id = $project AND (id = $identity OR task_key = upper($identity));
+            """, ("$project", projectId), ("$identity", taskIdentity)))
+        {
+            taskId = Convert.ToString(await taskCommand.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        }
+        if (string.IsNullOrWhiteSpace(taskId)) throw new KeyNotFoundException("Task was not found.");
+
+        var runs = new List<RunDto>();
+        await using (var runCommand = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at
+              FROM runs WHERE task_id = $task ORDER BY created_at, id;
+            """, ("$task", taskId)))
+        await using (var reader = await runCommand.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct)) runs.Add(ReadRun(reader));
+        }
+
+        var result = new List<ExecutionAttemptTimelineDto>(runs.Count);
+        foreach (var run in runs)
+        {
+            await using var outcomeCommand = Command(connection, """
+                SELECT payload_json FROM events
+                 WHERE run_id = $run AND kind = 'execution.outcome.classified'
+                 ORDER BY cursor DESC LIMIT 1;
+                """, ("$run", run.RunId));
+            var payload = Convert.ToString(await outcomeCommand.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+            var decision = string.IsNullOrWhiteSpace(payload)
+                ? null
+                : JsonSerializer.Deserialize<ExecutionOutcomeDecision>(payload, OutcomeJson);
+            result.Add(new ExecutionAttemptTimelineDto(run, decision));
+        }
         return result;
     }
 
@@ -441,7 +486,10 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'released' WHERE run_id = $run;
                 UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
-                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome), ("$now", Iso(UtcNow)));
+                UPDATE tasks SET state = '2-ready', version = version + 1, updated_at = $now
+                 WHERE id = $task AND state = '3-progress';
+                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome),
+                ("$now", Iso(UtcNow)), ("$task", lease.TaskId));
             released = lease with { Status = "released" };
             await AuditAsync(connection, transaction, actorId, "lease.released", "run", runId,
                 JsonSerializer.Serialize(new { request.Fence, request.Outcome }), ct);
@@ -613,10 +661,43 @@ public sealed partial class TaskServerStore
         RunDto? completed = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            if (request.OutcomeDecision is not null
+                && !string.Equals(
+                    request.Outcome,
+                    request.OutcomeDecision.Outcome.ToString(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new TaskServerConflictException(
+                    "outcome-decision-mismatch",
+                    "The run outcome does not match the shared typed outcome decision.");
+            }
+
+            var outcomePayload = request.OutcomeDecision is null
+                ? null
+                : JsonSerializer.Serialize(request.OutcomeDecision, OutcomeJson);
+            var outcomeKey = $"execution-outcome:{runId}:{request.OutcomeDecision?.ClassifierVersion}";
             var prior = await ReadRunCompletionAsync(connection, transaction, runId, ct);
             if (prior is not null)
             {
                 ValidateCompletionReplay(prior, request);
+                if (outcomePayload is not null)
+                {
+                    var priorOutcome = await ReadEventByIdempotencyKeyAsync(
+                        connection,
+                        transaction,
+                        outcomeKey,
+                        ct);
+                    if (priorOutcome is null
+                        || !string.Equals(
+                            priorOutcome.PayloadJson,
+                            outcomePayload,
+                            StringComparison.Ordinal))
+                    {
+                        throw new TaskServerConflictException(
+                            "completion-conflict",
+                            "The run is already completed with different classified facts.");
+                    }
+                }
                 completed = prior.Run;
                 return;
             }
@@ -662,6 +743,30 @@ public sealed partial class TaskServerStore
                 "completion",
                 ct);
             var now = UtcNow;
+            if (request.OutcomeDecision is not null)
+            {
+                if (!string.Equals(request.OutcomeDecision.RawFacts.AttemptId, runId, StringComparison.Ordinal))
+                    throw new TaskServerConflictException("attempt-identity-mismatch", "Outcome facts are not bound to this immutable attempt.");
+
+                var eventId = DeterministicId("evt", outcomeKey);
+                var eventRequest = new EventIngestRequest(
+                    eventId,
+                    "execution.outcome.classified",
+                    outcomePayload!,
+                    outcomeKey,
+                    request.Fence,
+                    now);
+                await ExecuteAsync(connection, """
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred)
+                    ON CONFLICT(idempotency_key) DO NOTHING;
+                    """, ct, transaction,
+                    ("$event", eventId), ("$run", runId), ("$task", lease.TaskId),
+                    ("$kind", eventRequest.Kind), ("$payload", outcomePayload), ("$key", outcomeKey),
+                    ("$fence", request.Fence), ("$occurred", Iso(now)));
+                var persisted = await ReadEventByIdempotencyKeyAsync(connection, transaction, outcomeKey, ct);
+                ValidateEventReplay(persisted, runId, lease.TaskId, eventRequest);
+            }
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'completed' WHERE run_id = $run;
                 UPDATE runs
@@ -704,6 +809,8 @@ public sealed partial class TaskServerStore
                     request.ResultEnvelopeDigest,
                     request.Sequence,
                     request.IdempotencyKey,
+                    classifierVersion = request.OutcomeDecision?.ClassifierVersion,
+                    recoveryAction = request.OutcomeDecision?.RecoveryAction.ToString(),
                 }), ct);
             completed = new RunDto(
                 runId,
@@ -1980,6 +2087,17 @@ public sealed partial class TaskServerStore
         => new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
             reader.GetInt64(5), Parse(reader.GetString(6)), Parse(reader.GetString(7)), reader.IsDBNull(8) ? null : reader.GetString(8));
 
+    private static RunDto ReadRun(SqliteDataReader reader)
+        => new(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetInt64(4),
+            Parse(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : Parse(reader.GetString(6)),
+            reader.IsDBNull(7) ? null : Parse(reader.GetString(7)));
+
     private static async Task<LeaseDto?> ReadLeaseAsync(SqliteConnection connection, SqliteTransaction transaction, string runId, CancellationToken ct)
     {
         await using var command = Command(connection, """
@@ -1991,6 +2109,21 @@ public sealed partial class TaskServerStore
             ? new LeaseDto(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
                 reader.GetInt64(5), Parse(reader.GetString(6)), Parse(reader.GetString(7)), reader.GetString(8))
             : null;
+    }
+
+    private static async Task<RunDto?> ReadRunAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at
+              FROM runs WHERE id = $run;
+            """, transaction, ("$run", runId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return ReadRun(reader);
     }
 
     private static async Task<EventDto?> ReadEventByIdempotencyKeyAsync(
@@ -2168,6 +2301,13 @@ public sealed partial class TaskServerStore
 
     private static string Iso(DateTime value) => value.ToUniversalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
     private static DateTime Parse(string value) => DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+    private static JsonSerializerOptions CreateOutcomeJson()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
 }
 
 public sealed class TaskServerConflictException(string code, string message) : Exception(message)

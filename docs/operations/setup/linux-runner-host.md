@@ -235,8 +235,10 @@ list.
 | `RUNNER_ROLE` | `--role` | `coding` | `coding` or the separately registered `review` service. |
 | `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. |
 | `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
+| `RUNNER_STATE_DIR` | `--state-dir` | `$RUNNER_WORKDIR/.runner-state` | Durable slot, attempt, PID, worker result, and file-backed output state used for planned restart reattachment. Keep it on persistent local storage. |
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
 | `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
+| `RUNNER_CLI_RESUME_ARGS` | `--cli-resume-args` | (none) | Optional provider-specific same-session arguments containing the literal `{sessionId}` placeholder. A supported infrastructure failure resumes at most once; an invalid session falls back to durable salvage once and then escalates. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
 | `RUNNER_AUTH_TOKEN` | none | (none) | Compatibility environment input. Prefer the credential file so the secret is absent from process diagnostics. |
 | `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
@@ -247,11 +249,14 @@ list.
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
-- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, text
-  output on stdout that the runner scans for the `[[TASK_*]]` sentinel).
+- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, final
+  response on stdout; the runner accepts a `[[TASK_*]]` sentinel only as its
+  terminal standalone line).
 - Codex: `RUNNER_CLI_BIN=codex`, plus the non-interactive exec flags your version
-  exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
-  script instead of fighting the space-split arg parser.
+  exposes. The runner reads the last completed `agent_message`, not raw JSONL
+  tool, diff, or diagnostic payloads. When quoting gets awkward, point
+  `RUNNER_CLI_BIN` at a small wrapper script instead of fighting the space-split
+  arg parser.
 
 ### Multi-repository clone layout and eligibility
 
@@ -378,9 +383,23 @@ attempted source mutation, returns the Epic to Backlog.
 
 The startup Git push probe still describes coding capability. A host whose
 identity reports `read-only` may claim Epic planning, but it receives no normal
-coding claims until push capability is restored. After a daemon interruption,
-the next claim requeues assigned Progress work once its lease is free and
-issues a higher fencing token.
+coding claims until push capability is restored.
+
+At startup the daemon reads `RUNNER_STATE_DIR` before making a new claim. A
+persisted attempt is adopted only when its worker PID still has the recorded
+start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
+then restores the same lease, fence, Task Server run id, and attempt instance,
+and follows the worker's JSONL output file from the persisted sequence. A
+worker that finished during the short restart window is finalized from its
+atomically written result file. The slot enters `launching` before
+`Process.Start`, and the worker writes its own atomic `worker.json` identity
+before starting the CLI. Startup briefly waits for that identity, closing the
+child-start-to-slot-save handoff window without trusting an unverified PID. A
+missing process, reused PID, or worktree mismatch is never heartbeated: the
+lease is actively released and the Task Server returns the Progress card to
+Ready with the next claim using a higher fence. This recovery preserves the
+bounded attempt/autonomy contract; it does not create a second attempt or an
+autonomous task store on the Runner.
 
 ### systemd deployment
 
@@ -399,9 +418,40 @@ At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
 `RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
 sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
 protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
-requests graceful SIGINT shutdown, and best-effort starts
+requests graceful SIGTERM drain, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
+
+The shipped unit deliberately uses `KillMode=process`. This is required:
+`control-group` kills detached job workers and makes safe reattachment
+impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
+`RestartSec=10s` bound a broken-binary restart loop while allowing ordinary
+recovery. Installing or changing the unit requires root, followed by
+`systemctl daemon-reload`.
+
+### Planned daemon restart and deploy
+
+A planned Runner deploy no longer waits for host idle. Replace the published
+files and restart the main service process:
+
+```bash
+sudo systemctl restart agent-runner
+sudo journalctl -u agent-runner --since '-2 minutes' \
+  | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+```
+
+On SIGTERM the old daemon stops making claims, leaves detached job workers
+running, flushes its already-atomic slot records, and exits. systemd starts the
+replacement, which verifies and reattaches those workers before opening any
+freed slot to claims. Confirm every previously occupied slot reports either
+`persisted attempt accepted` or `releasing dead persisted attempt`. The latter
+must be followed by a Ready card and a later higher-fence claim. Do not change
+the unit back to `KillMode=control-group`.
+
+This procedure covers a planned daemon binary restart, not a machine reboot,
+power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
+still use the existing fenced containment and `process-unknown` recovery
+contracts.
 
 ## 5. Run one task end-to-end for diagnostics
 

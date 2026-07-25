@@ -1,0 +1,194 @@
+:host {
+  display: block;
+  min-width: 0;
+  container: page-actions / inline-size;
+}
+
+.page-action-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  box-shadow: var(--elevation-resting);
+}
+
+.page-action-bar__type,
+.page-action-bar__actions,
+.page-action-bar__button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.page-action-bar__type {
+  flex: 0 0 auto;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.page-action-bar__separator {
+  align-self: stretch;
+  width: 1px;
+  background: var(--studio-border);
+}
+
+.page-action-bar__actions {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+}
+
+.page-action-bar__button {
+  gap: var(--studio-spacing-1);
+  min-height: 28px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.page-action-bar__button:hover:not(:disabled) {
+  border-color: var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}
+
+.page-action-bar__button:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+
+.page-action-bar__button--primary {
+  background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
+  color: var(--studio-accent);
+}
+
+.page-action-bar__button--extra {
+  background: color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
+  color: var(--studio-fg);
+}
+
+.page-action-bar__button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.page-pin-form {
+  display: grid;
+  gap: var(--studio-spacing-3);
+}
+
+.page-pin-form label {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.page-pin-form select,
+.page-pin-form input,
+.page-pin-form textarea {
+  width: 100%;
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font: inherit;
+  font-weight: 400;
+}
+
+.page-pin-form textarea {
+  resize: vertical;
+}
+
+.page-pin-form select:focus-visible,
+.page-pin-form input:focus-visible,
+.page-pin-form textarea:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+
+.page-pin-form__distinction,
+.page-pin-form__error {
+  margin: 0;
+}
+
+.page-pin-form__distinction {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2);
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+  font-size: 0.72rem;
+}
+
+.page-pin-form__error {
+  color: var(--studio-error);
+  font-size: 0.72rem;
+}
+
+.page-pin-form__footer {
+  display: flex;
+  gap: var(--studio-spacing-2);
+}
+
+.page-pin-form__cancel,
+.page-pin-form__submit {
+  min-height: 30px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-card-compact-radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-pin-form__cancel {
+  background: transparent;
+  color: var(--studio-fg);
+}
+
+.page-pin-form__submit {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+}
+
+@container page-actions (max-width: 720px) {
+  .page-action-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-action-bar__separator {
+    display: none;
+  }
+
+  .page-action-bar__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-action-bar__button {
+    transition-duration: 0s;
+  }
+}

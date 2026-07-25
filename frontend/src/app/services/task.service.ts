@@ -82,6 +82,7 @@ import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
 import type {
   ProjectDeploymentSummary,
+  ProjectTestRunsResponse,
   CompiledDeploymentPrompt,
   ProjectThroughputSummary,
   ProjectVisualEvidenceItem,
@@ -600,10 +601,12 @@ export class TaskService {
     );
   }
 
-  getDetail(jobId: string, watchPath?: string) {
+  getDetail(jobId: string, watchPath?: string, project?: string) {
+    let params = this.withWatchPath(watchPath).params ?? new HttpParams();
+    if (project) params = params.set('project', project);
     return this.http.get<TaskDetail>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
-      this.withWatchPath(watchPath),
+      params.keys().length ? { params } : {},
     );
   }
 
@@ -2121,6 +2124,13 @@ export class TaskService {
     );
   }
 
+  /** Project-wide planned/running/completed test-run pipeline with derived card attachments. */
+  getProjectTestRuns(projectName: string) {
+    return this.http.get<ProjectTestRunsResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/test-runs`,
+    );
+  }
+
   compileProjectDeployment(projectName: string, prompt: string) {
     return this.http.post<CompiledDeploymentPrompt>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/compile`,
@@ -2261,7 +2271,11 @@ export class TaskService {
       selectionSource?: 'explicit' | 'inherited';
     },
   ) {
-    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+    return this.http.post<{
+      project: string;
+      reply: OrchestratorChatTurn;
+      executionContext?: import('../features/orchestrator').ChatExecutionContext | null;
+    }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
       body,
     );
@@ -2291,7 +2305,11 @@ export class TaskService {
       selectionSource?: 'explicit' | 'inherited';
     },
   ) {
-    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+    return this.http.post<{
+      project: string;
+      reply: OrchestratorChatTurn;
+      executionContext?: import('../features/orchestrator').ChatExecutionContext | null;
+    }>(
       `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
       body,
     );

@@ -96,7 +96,7 @@ export interface RelatedTaskReference {
 export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
 
 /** Curated consolidation status of a wiki page. */
-export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt';
+export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt' | 'archived';
 
 /**
  * Curation classification of one wiki page (mirrors backend
@@ -110,6 +110,8 @@ export interface WikiClassification {
   supersededBy: string | null;
   /** konzept | adr | contract | domain-map | analyse | runbook | workbench | mockup | proposal | generiert | index */
   type: string | null;
+  /** Canonical interactive page kind derived by the backend. */
+  pageType?: 'doc' | 'concept' | 'workbench' | 'incident' | 'report' | null;
   /** ISO date of the consolidation analysis. */
   analyzedAt: string | null;
 }

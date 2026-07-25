@@ -1,3 +1,7 @@
+<app-review-attempt-history
+  [currentEpoch]="reviewAttemptEpoch()"
+  [cycles]="reviewAttemptCycles()" />
+
 @if (visibleRuns().length === 0) {
   <div class="run-timeline__empty">No CLI runs yet - start the task to populate the timeline.</div>
 } @else {

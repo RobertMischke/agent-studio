@@ -108,6 +108,25 @@ public sealed record RunPromptContextSnapshot
 }
 
 /// <summary>
+/// One operator-owned review-attempt epoch projected beside the CLI run
+/// timeline. Epoch zero is the initial cycle. Later epochs are opened only by
+/// explicit human requeues and retain the recorded reason and artifact-rotation
+/// count for audit.
+/// </summary>
+public sealed record ReviewAttemptCycle
+{
+    public int Epoch { get; init; }
+    public bool IsCurrent { get; init; }
+    public DateTime? StartedAt { get; init; }
+    public DateTime? EndedAt { get; init; }
+    public string? Actor { get; init; }
+    public string? Reason { get; init; }
+    public string? FromState { get; init; }
+    public string? ToState { get; init; }
+    public int RotatedArtifacts { get; init; }
+}
+
+/// <summary>
 /// Top-level session shape the <c>/api/tasks/{id}/runs</c> endpoint
 /// returns. The runs list is the primary surface; the aggregates above
 /// it (<see cref="RunCount"/>, <see cref="LastActivityAt"/>) are derived
@@ -122,6 +141,89 @@ public sealed record RunTimeline
     public bool HasActiveRun { get; init; }
     public List<RunRecord> Runs { get; init; } = [];
     public List<RunPromptEntry> PromptEntries { get; init; } = [];
+    /// <summary>Current operator-owned review epoch. Legacy tasks are epoch zero.</summary>
+    public int ReviewAttemptEpoch { get; init; }
+    /// <summary>Current and closed cycles, newest first, for the task-detail Runs surface.</summary>
+    public List<ReviewAttemptCycle> ReviewAttemptCycles { get; init; } = [];
+}
+
+/// <summary>
+/// Pure projection of operator-requeue ledger events into review-attempt cycle
+/// history. The durable sidecar supplies the authoritative current epoch; the
+/// timeline supplies operator reason, actor, lane crossing, and rotation count.
+/// Missing best-effort timeline rows still yield a visible current epoch.
+/// </summary>
+public static class ReviewAttemptTimelineBuilder
+{
+    public static List<ReviewAttemptCycle> Build(
+        int currentEpoch,
+        IReadOnlyList<TimelineEvent> events,
+        DateTime? initialStartedAt)
+    {
+        currentEpoch = Math.Max(0, currentEpoch);
+        events ??= [];
+
+        var boundaries = events
+            .Where(e => string.Equals(
+                e.Kind,
+                TimelineEventKinds.OperatorRequeued,
+                StringComparison.Ordinal))
+            .Select(e => (Event: e, Epoch: ReadEpoch(e)))
+            .Where(x => x.Epoch is > 0 && x.Epoch <= currentEpoch)
+            .GroupBy(x => x.Epoch!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(x => x.Event.Ts).First().Event);
+
+        var cycles = new List<ReviewAttemptCycle>(currentEpoch + 1);
+        for (var epoch = currentEpoch; epoch >= 0; epoch--)
+        {
+            boundaries.TryGetValue(epoch, out var boundary);
+            var nextBoundary = boundaries
+                .Where(pair => pair.Key > epoch)
+                .OrderBy(pair => pair.Key)
+                .Select(pair => pair.Value)
+                .FirstOrDefault();
+
+            cycles.Add(new ReviewAttemptCycle
+            {
+                Epoch = epoch,
+                IsCurrent = epoch == currentEpoch,
+                StartedAt = epoch == 0 ? initialStartedAt : boundary?.Ts,
+                EndedAt = epoch == currentEpoch ? null : nextBoundary?.Ts,
+                Actor = boundary?.Actor,
+                Reason = epoch == 0
+                    ? "Initial review cycle."
+                    : ReadDetail(boundary, "reason") ?? boundary?.Summary,
+                FromState = ReadDetail(boundary, "from"),
+                ToState = ReadDetail(boundary, "to"),
+                RotatedArtifacts = ReadNonNegativeInt(boundary, "rotatedArtifacts"),
+            });
+        }
+        return cycles;
+    }
+
+    private static int? ReadEpoch(TimelineEvent evt)
+    {
+        var value = ReadDetail(evt, "attemptEpoch");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var epoch)
+            ? Math.Max(0, epoch)
+            : null;
+    }
+
+    private static int ReadNonNegativeInt(TimelineEvent? evt, string key)
+    {
+        var value = ReadDetail(evt, key);
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
+            ? Math.Max(0, number)
+            : 0;
+    }
+
+    private static string? ReadDetail(TimelineEvent? evt, string key)
+        => evt?.Details != null && evt.Details.TryGetValue(key, out var value)
+            && !string.IsNullOrWhiteSpace(value)
+                ? value
+                : null;
 }
 
 public static class RunPromptTimelineBuilder

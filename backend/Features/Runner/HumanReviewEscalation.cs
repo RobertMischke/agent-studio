@@ -238,7 +238,10 @@ public sealed class HumanReviewEscalation
                     Reason: FormatReason(category, reason),
                     Prompt: SystemPrompt,
                     Response: NoModelResponse,
-                    FollowUp: string.Empty));
+                    FollowUp: string.Empty)
+                {
+                    AttemptEpoch = OperatorReviewRequeueService.ReadEpoch(folderPath),
+                });
             }
             catch (Exception ex)
             {

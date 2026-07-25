@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -71,6 +71,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, lists reissue
   timestamps and triggers from the timeline, and shows open gate evidence.
+  The Runs modal also shows the current operator-owned review-attempt epoch and
+  the closed cycle history, including requeue reason, lane crossing, and rotated
+  artifact count.
   Timeline and steering text is ANSI-sanitised before rendering. Code Review
   keeps the last available grade visible with its date when it belongs to an
   older delivery. The task-detail Docs tab presents rendered result documents
@@ -127,6 +130,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   guided definition editor. The editor collects a repository script and typed,
   operator-labelled parameters, validates them through the deployment compiler,
   and previews the generated operator form before any definition is saved or run.
+- `frontend/src/app/features/project-detail/components/project-test-runs-panel/`:
+  the Test Quality run pipeline. It shows planned, running, and completed
+  commit-bound runs in product order, including scope, host, duration, result,
+  and cards attached by the backend ancestry projection. Board cards render the
+  same projection as perfect, diff included, diff not included, pending, or no
+  assigned run.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
@@ -211,11 +220,12 @@ previews and links to the owning detail surface. Each data request fails
 independently so one unavailable source does not blank the dashboard. Numeric
 metrics use tabular figures.
 
-The production v1 owns a read-only Deployment destination, not a deployment
-workflow. Mutating template and prompt-defined controls remain explicit
-follow-up slices. Overview and Deployment both use the DEP-1 summary contract;
-neither parses deployment history in the frontend. Publishing controls remain
-owned by the existing publishing surface.
+Overview and Deployment both use the DEP-1 summary contract; neither parses
+deployment history in the frontend. Runnable targets default to the latest
+successful test run and carry its id, exact commit, and Head distance into the
+durable visible deployment task. Selecting Head is an explicit exception that
+requires an operator reason. Publishing controls remain owned by the existing
+publishing surface.
 
 The Overview owns a compact Visual Evidence review queue over delivered task
 screenshots. Acknowledgements reuse the append-only review-evidence log, so the

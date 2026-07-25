@@ -105,6 +105,7 @@
     <Using Include="AgentStudio.Tags" />
     <Using Include="AgentStudio.TaskAccess" />
     <Using Include="AgentStudio.Tasks" />
+    <Using Include="AgentStudio.TestRuns" />
     <Using Include="AgentStudio.Tests" />
     <Using Include="AgentStudio.Tokens" />
   </ItemGroup>

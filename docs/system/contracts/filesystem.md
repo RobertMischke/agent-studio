@@ -11,6 +11,8 @@ canonical layout:
   .metadata/
     projects.json
     workspaces.json
+    test-runs/
+      PROJ-023.json
   projects/
     PROJ-023/
       tasks/
@@ -42,6 +44,14 @@ Per-project task counters move out of the sidecar `.task-counter.json` and onto 
 Projects created through `POST /api/projects` use `<TaskRepository>/projects/PROJ-NNN/tasks/` as their watched task-store root. The product repository remains a separate `RepositoryPath` and never receives a new `.orchestrator/jobs` store. Legacy projects can retain their existing storage location until a controlled migration.
 
 The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string.
+
+Project test runs are independent, commit-bound evidence objects stored in
+`<TaskRepository>/.metadata/test-runs/<PROJ-NNN>.json`. The schema-versioned
+file contains the run lifecycle and never stores card assignments. Task reads
+derive their best run, commit distance, direction, and diff containment from
+Git ancestry, so moving or completing a card cannot rewrite test evidence.
+Normal writers use `POST /api/projects/{project}/test-runs` and
+`PUT /api/projects/{project}/test-runs/{runId}`.
 
 ## Operational Boundary
 
@@ -164,6 +174,34 @@ The application owns transitions between these states. Successful CLI runs move 
 ```
 
 Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
+
+### .metadata/review-attempt.json and results/history/ (optional)
+
+An explicit operator move out of `5-human-review` or `5e-escalated` into a
+work/review lane opens a new review-attempt epoch:
+
+```json
+{
+  "epoch": 1,
+  "startedAt": "2026-07-23T08:30:00Z",
+  "actor": "human:operator@example.com",
+  "reason": "Infrastructure repaired; reassess from fresh evidence.",
+  "fromState": "5e-escalated",
+  "toState": "4-auto-review",
+  "cliLogLineBoundary": 842
+}
+```
+
+Legacy tasks without this file are in epoch 0. Automatic moves never change it.
+The CLI-log boundary keeps the append-only historical prefix readable while
+excluding it from decisions in the new epoch.
+Before fresh Post Processing starts, active verdict residue is moved under
+`results/history/review-epoch-NNNN/operator-requeue-<timestamp>/`. These files
+remain available for audit but are not active deliverables and are excluded from
+review prompt inventories. `GET /api/tasks/{id}/runs` projects the authoritative
+current epoch plus the operator-requeue timeline boundaries as
+`reviewAttemptEpoch` and newest-first `reviewAttemptCycles`; the Task Detail Runs
+modal renders that projection beside the CLI run history.
 
 ### post-processing-outcomes.jsonl (optional)
 

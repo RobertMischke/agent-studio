@@ -458,8 +458,35 @@
             escalates flagged <code>environmental</code> / <code>cli-launch-failed</code>; environmental cycles no longer accrue
             toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
             <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
-            counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
+            counted per operator-owned attempt epoch. Only an explicit human requeue opens a fresh budget; automatic
+            Escalate / AcceptAsDone verdicts do not reset it. See
             <code>docs/system/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2260</code><br><span class="small">operator-requeue-attempt-epochs<br>(belege <code>AGT-1934/2110/2199</code>)</span></td>
+          <td>
+            An operator explicitly moved an escalated card back into <span class="lane">4-auto-review</span> with a reason.
+            Post Processing immediately consumed the previous escalation's spent retry counters and verdict artefacts, then
+            escalated the card again without a fresh gate, aspects, or decision-journal boundary. Requeue became lane ping-pong
+            and derived stale state overruled the operator.
+          </td>
+          <td>
+            Retry guards had no operator-owned epoch. The general counter inferred resets from automatic terminal verdicts,
+            while build/test and lint guards counted matching records over the full journal. Escalation summaries, aspect
+            verdicts, lifecycle state, and post-step outputs also remained in the active task root.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a human move out of <span class="lane">5-human-review</span> or
+            <span class="lane">5e-escalated</span> now increments <code>.metadata/review-attempt.json</code>, appends an
+            <code>OperatorRequeue</code> decision plus <code>operator_requeued</code> timeline event with the reason, and
+            rotates stale verdict evidence into <code>results/history/</code>. Every anti-churn guard reads only the active
+            epoch. Automatic moves retain the epoch. A direct requeue into <span class="lane">4-auto-review</span> recreates
+            Post Processing state and queues the complete gate/aspect path. The fresh pass excludes the pre-requeue status
+            and CLI-log tail from decision evidence, so another escalation requires a new gate or aspect event. The epoch
+            sidecar is authoritative: if the best-effort journal boundary cannot be written, an older-epoch verdict still
+            forces the same fresh assessment instead of reviving the stale escalation.
           </td>
         </tr>
         <tr>
@@ -912,6 +939,68 @@
             grade resolves its merge base against the task provenance, canonical task branch, or integration branch and
             reviews the full range through <code>ResultSha</code>. The regression uses separate implementation and evidence
             commits and proves that both, but not an unrelated canonical HEAD, reach the grade prompt.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2185</code><br><span class="small">generic Remote Unknown and exit-only recovery<br>(replays AGT-2070 and AGT-2148)</span></td>
+          <td>
+            Remote coding collapsed provider failures, missing sentinels, timeout, shutdown, and successful zero exits into
+            the same sentinel-only <code>Unknown</code>. Review retry precedent used a separate exit/empty-output rule, so
+            neither path exposed one recovery contract or immutable attempt identity.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> scanned stdout only after process exit. Provider events, raw final output, stderr,
+            signal, timeout/OOM, cancellation, host, lease, transport, session, and durable-output facts were not classified
+            together, and the Task Server completion stored no classifier decision.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> shared classifier <code>execution-outcome/v1</code> now emits typed outcome,
+            confidence/ambiguity, and a bounded recovery action for Coding or ReviewAttempt. A supported coding session resumes
+            at most once; invalid-session salvage fallback is also bounded once. Review infrastructure retry stays on the same
+            repository plus result SHA/digest and cannot invoke coding. Protocol v1 persists the raw decision as an idempotent
+            fenced <code>execution.outcome.classified</code> event; inconclusive remains explicit. Provider error-result frames
+            cannot masquerade as completion, an invalid provider session cannot be resumed again, and only published or
+            acknowledged salvage can authorize a fresh attempt.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2232</code><br><span class="small">planned remote-daemon restart killed jobs and adopted zombie leases<br>(observed on <code>AGT-2182/2194/2198</code>)</span></td>
+          <td>
+            Three restart incidents killed newly claimed remote jobs while the replacement daemon kept renewing their
+            leases without a corresponding host process. All slots appeared healthy but made no progress, including one
+            eight-hour stall. Deploys consequently required an idle host.
+          </td>
+          <td>
+            systemd used <code>KillMode=control-group</code>, the daemon owned CLI output through anonymous pipes, and slot
+            identity lived only in memory. Startup trusted lease presence without verifying PID generation or process cwd.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> job execution now runs behind a detached, file-logging worker. Lease, fence,
+            Task Server run/instance, PID/start time, worktree, and log sequence are atomically persisted. SIGTERM stops
+            claims and leaves workers alive; startup reattaches only after PID + worktree proof, while dead attempts are
+            released to Ready. The unit uses <code>KillMode=process</code> and bounded start limits. The recovered job reaches
+            its ordinary completion terminal; a dead job reaches the explicit release/requeue terminal instead of zombie Progress.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2208</code><br><span class="small">sentinel literal in streamed test diff</span></td>
+          <td>
+            A remote run that was testing sentinel handling streamed the fixture literal
+            <code>[[TASK_BLOCKED:missing API key]]</code> inside a diff. The runner classified that payload as a real
+            blocked verdict and incorrectly promoted the card to <span class="lane">5e-escalated</span>.
+          </td>
+          <td>
+            <code>runner/SentinelScanner</code> applied the sentinel regex to the complete raw stdout buffer. Codex
+            <code>command_execution</code>, file-change, and diagnostic JSONL therefore had the same authority as the
+            final <code>agent_message</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> structured output is reduced to the final agent reply before parsing,
+            and the token must be the terminal standalone line of that reply. Diff, code-block, file, and stderr
+            literals produce no verdict. Regression coverage pins the AGT-2208 fixture and the real final-sentinel path.
           </td>
         </tr>
       </tbody>

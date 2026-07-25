@@ -51,6 +51,13 @@ state.
   side-sheet chat dispatch. This operating mode accepts the effective model and
   reasoning choice from the live Codex catalogue, executes through the Codex
   one-shot registry, and rejects non-GPT models without a Claude fallback.
+- `backend/Features/Runner/RemoteChatWorkBroker.cs`,
+  `backend/Features/Tasks/LeaseEndpoints.cs`, and
+  `runner/RemoteProjectChatRunner.cs`: assignment-aware remote side-sheet chat
+  dispatch. The Runner claims and renews opaque chat work, prepares the
+  project's dedicated chat checkout from its normal git cache, starts Codex
+  there, and completes with the observed hostname, repository path, branch,
+  and HEAD revision.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -162,10 +169,36 @@ state.
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
 
+- Remote host capacity is reported as distinct workload classes. RUN occupancy
+  comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
+  sum is the configured host maximum). Remote SSH build/test GATE occupancy
+  comes from gate start/completion events and runs outside RUN slots. Host CPU
+  and load include both pools and unrelated processes, so neither is inferred
+  from lane membership or from CPU percentage. This keeps claim/lane drift
+  visible instead of silently folding it into a slot count.
+
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
+
+- Side-sheet project and task chat follows the same remote pickup ownership.
+  A remote-assigned project's chat work is claimable only by its assigned
+  Runner and executes inside a host checkout from the same project git cache as
+  card runs. A project without a remote assignment executes chat locally. Each
+  response projects the actual local or remote hostname, repository path,
+  branch, and HEAD; a reassignment invalidates a cached host context.
+- A planned remote-daemon restart is an execution handoff, not an attempt
+  boundary. The daemon persists lease, fence, Task Server run/instance,
+  worktree, detached-worker PID/start time, and file-log progress below
+  `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
+  workers. A pre-launch slot marker plus worker-written atomic identity closes
+  the `Process.Start`-to-slot-save handoff window. The replacement renews
+  authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
+  persisted worktree, then follows JSONL output and completes the same attempt.
+  Missing or mismatched processes are actively released and returned to Ready;
+  DB lease presence alone is never process-liveness evidence. systemd must use
+  `KillMode=process`.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,
@@ -176,7 +209,9 @@ state.
   coding pipeline. An interrupted assigned card whose lease is free is requeued
   to Ready inside the next atomic claim before a higher fence is issued.
 
-- Sentinel matches are authoritative. When adding a sentinel, update
+- A terminal sentinel in the final agent reply is authoritative. Sentinel-shaped
+  text in streamed tool output, diffs, file content, or stderr is not a verdict.
+  When adding a sentinel, update
   [docs/system/contracts/agent-task.md](../contracts/agent-task.md) and
   `AgentOutcomeAnalyzer.SentinelRegex`.
 - The agent classifies its run. The rule engine decides reissue, stop,
@@ -219,11 +254,12 @@ state.
   aspect-runner / orchestrator wiring.
 - Environmental cycles do not count against progress or budget: a transient
   environmental fault never accrues toward the no-progress quarantine streak
-  (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue
-  budget is counted per attempt chain, not over the job's whole lifetime -
-  `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
-  most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
-  card gets a fresh budget instead of escalating on the first new concern.
+  (`RunQuarantineBreaker.CountsAsNoProgressFailure`). The shared reissue budget
+  belongs to a review-attempt epoch. Only an explicit human move out of
+  `5-human-review` / `5e-escalated` opens the next epoch and rotates stale
+  verdict artefacts; automatic verdicts and moves retain the current epoch and
+  cannot replenish the ceiling. `OperatorReviewRequeueService` owns the epoch
+  boundary, history rotation, decision-journal row, and timeline event.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed

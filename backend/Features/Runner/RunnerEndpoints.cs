@@ -299,7 +299,8 @@ public static class RunnerEndpoints
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
                 var turns = chatService.Read(entry.Path);
-                return Results.Ok(new { project = projectName, turns });
+                var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
+                return Results.Ok(new { project = projectName, turns, executionContext });
             });
 
         runnerGroup.MapPost("/{projectName}/orchestrator-chat",
@@ -316,7 +317,8 @@ public static class RunnerEndpoints
                 // defaults of the user who is actually chatting.
                 var clientId = ctx.Items["ClientId"] as string;
                 var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
-                return Results.Ok(new { project = projectName, reply });
+                var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
+                return Results.Ok(new { project = projectName, reply, executionContext });
             });
 
         // Per-context transcript history (MC-2, Concept §4). The side sheet's
@@ -337,7 +339,8 @@ public static class RunnerEndpoints
             var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == key.ProjectId);
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{key.ProjectId}'" });
             var turns = chatService.Read(entry.Path, key);
-            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns });
+            var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
+            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns, executionContext });
         }
 
         static async Task<IResult> SendContextChat(
@@ -356,7 +359,8 @@ public static class RunnerEndpoints
             // who is actually chatting (matches the per-project route above).
             var clientId = ctx.Items["ClientId"] as string;
             var reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
-            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply });
+            var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
+            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply, executionContext });
         }
 
         runnerGroup.MapGet("/project:{projectId}/orchestrator-chat",

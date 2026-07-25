@@ -346,6 +346,14 @@ public record TaskInfo
     public TaskPublishSignal? PublishSignal { get; init; }
 
     /// <summary>
+    /// Commit-derived test evidence for this card. The relationship is never
+    /// persisted on the task: project test runs remain independent objects and
+    /// Git ancestry determines the best run, distance, and diff containment on
+    /// every read.
+    /// </summary>
+    public TaskTestRunEvidence? TestEvidence { get; init; }
+
+    /// <summary>
     /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
     /// that disambiguates a live run, a failed run waiting out the rapid-crash
     /// backoff, and an orphaned run killed by a backend restart. Folded on by

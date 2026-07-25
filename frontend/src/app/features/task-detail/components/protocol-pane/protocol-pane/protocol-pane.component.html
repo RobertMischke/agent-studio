@@ -384,6 +384,8 @@
                         [promptEntries]="runTimeline()?.promptEntries ?? []"
                         [promptMarkdown]="detail().promptMarkdown"
                         [promptHistory]="detail().promptHistory"
+                        [reviewAttemptEpoch]="runTimeline()?.reviewAttemptEpoch ?? 0"
+                        [reviewAttemptCycles]="runTimeline()?.reviewAttemptCycles ?? []"
                         (runFilter)="onRunFilter($event)"
                         (openGitViewer)="openGitViewer($event)" />
                     </div>

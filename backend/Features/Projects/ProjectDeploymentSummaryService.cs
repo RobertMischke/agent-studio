@@ -50,6 +50,7 @@ public sealed record ProjectDeploymentSummary
     public int? PendingCount { get; init; }
     public IReadOnlyList<ProjectDeploymentCommit> PendingCommits { get; init; } = [];
     public IReadOnlyList<ProjectDeploymentTarget> Targets { get; init; } = [];
+    public DeploymentTestRunReference? DefaultEvidenceRun { get; init; }
 }
 
 /// <summary>
@@ -70,6 +71,7 @@ public sealed class ProjectDeploymentSummaryService
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<ProjectDeploymentSummaryService> _logger;
     private readonly PublishTargetService? _publish;
+    private readonly TestRunService? _testRuns;
     private readonly ConcurrentDictionary<string, (DateTime At, ProjectDeploymentSummary Value)> _cache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -79,7 +81,8 @@ public sealed class ProjectDeploymentSummaryService
         GitService git,
         ProjectSettingsService settings,
         ILogger<ProjectDeploymentSummaryService> logger,
-        PublishTargetService? publish = null)
+        PublishTargetService? publish = null,
+        TestRunService? testRuns = null)
     {
         _config = config;
         _scanner = scanner;
@@ -87,6 +90,7 @@ public sealed class ProjectDeploymentSummaryService
         _settings = settings;
         _logger = logger;
         _publish = publish;
+        _testRuns = testRuns;
     }
 
     public ProjectDeploymentSummary? Build(string projectName)
@@ -110,9 +114,17 @@ public sealed class ProjectDeploymentSummaryService
     {
         var repoRoot = _git.ResolveRepoRootForProject(projectName);
         var targets = BuildTargets(projectName, repoRoot);
+        string? integrationTip = null;
+        if (!string.IsNullOrWhiteSpace(repoRoot) && _git.IsGitRepo(repoRoot))
+        {
+            var configuredBranch = _git.ResolveIntegrationBranch(
+                repoRoot, _settings.Get(projectName).IntegrationBranch);
+            integrationTip = _git.GetBranchTip(repoRoot, configuredBranch);
+        }
+        var evidenceRun = _testRuns?.LastGreenForDeployment(projectName, integrationTip);
         var taskRepository = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(taskRepository))
-            return Unavailable(projectName, "Task repository is not configured.", targets);
+            return Unavailable(projectName, "Task repository is not configured.", targets, evidenceRun);
 
         var path = Path.Combine(taskRepository, "logs", "stable-restarts.jsonl");
         var restartHistory = ReadRestartHistory(path, MaxHistoryRuns);
@@ -120,20 +132,20 @@ public sealed class ProjectDeploymentSummaryService
         if (latest is null)
             return Unavailable(projectName, File.Exists(path)
                 ? "No valid deploy-stable restart record is available."
-                : "No deploy-stable history is available.", targets);
+                : "No deploy-stable history is available.", targets, evidenceRun);
 
         if (string.IsNullOrWhiteSpace(repoRoot) || !_git.IsGitRepo(repoRoot))
-            return Unavailable(projectName, "Project repository is unavailable.", targets);
+            return Unavailable(projectName, "Project repository is unavailable.", targets, evidenceRun);
 
         // stable-restarts.jsonl is workspace-wide and predates project identity.
         // Reject a row whose deployed revision is not part of this repository so
         // one project's latest stable deploy can never be attributed to another.
         if (!_git.IsAncestor(repoRoot, latest.HeadBefore, latest.HeadAfter))
-            return Unavailable(projectName, "Latest deploy-stable revision range does not belong to this project repository.", targets);
+            return Unavailable(projectName, "Latest deploy-stable revision range does not belong to this project repository.", targets, evidenceRun);
 
         var integrationBranch = _git.ResolveIntegrationBranch(
             repoRoot, _settings.Get(projectName).IntegrationBranch);
-        var integrationTip = _git.GetBranchTip(repoRoot, integrationBranch);
+        integrationTip ??= _git.GetBranchTip(repoRoot, integrationBranch);
 
         var deployed = _git.GetCommitsInRangeAtRoot(repoRoot, latest.HeadBefore, latest.HeadAfter)
             .Select(ToCompact)
@@ -188,6 +200,7 @@ public sealed class ProjectDeploymentSummaryService
             PendingCount = pendingCount,
             PendingCommits = pendingItems,
             Targets = targets,
+            DefaultEvidenceRun = evidenceRun,
         };
     }
 
@@ -329,12 +342,14 @@ public sealed class ProjectDeploymentSummaryService
     private static ProjectDeploymentSummary Unavailable(
         string project,
         string reason,
-        IReadOnlyList<ProjectDeploymentTarget>? targets = null) => new()
+        IReadOnlyList<ProjectDeploymentTarget>? targets = null,
+        DeploymentTestRunReference? evidenceRun = null) => new()
     {
         Project = project,
         Available = false,
         Reason = reason,
         Targets = targets ?? [],
+        DefaultEvidenceRun = evidenceRun,
     };
 
     private static ProjectDeploymentCommit ToCompact(GitCommitInfo commit)

@@ -2,6 +2,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+test.use({ serviceWorkers: 'block' });
+
 /**
  * Regression coverage for the orchestrator "where am I right now" header
  * (`<app-orchestrator-context-header>`) wired into the side sheet.
@@ -25,7 +27,7 @@ const RUNNING_TASK_ID = 'run-task-1';
 const RUNNING_TASK_TITLE = 'Wire up the orchestrator header';
 const RESULTS = process.env.JOB_RESULTS_DIR
   ? resolve(process.env.JOB_RESULTS_DIR)
-  : resolve(process.cwd(), '..', 'results', 'AGT-2162');
+  : resolve(process.cwd(), '..', 'results', 'AGT-2269');
 
 mkdirSync(RESULTS, { recursive: true });
 
@@ -109,6 +111,14 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
 
+  await page.route('**/api/auth/status', async (route) => {
+    await fulfillKnownGet(
+      route,
+      { profile: 'local', bootstrapRequired: false, authenticated: false },
+      unexpectedRequests,
+    );
+  });
+
   const emptyArrayEndpoints = /\/api\/(?:cli\/(?:claude|codex|gemini)\/models|clients\/?|crash-recovery\/pending|git\/summary|tags|workspaces)(?:\?.*)?$/;
   await page.route(emptyArrayEndpoints, async (route) => {
     await fulfillKnownGet(route, [], unexpectedRequests);
@@ -142,7 +152,10 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
   return unexpectedRequests;
 }
 
-async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }): Promise<string[]> {
+async function stubWorkspace(
+  page: Page,
+  opts: { withRunningTask: boolean; executionContext?: Record<string, unknown> },
+): Promise<string[]> {
   const unexpectedRequests = await stubBoardBootstrap(page);
 
   await page.route(/\/api\/watch-paths$/, async (route) => {
@@ -191,7 +204,11 @@ async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }): Pr
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
-    await fulfillKnownGet(route, { project, turns: [] }, unexpectedRequests);
+    await fulfillKnownGet(
+      route,
+      { project, turns: [], executionContext: opts.executionContext ?? null },
+      unexpectedRequests,
+    );
   });
 
   if (opts.withRunningTask) {
@@ -199,7 +216,10 @@ async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }): Pr
     // plus the already-loaded task list. Keep the heavy task-detail request
     // pending so unrelated detail-pane subresources cannot open an error
     // dialog over this focused composer regression.
-    await page.route(new RegExp(`/api/tasks/${RUNNING_TASK_ID}(?:\\?.*)?$`), async () => {});
+    await page.route(
+      new RegExp(`/api/tasks/${RUNNING_TASK_ID}(?:\\?.*)?$`),
+      async () => new Promise<void>(() => undefined),
+    );
     await page.route(new RegExp(`/api/orchestrator/context/task:${PROJECT}/AGT-1916$`), async (route) => {
       await fulfillKnownGet(route, {
         contextKey: `task:${PROJECT}/AGT-1916`,
@@ -227,6 +247,64 @@ async function openSideSheet(page: Page, openContextMenu = true) {
 }
 
 test.describe('Orchestrator context header · where am I', () => {
+  test('shows the exact remote host checkout, branch, and HEAD reported by the runner', async ({ page }) => {
+    await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'dark');
+    const head = '0123456789abcdef0123456789abcdef01234567';
+    const repoPath = '/srv/agent-runner/work/PROJ-002/project-chat';
+    const unexpectedRequests = await stubWorkspace(page, {
+      withRunningTask: false,
+      executionContext: {
+        executionKind: 'remote',
+        hostName: 'agent-runner-01',
+        repoPath,
+        branch: 'develop',
+        headSha: head,
+        state: 'ready',
+        capturedAt: '2026-07-23T15:00:00Z',
+      },
+    });
+    await openSideSheet(page, false);
+
+    const execution = page.getByTestId('orch-execution-context');
+    await expect(execution).toBeVisible();
+    await expect(page.getByTestId('orch-execution-host')).toHaveText('agent-runner-01');
+    await expect(page.getByTestId('orch-execution-repo')).toHaveText(repoPath);
+    await expect(page.getByTestId('orch-execution-revision')).toHaveText(
+      `· develop@${head.slice(0, 8)}`,
+    );
+    await expect(execution).toHaveAttribute('title', new RegExp(
+      `Execution: agent-runner-01[\\s\\S]*Repository: ${repoPath}[\\s\\S]*Branch: develop[\\s\\S]*HEAD: ${head}`,
+    ));
+
+    await page.screenshot({
+      path: resolve(RESULTS, 'orchestrator-chat-remote-execution-context--mocked.png'),
+      fullPage: false,
+    });
+    expect(unexpectedRequests).toEqual([]);
+  });
+
+  test('labels a project without an execution runner as local', async ({ page }) => {
+    await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'light');
+    const unexpectedRequests = await stubWorkspace(page, {
+      withRunningTask: false,
+      executionContext: {
+        executionKind: 'local',
+        hostName: 'local',
+        repoPath: '/workspace/agent-studio',
+        branch: 'develop',
+        headSha: 'fedcba9876543210fedcba9876543210fedcba98',
+        state: 'ready',
+        capturedAt: '2026-07-23T15:00:00Z',
+      },
+    });
+    await openSideSheet(page, false);
+
+    await expect(page.getByTestId('orch-execution-host')).toHaveText('Local');
+    await expect(page.getByTestId('orch-execution-repo')).toHaveText('/workspace/agent-studio');
+    await expect(page.getByTestId('orch-execution-revision')).toHaveText('· develop@fedcba98');
+    expect(unexpectedRequests).toEqual([]);
+  });
+
   test('board scope shows the project chip and the Board scope chip', async ({ page }) => {
     const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page);

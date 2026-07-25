@@ -95,6 +95,38 @@ public static class LeaseEndpoints
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
 
+        // Interactive project-chat work uses the same remote pull direction as
+        // card runs. Studio queues an opaque request for the project's assigned
+        // runner; the host claims, renews and completes it with a claim token.
+        // No central process reaches into the runner over SSH.
+        app.MapPost("/api/runner/project-chat/claim",
+            (RemoteChatWorkClaimRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
+                    return Results.Unauthorized();
+                return Results.Ok(broker.TryClaim(req));
+            });
+
+        app.MapPost("/api/runner/project-chat/renew",
+            (RemoteChatWorkRenewRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId))
+                    return Results.Unauthorized();
+                return broker.Renew(req)
+                    ? Results.Ok(new { renewed = true })
+                    : Results.Conflict(new { renewed = false, error = "stale project-chat claim" });
+            });
+
+        app.MapPost("/api/runner/project-chat/complete",
+            (RemoteChatWorkCompletionRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId))
+                    return Results.Unauthorized();
+                return broker.Complete(req)
+                    ? Results.Ok(new { accepted = true })
+                    : Results.Conflict(new { accepted = false, error = "stale project-chat claim" });
+            });
+
         // Daemon pickup is selected server-side from the project record. The
         // gate makes scan + fenced lease + ready-to-progress move one claim
         // critical section for all remote contenders. The local runner reads
@@ -124,14 +156,16 @@ public static class LeaseEndpoints
             var clientId = context.Items["ClientId"] as string ?? context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
-            int? activeSlots = req.Telemetry is null
-                ? null
-                : Math.Max(0, req.Telemetry.ActiveSlots);
+            int? activeSlots = req.ActiveSlots is not null
+                ? Math.Max(0, req.ActiveSlots.Value)
+                : req.Telemetry is null
+                    ? null
+                    : Math.Max(0, req.Telemetry.ActiveSlots);
             var securedRunner = runnerPrincipal is null
                 ? null
                 : accessSecurity.RecordRunnerActivity(
                     runnerPrincipal.RunnerId, activeSlots, req.AvailableSlots, claimed: false);
-            var client = runnerPrincipal is not null || string.IsNullOrWhiteSpace(clientId)
+            var client = string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
             if (securedRunner is not null && !accessSecurity.RunnerAcceptsClaims(securedRunner.Id))
@@ -191,6 +225,18 @@ public static class LeaseEndpoints
                                 Message: "The original claim repository is no longer configured."));
                         }
 
+                        if (runnerPrincipal is not null)
+                            accessSecurity.RecordRunnerActivity(
+                                runnerPrincipal.RunnerId,
+                                (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
+                                Math.Max(0, req.AvailableSlots - 1),
+                                claimed: true);
+                        if (!string.IsNullOrWhiteSpace(clientId))
+                            clients.RecordRunnerActivity(
+                                clientId,
+                                (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
+                                Math.Max(0, req.AvailableSlots - 1),
+                                claimed: true);
                         return Results.Ok(new RunnerClaimResponse(
                             RunnerClaimStatus.Claimed,
                             replay.Lease.TaskKey,
@@ -367,7 +413,7 @@ public static class LeaseEndpoints
                         (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
                         Math.Max(0, req.AvailableSlots - 1),
                         claimed: true);
-                else if (!string.IsNullOrWhiteSpace(clientId))
+                if (!string.IsNullOrWhiteSpace(clientId))
                     clients.RecordRunnerActivity(
                         clientId,
                         (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
