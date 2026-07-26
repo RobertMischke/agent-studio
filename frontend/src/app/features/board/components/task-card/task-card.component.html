@@ -19,9 +19,7 @@
      (contextmenu)="openCardContextMenu($event)"
      (keydown)="onCardKeyDown($event)">
   <div class="task-card__header">
-    <span class="task-card__key-chip" data-testid="task-card-key" [cacTooltip]="'Task key: ' + issueLabel()">
-      {{ issueLabel() }}
-    </span>
+    <app-copyable-task-key variant="card" [key]="job().key" [label]="issueLabel()" testId="task-card-key" />
     <span class="task-card__header-signals">
       @if (codeReviewGradeBadge(); as grade) {
         <span class="task-card__grade-pill"

@@ -20,7 +20,7 @@
     }
     <div class="ov-subline" data-testid="overview-title-subline">
       @if (job().key; as taskKey) {
-        <span class="ov-subline__key" data-testid="overview-title-key">{{ taskKey }}</span>
+        <app-copyable-task-key variant="detail" [key]="taskKey" testId="overview-title-key" />
         <span class="ov-subline__sep" aria-hidden="true">·</span>
       }
       <span class="ov-lane-pill ov-subline__lane" data-testid="overview-title-lane"
