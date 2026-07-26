@@ -5,7 +5,7 @@
   "summary": "Ein Feed pro Projekt (und projektübergreifend): wichtige Entscheidungen und Ereignisse als verlinkte Timeline. Zwei Publika — Menschen sehen high-level, was passiert; Tasks/Agenten finden einen Einstieg und den zuletzt relevanten Kontext. Token-Kosten überall sichtbar; kostenbewusste, inkrementelle Zusammenstellung; tägliche/wöchentliche Zusammenfassungen als Stakeholder-News. Datenlage-Lücke: viele Entscheidungen fallen heute in externen Chats außerhalb des Tools.",
   "entrypoint": "index.html",
   "status": "active",
-  "phase": "concept",
+  "phase": "shaping",
   "updatedAt": "2026-07-26T00:00:00Z",
   "sourceTaskKeys": ["TE-8", "MKT-14"]
 }
