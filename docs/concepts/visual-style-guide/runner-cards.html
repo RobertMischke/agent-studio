@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner-card Workbench</title>
+<style>
+:root {
+  color-scheme:dark; --bg:#0f0f1a; --surface:#1e1e2e; --soft:#252537; --fg:#e2e8f0; --strong:#f8fafc; --dim:#94a3b8; --muted:#64748b;
+  --border:rgba(255,255,255,.10); --accent:#d97757; --accent-ink:#ecaf95; --teal:#4ec9b0; --info:#569cd6; --info-ink:#93c5fd;
+  --font-ui:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; --font-mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+:root[data-theme=light]{color-scheme:light;--bg:#fff;--surface:#fff;--soft:#ececec;--fg:#333;--strong:#1a1a1a;--dim:#555;--muted:#888;--border:#d4d4d4;--accent-ink:#8d5a3d;--info-ink:#1d4ed8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 var(--font-ui)}a{color:var(--info-ink)}button{font:inherit}.bar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:10px clamp(16px,4vw,42px);border-bottom:1px solid var(--border);background:var(--soft)}.bar a{text-decoration:none}.switch{display:flex;gap:4px}.switch button{padding:5px 9px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--dim)}.switch button[aria-pressed=true]{background:var(--surface);color:var(--strong)}
+main{max-width:1180px;margin:auto;padding:54px clamp(16px,4vw,42px) 90px}.kicker{color:var(--accent-ink);font:650 11px var(--font-mono);letter-spacing:.13em;text-transform:uppercase}h1{margin:9px 0;color:var(--strong);font-size:clamp(30px,5vw,52px);line-height:1}.lede{max-width:68ch;margin:0;color:var(--dim);font-size:15px}.rule{margin:28px 0 42px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--soft)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.option{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--soft)}.option-head{padding:14px 16px;border-bottom:1px solid var(--border)}.option-head span{color:var(--accent-ink);font:650 10px var(--font-mono);letter-spacing:.1em;text-transform:uppercase}.option-head h2{margin:5px 0 0;color:var(--strong);font-size:15px}.stage{min-height:300px;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.card{width:100%;max-width:300px;padding:16px;border:1px solid color-mix(in srgb,var(--info) 58%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--info) 10%,var(--surface));box-shadow:0 4px 12px color-mix(in srgb,var(--info) 12%,transparent)}.card-head{display:flex;justify-content:space-between;gap:12px}.card strong{color:var(--strong);font-size:14px}.card p{margin:5px 0 14px;color:var(--dim);font-size:11px}.meta{display:flex;flex-wrap:wrap;gap:6px}.pill{display:inline-flex;align-items:center;gap:4px;min-height:22px;max-width:100%;padding:0 8px;border:1px solid color-mix(in srgb,var(--teal) 40%,transparent);border-radius:7px;background:color-mix(in srgb,var(--teal) 16%,var(--surface));color:var(--accent-ink);font-size:11px;font-weight:600}.pill.local{border-color:var(--border);background:var(--soft);color:var(--muted);font-weight:500}.host-row{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--soft)}.host-icon{display:grid;place-items:center;width:27px;height:27px;border-radius:6px;background:color-mix(in srgb,var(--teal) 16%,var(--surface));color:var(--teal)}.host-copy strong{display:block;font:650 10.5px var(--font-mono)}.host-copy span{display:block;color:var(--muted);font-size:10.5px}.dot{width:10px;height:10px;border:1px solid color-mix(in srgb,var(--info) 55%,transparent);border-radius:50%;background:var(--info);animation:pulse 1.4s ease-in-out infinite}
+.notes{padding:14px 16px;color:var(--dim);font-size:12px}.notes code{display:block;margin-top:8px;color:var(--fg);font:10.5px/1.45 var(--font-mono)}.decision{margin-top:36px;padding:20px;border:1px solid var(--border);border-radius:10px}.decision h2{margin-top:0;color:var(--strong);font-size:17px}.decision li{margin:7px 0}
+@keyframes pulse{50%{opacity:.35;transform:scale(.75)}}@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}@media(max-width:820px){.grid{grid-template-columns:1fr}.stage{min-height:230px}}
+</style>
+</head>
+<body>
+<header class="bar"><a href="../visual-style-guide.html">← Visual Style Guide</a><div class="switch"><button data-theme="light" aria-pressed="false">Light</button><button data-theme="dark" aria-pressed="true">Dark</button></div></header>
+<main>
+  <div class="kicker">Focused workbench · Runner cards</div>
+  <h1>Execution location without card noise.</h1>
+  <p class="lede">Remote identity matters while work is running. Compare a faithful current chip with two bounded variants that spend progressively more card space.</p>
+  <div class="rule"><strong>Scope rule:</strong> runner identity appears only on active Progress cards. Once work settles, provenance belongs in evidence and history, not as a loud card badge.</div>
+  <section class="grid">
+    <article class="option">
+      <div class="option-head"><span>Option A · Current</span><h2>Compact provenance pill</h2></div>
+      <div class="stage"><div class="card"><div class="card-head"><strong>Validate remote gate</strong><span class="dot" aria-label="Running"></span></div><p>AGT-2258 · Codex · gpt-5</p><div class="meta"><span class="pill">⇥ remote · linux-02</span></div></div></div>
+      <div class="notes">Best for normal board density. Host identity is recognizable beside CLI/model metadata.<code>--studio-accent-2 · --studio-card-pill-height · --studio-bg-running</code></div>
+    </article>
+    <article class="option">
+      <div class="option-head"><span>Option B · Candidate</span><h2>Host identity row</h2></div>
+      <div class="stage"><div class="card"><div class="card-head"><strong>Validate remote gate</strong><span class="dot" aria-label="Running"></span></div><p>AGT-2258 · Codex · gpt-5</p><div class="host-row"><span class="host-icon">⇥</span><span class="host-copy"><strong>linux-02</strong><span>remote runner · lease active</span></span></div></div></div>
+      <div class="notes">Use only if runner host and lease state become primary operator decisions.<code>--studio-card-muted-bg · --studio-card-muted-border · --studio-accent-2</code></div>
+    </article>
+    <article class="option">
+      <div class="option-head"><span>Option C · Control</span><h2>Quiet local treatment</h2></div>
+      <div class="stage"><div class="card"><div class="card-head"><strong>Validate local build</strong><span class="dot" aria-label="Running"></span></div><p>AGT-2257 · Codex · gpt-5</p><div class="meta"><span class="pill local">local</span></div></div></div>
+      <div class="notes">Local is context, not a positive state. Keep it quieter than remote identity.<code>--studio-fg-muted · --studio-card-muted-bg · --studio-card-muted-border</code></div>
+    </article>
+  </section>
+  <section class="decision"><h2>Current recommendation</h2><ul><li>Keep Option A as the default. It answers local versus remote without turning the card into a host dashboard.</li><li>Use Option B only after an operator study proves that host or lease detail changes a frequent board decision.</li><li>Always expose the full host name and explanation in a tooltip or accessible description.</li><li>Do not retain the live halo, pulse, or runner pill on completed cards.</li></ul></section>
+</main>
+<script>
+(() => { const r=document.documentElement,b=[...document.querySelectorAll("[data-theme]")],s=t=>{r.dataset.theme=t;b.forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.theme===t)))};b.forEach(x=>x.addEventListener("click",()=>s(x.dataset.theme)));s(new URLSearchParams(location.search).get("theme")==="light"?"light":"dark") })();
+</script>
+</body>
+</html>
