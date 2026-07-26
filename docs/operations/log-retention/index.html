@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task-Logs: Aufbewahrung, Deckelung &amp; Bereinigung | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834; --rescue: #b58500;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f; --rescue: #d0a02a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 78ch; } p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 88ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; white-space: nowrap; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; } li { margin: 5px 0; max-width: 78ch; }
+  ol { padding-left: 22px; } ol li { margin: 6px 0; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; } .toc a { color: var(--ink-2); text-decoration: none; } .toc a:hover { color: var(--ink-1); text-decoration: underline; } .toc li { break-inside: avoid; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2 { fill: var(--surface-3); stroke: var(--line); }
+  .s-cont { fill: var(--accent-soft); stroke: var(--develop); }
+  .s-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .s-ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .ev { font-size: 12.5px; color: var(--ink-3); } .ev code { font-size: 11.5px; }
+  .dnum { font-weight:700; color:var(--develop); margin-right:8px; }
+  .ltr { display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; border-radius:5px; background:var(--accent-soft); color:var(--develop); font-weight:700; font-size:13px; margin-right:8px; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Betrieb / Runner</p>
+  <h1>Task-Logs: Aufbewahrung, Deckelung &amp; Bereinigung</h1>
+  <p class="lede">Der Task-Log (CLI-Mitschnitt) ist wertvoll und wird am Task angezeigt — aber ein entgleister Lauf produziert 170 MB, und GitHub lehnt jeden Blob &gt;100 MB grundsätzlich ab. Am 27.07. hat genau das die Lieferung einer ganzen Welle blockiert. Dieses Dokument entwirft die nachhaltige Politik: Log bleibt relevant und sichtbar, nur die Größe wird an der Quelle gedeckelt — transparent, konfigurierbar, mit Archiv-Bereinigung und komprimiertem Backup.</p>
+  <div class="meta">
+    <span><b>Status</b> Shaping (27.07.)</span>
+    <span><b>Phase</b> Entscheidungsreif für Sichtblick</span>
+    <span><b>Auslöser</b> Workspace-Push-Block durch 170-MB-Logs</span>
+    <span><b>Altlast</b> log-bloat, wiederkehrend</span>
+  </div>
+</header>
+
+<nav>
+  <ul class="toc">
+    <li><a href="#vorfall">1 · Der Vorfall (belegt)</a></li>
+    <li><a href="#wasistdrin">2 · Was im Log steht</a></li>
+    <li><a href="#prinzip">3 · Prinzip: relevant, aber gedeckelt</a></li>
+    <li><a href="#politik">4 · Die Retention-Politik (A–E)</a></li>
+    <li><a href="#lebenszyklus">5 · Log-Lebenszyklus</a></li>
+    <li><a href="#reparatur">6 · History-Reparatur bei Live-Input</a></li>
+    <li><a href="#sichtbar">7 · Hochbubbeln: sichtbare Fehler</a></li>
+    <li><a href="#offen">8 · Offene Entscheidungen &amp; Schnitt</a></li>
+  </ul>
+</nav>
+
+<h2 id="vorfall"><span class="no">1</span>Der Vorfall — belegt</h2>
+<p>Nach dem Un-Freeze der AGT-Welle am 27.07. lieferten die ersten Karten real (echte Commits, Übergänge nach auto-review). Dann fiel der Durchsatz auf <b>„0 running"</b>. Ursache, aus dem Backend-Log:</p>
+<div class="box bad">
+  <h4>Push-Block-Kette</h4>
+  <ol>
+    <li>Das Workspace-Repo (<code>agent-taskboard-workspace</code>) stand <b>548 Commits vor origin</b>.</li>
+    <li>Der Pipeline-Push wurde von GitHub <b>abgelehnt</b>: <code>cli-output.log</code> mit <b>124–167 MB</b> (AGT-2326 + viele WEB-*) über dem 100-MB-Limit → <code>pre-receive hook declined / GH001: Large files detected</code>.</li>
+    <li><code>workspace-artifact-push-failed</code> lief in Dauer-Retry (attempt 2, 3 …).</li>
+    <li>Der Runner-Git-Status degradierte → er claimte nichts Neues → <b>Stall</b>. Die Coding-Arbeit selbst blieb sicher (Commits lokal).</li>
+  </ol>
+</div>
+<div class="box accent">
+  <h4>Der Fund, der die Reparatur vereinfacht</h4>
+  <p>Der <b>aktuelle HEAD-Baum ist bereits sauber — 0 Dateien &gt;99 MB</b> (17 Dateien liegen zwischen 40–99 MB, also pushbar). Der Block kommt <b>ausschließlich aus den Zwischen-Commits</b> der unpushed Historie, wo die Logs mal 124–167 MB groß waren. GitHub prüft den <em>gesamten</em> Push-Range: ein einziger &gt;100-MB-Blob in irgendeinem Commit kippt alles. Konsequenz: die Reparatur betrifft nur die <b>unpushed Range</b> — HEAD ist schon okay.</p>
+</div>
+
+<h2 id="wasistdrin"><span class="no">2</span>Was im Log steht — und woher die Größe kommt</h2>
+<p>Stichprobe in einen der Riesen-Logs (AGT-2326, hier 42 MB post-Rotation, <b>564.340 Zeilen</b>):</p>
+<ul>
+  <li><b>Inhalt:</b> der rohe CLI-Mitschnitt — komplettes stdout <b>+ stderr</b>, jede Zeile mit <code>[timestamp] [stream]</code>-Präfix. Das Sample zeigt den Agenten, der einen <b>Code-Diff / Review streamt</b> (Zeilen wie <code>[17:03:49] [stderr] - return Results.BadRequest(...)</code>).</li>
+  <li><b>Kein</b> einzelner Riesen-Blob (längste Zeile 1.535 Zeichen) — sondern <b>hunderttausende Zeilen</b>.</li>
+  <li><b>Woher die 170 MB:</b> der volle Transkript wird bei <em>jedem</em> Artifact-Schritt ins Repo committet; lange Läufe + Reissues (die Kontext/Diffs erneut dumpen) + geschwätzige Tool-Ausgaben summieren sich. Jeder Commit snapshottet eine neue große Version → die Historie sammelt viele überdimensionierte Blobs.</li>
+</ul>
+<div class="box warn">
+  <h4>Die Größe ist selbst ein Symptom</h4>
+  <p>Ein <em>gesunder</em> Task-Log ist klein (KB bis wenige MB). <b>564.340 Zeilen / 170 MB = ein entgleister Lauf</b> — Runaway-/repetitive Ausgabe. Deckeln behebt den Speicher-/Push-Schaden; die pathologischen Läufe selbst bleiben ein eigenes Signal, das sichtbar werden sollte (§7).</p>
+</div>
+
+<h2 id="prinzip"><span class="no">3</span>Prinzip: der Log bleibt relevant — nur die Größe wird gedeckelt</h2>
+<div class="box accent">
+  <ul>
+    <li><b>Der Log bleibt.</b> Er ist der Task-Mitschnitt, wird am Task angezeigt und gehört zum dauerhaften Record. Nicht wegwerfen.</li>
+    <li><b>Nur die Größe deckeln — an der Quelle.</b> Der Runner begrenzt das Live-Log, damit es nie 170 MB erreicht. Das hält ihn relevant, sichtbar <em>und</em> immer pushbar.</li>
+    <li><b>Transparent &amp; konfigurierbar.</b> Jede Kürzung wird im Log markiert; die Schwelle ist eine Einstellung, kein hartkodierter Wert.</li>
+  </ul>
+</div>
+
+<h2 id="politik"><span class="no">4</span>Die Retention-Politik — deine Punkte A–E</h2>
+
+<div class="box">
+  <h4><span class="ltr">A</span>Archiv-Logs stark reduzieren</h4>
+  <p>Nicht alles ist gleich relevant. Logs von Tasks im <b>Archiv</b> — insbesondere <b>≥ 10 Tage archiviert</b> — werden aggressiv reduziert: auf einen kurzen Tail komprimiert oder ganz durch eine komprimierte Fassung ersetzt. Ein periodischer Sweep räumt das ordentlich auf. Das ist der größte Speicher-Hebel und risikoarm (archivierte Arbeit ist abgeschlossen).</p>
+</div>
+<div class="box">
+  <h4><span class="ltr">E</span>Tail-Lösung: transparent und konfigurierbar</h4>
+  <p>Die Deckelung ist eine <b>Einstellung</b>, kein Dogma. Ein Ladder-Modell:</p>
+  <table>
+    <tr><th>Kontext</th><th>Cap (Vorschlag)</th><th>Warum</th></tr>
+    <tr><td><b>Aktiv / Live-Cap an der Quelle</b></td><td>25 MB rollierend</td><td>klein genug für Anzeige + Push, groß genug für echten Kontext</td></tr>
+    <tr><td><b>Cleanup-Modus</b></td><td>bis 90 MB</td><td>bei bewusster Bereinigung ist mehr okay (Puffer unter 100 MB)</td></tr>
+    <tr><td><b>Archiv ≥ 10 Tage</b></td><td>stark reduziert / komprimiert</td><td>abgeschlossene Arbeit, minimaler Record</td></tr>
+    <tr><td><b>GitHub Hard-Limit</b></td><td>100 MB</td><td>externe Schranke — nie überschreiten</td></tr>
+  </table>
+  <p class="dim">Jede gekürzte Datei trägt einen sichtbaren Marker (<code>[trimmed to last N MB — full log on runner backup]</code>), damit niemand denkt, das sei der ganze Lauf.</p>
+</div>
+<div class="box">
+  <h4><span class="ltr">C</span>Tail-Einheit: MB oder letzte N Nachrichten?</h4>
+  <p>Statt roher MB ist <b>„letzte N Messages/Exchanges"</b> semantisch sauberer — es schneidet an Nachrichten-Grenzen, nicht mitten in einer Zeile, und bleibt für Menschen lesbar. Vorschlag: primär <b>letzte 50 Messages</b> als Tail-Einheit, mit einem MB-Hard-Cap als Sicherung (falls einzelne Messages riesig sind). Zu entscheiden: N (50?) und ob Message- oder MB-Grenze führt.</p>
+</div>
+<div class="box">
+  <h4><span class="ltr">D</span>Komprimiertes rollierendes Backup auf dem Runner</h4>
+  <p>Damit die Quell-Deckelung nichts <em>endgültig</em> verliert: der <b>Runner-Host</b> hält ein <b>komprimiertes, rollierendes Backup</b> der vollen Logs (z. B. <code>gzip</code>, Ring über die letzten K Läufe / D Tage). Der Task-Record im Repo bleibt schlank (Tail); wer den vollen Lauf braucht, findet ihn komprimiert am Host. Das entkoppelt „Anzeige/Sync schlank" von „Forensik vollständig".</p>
+</div>
+<div class="box">
+  <h4><span class="ltr">B</span>History-Umschreiben — nötig, aber technisch heikel bei Live-Input</h4>
+  <p>Im Prinzip okay — aber das Repo bekommt <b>ständig neuen Input</b> (die Pipeline committet laufend). Ein Rewrite auf einem live-beschriebenen Repo ist die eigentliche Herausforderung. Details in §6.</p>
+</div>
+
+<h2 id="lebenszyklus"><span class="no">5</span>Log-Lebenszyklus &amp; wo jede Regel greift</h2>
+<figure>
+<svg viewBox="0 0 1040 250" role="img" aria-label="Log-Lebenszyklus von der Quelle bis zur Archiv-Reduktion">
+  <rect class="s-cont" x="16" y="70" width="150" height="70" rx="9"/>
+  <text class="s-label" x="91" y="98" text-anchor="middle">Live-Log</text>
+  <text class="s-sub" x="91" y="116" text-anchor="middle">Runner, wächst</text>
+  <text class="s-tiny" x="91" y="132" text-anchor="middle">Cap 25MB (A-Quelle)</text>
+
+  <rect class="s-node" x="200" y="70" width="150" height="70" rx="9"/>
+  <text class="s-label" x="275" y="98" text-anchor="middle">Tail committet</text>
+  <text class="s-sub" x="275" y="116" text-anchor="middle">im Task-Record</text>
+  <text class="s-tiny" x="275" y="132" text-anchor="middle">angezeigt + pushbar</text>
+
+  <rect class="s-node2" x="384" y="70" width="150" height="70" rx="9"/>
+  <text class="s-label" x="459" y="98" text-anchor="middle">Voll-Backup</text>
+  <text class="s-sub" x="459" y="116" text-anchor="middle">Runner, gzip</text>
+  <text class="s-tiny" x="459" y="132" text-anchor="middle">rollierend (D)</text>
+
+  <rect class="s-node" x="568" y="70" width="150" height="70" rx="9"/>
+  <text class="s-label" x="643" y="98" text-anchor="middle">Archiv</text>
+  <text class="s-sub" x="643" y="116" text-anchor="middle">Task fertig</text>
+  <text class="s-tiny" x="643" y="132" text-anchor="middle">Tail bleibt</text>
+
+  <rect class="s-ok" x="752" y="70" width="160" height="70" rx="9"/>
+  <text class="s-label" x="832" y="94" text-anchor="middle">≥ 10 Tage</text>
+  <text class="s-sub" x="832" y="112" text-anchor="middle">stark reduziert</text>
+  <text class="s-tiny" x="832" y="128" text-anchor="middle">Sweep (A)</text>
+
+  <path class="s-flow" d="M166 105 H198" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M350 105 H382" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M275 140 V175 H459 V142" marker-end="url(#ar)" stroke-dasharray="5 4"/>
+  <path class="s-flow" d="M534 105 H566" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M718 105 H750" marker-end="url(#ar)"/>
+  <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--ink-3)"/></marker></defs>
+</svg>
+<figcaption><b>Ein Log, vier Stationen.</b> An der Quelle gedeckelt (25 MB), als Tail in den Task-Record committet (angezeigt + pushbar), voll + komprimiert als Runner-Backup (gestrichelt = parallel), im Archiv reduziert, nach 10 Tagen per Sweep stark verkleinert. Die volle Forensik lebt im Runner-Backup, nicht im gepushten Repo.</figcaption>
+</figure>
+
+<h2 id="reparatur"><span class="no">6</span>History-Reparatur bei laufendem Live-Input</h2>
+<p>Der Push braucht eine unpushed Range <b>ohne</b> &gt;100-MB-Blob. Da HEAD schon sauber ist, gibt es drei Wege — mit unterschiedlichem Umgang mit dem ständigen neuen Input:</p>
+<table>
+  <tr><th>Weg</th><th>Wie</th><th>Live-Input-Problem</th></tr>
+  <tr><td><b>Collapse</b></td><td><code>reset --soft origin/main</code> → ein sauberer Commit aus HEADs Baum → normaler Push (kein Force). HEAD ist clean → sofort pushbar.</td><td>Kollidiert mit gleichzeitigen Pipeline-Commits (Ref-Race). Braucht ein <b>kurzes Quiesce-Fenster</b>.</td></tr>
+  <tr><td><b>filter-branch</b></td><td>Blobs &gt;X in der Range trimmen, Commits erhalten.</td><td>Langsam (548 Commits), rewrite kollidiert ebenso mit neuem Input. <code>filter-repo</code> ist nicht installiert.</td></tr>
+  <tr><td><b>Git LFS</b></td><td>Große Blobs nach LFS migrieren.</td><td>Zusätzliche Infra + Historie-Migration; verworfen (Politik ist „deckeln", nicht „alles voll behalten").</td></tr>
+</table>
+<div class="box accent">
+  <h4>Empfohlener Repair-Ablauf (lock-sicher, reversibel)</h4>
+  <ol>
+    <li><b>Backup-Ref</b> setzen (liegt: <code>wsbackup-2026-07-26-2154</code>) → jederzeit <code>reset --hard</code> zurück.</li>
+    <li><b>Quiescen:</b> Pickup pausieren <em>und</em> in-flight-Übergänge auslaufen lassen (Monitor auf <code>progress:0</code> warten) → kein Pipeline-Commit im Fenster.</li>
+    <li><b>Collapse:</b> <code>reset --soft origin/main</code> → ein Commit „trim/collapse log-bloat" → <code>push</code> (fast-forward). HEAD ist clean, also kein Trimmen nötig.</li>
+    <li><b>Verifizieren:</b> Push grün, kein Blob &gt;100 MB im Range.</li>
+    <li><b>Resume:</b> Pickup wieder <code>auto</code>. Ab jetzt greift der Quell-Cap → keine Neu-Bloat.</li>
+  </ol>
+  <p class="dim">Der Collapse verdichtet die 548 Bookkeeping-Commits zu einem — für ein Artefakt-/Evidence-Repo akzeptabel (der Baum-Inhalt bleibt vollständig; nur die Commit-Granularität geht verloren). Die Alternative (filter-branch mit Commit-Erhalt) ist langsam und beim Live-Input nicht sicherer.</p>
+</div>
+<p><b>Der eigentliche Nachhaltigkeits-Punkt:</b> Ist der Quell-Cap (A/E) einmal aktiv, tritt dieser Rewrite-Bedarf <b>nie wieder</b> auf — die Historie wächst dann nur noch mit schlanken Tails. Der Rewrite ist eine Einmal-Bereinigung der Altlast, nicht ein Dauerzustand.</p>
+
+<h2 id="sichtbar"><span class="no">7</span>Hochbubbeln: solche Fehler müssen sichtbar sein</h2>
+<div class="box warn">
+  <p>Der Push-Block lief <b>still im Backend-Log</b> — nur „0 running" war außen sichtbar. Das darf nicht sein. Die Klasse „Lieferung blockiert" (Push-Reject, Repo nicht pushbar, Ziel-Branch fehlt) muss als <b>sichtbarer Health-Alert</b> hochbubbeln: an der Projekt-Ampel und am Runner-Status, mit der konkreten Ursache (welche Datei, welche Größe) und einem Reparatur-Link. Verzahnt mit dem Integrationsbranch-Beschluss (blocken + sichtbar + heilbar an einer Stelle) und der Push-Probe-Härtung.</p>
+</div>
+
+<h2 id="offen"><span class="no">8</span>Offene Entscheidungen &amp; Schnitt</h2>
+<div class="box">
+  <h4><span class="dnum">E1</span>Cap-Werte &amp; Tail-Einheit</h4>
+  <p>Quell-Cap 25 MB? Cleanup 90 MB? Tail als <b>letzte 50 Messages</b> mit MB-Sicherung — N und führende Grenze bestätigen (§4 C/E).</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E2</span>Archiv-Sweep-Politik</h4>
+  <p>Reduktion ab <b>≥ 10 Tagen</b> im Archiv — auf Tail komprimieren oder ganz durch gzip ersetzen? Sweep-Kadenz (täglich?) (§4 A).</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E3</span>Runner-Backup</h4>
+  <p>Komprimiertes rollierendes Voll-Backup am Host — Ring über K Läufe oder D Tage? Speicherbudget? (§4 D).</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E4</span>Altlast-Repair jetzt</h4>
+  <p>Den 548-Commit-Collapse per §6-Ablauf ausführen (Welle entsperren) — jetzt oder nach deinem Review dieses Dokuments? HEAD ist clean, Backup-Ref liegt.</p>
+</div>
+<div class="box accent">
+  <h4>Schnitt in Tickets</h4>
+  <ol>
+    <li><b>Quell-Cap</b> im Runner (rollierender Tail, konfigurierbar, Marker) — der Kern.</li>
+    <li><b>Archiv-Log-Sweep</b> (≥ 10 Tage → reduziert).</li>
+    <li><b>Runner-Voll-Backup</b> (gzip, rollierend).</li>
+    <li><b>Push-Failure-Sichtbarkeit</b> (Health-Alert + Ursache + Reparatur-Link).</li>
+    <li><b>Altlast-Repair</b> (Einmal-Collapse der unpushed Range) — via §6, sobald du GO gibst.</li>
+  </ol>
+</div>
+
+</main>
+</body>
+</html>
