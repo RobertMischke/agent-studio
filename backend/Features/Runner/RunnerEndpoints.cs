@@ -316,9 +316,39 @@ public static class RunnerEndpoints
                 // per-turn USER PREFERENCES block resolves to the live
                 // defaults of the user who is actually chatting.
                 var clientId = ctx.Items["ClientId"] as string;
-                var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
+                OrchestratorChatTurn reply;
+                try
+                {
+                    reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
+                }
+                catch (AgentStudio.Docs.WorkbenchAttachmentException ex)
+                {
+                    return AgentStudio.Orchestrator.OrchestratorContextEndpoints.AttachmentError(ex);
+                }
                 var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
                 return Results.Ok(new { project = projectName, reply, executionContext });
+            });
+
+        runnerGroup.MapPost("/{projectName}/orchestrator-chat/workbench-anchors",
+            (string projectName, WorkbenchTranscriptAnchorRequest req,
+                TaskScannerService scanner, WorkbenchTranscriptAnchorService anchors) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                try
+                {
+                    var anchor = anchors.Append(projectName, entry.Path, req);
+                    return Results.Ok(new
+                    {
+                        contextKey = $"project:{projectName}",
+                        project = projectName,
+                        anchor,
+                    });
+                }
+                catch (AgentStudio.Docs.WorkbenchAttachmentException ex)
+                {
+                    return AgentStudio.Orchestrator.OrchestratorContextEndpoints.AttachmentError(ex);
+                }
             });
 
         // Per-context transcript history (MC-2, Concept §4). The side sheet's
@@ -358,7 +388,15 @@ public static class RunnerEndpoints
             // USER PREFERENCES block resolves to the live defaults of the user
             // who is actually chatting (matches the per-project route above).
             var clientId = ctx.Items["ClientId"] as string;
-            var reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
+            OrchestratorChatTurn reply;
+            try
+            {
+                reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
+            }
+            catch (AgentStudio.Docs.WorkbenchAttachmentException ex)
+            {
+                return AgentStudio.Orchestrator.OrchestratorContextEndpoints.AttachmentError(ex);
+            }
             var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
             return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply, executionContext });
         }
@@ -373,6 +411,27 @@ public static class RunnerEndpoints
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"project:{projectId}", req, ctx, scanner, chatService, ct));
+        runnerGroup.MapPost("/project:{projectId}/orchestrator-chat/workbench-anchors",
+            (string projectId, WorkbenchTranscriptAnchorRequest req,
+                TaskScannerService scanner, WorkbenchTranscriptAnchorService anchors) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectId);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectId}'" });
+                try
+                {
+                    var anchor = anchors.Append(projectId, entry.Path, req);
+                    return Results.Ok(new
+                    {
+                        contextKey = $"project:{projectId}",
+                        project = projectId,
+                        anchor,
+                    });
+                }
+                catch (AgentStudio.Docs.WorkbenchAttachmentException ex)
+                {
+                    return AgentStudio.Orchestrator.OrchestratorContextEndpoints.AttachmentError(ex);
+                }
+            });
         runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));

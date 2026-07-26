@@ -614,6 +614,7 @@ builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
+builder.Services.AddSingleton<WorkbenchTranscriptAnchorService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own

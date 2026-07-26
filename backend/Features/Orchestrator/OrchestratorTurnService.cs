@@ -1,8 +1,14 @@
+using System.Text;
+using AgentStudio.Docs;
 using AgentStudio.Runner;
 
 namespace AgentStudio.Orchestrator;
 
-public sealed record OrchestratorTurnRequest(string Prompt, string? Model = null, string? WorkingDirectory = null);
+public sealed record OrchestratorTurnRequest(
+    string Prompt,
+    string? Model = null,
+    string? WorkingDirectory = null,
+    WorkbenchAttachmentRequest? Workbench = null);
 
 public sealed record OrchestratorTurnResponse(
     string ContextKey,
@@ -29,6 +35,7 @@ internal sealed class OrchestratorTurnWorkItem
     public required string Prompt { get; init; }
     public string? Model { get; init; }
     public string? WorkingDirectory { get; init; }
+    public WorkbenchContextAttachment? Workbench { get; init; }
 }
 
 public sealed class OrchestratorTurnService
@@ -44,6 +51,7 @@ public sealed class OrchestratorTurnService
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorTurnService> _logger;
     private readonly OrchestratorContextDigestService? _contextDigests;
+    private readonly WorkbenchCatalogueService? _workbenches;
     private readonly object _gate = new();
     private readonly Queue<OrchestratorTurnWorkItem> _queued = new();
     private readonly Dictionary<string, CancellationTokenSource> _active = new(StringComparer.Ordinal);
@@ -54,13 +62,15 @@ public sealed class OrchestratorTurnService
         OrchestratorRunner runner,
         IConfiguration config,
         ILogger<OrchestratorTurnService> logger,
-        OrchestratorContextDigestService? contextDigests = null)
+        OrchestratorContextDigestService? contextDigests = null,
+        WorkbenchCatalogueService? workbenches = null)
     {
         _registry = registry;
         _runner = runner;
         _config = config;
         _logger = logger;
         _contextDigests = contextDigests;
+        _workbenches = workbenches;
     }
 
     public OrchestratorTurnResponse Enqueue(string rawContextKey, OrchestratorTurnRequest request)
@@ -69,6 +79,16 @@ public sealed class OrchestratorTurnService
             throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
         if (string.IsNullOrWhiteSpace(request.Prompt))
             throw new ArgumentException("Prompt is required.", nameof(request));
+        WorkbenchContextAttachment? workbench = null;
+        if (request.Workbench != null)
+        {
+            if (key.Kind != OrchestratorContextKey.ProjectKind)
+                throw WorkbenchAttachmentException.Invalid(
+                    "A Workbench can attach only to its canonical project orchestrator context.");
+            if (_workbenches == null)
+                throw WorkbenchAttachmentException.Invalid("Workbench attachment resolution is unavailable.");
+            workbench = _workbenches.ResolveAttachment(key.ProjectId!, request.Workbench);
+        }
 
         var item = new OrchestratorTurnWorkItem
         {
@@ -76,7 +96,8 @@ public sealed class OrchestratorTurnService
             TurnId = Guid.NewGuid().ToString("N"),
             Prompt = request.Prompt,
             Model = request.Model,
-            WorkingDirectory = request.WorkingDirectory
+            WorkingDirectory = request.WorkingDirectory,
+            Workbench = workbench,
         };
 
         _registry.GetOrCreate(key.Value);
@@ -289,10 +310,13 @@ public sealed class OrchestratorTurnService
 
     private async Task<string> BuildPromptAsync(OrchestratorTurnWorkItem item, CancellationToken ct)
     {
-        if (_contextDigests == null) return item.Prompt;
+        if (_contextDigests == null)
+            return AppendStandaloneWorkbench(item.Prompt, item.Workbench);
         try
         {
-            var digest = await _contextDigests.BuildAsync(item.ContextKey, ct: ct).ConfigureAwait(false);
+            var digest = item.Workbench == null
+                ? await _contextDigests.BuildAsync(item.ContextKey, ct: ct).ConfigureAwait(false)
+                : await _contextDigests.BuildAsync(item.ContextKey, item.Workbench, ct: ct).ConfigureAwait(false);
             return digest.Digest + "\n\n=== USER MESSAGE ===\n" + item.Prompt;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -309,8 +333,21 @@ public sealed class OrchestratorTurnService
                 "orchestrator_context_digest_injection_failed contextKey={ContextKey} turnId={TurnId}",
                 item.ContextKey,
                 item.TurnId);
-            return item.Prompt;
+            return AppendStandaloneWorkbench(item.Prompt, item.Workbench);
         }
+    }
+
+    private static string AppendStandaloneWorkbench(
+        string prompt,
+        WorkbenchContextAttachment? workbench)
+    {
+        if (workbench == null) return prompt;
+        var sb = new StringBuilder();
+        OrchestratorContextDigestService.AppendWorkbenchAttachment(sb, workbench);
+        sb.AppendLine();
+        sb.AppendLine("=== USER MESSAGE ===");
+        sb.Append(prompt);
+        return sb.ToString();
     }
 
     private static string ActiveKey(OrchestratorTurnWorkItem item) => item.ContextKey + "|" + item.TurnId;

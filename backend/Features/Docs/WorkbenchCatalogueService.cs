@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace AgentStudio.Docs;
 
@@ -15,6 +17,10 @@ namespace AgentStudio.Docs;
 public sealed class WorkbenchCatalogueService
 {
     private const long MaxHtmlBytes = 20L * 1024 * 1024;
+    private const long MaxDescriptorBytes = 256L * 1024;
+    private const long MaxBriefBytes = 64L * 1024;
+    internal const int MaxAttachmentTextChars = 12_000;
+    internal const int MaxAttachmentTaskReferences = 64;
 
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
@@ -70,13 +76,19 @@ public sealed class WorkbenchCatalogueService
                     legacy.Id, legacy.Title, legacy.Summary, "invalid", legacy.Phase,
                     File.GetLastWriteTimeUtc(full), legacy.RepoRelPath, false,
                     $"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.",
-                    legacy.SourceTaskKeys));
+                    legacy.SourceTaskKeys)
+                {
+                    RelatedTaskKeys = [],
+                });
                 continue;
             }
             items.Add(new WorkbenchListItem(
                 legacy.Id, legacy.Title, legacy.Summary, "active", legacy.Phase,
                 File.GetLastWriteTimeUtc(full), legacy.RepoRelPath, true, null,
-                legacy.SourceTaskKeys));
+                legacy.SourceTaskKeys)
+            {
+                RelatedTaskKeys = [],
+            });
         }
 
         var visible = items
@@ -98,17 +110,146 @@ public sealed class WorkbenchCatalogueService
         if (full == null || !File.Exists(full)) return null;
         var html = ReadHtmlWithinLimit(full);
         if (html == null) return null;
+        var descriptorPath = item.DescriptorPath;
+        var descriptorText = descriptorPath == null
+            ? null
+            : ReadTextWithinLimit(ContainedPath(root, descriptorPath), MaxDescriptorBytes);
+        if (descriptorPath != null && descriptorText == null) return null;
+        var workbenchDir = Path.GetDirectoryName(full);
+        var briefFull = workbenchDir == null ? null : ContainedPath(workbenchDir, "brief.md");
+        var briefCandidatePath = briefFull == null
+            ? null
+            : Path.GetRelativePath(root, briefFull).Replace('\\', '/');
+        var briefPath = briefFull != null && File.Exists(briefFull)
+            ? briefCandidatePath
+            : null;
+        var briefText = briefFull != null && File.Exists(briefFull)
+            ? ReadTextWithinLimit(briefFull, MaxBriefBytes)
+            : null;
         var status = _git.GetStatusForRepoRoot(root);
         var provenancePaths = new List<string> { item.EntryPath };
-        var entryDir = Path.GetDirectoryName(item.EntryPath.Replace('\\', '/'))?.Replace('\\', '/');
-        if (!string.IsNullOrEmpty(entryDir))
-            provenancePaths.Add(entryDir + "/workbench.json");
+        if (descriptorPath != null) provenancePaths.Add(descriptorPath);
+        if (briefCandidatePath != null) provenancePaths.Add(briefCandidatePath);
         var workingTreeModified = status.IsRepo && status.Files.Any(change =>
             provenancePaths.Any(path => ChangeTouchesPath(change.Path, path)));
         var revision = status.IsRepo && status.Error == null && !workingTreeModified
             ? _git.GetHeadShaCached(root)
             : null;
-        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified);
+        var provenanceState = workingTreeModified
+            ? WorkbenchProvenanceStates.Dirty
+            : revision != null
+                ? WorkbenchProvenanceStates.ExactRevision
+                : WorkbenchProvenanceStates.Unavailable;
+        var fingerprint = Fingerprint(item.EntryPath, html, descriptorPath, descriptorText, briefPath, briefText);
+        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified)
+        {
+            DescriptorPath = descriptorPath,
+            BriefPath = briefPath,
+            ContentFingerprint = fingerprint,
+            ProvenanceState = provenanceState,
+            FreshnessFailures = provenanceState switch
+            {
+                WorkbenchProvenanceStates.Dirty =>
+                    ["Workbench content has uncommitted changes; HEAD revision is withheld."],
+                WorkbenchProvenanceStates.Unavailable =>
+                    [string.IsNullOrWhiteSpace(status.Error)
+                        ? "An exact Git revision is unavailable."
+                        : $"An exact Git revision is unavailable: {Compact(status.Error, 240)}"],
+                _ => [],
+            },
+        };
+    }
+
+    /// <summary>
+    /// Resolve the model-facing Workbench attachment from the project and id.
+    /// Client provenance is used only as an optimistic freshness assertion;
+    /// paths, repository text, branch, revision, and task facts are rebuilt
+    /// from the project repository on every call.
+    /// </summary>
+    public WorkbenchContextAttachment ResolveAttachment(
+        string projectName,
+        WorkbenchAttachmentRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!SafeId(request.Id))
+            throw WorkbenchAttachmentException.Invalid("Workbench id is invalid.");
+        ValidateExpectedProvenance(request);
+        ValidateSelection(request.Selection);
+
+        var document = Read(projectName, request.Id)
+            ?? throw WorkbenchAttachmentException.NotFound(
+                $"Workbench '{request.Id}' was not found or is invalid in project '{projectName}'.");
+        var item = document.Workbench;
+        if (string.IsNullOrWhiteSpace(document.DescriptorPath))
+            throw WorkbenchAttachmentException.Invalid(
+                $"Workbench '{request.Id}' has no canonical workbench.json descriptor.");
+
+        if (!string.IsNullOrWhiteSpace(request.ExpectedRevision)
+            && !string.Equals(request.ExpectedRevision.Trim(), document.Revision, StringComparison.OrdinalIgnoreCase))
+            throw WorkbenchAttachmentException.Stale(
+                $"Workbench '{request.Id}' no longer matches the observed revision.");
+        if (!string.IsNullOrWhiteSpace(request.ExpectedContentFingerprint)
+            && !string.Equals(request.ExpectedContentFingerprint.Trim(), document.ContentFingerprint, StringComparison.Ordinal))
+            throw WorkbenchAttachmentException.Stale(
+                $"Workbench '{request.Id}' no longer matches the observed content fingerprint.");
+
+        var root = ResolveRoot(projectName)
+            ?? throw WorkbenchAttachmentException.NotFound($"Unknown project '{projectName}'.");
+        var validationFailures = new List<string>();
+        string contextText;
+        string contextSourcePath;
+        if (document.BriefPath != null)
+        {
+            var brief = ReadTextWithinLimit(ContainedPath(root, document.BriefPath), MaxBriefBytes);
+            if (brief == null)
+                throw WorkbenchAttachmentException.Invalid(
+                    $"Workbench '{request.Id}' brief.md is unavailable or exceeds {MaxBriefBytes / 1024} KiB.");
+            contextSourcePath = document.BriefPath;
+            contextText = SafeRepositoryText(brief, validationFailures, "brief.md");
+        }
+        else
+        {
+            contextSourcePath = document.DescriptorPath!;
+            contextText = SafeRepositoryText(
+                $"Title: {item.Title}\nSummary: {item.Summary}\nLifecycle: {item.LifecycleState ?? item.Status}\nPhase: {item.Phase ?? "(none)"}",
+                validationFailures,
+                "workbench.json");
+        }
+
+        if (contextText.Length > MaxAttachmentTextChars)
+        {
+            contextText = contextText[..MaxAttachmentTextChars];
+            validationFailures.Add(
+                $"Workbench context was truncated to {MaxAttachmentTextChars} characters.");
+        }
+
+        var taskReferences = ResolveTaskReferences(
+            projectName,
+            _scanner.ScanAllJobsWithArchive(),
+            item.SourceTaskKeys,
+            item.RelatedTaskKeys,
+            validationFailures);
+
+        return new WorkbenchContextAttachment(
+            projectName,
+            item.Id,
+            item.Title,
+            document.DescriptorPath!,
+            item.EntryPath,
+            document.BriefPath,
+            document.Branch,
+            document.Revision,
+            document.ContentFingerprint!,
+            document.ProvenanceState!,
+            item.Status,
+            item.LifecycleState ?? LifecycleFromStatus(item.Status, item.Phase),
+            item.Phase,
+            contextSourcePath,
+            contextText,
+            request.Selection,
+            taskReferences,
+            validationFailures,
+            document.FreshnessFailures ?? []);
     }
 
     private List<WorkbenchListItem> DiscoverCanonical(string root)
@@ -138,7 +279,10 @@ public sealed class WorkbenchCatalogueService
             }
             try
             {
-                using var json = JsonDocument.Parse(File.ReadAllText(descriptor));
+                var descriptorText = ReadTextWithinLimit(descriptor, MaxDescriptorBytes);
+                if (descriptorText == null)
+                    throw new InvalidDataException($"workbench.json exceeds {MaxDescriptorBytes / 1024} KiB.");
+                using var json = JsonDocument.Parse(descriptorText);
                 var obj = json.RootElement;
                 var schema = RequiredInt(obj, "schemaVersion");
                 if (schema is not (1 or 2)) throw new InvalidDataException("schemaVersion must be 1 or 2.");
@@ -146,6 +290,9 @@ public sealed class WorkbenchCatalogueService
                 var title = RequiredString(obj, "title");
                 var summary = RequiredString(obj, "summary");
                 var entrypoint = RequiredString(obj, "entrypoint");
+                if (title.Length > 200) throw new InvalidDataException("title exceeds 200 characters.");
+                if (summary.Length > 2_000) throw new InvalidDataException("summary exceeds 2000 characters.");
+                if (entrypoint.Length > 500) throw new InvalidDataException("entrypoint exceeds 500 characters.");
                 var lifecycleState = schema >= 2 ? RequiredString(obj, "lifecycleState") : null;
                 if (schema >= 2 && !AllowedLifecycleStates.Contains(lifecycleState!))
                     throw new InvalidDataException($"Unsupported lifecycleState '{lifecycleState}'.");
@@ -174,9 +321,13 @@ public sealed class WorkbenchCatalogueService
                 if (!IsHtmlWithinLimit(full))
                     throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.");
                 var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
+                var sourceTaskKeys = TaskKeyArray(obj, "sourceTaskKeys");
+                var relatedTaskKeys = TaskKeyArray(obj, "relatedTaskKeys");
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
-                    updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
+                    updated.UtcDateTime, repoRel, true, null, sourceTaskKeys)
                 {
+                    DescriptorPath = descriptorRel,
+                    RelatedTaskKeys = relatedTaskKeys,
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
@@ -314,6 +465,142 @@ public sealed class WorkbenchCatalogueService
         }
     }
 
+    private static string? ReadTextWithinLimit(string? path, long maxBytes)
+    {
+        if (path == null) return null;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length > maxBytes) return null;
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string Fingerprint(
+        string entryPath,
+        string html,
+        string? descriptorPath,
+        string? descriptorText,
+        string? briefPath,
+        string? briefText)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Add(entryPath, html);
+        Add(descriptorPath, descriptorText);
+        Add(briefPath, briefText);
+        return "sha256:" + Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+
+        void Add(string? path, string? content)
+        {
+            if (path == null || content == null) return;
+            hash.AppendData(Encoding.UTF8.GetBytes(path));
+            hash.AppendData([0]);
+            hash.AppendData(Encoding.UTF8.GetBytes(content));
+            hash.AppendData([0]);
+        }
+    }
+
+    private static readonly Regex SensitiveRepositoryText = new(
+        @"(?im)(-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:password|passwd|secret|api[_-]?key|access[_-]?token|authorization)\s*[:=]|(?:ghp|github_pat|sk)-[A-Za-z0-9_-]{12,})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static string SafeRepositoryText(
+        string value,
+        List<string> validationFailures,
+        string source)
+    {
+        if (!SensitiveRepositoryText.IsMatch(value)) return value;
+        validationFailures.Add($"{source} text was omitted because it appears to contain credential material.");
+        return "[Repository context omitted because it appears to contain credential material.]";
+    }
+
+    private static void ValidateSelection(WorkbenchPresentationSelection? selection)
+    {
+        if (selection == null) return;
+        if (!BoundedPlain(selection.Key, 64)
+            || !BoundedPlain(selection.Value, 256)
+            || selection.Label != null && !BoundedPlain(selection.Label, 120))
+            throw WorkbenchAttachmentException.Invalid(
+                "Workbench presentation selection contains invalid or oversized fields.");
+    }
+
+    private static void ValidateExpectedProvenance(WorkbenchAttachmentRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ExpectedRevision)
+            && !Regex.IsMatch(request.ExpectedRevision.Trim(), "^[0-9a-fA-F]{40,64}$"))
+            throw WorkbenchAttachmentException.Invalid(
+                "Expected Workbench revision must be a full hexadecimal Git object id.");
+        if (!string.IsNullOrWhiteSpace(request.ExpectedContentFingerprint)
+            && !Regex.IsMatch(
+                request.ExpectedContentFingerprint.Trim(),
+                "^sha256:[0-9a-fA-F]{64}$"))
+            throw WorkbenchAttachmentException.Invalid(
+                "Expected Workbench content fingerprint must be a sha256 value.");
+    }
+
+    private static bool BoundedPlain(string? value, int max) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.Length <= max
+        && value.All(c => !char.IsControl(c));
+
+    internal static IReadOnlyList<WorkbenchTaskReference> ResolveTaskReferences(
+        string projectName,
+        IEnumerable<TaskInfo> allTasks,
+        IReadOnlyCollection<string> sourceKeys,
+        IReadOnlyCollection<string> relatedKeys,
+        List<string> validationFailures)
+    {
+        var requested = sourceKeys
+            .Select(key => (Key: key, Role: "source"))
+            .Concat(relatedKeys.Select(key => (Key: key, Role: "related")))
+            .GroupBy(row => row.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                Key = group.Key,
+                Roles = group.Select(row => row.Role).Distinct(StringComparer.Ordinal).ToArray(),
+            })
+            .ToList();
+        if (requested.Count > MaxAttachmentTaskReferences)
+        {
+            validationFailures.Add(
+                $"Task references were capped at {MaxAttachmentTaskReferences} entries.");
+            requested = requested.Take(MaxAttachmentTaskReferences).ToList();
+        }
+
+        // Materialize exactly once, then resolve the complete reference set from
+        // one project-filtered lookup. Facts from other projects never enter it.
+        var scopedTasks = allTasks
+            .Where(task => string.Equals(task.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var byKey = scopedTasks
+            .Where(task => !string.IsNullOrWhiteSpace(task.Key))
+            .GroupBy(task => task.Key!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        return requested.Select(reference =>
+        {
+            if (!byKey.TryGetValue(reference.Key, out var task))
+            {
+                validationFailures.Add(
+                    $"Referenced task '{reference.Key}' is unavailable in project '{projectName}'.");
+                return new WorkbenchTaskReference(
+                    reference.Key, reference.Roles, "unavailable", null, null, null);
+            }
+            return new WorkbenchTaskReference(
+                reference.Key,
+                reference.Roles,
+                "resolved",
+                string.IsNullOrWhiteSpace(task.Key) ? task.Id : task.Key,
+                Compact(task.Title, 160),
+                task.State);
+        }).ToList();
+    }
+
     private static bool ChangeTouchesPath(string changedPath, string targetPath)
     {
         var normalizedTarget = targetPath.Replace('\\', '/').TrimStart('/');
@@ -326,7 +613,7 @@ public sealed class WorkbenchCatalogueService
                 && normalizedTarget.StartsWith(normalizedChange, PathComparison);
     }
 
-    private static bool SafeId(string value) => value.Length is > 0 and <= 80
+    private static bool SafeId(string? value) => value is { Length: > 0 and <= 80 }
         && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
     private static string RequiredString(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
@@ -336,10 +623,27 @@ public sealed class WorkbenchCatalogueService
             ? parsed : throw new InvalidDataException($"{name} is required.");
     private static string? OptionalString(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    private static string[] StringArray(JsonElement obj, string name) =>
-        obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
-            ? value.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray()
-            : [];
+    private static string[] TaskKeyArray(JsonElement obj, string name)
+    {
+        if (!obj.TryGetProperty(name, out var value)) return [];
+        if (value.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"{name} must be an array.");
+        var keys = value.EnumerateArray()
+            .Select(entry => entry.ValueKind == JsonValueKind.String ? entry.GetString() : null)
+            .ToArray();
+        if (keys.Length > 200 || keys.Any(key => !BoundedPlain(key ?? "", 80)))
+            throw new InvalidDataException($"{name} contains invalid or too many task keys.");
+        return keys.Select(key => key!.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string Compact(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var oneLine = string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return oneLine.Length <= max ? oneLine : oneLine[..Math.Max(0, max - 3)] + "...";
+    }
 
     private static readonly HashSet<string> AllowedLifecycleStates = new(StringComparer.Ordinal)
         { "in-progress", "review-requested", "decided", "done" };
@@ -398,9 +702,72 @@ public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int C
 public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
+    public string? DescriptorPath { get; init; }
+    public string[] RelatedTaskKeys { get; init; } = [];
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
 }
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
-    bool WorkingTreeModified);
+    bool WorkingTreeModified)
+{
+    public string? DescriptorPath { get; init; }
+    public string? BriefPath { get; init; }
+    public string? ContentFingerprint { get; init; }
+    public string? ProvenanceState { get; init; }
+    public IReadOnlyList<string>? FreshnessFailures { get; init; }
+}
+
+public static class WorkbenchProvenanceStates
+{
+    public const string ExactRevision = "exact-revision";
+    public const string Dirty = "dirty";
+    public const string Unavailable = "unavailable";
+}
+
+public sealed record WorkbenchPresentationSelection(string Key, string Value, string? Label = null);
+
+public sealed record WorkbenchAttachmentRequest(
+    string Id,
+    string? ExpectedRevision = null,
+    string? ExpectedContentFingerprint = null,
+    WorkbenchPresentationSelection? Selection = null);
+
+public sealed record WorkbenchTaskReference(
+    string Key,
+    IReadOnlyList<string> Roles,
+    string Status,
+    string? TaskKey,
+    string? Title,
+    string? Lane);
+
+public sealed record WorkbenchContextAttachment(
+    string ProjectName,
+    string Id,
+    string Title,
+    string DescriptorPath,
+    string EntrypointPath,
+    string? BriefPath,
+    string? Branch,
+    string? Revision,
+    string ContentFingerprint,
+    string ProvenanceState,
+    string Status,
+    string LifecycleState,
+    string? Phase,
+    string ContextSourcePath,
+    string ContextText,
+    WorkbenchPresentationSelection? PresentationSelection,
+    IReadOnlyList<WorkbenchTaskReference> TaskReferences,
+    IReadOnlyList<string> ValidationFailures,
+    IReadOnlyList<string> FreshnessFailures);
+
+public sealed class WorkbenchAttachmentException : InvalidOperationException
+{
+    private WorkbenchAttachmentException(string code, string message) : base(message) => Code = code;
+    public string Code { get; }
+
+    public static WorkbenchAttachmentException Invalid(string message) => new("invalid", message);
+    public static WorkbenchAttachmentException NotFound(string message) => new("not-found", message);
+    public static WorkbenchAttachmentException Stale(string message) => new("stale", message);
+}

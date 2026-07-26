@@ -1,3 +1,5 @@
+using AgentStudio.Docs;
+
 namespace AgentStudio.Orchestrator;
 
 public static class OrchestratorSessionEndpoints
@@ -70,7 +72,16 @@ public static class OrchestratorSessionEndpoints
             if (string.IsNullOrWhiteSpace(request.Prompt))
                 return Results.BadRequest(new { error = "Prompt is required." });
 
-            return Results.Accepted($"/api/orchestrator/sessions/{parsed.Value}", turns.Enqueue(parsed.Value, request));
+            try
+            {
+                return Results.Accepted(
+                    $"/api/orchestrator/sessions/{parsed.Value}",
+                    turns.Enqueue(parsed.Value, request));
+            }
+            catch (WorkbenchAttachmentException ex)
+            {
+                return OrchestratorContextEndpoints.AttachmentError(ex);
+            }
         }
 
         static IResult Park(string contextKey, OrchestratorSessionRegistry registry, OrchestratorTurnService turns)

@@ -2,21 +2,26 @@
 lifecycleSchema: wiki-page-lifecycle/v1
 pageKind: concept
 lifecycleState: in-progress
-editedBy: "Codex / AGT-2137"
-editedAt: 2026-07-21T05:46:33Z
+editedBy: "Codex / AGT-2360"
+editedAt: 2026-07-26T15:42:48Z
 lifecycleHistory:
   - state: in-progress
     editedBy: "Codex / AGT-2137"
     editedAt: 2026-07-21T05:46:33Z
     note: "Initial classification: the read-only slice exists; chat and decision mutations remain open."
+  - state: in-progress
+    editedBy: "Codex / AGT-2360"
+    editedAt: 2026-07-26T15:42:48Z
+    note: "WB-3 backend attachment, context inspection, and project transcript anchors implemented; frontend pinning and WB-4 decisions remain open."
 ---
 
 # Experiment workbenches
 
 Status: concept and mockup complete, 2026-07-11. The first read-only production
 slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
-viewer, Pulse thinking inbox, and the curated legacy pilot. Chat attachment and
-decision mutations remain future slices.
+viewer, Pulse thinking inbox, and the curated legacy pilot. The WB-3 backend
+attachment and transcript-anchor contract landed on 2026-07-26. Frontend
+pinning and decision mutations remain future slices.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -424,6 +429,18 @@ with Robert's required Pulse entry point and the first WB-5 discovery pilot:
 This slice deliberately exposes no chat pinning, source editing, archive/build
 action, or decision-to-task mutation. The typed Workbench tab/document boundary
 is the host-side seam for those later features; the iframe receives none of it.
+
+### WB-3 backend contract, 2026-07-26
+
+The backend now accepts an optional Workbench attachment on the existing
+project orchestrator requests. It resolves the attachment from the project and
+Workbench id, rejects stale observed revisions or fingerprints, and supplies
+the same bounded digest to the side-sheet chat, canonical session-turn API, and
+read-only context inspector. Dirty content carries a content fingerprint and
+withholds HEAD. Canonical `project:<PROJ-ID>` open, close, and decision anchors
+append to the existing project transcript without invoking a model or changing
+tasks or repository content. This is the backend contract only; the host UI
+still needs to send validated bridge selections and anchor events.
 
 WB-2, WB-3, and WB-4 are the risk-bearing slices. If the team requires strictly
 small cards, split WB-3 into context builder and UI attachment, and WB-4 into

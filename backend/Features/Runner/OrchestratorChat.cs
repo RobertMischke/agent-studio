@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Docs;
 using AgentStudio.Git;
 using AgentStudio.Orchestrator;
 using AgentStudio.Projects;
@@ -136,6 +137,11 @@ public class OrchestratorChat
                 _ => ProjectChatTurnAuthors.Orchestrator
             };
             var body = turn.Text ?? "";
+            if (turn.WorkbenchAnchor is { } anchor)
+            {
+                var provenance = anchor.Revision ?? anchor.ContentFingerprint ?? "unavailable";
+                body = $"[Workbench {anchor.Event}: {anchor.WorkbenchId} @ {provenance}]";
+            }
             if (!string.IsNullOrWhiteSpace(turn.ErrorMessage))
             {
                 body = string.IsNullOrEmpty(body)
@@ -317,6 +323,7 @@ public record OrchestratorChatTurn
     public string? ErrorDetail { get; init; }
 
     public List<OrchestratorChatAttachment>? Attachments { get; init; }
+    public WorkbenchTranscriptAnchor? WorkbenchAnchor { get; init; }
 }
 
 /// <summary>
@@ -359,6 +366,7 @@ public static class OrchestratorChatRoles
 {
     public const string User = "user";
     public const string Orchestrator = "orchestrator";
+    public const string Anchor = "anchor";
 }
 
 public sealed record SendOrchestratorChatRequest(
@@ -367,7 +375,8 @@ public sealed record SendOrchestratorChatRequest(
     ChatNavigationContext? NavigationContext = null,
     string? Model = null,
     string? ThinkingLevel = null,
-    string? SelectionSource = null);
+    string? SelectionSource = null,
+    WorkbenchAttachmentRequest? Workbench = null);
 
 /// <summary>
 /// Structured navigation context the frontend ships with every project-chat
@@ -423,6 +432,7 @@ public class OrchestratorChatService
     private readonly ProjectRegistry? _projects;
     private readonly RemoteChatWorkBroker? _remoteWork;
     private readonly GitService? _git;
+    private readonly WorkbenchCatalogueService? _workbenches;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
@@ -452,7 +462,8 @@ public class OrchestratorChatService
         ProjectSettingsService? projectSettings = null,
         ProjectRegistry? projects = null,
         RemoteChatWorkBroker? remoteWork = null,
-        GitService? git = null)
+        GitService? git = null,
+        WorkbenchCatalogueService? workbenches = null)
     {
         _chat = chat;
         _runner = runner;
@@ -466,6 +477,7 @@ public class OrchestratorChatService
         _projects = projects;
         _remoteWork = remoteWork;
         _git = git;
+        _workbenches = workbenches;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -506,6 +518,8 @@ public class OrchestratorChatService
         OrchestratorContextKey? context,
         CancellationToken ct)
     {
+        var workbench = ResolveWorkbenchAttachment(projectName, req.Workbench, context);
+
         // Append the user turn outside the gate so the audit log records
         // the inbound message even if the user cancels while queued.
         var userTurn = new OrchestratorChatTurn
@@ -532,7 +546,8 @@ public class OrchestratorChatService
         }
         try
         {
-            var prompt = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
+            var prompt = await BuildPromptAsync(
+                projectName, watchPath, req, clientId, context, workbench, ct).ConfigureAwait(false);
             var requestedModel = string.IsNullOrWhiteSpace(req.Model)
                 ? ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55
                 : req.Model.Trim();
@@ -634,6 +649,7 @@ public class OrchestratorChatService
         SendOrchestratorChatRequest req,
         string? clientId,
         OrchestratorContextKey? context,
+        WorkbenchContextAttachment? workbench,
         CancellationToken ct)
     {
         var sb = new StringBuilder();
@@ -653,7 +669,9 @@ public class OrchestratorChatService
                     OrchestratorContextKey.TryParse($"project:{projectName}", out effectiveContext);
                 if (effectiveContext != null)
                 {
-                    var digest = await _contextDigests.BuildAsync(effectiveContext, ct: ct).ConfigureAwait(false);
+                    var digest = workbench == null
+                        ? await _contextDigests.BuildAsync(effectiveContext, ct: ct).ConfigureAwait(false)
+                        : await _contextDigests.BuildAsync(effectiveContext, workbench, ct: ct).ConfigureAwait(false);
                     sb.AppendLine(digest.Digest);
                     sb.AppendLine();
                     digestAdded = true;
@@ -687,6 +705,11 @@ public class OrchestratorChatService
                 SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: missing snapshot is fine; the orchestrator can");
                 // Best-effort: missing snapshot is fine; the orchestrator can
                 // still answer general questions from session memory.
+            }
+            if (workbench != null)
+            {
+                OrchestratorContextDigestService.AppendWorkbenchAttachment(sb, workbench);
+                sb.AppendLine();
             }
         }
 
@@ -750,6 +773,24 @@ public class OrchestratorChatService
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
         sb.AppendLine("Keep it short unless the user asked for depth.");
         return sb.ToString();
+    }
+
+    private WorkbenchContextAttachment? ResolveWorkbenchAttachment(
+        string projectName,
+        WorkbenchAttachmentRequest? request,
+        OrchestratorContextKey? context)
+    {
+        if (request == null) return null;
+        if (context != null && context.Kind != OrchestratorContextKey.ProjectKind)
+            throw WorkbenchAttachmentException.Invalid(
+                "A Workbench can attach only to the canonical project transcript.");
+        if (context?.ProjectId != null
+            && !string.Equals(context.ProjectId, projectName, StringComparison.OrdinalIgnoreCase))
+            throw WorkbenchAttachmentException.Invalid(
+                "Workbench project does not match the orchestrator context.");
+        if (_workbenches == null)
+            throw WorkbenchAttachmentException.Invalid("Workbench attachment resolution is unavailable.");
+        return _workbenches.ResolveAttachment(projectName, request);
     }
 
     /// <summary>
