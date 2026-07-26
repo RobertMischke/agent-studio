@@ -8,6 +8,7 @@
     <AssemblyName>orchestrator-engine</AssemblyName>
     <RootNamespace>AgentStudio.OrchestratorEngine</RootNamespace>
     <Version>0.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <InformationalVersion Condition="'$(SourceRevisionId)' != ''">$(Version)+$(SourceRevisionId)</InformationalVersion>
     <InformationalVersion Condition="'$(SourceRevisionId)' == ''">$(Version)+unknown</InformationalVersion>
   </PropertyGroup>

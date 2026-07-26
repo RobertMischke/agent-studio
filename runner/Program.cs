@@ -1,9 +1,22 @@
 using AgentRunner;
 using System.Runtime.InteropServices;
+using System.Reflection;
 
 // Standalone agent host. With a task key it performs the RM-5 one-shot run;
 // without one (or with --poll) it continuously fills bounded host slots. See
 // docs/operations/setup/linux-runner-host.md.
+
+if (args is ["--version"])
+{
+    var assembly = typeof(RunnerOptions).Assembly;
+    var informational = assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion
+        ?? assembly.GetName().Version?.ToString(3)
+        ?? "unknown";
+    Console.WriteLine($"agent-host {informational}");
+    return 0;
+}
 
 if (args is ["--detached-worker", var detachedSpec])
     return await DurableAgentProcess.RunWorkerAsync(detachedSpec);
@@ -119,6 +132,7 @@ static void PrintUsage()
 
           --health-check          Probe the Task Server and exit (0 reachable,
                                   4 not). Readiness check for the tunnel service.
+          --version               Print release version and Git SHA, then exit.
           --server <url>          Task Server base URL       (RUNNER_SERVER_URL)
           --runner-id <id>        Stable runner identity     (RUNNER_ID)
           --runner-name <name>    Board-facing runner name   (RUNNER_NAME)
