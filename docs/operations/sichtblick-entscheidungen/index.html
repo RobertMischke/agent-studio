@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sichtblick-Entscheidungen: Marketing &amp; Website | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --mkt: #b5468a; --web: #1f8a70; --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+    --mkt-soft: #f7ebf3; --web-soft: #e7f4ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --mkt: #d477b0; --web: #46b89a; --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+      --mkt-soft: #33212e; --web-soft: #1f2f2a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 90px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.65 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 46px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 35px; line-height: 1.15; margin: 0 0 14px; }
+  .lede { font-size: 18.5px; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 25px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 30px 0 4px; }
+  h3 .tag { font-size: 12px; font-weight: 700; border-radius: 5px; padding: 2px 8px; vertical-align: 2px; margin-right: 10px; }
+  .tag.mkt { background: var(--mkt-soft); color: var(--mkt); } .tag.web { background: var(--web-soft); color: var(--web); }
+  p { max-width: 74ch; } p.dim { color: var(--ink-2); }
+  .card { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 16px 20px; margin: 16px 0; }
+  .card.mkt { border-left: 4px solid var(--mkt); } .card.web { border-left: 4px solid var(--web); }
+  .card h4 { margin: 0 0 4px; font-size: 16px; } .card .sub { font-size: 13px; color: var(--ink-3); margin: 0 0 10px; }
+  .card .decision { font-size: 14.5px; margin: 10px 0 0; padding: 10px 12px; background: var(--surface-3); border-radius: 8px; }
+  .card .decision b { color: var(--ink-1); }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; } figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 11px; max-width: 90ch; } figcaption b { color: var(--ink-1); }
+  ul { padding-left: 22px; } li { margin: 6px 0; max-width: 74ch; }
+  ol.seq { counter-reset: s; list-style: none; padding-left: 0; } ol.seq li { position: relative; padding-left: 40px; margin: 12px 0; }
+  ol.seq li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--develop); color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+  .s-label { fill: var(--ink-1); font: 600 12.5px system-ui, sans-serif; } .s-sub { fill: var(--ink-2); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-mkt { fill: var(--mkt-soft); stroke: var(--mkt); } .s-web { fill: var(--web-soft); stroke: var(--web); } .s-dev { fill: var(--accent-soft); stroke: var(--develop); }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Entscheidungen</p>
+  <h1>Sichtblick-Entscheidungen: Marketing &amp; Website</h1>
+  <p class="lede">Sieben Karten warten auf deine Entscheidung, weil sie nach außen wirken — sie tragen deine Stimme (Marketing) oder gehen live auf die Website. Hier steht je Karte: worum es geht, was genau du entscheidest, und wie die Karten zusammenhängen.</p>
+  <div class="meta">
+    <span><b>7 Karten</b> · 4 Marketing · 3 Website</span>
+    <span><b>Gemeinsam</b> Positionierung nach außen</span>
+    <span><b>Status</b> warten auf Robert</span>
+  </div>
+</header>
+
+<h2 id="warum"><span class="no">A</span>Warum diese sieben nicht autonom laufen</h2>
+<p>Fast der ganze Altbestand wurde ohne dich verarbeitet. Diese sieben nicht — aus einem einfachen Grund: Sie produzieren <b>Aussagen über dich und dein Angebot</b> oder <b>veröffentlichen etwas live</b>. Ein Agent kann Code integrieren; er kann aber nicht entscheiden, wie du positioniert wirst, welche Preise/Angebote du machst, oder was auf deiner öffentlichen Seite steht. Das ist Geschäft und Stimme, nicht Technik.</p>
+<div class="box accent">
+  <h4>Die eine Kernabhängigkeit</h4>
+  <p>Die wichtigste Einsicht vorweg: Der zentrale <b>Website-Claim (AOW-8)</b> hängt an zwei Entscheidungen, die du an anderer Stelle triffst — dem <b>Positionierungs-Framework (MKT-14, liegt fertig)</b> und der <b>Container-Richtung</b>. Sind die zwei entschieden, schreibt sich der Website-Claim fast von selbst. Deshalb: diese zwei zuerst, dann fällt der Rest leichter.</p>
+</div>
+<figure>
+  <svg viewBox="0 0 960 200" role="img" aria-label="Abhängigkeit: MKT-14 und Container-Richtung speisen den Website-Claim">
+    <rect x="40" y="40" width="200" height="54" rx="10" class="s-dev"/><text x="60" y="66" class="s-label">MKT-14 · Problem-first</text><text x="60" y="84" class="s-sub">welches Problem lösen wir?</text>
+    <rect x="40" y="110" width="200" height="54" rx="10" class="s-dev"/><text x="60" y="136" class="s-label">Container-Richtung</text><text x="60" y="154" class="s-sub">wie sicher/isoliert?</text>
+    <path d="M240 67 C 330 67, 330 95, 400 100 M240 137 C 330 137, 330 108, 400 104" class="s-flow" marker-end="url(#a)"/>
+    <rect x="405" y="76" width="210" height="54" rx="10" class="s-web"/><text x="425" y="102" class="s-label">AOW-8 · Website-Claim</text><text x="425" y="120" class="s-sub">"Reliable coding-agent ops"</text>
+    <path d="M615 103 L 680 103" class="s-flow" marker-end="url(#a)"/>
+    <rect x="685" y="76" width="230" height="54" rx="10" class="s-node" style="fill:var(--surface-2);stroke:var(--line)"/><text x="705" y="102" class="s-label">Live-Website + AOW-3/4</text><text x="705" y="120" class="s-sub">Content, UX, Publish</text>
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Die Kette.</b> Positionierung (MKT-14) + Sicherheits-/Container-Richtung ergeben den tragenden Website-Claim (AOW-8). Der Claim wiederum rahmt den Content-Refresh (AOW-3) und die UX (AOW-4). MKT-7 (Angebote) läuft unabhängig daneben.</figcaption>
+</figure>
+
+<h2 id="mkt"><span class="no">B</span>Marketing — deine Stimme &amp; Strategie</h2>
+
+<div class="card mkt">
+  <h4>MKT-3 · Vergleichsseite „Agent Studio vs. AMP"</h4>
+  <p class="sub">SEO- und AI-Search-optimiert · Wettbewerbsvergleich</p>
+  <p>Eine Seite, die Agent Studio direkt gegen einen Wettbewerber (AMP) stellt — gebaut, damit sie in Google und in LLM-Antworten auftaucht, wenn jemand die beiden vergleicht.</p>
+  <div class="decision"><b>Deine Entscheidung:</b> Führst du einen öffentlichen Wettbewerbsvergleich — ja/nein? Und wenn ja, welcher Ton: sachlich-nüchtern (Tabelle der Fähigkeiten) oder pointiert? Ein Vergleich zieht Aufmerksamkeit, kann aber auch angreifbar/defensiv wirken.</div>
+</div>
+
+<div class="card mkt">
+  <h4>MKT-4 · Marketing-Studio wird selbst eine App</h4>
+  <p class="sub">Dogfooding · das Marketing-Projekt als Werkzeug</p>
+  <p>Statt das Marketing „nur" in Dokumenten zu betreiben, wird das Marketing-Projekt selbst ein kleines Tool/App — die Idee: das eigene Produkt an der eigenen Außendarstellung vorführen (dogfooding).</p>
+  <div class="decision"><b>Deine Entscheidung:</b> Wie weit soll das gehen — Scope und Ambition? Ein kleines internes Werkzeug, oder eine sichtbare „so arbeiten wir"-Demo? Das bindet Aufwand, den du bewusst setzen willst.</div>
+</div>
+
+<div class="card mkt">
+  <h4>MKT-5 · GEO/AEO/LLMO-Strategie</h4>
+  <p class="sub">Sichtbarkeit in LLM-Antworten · analysiert AMPs „INSTRUCTIONS-FOR-LLMs"-Taktik</p>
+  <p>GEO/AEO/LLMO = die neue SEO: nicht für Google optimieren, sondern dafür, dass <em>LLMs</em> (ChatGPT, Claude, Perplexity) dich in ihren Antworten nennen. Die Karte analysiert, wie der Wettbewerber das macht (eine „INSTRUCTIONS-FOR-LLMs"-Datei auf der Seite) und leitet eine eigene Strategie ab.</p>
+  <div class="decision"><b>Deine Entscheidung:</b> Willst du aktiv eine LLM-Sichtbarkeits-Strategie fahren? Das ist zukunftsträchtig (immer mehr Leute fragen LLMs statt Google), aber ein bewusstes Investment in ein neues Feld.</div>
+</div>
+
+<div class="card mkt">
+  <h4>MKT-7 · Hire-Page-Umbau</h4>
+  <p class="sub">Stundensätze RAUS · fünf produktisierte Consulting-Angebote REIN</p>
+  <p>Der größte inhaltliche Schnitt: Die „Hire"-Seite verkauft nicht mehr Stunden, sondern <b>fünf klar geschnürte Angebote</b> (z.B. „Agent-Setup-Sprint", „Pipeline-Audit" — Paketpreise statt Stundensatz). Das verändert, wie du wahrgenommen und bezahlt wirst.</p>
+  <div class="decision"><b>Deine Entscheidung:</b> <b>Welche fünf Angebote?</b> Das ist eine reine Geschäftsmodell-Entscheidung — unabhängig von allem anderen, jederzeit machbar. Nenn mir die fünf, den Rest baue ich.</div>
+</div>
+
+<h2 id="web"><span class="no">C</span>Website — Live-Publish, dein Sign-off</h2>
+
+<div class="card web">
+  <h4>AOW-8 · Website-Umbau mit dem Claim „Reliable coding-agent operations"</h4>
+  <p class="sub">Der tragende Claim · hängt an MKT-14 + Container-Richtung</p>
+  <p>Die zentrale Website-Aussage. „Reliable coding-agent operations" ist der Kandidat — aber ob das der richtige Lead ist, hängt an deinem Positionierungs-Framework (MKT-14) und daran, wie stark „sicher/isoliert" (Container) der Kern wird. <b>Das ist die Karte, die die anderen zwei Website-Karten rahmt.</b></p>
+  <div class="decision"><b>Deine Entscheidung:</b> MKT-14-Vorlage sichten + Container-Richtung setzen → dann steht der Lead-Claim. Danach ist AOW-8 fast mechanisch. Publish braucht deinen Sign-off.</div>
+</div>
+
+<div class="card web">
+  <h4>AOW-3 · Content-Refresh &nbsp;·&nbsp; AOW-4 · Card-UX / Ordering</h4>
+  <p class="sub">Folgen dem Claim · Live-Änderungen</p>
+  <p>AOW-3 frischt die Seiteninhalte auf, AOW-4 verbessert die Karten-Darstellung/Sortierung. Beide sind kleiner und folgen inhaltlich dem, was AOW-8 als Claim setzt — deshalb sinnvollerweise <em>nach</em> AOW-8.</p>
+  <div class="decision"><b>Deine Entscheidung:</b> Nur Sign-off für den Live-Gang, sobald der Claim steht. AOW-4 (UX) könnte auch schon früher als Entwurf laufen — sag, ob ich das vorziehen soll.</div>
+</div>
+
+<h2 id="seq"><span class="no">D</span>Empfohlene Reihenfolge</h2>
+<ol class="seq">
+  <li><b>MKT-14 sichten</b> (Problem-first-Vorlage liegt fertig) — welches Problem führt die Positionierung?</li>
+  <li><b>Container-Richtung setzen</b> (siehe Container-Grundlagen-Doc) — wie stark ist „sicher/isoliert"?</li>
+  <li><b>AOW-8 Claim festlegen</b> — fällt aus 1+2 fast von selbst; dann AOW-3/AOW-4 hinterher.</li>
+  <li><b>MKT-7 Angebote</b> — unabhängig, jederzeit: nenn die fünf, ich baue.</li>
+  <li><b>MKT-3/4/5</b> — nach Bedarf: Wettbewerbsvergleich, Dogfooding-App, LLM-Sichtbarkeit — je nachdem, wo du Energie reinstecken willst.</li>
+</ol>
+<p class="dim">Nichts davon ist dringend im Betriebssinn — es ist Aufbau-Arbeit an deiner Außendarstellung. Sobald du 1+2 gibst, wird der Website-Strang konkret; MKT-7 kannst du sofort und unabhängig anstoßen. Kein Publish ohne deinen Sign-off.</p>
+
+</main>
+</body>
+</html>

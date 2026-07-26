@@ -1,0 +1,169 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/71f31d3c893cae98dccac0a4621b37743c3f61c1cd194cbab13824c196d5b749",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/AdHoc/AdHocClaudeInvoker.cs",
+    "displayName": "AdHocClaudeInvoker.cs"
+  },
+  "reviewedAt": "2026-07-21T11:22:03.2451710Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-3cc7edb5f23c4275a3ddbf6283904bcd"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "691575ac424821f3eb29a61e574c25f41d8b95003090b26c3758855388ef875d"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/AdHoc/AdHocClaudeInvoker.cs",
+      "selector": "file",
+      "contentHash": "sha256:a8d1cf6c4fcc0d9b1aaac1d74fb3a1ed509823b578595b53f71c54ed1a5b6705"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "be8dea468a306287923b050ce1c63f37b1d01c79211906e52999b5d2ab3ea3e4"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:8fa1adf7fc0fc1c4a3aec177c2789d9f3afba5e53139e62aa85ae8fbdb94efd6"
+    }
+  },
+  "grade": {
+    "score": 78,
+    "band": "C",
+    "rationale": "The helper is concise and generally clear, but its documented best-effort recording contract is not enforced, and its wrapper detection can misclassify unrelated JSON containing a usage property."
+  },
+  "summary": "Two issues merit attention: AdHocUsageRecorder exceptions can escape despite the stated never-throws contract, and ParseOrFallback recognizes a broader JSON shape than its comments describe. Focused unit tests around recorder failures and ambiguous JSON objects would improve confidence.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 76,
+        "band": "C",
+        "rationale": "Normal wrapper and plain-text paths appear sound, but objects with any top-level usage property can be incorrectly treated as Claude CLI wrappers."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 84,
+        "band": "B",
+        "rationale": "The implementation is small and centralized, though wrapper-shape recognition duplicates an implicit external format contract and should be made stricter or encapsulated."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 82,
+        "band": "B",
+        "rationale": "Names and documentation are helpful, but the implementation contradicts both the wrapper-shape explanation and the stated never-throws behavior."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 68,
+        "band": "D",
+        "rationale": "Parsing degrades safely, but recording exceptions are not contained even though recording is explicitly documented as best-effort and non-throwing."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 80,
+        "band": "B",
+        "rationale": "The stateless methods are easy to exercise, but direct UTC clock access prevents deterministic timestamp assertions and recorder-failure behavior needs explicit coverage."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "recording-exceptions-escape",
+      "aspect": "error_handling",
+      "severity": "high",
+      "title": "Record does not honor its never-throws contract",
+      "description": "The class documentation says recording is best-effort and never throws, but Record invokes recorder.Record without exception handling. If the recorder performs file or other fallible I/O, an observability failure can fail an otherwise successful ad-hoc operation.",
+      "recommendation": "Contain expected recorder exceptions inside Record and report them through an appropriate non-throwing diagnostic path. Add a test using a recorder that throws to verify that the caller remains unaffected. Avoid catching fatal runtime exceptions indiscriminately if the recorder exposes more specific failure types.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocClaudeInvoker.cs",
+          "range": {
+            "start": {
+              "line": 82,
+              "column": 9
+            },
+            "end": {
+              "line": 96,
+              "column": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "overbroad-wrapper-detection",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Any top-level usage property is accepted as a CLI wrapper",
+      "description": "The detection predicate accepts either type equal to result or the mere presence of a usage property. This can misclassify domain JSON that happens to contain usage, contradicting the stated intent to treat non-wrapper JSON as plain text. It then passes that document to OrchestratorRunner.ParseResult and may replace the original content with an empty or incorrectly parsed reply.",
+      "recommendation": "Require the authoritative wrapper discriminator, such as a string type property equal to result, and validate any other required wrapper fields before parsing. If compatibility with a known legacy shape is required, recognize that shape explicitly and cover both ambiguous domain JSON and malformed wrappers with tests.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocClaudeInvoker.cs",
+          "range": {
+            "start": {
+              "line": 52,
+              "column": 13
+            },
+            "end": {
+              "line": 54,
+              "column": 57
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "broad-parse-catch-hides-defects",
+      "aspect": "error_handling",
+      "severity": "low",
+      "title": "Broad catch silently hides all parsing failures",
+      "description": "The catch block converts every exception from JSON parsing and OrchestratorRunner.ParseResult into a plain-text fallback without diagnostics. While fallback is appropriate for malformed or incompatible output, silently suppressing unexpected implementation failures makes regressions difficult to distinguish from legitimate non-wrapper input.",
+      "recommendation": "Catch expected JSON and wrapper-format exceptions specifically. If broader containment is required at this boundary, emit a non-throwing diagnostic that identifies the failure category without logging sensitive stdout.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocClaudeInvoker.cs",
+          "range": {
+            "start": {
+              "line": 59,
+              "column": 9
+            },
+            "end": {
+              "line": 62,
+              "column": 10
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
