@@ -41,8 +41,8 @@ describe('ProjectPipelinePanelComponent (smoke)', () => {
  * state survives). Asserts: a phase group renders; a configurable aspect step
  * exposes its enable toggle while a core step is locked "always on"; the prompt
  * cell shows the registry template reference plus the legacy inline-override
- * Clear affordance; and each step renders its 90-day token sum (no bottom
- * total).
+ * Clear affordance; and LLM-backed steps render their 90-day token sum (no
+ * bottom total) while process-only tool steps omit token UI.
  */
 describe('ProjectPipelinePanelComponent (render)', () => {
   function catalogue(): PipelineCatalogueStep[] {
@@ -67,6 +67,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
         promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
+      {
+        id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', phase: 'tool',
+        runMode: 'sequential', dependsOn: ['core-run'], idempotent: true, stub: false,
+        usesModel: false, usesPrompt: false, supportsMode: true, cliType: null,
+        promptTemplate: null, canDisable: true, defaultEnabled: true, supportsCondition: false,
+      },
     ];
   }
 
@@ -87,13 +93,14 @@ describe('ProjectPipelinePanelComponent (render)', () => {
       steps: [
         { stepId: 'aspect-requirement-fit', kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: true },
         { stepId: 'core-run', kind: 'core', totalTokens: 300_000, totalCostUsd: 0.75, anyModelUnknown: false },
+        { stepId: 'post-build-test-gate', kind: 'tool', totalTokens: 10_000, totalCostUsd: 0.01, anyModelUnknown: false },
       ],
-      totalTokens: 380_000, totalCostUsd: 0.83, anyModelUnknown: true,
+      totalTokens: 390_000, totalCostUsd: 0.84, anyModelUnknown: true,
       taskCount: 4, hasData: true, fetchedAt: '2026-06-10T00:00:00Z',
     };
   }
 
-  it('renders groups, the prompt binding cell, and per-step token sums', async () => {
+  it('renders groups, prompt bindings, and token sums only for LLM-backed steps', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectPipelinePanelComponent],
       providers: [
@@ -136,7 +143,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectRow?.textContent).toContain('Setting');
     expect(aspectRow?.textContent).toContain('Explanation');
     expect(host.querySelector('[data-testid="pipeline-step-setting-run-aspect-requirement-fit"]')?.textContent).toContain('parallel after core-run');
-    expect(host.querySelector('[data-testid="pipeline-step-setting-active-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-active-aspect-requirement-fit"]')).toBeNull();
     expect(host.querySelector('[data-testid="pipeline-step-setting-model-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-economy-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-prompt-aspect-requirement-fit"]')).toBeTruthy();
@@ -149,9 +156,14 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectRow?.textContent).not.toContain('Gate:');
     expect(aspectRow?.textContent).not.toContain('When:');
 
-    // Core step is locked on; the aspect step exposes its enable toggle.
-    expect(host.querySelector('[data-testid="pipeline-step-enabled-core-run"]')).toBeNull();
-    expect(host.querySelector('[data-testid="pipeline-step-enabled-aspect-requirement-fit"]')).toBeTruthy();
+    // Every collapsed row reserves the same toggle column. Core renders a
+    // disabled, checked switch; configurable steps expose a live switch.
+    const coreToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-enabled-core-run"]');
+    const aspectToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-enabled-aspect-requirement-fit"]');
+    expect(coreToggle?.disabled).toBe(true);
+    expect(coreToggle?.checked).toBe(true);
+    expect(aspectToggle?.disabled).toBe(false);
+    expect(aspectToggle?.closest('summary')).toBeTruthy();
 
     // Prompt binding cell: registry template reference + legacy inline override + Clear.
     const promptCell = host.querySelector('[data-testid="pipeline-step-prompt-aspect-requirement-fit"]');
@@ -160,7 +172,8 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-prompt-manage-aspect-requirement-fit"]')).toBeTruthy();
 
     // Per-step token sum: the aspect step shows its 90-day token total with the
-    // unknown-price star; the core step shows its own sum. No bottom total.
+    // unknown-price star; the core step shows its own sum. Tool steps show no
+    // token UI even if a malformed cost payload contains a tool entry.
     const aspectTokens = host.querySelector('[data-testid="pipeline-step-tokens-aspect-requirement-fit"]');
     expect(aspectTokens?.textContent).toContain('80.0k');
     expect(aspectTokens?.textContent).toContain('*');
@@ -172,8 +185,15 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(fixture.componentInstance.stepTokenTooltip(fixture.componentInstance.rows().find(r => r.id === 'aspect-code-quality')!))
       .toContain('Estimated cost: no price data');
     expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-tokens-post-build-test-gate"]')).toBeNull();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-post-build-test-gate"]')).toBeNull();
     expect(host.querySelector('[data-testid="pipeline-cost"]')).toBeNull();
     expect(host.querySelector('[data-testid="pipeline-cost-total"]')).toBeNull();
+
+    // Fixed-width type badges use one three-character vocabulary.
+    expect(host.querySelector('[data-testid="pipeline-step-kind-core-run"]')?.textContent?.trim()).toBe('COR');
+    expect(host.querySelector('[data-testid="pipeline-step-kind-aspect-requirement-fit"]')?.textContent?.trim()).toBe('ASP');
+    expect(host.querySelector('[data-testid="pipeline-step-kind-post-build-test-gate"]')?.textContent?.trim()).toBe('TOO');
   });
 
   it('emits openPrompts from the summary prompt chip and Manage in Prompts', async () => {

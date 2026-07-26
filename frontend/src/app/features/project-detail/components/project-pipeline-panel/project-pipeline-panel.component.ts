@@ -29,6 +29,7 @@ import {
 } from './pipeline-config.util';
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
+import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -46,7 +47,7 @@ import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-
 @Component({
   selector: 'app-project-pipeline-panel',
   standalone: true,
-  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective, PipelineHealthBlockComponent],
+  imports: [FormsModule, CliModelSelectorComponent, PipelineStepToggleComponent, TooltipDirective, PipelineHealthBlockComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
@@ -447,8 +448,19 @@ export class ProjectPipelinePanelComponent {
   groupSummary(group: PipelineGroup): string {
     const total = group.rows.length;
     const on = group.rows.filter(row => row.enabled).length;
-    const llm = group.rows.filter(row => row.usesModel).length;
+    const llm = group.rows.filter(row => this.hasTokenUsage(row)).length;
     return `${total} steps · ${on} on${llm ? ` · ${llm} LLM` : ''}`;
+  }
+
+  /**
+   * Tool steps are process-only and never own token usage. Core and
+   * orchestrator steps can account for an LLM call even when their catalogue
+   * model is runtime-owned rather than operator-configurable.
+   */
+  hasTokenUsage(step: PipelineAdminRow): boolean {
+    const kind = this.kindKey(step.kind);
+    return kind !== 'tool'
+      && (step.usesModel || kind === 'core' || kind === 'orchestrator');
   }
 
   modelSummary(step: PipelineAdminRow): string {
@@ -494,13 +506,6 @@ export class ProjectPipelinePanelComponent {
       return 'May run together with sibling steps in this phase; dependencies still have to finish first.';
     }
     return 'Runs in sequence at this position in the pipeline.';
-  }
-
-  activeExplanation(step: PipelineAdminRow): string {
-    if (!step.canDisable) return 'Fixed catalogue step; it always runs when the pipeline reaches this phase.';
-    return step.enabled
-      ? 'Enabled for this project; switch off to skip this step.'
-      : 'Skipped for this project until it is enabled again.';
   }
 
   modelExplanation(step: PipelineAdminRow): string {
@@ -608,10 +613,13 @@ export class ProjectPipelinePanelComponent {
 
   kindAbbrev(value: string | null | undefined): string {
     switch (this.kindKey(value)) {
-      case 'orchestrator': return 'ORCH';
       case 'module': return 'MOD';
+      case 'core': return 'COR';
+      case 'orchestrator': return 'ORC';
+      case 'tool': return 'TOO';
       case 'aspect': return 'ASP';
-      default: return (value ?? '').trim().toUpperCase();
+      case 'drift': return 'DRI';
+      default: return (value ?? '').trim().slice(0, 3).toUpperCase();
     }
   }
 

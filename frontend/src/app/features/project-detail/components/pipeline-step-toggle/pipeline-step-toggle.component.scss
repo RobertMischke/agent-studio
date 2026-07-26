@@ -1,0 +1,79 @@
+:host {
+  display: inline-flex;
+}
+
+.step-toggle {
+  min-width: 4.5rem;
+  min-height: var(--studio-card-pill-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-card-pill-padding-x);
+  border: 1px solid color-mix(in srgb, var(--pipeline-step-color) 32%, var(--studio-card-muted-border));
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-strong);
+  cursor: pointer;
+  font-size: var(--studio-card-meta-size);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.step-toggle input {
+  appearance: none;
+  position: relative;
+  width: 1.7rem;
+  height: 0.95rem;
+  margin: 0;
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: 999px;
+  background: var(--studio-card-muted-bg);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.step-toggle input::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.12rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--studio-fg-muted);
+  transform: translateY(-50%);
+  transition: left 0.12s ease, background 0.12s ease;
+}
+
+.step-toggle input:checked {
+  border-color: color-mix(in srgb, var(--pipeline-step-color) 58%, var(--studio-card-muted-border));
+  background: color-mix(in srgb, var(--pipeline-step-color) 22%, var(--studio-card-muted-bg));
+}
+
+.step-toggle input:checked::after {
+  left: 0.78rem;
+  background: var(--pipeline-step-color);
+}
+
+.step-toggle input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pipeline-step-color) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.step-toggle input:disabled {
+  cursor: default;
+}
+
+.step-toggle--locked {
+  border-color: var(--studio-card-muted-border);
+  color: var(--studio-fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-toggle input,
+  .step-toggle input::after {
+    transition-duration: 0s;
+  }
+}
