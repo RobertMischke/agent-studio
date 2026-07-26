@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "model-routing-policy",
+  "title": "Modell-Routing als Entscheidung von Token Economy",
+  "summary": "Neue Entscheidungsschicht über dem TaskComplexityEstimator: aus beobachtbaren Karten-Merkmalen eine begründete, auditierbare Wahl von Modell × Thinking-Level, mit LLM-Schiedsrichter nur für die uneindeutigen Fälle. Behandelt welche Information wertvoll ist, wie Komplexität in Bänder (trivial/standard/demanding/critical) + Konfidenz verdichtet wird, die Default-Tabelle Band→Modell×Level, die modellspezifische Reasoning-Ladder (Opus 5: low·medium·high·max ohne xhigh; Sonnet 5 mit xhigh) als hartes Wissen statt Stolperfalle, Break-even für den optionalen LLM-Call, die Reissue-/Feststecken-Policy (Modellwechsel), das Kontingent als Budget-Signal (preferStrongWhileQuotaAbundant) und die Lernschleife mit ihren Grenzen. Vier offene Entscheidungen E1-E4 für den Sichtblick, danach Schnitt in TE-Karten. Verzahnt mit dem TE-Library-Konzept upfront-task-complexity.md.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-26T20:40:00Z",
+  "sourceTaskKeys": ["TE-19", "TE-20"]
+}

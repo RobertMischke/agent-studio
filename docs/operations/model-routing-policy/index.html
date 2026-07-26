@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modell-Routing: Entscheidung an Token Economy | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834; --rescue: #b58500;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+    --t1: #eaf4ea; --t2: #eaf1fb; --t3: #f8f0dd; --t4: #fbecec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f; --rescue: #d0a02a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+      --t1: #1f2f1f; --t2: #1e2a3a; --t3: #33301e; --t4: #382222;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 78ch; } p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 88ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; white-space: nowrap; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; } li { margin: 5px 0; max-width: 78ch; }
+  ol { padding-left: 22px; } ol li { margin: 6px 0; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; } .toc a { color: var(--ink-2); text-decoration: none; } .toc a:hover { color: var(--ink-1); text-decoration: underline; } .toc li { break-inside: avoid; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2 { fill: var(--surface-3); stroke: var(--line); }
+  .s-cont { fill: var(--accent-soft); stroke: var(--develop); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .band { display:inline-block; font-size:12px; font-weight:600; border-radius:5px; padding:2px 8px; }
+  .band.t1 { background:var(--t1); color:var(--ok); }
+  .band.t2 { background:var(--t2); color:var(--develop); }
+  .band.t3 { background:var(--t3); color:var(--warn); }
+  .band.t4 { background:var(--t4); color:var(--bad); }
+  .ev { font-size: 12.5px; color: var(--ink-3); } .ev code { font-size: 11.5px; }
+  .dnum { font-weight:700; color:var(--develop); margin-right:8px; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Token Economy</p>
+  <h1>Modell-Routing als Entscheidung von Token Economy</h1>
+  <p class="lede">Heute wählt der Operator Modell und Reasoning-Stufe je Ticket von Hand. Zielbild: Token Economy entscheidet es — aus beobachtbaren Merkmalen einer Karte eine begründete, auditierbare Wahl von <b>Modell × Thinking-Level</b>, mit LLM-Schiedsrichter nur für die uneindeutigen Fälle. Dieses Dokument ist der Steuerungs-Ausgangspunkt: welche Information wertvoll ist, wie Komplexität erkannt wird, wie daraus eine Route wird — und die offenen Entscheidungen dafür.</p>
+  <div class="meta">
+    <span><b>Status</b> Shaping (26.07.)</span>
+    <span><b>Phase</b> Entscheidungsreif für Sichtblick</span>
+    <span><b>Auslöser</b> Opus-5-Onboarding + „Entscheidung an TE abgeben"</span>
+    <span><b>Library</b> Token Economy (PROJ-015)</span>
+  </div>
+</header>
+
+<nav>
+  <ul class="toc">
+    <li><a href="#warum">1 · Warum jetzt</a></li>
+    <li><a href="#ist">2 · Ist-Stand: manuell + drei Stolperfallen</a></li>
+    <li><a href="#info">3 · Welche Information ist wertvoll</a></li>
+    <li><a href="#komplexitaet">4 · Wie Komplexität erkannt wird</a></li>
+    <li><a href="#route">5 · Vom Band zur Route</a></li>
+    <li><a href="#ladder">6 · Die Ladder ist modellspezifisch</a></li>
+    <li><a href="#llm">7 · LLM-Schiedsrichter für Grauzonen</a></li>
+    <li><a href="#feststecken">8 · Feststecken → Wechsel</a></li>
+    <li><a href="#budget">9 · Kontingent als Signal</a></li>
+    <li><a href="#loop">10 · Lernschleife &amp; Grenzen</a></li>
+    <li><a href="#offen">11 · Offene Entscheidungen</a></li>
+  </ul>
+</nav>
+
+<h2 id="warum"><span class="no">1</span>Warum jetzt</h2>
+<p>Zwei Dinge fallen zusammen. Erstens ist <b>Opus 5</b> live und im Katalog (neuer Default), <b>Fable 5</b> ebenfalls onboardet — die Modellauswahl ist damit real breiter geworden. Zweitens hat sich beim Ein­takten der aktuellen Welle gezeigt, dass die Routing-Entscheidung heute reine Handarbeit ist: pro Ticket Modell setzen, Reasoning-Stufe raten. Robert hat das benannt — <em>„da hatte ich noch kein gutes Gefühl über den Entscheidungsweg"</em> — und den Zielzustand vorgegeben: <b>Token Economy soll das entscheiden</b>, inklusive der Fähigkeit, bei unklaren Fällen ein kleines LLM zu befragen.</p>
+<div class="box accent">
+  <h4>Beschluss-Rahmen (26.07.)</h4>
+  <ul>
+    <li><b>TE besitzt die Routing-Policy.</b> Die Bibliothek liefert je Karte eine Entscheidung <code>(cliType, model, thinkingLevel)</code> plus Begründung; Agent Studio übernimmt sie beim Anlegen/Reissue.</li>
+    <li><b>Auditierbar zuerst, gelernt später.</b> Start mit erklärbaren Merkmalen + gemessenen Nachbarn; ein LLM-Schiedsrichter nur, wo die Regel unsicher ist; gelernte Router erst, wenn Datenmenge und Kostenhebel es rechtfertigen.</li>
+    <li><b>Der Operator behält das Override.</b> Jede Auto-Route ist vorbelegt, nicht verriegelt — der Sichtblick-Gate bleibt die menschliche Instanz.</li>
+  </ul>
+</div>
+<p class="dim">Diese Workbench erfindet den Schätzer nicht neu — die Komplexitäts-Schätzung existiert in der Library bereits (<code>TaskComplexityEstimator</code>, siehe TE-Konzept <span class="mono">docs/concepts/upfront-task-complexity.md</span>). Sie beschreibt die <b>fehlende Schicht darüber</b>: die Policy, die aus einer Schätzung eine konkrete Modell-/Stufen-Wahl macht — und die vier offenen Entscheidungen, die diese Schicht braucht.</p>
+
+<h2 id="ist"><span class="no">2</span>Ist-Stand: manuell — und drei Stolperfallen</h2>
+<p>Die Route wird heute per drei API-Puts je Karte gesetzt: <code>/cli-type</code>, <code>/model</code>, <code>/thinking-level</code>. Das funktioniert, hat aber drei Fehlerquellen, die schon zugeschlagen haben:</p>
+<table>
+  <tr><th>Stolperfalle</th><th>Symptom (real beobachtet)</th><th>Was die Policy lernen muss</th></tr>
+  <tr>
+    <td><b>Stufe existiert nicht je Modell</b></td>
+    <td><code>xhigh</code> auf Opus 5 gesetzt → still auf <code>high</code> geklemmt. Opus 5's Ladder ist <span class="mono">low·medium·high·max</span>, <b>ohne</b> <code>xhigh</code>; nur Sonnet 5 hat <code>xhigh</code>.</td>
+    <td>Die gültige Ladder ist <b>pro Modell</b> verschieden. Eine Route muss gegen die Ladder des gewählten Modells validieren, nicht gegen einen globalen Namen. (§6)</td>
+  </tr>
+  <tr>
+    <td><b>Stufe geraten</b></td>
+    <td><em>„xHigh ist vermutlich eine gute Größe"</em> — eine Vermutung, kein Kriterium. Bei kleinen Tickets soll bewusst <code>high</code> oder ein <code>sonnet</code> genügen.</td>
+    <td>Die Stufe muss aus messbaren Merkmalen der Karte folgen, nicht aus Bauchgefühl. (§4–§5)</td>
+  </tr>
+  <tr>
+    <td><b>cliType-Bindung</b></td>
+    <td>Claude-Modelle brauchen <code>cliType=claude</code>; ein Modellwechsel ohne passenden cliType wird still verworfen.</td>
+    <td>Modell und cliType sind gekoppelt; die Policy setzt beide atomar. (§5)</td>
+  </tr>
+</table>
+<p>Das ist der Kern des Auftrags: nicht „welches Modell ist das beste", sondern eine <b>reproduzierbare Abbildung</b> von Karten-Merkmalen auf eine gültige, begründete Route — mit den Modell-Eigenheiten als hartem Wissen statt als Fallstrick.</p>
+
+<figure>
+<svg viewBox="0 0 1040 250" role="img" aria-label="Routing-Pipeline von der Karte zur Route und zurück">
+  <rect class="s-node" x="16" y="60" width="150" height="66" rx="9"/>
+  <text class="s-label" x="91" y="88" text-anchor="middle">Karte</text>
+  <text class="s-sub" x="91" y="107" text-anchor="middle">Prompt, Typ,</text>
+  <text class="s-sub" x="91" y="122" text-anchor="middle">Epic, Kriterien</text>
+
+  <rect class="s-node2" x="200" y="52" width="168" height="82" rx="9"/>
+  <text class="s-label" x="284" y="80" text-anchor="middle">Merkmale</text>
+  <text class="s-sub" x="284" y="99" text-anchor="middle">beobachtbar</text>
+  <text class="s-sub" x="284" y="115" text-anchor="middle">vor dem Lauf</text>
+
+  <rect class="s-node2" x="402" y="52" width="168" height="82" rx="9"/>
+  <text class="s-label" x="486" y="80" text-anchor="middle">Schätzung</text>
+  <text class="s-sub" x="486" y="99" text-anchor="middle">Band + Konfidenz</text>
+  <text class="s-sub" x="486" y="115" text-anchor="middle">TaskComplexityEstimator</text>
+
+  <rect class="s-cont" x="604" y="44" width="176" height="98" rx="9"/>
+  <text class="s-label" x="692" y="74" text-anchor="middle">Routing-Policy</text>
+  <text class="s-sub" x="692" y="93" text-anchor="middle">Band × Konfidenz</text>
+  <text class="s-sub" x="692" y="109" text-anchor="middle">→ Modell × Level</text>
+  <text class="s-tiny" x="692" y="127" text-anchor="middle">+ LLM bei Grauzone</text>
+
+  <rect class="s-node" x="814" y="52" width="150" height="82" rx="9"/>
+  <text class="s-label" x="889" y="80" text-anchor="middle">Route</text>
+  <text class="s-sub" x="889" y="99" text-anchor="middle">cliType, model,</text>
+  <text class="s-sub" x="889" y="115" text-anchor="middle">thinkingLevel</text>
+
+  <path class="s-flow" d="M166 93 H198" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M368 93 H400" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M570 93 H602" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M780 93 H812" marker-end="url(#ar)"/>
+
+  <path class="s-flow" d="M889 134 V196 H486 V196" marker-end="url(#ar)" stroke-dasharray="5 4"/>
+  <rect class="s-node2" x="360" y="182" width="252" height="46" rx="9"/>
+  <text class="s-label" x="486" y="203" text-anchor="middle">Lauf beobachten</text>
+  <text class="s-tiny" x="486" y="219" text-anchor="middle">Tokens · Dauer · Reissues · Ergebnis → Rekalibrierung</text>
+  <path class="s-flow" d="M360 205 H120 V128" marker-end="url(#ar)" stroke-dasharray="5 4"/>
+  <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--ink-3)"/></marker></defs>
+</svg>
+<figcaption><b>Die Pipeline.</b> Durchgezogen = Entscheidungspfad vor dem Lauf (nur beobachtbare Merkmale). Gestrichelt = Lernschleife: das tatsächliche Laufergebnis kalibriert Schätzer und Policy — es ist nie ein Eingang der Entscheidung, immer nur ihr nachträglicher Prüfstein.</figcaption>
+</figure>
+
+<h2 id="info"><span class="no">3</span>Welche Information ist wertvoll</h2>
+<p>Robert fragt genau richtig: <em>„welche Informationen sind hier wertvoll?"</em> Wertvoll ist nur, was <b>vor dem Lauf beobachtbar</b> ist und mit dem Aufwand korreliert. Der Schätzer wiegt sechs Dimensionen; die Policy erbt sie als Eingang:</p>
+<table>
+  <tr><th>Dimension</th><th>Gewicht</th><th>Beobachtbare Signale</th></tr>
+  <tr><td><b>Berührte Fläche</b></td><td>20%</td><td>referenzierte Dateien/Subsysteme, Abhängigkeits-Fan-out</td></tr>
+  <tr><td><b>Neuartigkeit</b></td><td>18%</td><td>Neu-Design-/Research-Sprache; gemessener Override wenn vorhanden</td></tr>
+  <tr><td><b>Constraint-Dichte</b></td><td>18%</td><td>Abnahmekriterien, Sicherheits-/Nebenläufigkeits-/Korrektheits-Auflagen</td></tr>
+  <tr><td><b>Spezifikations-Unschärfe</b></td><td>15%</td><td>Explorations-/Entscheidungs-Sprache; „unbekannter Fehler"-Signal</td></tr>
+  <tr><td><b>Lesepensum</b></td><td>15%</td><td>Prompt-/Kontextgröße, Subsysteme, gedeckelter Repo-Retrieval-Term</td></tr>
+  <tr><td><b>Verifikationskosten</b></td><td>14%</td><td>Gates, Integration/E2E/Benchmark-Anforderungen</td></tr>
+</table>
+<div class="box warn">
+  <h4>Die Trennlinie, die zählt</h4>
+  <p>Was <b>nicht</b> Eingang sein darf: tatsächlich geänderte Dateien, Tool-Calls, Review-Feedback — das sind <b>Ergebnisse</b>, erst nach dem Lauf bekannt. Sie kalibrieren die Policy im Nachhinein, sie entscheiden sie nie. Und: <b>Repo-Größe ist keine Arbeit</b> — sie wirkt nur gedeckelt im Lesepensum; berührte Fläche und Fan-out dominieren. Ein großes Repo mit einer Ein-Zeilen-Änderung bleibt trivial.</p>
+</div>
+<p>Robert hat aus anderer Quelle eine praktische Faustregel eingebracht, die exakt hier andockt — sie ist die menschliche Kurzform derselben Dimensionen:</p>
+<table>
+  <tr><th>Aufgabe</th><th>Faustregel (Robert)</th><th>Dominierende Dimension</th></tr>
+  <tr><td>Kleine, klar umrissene Änderung</td><td>günstiger, kleineres Modell</td><td>berührte Fläche ↓</td></tr>
+  <tr><td>Klar beschrieben, mittel</td><td>Sonnet / Opus mittel</td><td>Unschärfe ↓, Constraints mittel</td></tr>
+  <tr><td>Unbekannter Fehler</td><td>Opus 5, hohes Reasoning</td><td>Unschärfe ↑</td></tr>
+  <tr><td>Architektur / Refactor</td><td>Opus 5, höchstes Reasoning</td><td>Fläche ↑, Fan-out ↑</td></tr>
+  <tr><td>Steckt fest</td><td>Modell wechseln</td><td>Reissue-Signal (§8)</td></tr>
+  <tr><td>Kritisch</td><td>stärkster Executor + Reviewer + Gates</td><td>Constraint-Dichte ↑</td></tr>
+</table>
+
+<h2 id="komplexitaet"><span class="no">4</span>Wie Komplexität erkannt wird</h2>
+<p>Der Schätzer verdichtet die sechs Dimensionen zu einem <b>Band</b> plus einer <b>Konfidenz</b> (0–1) und Vorhersagen für Tokens/Dauer/Reissues. Vier Bänder — sie sind die Sprache, in der die Policy denkt:</p>
+<table>
+  <tr><th>Band</th><th>Charakter</th><th>Typische Karte</th></tr>
+  <tr><td><span class="band t1">trivial</span></td><td>lokal, eindeutig, geringe Verifikation</td><td>Kontextmenü-Scope-Fix, Copy-Änderung</td></tr>
+  <tr><td><span class="band t2">standard</span></td><td>klar beschrieben, umrissene Fläche</td><td>Run-Historie in der Overview, lokalisierter Bug</td></tr>
+  <tr><td><span class="band t3">demanding</span></td><td>breit / neuartig / mehrere Subsysteme</td><td>Host-Kapazität zentralisieren, Workbench-Decision-UI</td></tr>
+  <tr><td><span class="band t4">critical</span></td><td>hohe Constraint-Dichte, Fehlerkosten groß</td><td>Push-Probe-Härtung, Review-Rolle-Fix</td></tr>
+</table>
+<p class="dim">Die Konfidenz ist das zweite, oft unterschätzte Signal. Ein <span class="band t2">standard</span>-Band bei Konfidenz 0,4 ist etwas anderes als bei 0,9 — im ersten Fall ist die Karte unscharf beschrieben, und genau dort lohnt sich der LLM-Schiedsrichter (§7) oder ein bewusstes Aufrunden.</p>
+
+<h2 id="route"><span class="no">5</span>Vom Band zur Route</h2>
+<p>Hier ist die neue Schicht. Eine Default-Policy — bewusst konservativ, damit sie ohne Lerndaten sinnvoll startet — bildet <b>Band</b> auf einen Modell-Tier und eine Reasoning-Stufe ab. Sie ist ein Vorschlag, kein Zwang:</p>
+<table>
+  <tr><th>Band</th><th>Modell (Default)</th><th>Reasoning</th><th>Begründung</th></tr>
+  <tr><td><span class="band t1">trivial</span></td><td>Sonnet 5</td><td><code>high</code> oder <code>medium</code></td><td>günstig, schnell; Fehlerkosten niedrig, Variety erwünscht</td></tr>
+  <tr><td><span class="band t2">standard</span></td><td>Opus 5 <span class="s-tiny">(oder Sonnet 5)</span></td><td><code>high</code></td><td>solide Default-Wahl; bei Kostendruck Sonnet</td></tr>
+  <tr><td><span class="band t3">demanding</span></td><td>Opus 5</td><td><code>high</code> → <code>max</code></td><td>Fläche/Neuartigkeit rechtfertigt starkes Reasoning</td></tr>
+  <tr><td><span class="band t4">critical</span></td><td>Opus 5</td><td><code>max</code></td><td>höchste Stufe; zusätzlich Reviewer + Gates scharf</td></tr>
+</table>
+<div class="box accent">
+  <h4>Konfidenz-Modulation</h4>
+  <p>Auf die Band-Wahl legt sich die Konfidenz: <b>niedrige Konfidenz rundet auf</b> (eine Tier-/Stufe höher) — es ist billiger, eine unklare Karte zu stark zu bedienen als sie in einen Reissue zu schicken. <b>Sehr niedrige Konfidenz</b> (unter Schwelle) ruft stattdessen den LLM-Schiedsrichter (§7). Die Policy setzt <code>cliType</code>, <code>model</code> und <code>thinkingLevel</code> immer atomar und validiert die Stufe gegen die Ladder des gewählten Modells (§6).</p>
+</div>
+<p class="dim">Die aktuelle Welle folgt dieser Tabelle bereits von Hand: AGT-2381 (Kontextmenü, <span class="band t1">trivial</span>) → Sonnet 5 / high; AGT-2377/2378 (<span class="band t2">standard</span>) → Opus 5 / high; AGT-2375/2376 (<span class="band t3">demanding</span>) → Opus 5 / max; AGT-2374/2379 (<span class="band t4">critical</span>) → Opus 5 / max. Die Policy soll genau diese Handarbeit reproduzierbar machen.</p>
+
+<h2 id="ladder"><span class="no">6</span>Die Ladder ist modellspezifisch — kein globaler Name</h2>
+<p>Die teuerste stille Fehlerquelle. Reasoning-Stufen sind <b>keine universelle Skala</b>; jedes Modell hat seine eigene Leiter, und ein nicht existierender Name wird still auf die nächste gültige Stufe geklemmt — die Route sieht gesetzt aus, ist es aber nicht.</p>
+<figure>
+<svg viewBox="0 0 1040 210" role="img" aria-label="Reasoning-Ladder je Modell im Vergleich">
+  <text class="s-label" x="30" y="40">Opus 5</text>
+  <g>
+    <rect class="s-node" x="150" y="20" width="120" height="34" rx="6"/><text class="s-sub" x="210" y="42" text-anchor="middle">low</text>
+    <rect class="s-node" x="284" y="20" width="120" height="34" rx="6"/><text class="s-sub" x="344" y="42" text-anchor="middle">medium</text>
+    <rect class="s-node" x="418" y="20" width="120" height="34" rx="6"/><text class="s-sub" x="478" y="42" text-anchor="middle">high</text>
+    <rect class="s-cont" x="552" y="20" width="120" height="34" rx="6"/><text class="s-label" x="612" y="42" text-anchor="middle">max</text>
+    <rect x="686" y="20" width="120" height="34" rx="6" fill="none" stroke="var(--bad)" stroke-dasharray="4 4"/><text class="s-tiny" x="746" y="41" text-anchor="middle" fill="var(--bad)">xhigh ✗</text>
+  </g>
+  <text class="s-label" x="30" y="110">Sonnet 5</text>
+  <g>
+    <rect class="s-node" x="150" y="90" width="98" height="34" rx="6"/><text class="s-sub" x="199" y="112" text-anchor="middle">low</text>
+    <rect class="s-node" x="262" y="90" width="98" height="34" rx="6"/><text class="s-sub" x="311" y="112" text-anchor="middle">medium</text>
+    <rect class="s-node" x="374" y="90" width="98" height="34" rx="6"/><text class="s-sub" x="423" y="112" text-anchor="middle">high</text>
+    <rect class="s-node2" x="486" y="90" width="98" height="34" rx="6"/><text class="s-sub" x="535" y="112" text-anchor="middle">xhigh</text>
+    <rect class="s-cont" x="598" y="90" width="98" height="34" rx="6"/><text class="s-label" x="647" y="112" text-anchor="middle">max</text>
+  </g>
+  <text class="s-tiny" x="30" y="170">Regel: „stärkste Stufe" auflösen = oberstes Element</text>
+  <text class="s-tiny" x="30" y="188">der Modell-Ladder — für Opus 5 ist das max, nicht xhigh.</text>
+  <line x1="552" y1="150" x2="612" y2="60" stroke="var(--ok)" stroke-width="1.4" marker-end="url(#ar2)"/>
+  <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--ok)"/></marker></defs>
+</svg>
+<figcaption><b>Zwei Modelle, zwei Leitern.</b> Opus 5: <span class="mono">low·medium·high·max</span> (kein <code>xhigh</code>). Sonnet 5: <span class="mono">low·medium·high·xhigh·max</span>. Wer „xHigh" als „stärkste Stufe" meint, muss sie <b>pro Modell auflösen</b>: für Opus 5 ist das oberste Element <code>max</code>. Die Policy darf niemals einen Stufennamen setzen, ohne ihn gegen die Ladder des gewählten Modells zu prüfen.</figcaption>
+</figure>
+<div class="box ok">
+  <h4>Contract für die Policy</h4>
+  <ol>
+    <li>Die Ladder wird pro Modell aus dem Katalog gelesen (<code>/api/cli/&lt;cli&gt;/models</code> → <code>thinkingLevels</code>), nicht angenommen.</li>
+    <li>Intent wird <b>ordinal</b> ausgedrückt („stärkste", „eine unter der stärksten"), nicht als fester Name — und dann auf die konkrete Ladder abgebildet.</li>
+    <li>Ist die Ziel-Stufe in der Ladder nicht vorhanden, wählt die Policy die nächst-stärkere <b>vorhandene</b> Stufe und protokolliert die Ersetzung sichtbar — kein stiller Klemm-Effekt.</li>
+  </ol>
+</div>
+
+<h2 id="llm"><span class="no">7</span>LLM-Schiedsrichter für die Grauzonen</h2>
+<p>Roberts Frage: <em>„Kann Token Economy selber ein LLM steuern, um bei nicht eindeutigen Dingen zu entscheiden?"</em> — Ja, und der Rahmen dafür steht in der Library schon bereit: ein optionales <code>LlmComplexityAssessment</code>, das die Bibliothek annimmt, aber selbst nicht aufruft. Der Host (also die Policy) versioniert, cached, loggt oder deaktiviert den Rubrik-Call. Sein Einfluss ist auf <b>20% gedeckelt</b> und mit der gelieferten Konfidenz skaliert; Übereinstimmung mit der Regel hebt die Gesamt-Konfidenz.</p>
+<div class="box accent">
+  <h4>Wann sich der Schiedsrichter lohnt (Break-even)</h4>
+  <p style="font-family:ui-monospace,Consolas,monospace; font-size:13.5px;">P(Fehlroute ohne LLM) − P(Fehlroute mit LLM) &gt; Kosten des Schätzers / vermeidbare Fehlroute-Kosten</p>
+  <p>Illustrativ: ein 2.000-Token-Assessment gegen eine 200.000-Token-Fehlroute → Break-even bei <b>1% absoluter</b> Reduktion der Fehlroute-Wahrscheinlichkeit. Bei materiell unterschiedlichen Modellpreisen in Geld statt Tokens rechnen und Reissue- und Gate-Zeit einbeziehen.</p>
+</div>
+<p>Praktische Konsequenz: der LLM-Call ist <b>kein Default</b>, sondern wird nur ausgelöst, wenn die Regel-Konfidenz unter einer Schwelle liegt <em>und</em> die Fehlroute-Kosten der Karte hoch sind (breite Fläche, kritisches Band). Für triviale, billige Karten bleibt es bei der deterministischen Regel — den Schiedsrichter dort zu rufen wäre negativer Erwartungswert.</p>
+
+<h2 id="feststecken"><span class="no">8</span>Feststecken → Wechsel</h2>
+<p>Robert nennt „steckt fest" als eigene Kategorie mit eigener Antwort: Modell wechseln. Das ist keine Erstroute, sondern eine <b>Reissue-Policy</b> — sie greift, wenn ein Lauf escaliert oder ein Grade unter Schwelle liefert.</p>
+<table>
+  <tr><th>Signal</th><th>Reaktion der Reissue-Policy</th></tr>
+  <tr><td>1. Escalation, gleiches Modell</td><td>Reasoning eine Stufe höher (bis Ladder-Top); ggf. schärferer Reissue-Prompt</td></tr>
+  <tr><td>2. Escalation</td><td><b>Modellwechsel</b> — anderer Executor, Tier mindestens gleich; nicht dasselbe Modell mit derselben Stufe erneut</td></tr>
+  <tr><td>3. Escalation</td><td>Mensch: Sichtblick / Karte neu schneiden — die Karte ist wahrscheinlich falsch gestellt, nicht das Modell</td></tr>
+</table>
+<p class="dim">Der offene Forschungspunkt „schärferer Reissue-Prompt = schnellere Konvergenz?" (AGT-2380) liefert genau die Datenbasis, ob Schritt 1 den Prompt schärfen sollte. Bis dahin ist der Modellwechsel in Schritt 2 die konservative, belegte Reaktion — Diversität schlägt Wiederholung.</p>
+
+<h2 id="budget"><span class="no">9</span>Kontingent als Signal</h2>
+<p>Ein Signal, das keine Komplexitäts-Dimension ist, aber real Einfluss haben soll: das <b>Kontingent</b>. Robert — <em>„ich habe noch viel Kontingent, das ich verbrauchen möchte, deswegen primär Opus 5"</em>. Das ist eine legitime, temporäre Verschiebung der Kostenkurve: solange Opus-5-Kontingent reichlich und quasi-versunken ist, sinkt der relative Preis von „stark" gegen „günstig".</p>
+<div class="box warn">
+  <h4>Sauber modelliert, nicht fest verdrahtet</h4>
+  <p>Das Kontingent gehört als <b>Budget-Politik</b> in die Policy, nicht in die Komplexitäts-Schätzung — sonst verfälscht ein temporärer Kontostand die Aufwands-Messung dauerhaft. Konkret: ein Politik-Schalter <code>preferStrongWhileQuotaAbundant</code>, der bei reichlichem Kontingent die <span class="band t2">standard</span>-Zeile von „Sonnet erlaubt" auf „Opus 5 bevorzugt" kippt. Läuft das Kontingent zur Neige, greift automatisch wieder die kostenbewusste Default-Tabelle (§5). Fable bleibt trotz niedrigstem Preis außen vor — Robert will es aus Kostengründen bewusst nie routen; es ist onboardet, aber nicht in der Default-Policy.</p>
+</div>
+
+<h2 id="loop"><span class="no">10</span>Lernschleife &amp; Grenzen</h2>
+<p>Die Policy startet regelbasiert und auditierbar — und sammelt ab Tag eins die Daten, um sich selbst zu prüfen: je Lauf Tokens, Dauer, Reissues, Ergebnis. Erst wenn genug davon vorliegt, ist ein gelernter Router (Richtung RouteLLM / FrugalGPT) überhaupt eine Frage.</p>
+<div class="box">
+  <p style="font-family:ui-monospace,Consolas,monospace; font-size:13px; color:var(--ink-2);">Aufgabenvolumen × vermeidbare Kosten/Aufgabe × erreichbare Fehlerreduktion  &gt;  Schätzer + Wartung + Evaluation</p>
+  <p style="margin-top:10px;">Solange diese Ungleichung nicht hält, ist die deterministische Regel die richtige Wahl — nicht aus Bequemlichkeit, sondern weil ein gelernter Router unter dieser Schwelle mehr kostet als er spart. Für wiederkehrende teure Aufgaben-Familien Ergebnisse sammeln und <b>zeitlich oder projekt-ausgelagert</b> evaluieren, bevor gelernte Auswahl scharf geschaltet wird.</p>
+</div>
+<p class="dim">Grenze mit Ansage: die 30-Karten-Fixtures im TE-Backtest validieren die <em>Methode</em>, sie sind <b>keine Produktionsevidenz</b>. Die echte Kalibrierung kommt aus realen Karten (<span class="mono">results/complexity-backtest</span>). Keine beobachtete Historie als Kausalmodell verkaufen.</p>
+
+<h2 id="offen"><span class="no">11</span>Offene Entscheidungen</h2>
+<p>Vier Entscheidungen macht diese Schicht entscheidungsreif. Sie sind der Grund, warum die Workbench in den Sichtblick geht, bevor Tickets geschnitten werden.</p>
+
+<div class="box">
+  <h4><span class="dnum">E1</span>Default-Tabelle: bestätigen oder justieren</h4>
+  <p>Die Band→Modell×Level-Tabelle (§5) ist der konservative Startpunkt. <b>Frage:</b> Ist <span class="band t2">standard</span> = Opus 5 / high die richtige Default-Mitte, oder soll standard aus Kostengründen zu Sonnet 5 kippen (Opus nur ab <span class="band t3">demanding</span>)? Das ist der Haupthebel für die laufenden Token-Kosten.</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E2</span>Konfidenz-Schwellen</h4>
+  <p>Ab welcher Konfidenz wird aufgerundet (§5), ab welcher wird der LLM-Schiedsrichter gerufen (§7)? Vorschlag: aufrunden unter 0,6; Schiedsrichter unter 0,4 <em>und</em> nur bei <span class="band t3">demanding</span>/<span class="band t4">critical</span>. Zahlen sind zu bestätigen und später datengetrieben nachzuziehen.</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E3</span>Kontingent-Politik</h4>
+  <p><code>preferStrongWhileQuotaAbundant</code> (§9): manueller Schalter, oder soll die Policy den Kontostand selbst lesen und automatisch kippen? Und: gilt die Präferenz global oder pro Projekt? Fable bleibt in jedem Fall aus der Default-Route.</p>
+</div>
+<div class="box">
+  <h4><span class="dnum">E4</span>Wo lebt die Policy — und wie greift Studio zu?</h4>
+  <p>Die Entscheidung gehört in die TE-Library (<code>RoutingPolicy</code> über dem <code>TaskComplexityEstimator</code>). <b>Frage:</b> Ruft Agent Studio sie synchron beim Anlegen/Reissue (ein Vorbeleg-Endpunkt <code>/api/tasks/{id}/suggest-route</code>), oder erbt Studio nur einen Katalog-Default und die Feinroute bleibt Operator-Hand? Empfehlung: Vorbeleg-Endpunkt, Ergebnis editierbar — die Auto-Route entlastet, der Sichtblick behält das letzte Wort.</p>
+</div>
+
+<div class="box accent">
+  <h4>Nach dem Sichtblick — der Schnitt</h4>
+  <p>Sind E1–E4 entschieden, zerfällt die Umsetzung in kleine, klar umrissene Karten: (a) <code>RoutingPolicy</code> in TE über dem Estimator, (b) Ladder-validierende Route-Auflösung (§6) als eigener testbarer Baustein, (c) optionaler <code>/suggest-route</code>-Endpunkt in Studio mit Vorbelegung im Anlage-Dialog, (d) Kontingent-Signal als Politik-Schalter. TE-19 (Opus-5-Onboarding) und TE-20 (Token-Charts) liefern die Katalog- und Sicht-Grundlage, auf der diese Policy aufsetzt.</p>
+</div>
+
+</main>
+</body>
+</html>
