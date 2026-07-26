@@ -251,7 +251,7 @@ test.describe('Execution Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     const badge = remote.getByTestId('remote-host-git-status');
     await expect(badge).toBeVisible();
-    await expect(badge).toContainText('Contents: blocked');
+    await expect(badge).toContainText('Fallback repo: blocked');
     await badge.hover();
     await expect(page.getByRole('tooltip')).toContainText('permission denied');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
@@ -272,9 +272,9 @@ test.describe('Execution Hosts settings section', () => {
 
     await page.goto('/#/workspace/settings/remote-hosts');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
-    await expect(remote.getByTestId('remote-host-git-status')).toContainText('Contents: ok');
+    await expect(remote.getByTestId('remote-host-git-status')).toContainText('Fallback repo: ok');
     await expect(remote.getByTestId('remote-host-workflow-status'))
-      .toContainText('Workflow: permission missing');
+      .toContainText('Fallback workflow: permission missing');
     const fix = remote.getByTestId('remote-host-token-scope-fix');
     await expect(fix).toContainText('update both credential URL forms');
     await expect(fix.getByRole('link', { name: 'Open token requirements' }))

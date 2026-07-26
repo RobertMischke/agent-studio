@@ -206,6 +206,7 @@ public sealed record RunnerProjectPreflight
     public string RepositoryUrl { get; init; } = "";
     public string FetchUrl { get; init; } = "";
     public string PushUrl { get; init; } = "";
+    public string TargetBranch { get; init; } = "";
     public string Status { get; init; } = "failed";
     public string Detail { get; init; } = "";
     public DateTime CheckedAt { get; init; }

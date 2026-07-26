@@ -159,6 +159,21 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Project_preflight_fails_when_the_delivery_target_branch_does_not_exist()
+    {
+        await SeedOriginAsync();
+
+        var result = await GitWorkspace.PreflightProjectAsync(
+            PreflightOptions(), "PROJ-042", _origin, "develop", _ => { }, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("target branch 'develop' does not exist", result.Detail, StringComparison.OrdinalIgnoreCase);
+        var probeRefs = await GitAsync(_origin, "for-each-ref", "--format=%(refname)",
+            "refs/heads/runner/runner-test/delivery-preflight-*");
+        Assert.Empty(probeRefs.StdOut);
+    }
+
+    [Fact]
     public async Task Teardown_commits_and_pushes_uncommitted_changes_before_removal()
     {
         await SeedOriginAsync();

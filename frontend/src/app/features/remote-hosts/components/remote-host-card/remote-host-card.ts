@@ -182,7 +182,7 @@ export class RemoteHostCardComponent {
     if (this.liveLoading()) return 'loading…';
     if (this.liveError()) return 'unknown';
     if (this.retired()) return 'retired';
-    if (host.status === 'draining' || host.gitPushStatus === 'read-only') return 'blocked';
+    if (host.status === 'draining') return 'blocked';
     return this.stale() ? 'unknown' : 'open';
   });
   readonly daemonLabel = computed(() => {

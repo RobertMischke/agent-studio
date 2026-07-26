@@ -22,8 +22,10 @@ Linux host and fills a bounded set of task slots without owning task state:
 
 - **Code arrives and leaves via git `origin`** - the runner fetches over the
   credential-free URL and pushes with a write-enabled deploy key dedicated to
-  this host and repository. The daemon proves that push identity at startup;
-  a failed probe leaves the host read-only and blocks new claims.
+  this host and repository. A repository-specific delivery preflight proves
+  that identity and target branch before the server grants a project lease.
+  The daemon's startup probe covers only its configured fallback remote and is
+  diagnostic.
 - **Results leave through a durable outbox** - protocol 2 journals CLI output,
   status, artifacts, Git facts, terminal facts, and the final result envelope
   under `$RUNNER_WORKDIR/outbox/<run-attempt-id>/` before sending them. The
@@ -386,7 +388,8 @@ and runner hosts in the operator inventory. Rotate before expiry:
    ```
 
 3. Re-run both `git ls-remote` checks, restart `agent-host.service`, and confirm
-   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Execution Hosts**.
+   `Fallback repo: ok` plus `Fallback workflow: ok` in
+   **Workspace Settings -> Execution Hosts**.
 4. Revoke the old token only after every assigned repository and runner is
    green. A token owner's departure or repository-access removal also
    invalidates the runner identity and requires immediate rotation.
@@ -446,14 +449,16 @@ The runner publishes one of three statuses:
 - `ready-no-workflow-scope`: contents pushes succeeded, but GitHub rejected the
   workflow change. Claims remain enabled because card file scope is not known
   before execution.
-- `read-only`: the normal push path failed. The server refuses new claims.
+- `read-only`: the configured fallback push path failed. Project claims still
+  depend on their own repository delivery preflight.
 
-Execution Hosts shows separate **Contents** and **Workflow** badges. A missing
+Execution Hosts shows separate **Fallback repo** and **Fallback workflow**
+badges without presenting either as fleet-wide delivery truth. A missing
 workflow permission links back to this section. The same error classifier also
 recognizes GitHub's first real workflow rejection; if salvage fails, its
 `worktree-blocked` message includes the exact permission checklist and this
 documentation path. Restore or rotate credentials and restart the unit; the
-next startup probe replaces the status.
+next startup probe replaces the fallback status.
 
 ### Remote completion protocol
 
@@ -516,9 +521,9 @@ run without creating or pushing a runner branch. A valid plan creates child
 coding cards and sends the Epic to auto-review. Empty or invalid output, or any
 attempted source mutation, returns the Epic to Backlog.
 
-The startup Git push probe still describes coding capability. A host whose
-identity reports `read-only` may claim Epic planning, but it receives no normal
-coding claims until push capability is restored.
+Epic planning uses the same repository-specific delivery preflight as coding
+claims. A failure blocks only that project's claim and does not reduce the
+host's slots for unrelated projects.
 
 At startup the daemon reads `RUNNER_STATE_DIR` before making a new claim. A
 persisted attempt is adopted only when its worker PID still has the recorded
@@ -753,10 +758,11 @@ proof.
   the task. The daemon claim path normally avoids this before launch.
 - **`Project delivery preflight failed`** - read the full reason on both the
   Execution Hosts card and the project's Execution card. Run the printed failing
-  Git operation on the host against the registered repository URL. Repair its
-  credential or registration, then choose **Re-Probe** on the host card or
-  update the repository registration so the failed cached result is cleared and
-  probed again.
+  Git operation on the host against the registered repository URL and confirm
+  the named integration branch exists. Repair that repository's credential,
+  branch, or registration, then choose **Re-Probe** on the host card or wait for
+  the five-minute proof expiry. A fallback-repository warning is diagnostic and
+  does not override a successful project delivery preflight.
 - **`connection lost: cannot reach the task server ...` at startup** - the
   preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
   Confirm with `agent-host --health-check`; if it also exits `4`, restart the

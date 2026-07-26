@@ -109,12 +109,14 @@ describe('RemoteHostCardComponent', () => {
     });
     const el: HTMLElement = fixture.nativeElement;
     const badge = el.querySelector('[data-testid="remote-host-git-status"]');
-    expect(badge?.textContent).toContain('Contents: blocked');
+    expect(badge?.textContent).toContain('Fallback repo: blocked');
     const tooltip = fixture.debugElement
       .query(By.css('[data-testid="remote-host-git-status"]'))
       .injector.get(AppTooltipDirective);
     expect(tooltip.appTooltip()).toContain('permission denied');
     expect(badge?.getAttribute('data-tone')).toBe('error');
+    expect(el.querySelector('[data-testid="remote-host-activity"]')?.textContent)
+      .toContain('Task inflowopen');
   });
 
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
@@ -125,9 +127,9 @@ describe('RemoteHostCardComponent', () => {
     }).nativeElement;
 
     expect(el.querySelector('[data-testid="remote-host-git-status"]')?.textContent)
-      .toContain('Contents: ok');
+      .toContain('Fallback repo: ok');
     const workflow = el.querySelector('[data-testid="remote-host-workflow-status"]');
-    expect(workflow?.textContent).toContain('Workflow: permission missing');
+    expect(workflow?.textContent).toContain('Fallback workflow: permission missing');
     expect(workflow?.getAttribute('data-tone')).toBe('warn');
     const fix = el.querySelector('[data-testid="remote-host-token-scope-fix"]');
     expect(fix?.textContent).toContain('Grant the token');
@@ -143,12 +145,13 @@ describe('RemoteHostCardComponent', () => {
       projectPreflights: [{
         projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
         repositoryUrl: 'https://example.test/payments.git', fetchUrl: 'https://example.test/payments.git',
-        pushUrl: 'https://example.test/payments.git', status: 'failed',
+        pushUrl: 'https://example.test/payments.git', targetBranch: 'release', status: 'failed',
         detail: 'write probe failed: permission denied', checkedAt: '2026-07-10T11:59:00Z',
       }],
     }).nativeElement;
     const failure = el.querySelector('[data-testid="remote-host-project-preflight-failures"]');
     expect(failure?.textContent).toContain('Payments');
+    expect(failure?.textContent).toContain('release');
     expect(failure?.textContent).toContain('permission denied');
   });
 

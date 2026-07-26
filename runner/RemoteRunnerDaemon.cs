@@ -120,9 +120,10 @@ public sealed class RemoteRunnerDaemon
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
 
-        // Recover heartbeats before the potentially slow Git capability probe.
-        // Push readiness gates new coding claims, not ownership of work that is
-        // already executing under a valid fenced attempt.
+        // Recover heartbeats before the potentially slow fallback-remote probe.
+        // This startup result is host diagnostics only. Delivery admission is
+        // decided by the repository-specific preflight before each project can
+        // receive a lease.
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await WithServerRetryAsync<object?>(
             "git-capability report",
@@ -134,9 +135,8 @@ public sealed class RemoteRunnerDaemon
             },
             shutdown);
         _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
-        var admissionEnabled = gitCapability.CanPush;
-        if (!admissionEnabled)
-            _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
+        if (!gitCapability.CanPush)
+            _log("Configured fallback Git remote is read-only; project claims remain eligible and are gated by their own delivery preflight.");
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await WithServerRetryAsync<object?>(
             "capability advertisement",
@@ -221,22 +221,6 @@ public sealed class RemoteRunnerDaemon
                     .Select(process => process.TaskKey)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
-                if (!admissionEnabled)
-                {
-                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
-                        _options.RunnerId, _options.RunnerName, _options.Hostname,
-                        Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                        TakeTelemetry(),
-                        AvailableSlots: 0,
-                        ActiveSlots: active.Count,
-                        IdempotencyKey: $"read-only:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys,
-                        Inventory: inventorySnapshot), shutdown);
-                    AcknowledgeInventory(inventory, inventorySnapshot, response);
-                    await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
-                    continue;
-                }
-
                 var loadDecision = loadGate.Observe(
                     TakeTelemetry(),
                     DateTime.UtcNow);

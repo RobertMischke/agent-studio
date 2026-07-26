@@ -431,13 +431,16 @@ state.
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only
   (AGT-2178).
-- Remote `agent-host` admission is write-capability gated. Startup keeps the fetch URL
-  and Git `pushurl` separate, performs one push dry-run, and publishes the result
-  on its client identity. A reported `read-only` identity receives no coding
-  claims. The per-project delivery preflight is stricter and applies before any
-  first project claim, including Epic planning: it creates and removes a
-  temporary runner ref so server-side write policy is exercised. Execution Hosts
-  surfaces both states for operator repair.
+- Remote `agent-host` delivery admission is repository-scoped. The startup
+  probe still checks the configured fallback fetch URL and Git `pushurl`, but
+  publishes that result as diagnostics only: it never grants or denies another
+  project's claim. Before a project receives a lease, its delivery preflight
+  requires the registered fetch and push URLs, an exact remote integration
+  branch, and a real create/delete push of a temporary runner ref. Proofs expire
+  after five minutes because branch and credential state can change without a
+  settings write. A failed or unconfigured project stays Ready while unrelated
+  projects assigned to the same host remain claimable. Execution Hosts and the
+  project's Execution card surface the per-project target and failure reason.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider
