@@ -26,6 +26,8 @@ checksums before installation:
 
 ```sh
 sha256sum -c SHA256SUMS
+gh attestation verify agent-orchestrator-X.Y.Z-linux-x64.tar.gz \
+  --repo agent-orc/agent-studio
 ```
 
 ## Version matrix and compatibility
@@ -67,6 +69,11 @@ The installer is idempotent. It:
 6. starts Task Server first, opens normal admission only after `/readyz`, and
    then starts the Engine.
 
+An incomplete release tree is rejected before configuration is written. If the
+first Task Server never becomes ready, the installer stops the attempted units
+and removes the inactive `current` link while retaining the staged version for
+diagnosis.
+
 State stays under `/var/lib/agent-orchestrator`; configuration stays under
 `/etc/agent-orchestrator`. Neither lives inside a version directory. Caddy is
 host infrastructure. The archive supplies a template but does not silently
@@ -99,8 +106,14 @@ The updater follows this order:
 6. restore `Normal` mode, require `/readyz` to report `Normal`, then start the
    Engine.
 
+Lifecycle requests carry the current Task Server protocol header. A script and
+server protocol mismatch therefore fails explicitly before drain instead of
+being misreported as a timeout.
+
 The default drain timeout is 900 seconds and can be changed with
 `DRAIN_TIMEOUT_SECONDS`. A timeout restores `Normal` mode and changes no link.
+If either service cannot be stopped, the updater restarts the current release,
+restores normal admission, and changes no link.
 If the candidate stays red for `READY_TIMEOUT_SECONDS`, the updater stops it,
 restores the old link, starts the old release, reopens admission only after its
 own readiness gate, and exits nonzero. A failed candidate is never reported as
@@ -128,6 +141,7 @@ For release CI, green means green:
 - no required test, lint, type-check, build, packaging, checksum, attestation,
   or release step uses `continue-on-error`;
 - shell steps use failing exit codes and pipelines that propagate failure;
+- the production dependency audit blocks known critical runtime advisories;
 - .NET solution tests, release-topology tests, frontend lint/type-check/unit
   tests, and the production frontend build all block publication;
 - the `Category!=MachineBound` filter is explicit because tests that inspect a

@@ -38,7 +38,17 @@ SOURCE_DATE_EPOCH=1 "$repo_root/scripts/release/package-release.sh" \
 )
 
 fake_systemctl="$test_root/systemctl"
-printf '#!/bin/sh\nexit 0\n' >"$fake_systemctl"
+cat >"$fake_systemctl" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "${1:-}" = "stop" ] \
+    && [ -n "${FAKE_SYSTEMCTL_FAIL_STOP_FILE:-}" ] \
+    && [ -f "$FAKE_SYSTEMCTL_FAIL_STOP_FILE" ]; then
+    rm -f -- "$FAKE_SYSTEMCTL_FAIL_STOP_FILE"
+    exit 1
+fi
+exit 0
+EOF
 chmod 0755 "$fake_systemctl"
 
 fake_curl="$test_root/curl"
@@ -48,11 +58,17 @@ set -eu
 method=GET
 data=
 url=
+protocol=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -X) method=$2; shift 2 ;;
         --data) data=$2; shift 2 ;;
-        -H) shift 2 ;;
+        -H)
+            case "$2" in
+                "X-Task-Protocol-Version: "*) protocol=${2#*: } ;;
+            esac
+            shift 2
+            ;;
         -*) shift ;;
         *) url=$1; shift ;;
     esac
@@ -66,11 +82,26 @@ case "$url" in
         printf '{"status":"ready","mode":"%s"}\n' "$mode"
         ;;
     */api/v1/management/mode)
-        mode=$(printf '%s' "$data" | sed -n 's/.*"mode":"\([^"]*\)".*/\1/p')
+        [ "$protocol" = "2" ] || {
+            printf 'missing management protocol header\n' >&2
+            exit 22
+        }
+        mode_value=$(printf '%s' "$data" | sed -n 's/.*"mode":\([0-9][0-9]*\).*/\1/p')
+        case "$mode_value" in
+            0) mode=Normal ;;
+            1) mode=Draining ;;
+            2) mode=ReadOnly ;;
+            3) mode=Maintenance ;;
+            *) printf 'invalid management mode payload: %s\n' "$data" >&2; exit 22 ;;
+        esac
         printf '%s\n' "$mode" >"$mode_file"
         printf '{"mode":"%s"}\n' "$mode"
         ;;
     */api/v1/management/prepare-shutdown)
+        [ "$protocol" = "2" ] || {
+            printf 'missing management protocol header\n' >&2
+            exit 22
+        }
         printf '%s\n' Maintenance >"$mode_file"
         printf '{"safeToStop":true,"unresolvedAttempts":0,"mode":"Maintenance"}\n'
         ;;
@@ -147,5 +178,82 @@ run_env "$release_2/rollback.sh"
 [ "$(basename "$(readlink -f "$opt_root/current")")" = "1.0.0" ]
 [ "$(basename "$(readlink -f "$opt_root/previous")")" = "1.1.0" ]
 [ "$(cat "$mode_file")" = "Normal" ]
+
+fail_stop_file="$test_root/fail-stop-once"
+: >"$fail_stop_file"
+if FAKE_SYSTEMCTL_FAIL_STOP_FILE="$fail_stop_file" \
+    run_env "$release_2/update.sh" "$release_2"
+then
+    printf 'Update with a failed service stop unexpectedly succeeded.\n' >&2
+    exit 1
+fi
+[ "$(basename "$(readlink -f "$opt_root/current")")" = "1.0.0" ]
+[ "$(basename "$(readlink -f "$opt_root/previous")")" = "1.1.0" ]
+[ "$(cat "$mode_file")" = "Normal" ]
+
+fresh_opt="$test_root/fresh-opt"
+fresh_config="$test_root/fresh-etc"
+fresh_state="$test_root/fresh-state"
+fresh_systemd="$test_root/fresh-systemd"
+if env \
+    AGENT_ORCHESTRATOR_SKIP_ROOT_CHECK=1 \
+    AGENT_ORCHESTRATOR_SKIP_USER_CREATE=1 \
+    AGENT_ORCHESTRATOR_OPT_ROOT="$fresh_opt" \
+    AGENT_ORCHESTRATOR_CONFIG_ROOT="$fresh_config" \
+    AGENT_ORCHESTRATOR_STATE_ROOT="$fresh_state" \
+    AGENT_ORCHESTRATOR_SYSTEMD_ROOT="$fresh_systemd" \
+    AGENT_ORCHESTRATOR_MANAGEMENT_URL=http://127.0.0.1:5071 \
+    SYSTEMCTL_BIN="$fake_systemctl" \
+    CURL_BIN="$fake_curl" \
+    FAKE_MODE_FILE="$mode_file" \
+    NONINTERACTIVE=1 \
+    AUTH_MODE=none \
+    LISTEN_URL=http://0.0.0.0:5071 \
+    "$release_1/install.sh" "$release_1"
+then
+    printf 'Unauthenticated non-loopback install unexpectedly succeeded.\n' >&2
+    exit 1
+fi
+[ ! -e "$fresh_config/server.env" ]
+[ ! -e "$fresh_opt/current" ]
+
+printf '%s\n' Normal >"$mode_file"
+if env \
+    AGENT_ORCHESTRATOR_SKIP_ROOT_CHECK=1 \
+    AGENT_ORCHESTRATOR_SKIP_USER_CREATE=1 \
+    AGENT_ORCHESTRATOR_OPT_ROOT="$fresh_opt" \
+    AGENT_ORCHESTRATOR_CONFIG_ROOT="$fresh_config" \
+    AGENT_ORCHESTRATOR_STATE_ROOT="$fresh_state" \
+    AGENT_ORCHESTRATOR_SYSTEMD_ROOT="$fresh_systemd" \
+    AGENT_ORCHESTRATOR_MANAGEMENT_URL=http://127.0.0.1:5071 \
+    SYSTEMCTL_BIN="$fake_systemctl" \
+    CURL_BIN="$fake_curl" \
+    FAKE_MODE_FILE="$mode_file" \
+    NONINTERACTIVE=1 \
+    READY_TIMEOUT_SECONDS=1 \
+    "$release_bad/install.sh" "$release_bad"
+then
+    printf 'Unhealthy first install unexpectedly succeeded.\n' >&2
+    exit 1
+fi
+[ ! -e "$fresh_opt/current" ]
+
+incomplete_release="$test_root/source-incomplete"
+cp -a "$release_1" "$incomplete_release"
+rm -f -- "$incomplete_release/config/engine.env.template"
+if env \
+    AGENT_ORCHESTRATOR_SKIP_ROOT_CHECK=1 \
+    AGENT_ORCHESTRATOR_SKIP_USER_CREATE=1 \
+    AGENT_ORCHESTRATOR_OPT_ROOT="$test_root/incomplete-opt" \
+    AGENT_ORCHESTRATOR_CONFIG_ROOT="$test_root/incomplete-etc" \
+    AGENT_ORCHESTRATOR_STATE_ROOT="$test_root/incomplete-state" \
+    AGENT_ORCHESTRATOR_SYSTEMD_ROOT="$test_root/incomplete-systemd" \
+    NONINTERACTIVE=1 \
+    "$incomplete_release/install.sh" "$incomplete_release"
+then
+    printf 'Incomplete release source unexpectedly succeeded.\n' >&2
+    exit 1
+fi
+[ ! -e "$test_root/incomplete-etc/server.env" ]
 
 printf 'Release packaging and install/update/rollback tests passed.\n'

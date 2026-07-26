@@ -12,6 +12,7 @@ SYSTEMCTL_BIN=${SYSTEMCTL_BIN:-systemctl}
 CURL_BIN=${CURL_BIN:-curl}
 READY_TIMEOUT_SECONDS=${READY_TIMEOUT_SECONDS:-60}
 DRAIN_TIMEOUT_SECONDS=${DRAIN_TIMEOUT_SECONDS:-900}
+TASK_PROTOCOL_VERSION=${TASK_PROTOCOL_VERSION:-2}
 RELEASE_BASE_URL=${AGENT_STUDIO_RELEASE_BASE_URL:-https://github.com/agent-orc/agent-studio/releases/download}
 
 log()
@@ -53,6 +54,35 @@ source_version()
     normalize_version "$(sed -n '1p' "$source_dir/VERSION")"
 }
 
+validate_release_tree()
+{
+    release_dir=$1
+    for required in \
+        VERSION \
+        task-server \
+        orchestrator-engine \
+        install.sh \
+        update.sh \
+        rollback.sh \
+        lib.sh \
+        config/server.env.template \
+        config/engine.env.template \
+        config/Caddyfile.template \
+        systemd/agent-task-server.service \
+        systemd/agent-orchestrator-engine.service \
+        systemd/agent-task-server-backup.service \
+        systemd/agent-task-server-backup.timer
+    do
+        [ -f "$release_dir/$required" ] \
+            || die "Release source is incomplete; missing $required in $release_dir."
+    done
+    for executable in task-server orchestrator-engine install.sh update.sh rollback.sh lib.sh
+    do
+        [ -x "$release_dir/$executable" ] \
+            || die "Release source file is not executable: $release_dir/$executable"
+    done
+}
+
 resolve_release_source()
 {
     requested=$1
@@ -61,6 +91,7 @@ resolve_release_source()
 
     if [ -d "$requested" ]; then
         RESOLVED_SOURCE=$(CDPATH= cd -- "$requested" && pwd)
+        validate_release_tree "$RESOLVED_SOURCE"
         return
     fi
 
@@ -70,6 +101,7 @@ resolve_release_source()
         && [ -x "$script_dir/task-server" ] \
         && [ -x "$script_dir/orchestrator-engine" ]; then
         RESOLVED_SOURCE=$script_dir
+        validate_release_tree "$RESOLVED_SOURCE"
         return
     fi
 
@@ -90,6 +122,7 @@ resolve_release_source()
     )
     RESOLVED_SOURCE="$RESOLVED_TEMP/agent-orchestrator-$version-linux-x64"
     [ -d "$RESOLVED_SOURCE" ] || die "Release archive has an unexpected directory layout."
+    validate_release_tree "$RESOLVED_SOURCE"
 }
 
 cleanup_resolved_source()
@@ -102,12 +135,13 @@ cleanup_resolved_source()
 install_release_tree()
 {
     source_dir=$1
+    validate_release_tree "$source_dir"
     version=$(source_version "$source_dir")
     target="$OPT_ROOT/$version"
     install -d -m 0755 "$OPT_ROOT"
 
     if [ -d "$target" ]; then
-        [ -f "$target/VERSION" ] || die "Existing target is incomplete: $target"
+        validate_release_tree "$target"
         installed_version=$(normalize_version "$(sed -n '1p' "$target/VERSION")")
         [ "$installed_version" = "$version" ] \
             || die "Existing target $target has version $installed_version, expected $version."
@@ -184,6 +218,7 @@ api_request()
             "$CURL_BIN" -fsS -X "$method" \
                 -H "Authorization: Bearer $token" \
                 -H "X-Actor-Id: release-updater" \
+                -H "X-Task-Protocol-Version: $TASK_PROTOCOL_VERSION" \
                 -H "Content-Type: application/json" \
                 --data "$data" \
                 "$base$path"
@@ -191,18 +226,21 @@ api_request()
             "$CURL_BIN" -fsS -X "$method" \
                 -H "Authorization: Bearer $token" \
                 -H "X-Actor-Id: release-updater" \
+                -H "X-Task-Protocol-Version: $TASK_PROTOCOL_VERSION" \
                 "$base$path"
         fi
     else
         if [ -n "$data" ]; then
             "$CURL_BIN" -fsS -X "$method" \
                 -H "X-Actor-Id: release-updater" \
+                -H "X-Task-Protocol-Version: $TASK_PROTOCOL_VERSION" \
                 -H "Content-Type: application/json" \
                 --data "$data" \
                 "$base$path"
         else
             "$CURL_BIN" -fsS -X "$method" \
                 -H "X-Actor-Id: release-updater" \
+                -H "X-Task-Protocol-Version: $TASK_PROTOCOL_VERSION" \
                 "$base$path"
         fi
     fi
@@ -212,8 +250,15 @@ set_mode()
 {
     mode=$1
     reason=$2
+    case "$mode" in
+        Normal) mode_value=0 ;;
+        Draining) mode_value=1 ;;
+        ReadOnly) mode_value=2 ;;
+        Maintenance) mode_value=3 ;;
+        *) die "Unsupported Task Server mode: $mode" ;;
+    esac
     api_request PUT /api/v1/management/mode \
-        "{\"mode\":\"$mode\",\"reason\":\"$reason\"}" >/dev/null
+        "{\"mode\":$mode_value,\"reason\":\"$reason\"}" >/dev/null
 }
 
 wait_ready()
@@ -257,8 +302,19 @@ drain_for_switch()
 
 stop_runtime()
 {
-    "$SYSTEMCTL_BIN" stop agent-orchestrator-engine.service
-    "$SYSTEMCTL_BIN" stop agent-task-server.service
+    stop_failed=0
+    "$SYSTEMCTL_BIN" stop agent-orchestrator-engine.service || stop_failed=1
+    "$SYSTEMCTL_BIN" stop agent-task-server.service || stop_failed=1
+    [ "$stop_failed" -eq 0 ]
+}
+
+abort_after_stop_failure()
+{
+    log "Runtime stop failed before the link switch; restarting the current release."
+    if ! start_runtime; then
+        die "Runtime stop failed and the current release could not be restored."
+    fi
+    die "Runtime stop failed; the current release was restored and no link was changed."
 }
 
 install_systemd_units()

@@ -20,7 +20,7 @@ if [ "$new_target" = "$old_target" ]; then
 fi
 
 drain_for_switch "updating from $(basename "$old_target") to $(basename "$new_target")"
-stop_runtime
+stop_runtime || abort_after_stop_failure
 if ! switch_with_health_gate "$new_target" "$old_target"; then
     die "Candidate $(basename "$new_target") was rolled back because /readyz stayed red."
 fi

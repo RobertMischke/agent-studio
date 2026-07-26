@@ -20,7 +20,7 @@ fi
 target_version=$(basename "$target")
 
 drain_for_switch "rolling back from $(basename "$current") to $target_version"
-stop_runtime
+stop_runtime || abort_after_stop_failure
 if ! switch_with_health_gate "$target" "$current"; then
     die "Rollback target $target_version was unhealthy; $(basename "$current") was restored."
 fi

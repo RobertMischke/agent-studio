@@ -45,26 +45,47 @@ prompt()
 {
     label=$1
     default=$2
-    variable=$3
     value=
     if [ "${NONINTERACTIVE:-0}" != "1" ] && [ -r /dev/tty ]; then
         printf '%s [%s]: ' "$label" "$default" >/dev/tty
         IFS= read -r value </dev/tty || true
     fi
     [ -n "$value" ] || value=$default
-    eval "$variable=\$value"
+    printf '%s\n' "$value"
 }
 
 escape_sed()
 {
-    printf '%s' "$1" | sed 's/[\/&]/\\&/g'
+    printf '%s' "$1" | sed 's/[\/&\\]/\\&/g'
+}
+
+loopback_listeners_only()
+{
+    listeners=$1
+    old_ifs=$IFS
+    IFS=';'
+    set -- $listeners
+    IFS=$old_ifs
+    [ "$#" -gt 0 ] || return 1
+    for listener
+    do
+        listener=$(printf '%s' "$listener" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        case "$listener" in
+            http://127.0.0.1|http://127.0.0.1:*|https://127.0.0.1|https://127.0.0.1:*|\
+            http://localhost|http://localhost:*|https://localhost|https://localhost:*|\
+            http://\[::1\]|http://\[::1\]:*|https://\[::1\]|https://\[::1\]:*) ;;
+            *) return 1 ;;
+        esac
+    done
 }
 
 if [ ! -f "$CONFIG_ROOT/server.env" ]; then
-    prompt "Private Task Server listen URL" "${LISTEN_URL:-http://127.0.0.1:5071}" listen_url
-    prompt "Authentication mode (none or bearer)" "${AUTH_MODE:-bearer}" auth_mode
+    listen_url=$(prompt "Private Task Server listen URL" "${LISTEN_URL:-http://127.0.0.1:5071}")
+    auth_mode=$(prompt "Authentication mode (none or bearer)" "${AUTH_MODE:-bearer}")
     case "$auth_mode" in
         none)
+            loopback_listeners_only "$listen_url" \
+                || die "Authentication mode 'none' is permitted only for loopback LISTEN_URL values."
             token_file=
             token=
             ;;
@@ -113,7 +134,12 @@ if [ "$already_active" -eq 0 ]; then
     atomic_link "$target" "$OPT_ROOT/current"
 fi
 
-install_systemd_units "$target"
+if ! install_systemd_units "$target"; then
+    if [ "$already_active" -eq 0 ]; then
+        rm -f -- "$OPT_ROOT/current"
+    fi
+    die "Could not install or enable the systemd units."
+fi
 if [ "$already_active" -eq 1 ] \
     && "$SYSTEMCTL_BIN" is-active --quiet agent-task-server.service \
     && "$SYSTEMCTL_BIN" is-active --quiet agent-orchestrator-engine.service; then
@@ -121,6 +147,11 @@ if [ "$already_active" -eq 1 ] \
     install_result="Installation is already current at agent-orchestrator $version."
 else
     if ! start_runtime; then
+        "$SYSTEMCTL_BIN" stop agent-orchestrator-engine.service >/dev/null 2>&1 || true
+        "$SYSTEMCTL_BIN" stop agent-task-server.service >/dev/null 2>&1 || true
+        if [ "$already_active" -eq 0 ]; then
+            rm -f -- "$OPT_ROOT/current"
+        fi
         die "Installed release $version did not become ready; inspect journalctl -u agent-task-server."
     fi
     install_result="Installed and started agent-orchestrator $version."
