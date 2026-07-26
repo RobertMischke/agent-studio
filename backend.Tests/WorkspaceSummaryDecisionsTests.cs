@@ -124,7 +124,7 @@ public class WorkspaceSummaryDecisionsTests : IDisposable
     }
 
     [Fact]
-    public void BlankReason_FallsBackToKindAndJobIdTitle()
+    public void BlankEscalationReason_FallsBackToTypedInterventionTitle()
     {
         var now = new DateTime(2026, 5, 31, 12, 0, 0, DateTimeKind.Utc);
         AppendDecision(ReviewDecisionKind.Escalate, now.AddMinutes(-5), "lonely-job", reason: "");
@@ -132,6 +132,6 @@ public class WorkspaceSummaryDecisionsTests : IDisposable
         var summary = Build().Build(24, now);
 
         var decision = Assert.Single(summary.TopDecisions);
-        Assert.Equal("Escalate lonely-job", decision.Title);
+        Assert.Equal("[auto-review-escalation]", decision.Title);
     }
 }

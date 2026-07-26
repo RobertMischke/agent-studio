@@ -217,7 +217,10 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
             ReviewDecisionLog.ReadAll(_workspace, Project),
             item => item.JobId == slug);
         Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
-        Assert.StartsWith(ReviewDecisionOrchestrator.BuildTestGateInfrastructureReasonPrefix, decision.Reason);
+        Assert.StartsWith(
+            "[auto-review-escalation] "
+            + ReviewDecisionOrchestrator.BuildTestGateInfrastructureReasonPrefix,
+            decision.Reason);
         Assert.Equal("lease-infra", decision.AttemptChainId);
     }
 

@@ -293,7 +293,7 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
-    public void AllRunnerTemplates_ForbidAgentCommitAndPush()
+    public void AllRunnerTemplates_UseCalmPlatformCommitOwnership()
     {
         var prompts = Prompts();
         foreach (var template in new[]
@@ -320,9 +320,18 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
 
-            Assert.Contains("Do not run `git commit`", rendered);
-            Assert.Contains("`git push`", rendered);
-            Assert.Contains("unless this individual task explicitly asks", rendered);
+            // Fresh/recovery/reissue use the calm wording, while the two resume
+            // templates still carry the earlier direct form. Both state the
+            // current platform-owned commit boundary without punitive language.
+            var usesCalmWording = rendered.Contains(
+                "Please do not commit or push yourself",
+                StringComparison.Ordinal);
+            var usesDirectWording = rendered.Contains(
+                "Do not run `git commit`",
+                StringComparison.Ordinal);
+            Assert.True(usesCalmWording || usesDirectWording);
+            Assert.Contains("push", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("process violation", rendered, StringComparison.OrdinalIgnoreCase);
         }
     }
 
