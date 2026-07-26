@@ -1,7 +1,7 @@
 # AGT-2286 verification
 
 Verified on 2026-07-26 from branch
-`runner/agent-runner-01/AGT-2286`, rebuilt on `origin/develop` at `0e0d1c0f4`.
+`runner/agent-runner-01/AGT-2286`, rebuilt on `origin/develop` at `9ceb62de6`.
 
 ## Branch and review input
 
@@ -12,8 +12,8 @@ introduced by the current development head.
 
 No `code-review-grade-*.md` artifact exists in this worktree or its task
 results. The recut card and the current product code therefore served as the
-review input. The implementation is in `22cd125ee`; its contract and evidence
-commits are `143a58771`, `82ced8d5c`, and `b11b749c2`.
+review input. The implementation, contract, tests, and evidence are carried by
+the card-scoped commits immediately above the development head.
 
 ## Automated verification
 
