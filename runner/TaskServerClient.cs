@@ -156,13 +156,26 @@ public sealed class TaskServerClient : IDisposable
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
                 capabilities);
-            _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
-                HttpMethod.Put,
-                $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
-                request,
-                ct);
-            SetClientId(runnerId);
-            return runnerId;
+            try
+            {
+                _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
+                    HttpMethod.Put,
+                    $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
+                    request,
+                    ct);
+                SetClientId(runnerId);
+                return runnerId;
+            }
+            catch (TaskServerException ex) when (ex.StatusCode == 409 && options.Role != "review")
+            {
+                // Coding-fallback-guard: the monolith V1 mount admits only the
+                // review-executor identity ("runner-role-conflict"). A coding
+                // runner that negotiated V1 (the protocol endpoint exists in the
+                // monolith) must fall back to the legacy claim plane instead of
+                // crash-looping on the role conflict. Review runners keep V1.
+                _useV1 = false;
+                // fall through to the legacy registration path below.
+            }
         }
 
         // Networked-profile runners are enrolled by an owner. Their bearer
