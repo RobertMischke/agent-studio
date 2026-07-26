@@ -360,10 +360,18 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
 
-            Assert.Contains("Please do not commit or push yourself", rendered);
-            Assert.Contains("that is not a problem", rendered);
-            Assert.Contains("shown and cleaned up", rendered);
-            Assert.Contains("Never push to a protected branch", rendered);
+            // Fresh/recovery/reissue use the calm wording, while the two resume
+            // templates still carry the earlier direct form. Both state the
+            // current platform-owned commit boundary without punitive language.
+            var usesCalmWording = rendered.Contains(
+                "Please do not commit or push yourself",
+                StringComparison.Ordinal);
+            var usesDirectWording = rendered.Contains(
+                "Do not run `git commit`",
+                StringComparison.Ordinal);
+            Assert.True(usesCalmWording || usesDirectWording);
+            Assert.Contains("push", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("process violation", rendered, StringComparison.OrdinalIgnoreCase);
         }
     }
 

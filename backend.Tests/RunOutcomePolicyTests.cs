@@ -61,12 +61,12 @@ public class RunOutcomePolicyTests
         new(kind, "summary", sentinel, sentinel ? "DONE" : null, sentinel ? null : "heuristic", agentChars, agentChars / 5, duration);
 
     [Fact]
-    public void AgentGitViolation_StopsAndSurfacesProcessViolation()
+    public void AgentGitViolation_StopsOnlyForVerifiedGitDamage()
     {
         var outcome = Outcome(AgentOutcomeKind.Done, sentinel: true) with
         {
             IssueKind = RunIssueKind.AgentGitViolation,
-            Summary = "[agent-git-violation] Worker CLI advanced git HEAD during the run."
+            Summary = "[agent-git-violation] Genuine git damage detected: worker push changed a protected remote branch."
         };
 
         var action = RunOutcomePolicy.Decide(
@@ -78,8 +78,8 @@ public class RunOutcomePolicyTests
 
         Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
         Assert.Equal(RunIssueKind.AgentGitViolation, action.IssueKind);
-        Assert.Contains("Process violation", action.MetaMessage);
-        Assert.Contains("must not commit or push", action.MetaMessage);
+        Assert.Contains("Genuine git damage", action.MetaMessage);
+        Assert.Contains("protected remote branch", action.MetaMessage);
     }
 
     /// <summary>
