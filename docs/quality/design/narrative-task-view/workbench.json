@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "narrative-task-view",
+  "title": "Narrative task view",
+  "summary": "A proactive pipeline-generated reading view for task detail: fixed AHP Deck / Panel v1 presentation, honest PRE/POST state markers, two real-card mock reports, and measured per-card economics.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-24T00:00:00Z",
+  "sourceTaskKeys": ["AGT-2281", "AGT-2222", "AGT-2135"]
+}

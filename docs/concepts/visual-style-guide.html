@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Style Guide Workbench</title>
+<style>
+:root {
+  color-scheme: dark;
+  --studio-bg-titlebar: #181825;
+  --studio-bg-sidebar: #181825;
+  --studio-bg-editor: #0f0f1a;
+  --studio-bg-elevated: #1e1e2e;
+  --studio-bg-selected: #252537;
+  --studio-bg-hover: rgba(255, 255, 255, .04);
+  --studio-border: rgba(255, 255, 255, .06);
+  --studio-border-strong: rgba(255, 255, 255, .10);
+  --studio-fg: #e2e8f0;
+  --studio-fg-strong: #f8fafc;
+  --studio-fg-dim: #94a3b8;
+  --studio-fg-muted: #64748b;
+  --studio-accent: #d97757;
+  --studio-accent-strong: #ecaf95;
+  --studio-accent-2: #4ec9b0;
+  --studio-accent-3: #569cd6;
+  --studio-accent-3-strong: #93c5fd;
+  --studio-accent-success: #16a34a;
+  --studio-accent-success-strong: #86efac;
+  --studio-accent-warn: #cca700;
+  --studio-accent-warn-strong: #fcd34d;
+  --studio-accent-6: #ef4444;
+  --studio-accent-6-strong: #fda4af;
+  --studio-on-accent: #1a1a1a;
+  --studio-card-bg: #1e1e2e;
+  --studio-card-border: rgba(255, 255, 255, .10);
+  --studio-card-muted-bg: color-mix(in srgb, #94a3b8 7%, #1e1e2e);
+  --studio-card-muted-border: color-mix(in srgb, #94a3b8 18%, transparent);
+  --studio-spacing-1: 4px;
+  --studio-spacing-2: 8px;
+  --studio-spacing-3: 12px;
+  --studio-spacing-4: 16px;
+  --studio-spacing-5: 24px;
+  --studio-spacing-6: 32px;
+  --studio-spacing-7: 48px;
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --lane-backlog: #9d9d9d;
+  --lane-prep: #d1bfa5;
+  --lane-ready: #4ec9b0;
+  --lane-progress: #fcd34d;
+  --lane-auto-review: #f9e2af;
+  --lane-human-review: #c586c0;
+  --lane-escalated: #ef4444;
+  --lane-completed: #5fbf80;
+  --lane-archive: #6e6e6e;
+  --lane-failed: #f38ba8;
+  --ahp-blue: #4c8dff;
+  --ahp-blue-ink: #a8b1ff;
+  --ahp-blue-soft: #1c2740;
+  --ahp-blue-border: rgba(90, 150, 255, .50);
+  --ahp-teal: #34d3a6;
+  --ahp-teal-ink: #4fe0b6;
+  --ahp-teal-soft: #16302a;
+  --ahp-teal-border: rgba(52, 211, 166, .48);
+  --ahp-coral: #f06a6f;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --studio-bg-titlebar: #f3f3f3;
+  --studio-bg-sidebar: #f8f8f8;
+  --studio-bg-editor: #ffffff;
+  --studio-bg-elevated: #ececec;
+  --studio-bg-selected: rgba(217, 119, 87, .15);
+  --studio-bg-hover: rgba(0, 0, 0, .05);
+  --studio-border: #d4d4d4;
+  --studio-border-strong: #b4b4b4;
+  --studio-fg: #333333;
+  --studio-fg-strong: #1a1a1a;
+  --studio-fg-dim: #555555;
+  --studio-fg-muted: #888888;
+  --studio-accent-strong: #8d5a3d;
+  --studio-accent-success: #15803d;
+  --studio-accent-success-strong: #15803d;
+  --studio-accent-warn: #a16207;
+  --studio-accent-warn-strong: #b45309;
+  --studio-accent-6: #b91c1c;
+  --studio-accent-6-strong: #b91c1c;
+  --studio-card-bg: #ffffff;
+  --studio-card-border: #d4d4d4;
+  --studio-card-muted-bg: color-mix(in srgb, #888888 6%, #ffffff);
+  --studio-card-muted-border: color-mix(in srgb, #888888 22%, transparent);
+  --lane-backlog: #6e6e6e;
+  --lane-prep: #92745a;
+  --lane-ready: #15803d;
+  --lane-progress: #b45309;
+  --lane-auto-review: #a16207;
+  --lane-human-review: #7c3aed;
+  --lane-escalated: #b91c1c;
+  --lane-completed: #15803d;
+  --lane-archive: #4a4a4a;
+  --lane-failed: #b91c1c;
+  --ahp-blue: #3b82f6;
+  --ahp-blue-ink: #2f6fd6;
+  --ahp-blue-soft: #e7f0fe;
+  --ahp-blue-border: rgba(59, 130, 246, .42);
+  --ahp-teal: #14a37f;
+  --ahp-teal-ink: #0f8e6e;
+  --ahp-teal-soft: #e6f6f1;
+  --ahp-teal-border: rgba(20, 163, 127, .42);
+  --ahp-coral: #e5484d;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
+  font: 13px/1.55 var(--font-ui);
+}
+button, a { font: inherit; }
+a { color: var(--studio-accent-3-strong); text-underline-offset: 3px; }
+.shell { min-height: 100vh; }
+.topbar {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+  min-height: 44px;
+  padding: var(--studio-spacing-2) clamp(16px, 3vw, 40px);
+  border-bottom: 1px solid var(--studio-border);
+  background: color-mix(in srgb, var(--studio-bg-titlebar) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+.brand { display: flex; align-items: center; gap: 9px; color: var(--studio-fg-strong); font-weight: 650; }
+.brand-mark { width: 10px; height: 10px; border-radius: 3px; background: var(--studio-accent); }
+.theme-switch { display: inline-flex; padding: 2px; border: 1px solid var(--studio-border); border-radius: 6px; }
+.theme-switch button {
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
+main { width: min(1320px, 100%); margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(16px, 3vw, 40px) 96px; }
+.hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .8fr); gap: 28px; align-items: end; }
+.kicker, .section-no, .spec-label {
+  color: var(--ahp-coral);
+  font: 650 11px/1.2 var(--font-mono);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+h1 { max-width: 16ch; margin: 12px 0; color: var(--studio-fg-strong); font-size: clamp(34px, 6vw, 68px); line-height: .98; letter-spacing: -.045em; }
+.lede { max-width: 68ch; margin: 0; color: var(--studio-fg-dim); font-size: 15px; }
+.hero-note { padding: 18px; border: 1px solid var(--studio-border); border-radius: 10px; background: var(--studio-bg-sidebar); }
+.hero-note strong { display: block; margin-bottom: 6px; color: var(--studio-fg-strong); }
+.hero-note p { margin: 0; color: var(--studio-fg-dim); }
+.hero-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.hero-links a { padding: 6px 9px; border: 1px solid var(--studio-border); border-radius: 5px; text-decoration: none; }
+.section { margin-top: 72px; scroll-margin-top: 64px; }
+.section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.section h2 { margin: 7px 0 0; color: var(--studio-fg-strong); font-size: 22px; line-height: 1.2; }
+.section-head p { max-width: 64ch; margin: 0; color: var(--studio-fg-dim); }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.spec {
+  grid-column: span 4;
+  min-width: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: var(--studio-card-bg);
+  overflow: hidden;
+}
+.spec.wide { grid-column: span 6; }
+.spec.full { grid-column: 1 / -1; }
+.spec-body { padding: 18px; }
+.spec-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--studio-border);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-muted);
+  font: 10.5px/1.45 var(--font-mono);
+}
+.spec-foot code { color: var(--studio-fg-dim); }
+.spec h3 { margin: 6px 0 14px; color: var(--studio-fg-strong); font-size: 14px; }
+.swatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.swatch { min-width: 0; border: 1px solid var(--studio-border); border-radius: 7px; overflow: hidden; }
+.swatch-color { height: 54px; background: var(--swatch); }
+.swatch-meta { display: grid; gap: 2px; padding: 7px 8px; background: var(--studio-bg-sidebar); }
+.swatch-meta strong { overflow: hidden; color: var(--studio-fg); font: 10px var(--font-mono); text-overflow: ellipsis; }
+.swatch-meta span { color: var(--studio-fg-muted); font: 10px var(--font-mono); }
+.type-ramp { display: grid; gap: 12px; }
+.type-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: baseline; }
+.type-name, .type-value { color: var(--studio-fg-muted); font: 10.5px var(--font-mono); }
+.type-xl { color: var(--studio-fg-strong); font-size: 24px; font-weight: 600; }
+.type-md { color: var(--studio-fg-strong); font-size: 16px; font-weight: 600; }
+.type-body { font-size: 13px; }
+.type-ui { font-size: 12px; font-weight: 600; }
+.type-code { font: 12px var(--font-mono); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 40%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--chip-color) 12%, transparent);
+  color: var(--chip-color);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.chip.brand { --chip-color: var(--studio-accent-strong); }
+.chip.info { --chip-color: var(--studio-accent-3-strong); }
+.chip.pass { --chip-color: var(--studio-accent-success-strong); }
+.chip.warn { --chip-color: var(--studio-accent-warn-strong); }
+.chip.fail { --chip-color: var(--studio-accent-6-strong); }
+.panel-demo { display: grid; gap: 10px; }
+.panel {
+  padding: 14px;
+  border: 1px solid var(--studio-card-border);
+  border-radius: 8px;
+  background: var(--studio-card-bg);
+}
+.panel.muted { background: var(--studio-card-muted-bg); border-color: var(--studio-card-muted-border); }
+.panel.attention { background: color-mix(in srgb, var(--studio-accent-6) 8%, var(--studio-card-bg)); border-color: color-mix(in srgb, var(--studio-accent-6) 55%, var(--studio-card-border)); }
+.panel strong { color: var(--studio-fg-strong); }
+.panel p { margin: 3px 0 0; color: var(--studio-fg-dim); font-size: 12px; }
+.lanes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.lane { min-width: 0; }
+.lane-color { height: 34px; border-radius: 6px; background: var(--lane); }
+.lane strong, .lane code { display: block; overflow: hidden; margin-top: 5px; font: 9.5px/1.35 var(--font-mono); text-overflow: ellipsis; }
+.lane code { margin: 0; color: var(--studio-fg-muted); }
+.empty-state { min-height: 148px; display: grid; place-content: center; justify-items: start; padding: 24px; border: 1px dashed var(--studio-border-strong); border-radius: 8px; color: var(--studio-fg-muted); }
+.empty-icon { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 8px; border-radius: 7px; background: var(--studio-card-muted-bg); color: var(--studio-fg-dim); font: 15px var(--font-mono); }
+.empty-state strong { color: var(--studio-fg); font-size: 13px; }
+.empty-state p { max-width: 44ch; margin: 5px 0 0; font-size: 12px; }
+.indicators { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 92px; }
+.dot { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid color-mix(in srgb, var(--dot-color) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--dot-color) 20%, var(--studio-bg-elevated)); color: var(--dot-color); font-size: 9px; font-weight: 800; }
+.dot.run { --dot-color: var(--studio-accent-3-strong); }
+.dot.input { --dot-color: var(--studio-accent-warn-strong); }
+.dot.error { --dot-color: var(--studio-accent-6-strong); }
+.dot.run::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: pulse 1.4s ease-in-out infinite; }
+.runner-card { padding: 15px; border: 1px solid color-mix(in srgb, var(--studio-accent-3) 58%, var(--studio-card-border)); border-radius: 12px; background: color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-card-bg)); box-shadow: 0 4px 12px color-mix(in srgb, var(--studio-accent-3) 12%, transparent); }
+.runner-card-head { display: flex; justify-content: space-between; gap: 12px; }
+.runner-card strong { color: var(--studio-fg-strong); font-size: 14px; }
+.runner-card p { margin: 5px 0 12px; color: var(--studio-fg-dim); }
+.runner-pill { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; max-width: 100%; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--studio-accent-2) 40%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--studio-accent-2) 16%, var(--studio-bg-elevated)); color: var(--studio-accent-strong); font-size: 11px; font-weight: 600; }
+.runner-pill.local { border-color: var(--studio-card-muted-border); background: var(--studio-card-muted-bg); color: var(--studio-fg-muted); font-weight: 500; }
+.ahp-stage { position: relative; min-height: 238px; overflow: hidden; }
+.ahp-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.rail { fill: none; stroke: var(--studio-border-strong); stroke-width: 1.6; }
+.flow { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 7 12; animation: dash 1.55s linear infinite; }
+.flow.control { stroke: var(--ahp-blue); }
+.flow.execute { stroke: var(--ahp-teal); }
+.ahp-grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 52px; align-items: center; min-height: 238px; padding: 30px 14px; }
+.host { padding: 14px; border: 1px solid var(--host-border); border-radius: 14px; background: var(--host-bg); text-align: center; box-shadow: 0 0 30px color-mix(in srgb, var(--host-accent) 18%, transparent); }
+.host.control { --host-border: var(--ahp-blue-border); --host-bg: var(--ahp-blue-soft); --host-accent: var(--ahp-blue); }
+.host.execute { --host-border: var(--ahp-teal-border); --host-bg: var(--ahp-teal-soft); --host-accent: var(--ahp-teal); }
+.host.neutral { --host-border: var(--studio-border-strong); --host-bg: var(--studio-bg-sidebar); --host-accent: var(--studio-fg-muted); }
+.host strong { display: block; color: var(--host-accent); font: 700 11px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.host span { display: block; margin-top: 6px; color: var(--studio-fg-dim); font-size: 11px; }
+.workbench-links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.workbench-card { display: flex; flex-direction: column; min-height: 186px; padding: 18px; border: 1px solid var(--studio-border); border-radius: 10px; background: var(--studio-bg-sidebar); text-decoration: none; transition: transform .12s ease, border-color .12s ease; }
+.workbench-card:hover { transform: translateY(-2px); border-color: var(--studio-accent); }
+.workbench-card .card-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--studio-bg-selected); color: var(--studio-accent-strong); font: 16px var(--font-mono); }
+.workbench-card h3 { margin: 22px 0 7px; color: var(--studio-fg-strong); font-size: 16px; }
+.workbench-card p { margin: 0; color: var(--studio-fg-dim); }
+.workbench-card .open { margin-top: auto; padding-top: 18px; color: var(--studio-accent-3-strong); font: 11px var(--font-mono); }
+.theme-proof { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--studio-border); border-radius: 10px; overflow: hidden; }
+.proof { min-height: 270px; padding: 22px; color: var(--proof-fg); background: var(--proof-bg); }
+.proof + .proof { border-left: 1px solid var(--proof-border); }
+.proof.light { --proof-bg: #ffffff; --proof-card: #ececec; --proof-fg: #333333; --proof-strong: #1a1a1a; --proof-muted: #6e6e6e; --proof-border: #d4d4d4; --proof-accent: #8d5a3d; }
+.proof.dark { --proof-bg: #0f0f1a; --proof-card: #1e1e2e; --proof-fg: #e2e8f0; --proof-strong: #f8fafc; --proof-muted: #94a3b8; --proof-border: rgba(255,255,255,.10); --proof-accent: #ecaf95; }
+.proof-label { color: var(--proof-muted); font: 10.5px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.proof-card { margin-top: 34px; padding: 18px; border: 1px solid var(--proof-border); border-radius: 10px; background: var(--proof-card); }
+.proof-card strong { display: block; color: var(--proof-strong); }
+.proof-card p { margin: 4px 0 14px; color: var(--proof-muted); }
+.proof-chip { display: inline-flex; padding: 3px 8px; border: 1px solid var(--proof-accent); border-radius: 8px; color: var(--proof-accent); font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.source-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.source-list li { display: grid; grid-template-columns: minmax(180px, .6fr) minmax(0, 1fr); gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--studio-border); }
+.source-list strong { color: var(--studio-fg-strong); }
+.source-list span { color: var(--studio-fg-dim); }
+@keyframes dash { to { stroke-dashoffset: -38; } }
+@keyframes pulse { 50% { opacity: .35; transform: scale(.72); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; }
+  .spec, .spec.wide { grid-column: span 6; }
+  .workbench-links { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .spec, .spec.wide { grid-column: 1 / -1; }
+  .section-head { display: block; }
+  .section-head p { margin-top: 9px; }
+  .lanes { grid-template-columns: repeat(2, 1fr); }
+  .ahp-grid { grid-template-columns: 1fr; gap: 12px; }
+  .ahp-stage svg { display: none; }
+  .theme-proof { grid-template-columns: 1fr; }
+  .proof + .proof { border-left: 0; border-top: 1px solid var(--proof-border); }
+  .source-list li { grid-template-columns: 1fr; gap: 3px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span> Visual Style Guide</div>
+    <div class="theme-switch" role="group" aria-label="Page theme">
+      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="true">Dark</button>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <div>
+        <div class="kicker">Living inventory · Workbench · 2026-07-23</div>
+        <h1>See the system. Compare the next one.</h1>
+        <p class="lede">This is the visual twin of the product's engineering style guide: a rendered inventory of the current Agent Software Studio language, plus a place to compare variants before implementation cards are cut. Every specimen names the semantic tokens it consumes.</p>
+        <div class="hero-links">
+          <a href="visual-style-guide/README.md">Workbench folder</a>
+          <a href="visual-style-guide/vnext.md">vNext decisions</a>
+          <a href="../quality/frontend/style-guide/README.md">Canonical component guide</a>
+          <a href="../quality/design/style-guide-hard-rules.md">Hard rules</a>
+        </div>
+      </div>
+      <aside class="hero-note">
+        <strong>Paired with AGT-2237</strong>
+        <p>The Tone of Voice Style Guide is the textual twin. Visual hierarchy and interface wording must be reviewed together. The task relation is registered in this page's Wiki companion metadata and explained in the <a href="visual-style-guide/README.md#tone-of-voice-twin">folder index</a>.</p>
+      </aside>
+    </section>
+
+    <section class="section" id="current-language">
+      <div class="section-head">
+        <div><div class="section-no">§1 · Current language</div><h2>Rendered inventory</h2></div>
+        <p>Nine current patterns, reconstructed from the frontend source of truth. These examples are not a new component library. They make today's decisions visible and reviewable.</p>
+      </div>
+      <div class="grid">
+        <article class="spec wide">
+          <div class="spec-body">
+            <div class="spec-label">01 · Theme surfaces</div>
+            <h3>Surface and ink hierarchy</h3>
+            <div class="swatches">
+              <div class="swatch"><div class="swatch-color" style="--swatch:var(--studio-bg-editor)"></div><div class="swatch-meta"><strong>Editor</strong><span>dark #0f0f1a · light #ffffff</span></div></div>
+              <div class="swatch"><div class="swatch-color" style="--swatch:var(--studio-bg-titlebar)"></div><div class="swatch-meta"><strong>Chrome</strong><span>dark #181825 · light #f3f3f3</span></div></div>
+              <div class="swatch"><div class="swatch-color" style="--swatch:var(--studio-bg-elevated)"></div><div class="swatch-meta"><strong>Elevated</strong><span>dark #1e1e2e · light #ececec</span></div></div>
+              <div class="swatch"><div class="swatch-color" style="--swatch:var(--studio-accent)"></div><div class="swatch-meta"><strong>Brand</strong><span>#d97757</span></div></div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--studio-bg-editor</code><code>--studio-bg-titlebar</code><code>--studio-bg-elevated</code><code>--studio-accent</code></div>
+        </article>
+
+        <article class="spec wide">
+          <div class="spec-body">
+            <div class="spec-label">02 · Type</div>
+            <h3>Dense workbench type ramp</h3>
+            <div class="type-ramp">
+              <div class="type-row"><span class="type-name">heading-xl</span><span class="type-xl">Agent Studio</span><span class="type-value">24 / 600</span></div>
+              <div class="type-row"><span class="type-name">heading-md</span><span class="type-md">Pipeline health</span><span class="type-value">16 / 600</span></div>
+              <div class="type-row"><span class="type-name">body</span><span class="type-body">Evidence is ready for review.</span><span class="type-value">13 / 400</span></div>
+              <div class="type-row"><span class="type-name">ui-strong</span><span class="type-ui">HUMAN REVIEW</span><span class="type-value">12 / 600</span></div>
+              <div class="type-row"><span class="type-name">code-sm</span><span class="type-code">AGT-2274 · a8f32bc</span><span class="type-value">12 / 400</span></div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--font-ui</code><code>--font-mono</code><span>roles from design-system.md</span></div>
+        </article>
+
+        <article class="spec">
+          <div class="spec-body">
+            <div class="spec-label">03 · Chips and badges</div>
+            <h3>Tinted semantic containers</h3>
+            <div class="chips">
+              <span class="chip brand">Selected</span>
+              <span class="chip info">Running</span>
+              <span class="chip pass">Passed</span>
+              <span class="chip warn">Needs input</span>
+              <span class="chip fail">Failed</span>
+            </div>
+          </div>
+          <div class="spec-foot"><code>m.chip()</code><code>--studio-accent-*-strong</code><span>18px high · 9px radius</span></div>
+        </article>
+
+        <article class="spec">
+          <div class="spec-body">
+            <div class="spec-label">04 · Panels and cards</div>
+            <h3>Surface, muted, attention</h3>
+            <div class="panel-demo">
+              <div class="panel"><strong>Default panel</strong><p>Neutral content grouping.</p></div>
+              <div class="panel muted"><strong>Supporting evidence</strong><p>Quiet, secondary context.</p></div>
+              <div class="panel attention"><strong>Action required</strong><p>Whole-surface tint, never a left stripe.</p></div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--studio-card-*</code><code>--studio-card-attention-*</code><span>R1: no left accent line</span></div>
+        </article>
+
+        <article class="spec">
+          <div class="spec-body">
+            <div class="spec-label">05 · Empty state</div>
+            <h3>Muted guidance, not dead space</h3>
+            <div class="empty-state">
+              <span class="empty-icon" aria-hidden="true">◇</span>
+              <strong>No evidence yet</strong>
+              <p>Run the review step to populate this panel.</p>
+            </div>
+          </div>
+          <div class="spec-foot"><code>&lt;app-empty-state&gt;</code><code>--studio-fg-muted</code><code>--studio-spacing-3</code><a href="visual-style-guide/empty-states.html">Open workbench</a></div>
+        </article>
+
+        <article class="spec full">
+          <div class="spec-body">
+            <div class="spec-label">06 · Lane colors</div>
+            <h3>Workflow identity in both themes</h3>
+            <div class="lanes">
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-backlog)"></div><strong>Backlog</strong><code>#9d9d9d / #6e6e6e</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-prep)"></div><strong>Preparation</strong><code>#d1bfa5 / #92745a</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-ready)"></div><strong>Ready</strong><code>#4ec9b0 / #15803d</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-progress)"></div><strong>Progress</strong><code>#fcd34d / #b45309</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-auto-review)"></div><strong>Auto review</strong><code>#f9e2af / #a16207</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-human-review)"></div><strong>Human review</strong><code>#c586c0 / #7c3aed</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-escalated)"></div><strong>Escalated</strong><code>#ef4444 / #b91c1c</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-completed)"></div><strong>Completed</strong><code>#5fbf80 / #15803d</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-archive)"></div><strong>Archive</strong><code>#6e6e6e / #4a4a4a</code></div>
+              <div class="lane"><div class="lane-color" style="--lane:var(--lane-failed)"></div><strong>Failed</strong><code>#f38ba8 / #b91c1c</code></div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--lane-backlog</code><code>--lane-prep</code><code>--lane-ready</code><code>--lane-progress</code><code>--lane-auto-review</code><code>--lane-human-review</code><code>--lane-escalated</code><code>--lane-completed</code><code>--lane-archive</code><code>--lane-failed</code></div>
+        </article>
+
+        <article class="spec wide">
+          <div class="spec-body">
+            <div class="spec-label">07 · Mini indicators</div>
+            <h3>Small signals for current situations</h3>
+            <div class="indicators">
+              <span class="dot run" aria-label="Running"></span>
+              <span class="dot input" aria-label="Needs input">!</span>
+              <span class="dot error" aria-label="Error">×</span>
+              <span class="chip info">3 active</span>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--studio-accent-3-strong</code><code>--studio-accent-warn-strong</code><code>--studio-accent-6-strong</code><span>R4: acute only</span><a href="visual-style-guide/mini-indicators.html">Open workbench</a></div>
+        </article>
+
+        <article class="spec wide">
+          <div class="spec-body">
+            <div class="spec-label">08 · Runner card</div>
+            <h3>Execution location on active work</h3>
+            <div class="runner-card">
+              <div class="runner-card-head"><strong>Validate remote gate</strong><span class="dot run" aria-label="Running"></span></div>
+              <p>AGT-2258 · Codex · gpt-5</p>
+              <div class="chips"><span class="runner-pill">⇥ remote · linux-02</span><span class="runner-pill local">local</span></div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--studio-bg-running</code><code>--shadow-running</code><code>--studio-card-running-border</code><code>--studio-accent-2</code><a href="visual-style-guide/runner-cards.html">Open workbench</a></div>
+        </article>
+
+        <article class="spec full">
+          <div class="spec-body">
+            <div class="spec-label">09 · Agent Host Protocol diagram style</div>
+            <h3>Control, authority, and execution as a quiet flow</h3>
+            <div class="ahp-stage">
+              <svg viewBox="0 0 900 238" preserveAspectRatio="none" aria-hidden="true">
+                <path class="rail" d="M250,119 C330,119 360,119 420,119"></path>
+                <path class="flow control" d="M250,119 C330,119 360,119 420,119"></path>
+                <path class="rail" d="M480,119 C560,119 590,119 650,119"></path>
+                <path class="flow execute" d="M480,119 C560,119 590,119 650,119"></path>
+              </svg>
+              <div class="ahp-grid">
+                <div class="host control"><strong>Studio UI</strong><span>operator intent · control plane</span></div>
+                <div class="host neutral"><strong>Task Server</strong><span>authority · leases · events</span></div>
+                <div class="host execute"><strong>Runner host</strong><span>isolated execution · evidence</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="spec-foot"><code>--ahp-blue*</code><code>--ahp-teal*</code><code>--ahp-coral</code><span>1.6px rail · 2.4px dashed flow · HTML boxes over SVG wires</span><a href="../app/prompts/diagramm-stil-agent-host-protocol.md">Canonical recipe</a></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="workbenches">
+      <div class="section-head">
+        <div><div class="section-no">§2 · Growing workbench</div><h2>Compare before committing</h2></div>
+        <p>Each focused page keeps current behavior visible beside candidate variants. Implementation cards must link back to the relevant page and name the selected option.</p>
+      </div>
+      <div class="workbench-links">
+        <a class="workbench-card" href="visual-style-guide/empty-states.html"><span class="card-icon">◇</span><h3>Empty-state workbench</h3><p>Density, guidance, action and illustration balance.</p><span class="open">Compare variants →</span></a>
+        <a class="workbench-card" href="visual-style-guide/mini-indicators.html"><span class="card-icon">•••</span><h3>Mini-indicator workbench</h3><p>Dots, pips and labeled signals under the acute-state rule.</p><span class="open">Compare variants →</span></a>
+        <a class="workbench-card" href="visual-style-guide/runner-cards.html"><span class="card-icon">⇥</span><h3>Runner-card workbench</h3><p>Local versus remote execution, liveness and host identity.</p><span class="open">Compare variants →</span></a>
+      </div>
+    </section>
+
+    <section class="section" id="vnext">
+      <div class="section-head">
+        <div><div class="section-no">§3 · vNext</div><h2>Decision space before delivery</h2></div>
+        <p>The first modernization candidate is the current Welcome panel. It remains a candidate until the problem, options, decision and acceptance boundary are recorded.</p>
+      </div>
+      <article class="spec full">
+        <div class="spec-body">
+          <div class="spec-label">Candidate 001 · Welcome panel</div>
+          <h3>From generic launch card to useful return point</h3>
+          <div class="panel-demo">
+            <div class="panel muted"><strong>Observed</strong><p>A centered card repeats product identity, lists projects, and offers New task / Open project chat. It is functional but visually generic and does not help a returning operator resume recent work.</p></div>
+            <div class="panel"><strong>Decision to make</strong><p>Choose whether vNext prioritizes recency, operator intent, or a calmer brand moment. Do not combine all three without testing hierarchy and density.</p></div>
+          </div>
+          <div class="hero-links"><a href="visual-style-guide/vnext.md#welcome-panel">Open candidate record</a></div>
+        </div>
+        <div class="spec-foot"><code>--studio-spacing-7</code><code>--studio-bg-elevated</code><code>heading-lg</code><span>status: exploration</span></div>
+      </article>
+    </section>
+
+    <section class="section" id="theme-proof">
+      <div class="section-head">
+        <div><div class="section-no">§4 · Theme proof</div><h2>Light and dark, side by side</h2></div>
+        <p>This fixed pair is independent of the page toggle. It is a permanent visual proof that surfaces, text hierarchy, borders and semantic containers have two authored states.</p>
+      </div>
+      <div class="theme-proof">
+        <div class="proof light"><div class="proof-label">Light · daily driver</div><div class="proof-card"><strong>Review ready</strong><p>3 checks passed. Evidence is available.</p><span class="proof-chip">Passed</span></div></div>
+        <div class="proof dark"><div class="proof-label">Dark · Catppuccin base</div><div class="proof-card"><strong>Review ready</strong><p>3 checks passed. Evidence is available.</p><span class="proof-chip">Passed</span></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="sources">
+      <div class="section-head">
+        <div><div class="section-no">§5 · Sources of truth</div><h2>Where this inventory comes from</h2></div>
+        <p>The Workbench exposes decisions. These source files still own the implementation contract.</p>
+      </div>
+      <ul class="source-list">
+        <li><strong><a href="../../frontend/src/styles/_tokens-primitives.scss">Primitive tokens</a></strong><span>Raw palettes, alpha values and shadow scale.</span></li>
+        <li><strong><a href="../../frontend/src/styles/_tokens-semantic.scss">Semantic tokens</a></strong><span>Theme-aware surfaces, foregrounds, accents, cards and lanes.</span></li>
+        <li><strong><a href="../quality/frontend/design-system.md">Design system</a></strong><span>Color philosophy, type ramp, shape, density and motion.</span></li>
+        <li><strong><a href="../quality/frontend/style-guide/README.md">Component vocabulary</a></strong><span>Canonical components, audits and migration rules.</span></li>
+        <li><strong><a href="../quality/design/style-guide-hard-rules.md">Hard rules</a></strong><span>No left status bars, full-bleed views, honest totals, acute-only signals and both themes.</span></li>
+        <li><strong><a href="../app/prompts/diagramm-stil-agent-host-protocol.md">AHP diagram recipe</a></strong><span>Blue control plane, teal execution plane, coral labels and thin SVG flows.</span></li>
+      </ul>
+    </section>
+  </main>
+</div>
+<script>
+(() => {
+  const root = document.documentElement;
+  const buttons = [...document.querySelectorAll("[data-theme-choice]")];
+  const setTheme = (theme) => {
+    root.dataset.theme = theme;
+    buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === theme)));
+    try { localStorage.setItem("visual-style-guide-theme", theme); } catch {}
+  };
+  let stored = null;
+  try { stored = localStorage.getItem("visual-style-guide-theme"); } catch {}
+  const requested = new URLSearchParams(location.search).get("theme");
+  setTheme(requested === "light" || requested === "dark" ? requested : (stored === "light" || stored === "dark" ? stored : "dark"));
+  buttons.forEach(button => button.addEventListener("click", () => setTheme(button.dataset.themeChoice)));
+})();
+</script>
+</body>
+</html>

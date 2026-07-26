@@ -47,6 +47,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 
 | Topic | Start here |
 |---|---|
+| Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
@@ -73,6 +74,8 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](../quality/design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](../quality/design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](../quality/design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](../concepts/tree-project-indicator-alternatives.md) |
+| Visual Style Guide Workbench (current tokens and live patterns, Empty State / Mini Indicator / Runner Card comparisons, and vNext decisions) | [visual Style Guide](../concepts/visual-style-guide.html) · [Workbench folder](../concepts/visual-style-guide/README.md) · [Empty States](../concepts/visual-style-guide/empty-states.html) · [Mini Indicators](../concepts/visual-style-guide/mini-indicators.html) · [Runner Cards](../concepts/visual-style-guide/runner-cards.html) · [vNext](../concepts/visual-style-guide/vnext.md) |
+| Narrative task view (proactive PRE/POST pipeline generation, versioned cache, fixed AHP report template, measured cost model) | [interactive Workbench](../quality/design/narrative-task-view/index.html) |
 | UX doctrine | [product/design-principles.md](../quality/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](../concepts/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](../concepts/orchestrator-in-app.md) |

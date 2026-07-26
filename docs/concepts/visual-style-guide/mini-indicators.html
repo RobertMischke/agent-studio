@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini-indicator Workbench</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg:#0f0f1a; --surface:#1e1e2e; --soft:#252537; --fg:#e2e8f0; --strong:#f8fafc;
+  --dim:#94a3b8; --muted:#64748b; --border:rgba(255,255,255,.10);
+  --info:#93c5fd; --warn:#fcd34d; --error:#fda4af; --success:#86efac; --accent:#d97757;
+  --font-ui:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+:root[data-theme="light"] {
+  color-scheme:light; --bg:#fff; --surface:#ececec; --soft:#f8f8f8; --fg:#333; --strong:#1a1a1a;
+  --dim:#555; --muted:#888; --border:#d4d4d4; --info:#1d4ed8; --warn:#b45309; --error:#b91c1c; --success:#15803d;
+}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 var(--font-ui)}
+a{color:var(--info)} button{font:inherit}.bar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:10px clamp(16px,4vw,42px);border-bottom:1px solid var(--border);background:var(--soft)}.bar a{text-decoration:none}.switch{display:flex;gap:4px}.switch button{padding:5px 9px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--dim)}.switch button[aria-pressed=true]{background:var(--surface);color:var(--strong)}
+main{max-width:1180px;margin:auto;padding:54px clamp(16px,4vw,42px) 90px}.kicker{color:var(--accent);font:650 11px var(--font-mono);letter-spacing:.13em;text-transform:uppercase}h1{margin:9px 0;color:var(--strong);font-size:clamp(30px,5vw,52px);line-height:1}.lede{max-width:68ch;margin:0;color:var(--dim);font-size:15px}.rule{margin:28px 0 42px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--soft)}.rule strong{color:var(--strong)}
+.states{display:grid;grid-template-columns:140px repeat(4,1fr);border:1px solid var(--border);border-radius:10px;overflow:hidden}.cell{min-height:82px;display:grid;place-items:center;padding:12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}.cell:nth-child(5n){border-right:0}.head{min-height:48px;background:var(--soft);color:var(--dim);font:10px var(--font-mono);letter-spacing:.08em;text-transform:uppercase}.row-head{justify-items:start;background:var(--surface);color:var(--strong);font-weight:650}
+.dot{display:inline-grid;place-items:center;width:14px;height:14px;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);border-radius:50%;background:color-mix(in srgb,var(--c) 20%,var(--surface));color:var(--c);font-size:9px;font-weight:800}.dot.run{--c:var(--info)}.dot.input{--c:var(--warn)}.dot.error{--c:var(--error)}.dot.done{--c:var(--muted)}.dot.run::after{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite}
+.pips{display:flex;gap:3px}.pip{width:7px;height:12px;border:1px solid var(--border);border-radius:2px;background:var(--soft)}.pip.on{border-color:color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 45%,var(--surface))}.label{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid color-mix(in srgb,var(--c) 40%,transparent);border-radius:9px;background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--c);font-size:10px;font-weight:650;text-transform:uppercase}.glyph{color:var(--c);font:700 13px var(--font-mono)}
+.notes{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:14px}.note{padding:18px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}.note h2{margin:0 0 8px;color:var(--strong);font-size:15px}.note p{margin:0;color:var(--dim)}.tokens{margin-top:8px;color:var(--muted);font:10.5px/1.5 var(--font-mono)}
+@keyframes pulse{50%{opacity:.35;transform:scale(.72)}}@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}@media(max-width:760px){.states{grid-template-columns:100px repeat(4,minmax(70px,1fr));overflow-x:auto}.cell{min-width:70px}.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="bar"><a href="../visual-style-guide.html">← Visual Style Guide</a><div class="switch"><button data-theme="light" aria-pressed="false">Light</button><button data-theme="dark" aria-pressed="true">Dark</button></div></header>
+<main>
+  <div class="kicker">Focused workbench · Mini indicators</div>
+  <h1>Signal the situation, not decoration.</h1>
+  <p class="lede">The same four states are rendered through three compact patterns. Compare recognition, density and accessibility before choosing one for a specific surface.</p>
+  <div class="rule"><strong>Hard boundary:</strong> motion and loud pigment are reserved for work that is active or needs attention now. Completed and historical states remain quiet.</div>
+  <section class="states" aria-label="Mini indicator comparison">
+    <div class="cell head">Pattern</div><div class="cell head">Running</div><div class="cell head">Needs input</div><div class="cell head">Error</div><div class="cell head">Settled</div>
+    <div class="cell row-head">A · Dots</div><div class="cell"><span class="dot run" aria-label="Running"></span></div><div class="cell"><span class="dot input" aria-label="Needs input">!</span></div><div class="cell"><span class="dot error" aria-label="Error">×</span></div><div class="cell"><span class="dot done" aria-label="Settled">✓</span></div>
+    <div class="cell row-head">B · Pips</div><div class="cell"><span class="pips" style="--c:var(--info)"><i class="pip on"></i><i class="pip on"></i><i class="pip"></i></span></div><div class="cell"><span class="pips" style="--c:var(--warn)"><i class="pip on"></i><i class="pip on"></i><i class="pip on"></i></span></div><div class="cell"><span class="pips" style="--c:var(--error)"><i class="pip on"></i><i class="pip on"></i><i class="pip on"></i></span></div><div class="cell"><span class="pips" style="--c:var(--muted)"><i class="pip on"></i><i class="pip"></i><i class="pip"></i></span></div>
+    <div class="cell row-head">C · Labels</div><div class="cell"><span class="label" style="--c:var(--info)">Running</span></div><div class="cell"><span class="label" style="--c:var(--warn)">Input</span></div><div class="cell"><span class="label" style="--c:var(--error)">Error</span></div><div class="cell"><span class="label" style="--c:var(--muted)">Done</span></div>
+  </section>
+  <div class="notes">
+    <article class="note"><h2>Choose by available context</h2><p>Dots work when a nearby title and tooltip explain the state. Pips work only when their count or capacity contract is stable. Labels are the safest choice when ambiguity costs more than space.</p><div class="tokens">--studio-accent-3-strong · --studio-accent-warn-strong · --studio-accent-6-strong</div></article>
+    <article class="note"><h2>Accessibility contract</h2><p>Every indicator needs an accessible label and a text tooltip. Shape or glyph supplements color. A fixed trailing slot prevents row jitter, and reduced motion stops the running pulse.</p><div class="tokens">14px dot · 3:1 non-text contrast · prefers-reduced-motion</div></article>
+  </div>
+</main>
+<script>
+(() => { const r=document.documentElement,b=[...document.querySelectorAll("[data-theme]")],s=t=>{r.dataset.theme=t;b.forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.theme===t)))};b.forEach(x=>x.addEventListener("click",()=>s(x.dataset.theme)));s(new URLSearchParams(location.search).get("theme")==="light"?"light":"dark") })();
+</script>
+</body>
+</html>

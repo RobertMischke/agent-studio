@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Visual Style Guide vNext",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/vnext.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "dd13c7d067fe36e35d88446ba65f0833cc22bc765b522119dc71f86c8edf3350",
+      "sizeBytes": 4654,
+      "lineCount": 120,
+      "capturedAt": "2026-07-23T18:30:00.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "future",
+    "implementationState": "planned",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-23"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2274",
+      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2237",
+      "title": "Tone of Voice Style Guide",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}
