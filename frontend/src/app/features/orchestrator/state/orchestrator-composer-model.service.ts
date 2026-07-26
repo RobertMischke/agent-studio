@@ -1,8 +1,18 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import type { ChatModelControl, ChatModelSelection } from 'coding-agent-chat/core';
 import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { CLI_TYPES } from '../../../models/task.model';
+import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
 import type { CliModelInfo } from '../../cli';
 import { availableCodexModels, resolveComposerSelection } from './orchestrator-composer-model.util';
+
+const GPT_ONLY_REASON = 'Unavailable in this GPT-only chat';
+const ORCHESTRATOR_CLI_OPTIONS = CLI_TYPES.map(cliType => ({
+  id: cliType,
+  label: cliTypeLabel(cliType),
+  icon: cliTypeIcon(cliType),
+  ...(cliType === 'codex' ? {} : { disabledReason: GPT_ONLY_REASON }),
+}));
 
 /**
  * Workspace-persistent model choice for the canonical Orchestrator composer.
@@ -41,7 +51,10 @@ export class OrchestratorComposerModelService {
     : 'Inherited Codex default');
 
   readonly control = computed<ChatModelControl>(() => ({
-    cliOptions: [{ id: 'codex', label: 'Codex', icon: '◆' }],
+    // Keep the complete task-agent CLI vocabulary visible. This chat route is
+    // intentionally GPT-only, so non-Codex choices explain the host policy
+    // instead of disappearing as if quota or availability detection failed.
+    cliOptions: ORCHESTRATOR_CLI_OPTIONS,
     cliType: 'codex',
     model: this.effectiveSelection().model,
     thinkingLevel: this.effectiveSelection().thinkingLevel,

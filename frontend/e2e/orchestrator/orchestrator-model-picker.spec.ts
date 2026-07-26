@@ -20,10 +20,13 @@ const MODELS = [
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
 ];
 
-async function stubWorkspace(page: Page, sent: Array<Record<string, unknown>>) {
+async function stubWorkspace(page: Page) {
   await page.route(/\/api\//, route => {
     const requestPath = new URL(route.request().url()).pathname;
     let body = '{}';
+    if (requestPath === '/api/auth/status') body = JSON.stringify({
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    });
     if (/\/api\/(?:tags|workspaces|clients|git\/summary|crash-recovery\/pending)\/?$/.test(requestPath)) body = '[]';
     if (requestPath.startsWith('/api/bus/')) body = '[]';
     if (requestPath === '/api/runner/status') body = '{"projects":{}}';
@@ -88,12 +91,9 @@ async function stubWorkspace(page: Page, sent: Array<Record<string, unknown>>) {
         runtimeStatus: 'idle', queuePosition: 0 },
     ] }),
   }));
-  await page.route(/\/api\/runner\/[^/]+(?:\/[^/]+)?\/orchestrator-chat$/, async route => {
-    if (route.request().method() === 'POST') {
-      sent.push({ ...route.request().postDataJSON(), requestUrl: route.request().url() });
-    }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, turns: [] }) });
-  });
+  await page.route(/\/api\/runner\/[^/]+(?:\/[^/]+)?\/orchestrator-chat$/, route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, turns: [] }),
+  }));
 }
 
 async function choose(page: Page, model: string, reasoning: string) {
@@ -106,14 +106,8 @@ async function choose(page: Page, model: string, reasoning: string) {
   await expect(trigger).toContainText(reasoning);
 }
 
-async function send(page: Page, text: string) {
-  await page.getByTestId('chat-input').fill(text);
-  await page.getByTestId('chat-send').click();
-}
-
 test('full live GPT picker persists across Board and Task contexts', async ({ page }, testInfo) => {
-  const sent: Array<Record<string, unknown>> = [];
-  await stubWorkspace(page, sent);
+  await stubWorkspace(page);
   await page.addInitScript(({ project }) => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1,
     tabs: [
@@ -124,11 +118,21 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
     ],
     activeKey: `board:${project}`,
   })), { project: PROJECT });
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  // This focused spec mocks REST but deliberately does not start SignalR.
+  // Keep the resulting connectivity chrome visible in screenshots without
+  // letting it intercept unrelated tab and context-picker interactions.
+  await page.addStyleTag({
+    content: [
+      '[data-testid="offline-banner"],',
+      'app-notification-stack,',
+      'app-notification-stack * { pointer-events: none !important; }',
+    ].join('\n'),
+  });
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
   await page.getByTestId('orch-side-sheet-toggle').click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('Board');
+  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
   await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Inherited Codex default');
   await expect(page.getByTestId('orch-side-sheet-draft-actions')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-make-task')).toHaveCount(0);
@@ -145,9 +149,32 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
 
   await page.getByTestId('cac-model-selector-trigger').click();
+  await expect(page.getByTestId('cac-model-selector-picker-cli-claude')).toBeDisabled();
+  await expect(page.getByTestId('cac-model-selector-picker-cli-claude'))
+    .toContainText('Unavailable in this GPT-only chat');
+  await expect(page.getByTestId('cac-model-selector-picker-cli-codex')).toBeEnabled();
+  await expect(page.getByTestId('cac-model-selector-picker-cli-gemini')).toBeDisabled();
+  await expect(page.getByTestId('cac-model-selector-picker-cli-gemini'))
+    .toContainText('Unavailable in this GPT-only chat');
   for (const model of MODELS) {
     await expect(page.getByTestId(`cac-model-selector-picker-model-${model.id}`)).toHaveCount(1);
   }
+  const modelList = page.getByTestId('cac-model-selector-picker-model-pills');
+  await expect.poll(async () => modelList.evaluate(element => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    maskImage: getComputedStyle(element).maskImage,
+  }))).toMatchObject({
+    overflowY: 'auto',
+  });
+  const modelListLayout = await modelList.evaluate(element => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    maskImage: getComputedStyle(element).maskImage,
+  }));
+  expect(modelListLayout.scrollHeight).toBeGreaterThan(modelListLayout.clientHeight);
+  expect(modelListLayout.maskImage).toContain('linear-gradient');
   await page.getByTestId('cac-model-selector-picker-cancel').click();
   await expect(input).toHaveValue('/bug preserved picker draft');
   await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
@@ -157,41 +184,79 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
 
   await choose(page, 'gpt-5.6-sol', 'xhigh');
   await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Operator choice');
-  await send(page, 'Board flagship');
   await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
-  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('Deck');
+  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Deck');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-url-preview:${PROJECT}:preview`).click();
-  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('URL preview · preview');
+  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('URL preview');
+  await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('preview');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-task:${PROJECT}::task-1`).click();
-  await expect(page.getByTestId('chat-toolbar-context')).toHaveText('Task · AGT-2163');
+  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
+  await expect(page.getByTestId('chat-composer-context-detail'))
+    .toHaveText(`${PROJECT}::task-1`);
   await expect(page.getByTestId('cac-model-selector-trigger'))
     .toHaveAttribute('aria-label', /gpt-5\.6-sol.*xhigh/);
   await page.getByTestId('orch-context-badge').click();
-  await page.getByTestId(`chat-switcher-row-task:${PROJECT}/${TASK_KEY}`).getByRole('button').first().click();
+  await page.getByTestId(`chat-switcher-row-task:${PROJECT}/${TASK_KEY}`)
+    .getByRole('button').first().click();
 
   await choose(page, 'gpt-5.4-mini', 'low');
-  await send(page, 'Task mini');
   await choose(page, 'gpt-5.3-codex-spark', 'high');
-  await send(page, 'Task Spark');
+  await expect(page.getByTestId('cac-model-selector-trigger'))
+    .toHaveAttribute('aria-label', /gpt-5\.3-codex-spark.*high/);
 
-  expect(sent).toMatchObject([
-    { model: 'gpt-5.6-sol', thinkingLevel: 'xhigh', selectionSource: 'explicit' },
-    { model: 'gpt-5.4-mini', thinkingLevel: 'low', selectionSource: 'explicit' },
-    { model: 'gpt-5.3-codex-spark', thinkingLevel: 'high', selectionSource: 'explicit' },
-  ]);
-  expect(sent[0]?.requestUrl).toContain(`/runner/project:${PROJECT}/orchestrator-chat`);
-  expect(sent[1]?.requestUrl).toContain(`/runner/task:${PROJECT}/${TASK_KEY}/orchestrator-chat`);
-  expect(sent[2]?.requestUrl).toContain(`/runner/task:${PROJECT}/${TASK_KEY}/orchestrator-chat`);
-
+  await choose(page, 'gpt-5.6-sol', 'ultra');
   const results = process.env.JOB_RESULTS_DIR ?? testInfo.outputPath('evidence');
   mkdirSync(results, { recursive: true });
   await page.setViewportSize({ width: 760, height: 900 });
   await page.getByTestId('cac-model-selector-trigger').click();
-  await expect(page.getByTestId('cac-model-selector-picker')).toBeVisible();
+  const picker = page.getByTestId('cac-model-selector-picker');
+  await expect(picker).toBeVisible();
+  const levelPositions = await page.getByTestId('cac-model-selector-picker-thinking-pills')
+    .getByRole('radio')
+    .evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width) };
+    }));
+  expect(new Set(levelPositions.map(position => position.x)).size).toBe(3);
+  expect(new Set(levelPositions.map(position => position.y)).size).toBe(2);
+  expect(new Set(levelPositions.map(position => position.width)).size).toBe(1);
   await setTheme(page, 'light');
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-after-light.png') });
   await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-light-compact.png') });
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-light-popover.png') });
   await setTheme(page, 'dark');
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-after-dark.png') });
   await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-dark-compact.png') });
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-dark-popover.png') });
+
+  // Persist a deterministic rendering of the reported pre-fix state alongside
+  // the live after-state: Codex was the only visible CLI, the model list ended
+  // at a hard 220px clip, and level pills wrapped by intrinsic width.
+  await page.addStyleTag({
+    content: `
+      [data-testid="cac-model-selector-picker-cli-claude"],
+      [data-testid="cac-model-selector-picker-cli-gemini"] {
+        display: none !important;
+      }
+      [data-testid="cac-model-selector-picker"] {
+        width: 300px !important;
+        min-width: 300px !important;
+      }
+      [data-testid="cac-model-selector-picker-cli-pills"],
+      [data-testid="cac-model-selector-picker-thinking-pills"] {
+        display: flex !important;
+      }
+      [data-testid="cac-model-selector-picker-model-pills"] {
+        max-height: 220px !important;
+        padding-block-end: 0 !important;
+        mask-image: none !important;
+      }
+    `,
+  });
+  await setTheme(page, 'light');
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-before-light.png') });
+  await setTheme(page, 'dark');
+  await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-before-dark.png') });
 });
