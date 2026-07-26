@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing Studio — Planung & Know-how | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --blue: #2a78d6; --ok: #1f8a70; --warn: #9a6b00; --violet:#7a5bd0; --mkt:#b5468a;
+    --blue-soft: #eaf1fb; --ok-soft: #e7f4ef; --warn-soft: #f8f0dd; --violet-soft:#efeafb; --mkt-soft:#f7ebf3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --blue: #3987e5; --ok: #46b89a; --warn: #d9a63f; --violet:#a58be6; --mkt:#d477b0;
+      --blue-soft: #1e2a3a; --ok-soft: #1f2f2a; --warn-soft: #33301e; --violet-soft:#26203a; --mkt-soft:#33212e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 90px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.65 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 46px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 14px; }
+  .lede { font-size: 18.5px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 25px; margin: 54px 0 6px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 26px 0 4px; }
+  p { max-width: 74ch; } p.dim { color: var(--ink-2); }
+  code { background: var(--surface-3); border-radius: 4px; padding: 1px 6px; font: 13px/1.5 "Cascadia Code", Consolas, monospace; }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child { margin-bottom: 0; }
+  .box.mkt { background: var(--mkt-soft); border-color: color-mix(in srgb, var(--mkt) 30%, var(--line)); }
+  .box.blue { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 30%, var(--line)); }
+  figure { margin: 26px 0; } figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 11px; max-width: 92ch; } figcaption b { color: var(--ink-1); }
+  ul { padding-left: 22px; } li { margin: 6px 0; max-width: 74ch; }
+  .cards { display: grid; grid-template-columns: repeat(2,1fr); gap: 16px; margin: 20px 0; }
+  @media (max-width:720px){ .cards { grid-template-columns:1fr; } }
+  .pillar { border: 1px solid var(--line); border-left: 4px solid var(--mkt); border-radius: 10px; background: var(--surface-2); padding: 14px 16px; }
+  .pillar h4 { margin: 0 0 4px; font-size: 15.5px; } .pillar p { font-size: 13.5px; color: var(--ink-2); margin: 0; }
+  .pillar .st { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  td.k { white-space: nowrap; font-weight: 600; }
+  .s-label { fill: var(--ink-1); font: 600 12px system-ui, sans-serif; } .s-sub { fill: var(--ink-2); font: 10.5px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-mkt { fill: var(--mkt-soft); stroke: var(--mkt); } .s-ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge { display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:2px 8px;background:var(--mkt-soft);color:var(--mkt);margin-left:6px }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Planung &amp; Know-how</p>
+  <h1>Marketing Studio</h1>
+  <p class="lede">Nach dem guten Produkt fängt die Arbeit erst an. Marketing ist der Erfolgsbaustein — und muss koordiniert, begleitet, gemessen, geplant und verstanden werden. Dieses Dokument ist die Ideensammlung und der Startpunkt: ein eigener Ort, an dem Marketing als System entsteht, so wie Agent Studio für die Entwicklung.</p>
+  <div class="meta">
+    <span><b>Karte</b> MKT-4 (Kern) · MKT-3/5/7 fließen ein</span>
+    <span><b>Ambition</b> groß, wächst zur App</span>
+    <span><b>Jetzt</b> Ideensammlung + Know-how</span>
+  </div>
+</header>
+
+<h2 id="warum"><span class="no">A</span>Der Gedanke</h2>
+<p>Robert (26.07.): „Marketing ist nach dem guten Produkt der Erfolgsbaustein. Wenn das Produkt gut ist, fängt die Arbeit erst an: Das muss alles koordiniert gemacht, begleitet, gemessen, geplant, verstanden werden." Genau dafür entsteht das <b>Marketing Studio</b> — kein loser Ordner voll Notizen, sondern ein wachsendes System: erst Ideensammlung und Know-how, dann dokumentierte Maßnahmen, dann Werkzeuge, dann Messung — bis hin zu Leads, Kontakten und Verkauf.</p>
+<div class="box mkt"><h4>Analog zu Agent Studio / Quality Studio</h4><p>So wie Agent Studio die Entwicklung orchestriert und Quality Studio die Qualität, orchestriert das <b>Marketing Studio</b> die Außenwirkung. Gleiche Philosophie: ein ruhiges Wissens-/Planungsdokument als Sicht, der Betrieb (Maßnahmen, KPIs, Leads) daneben — und es wächst Stück für Stück.</p></div>
+
+<h2 id="saeulen"><span class="no">B</span>Die Säulen (Ausbaustufen)</h2>
+<div class="cards">
+  <div class="pillar"><span class="st">Stufe 1 · jetzt</span><h4>Ideensammlung &amp; Know-how</h4><p>Ein HTML-/Wiki-Dokument (dieses) für Planung und Wissen. Hier sammeln sich Strategie, gelernte Prinzipien, Referenzen — der ruhige Lesepol.</p></div>
+  <div class="pillar"><span class="st">Stufe 2</span><h4>Maßnahmen als TODO/Liste</h4><p>Jede Maßnahme dokumentiert, mit Status. Stück für Stück abarbeitbar — was ist geplant, was läuft, was ist erledigt.</p></div>
+  <div class="pillar"><span class="st">Stufe 3</span><h4>Werkzeuge: Textgenerierung &amp; Recherche</h4><p>Tools, die konkrete Marketing-Arbeit machen: Texte erzeugen, recherchieren — begleitet und kuratiert, nicht blind.</p></div>
+  <div class="pillar"><span class="st">Stufe 4</span><h4>KPI-Sammlung, automatisiert</h4><p>Kennzahlen laufen automatisch ein. Damit wird Marketing messbar statt Bauchgefühl — die Grundlage für „verstehen, wo wir stehen".</p></div>
+  <div class="pillar"><span class="st">Stufe 5</span><h4>Leads &amp; Kontakte</h4><p>Hier landen Leads und Kontakte — der Übergang von Sichtbarkeit zu Beziehung.</p></div>
+  <div class="pillar"><span class="st">Stufe 6</span><h4>Verkauf</h4><p>Perspektivisch sogar der Verkauf. Das Studio wird vom Planungsort zum Ort, an dem aus Aufmerksamkeit Umsatz wird.</p></div>
+</div>
+
+<figure>
+  <svg viewBox="0 0 960 130" role="img" aria-label="Ausbaustufen des Marketing Studio">
+    <rect x="16" y="45" width="140" height="44" rx="9" class="s-mkt"/><text x="30" y="65" class="s-label">1 Ideen/Know-how</text><text x="30" y="81" class="s-sub">jetzt</text>
+    <rect x="166" y="45" width="130" height="44" rx="9" class="s-mkt"/><text x="180" y="65" class="s-label">2 Maßnahmen</text><text x="180" y="81" class="s-sub">TODO+Status</text>
+    <rect x="306" y="45" width="140" height="44" rx="9" class="s-mkt"/><text x="320" y="65" class="s-label">3 Werkzeuge</text><text x="320" y="81" class="s-sub">Text+Recherche</text>
+    <rect x="456" y="45" width="130" height="44" rx="9" class="s-mkt"/><text x="470" y="65" class="s-label">4 KPIs</text><text x="470" y="81" class="s-sub">automatisch</text>
+    <rect x="596" y="45" width="150" height="44" rx="9" class="s-ok"/><text x="610" y="65" class="s-label">5 Leads/Kontakte</text>
+    <rect x="756" y="45" width="120" height="44" rx="9" class="s-ok"/><text x="770" y="65" class="s-label">6 Verkauf</text>
+    <path d="M156 67 L164 67 M296 67 L304 67 M446 67 L454 67 M586 67 L594 67 M746 67 L754 67" class="s-flow"/>
+  </svg>
+  <figcaption><b>Ein wachsendes System, keine Big-Bang-App.</b> Jede Stufe steht für sich und liefert Wert; zusammen werden sie zum Studio. Der Start ist bewusst klein: die Ideensammlung, die du in Ruhe lesen und fortschreiben kannst.</figcaption>
+</figure>
+
+<h2 id="einfliessend"><span class="no">C</span>Was hier einfließt (MKT-3 / 5 / 7)</h2>
+<p>Die drei Marketing-Karten aus dem Sichtblick sind keine Einzelseiten mehr, sondern <b>Themen im Marketing Studio</b>:</p>
+<table>
+  <thead><tr><th>Herkunft</th><th>Wird im Studio zu</th><th>Stand</th></tr></thead>
+  <tbody>
+    <tr><td class="k">MKT-3 · Vergleichsseite<br>(Agent Studio vs. AMP)</td><td>Geparkte <b>SEO-Maßnahme/Idee</b> — nicht als eigene Seite bauen, sondern als möglicher Hebel im SEO-Bereich vormerken.</td><td><span class="badge">geparkt</span></td></tr>
+    <tr><td class="k">MKT-5 · GEO/AEO/LLMO</td><td><b>Wird gemacht</b> — und lebt hier: IST-Stand kennen, Analysen &amp; Reports, „wo stehen wir". SEO/GEO/AEO/LLMO wird ein <b>wichtiger Dauer-Punkt</b> des Studios.</td><td><span class="badge">aktiv</span></td></tr>
+    <tr><td class="k">MKT-7 · Hire-Page<br>(produktisierte Angebote)</td><td><b>Thema</b> in der Marketing-App — hier willst du dich mehr mit beschäftigen; noch keine Umsetzung, erst Durchdenken.</td><td><span class="badge">Thema</span></td></tr>
+  </tbody>
+</table>
+
+<h2 id="messen"><span class="no">D</span>Der Kern: verstehen, wo wir stehen</h2>
+<div class="box blue"><h4>Analysen &amp; Reports als Herzstück</h4><p>Der wiederkehrende Wunsch: <b>„Vom Marketing Studio möchte ich prüfen können, wo wir stehen."</b> Deshalb ist die Mess- und Report-Ebene kein Anhängsel, sondern der Kern. SEO/GEO/AEO/LLMO-Sichtbarkeit, Reichweite, Leads — als laufende Kennzahlen und lesbare Reports, nicht als einmalige Momentaufnahme. Erst das macht Marketing steuerbar.</p></div>
+
+<h2 id="naechste"><span class="no">E</span>Nächste Schritte</h2>
+<ul>
+  <li><b>Dieses Dokument</b> ist Stufe 1 — die Ideensammlung. Es wächst mit; du kannst hier in Ruhe nachlesen und ergänzen.</li>
+  <li><b>MKT-5 (GEO/AEO/LLMO)</b> läuft als erste echte Maßnahme — Analyse des IST-Stands + erste Reports, angedockt hier.</li>
+  <li><b>MKT-3</b> als SEO-Idee vermerkt, <b>MKT-7</b> als Thema — beide warten bewusst, verwässern aber die aktive Arbeit nicht.</li>
+  <li>Wenn du „los" sagst, schneide ich die Maßnahmen-/TODO-Ebene (Stufe 2) und die erste KPI-Quelle (Stufe 4-Anfang) als Karten. Die App wächst aus dem Studio, nicht umgekehrt.</li>
+</ul>
+<p class="dim">Ambition bewusst groß, Start bewusst klein. Das Studio ist die Klammer, unter der Marketing vom Bauchgefühl zum begleiteten, gemessenen System wird — der Erfolgsbaustein nach dem guten Produkt.</p>
+
+</main>
+</body>
+</html>
