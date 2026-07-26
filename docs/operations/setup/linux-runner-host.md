@@ -310,10 +310,92 @@ probe URLs do not rewrite project clone remotes.
 
 Project clones keep their registered HTTPS URL for both fetch and push. The
 simplest write identity is a fine-grained personal access token owned by a
-dedicated machine account. Limit it to the assigned repositories with
-**Contents: Read and write**, store it in the runner user's OS credential
-helper, and keep the HTTPS URL free of embedded secrets. Do not put a token in
-`runner.env`, a command line, task output, or evidence.
+dedicated machine account. Follow [Token requirements](#token-requirements)
+before storing it in the runner user's credential helper. Keep the HTTPS URL
+free of embedded secrets. Do not put a token in `runner.env`, a command line,
+task output, or evidence.
+
+### Token requirements
+
+The coding runner must be able to publish ordinary source changes and changes
+under `.github/workflows`. Use one of these exact permission sets:
+
+| Token type | Repository selection | Required permissions |
+|---|---|---|
+| Fine-grained personal access token, preferred | Resource owner: the organization that owns the repository, or the personal account for a personally owned repository. Select only repositories assigned to this runner. | Repository permissions: **Contents: Read and write** and **Workflows: Read and write**. Metadata read access is added by GitHub. |
+| Personal access token (classic), compatibility fallback | The token follows all repository access of its user. Use only when organization policy or a fine-grained-token limitation requires it. | Scopes: **`repo`** and **`workflow`**. For a public-only repository, `public_repo` plus `workflow` is sufficient, but the runner baseline uses `repo` because private repositories are supported. |
+
+PATs are always tied to the user that creates them. A personal token is not an
+organization identity. For an organization repository, prefer a dedicated
+machine account, choose the organization as the fine-grained token's resource
+owner, and wait for organization approval when its policy requires approval.
+The account itself must have repository write access. Authorize a classic token
+for the organization's SAML SSO when applicable. For a long-lived integration
+that acts on behalf of an organization rather than one user, use a GitHub App
+instead of sharing a human user's PAT.
+
+Git credential lookup is path-sensitive when `useHttpPath` is enabled. The
+repository URL with `.git` and the same URL without `.git` are different exact
+keys. Store the same token under both keys. Run this as the systemd runner user
+after configuring an appropriate credential helper:
+
+```bash
+git config --global credential.https://github.com.useHttpPath true
+
+read -rp 'GitHub machine-account username: ' runner_github_user
+read -rp 'Repository slug (OWNER/REPOSITORY): ' runner_repo_slug
+read -rsp 'GitHub token: ' runner_github_token
+printf '\n'
+
+for runner_repo_path in "$runner_repo_slug" "$runner_repo_slug.git"; do
+  printf 'protocol=https\nhost=github.com\npath=%s\nusername=%s\npassword=%s\n\n' \
+    "$runner_repo_path" "$runner_github_user" "$runner_github_token" |
+    git credential approve
+done
+unset runner_github_token
+
+for runner_repo_url in \
+  "https://github.com/$runner_repo_slug" \
+  "https://github.com/$runner_repo_slug.git"; do
+  GIT_TERMINAL_PROMPT=0 git ls-remote "$runner_repo_url" HEAD >/dev/null &&
+    printf 'credential ok: %s\n' "$runner_repo_url"
+done
+unset runner_github_user runner_repo_slug runner_repo_path runner_repo_url
+```
+
+Never paste the token into a remote URL. `git credential approve` passes it on
+standard input so it does not enter shell history. On a headless host, make sure
+the selected credential helper persists for the runner user and protects its
+storage with user-only permissions.
+
+Set an expiration date and record the owner, repositories, permissions, expiry,
+and runner hosts in the operator inventory. Rotate before expiry:
+
+1. Create and approve the replacement token with the same repository selection
+   and permissions.
+2. Remove both old exact-match entries, then repeat the copy-paste storage block
+   above with the replacement token:
+
+   ```bash
+   read -rp 'Repository slug (OWNER/REPOSITORY): ' runner_repo_slug
+   for runner_repo_path in "$runner_repo_slug" "$runner_repo_slug.git"; do
+     printf 'protocol=https\nhost=github.com\npath=%s\n\n' "$runner_repo_path" |
+       git credential reject
+   done
+   unset runner_repo_slug runner_repo_path
+   ```
+
+3. Re-run both `git ls-remote` checks, restart `agent-host.service`, and confirm
+   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Remote hosts**.
+4. Revoke the old token only after every assigned repository and runner is
+   green. A token owner's departure or repository-access removal also
+   invalidates the runner identity and requires immediate rotation.
+
+The guided installer tracked by AGT-2334 must link to this section and include a
+**Create token** step before credential storage. That step shows the
+fine-grained and classic checklists above, records both URL forms, runs both
+read checks, then waits for the daemon capability result. Installer UI and
+secret-handling implementation remain on the installer card.
 
 A repository deploy key also works when the host uses an exact per-repository
 Git URL rewrite for transport. Generate it as the systemd runner user. Only the
@@ -352,12 +434,26 @@ the registry value while Git uses the deploy-key SSH transport. Add one exact
 rewrite per assigned repository. The `RUNNER_GIT_PUSH_REMOTE` value above is
 still only the startup probe input.
 
-At daemon startup, the runner performs `git push --dry-run` to
-`refs/heads/runner-capability-probe/<runner-id>`, publishes `ready` or
-`read-only` on its client identity, and then polls. Dry-run creates no branch.
-The server refuses claims from a `read-only` runner, and Remote Hosts shows a
-Read-only badge with the probe error. Restore credentials and restart the unit;
-the next startup probe replaces the status.
+At daemon startup, the runner first performs `git push --dry-run` to
+`refs/heads/runner-capability-probe/<runner-id>`. It then commits a disabled
+throwaway workflow with `[skip ci]`, pushes it to a unique branch below that
+namespace, and immediately deletes the branch. This second push proves the
+GitHub workflow permission that a dry-run cannot prove.
+
+The runner publishes one of three statuses:
+
+- `ready`: contents and workflow pushes succeeded.
+- `ready-no-workflow-scope`: contents pushes succeeded, but GitHub rejected the
+  workflow change. Claims remain enabled because card file scope is not known
+  before execution.
+- `read-only`: the normal push path failed. The server refuses new claims.
+
+Remote Hosts shows separate **Contents** and **Workflow** badges. A missing
+workflow permission links back to this section. The same error classifier also
+recognizes GitHub's first real workflow rejection; if salvage fails, its
+`worktree-blocked` message includes the exact permission checklist and this
+documentation path. Restore or rotate credentials and restart the unit; the
+next startup probe replaces the status.
 
 ### Remote completion protocol
 

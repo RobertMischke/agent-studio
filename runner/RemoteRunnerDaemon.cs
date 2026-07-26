@@ -129,11 +129,11 @@ public sealed class RemoteRunnerDaemon
             async () =>
             {
                 await _client.ReportGitCapabilityAsync(clientId, new RunnerGitCapabilityRequest(
-                    gitCapability.CanPush ? "ready" : "read-only", gitCapability.Detail, DateTime.UtcNow), shutdown);
+                    gitCapability.Status, gitCapability.Detail, DateTime.UtcNow), shutdown);
                 return null;
             },
             shutdown);
-        _log($"runner-git-capability status={(gitCapability.CanPush ? "ready" : "read-only")} detail={gitCapability.Detail}");
+        _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
         var admissionEnabled = gitCapability.CanPush;
         if (!admissionEnabled)
             _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
@@ -143,7 +143,11 @@ public sealed class RemoteRunnerDaemon
             async () =>
             {
                 await _client.AdvertiseCapabilitiesAsync(
-                    RunnerCapabilityProbe.Advertise(_options, gitCapability.CanPush),
+                    RunnerCapabilityProbe.Advertise(
+                        _options,
+                        gitCapability.CanPush,
+                        gitCapability.CanPushWorkflows,
+                        gitCapability.Detail),
                     null,
                     capabilityGeneration,
                     shutdown);
@@ -201,7 +205,11 @@ public sealed class RemoteRunnerDaemon
                 {
                     var capabilityTelemetry = TakeTelemetry();
                     await _client.AdvertiseCapabilitiesAsync(
-                        RunnerCapabilityProbe.Advertise(_options, gitPushReady: true),
+                        RunnerCapabilityProbe.Advertise(
+                            _options,
+                            gitCapability.CanPush,
+                            gitCapability.CanPushWorkflows,
+                            gitCapability.Detail),
                         RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                         ++capabilityGeneration,
                         shutdown);
