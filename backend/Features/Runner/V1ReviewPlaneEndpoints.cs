@@ -60,6 +60,34 @@ public static class V1ReviewPlaneEndpoints
             }
         });
 
+        api.MapPut("/runners/{runnerId}/capabilities", (
+            HttpContext context,
+            string runnerId,
+            Contract.CapabilityAdvertisementRequest request,
+            V1ReviewExecutorRegistry registry) =>
+        {
+            if (!RunnerMatches(context, runnerId))
+                return Results.Unauthorized();
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new Contract.ApiError(
+                    "runner-id-mismatch",
+                    "Route and capability runner ids differ."));
+            try
+            {
+                return Results.Ok(registry.AdvertiseCapabilities(runnerId, request));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new Contract.ApiError("invalid-request", exception.Message));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new Contract.ApiError(
+                    "capability-advertisement-conflict",
+                    exception.Message));
+            }
+        });
+
         api.MapPost("/runners/{runnerId}/review-claims", async (
             HttpContext context,
             string runnerId,
@@ -728,6 +756,9 @@ public sealed class V1ReviewExecutorRegistry
 {
     private readonly ConcurrentDictionary<string, Registration> _registrations =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CapabilityState> _capabilityStates =
+        new(StringComparer.Ordinal);
+    private readonly object _gate = new();
 
     public Contract.RunnerDto Register(string runnerId, Contract.RegisterRunnerRequest request)
     {
@@ -744,33 +775,45 @@ public sealed class V1ReviewExecutorRegistry
                 "The monolith V1 mount admits a separate review-executor identity only.");
 
         var now = DateTime.UtcNow;
-        var registration = _registrations.AddOrUpdate(
-            runnerId,
-            _ => new Registration(
-                request.Name,
-                request.HostId,
-                request.InstanceId,
-                request.RunnerVersion,
-                request.ProtocolVersion,
-                capabilities.ToHashSet(StringComparer.Ordinal),
-                now,
-                now),
-            (_, existing) =>
-            {
-                if (!existing.Capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor))
-                    throw new InvalidOperationException(
-                        "A coding identity cannot be changed into a review identity.");
-                return existing with
+        Registration registration;
+        lock (_gate)
+        {
+            registration = _registrations.AddOrUpdate(
+                runnerId,
+                _ => new Registration(
+                    request.Name,
+                    request.HostId,
+                    request.InstanceId,
+                    request.RunnerVersion,
+                    request.ProtocolVersion,
+                    capabilities.ToHashSet(StringComparer.Ordinal),
+                    now,
+                    now),
+                (_, existing) =>
                 {
-                    Name = request.Name,
-                    HostId = request.HostId,
-                    InstanceId = request.InstanceId,
-                    RunnerVersion = request.RunnerVersion,
-                    ProtocolVersion = request.ProtocolVersion,
-                    Capabilities = capabilities.ToHashSet(StringComparer.Ordinal),
-                    LastSeenAt = now,
-                };
-            });
+                    if (!existing.Capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor))
+                        throw new InvalidOperationException(
+                            "A coding identity cannot be changed into a review identity.");
+                    return existing with
+                    {
+                        Name = request.Name,
+                        HostId = request.HostId,
+                        InstanceId = request.InstanceId,
+                        RunnerVersion = request.RunnerVersion,
+                        ProtocolVersion = request.ProtocolVersion,
+                        Capabilities = capabilities.ToHashSet(StringComparer.Ordinal),
+                        LastSeenAt = now,
+                    };
+                });
+            if (_capabilityStates.TryGetValue(runnerId, out var capabilityState)
+                && !string.Equals(
+                    capabilityState.InstanceId,
+                    registration.InstanceId,
+                    StringComparison.Ordinal))
+            {
+                _capabilityStates.Remove(runnerId);
+            }
+        }
         return new Contract.RunnerDto(
             runnerId,
             registration.Name,
@@ -781,6 +824,101 @@ public sealed class V1ReviewExecutorRegistry
             "active",
             registration.RegisteredAt,
             registration.LastSeenAt);
+    }
+
+    public Contract.RunnerCapabilitySnapshotDto AdvertiseCapabilities(
+        string runnerId,
+        Contract.CapabilityAdvertisementRequest request)
+    {
+        if (request.SchemaVersion != Contract.CapabilityProtocol.CurrentSchemaVersion)
+            throw new ArgumentException(
+                $"Capability schema {request.SchemaVersion} is unsupported; expected " +
+                $"{Contract.CapabilityProtocol.CurrentSchemaVersion}.");
+        if (request.FreshForSeconds is < 30 or > 900)
+            throw new ArgumentException("Capability freshness must be between 30 and 900 seconds.");
+        if (request.Generation <= 0 || request.Capabilities.Count == 0)
+            throw new ArgumentException(
+                "Capability generation and at least one capability are required.");
+
+        var advertisedAt = request.AdvertisedAt.ToUniversalTime();
+        var now = DateTime.UtcNow;
+        if (advertisedAt > now.AddMinutes(2))
+            throw new ArgumentException("Capability advertisement time is too far in the future.");
+        var freshUntil = advertisedAt.AddSeconds(request.FreshForSeconds);
+        var capabilities = request.Capabilities
+            .Select(capability =>
+            {
+                var key = capability.Key.Trim().ToLowerInvariant();
+                if (key.Length == 0 || string.IsNullOrWhiteSpace(capability.Category))
+                    throw new ArgumentException("Capability key and category are required.");
+                return new Contract.CapabilityHealthDto(
+                    key,
+                    capability.Category.Trim().ToLowerInvariant(),
+                    capability.Status.Trim().ToLowerInvariant(),
+                    Contract.CapabilityHealthStates.Healthy,
+                    null,
+                    advertisedAt,
+                    freshUntil,
+                    freshUntil > now,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    capability.Version,
+                    capability.Identity,
+                    capability.Detail,
+                    [],
+                    []);
+            })
+            .GroupBy(capability => capability.Key, StringComparer.Ordinal)
+            .Select(group => group.Last())
+            .OrderBy(capability => capability.Category, StringComparer.Ordinal)
+            .ThenBy(capability => capability.Key, StringComparer.Ordinal)
+            .ToArray();
+
+        lock (_gate)
+        {
+            if (!_registrations.TryGetValue(runnerId, out var registration))
+                throw new InvalidOperationException(
+                    "Register this review-executor identity before advertising capabilities.");
+            if (!string.Equals(registration.InstanceId, request.InstanceId, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Capability advertisement instance does not match the registered review executor.");
+            if (_capabilityStates.TryGetValue(runnerId, out var existing)
+                && request.Generation < existing.Generation)
+            {
+                throw new InvalidOperationException(
+                    $"Capability generation {request.Generation} is older than {existing.Generation}.");
+            }
+
+            registration = registration with { LastSeenAt = now };
+            _registrations[runnerId] = registration;
+            _capabilityStates[runnerId] = new CapabilityState(
+                request.InstanceId,
+                request.Generation,
+                capabilities,
+                request.Telemetry);
+            return new Contract.RunnerCapabilitySnapshotDto(
+                runnerId,
+                registration.Name,
+                registration.HostId,
+                registration.InstanceId,
+                registration.RunnerVersion,
+                registration.ProtocolVersion,
+                "active",
+                registration.RegisteredAt,
+                registration.LastSeenAt,
+                new Contract.RemoteHostAdmissionDto(
+                    registration.HostId,
+                    "open",
+                    null,
+                    null,
+                    null,
+                    null),
+                capabilities,
+                request.Telemetry);
+        }
     }
 
     public bool TryGetReviewExecutor(string runnerId, string instanceId, out ReviewExecutor executor)
@@ -805,6 +943,12 @@ public sealed class V1ReviewExecutorRegistry
         IReadOnlySet<string> Capabilities,
         DateTime RegisteredAt,
         DateTime LastSeenAt);
+
+    private sealed record CapabilityState(
+        string InstanceId,
+        long Generation,
+        IReadOnlyList<Contract.CapabilityHealthDto> Capabilities,
+        Contract.HostTelemetrySnapshotDto? Telemetry);
 
     public sealed record ReviewExecutor(string HostId, IReadOnlySet<string> Capabilities);
 }
