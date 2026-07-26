@@ -80,6 +80,12 @@ public static class ReissueOpenItemsPreCheck
         /// <summary>Concern/block one-line summaries lifted from the
         /// <c>aspect-*.md</c> frontmatter of the previous run.</summary>
         public IReadOnlyList<string> AspectConcernSummaries { get; init; } = [];
+
+        /// <summary>Typed cause copied from the latest quality-loop reopen event.</summary>
+        public string ReissueCause { get; init; } = "unknown";
+
+        /// <summary>Stable analysis stratum derived from <see cref="ReissueCause"/>.</summary>
+        public string PromptFamily { get; init; } = "other-reissue";
     }
 
     public enum PreCheckAction
@@ -102,6 +108,9 @@ public static class ReissueOpenItemsPreCheck
         public IReadOnlyList<string> OpenItems { get; init; } = [];
         public string? FollowUpText { get; init; }
         public PreCheckAction Action { get; init; } = PreCheckAction.None;
+        public int PriorRunCount { get; init; }
+        public string ReissueCause { get; init; } = "unknown";
+        public string PromptFamily { get; init; } = "other-reissue";
 
         /// <summary>One-line orchestrator chat note describing the intervention,
         /// or null when <see cref="Action"/> is <see cref="PreCheckAction.None"/>.</summary>
@@ -126,11 +135,26 @@ public static class ReissueOpenItemsPreCheck
     {
         var isReissue = input.HasReissueTag && input.PriorRunCompleted;
         if (!isReissue)
-            return new PreCheckDecision { IsReissue = false, Action = PreCheckAction.None };
+            return new PreCheckDecision
+            {
+                IsReissue = false,
+                Action = PreCheckAction.None,
+                PriorRunCount = input.PriorRunCount,
+                ReissueCause = input.ReissueCause,
+                PromptFamily = input.PromptFamily,
+            };
 
         var openItems = ExtractOpenItems(input.FollowUpText, input.AspectConcernSummaries);
         if (openItems.Count == 0)
-            return new PreCheckDecision { IsReissue = true, OpenItems = openItems, Action = PreCheckAction.None };
+            return new PreCheckDecision
+            {
+                IsReissue = true,
+                OpenItems = openItems,
+                Action = PreCheckAction.None,
+                PriorRunCount = input.PriorRunCount,
+                ReissueCause = input.ReissueCause,
+                PromptFamily = input.PromptFamily,
+            };
 
         var escalate = input.PriorRunCount >= EscalateAfterReissues;
         var action = escalate ? PreCheckAction.Escalate : PreCheckAction.ForegroundOpenItems;
@@ -145,6 +169,9 @@ public static class ReissueOpenItemsPreCheck
             OpenItems = openItems,
             FollowUpText = input.FollowUpText,
             Action = action,
+            PriorRunCount = input.PriorRunCount,
+            ReissueCause = input.ReissueCause,
+            PromptFamily = input.PromptFamily,
             Note = note,
             ForegroundBlock = BuildForegroundBlock(openItems, escalate),
         };

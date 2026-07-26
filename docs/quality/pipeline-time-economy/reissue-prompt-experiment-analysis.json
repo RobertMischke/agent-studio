@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "experimentId": "finding-first-v1",
+  "generatedAt": "2026-07-26T00:00:00.000Z",
+  "evidenceLabels": {
+    "assignmentAndAttemptEvents": "hard",
+    "acceptanceEndpoint": "model-judged",
+    "gradeAEndpoint": "model-judged",
+    "armComparison": "experimental"
+  },
+  "predeclaredAnalysis": {
+    "assignmentUnit": "task from first eligible mapped reissue",
+    "primaryEndpoint": "attempts from first reissue to first model-judged acceptance",
+    "sensitivityEndpoint": "attempt at first model-judged Grade A",
+    "censoring": "right-censor at the last observed pipeline attempt",
+    "effect": "treatment minus control restricted mean attempts at the common observed horizon; negative is beneficial",
+    "uncertainty": "2000 task-level bootstrap resamples, percentile 95% interval",
+    "meaningfulBenefitThresholdAttempts": -0.5,
+    "minimumTasksPerArmForPromotion": 30,
+    "assignmentDriftTasksAllowed": 0,
+    "deterministicGateRiskDifferenceUpperBound": 0.05
+  },
+  "eligibleTasks": 0,
+  "armCounts": {
+    "control": 0,
+    "treatment": 0
+  },
+  "primaryEndpoint": {
+    "estimable": false,
+    "horizonAttempts": null,
+    "controlRestrictedMeanAttempts": null,
+    "treatmentRestrictedMeanAttempts": null,
+    "treatmentMinusControl": null,
+    "bootstrap95Ci": null,
+    "arms": {
+      "control": {
+        "assigned": 0,
+        "observedEndpoint": 0,
+        "rightCensored": 0,
+        "observedEndpointMeanAttempts": null
+      },
+      "treatment": {
+        "assigned": 0,
+        "observedEndpoint": 0,
+        "rightCensored": 0,
+        "observedEndpointMeanAttempts": null
+      }
+    }
+  },
+  "gradeASensitivity": {
+    "estimable": false,
+    "horizonAttempts": null,
+    "controlRestrictedMeanAttempts": null,
+    "treatmentRestrictedMeanAttempts": null,
+    "treatmentMinusControl": null,
+    "bootstrap95Ci": null,
+    "arms": {
+      "control": {
+        "assigned": 0,
+        "observedEndpoint": 0,
+        "rightCensored": 0,
+        "observedEndpointMeanAttempts": null
+      },
+      "treatment": {
+        "assigned": 0,
+        "observedEndpoint": 0,
+        "rightCensored": 0,
+        "observedEndpointMeanAttempts": null
+      }
+    }
+  },
+  "deterministicGateRegression": {
+    "estimable": false,
+    "controlRate": null,
+    "treatmentRate": null,
+    "treatmentMinusControl": null,
+    "bootstrap95Ci": null
+  },
+  "promptFamilyStrata": [],
+  "causeStrata": [],
+  "codingRouteCounts": {},
+  "assignmentDriftTasks": 0,
+  "routeDriftTasks": 0,
+  "promotionDecision": {
+    "eligible": false,
+    "recommendation": "Keep the production default unchanged."
+  }
+}

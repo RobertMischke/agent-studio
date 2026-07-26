@@ -18,6 +18,8 @@ public sealed partial class RuntimePromptService
     public const string RunnerResumeRestart = "runner-resume-restart.md";
     public const string RunnerRecoveryContinuation = "runner-recovery-continuation.md";
     public const string RunnerReissueChange = "runner-reissue-change.md";
+    public const string RunnerReissueControlV1 = "runner-reissue-control-v1.md";
+    public const string RunnerReissueTreatmentV1 = "runner-reissue-treatment-v1.md";
     public const string EpicDecomposition = "epic-decomposition.md";
     public const string SummaryProtocol = "summary-protocol.md";
     public const string CommitMessage = "commit-message.md";

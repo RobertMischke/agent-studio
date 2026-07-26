@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-26",
+  "sourceTask": "AGT-2322",
+  "classification": "observational",
+  "reissuePromptSignal": {
+    "mappedFirstReissues": 162,
+    "specificFindingCountSpearmanRhoWithAcceptedAttempt": -0.273,
+    "bootstrap95Ci": {
+      "lower": -0.420,
+      "upper": -0.117
+    },
+    "meanAttemptsFromFirstMappedReissue": {
+      "findingPresent": 1.83,
+      "findingAbsent": 3.63
+    },
+    "counterSignal": "The composite sharpness index pointed in the opposite direction."
+  },
+  "interpretation": "This is a narrow observational signal that motivates a controlled experiment. It does not authorize a production-default change."
+}
