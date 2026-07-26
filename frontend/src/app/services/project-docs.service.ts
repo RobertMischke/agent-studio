@@ -1,6 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { map } from 'rxjs';
+import {
+  HttpClient,
+  HttpErrorResponse,
+  HttpHeaders,
+  HttpParams,
+} from '@angular/common/http';
+import { catchError, map, of, throwError } from 'rxjs';
 import {
   ArchitectureOverview,
   ProjectStyleGuideCatalogue,
@@ -26,6 +31,12 @@ import {
   WorkbenchCatalogue,
   WorkbenchDocument,
 } from '../models/project-docs.model';
+
+export interface WikiConditionalResponse<T> {
+  modified: boolean;
+  etag: string | null;
+  body: T | null;
+}
 
 /**
  * Reduces a search snippet to text plus literal `<em>` / `</em>` highlight
@@ -99,6 +110,14 @@ export class ProjectDocsService {
   getWikiRecentEdits(projectName: string, limit = 12) {
     return this.http.get<WikiRecentEdits>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`
+    );
+  }
+
+  /** Conditional recent-edits read used by visible Wiki refresh loops. */
+  getWikiRecentEditsVersion(projectName: string, limit = 12, etag: string | null = null) {
+    return this.conditionalGet<WikiRecentEdits>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`,
+      etag,
     );
   }
 
@@ -212,6 +231,14 @@ export class ProjectDocsService {
     );
   }
 
+  /** Conditional per-file history read whose ETag also covers live file edits. */
+  getWikiFileHistoryVersion(projectName: string, relPath: string, etag: string | null = null) {
+    return this.conditionalGet<WikiFileHistory>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/history/${this.encodeRelPath(relPath)}`,
+      etag,
+    );
+  }
+
   /** Content of a wiki doc as it existed at an earlier commit (old-revision view). */
   getWikiRevision(projectName: string, sha: string, relPath: string) {
     return this.http.get<WikiRevisionContent>(
@@ -313,5 +340,28 @@ export class ProjectDocsService {
 
   private encodeRelPath(relPath: string): string {
     return relPath.split('/').map(encodeURIComponent).join('/');
+  }
+
+  private conditionalGet<T>(url: string, etag: string | null) {
+    const headers = etag
+      ? new HttpHeaders({ 'If-None-Match': etag })
+      : undefined;
+    return this.http.get<T>(url, { headers, observe: 'response' }).pipe(
+      map(response => ({
+        modified: true,
+        etag: response.headers.get('ETag'),
+        body: response.body,
+      }) satisfies WikiConditionalResponse<T>),
+      catchError((error: unknown) => {
+        if (error instanceof HttpErrorResponse && error.status === 304) {
+          return of({
+            modified: false,
+            etag: error.headers.get('ETag') ?? etag,
+            body: null,
+          } satisfies WikiConditionalResponse<T>);
+        }
+        return throwError(() => error);
+      }),
+    );
   }
 }

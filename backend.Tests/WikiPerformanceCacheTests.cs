@@ -296,6 +296,18 @@ public class WikiPerformanceCacheTests : IDisposable
         Assert.Equal(1, warmRollup.Files);
         Assert.Equal(cold.ETag, warm!.ETag);
 
+        // An unrelated commit moves repository HEAD but must not wake a client
+        // watching note.md. The validator is scoped to the selected document.
+        File.WriteAllText(Path.Combine(repoRoot, "README.md"), "# Repo");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "update unrelated readme");
+        git.InvalidateHeadKeyedCaches();
+
+        var afterUnrelatedCommit = docs.GetWikiHistory("History", "note.md", git);
+        Assert.NotNull(afterUnrelatedCommit);
+        Assert.Single(afterUnrelatedCommit!.History.Commits);
+        Assert.Equal(cold.ETag, afterUnrelatedCommit.ETag);
+
         // Second commit -> HEAD moves -> history refreshes to two commits.
         File.WriteAllText(Path.Combine(docsDir, "note.md"), "# Note\nsecond");
         RunGit(repoRoot, "add -A");

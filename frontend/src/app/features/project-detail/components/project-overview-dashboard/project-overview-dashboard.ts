@@ -21,6 +21,8 @@ import { ProjectPublishPanelComponent } from '../project-publish-panel/project-p
 import { ProjectOverviewUrlsComponent } from '../project-overview-urls/project-overview-urls';
 import { ProjectVisualEvidenceQueueComponent } from '../project-visual-evidence-queue/project-visual-evidence-queue';
 import type { ProjectRailKey } from '../project-shell/project-shell.config';
+import { WikiLiveRefreshService } from '../../services/wiki-live-refresh.service';
+import { mergeRecentWikiFeed } from './project-overview-wiki-feed';
 
 /** Operator-first Project Overview. Every block is a compact projection of an
  * existing detail truth; it owns no task, URL, deployment, or Wiki mutation. */
@@ -33,6 +35,7 @@ import type { ProjectRailKey } from '../project-shell/project-shell.config';
     ProjectOverviewUrlsComponent,
     ProjectVisualEvidenceQueueComponent,
   ],
+  providers: [WikiLiveRefreshService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-overview-dashboard.html',
   styleUrl: './project-overview-dashboard.scss',
@@ -46,6 +49,7 @@ export class ProjectOverviewDashboardComponent {
   private readonly tasks = inject(TaskService);
   private readonly docs = inject(ProjectDocsService);
   private readonly git = inject(ProjectGitService);
+  private readonly wikiLiveRefresh = inject(WikiLiveRefreshService);
   private refreshGeneration = 0;
 
   readonly tokenUsage = signal<ProjectTokenUsageSummary | null>(null);
@@ -98,7 +102,20 @@ export class ProjectOverviewDashboardComponent {
     .some(branch => branch.ahead > 50 || branch.behind > 50));
 
   constructor() {
-    effect(() => this.refresh(this.projectName()));
+    effect(() => {
+      const project = this.projectName();
+      this.refresh(project);
+      this.wikiLiveRefresh.watchRecentEdits(
+        project,
+        6,
+        edits => {
+          const current = this.wiki();
+          if (!current) return;
+          const next = mergeRecentWikiFeed(current, edits);
+          if (next !== current) this.wiki.set(next);
+        },
+      );
+    });
   }
 
   refresh(project = this.projectName(), forceEvidenceRefresh = false): void {
