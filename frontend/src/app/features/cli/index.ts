@@ -22,3 +22,4 @@ export type {
   CliWorkingMemoryDeleteResult,
 } from './models/cli.model';
 export { CLAUDE_FALLBACK_MODEL_ID, MODEL_IDS } from './models/model-ids';
+export { orderModelCatalog } from './models/model-catalog-ordering';

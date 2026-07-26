@@ -6,31 +6,39 @@ import { setTheme } from '../helpers/theme';
 const PROJECT = 'model-picker-project';
 const TASK_KEY = 'AGT-2163';
 const MODELS = [
-  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', isDefault: true, available: true,
-    thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra'], defaultThinkingLevel: 'ultra' },
-  { id: 'gpt-5.6-pro', label: 'GPT-5.6 Pro', available: true,
-    thinkingLevels: ['low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
-  { id: 'gpt-5.5', label: 'GPT-5.5', available: true,
-    thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
   { id: 'gpt-5.4', label: 'GPT-5.4', available: true,
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
+  { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', isDefault: true, available: true,
+    thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra'], defaultThinkingLevel: 'ultra' },
+  { id: 'gpt-5.5', label: 'GPT-5.5', available: true, deprecated: true,
+    availabilityNote: 'Superseded by GPT-5.6.',
+    thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
+  { id: 'gpt-5.6-pro', label: 'GPT-5.6 Pro', available: true,
+    thinkingLevels: ['low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', available: true,
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
   { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark', available: true,
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
 ];
 
-async function stubWorkspace(page: Page) {
+async function stubWorkspace(page: Page, sent: Record<string, unknown>[] = []) {
   await page.route(/\/api\//, route => {
     const requestPath = new URL(route.request().url()).pathname;
     let body = '{}';
-    if (requestPath === '/api/auth/status') body = JSON.stringify({
-      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
-    });
+    if (requestPath === '/api/auth/status') {
+      body = JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      });
+    }
     if (/\/api\/(?:tags|workspaces|clients|git\/summary|crash-recovery\/pending)\/?$/.test(requestPath)) body = '[]';
     if (requestPath.startsWith('/api/bus/')) body = '[]';
+    if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
     if (requestPath === '/api/runner/status') body = '{"projects":{}}';
     if (requestPath === '/api/cli/quota') body = '{"snapshots":[]}';
+    if (requestPath === '/api/epics') body = '[]';
     if (requestPath.startsWith('/api/tasks/archive')) body = '{"items":[],"total":0,"offset":0,"limit":50}';
     if (requestPath.endsWith('/visual-evidence')) body = JSON.stringify({
       project: PROJECT, capturedAt: '2026-07-12T10:00:00Z', unseenCount: 0, items: [],
@@ -91,9 +99,12 @@ async function stubWorkspace(page: Page) {
         runtimeStatus: 'idle', queuePosition: 0 },
     ] }),
   }));
-  await page.route(/\/api\/runner\/[^/]+(?:\/[^/]+)?\/orchestrator-chat$/, route => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, turns: [] }),
-  }));
+  await page.route(/\/api\/runner\/[^/]+(?:\/[^/]+)?\/orchestrator-chat$/, async route => {
+    if (route.request().method() === 'POST') {
+      sent.push({ ...route.request().postDataJSON(), requestUrl: route.request().url() });
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, turns: [] }) });
+  });
 }
 
 async function choose(page: Page, model: string, reasoning: string) {
@@ -259,4 +270,52 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-before-light.png') });
   await setTheme(page, 'dark');
   await picker.screenshot({ path: path.join(results, 'orchestrator-model-picker-before-dark.png') });
+});
+
+test('Studio Board picker leads with the latest generation and keeps older models selectable', async ({ page }, testInfo) => {
+  const sent: Record<string, unknown>[] = [];
+  await stubWorkspace(page, sent);
+  await page.addInitScript(({ project }) => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1,
+    tabs: [{ kind: 'board', projectName: project }],
+    activeKey: `board:${project}`,
+  })), { project: PROJECT });
+  await page.goto('/');
+  await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+
+  await page.getByTestId('studio-board-add-task').click();
+  await page.getByTestId('create-agent').click();
+  await page.getByTestId('create-agent-picker-cli-codex').click();
+  const createModelRows = page.getByTestId('create-agent-picker-model-pills').getByRole('radio');
+  await expect(createModelRows).toHaveCount(MODELS.length + 1);
+  expect(await createModelRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-testid')))).toEqual([
+    'create-agent-picker-model-default',
+    'create-agent-picker-model-gpt-5.6-sol',
+    'create-agent-picker-model-gpt-5.6-pro',
+    'create-agent-picker-model-gpt-5.5',
+    'create-agent-picker-model-gpt-5.4',
+    'create-agent-picker-model-gpt-5.4-mini',
+    'create-agent-picker-model-gpt-5.3-codex-spark',
+  ]);
+  await expect(page.getByTestId('create-agent-picker-older-heading')).toContainText('Older models');
+  const currentModel = page.getByTestId('create-agent-picker-model-gpt-5.6-sol');
+  const deprecatedModel = page.getByTestId('create-agent-picker-model-gpt-5.5');
+  await expect(currentModel).not.toHaveAttribute('data-generation', 'older');
+  await expect(deprecatedModel).toHaveAttribute('data-generation', 'older');
+  await expect(deprecatedModel).toHaveAttribute('data-deprecated', 'true');
+  await expect(deprecatedModel).toContainText('Superseded by GPT-5.6.');
+  await expect(deprecatedModel).toBeEnabled();
+  expect(Number(await deprecatedModel.evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
+
+  const results = process.env.JOB_RESULTS_DIR ?? testInfo.outputPath('evidence');
+  mkdirSync(results, { recursive: true });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await setTheme(page, 'light');
+  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-light-compact.png') });
+  await setTheme(page, 'dark');
+  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-dark-compact.png') });
+
+  await deprecatedModel.click();
+  await page.getByTestId('create-agent-picker-done').click();
+  await expect(page.getByTestId('create-agent')).toContainText('gpt-5.5');
 });
