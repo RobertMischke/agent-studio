@@ -288,7 +288,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export type EffectiveModelSource = 'fallback' | 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+export type EffectiveModelSource = 'fallback' | 'run' | 'policy' | 'explicit' | 'default' | 'human' | 'unknown';
 
 export interface EffectiveModelChip {
   icon: string;
@@ -347,7 +347,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     fullModel = job.model ?? ownerModel;
     effectiveCliType = cli;
     cliLbl = cli ? cliTypeLabel(cli) : null;
-    source = 'explicit';
+    source = job.modelExplicit === false ? 'policy' : 'explicit';
     isDefault = false;
   } else if (ownerCli || ownerModel) {
     icon = ownerCli ? cliTypeIcon(ownerCli) : '\u{1F916}';
@@ -405,7 +405,7 @@ function buildModelTooltip(
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
-  lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
+  lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : source === 'policy' ? ' <i>(policy suggestion)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
   if (thinkingLevel) {
     lines.push(`<b>Thinking level:</b> ${escapeHtml(thinkingLevel.effective)}${thinkingLevel.differsFromConfigured ? ' <i>(effective)</i>' : ''}`);
@@ -425,7 +425,7 @@ function buildModelTooltip(
   lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
 
   return {
-    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'policy' ? 'Policy-derived model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
 }

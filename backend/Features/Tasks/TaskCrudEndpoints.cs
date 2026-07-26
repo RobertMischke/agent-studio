@@ -636,7 +636,16 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects, AgentStudio.Registry.ComponentRoutingService routing) =>
+        group.MapPost("/", async (
+            CreateTaskRequest req,
+            HttpContext ctx,
+            TaskMutationService mutations,
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Registry.ComponentRoutingService routing,
+            ModelRoutingPolicyRegistry modelRouting,
+            IModelRoutingModeProvider routingMode,
+            CliRouter cliRouter,
+            CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
@@ -696,6 +705,47 @@ public static class TaskCrudEndpoints
                     PromptMarkdown = prompt,
                     RequestedTaskPrefix = resolvedRouting.AllowedTicketPrefix,
                 };
+            }
+
+            var modelExplicit = req.ModelExplicit ?? !string.IsNullOrWhiteSpace(req.Model);
+            var thinkingExplicit = req.ThinkingLevelExplicit ?? !string.IsNullOrWhiteSpace(req.ThinkingLevel);
+            if ((!modelExplicit || !thinkingExplicit)
+                && !string.IsNullOrWhiteSpace(req.CliType)
+                && CliTypes.IsValid(req.CliType))
+            {
+                try
+                {
+                    var catalogue = await cliRouter.Get(req.CliType).GetModelCatalogAsync(false, ct);
+                    var recommendation = modelRouting.Recommend(
+                        req.TaskType,
+                        catalogue,
+                        routingMode.EconomyMode,
+                        req.Title,
+                        req.PromptMarkdown);
+                    var effectiveModel = modelExplicit ? req.Model : recommendation.Model;
+                    var effectiveThinking = thinkingExplicit
+                        ? req.ThinkingLevel
+                        : string.Equals(effectiveModel, recommendation.Model, StringComparison.OrdinalIgnoreCase)
+                            ? recommendation.ThinkingLevel
+                            : ModelMetadataRegistry.ResolveThinkingLevel(
+                                req.CliType,
+                                effectiveModel,
+                                recommendation.ThinkingLevel);
+                    req = req with
+                    {
+                        Model = effectiveModel,
+                        ThinkingLevel = effectiveThinking,
+                        ModelExplicit = modelExplicit,
+                        ThinkingLevelExplicit = thinkingExplicit,
+                    };
+                }
+                catch (Exception ex)
+                {
+                    // Creation stays available when a live CLI catalogue is
+                    // temporarily unavailable. The pre-run qualification step
+                    // retries the same policy before execution.
+                    SilentCatch.Note(ex, "TaskCrudEndpoints: create-time model policy preview unavailable");
+                }
             }
 
             var jobId = mutations.CreateJob(req);

@@ -4317,8 +4317,10 @@ public class ProjectRunner
 
             await _modelQualification.RecordDecisionAsync(info.FolderPath, decision, ct);
             _logger.LogInformation(
-                "model-qualification jobId={JobId} taskType={TaskType} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
-                info.Id, decision.TaskType, decision.Complexity, decision.Surface,
+                "model-qualification jobId={JobId} taskType={TaskType} policy={PolicyVersion} tier={PolicyTier} economyMode={EconomyMode} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
+                info.Id, decision.TaskType,
+                decision.PolicyVersion, decision.PolicyTier, decision.EconomyMode,
+                decision.Complexity, decision.Surface,
                 decision.RecommendedModel, decision.RecommendedThinkingLevel,
                 decision.SelectedModel, decision.SelectedThinkingLevel,
                 decision.SelectionSource, decision.EstimatedSavingsPercent);

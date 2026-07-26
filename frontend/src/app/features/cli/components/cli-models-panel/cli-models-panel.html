@@ -1,4 +1,24 @@
 <div class="cli-models" data-testid="cli-models-panel">
+  @if (policy(); as routingPolicy) {
+    <section class="cli-models__policy" data-testid="model-routing-policy">
+      <div class="cli-models__policy-copy">
+        <span class="cli-models__policy-title">Automatic task routing</span>
+        <span class="cli-models__policy-detail">
+          Policy {{ routingPolicy.version }} derives the default tier from task type.
+          Correctness floors still apply.
+        </span>
+      </div>
+      <label class="cli-models__economy">
+        <input type="checkbox"
+               data-testid="model-routing-economy-mode"
+               [checked]="routingPolicy.economyMode"
+               [disabled]="savingEconomyMode()"
+               (change)="setEconomyMode($any($event.target).checked)" />
+        <span>{{ routingPolicy.economyModeLabel }}</span>
+        <small>Lower eligible tiers by one step</small>
+      </label>
+    </section>
+  }
   @for (g of groups(); track g.cliType) {
     <article class="cli-models__row"
              [class.cli-models__row--open]="isExpanded(g.cliType)"

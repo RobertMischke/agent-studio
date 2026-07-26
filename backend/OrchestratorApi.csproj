@@ -125,6 +125,7 @@
   <ItemGroup>
     <Content Include="..\prompts\runtime\*.md" Link="prompts\runtime\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\build-manifest.json" Link="build-manifest.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\build-manifest.json')" />
+    <EmbeddedResource Include="Policies\model-routing-policy.v1.json" />
   </ItemGroup>
 
 </Project>
