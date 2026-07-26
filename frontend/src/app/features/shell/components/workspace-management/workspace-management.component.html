@@ -18,6 +18,11 @@
       <div class="wsm__note wsm__note--error"
            data-testid="settings-workspaces-error">{{ err }}</div>
     }
+    @if (wsSettings.dropError(); as err) {
+      <div class="wsm__note wsm__note--error"
+           role="alert"
+           data-testid="settings-project-move-error">Could not move project: {{ err }}</div>
+    }
     @if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
       <div class="wsm__note">Loading workspaces…</div>
     } @else if (registryWorkspaces().length === 0) {
@@ -29,20 +34,28 @@
       </div>
     } @else {
       <ul class="studio-settings-workspaces__list"
+          cdkDropListGroup
           data-testid="settings-workspaces-list">
-        @for (ws of registryWorkspaces(); track ws.id) {
+        @for (ws of workspaceRows(); track ws.id) {
           <li class="studio-settings-workspace-row"
+              cdkDropList
+              [cdkDropListData]="ws"
+              [cdkDropListEnterPredicate]="workspaceEnterPredicate"
+              [cdkDropListSortingDisabled]="true"
               data-testid="settings-workspace-row"
               [attr.data-workspace-id]="ws.id"
               [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id"
               [class.studio-settings-workspace-row--drop-target]="wsSettings.isDragOver(ws.id)"
-              (dragover)="wsSettings.onWorkspaceDragOver($event, ws.id)"
-              (dragleave)="wsSettings.onWorkspaceDragLeave(ws.id)"
-              (drop)="wsSettings.onWorkspaceDrop($event, ws.id, ws.displayName)">
+              (cdkDropListEntered)="wsSettings.onWorkspaceDragEnter(ws.id)"
+              (cdkDropListExited)="wsSettings.onWorkspaceDragLeave(ws.id)"
+              (cdkDropListDropped)="onWorkspaceDrop($event, ws)">
             <span class="studio-settings-workspace-color"
                   [style.background]="ws.color || 'var(--studio-fg-muted)'"
                   aria-hidden="true"></span>
-            @if (wsSettings.isRenaming(ws.id)) {
+            @if (isUnassignedWorkspace(ws)) {
+              <span class="studio-settings-workspace-name"
+                    data-testid="settings-workspace-unassigned-name">Unassigned</span>
+            } @else if (wsSettings.isRenaming(ws.id)) {
               <input #renameInput
                      type="text"
                      class="studio-settings-workspace-name studio-settings-workspace-name--input"
@@ -67,10 +80,13 @@
                       [cacTooltip]="'Click to rename'"
                       (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
             }
-            <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
+            <span class="studio-settings-workspace-id mono">
+              {{ isUnassignedWorkspace(ws) ? 'Not assigned' : ws.id }}
+            </span>
             <span class="studio-settings-workspace-count">
               {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
             </span>
+            @if (!isUnassignedWorkspace(ws)) {
             <div class="studio-settings-workspace-actions">
               <button type="button"
                       class="studio-settings-workspace-action"
@@ -100,20 +116,23 @@
                         (click)="deleteRegistryWorkspace(ws)">×</button>
               </span>
             </div>
+            }
             @if (ws.projects.length > 0) {
               <ul class="studio-settings-projects"
                   data-testid="settings-projects-list"
                   [attr.data-workspace-id]="ws.id">
                 @for (p of ws.projects; track p.id) {
                   <li class="studio-settings-project-row"
+                      cdkDrag
+                      [cdkDragData]="{ projectId: p.id, sourceWorkspaceId: p.workspaceId || null }"
+                      [cdkDragDisabled]="isProjectBusy(p.id)"
                       data-testid="settings-project-row"
                       [attr.data-project-id]="p.id"
-                      [attr.draggable]="true"
-                      [class.studio-settings-project-row--busy]="registryProjectBusyId() === p.id"
+                      [class.studio-settings-project-row--busy]="isProjectBusy(p.id)"
                       [class.studio-settings-project-row--archived]="p.archived"
                       [class.studio-settings-project-row--dragging]="wsSettings.draggingProjectId() === p.id"
-                      (dragstart)="wsSettings.onProjectDragStart($event, p.id, ws.id)"
-                      (dragend)="wsSettings.onProjectDragEnd()">
+                      (cdkDragStarted)="wsSettings.onProjectDragStart(p.id, p.workspaceId || null)"
+                      (cdkDragEnded)="wsSettings.onProjectDragEnd()">
                     <span class="studio-settings-project-color"
                           [style.background]="p.color || 'var(--studio-fg-muted)'"
                           aria-hidden="true"></span>
@@ -126,31 +145,33 @@
                               class="studio-settings-workspace-action"
                               data-testid="settings-project-rename"
                               [cacTooltip]="'Rename project'"
-                              [disabled]="registryProjectBusyId() === p.id"
+                              [disabled]="isProjectBusy(p.id)"
                               (click)="renameRegistryProject(p.id, p.displayName)">✎</button>
                       <button type="button"
                               class="studio-settings-workspace-action"
                               data-testid="settings-project-short-code"
                               [cacTooltip]="'Edit short code'"
-                              [disabled]="registryProjectBusyId() === p.id"
+                              [disabled]="isProjectBusy(p.id)"
                               (click)="editRegistryProjectShortCode(p.id, p.shortCode)">#</button>
                       <button type="button"
                               class="studio-settings-workspace-action"
                               data-testid="settings-project-color"
                               [cacTooltip]="'Set project color'"
-                              [disabled]="registryProjectBusyId() === p.id"
+                              [disabled]="isProjectBusy(p.id)"
                               (click)="editRegistryProjectColor(p.id, p.color)">🎨</button>
                       <button type="button"
                               class="studio-settings-workspace-action"
                               data-testid="settings-project-workspace"
-                              [cacTooltip]="'Change workspace'"
-                              [disabled]="registryProjectBusyId() === p.id"
-                              (click)="changeRegistryProjectWorkspace(p.id, p.workspaceId)">⇄</button>
+                              cacTooltip="Move to workspace"
+                              aria-haspopup="menu"
+                              [attr.aria-expanded]="projectMoveMenuProjectId() === p.id"
+                              [disabled]="isProjectBusy(p.id)"
+                              (click)="openProjectMoveMenu($event, p.id, p.workspaceId || null)">⇄</button>
                       <button type="button"
                               class="studio-settings-workspace-action studio-settings-workspace-action--danger"
                               data-testid="settings-project-archive"
                               [cacTooltip]="p.archived ? 'Un-archive' : 'Archive'"
-                              [disabled]="registryProjectBusyId() === p.id"
+                              [disabled]="isProjectBusy(p.id)"
                               (click)="toggleRegistryProjectArchived(p.id, p.archived)">
                         {{ p.archived ? '↺' : '🗄' }}
                       </button>
@@ -182,4 +203,14 @@
       use the action buttons for color, reorder, workspace move, archive, and delete.
     </p>
   </div>
+  <app-menu
+    [items]="projectMoveMenuItems()"
+    [open]="!!projectMoveMenuProjectId()"
+    [anchorEl]="projectMoveMenuAnchor()"
+    placement="below"
+    testIdPrefix="settings-project-move"
+    ariaLabel="Move project to workspace"
+    [minWidth]="220"
+    (itemClick)="onProjectMoveMenuItemClick($event)"
+    (closeRequest)="closeProjectMoveMenu()" />
 </section>

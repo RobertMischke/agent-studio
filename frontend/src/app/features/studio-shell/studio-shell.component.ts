@@ -13,7 +13,8 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem, RegistryProjectSummary, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
+import { forkJoin } from 'rxjs';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
@@ -355,6 +356,7 @@ export class StudioShellComponent {
    * `moveRegistryWorkspace`, `deleteRegistryWorkspace`.
    */
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
+  readonly registryProjects = signal<readonly RegistryProjectSummary[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
   /** Ids waiting on an Explorer-tree registry mutation (rename / delete), used
@@ -398,9 +400,13 @@ export class StudioShellComponent {
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces({ includeArchived: false }).subscribe({
-      next: (ws) => {
+    forkJoin({
+      workspaces: this.jobService.getRegistryWorkspaces({ includeArchived: false }),
+      projects: this.jobService.getRegistryProjects({ includeArchived: false }),
+    }).subscribe({
+      next: ({ workspaces: ws, projects }) => {
         this.registryWorkspaces.set(ws ?? []);
+        this.registryProjects.set(projects ?? []);
         this.projectLookup.setWorkspaces(ws ?? []);
         this.registryWorkspacesLoading.set(false);
       },

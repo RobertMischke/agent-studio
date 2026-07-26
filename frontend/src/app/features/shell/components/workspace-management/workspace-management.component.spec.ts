@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -42,6 +42,7 @@ describe('WorkspaceManagementComponent (smoke)', () => {
  * two pure helpers that drive the delete button's disabled state and tooltip.
  */
 describe('WorkspaceManagementComponent workspace-delete gating', () => {
+  let fixture: ComponentFixture<WorkspaceManagementComponent>;
   let component: WorkspaceManagementComponent;
 
   beforeEach(() => {
@@ -54,7 +55,8 @@ describe('WorkspaceManagementComponent workspace-delete gating', () => {
         provideRouter([]),
       ],
     });
-    component = TestBed.createComponent(WorkspaceManagementComponent).componentInstance;
+    fixture = TestBed.createComponent(WorkspaceManagementComponent);
+    component = fixture.componentInstance;
   });
 
   function project(id: string): RegistryProjectSummary {
@@ -125,5 +127,62 @@ describe('WorkspaceManagementComponent workspace-delete gating', () => {
       expect(component.workspaceDeleteTooltip(workspace({ projects: [] })))
         .toBe('Delete this workspace');
     });
+  });
+
+  it('projects registered projects with no workspace into a non-target Unassigned row', () => {
+    const realWorkspace = workspace({ id: 'ws-1', projects: [] });
+    const orphan = { ...project('PROJ-21'), workspaceId: '' };
+    component.registryWorkspaces.set([realWorkspace]);
+    component.registryProjects.set([orphan]);
+
+    expect(component.workspaceRows()).toEqual([
+      realWorkspace,
+      expect.objectContaining({
+        id: '__unassigned__',
+        synthetic: 'unassigned',
+        projects: [orphan],
+      }),
+    ]);
+    expect(component.isUnassignedWorkspace(component.workspaceRows()[1])).toBe(true);
+
+    fixture.detectChanges();
+    const dragRow = fixture.nativeElement.querySelector(
+      '[data-workspace-id="__unassigned__"] [data-testid="settings-project-row"]',
+    ) as HTMLElement | null;
+    expect(dragRow?.classList.contains('cdk-drag-disabled')).toBe(false);
+  });
+
+  it('offers every real workspace in the move menu for an Unassigned project', () => {
+    const firstWorkspace = workspace({ id: 'ws-1', displayName: 'Workspace One' });
+    const secondWorkspace = workspace({ id: 'ws-2', displayName: 'Workspace Two' });
+    component.registryWorkspaces.set([firstWorkspace, secondWorkspace]);
+    component.projectMoveMenuProjectId.set('PROJ-21');
+    component.projectMoveMenuSourceWorkspaceId.set(null);
+
+    expect(component.projectMoveMenuItems()).toEqual([
+      { kind: 'header', label: 'Move to workspace' },
+      { kind: 'row', id: 'ws-1', label: 'Workspace One', hint: 'ws-1' },
+      { kind: 'row', id: 'ws-2', label: 'Workspace Two', hint: 'ws-2' },
+    ]);
+  });
+
+  it('accepts an Unassigned project on a real workspace but never accepts the synthetic bucket', () => {
+    const realWorkspace = workspace({ id: 'ws-1', projects: [] });
+    const unassignedWorkspace = {
+      ...workspace({ id: '__unassigned__', displayName: 'Unassigned', projects: [] }),
+      synthetic: 'unassigned' as const,
+    };
+    const drag = {
+      data: { projectId: 'PROJ-21', sourceWorkspaceId: null },
+    } as Parameters<typeof component.workspaceEnterPredicate>[0];
+    const realDrop = {
+      data: realWorkspace,
+    } as Parameters<typeof component.workspaceEnterPredicate>[1];
+    const unassignedDrop = {
+      data: unassignedWorkspace,
+    } as Parameters<typeof component.workspaceEnterPredicate>[1];
+
+    expect(component.workspaceEnterPredicate(drag, realDrop)).toBe(true);
+    expect(component.workspaceEnterPredicate(drag, unassignedDrop)).toBe(false);
   });
 });

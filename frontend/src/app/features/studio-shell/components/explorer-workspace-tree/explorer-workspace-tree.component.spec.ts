@@ -122,6 +122,50 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(groups[1].projects.map(p => p.name)).toEqual(['Orphan']);
   });
 
+  it('keeps a registered project with no valid workspace draggable in Unassigned', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    const orphan = project('AI Patterns', '', '/repos/AI Patterns');
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, []),
+    ]);
+    fixture.componentRef.setInput('registryProjects', [orphan]);
+    fixture.componentRef.setInput('projectRows', [row('AI Patterns')]);
+
+    const unassigned = cmp.groups().find(group => group.id === '__unassigned__');
+    expect(unassigned?.projects[0]).toMatchObject({
+      name: 'AI Patterns',
+      projectId: orphan.id,
+      workspaceId: null,
+    });
+
+    fixture.detectChanges();
+    const dragRow = fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-project-row-AI Patterns"]',
+    ) as HTMLElement | null;
+    expect(dragRow?.classList.contains('cdk-drag-disabled')).toBe(false);
+  });
+
+  it('shows registration guidance only for genuinely registry-less rows', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, []),
+    ]);
+    fixture.componentRef.setInput('registryProjects', []);
+    fixture.componentRef.setInput('projectRows', [row('Local only')]);
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const hintTestId = 'studio-explorer-project-register-hint-Local only';
+    expect(root.querySelector(`[data-testid="${hintTestId}"]`)?.textContent)
+      .toContain('Register first');
+    const hint = fixture.debugElement
+      .queryAll(By.directive(TooltipDirective))
+      .find(node => (node.nativeElement as HTMLElement).dataset['testid'] === hintTestId);
+    expect(hint?.injector.get(TooltipDirective).content())
+      .toBe('Use + on the destination workspace to onboard this project');
+  });
+
   it('falls back to a single legacy folder when the registry is empty', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
@@ -591,8 +635,8 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     cmp.projectDrag.reset();
   }
 
-  const dragEvent = () =>
-    ({ effectAllowed: '', dropEffect: '', setData: noop });
+  const dropEvent = (projectNode: ReturnType<ExplorerWorkspaceTreeComponent['groups']>[number]['projects'][number]) =>
+    ({ item: { data: projectNode } } as unknown as Parameters<ExplorerWorkspaceTreeComponent['onWorkspaceDrop']>[0]);
 
   it('attaches the registry projectId + owning workspaceId to matched nodes', () => {
     const fixture = mount();
@@ -618,15 +662,14 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     const alpha = groups[0].projects[0]; // lives in ws-default
     const sideGroup = groups[1];         // ws-2
 
-    const dt = dragEvent();
-    cmp.onDragStart({ dataTransfer: dt, preventDefault: noop } as unknown as DragEvent, alpha);
+    cmp.onDragStart(alpha);
     expect(cmp.projectDrag.draggingProjectId()).toBe('PROJ-Alpha');
     expect(cmp.canDropOnWorkspace('ws-2')).toBe(true);
     expect(cmp.canDropOnWorkspace('ws-default')).toBe(false); // same workspace = no-op
 
     let emitted: { projectId: string; targetWorkspaceId: string } | null = null;
     const sub = cmp.projectDrop.subscribe(e => (emitted = e));
-    cmp.onWorkspaceDrop({ preventDefault: noop, dataTransfer: dt } as unknown as DragEvent, sideGroup);
+    cmp.onWorkspaceDrop(dropEvent(alpha), sideGroup);
     sub.unsubscribe();
 
     expect(emitted).toEqual({ projectId: 'PROJ-Alpha', targetWorkspaceId: 'ws-2' });
@@ -641,11 +684,11 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
 
     const groups = cmp.groups();
     const alpha = groups[0].projects[0]; // ws-default
-    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault: noop } as unknown as DragEvent, alpha);
+    cmp.onDragStart(alpha);
 
     let emitted = false;
     const sub = cmp.projectDrop.subscribe(() => (emitted = true));
-    cmp.onWorkspaceDrop({ preventDefault: noop, dataTransfer: dragEvent() } as unknown as DragEvent, groups[0]);
+    cmp.onWorkspaceDrop(dropEvent(alpha), groups[0]);
     sub.unsubscribe();
 
     expect(emitted).toBe(false);
@@ -657,12 +700,7 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     twoWorkspaces(cmp, fixture);
 
     const orphan = cmp.groups().find(g => g.id === '__unassigned__')!.projects[0];
-    let prevented = false;
-    cmp.onDragStart(
-      { dataTransfer: dragEvent(), preventDefault() { prevented = true; } } as unknown as DragEvent,
-      orphan,
-    );
-    expect(prevented).toBe(true);
+    cmp.onDragStart(orphan);
     expect(cmp.projectDrag.draggingProjectId()).toBeNull();
   });
 
@@ -672,7 +710,7 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     twoWorkspaces(cmp, fixture);
 
     const alpha = cmp.groups()[0].projects[0];
-    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault: noop } as unknown as DragEvent, alpha);
+    cmp.onDragStart(alpha);
     expect(cmp.canDropOnWorkspace('__unassigned__')).toBe(false);
     expect(cmp.canDropOnWorkspace('__all__')).toBe(false);
   });

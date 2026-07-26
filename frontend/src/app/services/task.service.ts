@@ -704,6 +704,18 @@ export class TaskService {
     return this.http.get<RegistryWorkspaceListItem[]>(`${this.baseUrl}/workspaces`, { params });
   }
 
+  /**
+   * Flat registry projection. Unlike GET /workspaces, this also includes
+   * projects whose workspaceId is empty or no longer resolves to a real
+   * workspace, so the UI can offer a recovery move for them.
+   */
+  getRegistryProjects(opts?: { includeArchived?: boolean }) {
+    const params = opts?.includeArchived
+      ? new HttpParams().set('includeArchived', 'true')
+      : undefined;
+    return this.http.get<RegistryProjectSummary[]>(`${this.baseUrl}/projects`, { params });
+  }
+
   /** F45b — create a workspace. Returns the new record. */
   createRegistryWorkspace(displayName: string, color?: string | null) {
     return this.http.post<{ id: string; displayName: string }>(
