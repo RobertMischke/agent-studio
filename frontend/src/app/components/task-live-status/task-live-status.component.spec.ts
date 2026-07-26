@@ -117,4 +117,30 @@ describe('TaskLiveStatusComponent', () => {
     expect(root.dataset['liveTone']).toBe('stalled');
     expect(root.textContent).toMatch(/No activity for (?:11m59s|12m00s) · possible hang/);
   });
+
+  it('never flags a possible hang in preparation, however long it has been idle', () => {
+    const stale = new Date(Date.now() - 93 * 60 * 60_000).toISOString();
+    fixture.componentRef.setInput('task', task({
+      state: '1-preparation',
+      lastActivity: stale,
+      executionLocation: null,
+      runActivity: { kind: 'no-active-run', attempt: 0 },
+      liveStatus: {
+        attempt: 1,
+        activeStep: null,
+        nextSteps: [{ stepId: 'loop-check', displayName: 'Loop check' }],
+        queue: null,
+        latestEventAt: stale,
+      },
+    }));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
+    expect(root.dataset['liveTone']).toBe('idle');
+    expect(root.textContent).not.toContain('possible hang');
+    expect(root.textContent).not.toContain('No active run');
+    expect(root.textContent).toContain('Preparing');
+    // last activity still surfaced, live-ticking via NowTickService
+    expect(root.textContent).toMatch(/Last activity 93h00m ago/);
+  });
 });
