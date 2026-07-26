@@ -4,7 +4,7 @@ import type { RunnerProjectPreflight } from '../../../models/task.model';
 /**
  * Remote-hosts registry model (AGT-1921).
  *
- * The "Remote Hosts" settings page shows every execution location - the
+ * The "Execution Hosts" settings page shows every execution location - the
  * operator's local machine and each remote runner host - in one list, so the
  * whole fleet reads as a single picture (see
  * docs/research/remote-ready-kickoff-2026-07.md). Host definitions are seeded

@@ -87,7 +87,7 @@ pipeline view.
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
 - `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
-  read model fed by the SSH gate start/completion events. The Remote Hosts view
+  read model fed by the SSH gate start/completion events. The Execution Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
   visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and

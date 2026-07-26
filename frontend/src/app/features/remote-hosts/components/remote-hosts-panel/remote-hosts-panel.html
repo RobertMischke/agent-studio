@@ -1,9 +1,9 @@
 <div class="rh" data-testid="remote-hosts-panel">
   <header class="rh__head">
     <div class="rh__intro">
-      <h2 class="rh__title">Remote Hosts</h2>
+      <h2 class="rh__title">Execution Hosts</h2>
       <p class="rh__subtitle">
-        Every execution location in one place - your local machine and each
+        Every CLI execution host in one place - this local machine and each
         remote runner - with heartbeat status, capabilities, system vitals, and
         per-CLI quota. Re-Probe, Drain, or Retire a host from its row.
       </p>
@@ -14,7 +14,7 @@
               data-testid="remote-hosts-add"
               (click)="openWizard()">
         <span aria-hidden="true">+</span>
-        <span>Add host</span>
+        <span>Add execution host</span>
       </button>
       <button class="rh__refresh"
             type="button"
@@ -41,8 +41,8 @@
 
   @if (total() === 0 && !loading()) {
     <div class="rh__empty" data-testid="remote-hosts-empty">
-      No hosts registered yet. The local machine and remote runners appear here
-      once they report a heartbeat.
+      No execution hosts registered yet. This local machine and remote runners
+      appear here once they report a heartbeat.
     </div>
   }
 

@@ -40,7 +40,7 @@ export class RemoteHostsService {
 
   /**
    * Refresh the compact live view without replacing a longer telemetry series
-   * already loaded by the Remote Hosts page.
+   * already loaded by the Execution Hosts page.
    */
   refresh(): void {
     if (this.hosts().length === 0) {

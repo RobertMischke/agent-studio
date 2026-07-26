@@ -9,10 +9,10 @@ import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
 
 /**
- * Remote Hosts settings page (AGT-1921).
+ * Execution Hosts settings page (AGT-1921).
  *
- * The single visible entry point into remote-host management: every execution
- * location - the operator's local machine and each remote runner - in one list
+ * The single visible entry point into execution-host management: the local
+ * machine and each remote runner in one list
  * so the whole fleet reads as one picture. Each row carries heartbeat status,
  * capabilities, live system vitals (RAM / CPU / Disk), per-CLI quota, and the
  * Re-Probe / Drain / Retire actions ({@link RemoteHostCardComponent}).

@@ -1,4 +1,4 @@
-# Remote hosts runbook
+# Execution hosts runbook
 
 This runbook is the operator path for adding, connecting, draining, retiring,
 reviving, and permanently removing a remote agent host. The detailed Linux
@@ -6,7 +6,7 @@ installation reference remains [linux-runner-host.md](setup/linux-runner-host.md
 
 ## Add a host
 
-Open **Workspace Settings > Remote hosts > Add host**. The wizard introduced in
+Open **Workspace Settings > Execution Hosts > Add execution host**. The wizard introduced in
 AGT-1922 asks for a stable runner name such as `agent-runner-01` and an SSH
 target such as `runner@host.example.com`.
 
@@ -149,7 +149,7 @@ Canary failure returns to a longer cooldown. Do not lower
 `RUNNER_MAX_PARALLELISM` as a repair. Healthy capabilities and unrelated
 services on the same host continue using the configured slots.
 
-Remote Hosts shows the capability state, reason, first and last failure,
+Execution Hosts shows the capability state, reason, first and last failure,
 cooldown, canary claim, affected coding and review attempts, and recovery
 history. A stale advertisement is explicitly stale. AGT-2142 telemetry appears
 as live meters only while both its sample and the host heartbeat are fresh.

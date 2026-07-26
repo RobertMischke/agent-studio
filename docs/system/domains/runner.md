@@ -270,7 +270,7 @@ state.
   `3-progress`. The server persists the result on the host identity and reuses
   it for following cards without another offer roundtrip. Repository
   registration and integration-branch mutations invalidate every host's cached
-  result for that project. A failure remains visible on the Remote Hosts card
+  result for that project. A failure remains visible on the Execution Hosts card
   and project execution card.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
@@ -434,7 +434,7 @@ state.
   on its client identity. A reported `read-only` identity receives no coding
   claims. The per-project delivery preflight is stricter and applies before any
   first project claim, including Epic planning: it creates and removes a
-  temporary runner ref so server-side write policy is exercised. Remote Hosts
+  temporary runner ref so server-side write policy is exercised. Execution Hosts
   surfaces both states for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through

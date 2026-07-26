@@ -28,9 +28,13 @@ describe('RemoteHostsPanelComponent', () => {
     const el: HTMLElement = fixture.nativeElement;
 
     expect(el.querySelector('[data-testid="remote-hosts-panel"]')).toBeTruthy();
+    expect(el.querySelector('h2')?.textContent).toContain('Execution Hosts');
     const cards = el.querySelectorAll('[data-testid="remote-host-card"]');
     expect(cards.length).toBe(fixture.componentInstance.total());
     expect(cards.length).toBeGreaterThanOrEqual(2);
+    expect(cards.item(0).querySelector('[data-role="local"]')?.textContent).toContain('Local');
+    expect(cards.item(0).querySelector('[data-testid="remote-host-name"]')?.textContent)
+      .toContain('Local machine');
 
     // Summary total equals the number of rendered cards (R3).
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
@@ -48,6 +52,7 @@ describe('RemoteHostsPanelComponent', () => {
     addButton.click();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="add-host-wizard"]')).toBeTruthy();
+    expect(el.querySelector('#add-host-title')?.textContent).toContain('Add an execution host');
 
     fixture.destroy();
   });

@@ -29,6 +29,7 @@ import {
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad } from './status-bar-host-load';
+import { withRouteSegment } from '../../../../services/url-hash.util';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -140,22 +141,29 @@ export class StatusBarComponent implements OnInit, OnDestroy {
         ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
-    if (!load) return `${execution}${comparison} Remote host load is unavailable.`;
+    if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
 
-    const loadDetail = `Remote host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
-      + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active remote `
+    const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
+      + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
       + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
     if (load.correlation === 'load-without-runs') {
-      return `${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `${execution}${comparison} ${loadDetail}`;
+    return `Open execution hosts. ${execution}${comparison} ${loadDetail}`;
   }
 
   autoTooltip(): string {
     return `${this.autoCount()} of ${this.projectCount()} project(s) have auto-pickup enabled.`;
+  }
+
+  navigateToExecutionHosts(): void {
+    window.location.hash = withRouteSegment(
+      window.location.hash,
+      '/workspace/settings/execution-hosts',
+    );
   }
 
   /** Atomic commit from the unified selector. Persists to localStorage and

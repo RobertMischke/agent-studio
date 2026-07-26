@@ -115,9 +115,9 @@ outbound to the authenticated HTTPS origin with its enrolled service identity.
 The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
-## Product onboarding from Remote Hosts
+## Product onboarding from Execution Hosts
 
-The primary setup path is **Workspace Settings -> Remote hosts -> Set up agent
+The primary setup path is **Workspace Settings -> Execution Hosts -> Set up agent
 host**. The action creates a normal visible CLI task, so the existing task
 conversation owns live output, operator input, completion, and durable history.
 The local controller then runs
@@ -386,7 +386,7 @@ and runner hosts in the operator inventory. Rotate before expiry:
    ```
 
 3. Re-run both `git ls-remote` checks, restart `agent-host.service`, and confirm
-   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Remote hosts**.
+   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Execution Hosts**.
 4. Revoke the old token only after every assigned repository and runner is
    green. A token owner's departure or repository-access removal also
    invalidates the runner identity and requires immediate rotation.
@@ -448,7 +448,7 @@ The runner publishes one of three statuses:
   before execution.
 - `read-only`: the normal push path failed. The server refuses new claims.
 
-Remote Hosts shows separate **Contents** and **Workflow** badges. A missing
+Execution Hosts shows separate **Contents** and **Workflow** badges. A missing
 workflow permission links back to this section. The same error classifier also
 recognizes GitHub's first real workflow rejection; if salvage fails, its
 `worktree-blocked` message includes the exact permission checklist and this
@@ -731,7 +731,7 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
 - the uploaded evidence is present under the task's `results/` folder and in the
   workspace evidence commit.
 
-For the full Remote Hosts acceptance, also record the setup task id, the exact
+For the full Execution Hosts acceptance, also record the setup task id, the exact
 Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
 status outputs, and the runner client id from `GET /api/clients`. Its
 `lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
@@ -752,7 +752,7 @@ proof.
 - **`lease not granted: Held` in one-task mode** - another runner already holds
   the task. The daemon claim path normally avoids this before launch.
 - **`Project delivery preflight failed`** - read the full reason on both the
-  Remote Hosts card and the project's Execution card. Run the printed failing
+  Execution Hosts card and the project's Execution card. Run the printed failing
   Git operation on the host against the registered repository URL. Repair its
   credential or registration, then choose **Re-Probe** on the host card or
   update the repository registration so the failed cached result is cleared and
@@ -786,7 +786,7 @@ proof.
   `RUNNER_SERVER_URL` straight at the Studio.
 ## Reading host telemetry
 
-The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Remote Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 

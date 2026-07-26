@@ -80,6 +80,9 @@ describe('WorkspaceOverlaysService canonical settings routes', () => {
 
     service.select('screenshots');
     expect(window.location.hash).toBe('#/workspace/settings/screenshots');
+
+    service.select('remote-hosts');
+    expect(window.location.hash).toBe('#/workspace/settings/execution-hosts');
   });
 
   it('reads legacy loose routes and republishes the canonical path', () => {
@@ -92,5 +95,16 @@ describe('WorkspaceOverlaysService canonical settings routes', () => {
     expect(service.section()).toBe('tokens');
     expect(service.tokenUsagePage()).toBe('claude');
     expect(window.location.hash).toBe('#/workspace/settings/tokens/claude');
+  });
+
+  it('migrates the former remote-hosts route to Execution Hosts', () => {
+    history.replaceState(null, '', '/#/workspace/settings/remote-hosts');
+    const service = new WorkspaceOverlaysService();
+
+    service.syncFromHash();
+
+    expect(service.settingsOpen()).toBe(true);
+    expect(service.section()).toBe('remote-hosts');
+    expect(window.location.hash).toBe('#/workspace/settings/execution-hosts');
   });
 });

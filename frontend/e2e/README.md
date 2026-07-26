@@ -438,7 +438,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | Spec | Summary |
 |------|---------|
 | `appearance-layout-toggles.spec.ts` | Settings - Appearance/Layout segmented toggles |
-| `remote-hosts.spec.ts` | Remote Hosts settings section |
+| `remote-hosts.spec.ts` | Execution Hosts settings section |
 | `settings-consolidation.spec.ts` | Settings consolidation (AGT-2035) |
 | `task-server.spec.ts` | Task Server settings section |
 | `workspace-settings-panel-screenshots.spec.ts` | captures light-theme screenshot of Settings Workspaces section |

@@ -2,10 +2,10 @@
   <section class="wizard">
     <header class="wizard__header">
       <div>
-        <span class="wizard__kicker">Remote execution</span>
-        <h2 id="add-host-title">Add an agent host</h2>
+        <span class="wizard__kicker">Execution host setup</span>
+        <h2 id="add-host-title">Add an execution host</h2>
       </div>
-      <button class="wizard__close" type="button" aria-label="Close add host wizard" (click)="cancelled.emit()">×</button>
+      <button class="wizard__close" type="button" aria-label="Close execution host wizard" (click)="cancelled.emit()">×</button>
     </header>
 
     <ol class="stepper" aria-label="Host setup progress">
@@ -59,7 +59,7 @@
 
         <footer class="wizard__footer">
           <button class="button button--quiet" type="button" (click)="step() === 0 ? cancelled.emit() : back()">{{ step() === 0 ? 'Cancel' : 'Back' }}</button>
-          <button class="button button--primary" type="button" data-testid="add-host-next" [disabled]="!canContinue()" (click)="next()">{{ step() === 4 ? 'Add host' : 'Continue' }}</button>
+          <button class="button button--primary" type="button" data-testid="add-host-next" [disabled]="!canContinue()" (click)="next()">{{ step() === 4 ? 'Add execution host' : 'Continue' }}</button>
         </footer>
       </main>
 

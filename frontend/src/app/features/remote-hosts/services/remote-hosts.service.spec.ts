@@ -21,6 +21,12 @@ describe('RemoteHostsService', () => {
     svc.ensureLoaded();
     const hosts = svc.hosts();
     expect(hosts.length).toBeGreaterThanOrEqual(2);
+    expect(hosts[0]).toMatchObject({
+      id: 'local',
+      name: 'Local machine',
+      role: 'local',
+      clientId: 'local-default',
+    });
     expect(hosts.some((h) => h.role === 'local')).toBe(true);
     expect(hosts.some((h) => h.role === 'remote')).toBe(true);
     expect(hosts.find((h) => h.id === 'agent-runner-01')).toMatchObject({

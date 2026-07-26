@@ -4,19 +4,19 @@ import { join } from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 /**
- * Remote Hosts settings section (AGT-1921).
+ * Execution Hosts settings section (AGT-1921).
  *
- * The new "Remote hosts" section of the consolidated Workspace-settings home
+ * The "Execution Hosts" section of the consolidated Workspace-settings home
  * lists every execution location - the operator's local machine and each remote
  * runner - in one list with heartbeat status, capabilities, system vitals
  * (RAM / CPU / Disk), per-CLI quota, and the Re-Probe / Drain / Retire actions.
  *
  * Client lifecycle and activity come from the persisted Task Server API.
- *   - the rail exposes the "Remote hosts" section and the overview card;
+ *   - the rail exposes the "Execution Hosts" section and the overview card;
  *   - the section renders one card per host with vitals + quota;
  *   - the header summary count reconciles to the visible cards (R3);
  *   - Drain and graceful Retire call the API, confirm impact, and preserve retired clients;
- *   - a #/workspace/settings/remote-hosts deep-link opens the section.
+ *   - a #/workspace/settings/execution-hosts deep-link opens the section.
  */
 
 const SHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? '../results/remote-hosts';
@@ -55,7 +55,7 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/workspaces*', json([]));
 }
 
-test.describe('Remote Hosts settings section', () => {
+test.describe('Execution Hosts settings section', () => {
   test.use({ serviceWorkers: 'block' });
 
   test.beforeEach(async ({ page }) => {
@@ -71,12 +71,13 @@ test.describe('Remote Hosts settings section', () => {
     await dismissDevErrorDialog(page);
   });
 
-  test('rail + overview expose the Remote hosts section', async ({ page }) => {
+  test('rail + overview expose the Execution Hosts section', async ({ page }) => {
     await page.getByTestId('status-bar-settings').click();
     await expect(settingsHome(page)).toBeVisible();
     await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toBeVisible();
-    await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toContainText('Remote hosts');
+    await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toContainText('Execution Hosts');
     await expect(page.getByTestId('workspace-settings-card-remote-hosts')).toBeVisible();
+    await expect(page.getByTestId('workspace-settings-card-remote-hosts')).toContainText('Execution Hosts');
   });
 
   test('section lists one card per host; summary reconciles to the cards (R3)', async ({ page }) => {
@@ -90,6 +91,7 @@ test.describe('Remote Hosts settings section', () => {
     const cards = page.getByTestId('remote-host-card');
     const count = await cards.count();
     expect(count).toBeGreaterThanOrEqual(2);
+    await expect(cards.first().getByText('Local', { exact: true })).toBeVisible();
 
     // Every card shows vitals + a status badge.
     await expect(page.getByTestId('remote-host-vitals').first()).toBeVisible();
@@ -618,11 +620,13 @@ test.describe('Remote Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-slots-stale-light--mocked.png'), fullPage: false });
   });
 
-  test('deep-link opens the Remote hosts section directly', async ({ page }) => {
-    await page.goto('/#/workspace/settings/remote-hosts');
+  test('deep-link opens the Execution Hosts section directly', async ({ page }) => {
+    await page.goto('/#/workspace/settings/execution-hosts');
     await page.waitForLoadState('domcontentloaded');
     await expect(settingsHome(page)).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
+    await expect(page.getByTestId('remote-hosts-panel').getByRole('heading', { level: 2 }))
+      .toHaveText('Execution Hosts');
   });
 });

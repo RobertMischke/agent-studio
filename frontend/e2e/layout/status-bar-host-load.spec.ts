@@ -109,9 +109,30 @@ async function stubHostLoad(
     }],
     findings: [],
   }));
+  await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', json({
+    clientId: 'agent-runner-01',
+    window: '14d',
+    points: [{
+      timestamp: now,
+      cpuPercent: 68,
+      load1,
+      load5: load1,
+      load15: load1,
+      memoryUsedBytes: 24_000_000_000,
+      memoryTotalBytes: 64_000_000_000,
+      swapInBytesPerSecond: 0,
+      swapOutBytesPerSecond: 0,
+      cpuStealPercent: 0,
+      ioWaitPercent: 0,
+      cpuCores: 12,
+      activeSlots: runningCount,
+    }],
+    findings: [],
+  }));
+  await page.route('**/api/v1/management/remote-hosts', json([]));
 }
 
-test.describe('Status bar remote-host load companion signal', () => {
+test.describe('Status bar execution-host load companion signal', () => {
   test.use({ serviceWorkers: 'block' });
 
   test('corresponding run count and load share the existing pulse point', async ({ page }) => {
@@ -123,10 +144,21 @@ test.describe('Status bar remote-host load companion signal', () => {
     await expect(running).toHaveAttribute('data-signal-tone', 'working');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
     await running.hover();
-    await expect(page.getByTestId('cac-tooltip')).toContainText('Running 4 - 1 local / 3 remote');
-    await expect(page.getByTestId('cac-tooltip')).toContainText('Remote host load 7.2 / 12 cores (60%)');
-    await expect(page.getByTestId('cac-tooltip')).toContainText('3 active remote slots');
-    await expect(page.getByTestId('status-bar-running-divergence')).toHaveCount(0);
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Open execution hosts');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Execution host load 7.2 / 12 cores (60%)');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('4 active execution slots');
+  });
+
+  test('click opens Execution Hosts management', async ({ page }) => {
+    await stubHostLoad(page, 2, 3.6);
+    await page.goto('/');
+
+    await page.getByTestId('status-bar-running').click();
+
+    await expect(page).toHaveURL(/#\/workspace\/settings\/execution-hosts(?:&|$)/);
+    await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
+    await expect(page.getByTestId('remote-hosts-panel').getByRole('heading', { level: 2 }))
+      .toHaveText('Execution Hosts');
   });
 
   test('high load without runs becomes a quiet hint in both themes', async ({ page }) => {
