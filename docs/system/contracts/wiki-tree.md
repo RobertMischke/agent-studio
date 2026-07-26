@@ -41,8 +41,11 @@ folders are pruned from the navigation tree.
 Siblings are sorted folders first, then files. An optional leading numeric
 prefix such as `01-`, `01_`, or `01.` controls sort order and is hidden from the
 display title. Without a prefix, items sort by display title. A saved category
-drag-order (`docs/app/config/wiki-order.json`) overrides the folder order per sibling
-group; unlisted folders sort behind in the default order.
+and document drag-order (`docs/app/config/wiki-order.json`) overrides each kind
+per sibling group; unlisted folders or documents sort behind their saved peers
+in the existing default order. The file has schema `wiki-order/v2`, with
+`folderOrder` and `fileOrder` maps keyed by the parent docs-relative path
+(`""` means the docs root).
 
 There is no pinned node and no immutable node: every folder and page follows
 the same sort, rename, move, and delete rules. (The former Engineering
@@ -265,6 +268,14 @@ Adds, moves, updates, or removes one shared Overview entry and commits
 `docs/app/config/home.json`. A pin request carries `pinned: true`,
 `sectionTitle`, `label`, and optional `note`; `pinned: false` removes the page
 from every section. The page itself remains unchanged.
+
+### `PUT /wiki/folder-order` and `PUT /wiki/file-order`
+
+Both endpoints accept `{ "parentRelPath": "concepts", "orderedNames": [...] }`,
+persist the respective sibling order in `docs/app/config/wiki-order.json`, and
+commit that config change. The response uses the standard wiki mutation shape.
+The frontend applies document reorders in place, then soft-refreshes the tree
+and any mounted folder overview after persistence succeeds.
 
 ### `DELETE /wiki/files/{relPath}`
 

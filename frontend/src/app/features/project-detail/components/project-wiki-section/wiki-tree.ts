@@ -85,3 +85,101 @@ export function collectFolderIds(roots: readonly WikiTreeNode[]): string[] {
   walk(roots);
   return out;
 }
+
+/** Depth-first document paths in the exact order projected by the wiki tree. */
+export function collectDocumentPaths(roots: readonly WikiTreeNode[]): string[] {
+  const out: string[] = [];
+  const walk = (nodes: readonly WikiTreeNode[]): void => {
+    for (const node of nodes) {
+      if (node.type === 'folder') walk(node.children);
+      else if (node.relPath) out.push(node.relPath);
+    }
+  };
+  walk(roots);
+  return out;
+}
+
+export interface WikiSiblingReorder {
+  parentRel: string;
+  orderedNames: string[];
+}
+
+/** Direct document names under one parent, in the tree's current order. */
+export function collectDirectDocumentNames(
+  roots: readonly WikiTreeNode[],
+  parentRel: string,
+): string[] {
+  return (findFolderChildren(roots, parentRel) ?? [])
+    .filter(node => node.type !== 'folder')
+    .map(node => node.name);
+}
+
+/** Plan a same-kind reorder without mutating the tree. */
+export function planWikiSiblingReorder(
+  roots: readonly WikiTreeNode[],
+  draggedRel: string,
+  targetRel: string,
+  kind: 'folder' | 'file',
+): WikiSiblingReorder | null {
+  const parentRel = parentDir(draggedRel);
+  if (draggedRel === targetRel || parentRel !== parentDir(targetRel)) return null;
+  const siblings = findFolderChildren(roots, parentRel);
+  if (!siblings) return null;
+  const isKind = (node: WikiTreeNode) => kind === 'folder'
+    ? node.type === 'folder'
+    : node.type !== 'folder';
+  const orderedNames = siblings.filter(isKind).map(node => node.name);
+  const from = orderedNames.indexOf(basename(draggedRel));
+  const to = orderedNames.indexOf(basename(targetRel));
+  if (from < 0 || to < 0 || from === to) return null;
+  const [dragged] = orderedNames.splice(from, 1);
+  orderedNames.splice(to, 0, dragged);
+  return { parentRel, orderedNames };
+}
+
+/** Immutable optimistic reorder of file children under one parent folder. */
+export function reorderWikiFiles(
+  roots: readonly WikiTreeNode[],
+  parentRel: string,
+  orderedNames: readonly string[],
+): WikiTreeNode[] {
+  const reorder = (nodes: readonly WikiTreeNode[]): WikiTreeNode[] => {
+    const index = new Map(orderedNames.map((name, position) => [name, position]));
+    const folders = nodes.filter(node => node.type === 'folder');
+    const files = nodes.filter(node => node.type !== 'folder')
+      .slice()
+      .sort((a, b) => (index.get(a.name) ?? Number.MAX_SAFE_INTEGER)
+        - (index.get(b.name) ?? Number.MAX_SAFE_INTEGER));
+    return [...folders, ...files];
+  };
+  if (!parentRel) return reorder(roots);
+  return roots.map(node => {
+    if (node.type !== 'folder') return node;
+    if (node.relPath === parentRel) return { ...node, children: reorder(node.children) };
+    return { ...node, children: reorderWikiFiles(node.children, parentRel, orderedNames) };
+  });
+}
+
+function findFolderChildren(
+  roots: readonly WikiTreeNode[],
+  parentRel: string,
+): readonly WikiTreeNode[] | null {
+  if (!parentRel) return roots;
+  for (const node of roots) {
+    if (node.type !== 'folder') continue;
+    if (node.relPath === parentRel) return node.children;
+    const nested = findFolderChildren(node.children, parentRel);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function parentDir(relPath: string): string {
+  const slash = relPath.lastIndexOf('/');
+  return slash < 0 ? '' : relPath.slice(0, slash);
+}
+
+function basename(relPath: string): string {
+  const slash = relPath.lastIndexOf('/');
+  return slash < 0 ? relPath : relPath.slice(slash + 1);
+}

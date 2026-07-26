@@ -37,7 +37,7 @@ its path and format only change together with the code that reads it.
 |---|---|
 | [`app/schemas/`](../app/schemas/README.md) | JSON schemas for wire and disk shapes (validated by the backend). |
 | `app/help/` | Short Markdown help bodies served by the app next to non-obvious UI surfaces (`GET /api/concept-docs/{topic}`). |
-| `app/config/` | Wiki configuration: the curated home (`home.json`) and the saved category order (`wiki-order.json`). |
+| `app/config/` | Wiki configuration: the curated home (`home.json`) and saved category/document order (`wiki-order.json`). |
 
 **Rule:** `app/` = Code-Vertrag — Pfad und Format nur zusammen mit Code ändern.
 A guard test (`WikiPathCentralizationGuardTests`) keeps every hardcoded `docs/`

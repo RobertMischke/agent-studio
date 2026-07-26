@@ -46,7 +46,10 @@ const RESULTS = [
   hit('README.md', 0.6),
 ];
 
-async function setup(resp: WikiSearchResponse = response(RESULTS)) {
+async function setup(
+  resp: WikiSearchResponse = response(RESULTS),
+  documentOrder: readonly string[] = [],
+) {
   await TestBed.configureTestingModule({
     imports: [WikiSearchResultsComponent],
     providers: [provideZonelessChangeDetection()],
@@ -56,6 +59,7 @@ async function setup(resp: WikiSearchResponse = response(RESULTS)) {
   fixture.componentRef.setInput('projectName', 'Demo');
   fixture.componentRef.setInput('query', resp.query);
   fixture.componentRef.setInput('response', resp);
+  fixture.componentRef.setInput('documentOrder', documentOrder);
   fixture.detectChanges();
   return { fixture };
 }
@@ -131,6 +135,36 @@ describe('WikiSearchResultsComponent', () => {
     const flat = [...root.querySelectorAll('[data-testid^="wiki-search-open-"]')]
       .map(node => node.getAttribute('data-testid'));
     expect(flat).toEqual(['wiki-search-open-README.md', 'wiki-search-open-CHANGELOG.md']);
+  });
+
+  it('uses persisted document order in tree mode while the flat list stays score ordered', async () => {
+    const hits = response([
+      hit('guides/alpha.md', 0.9),
+      hit('guides/beta.md', 0.7),
+      hit('guides/gamma.md', 0.5),
+    ]);
+    const { fixture } = await setup(hits, [
+      'guides/gamma.md',
+      'guides/alpha.md',
+      'guides/beta.md',
+    ]);
+    const root = el(fixture);
+
+    const renderedHits = () => [...root.querySelectorAll('[data-testid^="wiki-search-open-"]')]
+      .map(node => node.getAttribute('data-testid'));
+    expect(renderedHits()).toEqual([
+      'wiki-search-open-guides/gamma.md',
+      'wiki-search-open-guides/alpha.md',
+      'wiki-search-open-guides/beta.md',
+    ]);
+
+    root.querySelector<HTMLButtonElement>('[data-testid="wiki-search-view-list"]')!.click();
+    fixture.detectChanges();
+    expect(renderedHits()).toEqual([
+      'wiki-search-open-guides/alpha.md',
+      'wiki-search-open-guides/beta.md',
+      'wiki-search-open-guides/gamma.md',
+    ]);
   });
 
   it('collapses the synthetic root group like any folder group', async () => {

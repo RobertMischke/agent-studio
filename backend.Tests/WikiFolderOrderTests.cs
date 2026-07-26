@@ -1,17 +1,16 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 
 using Xunit;
 
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Covers the saved category drag-order
-/// (<see cref="ProjectDocsService.SetWikiFolderOrder"/> +
-/// <c>docs/app/config/wiki-order.json</c>): persistence, the wiki tree and the folder
-/// overview following the stored order (unknown folders behind,
-/// alphabetically), the alphabetical fallback when no order is stored,
-/// input validation, and the order file staying invisible as a page.
+/// Covers the saved category and document drag-orders in
+/// <c>docs/app/config/wiki-order.json</c>: persistence, tree/folder projection,
+/// merging unlisted siblings behind the curated order, validation, and the
+/// config file staying invisible as a page.
 /// </summary>
 public class WikiFolderOrderTests : IDisposable
 {
@@ -111,7 +110,7 @@ public class WikiFolderOrderTests : IDisposable
     // ---- Folder overview follows the same order ----
 
     [Fact]
-    public void GetWikiFolder_RespectsSavedOrder_PagesStayAlphabetical()
+    public void GetWikiFolder_RespectsSavedFolderOrder_UnlistedPagesStayAlphabetical()
     {
         WritePage("gamma/page.md", "# G\n");
         WritePage("alpha/page.md", "# A\n");
@@ -129,6 +128,65 @@ public class WikiFolderOrderTests : IDisposable
             view!.Children.Select(c => c.Name).ToArray());
     }
 
+    // ---- Document persistence + merge order ----
+
+    [Fact]
+    public void SetWikiFileOrder_RoundTripsThroughConfig_TreeAndFolderMergeUnlistedPagesBehind()
+    {
+        WritePage("concepts/alpha.md", "# Alpha\n");
+        WritePage("concepts/02-beta.md", "# Beta\n");
+        WritePage("concepts/gamma.md", "# Gamma\n");
+        WritePage("concepts/10-delta.md", "# Delta\n");
+        var docs = BuildDocsService();
+
+        var result = docs.SetWikiFileOrder(ProjectName, "concepts", new[] { "gamma.md", "alpha.md" });
+
+        Assert.True(result.Success, result.Error);
+        var orderFile = Path.Combine(_docsDir, "app", "config", "wiki-order.json");
+        using (var json = JsonDocument.Parse(File.ReadAllText(orderFile)))
+        {
+            Assert.Equal("wiki-order/v2", json.RootElement.GetProperty("schemaVersion").GetString());
+            Assert.Equal(
+                new[] { "gamma.md", "alpha.md" },
+                json.RootElement.GetProperty("fileOrder").GetProperty("concepts")
+                    .EnumerateArray().Select(item => item.GetString()).ToArray());
+        }
+
+        // A fresh service proves the persisted file is the source of truth.
+        var reloaded = BuildDocsService();
+        var treePages = reloaded.GetWikiTree(ProjectName)!.Root.Single(n => n.Name == "concepts")
+            .Children.Where(n => n.Type != "folder").Select(n => n.Name).ToArray();
+        var folderPages = reloaded.GetWikiFolder(ProjectName, "concepts")!.Children
+            .Where(n => n.Kind == "page").Select(n => n.Name).ToArray();
+
+        var expected = new[] { "gamma.md", "alpha.md", "02-beta.md", "10-delta.md" };
+        Assert.Equal(expected, treePages);
+        Assert.Equal(expected, folderPages);
+    }
+
+    [Fact]
+    public void FolderAndFileOrders_PreserveEachOtherAndOtherParents()
+    {
+        WritePage("alpha/b.md", "# B\n");
+        WritePage("alpha/a.md", "# A\n");
+        WritePage("beta/d.md", "# D\n");
+        WritePage("beta/c.md", "# C\n");
+        var docs = BuildDocsService();
+
+        Assert.True(docs.SetWikiFolderOrder(ProjectName, "", new[] { "beta", "alpha" }).Success);
+        Assert.True(docs.SetWikiFileOrder(ProjectName, "alpha", new[] { "b.md", "a.md" }).Success);
+        Assert.True(docs.SetWikiFileOrder(ProjectName, "beta", new[] { "d.md", "c.md" }).Success);
+
+        using var json = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(_docsDir, "app", "config", "wiki-order.json")));
+        Assert.Equal(new[] { "beta", "alpha" }, json.RootElement.GetProperty("folderOrder")
+            .GetProperty("").EnumerateArray().Select(item => item.GetString()).ToArray());
+        Assert.Equal(new[] { "b.md", "a.md" }, json.RootElement.GetProperty("fileOrder")
+            .GetProperty("alpha").EnumerateArray().Select(item => item.GetString()).ToArray());
+        Assert.Equal(new[] { "d.md", "c.md" }, json.RootElement.GetProperty("fileOrder")
+            .GetProperty("beta").EnumerateArray().Select(item => item.GetString()).ToArray());
+    }
+
     // ---- Validation ----
 
     [Fact]
@@ -142,6 +200,41 @@ public class WikiFolderOrderTests : IDisposable
         Assert.False(docs.SetWikiFolderOrder(ProjectName, "", new[] { "nested/name" }).Success);
         Assert.False(docs.SetWikiFolderOrder(ProjectName, "", new[] { ".hidden" }).Success);
         Assert.False(docs.SetWikiFolderOrder(ProjectName, "", new[] { "" }).Success);
+    }
+
+    [Fact]
+    public void SetWikiFileOrder_RejectsUnsafeParentAndNames()
+    {
+        WritePage("alpha/page.md", "# A\n");
+        var docs = BuildDocsService();
+
+        Assert.False(docs.SetWikiFileOrder(ProjectName, "../outside", new[] { "page.md" }).Success);
+        Assert.False(docs.SetWikiFileOrder(ProjectName, "missing-folder", new[] { "page.md" }).Success);
+        Assert.False(docs.SetWikiFileOrder(ProjectName, "alpha", new[] { "nested/page.md" }).Success);
+        Assert.False(docs.SetWikiFileOrder(ProjectName, "alpha", new[] { ".hidden.md" }).Success);
+        Assert.False(docs.SetWikiFileOrder(ProjectName, "alpha", new[] { "" }).Success);
+    }
+
+    [Fact]
+    public void SetWikiOrders_ConfiguredBranchSource_RejectsWithoutWritingConfig()
+    {
+        WritePage("alpha/page.md", "# A\n");
+        var config = BuildConfig();
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var project = registry.EnsureProjectForStorage(
+            Path.Combine(_tempDir, ".orchestrator", "jobs"), ProjectName, DefaultWorkspace.Id);
+        registry.SetWikiSourceBranch(project.Id, "origin/develop");
+        var docs = new ProjectDocsService(
+            BuildScanner(config), registry, NullLogger<ProjectDocsService>.Instance);
+
+        var folderResult = docs.SetWikiFolderOrder(ProjectName, "", new[] { "alpha" });
+        var fileResult = docs.SetWikiFileOrder(ProjectName, "alpha", new[] { "page.md" });
+
+        Assert.False(folderResult.Success);
+        Assert.False(fileResult.Success);
+        Assert.Contains("disabled to prevent silent divergence", folderResult.Error);
+        Assert.Contains("disabled to prevent silent divergence", fileResult.Error);
+        Assert.False(File.Exists(Path.Combine(_docsDir, "app", "config", "wiki-order.json")));
     }
 
     // ---- The order file is configuration, never a page ----

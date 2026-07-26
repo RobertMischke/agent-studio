@@ -12,6 +12,10 @@
 }
 
 .wfolder {
+  --wfolder-fg: var(--pwiki-paper-fg, var(--studio-fg));
+  --wfolder-muted: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  --wfolder-accent: var(--pwiki-paper-link, var(--studio-accent-3));
+
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
@@ -26,7 +30,7 @@
   flex-wrap: wrap;
   gap: var(--studio-spacing-1);
   font-size: 0.74rem;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 .wfolder__crumb {
   display: inline-flex;
@@ -36,23 +40,23 @@
   border: 0;
   background: transparent;
   font: inherit;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   cursor: pointer;
   border-radius: 4px;
 }
-button.wfolder__crumb:hover { color: var(--studio-fg); text-decoration: underline; }
+button.wfolder__crumb:hover { color: var(--wfolder-fg); text-decoration: underline; }
 button.wfolder__crumb:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;
 }
 .wfolder__crumb--current {
-  color: var(--studio-fg);
+  color: var(--wfolder-fg);
   font-weight: 600;
   cursor: default;
 }
 .wfolder__crumb-sep { opacity: 0.55; }
 .wfolder__crumb-copy { margin-left: auto; }
-button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: none; }
+button.wfolder__crumb-copy:hover { color: var(--wfolder-fg); text-decoration: none; }
 
 /* ---- header ---- */
 .wfolder__head {
@@ -67,14 +71,14 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  color: var(--studio-accent-3);
-  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  color: var(--wfolder-accent);
+  background: color-mix(in srgb, var(--wfolder-accent) 14%, transparent);
 }
 .wfolder__title {
   margin: 0;
   font-size: 0.98rem;
   font-weight: 700;
-  color: var(--studio-fg);
+  color: var(--wfolder-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -84,7 +88,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   flex-shrink: 0;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 
 /* ---- states ---- */
@@ -92,7 +96,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   margin: 0;
   padding: var(--studio-spacing-3) 0;
   font-size: 0.78rem;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 .wfolder__state--error { color: var(--studio-error); }
 
@@ -108,7 +112,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.78rem;
-  color: var(--studio-fg);
+  color: var(--wfolder-fg);
 }
 .wfolder__table th {
   text-align: left;
@@ -116,9 +120,9 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--wfolder-fg) 14%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -132,11 +136,12 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
 .wfolder__th-size { width: 4.5rem; }
 .wfolder__table td {
   padding: var(--studio-spacing-2);
-  border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 7%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--wfolder-fg) 7%, transparent);
   vertical-align: top;
 }
 .wfolder__row { cursor: pointer; }
-.wfolder__row:hover td { background: color-mix(in srgb, var(--studio-fg) 5%, transparent); }
+.wfolder__row:hover td { background: color-mix(in srgb, var(--wfolder-fg) 5%, transparent); }
+.wfolder__row--drop td { background: color-mix(in srgb, var(--wfolder-accent) 12%, transparent); }
 .wfolder__row--folder .wfolder__title-text { font-weight: 600; }
 
 .wfolder__cell-title { min-width: 0; }
@@ -145,9 +150,34 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   align-items: center;
   gap: var(--studio-spacing-2);
   min-width: 0;
-  color: var(--studio-fg);
+  color: var(--wfolder-fg);
 }
-.wfolder__title-line app-studio-icon { color: var(--studio-fg-muted); }
+.wfolder__title-line app-studio-icon { color: var(--wfolder-muted); }
+.wfolder__drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--wfolder-muted);
+  cursor: grab;
+  opacity: 0.45;
+}
+.wfolder__drag:hover,
+.wfolder__drag:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, var(--wfolder-fg) 8%, transparent);
+}
+.wfolder__drag:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wfolder__drag:active { cursor: grabbing; }
 .wfolder__title-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -166,7 +196,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   cursor: pointer;
   opacity: 0;
 }
@@ -174,10 +204,10 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
 .wfolder__star:focus-visible,
 .wfolder__star--active { opacity: 1; }
 .wfolder__star:hover {
-  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
-  color: var(--studio-fg);
+  background: color-mix(in srgb, var(--wfolder-fg) 8%, transparent);
+  color: var(--wfolder-fg);
 }
-.wfolder__star--active { color: var(--studio-accent-3); }
+.wfolder__star--active { color: var(--wfolder-accent); }
 .wfolder__star:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;
@@ -186,7 +216,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   display: block;
   margin-top: var(--studio-spacing-1);
   font-size: 0.72rem;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -202,7 +232,7 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   text-overflow: ellipsis;
   font-family: var(--font-mono, monospace);
   font-size: 0.7rem;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 /* Narrow-panel fallback (see `@container wfolder` below): filename as a
    second line under the title instead of its own column. Hidden by default. */
@@ -215,52 +245,52 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   margin-top: var(--studio-spacing-1);
   font-family: var(--font-mono, monospace);
   font-size: 0.7rem;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 .wfolder__cell-type {
   white-space: nowrap;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 /* Status/Typ column: curated classification chips (consolidation analysis).
    Muted by design - most pages show only the type code or nothing at all. */
 .wfolder__cell-class {
   white-space: nowrap;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 .wfolder__class-chip {
   display: inline-block;
   padding: 0 var(--studio-spacing-1);
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wfolder-fg) 14%, transparent);
   border-radius: 4px;
   font-size: 0.62rem;
   line-height: 1.6;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
 }
 .wfolder__class-chip + .wfolder__class-chip { margin-left: var(--studio-spacing-1); }
 .wfolder__class-chip[data-kind='type'] {
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--studio-fg-muted) 82%, transparent);
+  color: color-mix(in srgb, var(--wfolder-muted) 82%, transparent);
 }
 .wfolder__class-chip[data-tone='stale'] {
-  color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-fg-muted));
-  border-color: color-mix(in srgb, var(--studio-error) 30%, var(--studio-fg-muted));
+  color: color-mix(in srgb, var(--studio-error) 55%, var(--wfolder-muted));
+  border-color: color-mix(in srgb, var(--studio-error) 30%, var(--wfolder-muted));
   background: color-mix(in srgb, var(--studio-error) 7%, transparent);
 }
 .wfolder__class-chip[data-tone='superseded'] {
-  color: color-mix(in srgb, var(--studio-warn, var(--studio-fg)) 45%, var(--studio-fg-muted));
-  border-color: color-mix(in srgb, var(--studio-warn, var(--studio-fg-muted)) 25%, var(--studio-fg-muted));
+  color: color-mix(in srgb, var(--studio-warn, var(--wfolder-fg)) 45%, var(--wfolder-muted));
+  border-color: color-mix(in srgb, var(--studio-warn, var(--wfolder-muted)) 25%, var(--wfolder-muted));
   background: color-mix(in srgb, var(--studio-warn, transparent) 6%, transparent);
 }
 .wfolder__cell-when {
   white-space: nowrap;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   font-variant-numeric: tabular-nums;
 }
 .wfolder__cell-size {
   white-space: nowrap;
   text-align: right;
-  color: var(--studio-fg-muted);
+  color: var(--wfolder-muted);
   font-variant-numeric: tabular-nums;
 }
 .wfolder__table th:last-child { text-align: right; }
