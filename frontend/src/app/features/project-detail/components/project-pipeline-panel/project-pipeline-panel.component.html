@@ -50,13 +50,10 @@
                       [attr.data-testid]="'pipeline-step-kind-' + step.id"
                       [attr.data-kind]="kindKey(step.kind)"
                       [cacTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
-                <span class="pp__summary-main">
-                  <span class="pp__name"
+                <span class="pp__summary-main"><span class="pp__name"
                         [attr.data-testid]="'pipeline-step-name-' + step.id">{{ step.displayName }}</span>
-                  @if (step.appliesTo !== 'any') {
-                    <span class="pp__kind"
-                          [attr.data-testid]="'pipeline-step-stack-' + step.id">{{ step.appliesTo }}</span>
-                  }
+                  @if (step.appliesTo !== 'any') { <span class="pp__kind"
+                    [attr.data-testid]="'pipeline-step-stack-' + step.id">{{ step.appliesTo }}</span> }
                 </span>
                 <button type="button"
                         class="pp__info"
@@ -66,9 +63,7 @@
                         tooltipPosition="right"
                         (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
                 <span class="pp__summary-chips">
-                  <span class="pp__state" [class.pp__state--off]="!step.enabled || !step.applicable">
-                    {{ !step.applicable ? 'not applicable' : (step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on') }}
-                  </span>
+                  <span class="pp__state" [class.pp__state--off]="!step.enabled || !step.applicable">{{ !step.applicable ? 'not applicable' : (step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on') }}</span>
                   @if (hasTokenUsage(step)) {
                     <span class="pp__chip pp__chip--tokens"
                           [class.pp__chip--tokens-empty]="step.tokenSum === null"

@@ -66,5 +66,6 @@ function step(overrides: Partial<PipelineAdminRow>): PipelineAdminRow {
     effectiveModelSource: '', effectiveThinkingLevel: '', prompt: '', promptTemplate: '', mode: '',
     condition: '', conditionValue: '', conditionNeedsValue: false, canMoveUp: false, canMoveDown: false,
     tokenSum: null, tokenUnknown: false, ...overrides,
+    tokenCostUsd: overrides.tokenCostUsd ?? null,
   };
 }

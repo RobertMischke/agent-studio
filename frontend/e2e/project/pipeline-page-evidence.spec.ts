@@ -2,7 +2,6 @@ import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
 import { setTheme } from '../helpers/theme';
-import type { Page } from '@playwright/test';
 
 /**
  * T4a evidence — the reworked project-level Pipeline page.
@@ -41,7 +40,6 @@ const CATALOGUE = {
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
     { id: 'post-lint-scss', displayName: 'Frontend stylelint', kind: 'tool', appliesTo: 'angular', applicable: true, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [{ workingSubdir: 'frontend', command: 'npx stylelint "src/**/*.scss"' }] }, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: true },
-    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
 };
 
@@ -78,44 +76,7 @@ function fakeCost(project: string) {
 let projectSlug = '';
 let projectName = '';
 
-async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
-  await page.route('**/api/**', async route => {
-    const url = new URL(route.request().url());
-    if (url.pathname === '/api/crash-recovery/pending') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ pending: [] }),
-      });
-      return;
-    }
-    if (/^\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ models: [], source: 'pipeline-evidence' }),
-      });
-      return;
-    }
-    if (url.pathname === '/api/cli/quota' || url.pathname === '/api/cli/usage') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(url.pathname.endsWith('/quota')
-          ? { at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] }
-          : { at: new Date().toISOString(), sessions: [] }),
-      });
-      return;
-    }
-    const response = await route.fetch({
-      url: `${baseUrl}${url.pathname}${url.search}`,
-      timeout: 30_000,
-    });
-    await route.fulfill({ response });
-  });
-}
-
-test.beforeEach(async ({ page, devBackend }) => {
+test.beforeEach(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
