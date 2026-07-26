@@ -98,6 +98,16 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(document);
         });
 
+        app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/prepare",
+            (string projectName, string id, PrepareWorkbenchDecisionRequest body,
+                WorkbenchDecisionService decisions) =>
+                WorkbenchDecisionHttpResult(decisions.Prepare(projectName, id, body)));
+
+        app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/confirm",
+            (string projectName, string id, ConfirmWorkbenchDecisionRequest body,
+                WorkbenchDecisionService decisions) =>
+                WorkbenchDecisionHttpResult(decisions.Confirm(projectName, id, body)));
+
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
         // that backs the wiki navigation tree. No git is touched here, and a warm
         // cache serves it without opening a file (AGT-2013); the ETag lets a
@@ -237,10 +247,16 @@ public static class ProjectDocsEndpoints
         // source page remains readable, linkable, and recoverable.
         app.MapPut("/api/projects/{projectName}/wiki/classification/{**relPath}",
             (string projectName, string relPath, WikiClassificationRequest body,
-                ProjectDocsService docs, WikiCompanionStore companions, GitService git) =>
+                ProjectDocsService docs, WikiCompanionStore companions, GitService git,
+                WorkbenchCatalogueService workbenches) =>
             {
                 var rel = Normalize(relPath);
                 if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+                if (workbenches.OwnsCanonicalPath(projectName, rel))
+                    return Results.Conflict(new
+                    {
+                        error = "Canonical Workbenches must use the explicit decision endpoint; Wiki classification cannot archive them.",
+                    });
                 var status = body.Status?.Trim().ToLowerInvariant();
                 if (status is not ("archived" or "aktuell"))
                     return Results.BadRequest(new { error = "status must be 'archived' or 'aktuell'" });
@@ -418,6 +434,19 @@ public static class ProjectDocsEndpoints
                 return Results.StatusCode(StatusCodes.Status304NotModified);
         }
         return Results.Ok(payload);
+    }
+
+    private static IResult WorkbenchDecisionHttpResult(WorkbenchDecisionResult result)
+    {
+        if (result.Success) return Results.Ok(result);
+        return result.ErrorCode switch
+        {
+            "not-canonical" => Results.NotFound(result),
+            "stale-revision" or "dirty-descriptor" or "operation-id-conflict"
+                or "already-settled" => Results.Conflict(result),
+            "validation" => Results.BadRequest(result),
+            _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+        };
     }
 
     /// <summary>Trims and forward-slashes a client path; null when blank.</summary>

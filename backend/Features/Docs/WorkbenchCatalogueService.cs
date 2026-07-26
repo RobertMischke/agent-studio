@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AgentStudio.Docs;
 
@@ -58,6 +60,21 @@ public sealed class WorkbenchCatalogueService
         if (root == null) return null;
 
         var items = DiscoverCanonical(root);
+        foreach (var duplicate in items
+                     .Where(item => item.Valid)
+                     .GroupBy(item => item.Id, StringComparer.Ordinal)
+                     .Where(group => group.Count() > 1)
+                     .SelectMany(group => group)
+                     .ToList())
+        {
+            var index = items.IndexOf(duplicate);
+            items[index] = duplicate with
+            {
+                Valid = false,
+                Status = "invalid",
+                Error = "Workbench id is duplicated by another canonical descriptor.",
+            };
+        }
         var ids = items.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var legacy in LegacyPilot)
         {
@@ -98,18 +115,157 @@ public sealed class WorkbenchCatalogueService
         if (full == null || !File.Exists(full)) return null;
         var html = ReadHtmlWithinLimit(full);
         if (html == null) return null;
-        var status = _git.GetStatusForRepoRoot(root);
+        var docsRoot = ContainedPath(root, "docs");
+        string? descriptorPath = null;
+        if (docsRoot != null)
+        {
+            var descriptorMatches = EnumerateWorkbenchDescriptors(docsRoot)
+                .Where(path =>
+                    string.Equals(Path.GetFileName(Path.GetDirectoryName(path)), id, StringComparison.Ordinal))
+                .Take(2)
+                .ToList();
+            if (descriptorMatches.Count == 1) descriptorPath = descriptorMatches[0];
+        }
         var provenancePaths = new List<string> { item.EntryPath };
-        var entryDir = Path.GetDirectoryName(item.EntryPath.Replace('\\', '/'))?.Replace('\\', '/');
-        if (!string.IsNullOrEmpty(entryDir))
-            provenancePaths.Add(entryDir + "/workbench.json");
+        if (descriptorPath != null)
+            provenancePaths.Add(Path.GetRelativePath(root, descriptorPath).Replace('\\', '/'));
+        var status = _git.GetStatusForRepoRoot(root);
         var workingTreeModified = status.IsRepo && status.Files.Any(change =>
             provenancePaths.Any(path => ChangeTouchesPath(change.Path, path)));
         var revision = status.IsRepo && status.Error == null && !workingTreeModified
             ? _git.GetHeadShaCached(root)
             : null;
-        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified);
+        var fingerprint = descriptorPath == null
+            ? null
+            : ComputeWorkbenchFingerprint(descriptorPath, full);
+        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified, fingerprint);
     }
+
+    /// <summary>
+    /// Resolves the one canonical schema-v2 descriptor owned by a Workbench.
+    /// This is deliberately internal: decision mutations use the exact same
+    /// containment and validation rules as catalogue reads, while legacy pilot
+    /// rows never acquire mutation authority.
+    /// </summary>
+    internal WorkbenchMutationSnapshot? ResolveCanonicalForMutation(string projectName, string id)
+    {
+        if (!SafeId(id)) return null;
+        var root = ResolveRoot(projectName);
+        if (root == null) return null;
+        var docsRoot = ContainedPath(root, "docs");
+        if (docsRoot == null || !Directory.Exists(docsRoot)) return null;
+        var matches = EnumerateWorkbenchDescriptors(docsRoot)
+            .Where(path => string.Equals(Path.GetFileName(Path.GetDirectoryName(path)), id, StringComparison.Ordinal))
+            .ToList();
+        if (matches.Count != 1) return null;
+
+        var item = List(projectName, includeHistory: true)?.Items
+            .Where(candidate => candidate.Valid && candidate.Id == id)
+            .ToList();
+        if (item is not { Count: 1 }) return null;
+
+        var descriptorPath = ContainedPath(root, Path.GetRelativePath(root, matches[0]));
+        var entryPath = ContainedPath(root, item[0].EntryPath);
+        if (descriptorPath == null || entryPath == null) return null;
+        try
+        {
+            var descriptorText = File.ReadAllText(descriptorPath);
+            var descriptor = JsonNode.Parse(descriptorText) as JsonObject;
+            if (descriptor == null) return null;
+            var status = _git.GetStatusForRepoRoot(root);
+            var descriptorRel = Path.GetRelativePath(root, descriptorPath).Replace('\\', '/');
+            var entryRel = Path.GetRelativePath(root, entryPath).Replace('\\', '/');
+            var dirty = status.IsRepo && status.Files.Any(change =>
+                ChangeTouchesPath(change.Path, descriptorRel)
+                || ChangeTouchesPath(change.Path, entryRel));
+            return new WorkbenchMutationSnapshot(
+                root,
+                descriptorPath,
+                descriptorRel,
+                entryPath,
+                entryRel,
+                descriptor,
+                ComputeDescriptorFingerprint(descriptorText),
+                ComputeWorkbenchFingerprint(descriptorPath, entryPath),
+                status.IsRepo ? _git.ReadHeadShaAt(root) : null,
+                dirty,
+                item[0]);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    internal bool OperationIdOwnedByAnotherWorkbench(
+        string projectName, string operationId, string workbenchId)
+    {
+        var root = ResolveRoot(projectName);
+        var docsRoot = root == null ? null : ContainedPath(root, "docs");
+        if (docsRoot == null || !Directory.Exists(docsRoot)) return false;
+        foreach (var descriptorPath in EnumerateWorkbenchDescriptors(docsRoot))
+        {
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllText(descriptorPath));
+                var obj = json.RootElement;
+                if (RequiredInt(obj, "schemaVersion") != 2
+                    || !obj.TryGetProperty("decision", out var decision)
+                    || decision.ValueKind != JsonValueKind.Object
+                    || OptionalString(decision, "operationId") != operationId)
+                    continue;
+                return RequiredString(obj, "id") != workbenchId;
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException)
+            {
+                // Invalid descriptors have no mutation authority. They remain
+                // visible as catalogue errors through the ordinary scan.
+                SilentCatch.Note(ex, "Workbench operation-id ownership scan skipped an invalid descriptor.");
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True when a Wiki classification path is inside a canonical Workbench
+    /// folder. Generic Wiki classification must never stand in for the
+    /// reasoned, explicitly confirmed Workbench archive decision.
+    /// </summary>
+    public bool OwnsCanonicalPath(string projectName, string relPath)
+    {
+        var root = ResolveRoot(projectName);
+        var docsRoot = root == null ? null : ContainedPath(root, "docs");
+        if (root == null || docsRoot == null || !Directory.Exists(docsRoot)) return false;
+        var normalized = relPath.Replace('\\', '/').TrimStart('/');
+        foreach (var descriptorPath in EnumerateWorkbenchDescriptors(docsRoot))
+        {
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllText(descriptorPath));
+                if (RequiredInt(json.RootElement, "schemaVersion") != 2
+                    || RequiredString(json.RootElement, "pageKind") != "workbench")
+                    continue;
+                var folder = Path.GetRelativePath(root, Path.GetDirectoryName(descriptorPath)!)
+                    .Replace('\\', '/').TrimEnd('/');
+                var docsRelativeFolder = Path.GetRelativePath(
+                        docsRoot, Path.GetDirectoryName(descriptorPath)!)
+                    .Replace('\\', '/').TrimEnd('/');
+                if (PathIsWithin(normalized, folder)
+                    || PathIsWithin(normalized, docsRelativeFolder))
+                    return true;
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException)
+            {
+                // Invalid descriptors do not own a canonical Workbench.
+                SilentCatch.Note(ex, "Workbench Wiki-classification ownership scan skipped an invalid descriptor.");
+            }
+        }
+        return false;
+    }
+
+    private static bool PathIsWithin(string candidate, string folder) =>
+        candidate.Equals(folder, PathComparison)
+        || candidate.StartsWith(folder + "/", PathComparison);
 
     private List<WorkbenchListItem> DiscoverCanonical(string root)
     {
@@ -141,30 +297,29 @@ public sealed class WorkbenchCatalogueService
                 using var json = JsonDocument.Parse(File.ReadAllText(descriptor));
                 var obj = json.RootElement;
                 var schema = RequiredInt(obj, "schemaVersion");
-                if (schema is not (1 or 2)) throw new InvalidDataException("schemaVersion must be 1 or 2.");
+                if (schema != 2) throw new InvalidDataException("schemaVersion must be 2.");
                 var id = RequiredString(obj, "id");
                 var title = RequiredString(obj, "title");
                 var summary = RequiredString(obj, "summary");
                 var entrypoint = RequiredString(obj, "entrypoint");
-                var lifecycleState = schema >= 2 ? RequiredString(obj, "lifecycleState") : null;
-                if (schema >= 2 && !AllowedLifecycleStates.Contains(lifecycleState!))
+                var lifecycleState = RequiredString(obj, "lifecycleState");
+                if (!AllowedLifecycleStates.Contains(lifecycleState))
                     throw new InvalidDataException($"Unsupported lifecycleState '{lifecycleState}'.");
-                var status = schema >= 2 ? StatusFromLifecycle(lifecycleState!) : RequiredString(obj, "status");
-                var updatedText = schema >= 2 ? RequiredString(obj, "editedAt") : RequiredString(obj, "updatedAt");
-                var editedBy = schema >= 2 ? RequiredString(obj, "editedBy") : OptionalString(obj, "editedBy");
-                var lifecycleHistory = schema >= 2
-                    ? RequiredLifecycleHistory(obj, lifecycleState!, editedBy!, updatedText)
-                    : [];
+                var updatedText = RequiredString(obj, "editedAt");
+                var editedBy = RequiredString(obj, "editedBy");
+                var lifecycleHistory = RequiredLifecycleHistory(obj, lifecycleState, editedBy, updatedText);
+                if (RequiredString(obj, "pageKind") != "workbench")
+                    throw new InvalidDataException("pageKind must be workbench.");
+                if (obj.TryGetProperty("status", out _) || obj.TryGetProperty("updatedAt", out _))
+                    throw new InvalidDataException("schemaVersion 2 must not store legacy status or updatedAt fields.");
+                var decision = ReadDecision(obj, lifecycleState);
+                var status = StatusFromDecision(lifecycleState, decision);
                 var phase = OptionalString(obj, "phase");
                 if (!SafeId(id) || id != folder) throw new InvalidDataException("id must match the containing folder.");
                 if (!AllowedStatuses.Contains(status)) throw new InvalidDataException($"Unsupported status '{status}'.");
-                if (schema >= 2 && RequiredString(obj, "pageKind") != "workbench")
-                    throw new InvalidDataException("pageKind must be workbench.");
-                if (schema >= 2 && (obj.TryGetProperty("status", out _) || obj.TryGetProperty("updatedAt", out _)))
-                    throw new InvalidDataException("schemaVersion 2 must not store legacy status or updatedAt fields.");
                 if (phase != null && !AllowedPhases.Contains(phase)) throw new InvalidDataException($"Unsupported phase '{phase}'.");
                 if (!IsUtcLifecycleTimestamp(updatedText, out var updated))
-                    throw new InvalidDataException($"{(schema >= 2 ? "editedAt" : "updatedAt")} must be an ISO UTC timestamp ending in Z.");
+                    throw new InvalidDataException("editedAt must be an ISO UTC timestamp ending in Z.");
                 var extension = Path.GetExtension(entrypoint);
                 if (!extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
                     && !extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
@@ -177,9 +332,11 @@ public sealed class WorkbenchCatalogueService
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
                 {
-                    LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
+                    LifecycleState = lifecycleState,
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
+                    Decision = decision,
+                    DecisionStage = DecisionStage(decision),
                 });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
@@ -341,6 +498,145 @@ public sealed class WorkbenchCatalogueService
             ? value.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray()
             : [];
 
+    private static WorkbenchDecisionProjection? ReadDecision(JsonElement obj, string lifecycleState)
+    {
+        if (!obj.TryGetProperty("decision", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            if (lifecycleState is "decided" or "done")
+                throw new InvalidDataException("Settled lifecycleState requires a decision receipt.");
+            return null;
+        }
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("decision must be an object or null.");
+
+        var outcome = RequiredString(value, "outcome");
+        if (outcome is not ("feature-spawn" or "archive"))
+            throw new InvalidDataException($"Unsupported decision outcome '{outcome}'.");
+        var state = RequiredString(value, "state");
+        if (state is not ("pending" or "failed" or "succeeded"))
+            throw new InvalidDataException($"Unsupported decision state '{state}'.");
+        var operationId = RequiredString(value, "operationId");
+        if (!WorkbenchDecisionContracts.SafeOperationId(operationId))
+            throw new InvalidDataException("decision operationId is malformed.");
+        var preparedAt = RequiredString(value, "preparedAt");
+        var preparedBy = RequiredString(value, "preparedBy");
+        if (!IsUtcLifecycleTimestamp(preparedAt, out _))
+            throw new InvalidDataException("decision preparedAt must be an ISO UTC timestamp ending in Z.");
+        var sourceRevision = OptionalString(value, "sourceRevision");
+        var sourceFingerprint = OptionalString(value, "sourceFingerprint");
+        if (string.IsNullOrWhiteSpace(sourceRevision) && string.IsNullOrWhiteSpace(sourceFingerprint))
+            throw new InvalidDataException("decision needs sourceRevision or sourceFingerprint.");
+        if (sourceRevision != null
+            && (sourceRevision.Length is < 7 or > 64 || !sourceRevision.All(Uri.IsHexDigit)))
+            throw new InvalidDataException("decision sourceRevision is malformed.");
+        if (sourceFingerprint != null
+            && (sourceFingerprint.Length != 64 || !sourceFingerprint.All(Uri.IsHexDigit)))
+            throw new InvalidDataException("decision sourceFingerprint is malformed.");
+        var confirmedAt = OptionalString(value, "confirmedAt");
+        var confirmedBy = OptionalString(value, "confirmedBy");
+        if ((confirmedAt == null) != (confirmedBy == null)
+            || confirmedAt != null && !IsUtcLifecycleTimestamp(confirmedAt, out _))
+            throw new InvalidDataException("decision confirmation provenance is malformed.");
+        var decidedAt = OptionalString(value, "decidedAt");
+        if (decidedAt != null && !IsUtcLifecycleTimestamp(decidedAt, out _))
+            throw new InvalidDataException("decision decidedAt must be an ISO UTC timestamp ending in Z.");
+        var reason = OptionalString(value, "reason");
+        var failure = OptionalString(value, "failure");
+        var spawned = StringArray(value, "spawnedTaskKeys");
+
+        if (outcome == "archive" && string.IsNullOrWhiteSpace(reason))
+            throw new InvalidDataException("Archive decision reason is required.");
+        if (outcome == "archive" && value.TryGetProperty("taskDraft", out _))
+            throw new InvalidDataException("Archive decisions cannot carry a task draft.");
+        if (outcome == "feature-spawn")
+        {
+            if (value.TryGetProperty("reason", out _))
+                throw new InvalidDataException("Feature decisions cannot carry an archive reason.");
+            if (!value.TryGetProperty("taskDraft", out var taskDraft)
+                || taskDraft.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Feature decision taskDraft is required.");
+            WorkbenchTaskDraft? parsedDraft;
+            try
+            {
+                parsedDraft = taskDraft.Deserialize<WorkbenchTaskDraft>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException("Feature decision taskDraft is malformed.", ex);
+            }
+            var draftError = parsedDraft == null
+                ? "task draft is missing."
+                : WorkbenchDecisionContracts.ValidateTaskDraft(parsedDraft);
+            if (draftError != null)
+                throw new InvalidDataException($"Feature decision {draftError}");
+        }
+        if (state == "failed" && (confirmedAt == null || string.IsNullOrWhiteSpace(failure)))
+            throw new InvalidDataException("Failed decision needs confirmation provenance and failure.");
+        if (state == "succeeded")
+        {
+            if (confirmedAt == null || decidedAt == null)
+                throw new InvalidDataException("Succeeded decision needs confirmation and decidedAt provenance.");
+            if (outcome == "feature-spawn" && spawned.Length == 0)
+                throw new InvalidDataException("Succeeded feature decision needs a spawned task receipt.");
+            if (outcome == "archive" && spawned.Length != 0)
+                throw new InvalidDataException("Archive decisions cannot carry spawned task receipts.");
+            var expectedLifecycle = outcome == "archive" ? "done" : "decided";
+            if (lifecycleState != expectedLifecycle)
+                throw new InvalidDataException($"Succeeded {outcome} decision requires lifecycleState '{expectedLifecycle}'.");
+        }
+        else if (lifecycleState is "decided" or "done")
+        {
+            throw new InvalidDataException("Pending or failed decisions must remain in a current lifecycle state.");
+        }
+        if (state != "succeeded" && (decidedAt != null || spawned.Length != 0))
+            throw new InvalidDataException("Unsettled decisions cannot carry a settled receipt.");
+
+        return new WorkbenchDecisionProjection(
+            outcome, state, operationId, sourceRevision, sourceFingerprint,
+            preparedAt, preparedBy, confirmedAt, confirmedBy, decidedAt,
+            reason, failure, spawned);
+    }
+
+    private static string StatusFromDecision(
+        string lifecycleState, WorkbenchDecisionProjection? decision)
+    {
+        if (decision == null) return StatusFromLifecycle(lifecycleState);
+        if (decision.State is "pending" or "failed") return "decision-pending";
+        return decision.Outcome == "archive" ? "archived" : "decided";
+    }
+
+    private static string? DecisionStage(WorkbenchDecisionProjection? decision) =>
+        decision switch
+        {
+            null => null,
+            { State: "pending", ConfirmedAt: null } => "prepared",
+            { State: "pending" } => "pending",
+            { State: "failed" } => "failed",
+            { State: "succeeded", Outcome: "archive" } => "archived",
+            { State: "succeeded" } => "succeeded",
+            _ => null,
+        };
+
+    internal static string ComputeDescriptorFingerprint(string text) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    internal static string? ComputeWorkbenchFingerprint(string descriptorPath, string entryPath)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            hash.AppendData(File.ReadAllBytes(descriptorPath));
+            hash.AppendData([0]);
+            hash.AppendData(File.ReadAllBytes(entryPath));
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static readonly HashSet<string> AllowedLifecycleStates = new(StringComparer.Ordinal)
         { "in-progress", "review-requested", "decided", "done" };
     private static string StatusFromLifecycle(string state) => state switch
@@ -401,6 +697,36 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
+    public WorkbenchDecisionProjection? Decision { get; init; }
+    public string? DecisionStage { get; init; }
 }
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
-    bool WorkingTreeModified);
+    bool WorkingTreeModified, string? Fingerprint);
+
+public sealed record WorkbenchDecisionProjection(
+    string Outcome,
+    string State,
+    string OperationId,
+    string? SourceRevision,
+    string? SourceFingerprint,
+    string PreparedAt,
+    string PreparedBy,
+    string? ConfirmedAt,
+    string? ConfirmedBy,
+    string? DecidedAt,
+    string? Reason,
+    string? Failure,
+    string[] SpawnedTaskKeys);
+
+internal sealed record WorkbenchMutationSnapshot(
+    string Root,
+    string DescriptorPath,
+    string DescriptorRelPath,
+    string EntryPath,
+    string EntryRelPath,
+    JsonObject Descriptor,
+    string DescriptorFingerprint,
+    string? Fingerprint,
+    string? Revision,
+    bool Dirty,
+    WorkbenchListItem Item);

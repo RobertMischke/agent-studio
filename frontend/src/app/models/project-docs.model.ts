@@ -198,6 +198,23 @@ export interface WikiRevisionContent {
 }
 
 export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
+
+export interface WorkbenchDecisionProjection {
+  outcome: 'feature-spawn' | 'archive';
+  state: 'pending' | 'failed' | 'succeeded';
+  operationId: string;
+  sourceRevision: string | null;
+  sourceFingerprint: string | null;
+  preparedAt: string;
+  preparedBy: string;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+  decidedAt: string | null;
+  reason: string | null;
+  failure: string | null;
+  spawnedTaskKeys: string[];
+}
 
 export interface WorkbenchListItem {
   id: string;
@@ -214,6 +231,8 @@ export interface WorkbenchListItem {
   lifecycleState?: WikiLifecycleState | null;
   editedBy?: string | null;
   lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
+  decision?: WorkbenchDecisionProjection | null;
+  decisionStage?: WorkbenchDecisionStage | null;
 }
 
 export interface WorkbenchCatalogue {
@@ -229,6 +248,7 @@ export interface WorkbenchDocument {
   branch: string | null;
   revision: string | null;
   workingTreeModified: boolean;
+  fingerprint: string | null;
 }
 
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----

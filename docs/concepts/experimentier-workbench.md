@@ -2,13 +2,17 @@
 lifecycleSchema: wiki-page-lifecycle/v1
 pageKind: concept
 lifecycleState: in-progress
-editedBy: "Codex / AGT-2137"
-editedAt: 2026-07-21T05:46:33Z
+editedBy: "Codex / AGT-2362"
+editedAt: 2026-07-26T15:55:40Z
 lifecycleHistory:
   - state: in-progress
     editedBy: "Codex / AGT-2137"
     editedAt: 2026-07-21T05:46:33Z
     note: "Initial classification: the read-only slice exists; chat and decision mutations remain open."
+  - state: in-progress
+    editedBy: "Codex / AGT-2362"
+    editedAt: 2026-07-26T15:55:40Z
+    note: "The repository-backed decision lifecycle and archive API exist; trusted host editor and chat attachment remain open."
 ---
 
 # Experiment workbenches
@@ -16,7 +20,8 @@ lifecycleHistory:
 Status: concept and mockup complete, 2026-07-11. The first read-only production
 slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
 viewer, Pulse thinking inbox, and the curated legacy pilot. Chat attachment and
-decision mutations remain future slices.
+the trusted host editor remain future slices. The repository-backed decision
+and archive API landed on 2026-07-26.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -425,6 +430,30 @@ This slice deliberately exposes no chat pinning, source editing, archive/build
 action, or decision-to-task mutation. The typed Workbench tab/document boundary
 is the host-side seam for those later features; the iframe receives none of it.
 
+### Repository decision lifecycle, 2026-07-26
+
+The backend half of WB-4 now accepts only canonical schema-version-2
+descriptors. `POST .../decisions/prepare` fences a validated feature draft or
+archive reason against the exact Workbench Git revision or content fingerprint
+and records one durable operation id before any task mutation.
+`POST .../decisions/confirm` requires an explicit confirmation flag and the
+prepared fence. It creates or reconciles a deterministic feature task receipt,
+or records the archive outcome and reason without deleting the Workbench.
+
+Prepared, pending, and failed operations remain in the current catalogue.
+Succeeded feature decisions project as decided history; succeeded archive
+decisions project as archived history. Descriptor writes are flushed, committed
+through a bounded Git pathspec, serialized per project, and repaired by the
+same operation id after task, descriptor-write, or commit partial failure.
+Legacy pilot rows remain read-only. Generic Wiki classification rejects paths
+owned by a canonical Workbench so it cannot bypass the archive reason and
+confirmation contract.
+
+This backend slice does not claim the remaining trusted host editor or
+orchestrator attachment UI. Those surfaces must call the preparation and
+confirmation contracts and keep all final confirmation controls outside the
+Workbench iframe.
+
 WB-2, WB-3, and WB-4 are the risk-bearing slices. If the team requires strictly
 small cards, split WB-3 into context builder and UI attachment, and WB-4 into
 preview and mutation/receipt. That makes seven cards but does not change the
@@ -442,10 +471,11 @@ cards.
 
 The concept card remains complete. The 2026-07-12 implementation records the
 first read-only product slice described above without retroactively expanding
-the concept card's original scope. WB-3 and WB-4 remain separate future work;
-WB-4 is still handed off as its own large card, not as residual viewer work.
-Further WB-2 hardening and additional curated migrations should continue to be
-accepted against the boundaries in the slice table.
+the concept card's original scope. The repository mutation half of WB-4 landed
+on 2026-07-26. WB-3 and the trusted host editor half of WB-4 remain separate
+future work, not residual viewer work. Further WB-2 hardening and additional
+curated migrations should continue to be accepted against the boundaries in
+the slice table.
 
 ## 12. Validation plan for implementation
 

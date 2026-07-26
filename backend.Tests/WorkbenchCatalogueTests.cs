@@ -155,7 +155,13 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var dir = Path.Combine(_root, "docs", "workbenches", "escape");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "workbench.json"), """
-          {"schemaVersion":1,"id":"escape","title":"Escape","summary":"Bad", "entrypoint":"../../../secret.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
+          {
+            "schemaVersion":2,"id":"escape","title":"Escape","summary":"Bad",
+            "entrypoint":"../../../secret.html","pageKind":"workbench",
+            "lifecycleState":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z",
+            "lifecycleHistory":[{"state":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z"}],
+            "decision":null
+          }
           """);
         Directory.CreateDirectory(Path.Combine(_root, "docs", "quality", "design"));
         File.WriteAllText(Path.Combine(_root, "docs", "quality", "design", "app-survey-2026-07-11.html"), "<h1>Survey</h1>");
@@ -174,7 +180,13 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Directory.CreateDirectory(_outside);
         File.WriteAllText(Path.Combine(_outside, "index.html"), "<h1>Outside</h1>");
         File.WriteAllText(Path.Combine(_outside, "workbench.json"), """
-          {"schemaVersion":1,"id":"linked","title":"Linked","summary":"Bad", "entrypoint":"index.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
+          {
+            "schemaVersion":2,"id":"linked","title":"Linked","summary":"Bad",
+            "entrypoint":"index.html","pageKind":"workbench",
+            "lifecycleState":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z",
+            "lifecycleHistory":[{"state":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z"}],
+            "decision":null
+          }
           """);
         var catalogueRoot = Path.Combine(_root, "docs", "workbenches");
         Directory.CreateDirectory(catalogueRoot);
@@ -198,7 +210,13 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         using (var html = new FileStream(Path.Combine(dir, "index.html"), FileMode.Create, FileAccess.Write))
             html.SetLength(21L * 1024 * 1024);
         File.WriteAllText(Path.Combine(dir, "workbench.json"), """
-          {"schemaVersion":1,"id":"oversized","title":"Oversized","summary":"Too large", "entrypoint":"index.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
+          {
+            "schemaVersion":2,"id":"oversized","title":"Oversized","summary":"Too large",
+            "entrypoint":"index.html","pageKind":"workbench",
+            "lifecycleState":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z",
+            "lifecycleHistory":[{"state":"in-progress","editedBy":"Tests","editedAt":"2026-07-12T10:00:00Z"}],
+            "decision":null
+          }
           """);
 
         var service = Service();
@@ -234,13 +252,119 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.Contains("Uncommitted bytes", dirty.Html);
     }
 
+    [Fact]
+    public void CanonicalWorkbenchPathsCannotUseGenericWikiClassification()
+    {
+        WriteWorkbench("owned", "Owned", "active", "2026-07-12T10:00:00Z");
+        var service = Service();
+
+        Assert.True(service.OwnsCanonicalPath(
+            "Project", "docs/workbenches/owned/index.html"));
+        Assert.True(service.OwnsCanonicalPath(
+            "Project", "workbenches/owned/workbench.json"));
+        Assert.False(service.OwnsCanonicalPath(
+            "Project", "docs/concepts/ordinary.md"));
+    }
+
     private void WriteWorkbench(string id, string title, string status, string updatedAt)
     {
         var dir = Path.Combine(_root, "docs", "workbenches", id);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "index.html"), $"<h1>{title}</h1>");
+        var lifecycle = status switch
+        {
+            "decided" => "decided",
+            "archived" => "done",
+            "decision-pending" => "review-requested",
+            _ => "in-progress",
+        };
+        var decision = status switch
+        {
+            "decision-pending" => $$"""
+              {
+                "outcome": "feature-spawn",
+                "state": "failed",
+                "operationId": "operation-{{id}}",
+                "sourceRevision": "1234567",
+                "sourceFingerprint": "{{new string('a', 64)}}",
+                "preparedAt": "{{updatedAt}}",
+                "preparedBy": "Tests",
+                "confirmedAt": "{{updatedAt}}",
+                "confirmedBy": "Tests",
+                "failure": "Injected failure",
+                "taskDraft": {
+                  "title": "Feature",
+                  "goal": "Implement it.",
+                  "acceptanceCriteria": ["It works."],
+                  "evidenceLinks": [],
+                  "relatedTaskKeys": [],
+                  "initialLane": "1-preparation",
+                  "mode": "coding",
+                  "taskType": "feature"
+                },
+                "spawnedTaskKeys": []
+              }
+              """,
+            "decided" => $$"""
+              {
+                "outcome": "feature-spawn",
+                "state": "succeeded",
+                "operationId": "operation-{{id}}",
+                "sourceRevision": "1234567",
+                "sourceFingerprint": "{{new string('b', 64)}}",
+                "preparedAt": "{{updatedAt}}",
+                "preparedBy": "Tests",
+                "confirmedAt": "{{updatedAt}}",
+                "confirmedBy": "Tests",
+                "decidedAt": "{{updatedAt}}",
+                "taskDraft": {
+                  "title": "Feature",
+                  "goal": "Implement it.",
+                  "acceptanceCriteria": ["It works."],
+                  "evidenceLinks": [],
+                  "relatedTaskKeys": [],
+                  "initialLane": "1-preparation",
+                  "mode": "coding",
+                  "taskType": "feature"
+                },
+                "spawnedTaskKeys": ["TST-1"]
+              }
+              """,
+            "archived" => $$"""
+              {
+                "outcome": "archive",
+                "state": "succeeded",
+                "operationId": "operation-{{id}}",
+                "sourceRevision": "1234567",
+                "sourceFingerprint": "{{new string('c', 64)}}",
+                "preparedAt": "{{updatedAt}}",
+                "preparedBy": "Tests",
+                "confirmedAt": "{{updatedAt}}",
+                "confirmedBy": "Tests",
+                "decidedAt": "{{updatedAt}}",
+                "reason": "Experiment no longer justifies implementation.",
+                "spawnedTaskKeys": []
+              }
+              """,
+            _ => "null",
+        };
         File.WriteAllText(Path.Combine(dir, "workbench.json"), $$"""
-          {"schemaVersion":1,"id":"{{id}}","title":"{{title}}","summary":"Question", "entrypoint":"index.html","status":"{{status}}","phase":"testing","updatedAt":"{{updatedAt}}"}
+          {
+            "schemaVersion": 2,
+            "id": "{{id}}",
+            "title": "{{title}}",
+            "summary": "Question",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "{{lifecycle}}",
+            "phase": "testing",
+            "editedBy": "Tests",
+            "editedAt": "{{updatedAt}}",
+            "lifecycleHistory": [
+              { "state": "{{lifecycle}}", "editedBy": "Tests", "editedAt": "{{updatedAt}}" }
+            ],
+            "decision": {{decision}}
+          }
           """);
     }
 
