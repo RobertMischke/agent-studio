@@ -209,6 +209,24 @@ boundary, route map, and visual ownership diagram are in
   summary. It does not own project onboarding or a project-source catalogue.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
+- The System prompts destination is the prompt registry and observability
+  surface. Its overview groups runtime-step, orchestrator, drift, and framing
+  templates, explains application and project pipeline override precedence, and
+  provides a sortable activity table. `RuntimePromptService.Render` appends one
+  row per use to `<TaskRepository>/logs/prompt-calls.jsonl` with the effective
+  content hash, estimated rendered-input tokens, timestamp, and any available
+  project, step, and model context. The API aggregates total and seven-day
+  calls, last call, a 14-day series, current and historical versions, and
+  historical theoretical input cost through `TokenPricing`. Unknown models
+  remain explicitly unpriced. Review actions check the static usage catalogue,
+  repository references, and project pipeline overrides, then persist
+  `prompts/runtime/<name>.md.meta.json`.
+  The durable source, precedence, companion, telemetry, and cost rules are
+  defined by the
+  [runtime prompt registry contract](../contracts/runtime-prompts.md).
+  Result-quality benchmarking by prompt version is deliberately vNext. The
+  versioned call ledger is its data foundation, but this surface does not claim
+  that call volume or cost measures outcome quality.
 - `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
   project onboarding workflow. Its roomy, scrollable form groups project
   identity, repository paths/URL, and execution defaults without a source-type
