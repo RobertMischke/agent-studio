@@ -249,10 +249,48 @@ test.describe('Remote Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     const badge = remote.getByTestId('remote-host-git-status');
     await expect(badge).toBeVisible();
-    await expect(badge).toContainText('Writable: no');
+    await expect(badge).toContainText('Contents: blocked');
     await badge.hover();
     await expect(page.getByRole('tooltip')).toContainText('permission denied');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
+  });
+
+  test('shows missing workflow permission with a concrete token fix and keeps inflow open', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: '2026-07-26T09:00:00Z', lastSeenAt: new Date().toISOString(),
+        runnerGitStatus: 'ready-no-workflow-scope',
+        runnerGitDetail: 'contents ready; GitHub workflow scope missing',
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-git-status')).toContainText('Contents: ok');
+    await expect(remote.getByTestId('remote-host-workflow-status'))
+      .toContainText('Workflow: permission missing');
+    const fix = remote.getByTestId('remote-host-token-scope-fix');
+    await expect(fix).toContainText('update both credential URL forms');
+    await expect(fix.getByRole('link', { name: 'Open token requirements' }))
+      .toHaveAttribute(
+        'href',
+        'https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/linux-runner-host.md#token-requirements',
+      );
+    await expect(remote.getByTestId('remote-host-activity')).toContainText('Task inflowopen');
+    await setTheme(page, 'light');
+    await page.screenshot({
+      path: join(SHOT_DIR, 'remote-host-workflow-scope--light--mocked.png'),
+      fullPage: false,
+    });
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(SHOT_DIR, 'remote-host-workflow-scope--dark--mocked.png'),
+      fullPage: false,
+    });
   });
 
   test('shows selective capability drain, canary context, affected claims, and recovery history without freshening stale metrics', async ({ page }) => {

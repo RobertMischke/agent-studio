@@ -406,6 +406,29 @@ minutes”, no repos mounted). That would make Docker the <em>demo</em> channel 
 all-in-one the <em>local product</em> — both from the same release pipeline. Open for Robert’s
 call.</p>
 
+<h3 id="token-requirements">8.10 D5: token requirements and guided onboarding</h3>
+<p>The guided installer line (AGT-2334) includes a <b>Create token</b> step before
+credential storage. Its implementation stays on the installer card. The step links to the
+<a href="../../setup/linux-runner-host.md#token-requirements">Linux runner token requirements</a>
+and presents these exact GitHub choices:</p>
+<ul>
+  <li><b>Fine-grained PAT, preferred:</b> choose the organization that owns the repository
+      as resource owner, limit access to assigned repositories, and grant
+      <b>Contents: Read and write</b> plus <b>Workflows: Read and write</b>.</li>
+  <li><b>Classic PAT, compatibility fallback:</b> grant <code>repo</code> plus
+      <code>workflow</code> and complete organization SSO authorization when applicable.</li>
+  <li>A PAT belongs to its creating user, not to the organization. Prefer a dedicated
+      machine account; organization policy may require owner approval.</li>
+  <li>With <code>credential.https://github.com.useHttpPath=true</code>, store and verify the
+      credential for both <code>https://github.com/OWNER/REPOSITORY</code> and
+      <code>https://github.com/OWNER/REPOSITORY.git</code>.</li>
+</ul>
+<p>The wizard waits for the runner startup result and explains
+<code>ready</code>, <code>ready-no-workflow-scope</code>, and <code>read-only</code>.
+Only <code>read-only</code> blocks claims. The middle state links to the permission checklist
+but does not try to predict whether a card will touch <code>.github/workflows</code>.
+Rotation updates and verifies both URL entries before the old token is revoked.</p>
+
 <h2>9 · Runner-host resource governance</h2>
 <p>On Linux, <code>agent-host</code> owns the resource controls in every Coding and Review systemd
 unit it installs or updates. Slot counts are admission decisions, not capacity units: a single

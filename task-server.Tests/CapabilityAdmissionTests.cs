@@ -143,6 +143,70 @@ public sealed class CapabilityAdmissionTests
         Assert.Equal(resultSha, reviewClaim.Subject!.ExpectedResultSha);
     }
 
+    [Fact]
+    public async Task Missing_workflow_push_scope_is_visible_but_does_not_block_coding_claims()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        await store.RegisterRunnerAsync(
+            "coding",
+            new RegisterRunnerRequest(
+                "coding",
+                "host-a",
+                "coding-instance",
+                "1.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor]),
+            "coding",
+            default);
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                "coding",
+                "coding-instance",
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                1,
+                [
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.CodingExecutor,
+                        "executor"),
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.GitPush,
+                        "source"),
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.GitWorkflowPush,
+                        "source",
+                        "ready-no-workflow-scope",
+                        Detail: "workflow scope missing"),
+                ]),
+            "coding",
+            default);
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                "coding",
+                "coding-instance",
+                RequiredCapabilities:
+                [
+                    CapabilityProtocol.CodingExecutor,
+                    CapabilityProtocol.GitPush,
+                ]),
+            "coding",
+            default);
+
+        Assert.Equal("claimed", claim.Status);
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var workflow = Assert.Single(
+            snapshot.Capabilities,
+            capability => capability.Key == CapabilityProtocol.GitWorkflowPush);
+        Assert.Equal("ready-no-workflow-scope", workflow.AdvertisedStatus);
+        Assert.Equal("workflow scope missing", workflow.Detail);
+    }
+
     [Theory]
     [InlineData(CapabilityProtocol.Disk)]
     [InlineData(CapabilityProtocol.LeaseAuthority)]

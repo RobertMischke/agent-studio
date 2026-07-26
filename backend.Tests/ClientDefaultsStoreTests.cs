@@ -116,13 +116,17 @@ public class ClientDefaultsStoreTests : IDisposable
         var runner = store.Register(new RegisterClientRequest { DisplayName = "agent-runner-01", Kind = "service" });
         var checkedAt = new DateTime(2026, 7, 11, 20, 0, 0, DateTimeKind.Utc);
 
-        var updated = store.SetRunnerGitCapability(runner.Id, "read-only", "permission denied", checkedAt);
+        var updated = store.SetRunnerGitCapability(
+            runner.Id,
+            "ready-no-workflow-scope",
+            "contents ready; workflow permission missing",
+            checkedAt);
         var reloaded = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance).Find(runner.Id);
         var summary = ClientSummary.From(reloaded!);
 
-        Assert.Equal("read-only", updated!.RunnerGitStatus);
-        Assert.Equal("read-only", summary.RunnerGitStatus);
-        Assert.Equal("permission denied", summary.RunnerGitDetail);
+        Assert.Equal("ready-no-workflow-scope", updated!.RunnerGitStatus);
+        Assert.Equal("ready-no-workflow-scope", summary.RunnerGitStatus);
+        Assert.Equal("contents ready; workflow permission missing", summary.RunnerGitDetail);
         Assert.Equal(checkedAt, summary.RunnerGitCheckedAt);
     }
 

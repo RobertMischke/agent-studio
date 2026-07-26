@@ -89,12 +89,32 @@ describe('RemoteHostCardComponent', () => {
     });
     const el: HTMLElement = fixture.nativeElement;
     const badge = el.querySelector('[data-testid="remote-host-git-status"]');
-    expect(badge?.textContent).toContain('Writable: no');
+    expect(badge?.textContent).toContain('Contents: blocked');
     const tooltip = fixture.debugElement
       .query(By.css('[data-testid="remote-host-git-status"]'))
       .injector.get(AppTooltipDirective);
     expect(tooltip.appTooltip()).toContain('permission denied');
     expect(badge?.getAttribute('data-tone')).toBe('error');
+  });
+
+  it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      gitPushStatus: 'ready-no-workflow-scope',
+      gitPushDetail: 'GitHub rejected .github/workflows/release.yml without workflow scope',
+    }).nativeElement;
+
+    expect(el.querySelector('[data-testid="remote-host-git-status"]')?.textContent)
+      .toContain('Contents: ok');
+    const workflow = el.querySelector('[data-testid="remote-host-workflow-status"]');
+    expect(workflow?.textContent).toContain('Workflow: permission missing');
+    expect(workflow?.getAttribute('data-tone')).toBe('warn');
+    const fix = el.querySelector('[data-testid="remote-host-token-scope-fix"]');
+    expect(fix?.textContent).toContain('Grant the token');
+    expect(fix?.querySelector('a')?.getAttribute('href'))
+      .toBe('https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/linux-runner-host.md#token-requirements');
+    expect(el.querySelector('[data-testid="remote-host-activity"]')?.textContent)
+      .toContain('Task inflowopen');
   });
 
   it('shows the project and reason when a delivery preflight blocks claims', () => {

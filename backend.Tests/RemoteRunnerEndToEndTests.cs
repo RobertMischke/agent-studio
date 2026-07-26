@@ -1087,7 +1087,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
 
         await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
-            "ready", "dry-run succeeded", DateTime.UtcNow), CancellationToken.None);
+            "ready-no-workflow-scope",
+            "contents push ready; workflow scope missing",
+            DateTime.UtcNow), CancellationToken.None);
 
         var admitted = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"));

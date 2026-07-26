@@ -43,3 +43,30 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
   host-derived defaults unless the operator deliberately changes
   `/etc/agent-host/profile.conf`; see
   [runner-host resource governance](resource-governance.md).
+
+## Token requirements and guided onboarding
+
+The D5 guided installer line (AGT-2334) must include a **Create token** step
+before it stores repository credentials. The installer implementation remains
+on that card; this document defines its connection to the runner contract.
+
+The step links to
+[Linux runner host: Token requirements](../../setup/linux-runner-host.md#token-requirements)
+and presents the exact GitHub choices:
+
+- Fine-grained PAT, preferred: select the organization that owns the repository
+  as resource owner, limit access to assigned repositories, and grant
+  **Contents: Read and write** plus **Workflows: Read and write**.
+- Classic PAT, compatibility fallback: grant **`repo`** plus **`workflow`** and
+  complete organization SSO authorization when applicable.
+- A PAT belongs to its creating user, not to the organization. Prefer a
+  dedicated machine account; organization policy may require owner approval.
+- With `credential.https://github.com.useHttpPath=true`, store and verify the
+  credential for both `https://github.com/OWNER/REPOSITORY` and
+  `https://github.com/OWNER/REPOSITORY.git`.
+
+The wizard waits for the runner's startup result and explains all three states:
+`ready`, `ready-no-workflow-scope`, and `read-only`. Only `read-only` blocks
+claims. The middle state links to the permission checklist but does not try to
+predict whether a card will touch `.github/workflows`. Rotation repeats both URL
+entries and both checks before the old token is revoked.

@@ -190,6 +190,17 @@ export class RemoteHostsService {
             const stats = telemetryFresh && snapshot.telemetry
               ? telemetryStats(snapshot.telemetry)
               : status === 'offline' ? null : current.stats;
+            const gitPush = snapshot.capabilities.find(capability => capability.key === 'git:push');
+            const gitWorkflowPush = snapshot.capabilities.find(
+              capability => capability.key === 'git:workflow-push',
+            );
+            const gitPushStatus = gitPush && gitPush.advertisedStatus !== 'ready'
+              ? 'read-only' as const
+              : gitWorkflowPush?.advertisedStatus === 'ready-no-workflow-scope'
+                ? 'ready-no-workflow-scope' as const
+                : gitWorkflowPush?.advertisedStatus === 'ready' || gitPush?.advertisedStatus === 'ready'
+                  ? 'ready' as const
+                  : current.gitPushStatus;
             const next: RemoteHost = {
               ...current,
               name: snapshot.name,
@@ -198,6 +209,10 @@ export class RemoteHostsService {
               capabilityHealth: snapshot.capabilities,
               capabilities: snapshot.capabilities.map(capability =>
                 capability.version ? `${capability.key} ${capability.version}` : capability.key),
+              gitPushStatus,
+              gitPushDetail: gitWorkflowPush?.detail ?? gitPush?.detail ?? current.gitPushDetail,
+              gitPushCheckedAt:
+                gitWorkflowPush?.advertisedAt ?? gitPush?.advertisedAt ?? current.gitPushCheckedAt,
               hostAdmission: snapshot.hostAdmission,
               stats,
             };

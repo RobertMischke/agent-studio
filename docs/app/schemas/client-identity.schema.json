@@ -56,12 +56,12 @@
     },
     "runnerGitStatus": {
       "type": ["string", "null"],
-      "enum": ["ready", "read-only", null],
-      "description": "Latest remote-daemon startup push proof. A read-only runner is refused claims."
+      "enum": ["ready", "ready-no-workflow-scope", "read-only", null],
+      "description": "Latest remote-daemon startup push proof. A read-only runner is refused claims; ready-no-workflow-scope remains claimable but cannot publish changes under .github/workflows."
     },
     "runnerGitDetail": {
       "type": ["string", "null"],
-      "description": "Operator-facing result of the latest Git push dry-run."
+      "description": "Operator-facing result of the latest contents and workflow Git push probes."
     },
     "runnerGitCheckedAt": {
       "type": ["string", "null"],
