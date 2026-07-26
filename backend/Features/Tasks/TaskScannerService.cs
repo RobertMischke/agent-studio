@@ -694,6 +694,45 @@ public class TaskScannerService : ITaskScanner
         };
     }
 
+    /// <summary>
+    /// Reads the validated implementation-card proposals from a delivered
+    /// concept Workbench. The published document is the durable source of
+    /// truth, not the agent's status report.
+    /// </summary>
+    public PromoteConceptResponse? BuildPromoteConceptPlan(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null || !TaskModes.IsConcept(info.Mode)) return null;
+
+        var publication = AgentStudio.Pipeline.ConceptWorkbenchStore.Read(info.FolderPath);
+        if (publication == null || string.IsNullOrWhiteSpace(publication.RepoRelativeDirectory))
+            return null;
+
+        var entry = GetWatchPaths().FirstOrDefault(candidate =>
+            WatchPathComparison.PathsEqual(candidate.Path, info.WatchPath));
+        var repositoryRoot = entry?.RepositoryPath;
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
+            repositoryRoot = entry?.RootPath;
+        if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
+            return null;
+
+        var review = AgentStudio.Pipeline.ConceptWorkbenchContract.ReviewDirectory(
+            repositoryRoot, publication.RepoRelativeDirectory);
+        if (!review.IsComplete || review.Descriptor == null) return null;
+
+        return new PromoteConceptResponse
+        {
+            Source = new ConceptSourceDocument
+            {
+                RepoRelativePath = publication.RepoRelativeEntrypoint,
+                Title = review.Descriptor.Title,
+            },
+            Items = review.Descriptor.ImplementationTasks,
+            WatchPath = info.WatchPath,
+            ProjectName = info.ProjectName,
+        };
+    }
+
     private static readonly HashSet<string> PromotableImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp" };
 

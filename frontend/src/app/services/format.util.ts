@@ -147,6 +147,7 @@ export function taskModeIcon(mode: TaskMode): string {
   switch (mode) {
     case 'planning': return '🗺️';
     case 'research': return '🔍';
+    case 'concept':  return '◈';
     case 'coding':   return '💻';
   }
 }
@@ -155,6 +156,7 @@ export function taskModeLabel(mode: TaskMode): string {
   switch (mode) {
     case 'planning': return 'Planning';
     case 'research': return 'Research';
+    case 'concept':  return 'Concept';
     case 'coding':   return 'Coding';
   }
 }

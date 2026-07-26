@@ -52,6 +52,7 @@ export interface ModeBadge {
 const MODE_TOOLTIP: Record<Exclude<TaskMode, 'coding'>, string> = {
   planning: 'Planning mode: read-only. The agent investigates and produces a plan without writing source.',
   research: 'Research mode: read-only with web access. The agent gathers information and reports findings.',
+  concept: 'Concept mode: docs-only. The agent delivers a Workbench and waits for human sight review.',
 };
 
 /**
@@ -62,7 +63,7 @@ const MODE_TOOLTIP: Record<Exclude<TaskMode, 'coding'>, string> = {
  * the field is absent (older payloads).
  */
 export function buildModeBadge(mode: TaskInfo['mode']): ModeBadge | null {
-  if (mode !== 'planning' && mode !== 'research') return null;
+  if (mode !== 'planning' && mode !== 'research' && mode !== 'concept') return null;
   return {
     mode,
     label: taskModeLabel(mode),

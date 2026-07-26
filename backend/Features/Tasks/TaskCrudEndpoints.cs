@@ -339,6 +339,110 @@ public static class TaskCrudEndpoints
             return Results.Ok(plan with { Attachments = attachments });
         });
 
+        // Concept promotion is an explicit sight-review action. It reads only
+        // validated implementation proposals from the published Workbench,
+        // creates coding cards in preparation, and completes the source concept
+        // card after recording the human gate.
+        group.MapGet("/{jobId}/promote-concept", (string jobId, string? project, string? watchPath,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!TaskModes.IsConcept(info.Mode))
+                return Results.BadRequest(new { error = "Only concept tasks have implementation-card proposals." });
+
+            var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
+            return plan is null
+                ? Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." })
+                : Results.Ok(plan);
+        });
+
+        group.MapPost("/{jobId}/promote-concept", async (
+            string jobId,
+            string? project,
+            string? watchPath,
+            PromoteConceptRequest request,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Pipeline.ConceptPromotionService promotion,
+            TaskTransitionService transitions,
+            AgentStudio.Pipeline.PipelineExecutionLog pipelineLog,
+            CancellationToken ct) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!TaskModes.IsConcept(info.Mode))
+                return Results.BadRequest(new { error = "Only concept tasks can be promoted." });
+            if (info.State is not (TaskStates.HumanReview or TaskStates.Completed))
+                return Results.Conflict(new { error = "Complete sight review before promoting implementation cards." });
+
+            var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
+            if (plan is null)
+                return Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." });
+
+            PromoteConceptTasksResponse result;
+            try
+            {
+                result = promotion.Promote(info, plan, request);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+
+            if (info.State == TaskStates.HumanReview)
+            {
+                var now = DateTime.UtcNow;
+                pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptSightReviewGateStepId,
+                    Kind = StepKind.Orchestrator,
+                    Status = PipelineStepStatus.Passed,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    Verdict = "sight-review-approved",
+                    VerdictSummary = "Human sight review approved the concept.",
+                });
+                pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptPromotionStepId,
+                    Kind = StepKind.Tool,
+                    Status = PipelineStepStatus.Passed,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    Verdict = result.Created.Count == 0 ? "no-implementation" : "implementation-cards-created",
+                    VerdictSummary = result.Created.Count == 0
+                        ? "Sight review completed without implementation cards."
+                        : $"Created {result.Created.Count} implementation card(s) from the Workbench.",
+                });
+                pipelineLog.Complete(info.FolderPath, now);
+                SteerPendingMarker.Clear(info.FolderPath);
+
+                var move = await transitions.MoveAsync(
+                    jobId,
+                    TaskStates.Completed,
+                    watchPath,
+                    ct,
+                    cause: "concept-sight-review-approved",
+                    reason: "Concept sight review approved and implementation promotion completed.");
+                if (move.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new
+                    {
+                        error = move.Message ?? "Implementation cards were created, but the concept card could not be completed.",
+                        result,
+                    });
+            }
+
+            return Results.Ok(result);
+        });
+
         // AGT-2069 — declare (or clear) "bewusst keine Umsetzung" (deliberately
         // no follow-up) for a planning task. This is the escape hatch that lets a
         // planning task satisfy the spawn-contract completion gate without

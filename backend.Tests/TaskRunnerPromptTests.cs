@@ -637,6 +637,19 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RenderModeFraming_Concept_CarriesBoundedWorkbenchContract()
+    {
+        var framing = Prompts().RenderModeFraming("concept", allowWebAccess: false);
+
+        Assert.Contains("docs-only Workbench delivery", framing);
+        Assert.Contains("docs/operations/<topic>/", framing);
+        Assert.Contains("workbench.json", framing);
+        Assert.Contains("index.html", framing);
+        Assert.Contains("[[TASK_NEEDS_INPUT:", framing);
+        Assert.DoesNotContain("Read-only run", framing);
+    }
+
+    [Fact]
     public void RenderModeFraming_CodingWithWeb_AddsWebHintOnly()
     {
         // Decision 2: the web toggle is independent of the mode. A coding task
@@ -697,7 +710,9 @@ public class TaskRunnerPromptTests
     [Fact]
     public void ModeFramingSnippets_DoNotContainEmDashes()
     {
-        var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
+        var framing =
+            Prompts().RenderModeFraming("research", allowWebAccess: true)
+            + Prompts().RenderModeFraming("concept", allowWebAccess: false);
         Assert.DoesNotContain("—", framing);
     }
 

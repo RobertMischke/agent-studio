@@ -44,6 +44,33 @@ public sealed class ReadOnlyContainmentPolicyTests
     }
 
     [Fact]
+    public void ConceptMode_WithOneOperationsWorkbench_IsContained()
+    {
+        var result = ReadOnlyContainmentPolicy.Evaluate(
+            TaskModes.Concept,
+            isRepo: true,
+            changedFiles:
+            [
+                "docs/operations/concept-pipeline/index.html",
+                "docs/operations/concept-pipeline/workbench.json",
+            ]);
+
+        Assert.False(result.IsViolation);
+    }
+
+    [Theory]
+    [InlineData("backend/Features/X.cs")]
+    [InlineData("docs/operations/one/index.html", "docs/operations/two/index.html")]
+    public void ConceptMode_WithOutsideOrMultipleWorkbenchDiff_IsViolation(params string[] changedFiles)
+    {
+        var result = ReadOnlyContainmentPolicy.Evaluate(
+            TaskModes.Concept, isRepo: true, changedFiles);
+
+        Assert.True(result.IsViolation);
+        Assert.Contains("containment violation", result.Summary);
+    }
+
+    [Fact]
     public void ReadOnlyMode_WithCleanTree_IsNotViolation()
     {
         var result = ReadOnlyContainmentPolicy.Evaluate(

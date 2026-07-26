@@ -8,8 +8,9 @@ namespace AgentStudio.Runner;
 /// reissue, a resume, or a crash-recovery continuation. The shared main checkout
 /// is read-only reference + the integration target; an agent coding run must
 /// never run with its working directory pointed at it (that is the
-/// cross-contamination bug ASS-1732). Read-only modes (planning / research) and
-/// epic planning runs write nothing, so they may run in-place without a worktree.
+/// cross-contamination bug ASS-1732). Report-only modes (planning / research)
+/// and epic planning runs write nothing, so they may run in-place. Concept runs
+/// need isolation because they author a bounded docs-only Workbench.
 ///
 /// <para>
 /// This is intentionally separate from <see cref="ParallelSlotPolicy"/>: that
@@ -22,13 +23,14 @@ public static class WorktreeRunPolicy
 {
     /// <summary>
     /// True when this run must execute inside an isolated task worktree. A coding
-    /// run always does; read-only modes (planning / research) and epic planning
-    /// runs do not (they mutate nothing). A required worktree with no
+    /// run always does; concept runs do so their docs-only diff is isolated.
+    /// Report-only modes (planning / research) and epic planning runs do not.
+    /// A required worktree with no
     /// authoritative Git repository is a rejected admission, never an in-place
     /// fallback.
     /// </summary>
     public static bool RequiresWorktree(string? mode, bool isEpicPlanningRun)
-        => !isEpicPlanningRun && !TaskModes.IsReadOnly(mode);
+        => !isEpicPlanningRun && (!TaskModes.IsReadOnly(mode) || TaskModes.IsConcept(mode));
 
     /// <summary>
     /// Maps the project's configured CLI cwd into a newly materialized worktree.

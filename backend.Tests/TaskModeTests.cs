@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Task execution mode (coding|planning|research) - orthogonal to the epic
+/// Task execution mode (coding|planning|research|concept) - orthogonal to the epic
 /// kind. Foundation slice: the field round-trips through task.json + the scanner
 /// and the web-access default is mode-derived. Pipeline behaviour (read-only
 /// git-step skip) + the create-modal + promote flow are separate slices.
@@ -37,9 +37,13 @@ public class TaskModeTests : IDisposable
         Assert.Equal(TaskModes.Coding, TaskModes.Normalize("nonsense"));
         Assert.Equal(TaskModes.Planning, TaskModes.Normalize("PLANNING"));
         Assert.Equal(TaskModes.Research, TaskModes.Normalize("research"));
+        Assert.Equal(TaskModes.Concept, TaskModes.Normalize("CONCEPT"));
         Assert.False(TaskModes.IsReadOnly("coding"));
         Assert.True(TaskModes.IsReadOnly("planning"));
         Assert.True(TaskModes.IsReadOnly("research"));
+        Assert.True(TaskModes.IsReadOnly("concept"));
+        Assert.False(TaskModes.IsReportOnly("concept"));
+        Assert.True(TaskModes.IsConcept("concept"));
     }
 
     [Fact]
@@ -76,6 +80,25 @@ public class TaskModeTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal(TaskModes.Research, info!.Mode);
         Assert.True(info.AllowWebAccess); // research defaults web on
+    }
+
+    [Fact]
+    public void CreateJob_ConceptMode_IsPersistedAndDefaultsWebAccessOff()
+    {
+        var (_, scanner, mutations) = Build();
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "concept-1",
+            Title = "Concept",
+            Mode = TaskModes.Concept,
+            WatchPath = _watchPath,
+            TargetState = TaskStates.Ready,
+        });
+
+        var info = scanner.FindJob("concept-1", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(TaskModes.Concept, info!.Mode);
+        Assert.False(info.AllowWebAccess);
     }
 
     [Fact]

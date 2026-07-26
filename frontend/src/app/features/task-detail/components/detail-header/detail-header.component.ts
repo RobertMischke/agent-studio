@@ -420,7 +420,7 @@ export class DetailHeaderComponent {
    */
   readonly modeBadge = computed(() => {
     const mode = this.info().mode;
-    if (mode !== 'planning' && mode !== 'research') return null;
+    if (mode !== 'planning' && mode !== 'research' && mode !== 'concept') return null;
     return {
       mode,
       icon: taskModeIcon(mode),
@@ -428,7 +428,9 @@ export class DetailHeaderComponent {
       tooltip:
         mode === 'planning'
           ? 'Planning task: read-only. It investigates and proposes the next work; it is only done once it spawns follow-up cards or declares no follow-up intended.'
-          : 'Research task: read-only with web access. It gathers information and reports findings.',
+          : mode === 'research'
+            ? 'Research task: read-only with web access. It gathers information and reports findings.'
+            : 'Concept task: docs-only. It delivers one Workbench and waits for human sight review before implementation cards are promoted.',
     };
   });
 

@@ -33,6 +33,14 @@ describe('CreateModePickerComponent', () => {
     expect(cmp.allowWebAccess()).toBe(false);
   });
 
+  it('offers concept mode with web access off', () => {
+    const { cmp } = setup();
+    expect(cmp.modeOptions.some((option) => option.value === 'concept')).toBe(true);
+    cmp.setMode('concept');
+    expect(cmp.mode()).toBe('concept');
+    expect(cmp.allowWebAccess()).toBe(false);
+  });
+
   it('resets web access to the mode default when switching back to coding', () => {
     const { cmp } = setup();
     cmp.setMode('research');
@@ -54,6 +62,7 @@ describe('CreateModePickerComponent', () => {
   it('exposes the per-mode web default (research = on, else off)', () => {
     expect(CreateModePickerComponent.webDefaultFor('research')).toBe(true);
     expect(CreateModePickerComponent.webDefaultFor('planning')).toBe(false);
+    expect(CreateModePickerComponent.webDefaultFor('concept')).toBe(false);
     expect(CreateModePickerComponent.webDefaultFor('coding')).toBe(false);
   });
 });

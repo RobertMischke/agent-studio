@@ -888,6 +888,21 @@ export class TaskService {
     );
   }
 
+  getPromoteConcept(jobId: string, watchPath?: string) {
+    return this.http.get<import('../models/task.model').PromoteConceptResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/promote-concept`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  promoteConcept(jobId: string, itemIndexes: number[], watchPath?: string) {
+    return this.http.post<import('../models/task.model').PromoteConceptTasksResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/promote-concept`,
+      { itemIndexes },
+      this.withWatchPath(watchPath),
+    );
+  }
+
   /**
    * AGT-2069 — declare (or clear) "no follow-up intended" on a planning task.
    * This satisfies the spawn-contract completion gate without producing

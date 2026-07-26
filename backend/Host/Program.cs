@@ -520,6 +520,9 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>(
 builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IManagedProjectArtifactCommitService,
     AgentStudio.Pipeline.ManagedProjectArtifactCommitService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IConceptWorkbenchPublisher,
+    AgentStudio.Pipeline.ConceptWorkbenchPublisher>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ConceptPromotionService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.OnDemandPostStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
