@@ -88,20 +88,26 @@ export class TaskLiveStatusComponent {
 
     const latestAt = latestActivityAt(task, status.latestEventAt);
     const idleMs = latestAt === null ? null : Math.max(0, this.now() - latestAt);
+    // Preparation is a pre-run lane: a card legitimately sits here before any
+    // step or runner has picked it up. Idle time here is not a hang, so it must
+    // not raise the stall/possible-hang alarm — only the running lanes do.
+    const preparing = task.state === TaskState.Preparation;
     const activeLane = task.state === TaskState.Progress
-      || task.state === TaskState.AutoReview
-      || task.state === TaskState.Preparation;
+      || task.state === TaskState.AutoReview;
     const stalled = activeLane && idleMs !== null && idleMs >= STALE_AFTER_MS;
-    const noActiveRun = task.runActivity?.kind === 'failed-idle'
-      || task.runActivity?.kind === 'no-active-run';
+    const noActiveRun = !preparing
+      && (task.runActivity?.kind === 'failed-idle'
+        || task.runActivity?.kind === 'no-active-run');
 
     return {
-      tone: stalled || noActiveRun ? 'stalled' : 'idle',
-      headline: stalled
-        ? `No activity for ${elapsed(idleMs!)} · possible hang`
-        : noActiveRun
-          ? 'No active run'
-          : 'Between steps',
+      tone: preparing ? 'idle' : (stalled || noActiveRun ? 'stalled' : 'idle'),
+      headline: preparing
+        ? 'Preparing'
+        : stalled
+          ? `No activity for ${elapsed(idleMs!)} · possible hang`
+          : noActiveRun
+            ? 'No active run'
+            : 'Between steps',
       detail: idleMs === null ? 'No recorded activity time' : `Last activity ${elapsed(idleMs)} ago`,
       next,
       attempt: status.attempt,
