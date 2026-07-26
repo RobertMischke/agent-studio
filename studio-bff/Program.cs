@@ -7,9 +7,30 @@ var taskServerUrl = builder.Configuration["TaskServer:BaseUrl"]
 builder.Services.AddHttpClient("task-server", client =>
 {
     client.BaseAddress = new Uri(taskServerUrl);
+    var bearerToken = ReadTaskServerToken(builder.Configuration);
+    if (!string.IsNullOrWhiteSpace(bearerToken))
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
     client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, TaskServerProtocol.Current.ToString());
     client.DefaultRequestHeaders.Add(TaskServerProtocol.ClientVersionHeaderName,
         typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0");
+})
+.ConfigurePrimaryHttpMessageHandler(() =>
+{
+    var expectedFingerprint = builder.Configuration["TaskServer:TlsServerCertificateSha256"]?.Trim();
+    if (string.IsNullOrWhiteSpace(expectedFingerprint))
+        return new HttpClientHandler();
+    return new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
+            certificate is not null
+            && (errors & ~System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors) == 0
+            && certificate.NotBefore.ToUniversalTime() <= DateTime.UtcNow
+            && certificate.NotAfter.ToUniversalTime() >= DateTime.UtcNow
+            && string.Equals(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(certificate.RawData)),
+                expectedFingerprint,
+                StringComparison.OrdinalIgnoreCase),
+    };
 });
 
 var app = builder.Build();
@@ -37,5 +58,30 @@ app.Map("/api/v1/{**path}", async context =>
 });
 
 await app.RunAsync();
+
+static string? ReadTaskServerToken(IConfiguration configuration)
+{
+    var legacy = configuration["TaskServer:BearerToken"]?.Trim();
+    var direct = configuration["TaskServer:AuthToken"]?.Trim();
+    var file = configuration["TaskServer:AuthTokenFile"]?.Trim();
+    if (!string.IsNullOrWhiteSpace(direct) && !string.IsNullOrWhiteSpace(file))
+        throw new InvalidOperationException(
+            "Configure only one of TaskServer:AuthToken or TaskServer:AuthTokenFile.");
+    if (!string.IsNullOrWhiteSpace(file))
+    {
+        var resolved = Path.GetFullPath(file);
+        if (!File.Exists(resolved))
+            throw new InvalidOperationException(
+                $"TaskServer:AuthTokenFile does not exist: {resolved}");
+        direct = File.ReadAllText(resolved).Trim();
+    }
+    if (!string.IsNullOrWhiteSpace(direct)
+        && !string.IsNullOrWhiteSpace(legacy))
+    {
+        throw new InvalidOperationException(
+            "Configure TaskServer:AuthToken or the legacy TaskServer:BearerToken, not both.");
+    }
+    return string.IsNullOrWhiteSpace(direct) ? legacy : direct;
+}
 
 public partial class Program;

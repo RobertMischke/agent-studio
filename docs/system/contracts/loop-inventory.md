@@ -100,6 +100,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet fired in production. ASS-665 (a healthy `ng serve` cold-compile killed by the watchdog as `status=stopped, exitCode=-1`) is the motivating example: with this loop the transient kill self-heals via re-spawn instead of parking in human review.
 - **Notes:** The decider is pure (ADR-0032): it only classifies an issue as a transient abort and checks the remaining issue-specific budget; the binding re-spawn + counter + terminal escalation live in `ProjectRunner`. `EnvironmentBlocker` is unrecoverable and `PermissionBlocked` needs a human, so both still route to review. The counter resets when the job leaves the run loop (moved to review on a clean run, or escalated to human review), so the budget measures consecutive transient aborts without an intervening successful completion. It does NOT persist across backend restart. Pairs with the watchdog long-op widening (same feature): the long-op fix removes the false-positive kill in the first place, this loop recovers a genuine transient kill that still happens. The re-trigger prompt asks the agent to narrate during long operations so a legitimate wait stays visibly alive.
 
+### ui-task.human-feedback-iterations
+
+- **Kind:** Post-Guard
+- **Where:** [`backend/Features/Runner/UiIterationGate.cs`](../../../backend/Features/Runner/UiIterationGate.cs) and `ProjectRunner.HandleUiIterationCompletionAsync`
+- **Re-entry trigger:** A human rejects an evidenced UI iteration and Part 2 submits the feedback through the existing Continue flow.
+- **Budget:** `UiIterationGate.DefaultMaxIterations` (default 4, configurable per project from 1 through 10 on `PipelineSteps["pre-ui-pipeline-routing"].maxIterations`). Missing evidence has the separate `RunOutcomePolicy.MaxAutoReissueAttempts` budget of 1 retry for the same iteration.
+- **Action when budget exhausted:** A feedback Continue at the cap is refused before CLI admission and routed through `HumanReviewEscalation` to `5e-escalated` with category `ui-iteration-cap`. Finishing remains available because it does not start another run.
+- **Breaker test:** [`backend.Tests/Architecture/UiIterationBreakerTest.cs`](../../../backend.Tests/Architecture/UiIterationBreakerTest.cs), plus [`backend.Tests/UiTaskPipelineTests.cs`](../../../backend.Tests/UiTaskPipelineTests.cs)
+- **Last fired:** Not yet fired in production.
+- **Notes:** Iteration state is durable in `results/ui-iteration-NNN/` and `steer-pending.json`. Backend restarts do not reset the counter. The generic steer timeout explicitly ignores this human-review marker.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.

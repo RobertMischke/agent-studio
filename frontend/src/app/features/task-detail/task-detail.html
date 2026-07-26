@@ -38,6 +38,8 @@
     (generateCommitMessage)="generateCommitMessage()"
     (addCommit)="addCommitFromMenu()" />
 
+  <app-task-live-status [task]="detail().info" variant="detail" />
+
   @if (detail().info.epicId && detail().info.kind !== 'epic') {
     <app-epic-membership-banner
       [epicId]="detail().info.epicId!"
@@ -46,7 +48,11 @@
   }
 
   @if (isEscalated()) {
-    <app-escalation-summary [detail]="detail()" />
+    <app-escalation-summary
+      [detail]="detail()"
+      [mutationsBlocked]="mutationsBlocked()"
+      [triageActingId]="triageActingId()"
+      (triageAction)="onTriageAction($event)" />
   }
 
   <app-command-deck
@@ -114,6 +120,8 @@
         [cliTypeOverride]="cliTypeDraft()"
         [modelOverride]="modelDraft()"
         [thinkingLevelOverride]="thinkingLevelDraft()"
+        [routeTab]="routeDetailTab()"
+        [runOutcome]="runOutcomePresentation()"
         (maximizeToggle)="toggleMaximize('prompt')"
         (hide)="togglePane('prompt')"
         (save)="saveFileContent('prompt.md', $event)"
@@ -121,7 +129,8 @@
         (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)"
         (agentConfigCommit)="onAgentConfigCommit($event)"
         (referencesChanged)="fileSaved.emit()"
-        (titleSaved)="fileSaved.emit()" />
+        (titleSaved)="fileSaved.emit()"
+        (activeTabChange)="detailTabChange.emit($event)" />
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
@@ -146,6 +155,7 @@
         [chatError]="chatError()"
         [queuedFollowUp]="showQueuedFollowUp()"
         [regenerating]="regeneratingSummary()"
+        [runOutcome]="runOutcomePresentation()"
         (maximizeToggle)="toggleMaximize('protocol')"
         (hide)="togglePane('protocol')"
         (activeInspectorTabChange)="onInspectorTabChange($event)"

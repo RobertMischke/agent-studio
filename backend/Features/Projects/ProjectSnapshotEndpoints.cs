@@ -128,6 +128,8 @@ public static class ProjectSnapshotEndpoints
                     crashRecoveryEnabled = settings.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy),
                     runnerMode = settings.RunnerMode,
+                    pickupMode = ProjectExecutionPolicy.ResolvePickupMode(settings),
+                    executionLocation = ProjectExecutionPolicy.ResolveExecutionLocation(settings),
                     orchestratorModel = settings.OrchestratorModel,
                     orchestratorThinkingLevel = settings.OrchestratorThinkingLevel,
                     // F35: every lane resolved to its effective strategy.

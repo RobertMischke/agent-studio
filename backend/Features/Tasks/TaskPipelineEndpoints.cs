@@ -52,7 +52,7 @@ public static class TaskPipelineEndpoints
             var settings = string.IsNullOrWhiteSpace(info.ProjectName)
                 ? null
                 : projectSettings.Get(info.ProjectName);
-            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(info.Mode), settings);
+            var pipeline = ProjectPipelineOrder.Apply(UiTaskPipelineRouter.Select(info, settings), settings);
             var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var step in pipeline.AllSteps)
             {

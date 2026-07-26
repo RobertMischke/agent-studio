@@ -20,6 +20,14 @@ public sealed class RemoteReviewDaemon
     {
         await _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown);
         var active = new List<Task<int>>();
+        var telemetry = new HostTelemetrySampler();
+        var capabilityGeneration = DateTime.UtcNow.Ticks;
+        await _client.AdvertiseCapabilitiesAsync(
+            RunnerCapabilityProbe.Advertise(_options, gitPushReady: false),
+            RunnerCapabilityProbe.Telemetry(telemetry.SampleIfDue(0)),
+            capabilityGeneration,
+            shutdown);
+        var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         while (!shutdown.IsCancellationRequested)
         {
             for (var index = active.Count - 1; index >= 0; index--)
@@ -39,6 +47,15 @@ public sealed class RemoteReviewDaemon
                     _log($"remote review slot failed after cleanup: {exception.Message}");
                 }
                 active.RemoveAt(index);
+            }
+            if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+            {
+                await _client.AdvertiseCapabilitiesAsync(
+                    RunnerCapabilityProbe.Advertise(_options, gitPushReady: false),
+                    RunnerCapabilityProbe.Telemetry(telemetry.SampleIfDue(active.Count)),
+                    ++capabilityGeneration,
+                    shutdown);
+                nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
             }
             var claimedAny = false;
             while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)

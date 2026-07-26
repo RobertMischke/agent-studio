@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Product-owned remote runner onboarding controller (AGT-2094).
+# Product-owned agent host onboarding controller (AGT-2094).
 #
 # This controller is launched from the standard visible CLI task. All setup
 # commands run over SSH on the selected host, while stdout/stderr remain in the
-# canonical task conversation. The runner daemon is started only by systemd.
+# canonical task conversation. The agent host daemon is started only by systemd.
 set -euo pipefail
 
 host=""
@@ -17,7 +17,7 @@ role="coding"
 git_remote=""
 git_push_remote=""
 package_id="CodingAgentRunner"
-runner_command="agent-runner"
+runner_command="agent-host"
 minimum_version="0.5.0"
 skip_auth=0
 
@@ -37,7 +37,7 @@ Usage: remote-runner-onboard.sh \
 Options:
   --role <role>           Managed service role (default: coding)
   --package-id <id>       NuGet DotnetTool package (default: CodingAgentRunner)
-  --runner-command <cmd>  Installed tool command (default: agent-runner)
+  --runner-command <cmd>  Installed tool command (default: agent-host)
   --minimum-version <v>   Minimum accepted package version (default: 0.5.0)
   --auth-token-file <p>   Protected Runner credential file already on the host
   --skip-auth             Do not launch login flows; status checks still run
@@ -189,7 +189,7 @@ else
 fi
 REMOTE_PREFLIGHT
 
-printf '[onboarding] phase=install Installing/updating the runner tool and agent CLIs.\n'
+printf '[onboarding] phase=install Installing/updating the agent host tool and agent CLIs.\n'
 if ! "${ssh_base[@]}" -T "$host" bash -s -- "$package_id" "$runner_command" "$minimum_version" <<'REMOTE_INSTALL'
 set -euo pipefail
 package_id="$1"
@@ -274,6 +274,8 @@ runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
 runner_group="$(id -gn)"
 runner_home="$HOME"
+agent_host_root="/opt/agent-host"
+legacy_root="/opt/agent-runner"
 
 if [[ "$role" == "coding" ]]; then
   service_name="agent-runner"
@@ -312,7 +314,7 @@ resource_policy="$(sudo /usr/local/libexec/agent-host-resource-governance \
 
 cat >"$unit_tmp" <<EOF
 [Unit]
-Description=Agent Studio remote $role runner daemon
+Description=Agent Studio $role agent host daemon
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -326,7 +328,7 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
-ExecStart=$runner_bin --poll
+ExecStart=$agent_host_root/agent-host --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
@@ -343,6 +345,7 @@ ReadWritePaths=$service_root $runner_home
 
 [Install]
 WantedBy=multi-user.target
+Alias=agent-runner.service
 EOF
 
 sudo install -d -m 0750 /etc/agent-runner "$service_root" "$service_root/work" "$service_root/state"
@@ -350,11 +353,27 @@ if [[ "$role" == "review" ]]; then
   sudo install -d -m 0750 "$service_root/review-work"
 fi
 sudo chown -R "$runner_user:$runner_group" "$service_root"
+sudo install -d -m 0755 "$agent_host_root"
+sudo ln -sfn "$runner_bin" "$agent_host_root/agent-host"
+sudo ln -sfn agent-host "$agent_host_root/agent-runner"
+if [[ -e "$legacy_root" && ! -L "$legacy_root" ]]; then
+  legacy_backup="${legacy_root}.pre-agent-host"
+  [[ ! -e "$legacy_backup" ]] || {
+    printf '[remote] Cannot preserve legacy publish directory: %s already exists.\n' "$legacy_backup" >&2
+    exit 41
+  }
+  sudo mv "$legacy_root" "$legacy_backup"
+  printf '[remote] Preserved legacy publish directory at %s.\n' "$legacy_backup"
+fi
+sudo ln -sfnT "$agent_host_root" "$legacy_root"
 if [[ "$service_auth" == 1 ]]; then
   sudo chown root:"$runner_group" "$auth_token_file"
   sudo chmod 0640 "$auth_token_file"
 fi
 sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" "$env_file"
+if [[ -f /etc/systemd/system/agent-runner.service && ! -L /etc/systemd/system/agent-runner.service ]]; then
+  sudo systemctl stop agent-runner.service || true
+fi
 sudo install -m 0644 "$unit_tmp" "/etc/systemd/system/${service_name}.service"
 sudo systemctl daemon-reload
 sudo systemctl enable "$service_name"
@@ -363,7 +382,7 @@ sleep 2
 sudo systemctl is-enabled "$service_name"
 sudo systemctl is-active "$service_name"
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
-  "$runner_bin" --health-check --server "$server_url"
+  "$agent_host_root/agent-host" --health-check --server "$server_url"
 
 if [[ "$role" == "coding" ]]; then
   git_status=""

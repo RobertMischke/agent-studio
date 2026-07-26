@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-24
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -43,21 +43,40 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
   pipeline definitions, step ids, default ordering, step run modes, and display
   names.
+- `backend/Features/Pipeline/PipelineCatalogue.cs`,
+  `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
+  `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
+  shared EvidenceGate-based routing, mandatory iteration result layout, and
+  bounded hand-off to Human Review. The durable Part 2 consumer shape is defined
+  in [the UI task pipeline contract](../contracts/ui-task-pipeline.md).
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
+  `task-server/TaskServerOrchestrationStore.cs`, and
+  `orchestrator-engine/`: the separated flow boundary. Project flow
+  definitions are versioned Task Server data. The API-only Engine executes
+  ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
+  stages under bounded per-stage concurrency. A run snapshots the definition
+  version and ordered stages at creation, so later definition edits do not
+  rewrite in-flight work.
 - `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
   runs belong to commits rather than cards and expose planned order, scope,
   host, state, result, duration, and derived card attachments through
   `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
   step telemetry.
-- `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
+- `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
-  `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
-  the operator accepts a done-green task (the `HumanReview -> Completed`
-  transition wired in `TaskTransitionService`), then records the outcome so the
-  pending step flips to passed / failed / skipped in place. After a successful
-  merge it also pushes the integration branch itself to `origin`
+  delivery merge when the operator accepts a done-green task (the
+  `HumanReview -> Completed` transition wired in `TaskTransitionService`).
+  Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
+  `ResultSha` from `logs/review-subject.json`, fetch that exact
+  `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
+  mismatch. The configured integration ref is fetched and fast-forwarded
+  before the merge; a missing local branch is created from origin and a
+  divergent one fails visibly. The outcome is recorded so the pending step
+  flips to passed / failed / skipped in place. After a successful merge it
+  also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as
@@ -71,6 +90,14 @@ pipeline view.
   read model fed by the SSH gate start/completion events. The Remote Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
   visibility-only and never admits, cancels, or reorders a gate.
+- `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
+  deliveries after a backend restart when the durable lane move landed but the
+  merge did not. It also repairs the legacy `no-branch` outcome caused by
+  looking only for `task/<slug>`.
+- `IntegrationPushBackstopHostedService` reconstructs lost
+  `IntegrationPushQueue` work from durable passed-merge and pending-push
+  pipeline facts. The channel is a latency optimization, not the durability
+  boundary.
 - `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
   `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
   `post-task-spawner` step (AGT-2028). After a task settles it asks the best
@@ -153,6 +180,10 @@ pipeline view.
 - `backend/Features/Tasks/TaskPipelineEndpoints.cs`: API surface for task
   pipeline data, including `GET /{jobId}/step-prompts`, the read-model the
   Overview "Prompt" affordance parses from `.metadata/prompts.jsonl`.
+- `backend/Features/Tasks/TaskLiveStatusProjection.cs`: board and detail
+  read-model for the current pipeline step, recorded CLI/model provenance,
+  enabled upcoming steps, current runner/review queue position, and latest
+  activity time. It reads the current execution root only.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
 
@@ -214,8 +245,26 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+- Board cards and task detail share one live-status projection. The active step
+  comes from the newest root `PipelineExecutionRecord`; `PreviousAttempts` is
+  never eligible for a current-work or inactivity signal. CLI/model labels come
+  from the recorded step or matching `StepPromptLog` entry, host identity comes
+  from the existing execution-location projection, and queue positions come
+  from the runner and post-processing queues that already schedule the work.
+  The projection is read-only and introduces no telemetry or persisted task
+  state. A Ready task treats an existing completed root as the previous attempt
+  and previews the fresh enabled chain. Without an active step or queue
+  position, active-lane cards report the newest recorded activity time and
+  explicitly flag ten minutes of silence as a possible hang.
 
 ### Post-step lifecycle and ownership
+
+The separated control-plane path preserves the same ownership rule:
+definitions live in the Task Server, while execution lives in
+`orchestrator-engine`. The Engine receives the task payload and prior stage
+results only through the public API. Its `engine.env` contains bootstrap
+connectivity, identity/credential, lease timing, and concurrency caps, never
+project flow definitions, model routing, or gate policy.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**
@@ -239,17 +288,6 @@ code-owned, so that same destination is where an operator overrides it. A
 card-level addition is a separate execution-plan fact, not an activation source
 or a new arbitrary executable definition; it can only reference a known
 catalogue step.
-
-The task Overview pipeline uses progressive disclosure and the shared compact
-row-density tokens. Quiet groups start collapsed, while danger, warning, and
-concern groups start open. Every group header retains the aggregate status,
-ran/total count, disabled and concern counts, and token total. Uniform
-activation and model metadata appears once on the group header. Metric headers
-and cells exist only when at least one visible row has real data for that
-metric. Expanding a group keeps step details, enable/disable, post-step
-controls, token details, cost breakdown, and non-uniform per-step model context
-reachable. The existing Agent model picker remains outside the collapsible
-pipeline rows; durable per-step overrides remain on Project Hub -> Pipeline.
 
 On-demand execution is bounded to post-steps that declare themselves
 idempotent and have an implemented runner. It is allowed after the main run and

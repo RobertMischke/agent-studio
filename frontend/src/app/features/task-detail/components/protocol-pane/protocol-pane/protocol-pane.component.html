@@ -55,16 +55,6 @@
                 data-testid="watchdog-chip">{{ wp.label }}</span>
         }
       }
-      @if (outcomeIssue(); as issue) {
-        <button type="button"
-                class="pane__outcome-issue"
-                [class]="'pane__outcome-issue--' + outcomeIssueTone()"
-                [cacTooltip]="issue.summary || issue.kind"
-                data-testid="protocol-outcome-issue-chip"
-                (click)="outcomeIssueModalOpen.set(true)">
-          {{ issue.label || issue.kind }}
-        </button>
-      }
       @if (claudeRateLimit(); as rl) {
         <span class="pane__telemetry pane__telemetry-rate"
               [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
@@ -96,14 +86,13 @@
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
       <app-protocol-verdict-banner
+        data-testid="protocol-run-outcome"
         [verdict]="v"
-        [chain]="verdictChain()"
         [running]="isRunning()"
         [canRequestInterim]="canRequestInterim()"
         [interimInFlight]="interimInFlight()"
         [interimElapsedSeconds]="interimElapsedSeconds()"
-        (requestInterim)="requestInterimSummary()"
-        (openEvidence)="onVerdictChainEvidence($event)" />
+        (requestInterim)="requestInterimSummary()" />
     }
     @if (interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
@@ -144,41 +133,6 @@
             <pre class="interim-summary__body interim-summary__body--error"
                  data-testid="protocol-interim-error">{{ s.error || 'Unknown error.' }}</pre>
           }
-        </div>
-      }
-    }
-    @if (outcomeIssueModalOpen()) {
-      @if (outcomeIssue(); as issue) {
-        <div #outcomeIssuePortalRoot
-             class="outcome-dialog-backdrop"
-             data-testid="protocol-outcome-issue-modal"
-             (click)="outcomeIssueModalOpen.set(false)" tabindex="0" (keydown.enter)="outcomeIssueModalOpen.set(false)" (keydown.space)="outcomeIssueModalOpen.set(false); $event.preventDefault()">
-          <section class="outcome-dialog"
-                   role="dialog"
-                   aria-modal="true"
-                   aria-labelledby="outcome-dialog-title"
-                   (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-            <header class="outcome-dialog__head">
-              <div>
-                <p class="outcome-dialog__eyebrow">Runner outcome</p>
-                <h3 id="outcome-dialog-title">{{ issue.label || issue.kind }}</h3>
-              </div>
-              <button type="button"
-                      class="outcome-dialog__close"
-                      data-testid="protocol-outcome-issue-close"
-                      aria-label="Close outcome issue detail"
-                      (click)="outcomeIssueModalOpen.set(false)">×</button>
-            </header>
-            <dl class="outcome-dialog__meta">
-              <div><dt>Category</dt><dd><code>{{ issue.kind }}</code></dd></div>
-              <div><dt>Severity</dt><dd>{{ issue.severity || 'Info' }}</dd></div>
-              <div><dt>Last seen</dt><dd>{{ formatIssueTime(issue.lastSeenAt) }}</dd></div>
-            </dl>
-            <p class="outcome-dialog__explanation">{{ outcomeIssueExplanation(issue) }}</p>
-            @if (issue.summary) {
-              <pre class="outcome-dialog__summary">{{ issue.summary }}</pre>
-            }
-          </section>
         </div>
       }
     }
@@ -399,13 +353,14 @@
                 [visible]="gitViewerRun() !== null"
                 (closeRequest)="closeGitViewer()" />
 
-              @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
+              @if (cliOutput().length > 0 || runnerEvents().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
                 @switch (activityView()) {
                   @case ('plan') {
                     <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
                   }
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
+                      <app-runner-replay-metadata [events]="runnerEvents()" />
                       <!-- Virtualised: the transcript can grow into the thousands of
                            events for a long-running task, so the view windows its own
                            DOM and owns its own scroll container (bounded by the
@@ -444,7 +399,7 @@
                                 (click)="exitConversationTraceFallback()">Back to CLI</button>
                       </div>
                     }
-                    <app-activity-log-view [lines]="filteredCliOutput()"
+                    <app-activity-log-view [lines]="runnerTraceLines()"
                                            [bodyMaxHeight]="'none'"
                                            [isRunning]="isRunning()"
                                            [defaultMode]="'trace'"
@@ -474,15 +429,8 @@
 
               @if (outcomeVisible()) {
                 @if (outcome(); as o) {
-                  <div class="auto-eval"
-                       [attr.data-kind]="o.kind"
-                       [attr.data-testid]="'auto-eval-banner'">
-                    <div class="auto-eval__head">
-                      <span class="auto-eval__badge"
-                            [attr.data-kind]="o.kind"
-                            [attr.aria-label]="o.kind">{{ outcomeEmoji(o.kind) }}</span>
-                      <span class="auto-eval__summary">{{ o.summary }}</span>
-                    </div>
+                  <div class="auto-eval" data-testid="auto-eval-actions">
+                    <span class="auto-eval__summary">Suggested next actions</span>
                     @if (o.suggestions.length > 0) {
                       <div class="auto-eval__chips" role="group" aria-label="Quick replies">
                         @for (chip of o.suggestions; track chip.label) {
@@ -547,7 +495,7 @@
 @if (verboseDebugOpen()) {
   <app-verbose-debug-overlay
     data-testid="protocol-verbose-debug"
-    [lines]="cliOutput()"
+    [lines]="runnerTraceLines()"
     [runTimeline]="runTimeline()"
     [screenshots]="screenshots()"
     [tokenSummary]="detail().info.tokenSummary ?? null"

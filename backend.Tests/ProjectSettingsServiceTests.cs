@@ -97,6 +97,52 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.False(svc.Get("demo").RemoteExecutionEnabled);
     }
 
+    [Theory]
+    [InlineData("auto-continuous", PickupModes.Auto, ExecutionLocations.Local)]
+    [InlineData("manual", PickupModes.Manual, ExecutionLocations.Local)]
+    [InlineData("paused", PickupModes.Paused, ExecutionLocations.Local)]
+    [InlineData("runner-01", PickupModes.Auto, "runner-01")]
+    public void LegacyExecutionRunner_IsReadCompatibly_AndMigratedOnNextWrite(
+        string legacyValue,
+        string expectedPickupMode,
+        string expectedLocation)
+    {
+        File.WriteAllText(StorePath(), $$"""
+        {
+          "legacy": {
+            "ExecutionRunner": "{{legacyValue}}"
+          }
+        }
+        """);
+        var svc = Build();
+
+        var loaded = svc.Get("legacy");
+        Assert.Equal(expectedPickupMode, loaded.PickupMode);
+        Assert.Equal(expectedLocation, loaded.ExecutionLocation);
+
+        svc.SetAutoCommit("legacy", false);
+
+        using var persisted = System.Text.Json.JsonDocument.Parse(File.ReadAllText(StorePath()));
+        var project = persisted.RootElement.GetProperty("legacy");
+        Assert.Equal(expectedPickupMode, project.GetProperty("PickupMode").GetString());
+        Assert.Equal(expectedLocation, project.GetProperty("ExecutionLocation").GetString());
+    }
+
+    [Fact]
+    public void SetExecutionSettings_PausedRemote_PreservesLocationAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetExecutionSettings("demo", PickupModes.Auto, "runner-01");
+        svc.SetExecutionSettings("demo", PickupModes.Paused, executionLocation: null);
+
+        var reloaded = Build().Get("demo");
+        Assert.Equal(PickupModes.Paused, reloaded.PickupMode);
+        Assert.Equal("runner-01", reloaded.ExecutionLocation);
+        Assert.False(ProjectExecutionPolicy.AllowsAutomaticPickup(reloaded));
+        Assert.True(ProjectExecutionPolicy.IsAssignedRemote(reloaded, "runner-01"));
+    }
+
     [Fact]
     public void RekeyProject_MovesAllSettingsAndUpdatesRunnerAcrossReload()
     {

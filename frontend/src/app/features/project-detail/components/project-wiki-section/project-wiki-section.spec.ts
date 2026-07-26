@@ -211,7 +211,11 @@ const HOME: WikiHome = {
   ],
 };
 
-async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
+async function setup(
+  tree: WikiTree = TREE,
+  pulse: WikiPulse = PULSE,
+  projectId: string | null = null,
+) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
     providers: [
@@ -226,6 +230,7 @@ async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
   const fixture = TestBed.createComponent(ProjectWikiSectionComponent);
   const http = TestBed.inject(HttpTestingController);
   fixture.componentRef.setInput('projectName', 'Demo');
+  if (projectId) fixture.componentRef.setInput('projectId', projectId);
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
@@ -1746,6 +1751,23 @@ describe('ProjectWikiSectionComponent', () => {
     expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
     expect(el(fixture).querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  it('restores and keeps a page on the immutable project-id route', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#/projects/PROJ-900/wiki?page=concepts%2Foverview.md',
+    );
+    const { fixture, http } = await setup(TREE, PULSE, 'PROJ-900');
+    flushDoc(http, 'concepts/overview.md', '# Restored via stable id\n');
+    fixture.detectChanges();
+    flushWikiHomeIfRendered(http);
+
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
+    expect(window.location.hash)
+      .toBe('#/projects/PROJ-900/wiki?page=concepts%2Foverview.md');
     http.verify();
   });
 

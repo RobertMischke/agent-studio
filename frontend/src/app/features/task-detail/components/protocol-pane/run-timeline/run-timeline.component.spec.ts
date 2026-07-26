@@ -467,7 +467,7 @@ describe('RunTimelineComponent (smoke)', () => {
     fixture.detectChanges();
 
     const badge = fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('Remote · agent-runner-01');
+    expect(badge.textContent).toContain('Host · agent-runner-01');
     expect(badge.classList.contains('execution-location--history')).toBe(true);
     expect(badge.classList.contains('execution-location--acute')).toBe(false);
     TestBed.inject(HttpTestingController).verify();

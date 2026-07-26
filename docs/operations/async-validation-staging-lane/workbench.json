@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "async-validation-staging-lane",
+  "title": "Async Validation & the Test Staging Lane",
+  "summary": "A design proposal: stop running the full test suite per card and per retry. Batch validation on a test-integration branch fed by a staging lane, scope tests deterministically, and cache gate results per SHA. Rests on the pipeline-time-economy evidence.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-25T00:00:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": ["AGT-2155", "AGT-2293"]
+}

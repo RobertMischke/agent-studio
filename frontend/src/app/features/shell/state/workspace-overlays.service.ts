@@ -46,9 +46,10 @@ export type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
  * Workspace-settings view. One view, one open flag, one active section.
  *
  * The view is deep-linkable so a bookmark or copy-pasted address reproduces the
- * open section. Legacy per-overlay hashes (`#/workspace/tokens`,
- * `#/workspace/screenshots`) are preserved; the retired `#/workspace/summary` /
- * `#/summary` aliases now resolve to the overview.
+ * open section. Canonical routes live below `#/workspace/settings`; legacy
+ * per-overlay hashes (`#/workspace/tokens`, `#/workspace/screenshots`) remain
+ * readable migration inputs. The retired `#/workspace/summary` / `#/summary`
+ * aliases resolve to the overview.
  *
  * The deep link is the hash's ROUTE SEGMENT and coexists with key-value
  * segments such as the board's `filters=...` (see url-hash.util.ts):
@@ -119,7 +120,9 @@ export class WorkspaceOverlaysService {
 
   selectTokenUsagePage(page: WorkspaceTokenUsagePage): void {
     this.tokenUsagePage.set(page);
-    this.writeRoute(page === 'workspace' ? '/workspace/tokens' : `/workspace/tokens/${page}`);
+    this.writeRoute(page === 'workspace'
+      ? '/workspace/settings/tokens'
+      : `/workspace/settings/tokens/${page}`);
   }
 
   close(): void {
@@ -183,8 +186,12 @@ export class WorkspaceOverlaysService {
       if (this.section() !== section) this.section.set(section);
       if (!this.settingsOpen()) this.settingsOpen.set(true);
       this.openedViaHash = true;
-      if (route === '/workspace/settings/project-sources') {
-        this.writeRoute('/workspace/settings');
+      const tokenPage = this.tokenUsagePage();
+      const canonicalRoute = section === 'tokens' && tokenPage !== 'workspace'
+        ? `/workspace/settings/tokens/${tokenPage}`
+        : this.routeForSection(section);
+      if (route !== canonicalRoute) {
+        this.writeRoute(canonicalRoute);
       }
     } else if (this.settingsOpen() && this.openedViaHash) {
       this.settingsOpen.set(false);
@@ -197,7 +204,11 @@ export class WorkspaceOverlaysService {
       case '/workspace/tokens': return 'tokens';
       case '/workspace/tokens/claude': return 'tokens';
       case '/workspace/tokens/codex': return 'tokens';
+      case '/workspace/settings/tokens': return 'tokens';
+      case '/workspace/settings/tokens/claude': return 'tokens';
+      case '/workspace/settings/tokens/codex': return 'tokens';
       case '/workspace/screenshots': return 'screenshots';
+      case '/workspace/settings/screenshots': return 'screenshots';
       case '/workspace/settings/caps':
       case '/workspace/caps': return 'caps';
       case '/workspace/settings/cli-sessions': return 'cli-sessions';
@@ -222,15 +233,19 @@ export class WorkspaceOverlaysService {
   }
 
   private tokenUsagePageForRoute(route: string): WorkspaceTokenUsagePage {
-    if (route === '/workspace/tokens/claude') return 'claude';
-    if (route === '/workspace/tokens/codex') return 'codex';
+    if (route === '/workspace/tokens/claude' || route === '/workspace/settings/tokens/claude') {
+      return 'claude';
+    }
+    if (route === '/workspace/tokens/codex' || route === '/workspace/settings/tokens/codex') {
+      return 'codex';
+    }
     return 'workspace';
   }
 
   private routeForSection(section: WorkspaceSettingsSection): string {
     switch (section) {
-      case 'tokens': return '/workspace/tokens';
-      case 'screenshots': return '/workspace/screenshots';
+      case 'tokens': return '/workspace/settings/tokens';
+      case 'screenshots': return '/workspace/settings/screenshots';
       case 'caps': return '/workspace/settings/caps';
       case 'cli-sessions': return '/workspace/settings/cli-sessions';
       case 'cli-paths': return '/workspace/settings/cli-paths';
@@ -260,6 +275,10 @@ export class WorkspaceOverlaysService {
     '/workspace/settings/project-sources',
     '/workspace/settings/orchestrator',
     '/workspace/settings/working-memory',
+    '/workspace/settings/tokens',
+    '/workspace/settings/tokens/claude',
+    '/workspace/settings/tokens/codex',
+    '/workspace/settings/screenshots',
     '/workspace/caps',
     '/workspace/prompts',
     '/workspace/tokens',

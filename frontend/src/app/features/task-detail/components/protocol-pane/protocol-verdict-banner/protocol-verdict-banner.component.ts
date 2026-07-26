@@ -1,26 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { ProtocolVerdict } from '../protocol-verdict';
-import type { ChainEvidenceLink, VerdictChain } from '../protocol-verdict-chain';
-
-/**
- * The three-state verdict pill at the top of the protocol pane, plus the
- * collapsed "superseded run outcome" history line beneath it.
- *
- * Split out of `protocol-pane` so the reason-expansion state (BEFUND 1) and
- * the superseded-blocker rendering (BEFUND 2/3) live in one small, testable
- * surface instead of growing the already-oversized parent.
- *
- * - **Full reason (BEFUND 1):** the reason can be a long blocker sentence.
- *   Collapsed it clamps to one line with the whole text in the tooltip;
- *   clicking it unclamps so it wraps in full. The affordance only appears when
- *   there is genuinely more to read (a superseded blocker or a long reason).
- * - **Superseded history (BEFUND 2/3):** when the head verdict was demoted
- *   because the card reached an accepted stand, `verdict.superseded` carries
- *   the earlier Blocked/Failed outcome. It renders as a quiet history strip,
- *   never as the head banner, and expands together with the reason so the user
- *   can follow the sequence (accepted stand leads, superseded run below).
- */
+/** The single run outcome banner plus its raw-signal disclosure. */
 @Component({
   selector: 'app-protocol-verdict-banner',
   standalone: true,
@@ -36,29 +17,15 @@ export class ProtocolVerdictBannerComponent {
   readonly interimInFlight = input(false);
   readonly interimElapsedSeconds = input(0);
 
-  /**
-   * The four-step verdict chain (Run → Gate → Review → Lane) with evidence
-   * links (BEFUND 2) plus the causal narrative (BEFUND 3). Optional: when null
-   * the banner renders just the head pill (e.g. no run yet). Rendered inside
-   * the expandable region so it opens together with the reason/history.
-   */
-  readonly chain = input<VerdictChain | null>(null);
-
-  /** Emitted when the user clicks an evidence link in the chain. */
-  readonly openEvidence = output<ChainEvidenceLink>();
   readonly requestInterim = output<void>();
 
-  /** Whether the reason (and any superseded history) is shown in full. */
+  /** Whether the reason and raw signals are shown in full. */
   readonly expanded = signal(false);
   readonly dismissed = signal(false);
 
-  /**
-   * Only offer the expand affordance when there is genuinely more to read: a
-   * demoted/superseded blocker, or a reason long enough to clip on one line.
-   */
   readonly expandable = computed<boolean>(() => {
     const v = this.verdict();
-    return !!v.superseded || !!this.chain() || (v.detail?.length ?? 0) > 64;
+    return (v.signals?.length ?? 0) > 0 || (v.detail?.length ?? 0) > 64;
   });
 
   constructor() {
@@ -82,9 +49,5 @@ export class ProtocolVerdictBannerComponent {
 
   dismiss(): void {
     this.dismissed.set(true);
-  }
-
-  onEvidence(link: ChainEvidenceLink): void {
-    this.openEvidence.emit(link);
   }
 }

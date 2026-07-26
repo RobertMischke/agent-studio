@@ -8,11 +8,12 @@ import type { ProtocolVerdict } from '../protocol-verdict';
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
     kind: 'ok',
+    status: 'succeeded',
+    signals: [],
     emoji: '🟢',
     label: 'Success',
     detail: 'Last run completed successfully.',
     duration: '4 min',
-    superseded: null,
     ...overrides,
   };
 }
@@ -66,7 +67,7 @@ describe('ResultViewComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const badge = el.querySelector('[data-testid="result-case-badge"]');
-    expect(badge?.textContent).toContain('Bugfix');
+    expect(badge?.textContent).toContain('Success');
 
     expect(el.querySelector('[data-testid="result-overview-problem"]')?.textContent).toContain('unreadable');
     expect(el.querySelector('[data-testid="result-overview-solution"]')?.textContent).toContain('Re-toned');

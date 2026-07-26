@@ -65,8 +65,8 @@
         @if (infoTopic(); as topic) {
           <app-info-button [topic]="topic" />
         }
-        <!-- Lane status cluster (In-Progress only, project-scoped). Three
-             chips so the operator can see WHAT IS RUNNING, WHAT COMES NEXT,
+        <!-- Lane status cluster (In-Progress only, project-scoped).
+             Shows WHAT IS RUNNING, WHAT COMES NEXT,
              and HOW MANY ARE WAITING without contradiction. The mode chip
              is the click target that flips auto-pickup; the run + queue
              chips are read-only indicators. -->
@@ -133,6 +133,9 @@
                 [cacTooltip]="'Collapse ' + title() + ' lane'"
                 (click)="collapseToggle.emit()">‹</button>
       </div>
+      @if (state() === '5-human-review') {
+        <app-decision-backlog-hint [tasks]="jobs()" (taskClick)="jobClick.emit($event)" />
+      }
       <div class="column__body">
         @if (isArchive()) {
           <div class="archive-filter">

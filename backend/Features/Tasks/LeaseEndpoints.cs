@@ -49,13 +49,11 @@ public static class LeaseEndpoints
                 if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal principal)
                 {
                     var settingsProject = settings.Get(task.ProjectName);
-                    var assigned = settingsProject.ExecutionRunner;
-                    if (!settingsProject.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(assigned)
-                        || !(string.Equals(assigned, principal.RunnerId, StringComparison.OrdinalIgnoreCase)
-                             || string.Equals(assigned, principal.RunnerName, StringComparison.OrdinalIgnoreCase)))
+                    if (!ProjectExecutionPolicy.IsAssignedRemote(
+                            settingsProject, principal.RunnerId, principal.RunnerName))
                         return Results.Json(new RunLeaseResponse(
                             "ProjectDenied", false, null,
-                            "The Runner is not assigned to this remote-enabled project."), statusCode: StatusCodes.Status403Forbidden);
+                            "The Runner is not assigned to this project's execution location."), statusCode: StatusCodes.Status403Forbidden);
                 }
                 var project = projects.FindByStorageLocation(task.WatchPath)
                               ?? projects.FindByIdOrDisplayName(task.ProjectName);
@@ -134,7 +132,7 @@ public static class LeaseEndpoints
         // Daemon pickup is selected server-side from the project record. The
         // gate makes scan + fenced lease + ready-to-progress move one claim
         // critical section for all remote contenders. The local runner reads
-        // the same ExecutionRunner field and therefore never enters this race.
+        // the same resolved executionLocation and therefore never enters this race.
         app.MapPost("/api/runner/claim", async (
             RunnerClaimRequest req,
             TaskScannerService scanner,
@@ -274,11 +272,8 @@ public static class LeaseEndpoints
                 foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
-                    var assigned = project.ExecutionRunner;
-                    if (!project.RemoteExecutionEnabled
-                        || string.IsNullOrWhiteSpace(assigned)
-                        || (!string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase)))
+                    if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                        || !ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName))
                         continue;
                     var interruptedKey = interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id;
                     if (leases.Peek(interruptedKey).Outcome != "Free") continue;
@@ -350,11 +345,8 @@ public static class LeaseEndpoints
                     .Where(t =>
                     {
                         var project = settings.Get(t.ProjectName);
-                        var assigned = project.ExecutionRunner;
-                        return project.RemoteExecutionEnabled
-                               && !string.IsNullOrWhiteSpace(assigned)
-                               && (string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
-                                   || string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase))
+                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
                                && AgentTypes.IsAutoPickupEligible(t.Agent)
                                && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
                                && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
@@ -367,7 +359,11 @@ public static class LeaseEndpoints
 
                 TaskInfo? candidate = null;
                 RemoteProjectRepository? repository = null;
+                TaskInfo? failedPreflightCandidate = null;
+                RemoteProjectRepository? failedPreflightRepository = null;
+                RunnerProjectPreflight? failedProjectPreflight = null;
                 var readOnlyCodingSkipped = false;
+                string? nonRemoteCapableProject = null;
                 foreach (var task in eligible)
                 {
                     if (client is not null
@@ -387,14 +383,45 @@ public static class LeaseEndpoints
                         settings.Get(task.ProjectName).IntegrationBranch);
                     if (repository is not null)
                     {
+                        var cached = string.IsNullOrWhiteSpace(clientId)
+                            ? null
+                            : clients.FindRunnerProjectPreflight(clientId, repository.ProjectId);
+                        if (cached is not null
+                            && string.Equals(cached.RegistrationFingerprint,
+                                ProjectDeliveryPreflightFingerprint.Create(repository), StringComparison.Ordinal)
+                            && !string.Equals(cached.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                        {
+                            failedPreflightCandidate ??= task;
+                            failedPreflightRepository ??= repository;
+                            failedProjectPreflight ??= cached;
+                            repository = null;
+                            continue;
+                        }
                         candidate = task;
                         break;
                     }
 
-                    logger.LogInformation(
-                        "remote-runner-project-skipped project={Project} task={TaskKey} reason=repository-url-unresolved",
+                    nonRemoteCapableProject = task.ProjectName;
+                    logger.LogWarning(
+                        "remote-runner-project-not-remote-capable project={Project} task={TaskKey} reason=repository-url-not-configured",
                         task.ProjectName,
                         task.Key ?? task.TaskKey ?? task.Id);
+                }
+
+                if ((candidate is null || repository is null)
+                    && failedPreflightCandidate is not null
+                    && failedPreflightRepository is not null
+                    && failedProjectPreflight is not null)
+                {
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightFailed,
+                        ProjectName: failedPreflightCandidate.ProjectName,
+                        Message: $"Project delivery preflight failed: {failedProjectPreflight.Detail}",
+                        ProjectId: failedPreflightRepository.ProjectId,
+                        RepositoryUrl: failedPreflightRepository.RepositoryUrl,
+                        DefaultBranch: failedPreflightRepository.DefaultBranch,
+                        TaskKind: failedPreflightCandidate.Kind,
+                        RegistrationFingerprint: ProjectDeliveryPreflightFingerprint.Create(failedPreflightRepository)));
                 }
 
                 if (candidate is null || repository is null)
@@ -402,7 +429,83 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty,
                         Message: readOnlyCodingSkipped
                             ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
-                            : null));
+                            : nonRemoteCapableProject is not null
+                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                                : null));
+
+                if (string.IsNullOrWhiteSpace(clientId))
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Invalid,
+                        Message: "A registered host client identity is required for project delivery preflight."));
+
+                var registrationFingerprint = ProjectDeliveryPreflightFingerprint.Create(repository);
+                if (req.ProjectPreflight is not null)
+                {
+                    if (!string.Equals(req.ProjectPreflight.ProjectId, repository.ProjectId, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(req.ProjectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
+                    {
+                        return Results.Ok(new RunnerClaimResponse(
+                            RunnerClaimStatus.Invalid,
+                            ProjectName: candidate.ProjectName,
+                            Message: "The project registration changed while delivery preflight was running. Retry the claim.",
+                            ProjectId: repository.ProjectId,
+                            RepositoryUrl: repository.RepositoryUrl,
+                            DefaultBranch: repository.DefaultBranch,
+                            RegistrationFingerprint: registrationFingerprint));
+                    }
+
+                    var urlsMatch = SameRepositoryUrl(req.ProjectPreflight.FetchUrl, repository.RepositoryUrl)
+                                    && SameRepositoryUrl(req.ProjectPreflight.PushUrl, repository.RepositoryUrl);
+                    var succeeded = req.ProjectPreflight.Succeeded && urlsMatch;
+                    var detail = urlsMatch
+                        ? OneLine(req.ProjectPreflight.Detail)
+                        : $"fetch and push URL must both match registered repository '{repository.RepositoryUrl}'";
+                    clients.SetRunnerProjectPreflight(clientId, new RunnerProjectPreflight
+                    {
+                        ProjectId = repository.ProjectId,
+                        ProjectName = candidate.ProjectName,
+                        RegistrationFingerprint = registrationFingerprint,
+                        RepositoryUrl = repository.RepositoryUrl,
+                        FetchUrl = req.ProjectPreflight.FetchUrl?.Trim() ?? "",
+                        PushUrl = req.ProjectPreflight.PushUrl?.Trim() ?? "",
+                        Status = succeeded ? "ready" : "failed",
+                        Detail = detail,
+                        CheckedAt = req.ProjectPreflight.CheckedAt.ToUniversalTime(),
+                    });
+                    logger.Log(succeeded ? LogLevel.Information : LogLevel.Warning,
+                        "remote-runner-project-preflight project={Project} projectId={ProjectId} runner={Runner} status={Status} detail={Detail}",
+                        candidate.ProjectName, repository.ProjectId, req.RunnerName, succeeded ? "ready" : "failed", detail);
+                }
+
+                var projectPreflight = clients.FindRunnerProjectPreflight(clientId, repository.ProjectId);
+                if (projectPreflight is null
+                    || !string.Equals(projectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
+                {
+                    if (projectPreflight is not null)
+                        clients.InvalidateRunnerProjectPreflights(repository.ProjectId);
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightRequired,
+                        ProjectName: candidate.ProjectName,
+                        Message: "Project delivery preflight is required before the first claim.",
+                        ProjectId: repository.ProjectId,
+                        RepositoryUrl: repository.RepositoryUrl,
+                        DefaultBranch: repository.DefaultBranch,
+                        TaskKind: candidate.Kind,
+                        RegistrationFingerprint: registrationFingerprint));
+                }
+
+                if (!string.Equals(projectPreflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.PreflightFailed,
+                        ProjectName: candidate.ProjectName,
+                        Message: $"Project delivery preflight failed: {projectPreflight.Detail}",
+                        ProjectId: repository.ProjectId,
+                        RepositoryUrl: repository.RepositoryUrl,
+                        DefaultBranch: repository.DefaultBranch,
+                        TaskKind: candidate.Kind,
+                        RegistrationFingerprint: registrationFingerprint));
+                }
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
@@ -459,7 +562,7 @@ public static class LeaseEndpoints
                         RunnerId = acquire.Lease.RunnerId,
                         ClientId = acquire.Lease.ClientId ?? acquire.Lease.RunnerId,
                         HostDisplayName = string.IsNullOrWhiteSpace(acquire.Lease.RunnerName) ? acquire.Lease.Hostname : acquire.Lease.RunnerName,
-                        ConfiguredRunnerId = settings.Get(candidate.ProjectName).ExecutionRunner,
+                        ConfiguredRunnerId = ProjectExecutionPolicy.ResolveExecutionLocation(settings.Get(candidate.ProjectName)),
                         StartedAt = acquire.Lease.AcquiredAt,
                         LastHeartbeat = acquire.Lease.LastHeartbeatAt,
                         LastActivityAt = acquire.Lease.LastHeartbeatAt,
@@ -557,7 +660,6 @@ public static class LeaseEndpoints
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
-            AgentStudio.Registry.ProjectRegistry projects,
             TaskMutationService mutations,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
@@ -678,18 +780,6 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
-                var registryProject = projects.FindByStorageLocation(task.WatchPath)
-                                      ?? projects.FindByIdOrDisplayName(task.ProjectName);
-                var remoteRepository = RemoteProjectRepositoryResolver.Resolve(
-                    registryProject,
-                    projectSettings.Get(task.ProjectName).IntegrationBranch);
-                var repositoryUrl = remoteRepository?.RepositoryUrl ?? req.Repository;
-                var resultRef = string.IsNullOrWhiteSpace(req.SalvageBranch)
-                    ? run.ResultSha
-                    : req.SalvageBranch;
-                var reviewPlan = BuildRemoteReviewPlan(
-                    registryProject?.RepositoryPath,
-                    projectSettings.Get(task.ProjectName).BuildProfile);
                 var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
@@ -698,10 +788,7 @@ public static class LeaseEndpoints
                     AttemptAuthorityService.Hash(requirements),
                     AttemptAuthorityService.Hash("remote-review-policy:v1"),
                     run.EvidenceDigests,
-                    $"review-subject:{run.AttemptId}:{run.ResultSha}",
-                    RepositoryUrl: repositoryUrl,
-                    ResultRef: resultRef,
-                    Plan: reviewPlan));
+                    $"review-subject:{run.AttemptId}:{run.ResultSha}"));
                 if (!review.Accepted)
                 {
                     return Results.Conflict(new RemoteRunCompletionResponse(
@@ -710,19 +797,6 @@ public static class LeaseEndpoints
                         FailureClassification: review.Status.ToString()));
                 }
                 reviewAttempt = review.ReviewAttempt;
-                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
-                {
-                    TaskKey = req.TaskKey,
-                    Project = task.ProjectName,
-                    Repository = repositoryUrl ?? run.RepositoryId,
-                    ResultSha = run.ResultSha!,
-                    AttemptChainId = req.AttemptChainId!,
-                    Executor = req.RunnerId,
-                    LeaseId = req.LeaseId,
-                    FencingToken = req.FencingToken,
-                    ResultRef = resultRef,
-                    CompletedAtUtc = DateTimeOffset.UtcNow,
-                });
             }
 
             if (!isEpicPlanning
@@ -1001,24 +1075,7 @@ public static class LeaseEndpoints
 
             if (targetState == TaskStates.Escalated)
             {
-                var (category, reason) = outcome switch
-                {
-                    "blocked" => (
-                        HumanReviewEscalationCategories.AgentBlocked,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote agent emitted TASK_BLOCKED without a stated reason; inspect the run log before deciding."
-                            : $"Remote agent emitted TASK_BLOCKED: {reportedReason}"),
-                    "needsinput" => (
-                        HumanReviewEscalationCategories.AgentNeedsInput,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote agent emitted TASK_NEEDS_INPUT without a stated question; inspect the run log before deciding."
-                            : $"Remote agent emitted TASK_NEEDS_INPUT: {reportedReason}"),
-                    _ => (
-                        HumanReviewEscalationCategories.OrchestratorInconclusive,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote run ended without a terminal sentinel or a diagnostic."
-                            : reportedReason),
-                };
+                var (category, reason) = RemoteEscalation(outcome, req.Reason);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
@@ -1118,44 +1175,6 @@ public static class LeaseEndpoints
         return relativePath;
     }
 
-    private static AgentStudio.TaskServer.Contracts.ReviewPlanDto BuildRemoteReviewPlan(
-        string? repositoryPath,
-        BuildProfile? profile)
-    {
-        var verifyPlan = VerifyCommandPlanner.Plan(repositoryPath ?? string.Empty, profile);
-        var commands = verifyPlan.Commands
-            .Select((command, index) =>
-            {
-                var shellCommand = string.IsNullOrWhiteSpace(command.WorkingSubdir)
-                    ? command.Command
-                    : $"cd -- {ShellQuote(command.WorkingSubdir)} && {command.Command}";
-                var aspect = command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests";
-                return new AgentStudio.TaskServer.Contracts.ReviewCommandDto(
-                    $"verify-{index + 1}",
-                    aspect,
-                    "sh",
-                    ["-lc", shellCommand]);
-            })
-            .ToList();
-        if (commands.Count == 0)
-        {
-            commands.Add(new AgentStudio.TaskServer.Contracts.ReviewCommandDto(
-                "verify-subject",
-                "completion",
-                "git",
-                ["rev-parse", "--verify", "HEAD"]));
-        }
-
-        return new AgentStudio.TaskServer.Contracts.ReviewPlanDto(
-            commands,
-            commands.Select(command => command.Aspect)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList());
-    }
-
-    private static string ShellQuote(string value)
-        => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
-
     private static bool CanonicalLeaseWritePresent(
         string? attemptId,
         long? authorityEpoch,
@@ -1163,6 +1182,15 @@ public static class LeaseEndpoints
         !string.IsNullOrWhiteSpace(attemptId)
         && authorityEpoch is > 0
         && !string.IsNullOrWhiteSpace(idempotencyKey);
+
+    private static bool SameRepositoryUrl(string? actual, string expected) =>
+        string.Equals(actual?.Trim().TrimEnd('/'), expected.Trim().TrimEnd('/'), StringComparison.Ordinal);
+
+    private static string OneLine(string? value)
+    {
+        var clean = (value ?? "preflight failed").Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return clean.Length <= 1000 ? clean : clean[..1000];
+    }
 
     /// <summary>
     /// Fill a partial acquire request with this backend's runner identity so a
@@ -1198,4 +1226,36 @@ public static class LeaseEndpoints
 
     private static string InitiatingPrincipal(string? ownerClientId)
         => string.IsNullOrWhiteSpace(ownerClientId) ? "automation:unknown" : ownerClientId;
+
+    private static (string Category, string Reason) RemoteEscalation(string outcome, string? reportedReason)
+    {
+        var reason = CredentialRedactor.Redact(reportedReason)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        return outcome switch
+        {
+            "blocked" when reason.StartsWith(
+                "Remote environment preparation failed after ",
+                StringComparison.OrdinalIgnoreCase)
+                => (
+                    HumanReviewEscalationCategories.RemoteEnvironmentPreparation,
+                    reason),
+            "blocked" => (
+                HumanReviewEscalationCategories.AgentBlocked,
+                reason.Length == 0
+                    ? "The remote agent reported that it could not continue."
+                    : $"The remote agent reported a blocker: {reason}"),
+            "needsinput" => (
+                HumanReviewEscalationCategories.NeedsHumanInput,
+                reason.Length == 0
+                    ? "The remote agent requires operator input before it can continue."
+                    : $"The remote agent requires operator input: {reason}"),
+            _ => (
+                HumanReviewEscalationCategories.RemoteOutcomeUnknown,
+                reason.Length == 0
+                    ? "The remote runner ended without a recognized terminal outcome."
+                    : $"The remote runner ended without a recognized terminal outcome: {reason}"),
+        };
+    }
 }

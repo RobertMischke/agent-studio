@@ -145,6 +145,12 @@ public sealed class CrashRecoveryServiceTests : IDisposable
 
         Assert.Empty(recovery.GetPendingOrphanRecoveries());
 
+        var gateEvidence = Path.Combine(jobFolder, "results", "commit-candidate-gate.json");
+        Assert.True(File.Exists(gateEvidence));
+        var evidenceText = File.ReadAllText(gateEvidence);
+        Assert.Contains("crash-recovery", evidenceText);
+        Assert.Contains("active-task", evidenceText);
+
         // Decision is mirrored both in recovery.jsonl and in the daily backend log.
         var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
         Assert.Contains("orphan-pending-confirmation", jsonl);
@@ -248,6 +254,24 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
         Assert.Contains("orphan-pending-confirmation", jsonl);
         Assert.Contains("operator dismissed pending orphan recovery", jsonl);
+    }
+
+    [Fact]
+    public async Task RecoverAsync_UnknownDirectCheckout_CannotWidenAfterOperatorReview()
+    {
+        File.WriteAllText(Path.Combine(_repoRoot, "reviewed.txt"), "reviewed before confirmation\n");
+
+        var (recovery, _) = BuildRecovery();
+        await recovery.RecoverAsync();
+        var pending = Assert.Single(recovery.GetPendingOrphanRecoveries());
+        Assert.Equal(["reviewed.txt"], pending.Pathspecs);
+
+        File.WriteAllText(Path.Combine(_repoRoot, "concurrent.txt"), "appeared after review\n");
+        var result = recovery.CommitPendingOrphanRecovery(pending.Id);
+
+        Assert.Equal(CrashRecoveryActionStatuses.Committed, result.Status);
+        Assert.Equal("reviewed.txt", RunGitCapture(_repoRoot, "show --name-only --pretty=format: HEAD"));
+        Assert.Contains("?? concurrent.txt", RunGitCapture(_repoRoot, "status --short"));
     }
 
     [Fact]

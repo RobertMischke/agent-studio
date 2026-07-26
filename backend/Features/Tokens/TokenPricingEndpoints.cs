@@ -45,7 +45,7 @@ public static class TokenPricingEndpoints
                     TokenPricing.Estimate(item.Model, item.InputTokens, item.OutputTokens,
                         item.CacheReadTokens, item.CacheWriteTokens, at));
             }).ToList();
-            return Results.Ok(new { items = rows, provider = "CodingAgentRunner (CAR)" });
+            return Results.Ok(new { items = rows, provider = "TokenEconomy" });
         });
     }
 }

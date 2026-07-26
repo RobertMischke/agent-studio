@@ -19,10 +19,11 @@ namespace AgentRunner;
 public sealed class TaskServerClient : IDisposable
 {
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
+    private static readonly JsonSerializerOptions TaskServerContractJson =
+        new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
     private readonly RunnerOptions? _options;
-    private readonly string _clientKind;
     // Per-run caches, evicted on completion/release so the long-lived daemon does
     // not retain every claimed task's lease and full prompt body for its lifetime.
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease, string InstanceId)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
@@ -33,10 +34,24 @@ public sealed class TaskServerClient : IDisposable
     public TaskServerClient(RunnerOptions options)
     {
         _options = options;
-        _clientKind = string.Equals(options.Role, "review", StringComparison.OrdinalIgnoreCase)
-            ? "review-runner"
-            : "runner";
-        _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
+        HttpMessageHandler handler = new HttpClientHandler();
+        if (!string.IsNullOrWhiteSpace(options.TlsServerCertificateSha256))
+        {
+            var expectedFingerprint = options.TlsServerCertificateSha256;
+            handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
+                    certificate is not null
+                    && (errors & ~System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors) == 0
+                    && certificate.NotBefore.ToUniversalTime() <= DateTime.UtcNow
+                    && certificate.NotAfter.ToUniversalTime() >= DateTime.UtcNow
+                    && string.Equals(
+                        Convert.ToHexString(SHA256.HashData(certificate.RawData)),
+                        expectedFingerprint,
+                        StringComparison.OrdinalIgnoreCase),
+            };
+        }
+        _http = new HttpClient(handler) { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         _configuredClientId = options.ClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(options.AuthToken);
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
@@ -61,13 +76,9 @@ public sealed class TaskServerClient : IDisposable
         string runnerId,
         string? configuredClientId = null,
         string? authToken = null,
-        bool usesDurableTaskServer = false,
-        string role = "coding")
+        bool usesDurableTaskServer = false)
     {
         _http = http;
-        _clientKind = string.Equals(role, "review", StringComparison.OrdinalIgnoreCase)
-            ? "review-runner"
-            : "runner";
         _configuredClientId = configuredClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)
@@ -87,7 +98,7 @@ public sealed class TaskServerClient : IDisposable
         var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         using var response = await _http.PostAsJsonAsync(
             "/api/v1/protocol/compatibility",
-            new Contract.ProtocolCompatibilityRequest(_clientKind, clientVersion, RunnerOptions.ProtocolVersion),
+            new Contract.ProtocolCompatibilityRequest("runner", clientVersion, RunnerOptions.ProtocolVersion),
             Json,
             ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -102,13 +113,6 @@ public sealed class TaskServerClient : IDisposable
         var compatibility = JsonSerializer.Deserialize<Contract.ProtocolCompatibilityResponse>(detail, Json);
         if (compatibility?.Supported != true)
             throw new TaskServerException(426, compatibility?.Reason ?? "Task Server protocol is not compatible.");
-        if (!string.Equals(_clientKind, "review-runner", StringComparison.Ordinal)
-            && compatibility.Server.Capabilities is { Count: > 0 } capabilities
-            && !capabilities.Contains("coding-plane", StringComparer.Ordinal))
-        {
-            _useV1 = false;
-            return;
-        }
         _useV1 = true;
     }
 
@@ -307,7 +311,8 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 req.RequestedTtlSeconds ?? 120,
                 req.AvailableSlots,
-                ToContract(req.Inventory)),
+                ToContract(req.Inventory),
+                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options)),
             ct);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
             || claim.Task is null || claim.Run is null || claim.Lease is null)
@@ -367,7 +372,13 @@ public sealed class TaskServerClient : IDisposable
             throw new TaskServerException(409, "Remote review execution requires the versioned Task Server.");
         return await PostJsonAsync<Contract.ReviewClaimRequest, Contract.ReviewClaimResponse>(
                    $"/api/v1/runners/{Uri.EscapeDataString(request.ExecutorId)}/review-claims",
-                   request,
+                   request with
+                   {
+                       RequiredCapabilities = request.RequiredCapabilities
+                           ?? (_options is null
+                               ? null
+                               : RunnerCapabilityProbe.ReviewRequirements(_options)),
+                   },
                    ct)
                ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
     }
@@ -420,9 +431,16 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RemoteChatWorkClaimResponse> ClaimProjectChatWorkAsync(
         RemoteChatWorkClaimRequest request,
         CancellationToken ct)
-        => await PostJsonAsync<RemoteChatWorkClaimRequest, RemoteChatWorkClaimResponse>(
-               "/api/runner/project-chat/claim", request, ct)
-           ?? new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+    {
+        // Project chat is still a legacy monolith surface. A Runner connected
+        // to the standalone v1 owner must not probe an endpoint that the Task
+        // Server deliberately does not own.
+        if (_useV1)
+            return new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+        return await PostJsonAsync<RemoteChatWorkClaimRequest, RemoteChatWorkClaimResponse>(
+                   "/api/runner/project-chat/claim", request, ct)
+               ?? new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+    }
 
     public async Task<bool> RenewProjectChatWorkAsync(
         RemoteChatWorkRenewRequest request,
@@ -467,6 +485,59 @@ public sealed class TaskServerClient : IDisposable
 
         _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
             $"/api/clients/{Uri.EscapeDataString(clientId)}/runner-git-capability", request, ct);
+    }
+
+    public async Task AdvertiseCapabilitiesAsync(
+        IReadOnlyList<Contract.AdvertisedCapabilityDto> capabilities,
+        Contract.HostTelemetrySnapshotDto? telemetry,
+        long generation,
+        CancellationToken ct)
+    {
+        if (!_useV1) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        var request = new Contract.CapabilityAdvertisementRequest(
+            options.RunnerId,
+            RunnerInstanceId,
+            Contract.CapabilityProtocol.CurrentSchemaVersion,
+            DateTime.UtcNow,
+            180,
+            generation,
+            capabilities,
+            telemetry);
+        _ = await SendJsonAsync<Contract.CapabilityAdvertisementRequest, Contract.RunnerCapabilitySnapshotDto>(
+            HttpMethod.Put,
+            $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/capabilities",
+            request,
+            ct);
+    }
+
+    public async Task ReportCapabilityFailureAsync(
+        string capabilityKey,
+        string classification,
+        string reason,
+        string idempotencyKey,
+        string? claimKind,
+        string? claimId,
+        long? fence,
+        CancellationToken ct)
+    {
+        if (!_useV1) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        var request = new Contract.CapabilityFailureRequest(
+            options.RunnerId,
+            RunnerInstanceId,
+            capabilityKey,
+            classification,
+            reason,
+            DateTime.UtcNow,
+            idempotencyKey,
+            claimKind,
+            claimId,
+            fence);
+        _ = await PostJsonAsync<Contract.CapabilityFailureRequest, Contract.CapabilityFailureResponse>(
+            $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/capability-failures",
+            request,
+            ct);
     }
 
     private static JsonSerializerOptions CreateJsonOptions()
@@ -571,11 +642,12 @@ public sealed class TaskServerClient : IDisposable
         foreach (var line in req.Lines)
         {
             var key = $"runner-log:{authority.RunId}:{line.Timestamp:O}:{appended}:{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(line.Text)))[..12]}";
+            var kind = ClassifyV1Event(line);
             await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
                 $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
                 new Contract.EventIngestRequest(
                     $"evt_{Guid.NewGuid():N}",
-                    "runner.output",
+                    kind,
                     JsonSerializer.Serialize(line, Json),
                     key,
                     authority.Lease.FencingToken,
@@ -584,6 +656,41 @@ public sealed class TaskServerClient : IDisposable
             appended++;
         }
         return new LogIngestResponse(req.TaskKey, appended);
+    }
+
+    private static string ClassifyV1Event(CliOutputLine line)
+    {
+        if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase))
+        {
+            if (line.Text.Contains("runner transport disconnected", StringComparison.Ordinal))
+                return Contract.LifecycleEventKinds.RunnerDisconnected;
+            if (line.Text.Contains("runner transport reconnected", StringComparison.Ordinal))
+                return Contract.LifecycleEventKinds.RunnerReconnected;
+            return Contract.LifecycleEventKinds.RunnerTrace;
+        }
+        if (!string.Equals(line.Stream, "stdout", StringComparison.OrdinalIgnoreCase))
+            return "runner.diagnostic";
+
+        try
+        {
+            using var document = JsonDocument.Parse(line.Text);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("type", out var typeElement))
+            {
+                var type = typeElement.GetString();
+                if (type is not null
+                    && (type.Contains("tool", StringComparison.OrdinalIgnoreCase)
+                        || type.Contains("command", StringComparison.OrdinalIgnoreCase)))
+                    return Contract.LifecycleEventKinds.ToolTrace;
+            }
+        }
+        catch (JsonException)
+        {
+            // Plain agent text is still a typed agent-message event. The raw
+            // line remains inside the bounded event payload for canonical replay.
+        }
+
+        return Contract.LifecycleEventKinds.AgentMessage;
     }
 
     public async Task<ArtifactIngestResponse?> UploadArtifactsAsync(ArtifactIngestRequest req, CancellationToken ct)
@@ -717,12 +824,19 @@ public sealed class TaskServerClient : IDisposable
                 return;
             }
             default:
+                var eventKind = $"runner.{item.Kind}";
+                if (string.Equals(item.Kind, "log", StringComparison.Ordinal))
+                {
+                    var line = JsonSerializer.Deserialize<CliOutputLine>(item.PayloadJson, Json)
+                               ?? throw new InvalidDataException("Durable log payload is empty.");
+                    eventKind = ClassifyV1Event(line);
+                }
                 await SendJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
                     HttpMethod.Post,
                     $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
                     new Contract.EventIngestRequest(
                         $"evt_{HashId(item.IdempotencyKey)}",
-                        $"runner.{item.Kind}",
+                        eventKind,
                         item.PayloadJson,
                         item.IdempotencyKey,
                         authority.Fence,
@@ -814,9 +928,14 @@ public sealed class TaskServerClient : IDisposable
 
     private async Task<TResp?> SendJsonAsync<TReq, TResp>(HttpMethod method, string url, TReq body, CancellationToken ct)
     {
+        // The standalone Task Server's established HTTP contract uses numeric
+        // enum values. Legacy monolith DTOs continue to use string enums.
+        var requestJson = typeof(TReq).Assembly == typeof(Contract.ProtocolRangeDto).Assembly
+            ? TaskServerContractJson
+            : Json;
         using var request = new HttpRequestMessage(method, url)
         {
-            Content = JsonContent.Create(body, options: Json),
+            Content = JsonContent.Create(body, options: requestJson),
         };
         using var resp = await _http.SendAsync(request, ct);
         if (!resp.IsSuccessStatusCode)

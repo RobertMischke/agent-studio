@@ -5,12 +5,17 @@ public sealed class TaskServerOptions
     public const string SectionName = "TaskServer";
 
     public string DataDirectory { get; set; } = "data";
+    public string? BackupDirectory { get; set; }
     public string ListenUrl { get; set; } = "http://127.0.0.1:5071";
     public int MinimumLeaseSeconds { get; set; } = 30;
     public int MaximumLeaseSeconds { get; set; } = 600;
     public int ResultRetentionDays { get; set; } = 30;
     public int InvariantReconciliationSeconds { get; set; } = 30;
     public int InventoryGraceSeconds { get; set; } = 120;
+    public int MaximumEventPayloadBytes { get; set; } = 256 * 1024;
+    public bool RequireAuthentication { get; set; }
+    public string? StudioBearerToken { get; set; }
+    public string? RunnerBearerToken { get; set; }
 
     public string ResolveDataDirectory()
     {
@@ -23,4 +28,11 @@ public sealed class TaskServerOptions
             ? DataDirectory
             : Path.Combine(AppContext.BaseDirectory, DataDirectory));
     }
+
+    public string ResolveBackupDirectory()
+        => string.IsNullOrWhiteSpace(BackupDirectory)
+            ? Path.Combine(ResolveDataDirectory(), "backups")
+            : Path.GetFullPath(Path.IsPathRooted(BackupDirectory)
+                ? BackupDirectory
+                : Path.Combine(AppContext.BaseDirectory, BackupDirectory));
 }

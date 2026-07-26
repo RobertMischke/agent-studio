@@ -141,6 +141,8 @@ public sealed record RunTimeline
     public bool HasActiveRun { get; init; }
     public List<RunRecord> Runs { get; init; } = [];
     public List<RunPromptEntry> PromptEntries { get; init; } = [];
+    /// <summary>Typed standalone-runner lifecycle replay. Diagnostics are retained for Trace but never inferred from CLI prose.</summary>
+    public List<RunnerRecordedEvent> RunnerEvents { get; init; } = [];
     /// <summary>Current operator-owned review epoch. Legacy tasks are epoch zero.</summary>
     public int ReviewAttemptEpoch { get; init; }
     /// <summary>Current and closed cycles, newest first, for the task-detail Runs surface.</summary>

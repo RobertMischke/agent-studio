@@ -77,16 +77,7 @@
           <span class="detail__meta-item"
                 data-testid="detail-created-at"
                 [cacTooltip]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>
-          @if (runActivityBadge(); as ra) {
-            <span class="detail__run-activity-pill"
-                  [class]="'detail__run-activity-pill--' + ra.tone"
-                  [cacTooltip]="ra.tooltip"
-                  data-testid="detail-run-activity"
-                  [attr.data-run-activity-kind]="ra.kind">
-              <span class="detail__run-activity-dot"></span>
-              {{ ra.label }}
-            </span>
-          } <app-execution-location-badge [execution]="info().executionLocation" />
+          <app-execution-location-badge [execution]="info().executionLocation" />
         </div>
       }
     </div>

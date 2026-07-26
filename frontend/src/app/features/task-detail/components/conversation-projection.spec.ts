@@ -102,7 +102,70 @@ describe('sanitizeProjectionLines - ANSI output', () => {
     expect(sanitizeProjectionLines([
       line('\u001b[33m[39m Building...\u001b[0m', 'stderr'),
     ])).toEqual([
-      line(' Building...', 'stderr'),
+      line(' Building...', 'stdout'),
+    ]);
+  });
+
+  it('keeps ordinary agent stderr transcript lines neutral', () => {
+    expect(sanitizeProjectionLines([
+      line('- Added the regression coverage.', 'stderr'),
+      line('tokens used', 'stderr'),
+      line('60,162', 'stderr'),
+    ])).toEqual([
+      line('- Added the regression coverage.', 'stdout'),
+      line('tokens used', 'stdout'),
+      line('60,162', 'stdout'),
+    ]);
+  });
+
+  it('keeps genuine CLI failures on stderr', () => {
+    const failure = line('Error: command exited with code 1', 'stderr');
+    const input = [failure];
+    expect(sanitizeProjectionLines(input)).toBe(input);
+  });
+
+  it('preserves a Codex text-mode stderr transcript for the library projector', () => {
+    const input = [
+      line('[runner] spawning codex exec system marker', 'system'),
+      line('OpenAI Codex v0.144.1 (research preview)', 'stderr'),
+      line('Reasoning: inspect the Activity feed.', 'stderr'),
+      line('Process exited with code 1', 'stderr'),
+      line('tokens used', 'stderr'),
+      line('60,162', 'stderr'),
+      line('The complete agent answer follows on stdout.', 'stdout'),
+    ];
+
+    expect(sanitizeProjectionLines(input)).toBe(input);
+  });
+
+  it('ends the Codex transcript envelope when a supervisor event takes over', () => {
+    expect(sanitizeProjectionLines([
+      line('OpenAI Codex v0.144.1 (research preview)', 'stderr'),
+      line('Reasoning: inspect the Activity feed.', 'stderr'),
+      line(
+        '[19:23:30.120] [supervisor] [escalate] Auto-review completion gate stayed open.',
+        'stderr',
+      ),
+      line('Normal agent output after the supervisor event.', 'stderr'),
+    ])).toEqual([
+      line('OpenAI Codex v0.144.1 (research preview)', 'stderr'),
+      line('Reasoning: inspect the Activity feed.', 'stderr'),
+      line('**Escalate** · Auto-review completion gate stayed open.', 'supervisor'),
+      line('Normal agent output after the supervisor event.', 'stdout'),
+    ]);
+  });
+
+  it('turns timestamped supervisor output into a structured supervisor message', () => {
+    expect(sanitizeProjectionLines([
+      line(
+        '[19:23:30.120] [supervisor] [escalate] Auto-review completion gate could not clear unfinished work.',
+        'stderr',
+      ),
+    ])).toEqual([
+      line(
+        '**Escalate** · Auto-review completion gate could not clear unfinished work.',
+        'supervisor',
+      ),
     ]);
   });
 });

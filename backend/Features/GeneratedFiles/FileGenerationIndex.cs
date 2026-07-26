@@ -50,6 +50,9 @@ public sealed class FileGenerationIndex
         }
     }
 
+    public int? CurrentRunIndex(string jobFolderPath)
+        => _pipelineLog?.Read(jobFolderPath)?.Attempt;
+
     public IReadOnlyDictionary<string, FileGenerationMeta> ReadForJob(string jobFolderPath, bool cacheLegacy = true)
     {
         var entries = ReadRaw(jobFolderPath);

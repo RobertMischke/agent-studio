@@ -169,9 +169,6 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
             id = "locked-reference", key = "AGT-2", title = "Reference", state = TaskStates.Backlog,
             order = 1, agent = "codex", references = new { relatedTo = new[] { "AGT-2166" } },
         }));
-        File.SetUnixFileMode(referenceJson,
-            UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
-
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var machine = new TaskStateMachine(
@@ -180,7 +177,28 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
             new LaneMutexRegistry(NullLogger<LaneMutexRegistry>.Instance),
             projectRegistry: registry);
 
-        Assert.False(machine.ChangeProject("agt-2166-reference-failure", target, source));
+        // task.json writes replace the file atomically through a sibling temp
+        // file. A read-only target file no longer blocks that correct write
+        // strategy, so deny directory creation instead to exercise the strict
+        // write failure and rollback boundary.
+        File.SetUnixFileMode(
+            referencingTask,
+            UnixFileMode.UserRead | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        bool changed;
+        try
+        {
+            changed = machine.ChangeProject("agt-2166-reference-failure", target, source);
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                referencingTask,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        Assert.False(changed);
 
         Assert.True(Directory.Exists(sourceTask));
         Assert.Equal("AGT-2166", scanner.FindJob("agt-2166-reference-failure", source)!.Key);

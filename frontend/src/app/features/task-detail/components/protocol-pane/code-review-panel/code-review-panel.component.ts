@@ -23,7 +23,6 @@ import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-re
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
 import { buildTokenCostTooltip } from '../../../../tokens';
-import { taskNavigationHref } from '../../../state/task-url';
 import { CouncilReviewReactionComponent } from '../council-review-reaction/council-review-reaction.component';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */

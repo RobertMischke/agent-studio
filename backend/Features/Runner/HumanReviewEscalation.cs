@@ -10,17 +10,48 @@ namespace AgentStudio.Runner;
 /// </summary>
 public static class HumanReviewEscalationCategories
 {
-    public const string WatchdogKill = "watchdog-kill";
-    public const string PermissionBlocked = "permission-blocked";
-    public const string EnvironmentBlocker = "environment-blocker";
+    /// <summary>Fallback for legacy auto-review escalation paths.</summary>
+    public const string AutoReviewEscalation = "auto-review-escalation";
+
     /// <summary>A remote coding claim could not prepare its repository or
     /// execution environment after the durable per-task retry budget.</summary>
     public const string RemoteClaimEnvironment = "remote-claim-environment";
-    /// <summary>The remote agent explicitly reported BLOCKED. This is an
-    /// intervention request, never evidenced delivery awaiting approval.</summary>
+
+    /// <summary>The agent explicitly reported that it could not proceed.</summary>
     public const string AgentBlocked = "agent-blocked";
+
     /// <summary>The remote agent explicitly requested an operator choice.</summary>
     public const string AgentNeedsInput = "agent-needs-input";
+
+    /// <summary>The agent needs information automation could not derive safely.</summary>
+    public const string NeedsHumanInput = "needs-human-input";
+
+    /// <summary>The deterministic completion gate still found unfinished work
+    /// after the bounded reissue budget was exhausted.</summary>
+    public const string CompletionGateUnresolved = "completion-gate-unresolved";
+
+    /// <summary>A run exhausted its bounded recovery budget without emitting a
+    /// recognized terminal completion signal.</summary>
+    public const string NoCompletionSignal = "no-completion-signal";
+
+    /// <summary>A remote run ended without a recognized terminal outcome.</summary>
+    public const string RemoteOutcomeUnknown = "remote-outcome-unknown";
+
+    /// <summary>The task server could not resolve a cloneable repository for a
+    /// remotely assigned task.</summary>
+    public const string RemoteRepositoryUnavailable = "remote-repository-unavailable";
+
+    /// <summary>The remote runner exhausted its bounded clone/fetch/worktree
+    /// preparation attempts before the agent process could start.</summary>
+    public const string RemoteEnvironmentPreparation = "remote-environment-preparation";
+
+    /// <summary>An out-of-band completion call explicitly parked a problem
+    /// rather than submitting a finished delivery for acceptance.</summary>
+    public const string ExternalCompletionBlocked = "external-completion-blocked";
+
+    public const string WatchdogKill = "watchdog-kill";
+    public const string PermissionBlocked = "permission-blocked";
+    public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
     /// <summary>A task worktree remained locked after bounded cleanup retries.
@@ -30,22 +61,22 @@ public static class HumanReviewEscalationCategories
 
     /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
     /// reach a terminal verdict. An infra fault, not a logical failure; routed to
-    /// human review rather than left stranded in 3-progress.</summary>
+    /// operator intervention rather than left stranded in 3-progress.</summary>
     public const string InfraCrash = "infra-crash";
 
     /// <summary>The run failed and produced real text that maps to no terminal
     /// verdict. The orchestrator could not conclude it, so it stops and hands the
-    /// task to a human (replaces the old classifier-unknown stranding).</summary>
+    /// task to an operator (replaces the old classifier-unknown stranding).</summary>
     public const string OrchestratorInconclusive = "orchestrator-inconclusive";
 
     /// <summary>The run exceeded the model's input window (prompt too long /
-    /// context length). Non-retryable, so it is routed straight to human review
+    /// context length). Non-retryable, so it is routed straight to Escalated
     /// instead of being re-issued into the same overflow.</summary>
     public const string ContextOverflow = "context-overflow";
 
     /// <summary>The configured model is invalid/unsupported for this account or
     /// CLI (invalid_request / HTTP 400 "model not supported"). Non-retryable:
-    /// re-issuing spawns into the same 400, so it is routed to human review with
+    /// re-issuing spawns into the same 400, so it is routed to Escalated with
     /// a clear model-invalid reason instead of the orchestrator-inconclusive
     /// catch-all.</summary>
     public const string ModelInvalid = "model-invalid";
@@ -77,7 +108,7 @@ public static class HumanReviewEscalationCategories
     public const string AuthRefreshFailed = "auth-refresh-failed";
 
     /// <summary>The run could not be mapped to a terminal verdict, but it left
-    /// files in <c>results/</c>. Routed to human review WITH a "there is partial
+    /// files in <c>results/</c>. Routed to Escalated WITH a "there is partial
     /// work to inspect" hint rather than a bare inconclusive park, so a reviewer
     /// looks at the deliverables before deciding (AGT-1944 taxonomy:
     /// inconclusive-with-results).</summary>
@@ -102,6 +133,10 @@ public static class HumanReviewEscalationCategories
     /// context. Routed to 5e-escalated with a clear reason instead of waiting
     /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
     public const string SteerUnanswered = "steer-unanswered";
+
+    /// <summary>The bounded UI feedback loop exhausted its configured cap, or
+    /// repeatedly failed to produce the mandatory iteration evidence.</summary>
+    public const string UiIterationCap = "ui-iteration-cap";
 
     /// <summary>A review subject can never be materialized - either because the
     /// pre-plane source completion has no immutable Result-Envelope, or because
@@ -131,7 +166,7 @@ public static class HumanReviewEscalationCategories
 /// <para>Before this funnel existed, three <see cref="ProjectRunner"/> paths
 /// (watchdog kill / permission / environment block, the auto-failure park, and
 /// the over-budget pickup zombie escalation) moved a folder straight from
-/// 3-progress into 5-human-review without either half, producing cards the
+/// 3-progress into the operator-intervention path without either half, producing cards the
 /// board could not explain - the bug this funnel fixes. The
 /// <c>HumanReviewVerdictDriftTest</c> mechanically forbids any new move into the
 /// lane from outside this file and the orchestrator.</para>
@@ -289,6 +324,30 @@ public sealed class HumanReviewEscalation
         var c = string.IsNullOrWhiteSpace(category) ? HumanReviewEscalationCategories.UnknownLegacy : category.Trim();
         var r = (reason ?? string.Empty).Trim();
         return r.Length == 0 ? $"[{c}]" : $"[{c}] {r}";
+    }
+
+    /// <summary>
+    /// Enforces the lane contract for a decision-journal escalation. Existing
+    /// typed reasons are preserved; untyped auto-review reasons receive the
+    /// stable fallback category, and a category-only reason receives a concrete
+    /// sentence. This keeps every newly-written 5e card explainable even while
+    /// older specialized paths are migrated incrementally.
+    /// </summary>
+    public static string EnsureFormattedReason(
+        string? reason,
+        string fallbackCategory = HumanReviewEscalationCategories.AutoReviewEscalation)
+    {
+        var value = (reason ?? string.Empty).Trim();
+        if (!value.StartsWith("[", StringComparison.Ordinal))
+            return FormatReason(fallbackCategory, value);
+
+        var close = value.IndexOf(']');
+        if (close <= 1)
+            return FormatReason(fallbackCategory, value);
+
+        var category = value[1..close].Trim();
+        var sentence = value[(close + 1)..].Trim();
+        return FormatReason(category, sentence);
     }
 
     /// <summary>Builds the minimal status.md the board renders for an

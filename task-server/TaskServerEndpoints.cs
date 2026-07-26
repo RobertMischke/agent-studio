@@ -16,11 +16,19 @@ public static class TaskServerEndpoints
         api.MapPost("/protocol/compatibility", (ProtocolCompatibilityRequest request, TaskServerStore store) =>
         {
             var supported = TaskServerProtocol.Supports(request.ProtocolVersion)
-                && request.ClientKind is "studio" or "runner" or "review-runner" or "management";
+                && request.ClientKind is "studio" or "runner" or "review-runner" or "management"
+                    or TaskServerProtocol.EngineClientKind;
+            var reason = supported
+                ? null
+                : !store.Status().Protocol.ClientKinds.Contains(request.ClientKind, StringComparer.Ordinal)
+                    ? $"Client kind '{request.ClientKind}' is not supported. Supported client kinds: " +
+                      $"{string.Join(", ", store.Status().Protocol.ClientKinds)}."
+                    : $"Client protocol {request.ProtocolVersion} is outside the supported range " +
+                      $"{TaskServerProtocol.MinimumSupported}-{TaskServerProtocol.MaximumSupported}.";
             var response = new ProtocolCompatibilityResponse(
                 supported,
                 store.Status().Protocol,
-                supported ? null : $"{request.ClientKind} protocol {request.ProtocolVersion} is not supported.");
+                reason);
             return supported ? Results.Ok(response) : Results.Json(response, statusCode: StatusCodes.Status426UpgradeRequired);
         });
 
@@ -41,6 +49,9 @@ public static class TaskServerEndpoints
         api.MapGet("/projects/{projectId}/tasks/{taskIdentity}/attempts", async (
             string projectId, string taskIdentity, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListAttemptsAsync(projectId, taskIdentity, ct)));
+        api.MapGet("/projects/{projectId}/tasks/{taskIdentity}/history", async (
+            string projectId, string taskIdentity, long? after, TaskServerStore store, CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetTaskHistoryAsync(projectId, taskIdentity, after ?? 0, ct)));
         api.MapPost("/projects/{projectId}/tasks", async (
             HttpContext context, string projectId, CreateTaskRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CreateTaskAsync(projectId, request, Actor(context), ct), StatusCodes.Status201Created));
@@ -52,6 +63,28 @@ public static class TaskServerEndpoints
         runners.MapPut("/{runnerId}", async (
             HttpContext context, string runnerId, RegisterRunnerRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.RegisterRunnerAsync(runnerId, request, Actor(context), ct)));
+        runners.MapPut("/{runnerId}/capabilities", async (
+            HttpContext context,
+            string runnerId,
+            CapabilityAdvertisementRequest request,
+            TaskServerStore store,
+            CancellationToken ct) =>
+        {
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and capability runner ids differ."));
+            return await InvokeAsync(() => store.AdvertiseCapabilitiesAsync(request, Actor(context), ct));
+        });
+        runners.MapPost("/{runnerId}/capability-failures", async (
+            HttpContext context,
+            string runnerId,
+            CapabilityFailureRequest request,
+            TaskServerStore store,
+            CancellationToken ct) =>
+        {
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and capability runner ids differ."));
+            return await InvokeAsync(() => store.ReportCapabilityFailureAsync(request, Actor(context), ct));
+        });
         runners.MapPost("/{runnerId}/claims", async (
             HttpContext context, string runnerId, ClaimRequest request, TaskServerStore store, CancellationToken ct) =>
         {
@@ -146,6 +179,71 @@ public static class TaskServerEndpoints
             HttpContext context, string attemptId, ReviewCleanupRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CleanupReviewAsync(attemptId, request, Actor(context), ct)));
 
+        var orchestration = api.MapGroup("/orchestration");
+        orchestration.MapGet("/projects/{projectId}/flow-definition", async (
+            string projectId,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetFlowDefinitionAsync(projectId, ct)));
+        orchestration.MapPut("/projects/{projectId}/flow-definition", async (
+            HttpContext context,
+            string projectId,
+            UpsertFlowDefinitionRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.UpsertFlowDefinitionAsync(
+                projectId, request, Actor(context), ct)));
+        orchestration.MapGet("/runs", async (
+            string? projectId,
+            string? status,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ListOrchestrationRunsAsync(projectId, status, ct)));
+        orchestration.MapGet("/runs/{runId}", async (
+            string runId,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetOrchestrationRunAsync(runId, ct)));
+        orchestration.MapPost("/projects/{projectId}/runs", async (
+            HttpContext context,
+            string projectId,
+            CreateOrchestrationRunRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.CreateOrchestrationRunAsync(
+                projectId, request, Actor(context), ct), StatusCodes.Status201Created));
+        orchestration.MapPost("/claims", async (
+            HttpContext context,
+            OrchestrationClaimRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ClaimOrchestrationAsync(
+                request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/lease/renew", async (
+            HttpContext context,
+            string runId,
+            OrchestrationLeaseRenewRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.RenewOrchestrationLeaseAsync(
+                runId, request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/lease/release", async (
+            HttpContext context,
+            string runId,
+            ReleaseOrchestrationLeaseRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReleaseOrchestrationLeaseAsync(
+                runId, request, Actor(context), ct)));
+        orchestration.MapPost("/runs/{runId}/stages/complete", async (
+            HttpContext context,
+            string runId,
+            CompleteOrchestrationStageRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.CompleteOrchestrationStageAsync(
+                runId, request, Actor(context), ct)));
+
         var management = api.MapGroup("/management");
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));
         management.MapGet("/outboxes", async (TaskServerStore store, CancellationToken ct)
@@ -169,6 +267,24 @@ public static class TaskServerEndpoints
             => await InvokeAsync(() => store.ListAuditAsync(after ?? 0, ct)));
         management.MapGet("/invariants", async (TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.GetInvariantRegistryAsync(ct)));
+        management.MapGet("/remote-hosts", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ListRunnerCapabilitySnapshotsAsync(ct)));
+        management.MapPost("/remote-hosts/{hostId}/operator-drain", async (
+            HttpContext context,
+            string hostId,
+            OperatorHostDrainRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.RequestOperatorHostDrainAsync(
+                hostId, request, Actor(context), ct)));
+        management.MapPost("/remote-hosts/{hostId}/automatic-drain/clear", async (
+            HttpContext context,
+            string hostId,
+            ClearAutomaticHostDrainRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ClearAutomaticHostDrainAsync(
+                hostId, request, Actor(context), ct)));
         management.MapPost("/migrations/legacy/inventory", async (
             LegacyMigrationRequest request, LegacyMigrationService migration, CancellationToken ct)
             => await InvokeAsync(() => migration.InventoryAsync(request, ct)));

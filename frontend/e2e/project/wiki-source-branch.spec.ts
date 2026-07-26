@@ -87,6 +87,8 @@ test.beforeEach(async ({ page }) => {
         at: '2026-07-12T03:00:00Z', ttlSeconds: 600, snapshots: [],
       } });
     }
+    if (endpoint.startsWith('/api/bus/')) return route.fulfill({ json: [] });
+    if (endpoint === '/api/v1/management/remote-hosts') return route.fulfill({ json: [] });
     if (endpoint === '/api/tags' || endpoint === '/api/clients' || endpoint === '/api/clients/') {
       return route.fulfill({ json: [] });
     }
@@ -159,6 +161,20 @@ test('branch source is visible and read-only in both themes', async ({ page }) =
     await setTheme(page, theme);
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
     await page.mouse.move(0, 0);
+    const surfaceBackground = await page.getByTestId('project-wiki-viewer-empty')
+      .evaluate(element => getComputedStyle(element).backgroundColor);
+    const [surfaceRed, surfaceGreen, surfaceBlue] = parseRgb(surfaceBackground);
+    if (theme === 'dark') {
+      expect(
+        Math.max(surfaceRed, surfaceGreen, surfaceBlue),
+        'dark Wiki content surface must not fall back to a light paper colour',
+      ).toBeLessThan(80);
+    } else {
+      expect(
+        Math.min(surfaceRed, surfaceGreen, surfaceBlue),
+        'light Wiki content surface must remain a light paper colour',
+      ).toBeGreaterThan(230);
+    }
     const tokenColours = await indicator.evaluate((element) => {
       const actual = getComputedStyle(element);
       const colours = {

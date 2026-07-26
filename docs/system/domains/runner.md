@@ -91,7 +91,7 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
-- `runner/*`: the standalone remote runner daemon. A dependency-free console
+- `runner/*`: the standalone `agent-host` daemon. A dependency-free console
   process that runs as either a separately registered `coding` or `review`
   service. Coding continuously claims server-assigned projects with bounded
   host slots (default 2), fenced leases + heartbeat, per-task linked git
@@ -134,26 +134,39 @@ state.
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
   forget.
+- `orchestrator-engine/`: the separate API-only flow executor. Its bounded
+  ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
+  loops claim server-owned orchestration runs through
+  `/api/v1/orchestration/*`. It references only the shared Task Server
+  contracts and has no TaskScanner, task-folder, or store access.
+- `task-server/TaskServerOrchestrationStore.cs`: durable flow definitions,
+  orchestration runs, stage results, leases, fences, and restart recovery.
+  Expired Engine leases return the same run to `pending`; a replacement Engine
+  receives a higher fence and stale settlement is rejected.
+- `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
+  for the legacy host. `Orchestration:ExecutionMode` accepts exactly
+  `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
+  hosted services from the monolith.
 - Canonical Remote ReviewAttempts are excluded from the legacy
   `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
   fenced Remote Review Executor claims them. This is the fail-closed bootstrap
   boundary: the Task Server never substitutes its checkout or local
   `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
   authority continue through the established local compatibility path.
+- `task-server.Tests/TopologyTests.cs`: release-blocking sibling-process
+  harness for Studio detach, canonical history replay, renewal safety stop,
+  Task Server restart quarantine, Runner replacement after positive
+  no-overlap proof, and authenticated HTTPS event transport.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
   persisted RunAttempt lease onto `TaskInfo.Runner`
-  for `3-progress` cards, so the board can show which runner executes a card
-  (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
+  for `3-progress` cards, so the board can show which host executes a card
+  (remote `Host · <runner-id>` from the lease owner vs a quiet `Local`
+  in-process run).
   The projection includes canonical Attempt ID and authority epoch alongside
   the lease and fence. A remote runner acquires the run lease; the local
   in-process runner uses the disk pickup-lock and holds none, which is exactly
   the lokal-vs-remote signal.
-- `TaskRunnerService.GetStatus` owns the status-bar running count. It counts
-  live `3-progress` cards backed by either a local execution slot or an active
-  fenced run lease, deduplicated by card. `RunnerStatus.RunningCount` is the
-  client contract; consumers do not infer it from local `ActiveJobId` or remote
-  host `ActiveSlots` telemetry.
 
 ## Invariants
 
@@ -178,9 +191,24 @@ state.
   restart takeover changes both the durable fence and the containment namespace.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
+- Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
+  daemon-local slot reduction. Coding and review services publish versioned,
+  expiring health for provider authentication, Git fetch/push, repository
+  access, .NET, Node, Playwright, vision, disk, Task Server connectivity, and
+  platform/toolchain identity. Claims persist their required set. One
+  capability advances through `healthy -> suspect -> draining -> half-open ->
+  healthy` with bounded thresholds, exponential cooldown, and one fenced
+  canary. Matching new claims stop while unrelated capabilities and the
+  configured parallelism continue. Active leases are never revoked by this
+  admission decision. Disk full, invalid lease authority, host network
+  isolation, repository filesystem corruption, and Task Server authority
+  uncertainty use the separate automatic whole-host drain. Operator drain is a
+  distinct API, audit action, persisted field, and UI label. Capability failure
+  reports must bind the active coding or review claim and fence; stale and
+  duplicate deliveries fail closed or replay idempotently.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
-  `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps
+  `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
   no execution seat; a continuation must pass admission again and remains
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
@@ -209,7 +237,7 @@ state.
   card runs. A project without a remote assignment executes chat locally. Each
   response projects the actual local or remote hostname, repository path,
   branch, and HEAD; a reassignment invalidates a cached host context.
-- A planned remote-daemon restart is an execution handoff, not an attempt
+- A planned `agent-host` daemon restart is an execution handoff, not an attempt
   boundary. The daemon persists lease, fence, Task Server run/instance,
   worktree, detached-worker PID/start time, and file-log progress below
   `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
@@ -220,6 +248,30 @@ state.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
+- A failed lease renewal consumes the last server-issued authority window.
+  The standalone Runner stops before the known expiry minus one renewal
+  interval, cancels the CLI process tree, and does not turn transport loss into
+  autonomous authority. Task Server restart records `process-unknown`; only
+  positive containment or infrastructure-fencing proof permits a higher-fence
+  replacement.
+- A remote project clone is eligible only when the project registry contains a
+  repository URL. On every new clone and refresh, the standalone runner sets
+  both fetch and push URLs to that registry value and logs the effective pair.
+  Host-level probe and one-shot fallback URLs never flow into project clones.
+  A project without a registry URL stays Ready, is reported as not
+  remote-capable, and creates no clone.
+- Before the first card for one host/project pair is leased, the claim endpoint
+  returns an unleased preflight offer containing the registered repository and
+  a registration fingerprint. The host creates or refreshes the exact shared
+  project clone, verifies that both `origin` fetch and push URLs equal the
+  registration, fetches, and proves write access by creating and removing a
+  temporary runner ref. It reports the result in the next claim request. Only a
+  matching green result may cross `2-ready` to
+  `3-progress`. The server persists the result on the host identity and reuses
+  it for following cards without another offer roundtrip. Repository
+  registration and integration-branch mutations invalidate every host's cached
+  result for that project. A failure remains visible on the Remote Hosts card
+  and project execution card.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,
@@ -371,11 +423,13 @@ state.
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only
   (AGT-2178).
-- Remote daemon admission is write-capability gated. Startup keeps the fetch URL
+- Remote `agent-host` admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
   on its client identity. A reported `read-only` identity receives no coding
-  claims, but may receive read-only Epic planning claims. Remote Hosts surfaces
-  the same state for operator repair.
+  claims. The per-project delivery preflight is stricter and applies before any
+  first project claim, including Epic planning: it creates and removes a
+  temporary runner ref so server-side write policy is exercised. Remote Hosts
+  surfaces both states for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider
@@ -401,7 +455,7 @@ The projection distinguishes `local-running`, `remote-running`,
 missed heartbeat becomes acute only after the stale window. A renewed lease
 returns to healthy without a page reload through the normal task push/poll path.
 Run-start session events capture the execution projection so finished run
-history keeps its runner attribution with `historical: true` and renders
+history keeps its stable runner-id attribution with `historical: true` and renders
 quietly. The wire contract is
 [task-execution-location.schema.json](../schemas/task-execution-location.schema.json).
 

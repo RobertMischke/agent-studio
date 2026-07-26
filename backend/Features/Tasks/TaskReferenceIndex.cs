@@ -26,17 +26,20 @@ public sealed class TaskReferenceIndex
     private readonly Dictionary<string, TaskInfo> _byKey;
     private readonly Dictionary<string, IReadOnlyCollection<string>> _dependsOn;
     private readonly Dictionary<string, List<TaskReferenceLink>> _incoming;
+    private readonly Dictionary<string, List<string>> _incomingDependsOn;
 
     private static readonly StringComparer KeyComparer = StringComparer.OrdinalIgnoreCase;
 
     private TaskReferenceIndex(
         Dictionary<string, TaskInfo> byKey,
         Dictionary<string, IReadOnlyCollection<string>> dependsOn,
-        Dictionary<string, List<TaskReferenceLink>> incoming)
+        Dictionary<string, List<TaskReferenceLink>> incoming,
+        Dictionary<string, List<string>> incomingDependsOn)
     {
         _byKey = byKey;
         _dependsOn = dependsOn;
         _incoming = incoming;
+        _incomingDependsOn = incomingDependsOn;
         KnownKeys = new HashSet<string>(byKey.Keys, KeyComparer);
     }
 
@@ -63,6 +66,45 @@ public sealed class TaskReferenceIndex
         WaitsOnEvaluator.Evaluate(job, _byKey, _dependsOn);
 
     /// <summary>
+    /// Finds every active keyed task that transitively waits on
+    /// <paramref name="key"/>. Completed and archived sources are fulfillment
+    /// boundaries, so neither they nor tasks behind them are counted. The
+    /// visited set de-duplicates diamonds and makes stale on-disk cycles safe.
+    /// </summary>
+    public TransitiveWaitersStatus FindTransitiveWaiters(
+        string? key,
+        IReadOnlySet<string>? eligibleKeys = null)
+    {
+        var root = key?.Trim();
+        if (string.IsNullOrEmpty(root)) return new();
+
+        var visited = new HashSet<string>(KeyComparer) { root };
+        var queue = new Queue<string>();
+        var keys = new List<string>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            var target = queue.Dequeue();
+            if (!_incomingDependsOn.TryGetValue(target, out var sources)) continue;
+
+            foreach (var sourceKey in sources)
+            {
+                if (!visited.Add(sourceKey)) continue;
+                if (!_byKey.TryGetValue(sourceKey, out var source)) continue;
+                if (WaitsOnEvaluator.IsFulfilledState(source.State)) continue;
+
+                if (eligibleKeys == null || eligibleKeys.Contains(sourceKey))
+                    keys.Add(source.Key!.Trim());
+                queue.Enqueue(sourceKey);
+            }
+        }
+
+        keys.Sort(StringComparer.OrdinalIgnoreCase);
+        return new TransitiveWaitersStatus { Keys = keys };
+    }
+
+    /// <summary>
     /// Tasks that reference <paramref name="key"/>. Optionally filtered to a
     /// single relation kind (<see cref="TaskReferenceKinds"/>); null returns
     /// every incoming link. Empty when nothing points at the key.
@@ -81,6 +123,7 @@ public sealed class TaskReferenceIndex
         var byKey = new Dictionary<string, TaskInfo>(KeyComparer);
         var dependsOn = new Dictionary<string, IReadOnlyCollection<string>>(KeyComparer);
         var incoming = new Dictionary<string, List<TaskReferenceLink>>(KeyComparer);
+        var incomingDependsOn = new Dictionary<string, List<string>>(KeyComparer);
 
         var all = tasks as IReadOnlyCollection<TaskInfo> ?? tasks.ToList();
 
@@ -114,10 +157,18 @@ public sealed class TaskReferenceIndex
                     SourceState: t.State,
                     SourceWatchPath: t.WatchPath,
                     Kind: kind));
+
+                if (kind == TaskReferenceKinds.DependsOn && sourceKey.Length > 0)
+                {
+                    if (!incomingDependsOn.TryGetValue(target, out var sources))
+                        incomingDependsOn[target] = sources = [];
+                    if (!sources.Contains(sourceKey, KeyComparer))
+                        sources.Add(sourceKey);
+                }
             }
         }
 
-        return new TaskReferenceIndex(byKey, dependsOn, incoming);
+        return new TaskReferenceIndex(byKey, dependsOn, incoming, incomingDependsOn);
     }
 }
 

@@ -59,6 +59,7 @@ describe('DetailHeaderComponent (smoke)', () => {
         model: 'gpt-5.6-sol', thinkingLevel: 'medium', runOutcome: 'success',
       },
     });
+    fixture.componentRef.setInput('defaultThinkingLevel', 'ultra');
     fixture.detectChanges();
 
     const level = fixture.nativeElement.querySelector('[data-testid="detail-thinking-level"]') as HTMLElement;
@@ -178,7 +179,7 @@ describe('DetailHeaderComponent (smoke)', () => {
     );
     expect(btn!.disabled).toBe(false);
     expect(btn!.getAttribute('data-git-loading')).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Merge into Develop');
+    expect(fixture.nativeElement.textContent).toContain('Accept');
   });
 
   it('never gates a non-git primary (Ready "Run now") on git loading', async () => {

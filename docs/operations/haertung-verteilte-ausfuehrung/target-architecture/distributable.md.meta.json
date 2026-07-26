@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "The control plane as a distributable",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "2769b7c10f583aeeb4ee613d1ef3fe10a117fb34a62c0cf2b9bdaaaf27421a60",
+      "sizeBytes": 1716,
+      "lineCount": 34,
+      "capturedAt": "2026-07-24T21:17:41Z"
+    }
+  },
+  "classification": {
+    "owner": "distributed-execution",
+    "documentMode": "vision",
+    "temporalState": "future",
+    "implementationState": "planned",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "proposal",
+    "analyzedAt": "2026-07-24"
+  }
+}

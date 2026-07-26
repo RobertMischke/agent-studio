@@ -25,6 +25,8 @@ public interface IAutoReviewPostProcessingQueue
 /// </summary>
 public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQueue
 {
+    private readonly object _pendingLock = new();
+    private readonly List<AutoReviewPostProcessingRequest> _pending = [];
     private readonly Channel<AutoReviewPostProcessingRequest> _channel =
         Channel.CreateUnbounded<AutoReviewPostProcessingRequest>(new UnboundedChannelOptions
         {
@@ -34,8 +36,41 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
 
     public ChannelReader<AutoReviewPostProcessingRequest> Reader => _channel.Reader;
 
-    public bool Enqueue(AutoReviewPostProcessingRequest request) =>
-        _channel.Writer.TryWrite(request);
+    public bool Enqueue(AutoReviewPostProcessingRequest request)
+    {
+        lock (_pendingLock) _pending.Add(request);
+        if (_channel.Writer.TryWrite(request)) return true;
+        MarkStarted(request);
+        return false;
+    }
+
+    /// <summary>
+    /// One-based position in the existing post-processing slot queue. This is a
+    /// read projection of queue membership, not a second scheduling state.
+    /// </summary>
+    public int? PositionOf(string projectName, string jobId)
+    {
+        lock (_pendingLock)
+        {
+            var position = _pending.FindIndex(request =>
+                string.Equals(request.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(request.JobId, jobId, StringComparison.OrdinalIgnoreCase));
+            return position < 0 ? null : position + 1;
+        }
+    }
+
+    internal void MarkStarted(AutoReviewPostProcessingRequest request)
+    {
+        lock (_pendingLock)
+        {
+            var index = _pending.FindIndex(candidate =>
+                candidate.EnqueuedAtUtc == request.EnqueuedAtUtc
+                && string.Equals(candidate.ProjectName, request.ProjectName, StringComparison.Ordinal)
+                && string.Equals(candidate.JobId, request.JobId, StringComparison.Ordinal)
+                && string.Equals(candidate.Source, request.Source, StringComparison.Ordinal));
+            if (index >= 0) _pending.RemoveAt(index);
+        }
+    }
 }
 
 /// <summary>
@@ -137,6 +172,7 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
                 // is post-processed twice at the same time.
                 if (!inFlight.TryAdd(key, 0))
                 {
+                    _queue.MarkStarted(request);
                     _logger.LogDebug(
                         "auto-review-postprocessing-dedup project={Project} job={JobId} reason=already-in-flight",
                         request.ProjectName, request.JobId);
@@ -144,6 +180,7 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
                 }
 
                 await slots.WaitAsync(stoppingToken);
+                _queue.MarkStarted(request);
 
                 var task = Task.Run(async () =>
                 {

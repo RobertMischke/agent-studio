@@ -190,6 +190,7 @@
 // Wiki / Steering / Prompts doc views already use (AGT-2011).
 .proj-shell__panel[data-rail-key='wiki'],
 .proj-shell__panel[data-rail-key='steering'],
+.proj-shell__panel[data-rail-key='integration'],
 .proj-shell__panel[data-rail-key='git'] {
   overflow: hidden;
   padding: 0;
@@ -197,6 +198,7 @@
 
 .proj-shell__panel[data-rail-key='wiki'] .proj-shell__panel-content,
 .proj-shell__panel[data-rail-key='steering'] .proj-shell__panel-content,
+.proj-shell__panel[data-rail-key='integration'] .proj-shell__panel-content,
 .proj-shell__panel[data-rail-key='git'] .proj-shell__panel-content,
 .proj-shell__panel[data-rail-key='prompts'] .proj-shell__panel-content {
   width: 100%;

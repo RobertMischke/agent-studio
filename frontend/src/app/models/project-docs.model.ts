@@ -425,6 +425,8 @@ export interface WikiFolderChild {
   title: string;
   summary: string | null;
   updatedAt: string | null;
+  /** Git author date when available; mtime is the marked fallback for pages without history. */
+  updatedAtSource?: 'git' | 'mtime' | null;
   size: number | null;
   childCount: number | null;
   /** Curated classification (pages only; null for folders and unclassified pages). */

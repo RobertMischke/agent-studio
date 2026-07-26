@@ -143,7 +143,7 @@
   <p class="lede">Ursachen von Arbeitsverlust und falschen Review-Scopes sowie die zugehörigen
   Maßnahmen: Result-SHA-Vertrag, Fencing und hermetische Verifikation.</p>
   <div class="meta">
-    <span><b>Stand:</b> 25.07.2026</span>
+    <span><b>Stand:</b> 24.07.2026</span>
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
     <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
     identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
@@ -155,8 +155,8 @@
   <ul class="toc">
     <!-- Kein relativer Link: der Workbench-Viewer rendert mit base=about:blank,
          relative Navigation schwärzt das iframe. Zielbild über den Wiki-Baum:
-         docs/operations/haertung-verteilte-ausfuehrung/zielbild/ -->
-    <li><b>Zielbild:</b> Akteure und Verträge unter <code>zielbild/</code> im Wiki-Baum</li>
+         docs/operations/haertung-verteilte-ausfuehrung/target-architecture/ -->
+    <li><b>Zielbild:</b> Akteure und Verträge unter <code>target-architecture/</code> im Wiki-Baum</li>
     <li><a href="#tldr">Kernaussagen</a></li>
     <li><a href="#system">§1 Systembild</a></li>
     <li><a href="#git">§2 Git und Ergebniszuordnung</a></li>
@@ -171,12 +171,9 @@
 
 <section id="tldr" class="box accent">
   <h4>Kernaussagen</h4>
-  <p class="stx stx-part"><b>Current state, 25 Jul:</b> Verified push,
-  persisted AttemptAuthority fencing, durable result envelopes, and exact-SHA
-  Remote Review are implemented. Tranche 0 now mounts the versioned Review
-  plane in <code>OrchestratorApi</code> against that same authority, so the
-  deployed Review unit has a reachable executor API before the standalone Task
-  Server store migration.</p>
+  <p class="stx stx-part"><b>Stand 24.07.:</b> Drei Grundlagen sind aktiv: verifizierter Push vor
+  Completion, persistente Attempt-Authority mit Fencing (AGT-2182) und Remote-Gates auf einer exakten
+  Subjekt-SHA. Der unveränderliche Result-SHA-Handoff für alle Konsumenten bleibt mit AGT-2183/2184 offen.</p>
   <ul>
     <li><b>Ergebnisevidenz ist noch nicht durchgängig ein Vertrag.</b> Das Gate erhält bereits eine exakte
         Subjekt-SHA. Grade-Step, Merge und UI benötigen weiterhin den einheitlichen Attempt-Record mit
@@ -196,12 +193,6 @@
 
 <!-- ============================================================ -->
 <h2 id="system"><span class="no">§1</span>Systembild</h2>
-<p class="stx stx-ok"><b>Tranche 0, 25 Jul:</b> The monolith exposes only the
-versioned <code>review-plane</code> capability: compatibility, Review Executor
-registration and claim, heartbeat, fenced grade and cleanup writes, and result
-envelope reads. Coding Runners continue to negotiate the legacy monolith path.
-The later actor split moves the same routes and contract to the standalone Task
-Server without changing AttemptId, fence, epoch, or idempotency semantics.</p>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Das Systembild enthält den aktuellen Remote-Runner,
 die SSH-Gate-Brücke und die persistente Attempt-Authority. Result-SHA-Handoff und claimbare
 Remote-Schritte sind noch nicht vollständig umgesetzt.</p>
@@ -650,8 +641,10 @@ Im Zielzustand verwenden alle Konsumenten denselben Attempt-Record und claimbare
 <h2 id="schreiber"><span class="no">§4</span>Schreibmodell und Fencing</h2>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Weitgehend umgesetzt. AGT-2182 lieferte persistente
 Attempt-Authority mit Fencing (Grade B); der Kern von AGT-2260 schützt Operator-Epochen. Ein
-Acquire-to-Lane-Crash-Fenster bleibt offen. Schreibverstöße von Agenten führen zur
-<code>agent-git-violation</code>-Eskalation.</p>
+Acquire-to-Lane-Crash-Fenster bleibt offen. Ein normaler linearer Worker-Commit ist ein
+INFO-Finding und blockiert den Run nicht. Post-Processing faltet ihn, wenn sicher möglich, in den
+Plattform-Commit zurück. Nur ein Push auf einen geschützten Branch oder ein Rewrite bereits
+vorhandener fremder Historie bleibt eine <code>agent-git-violation</code>-Eskalation.</p>
 <p class="evidence-link"><b>Beleg:</b> <a href="#incident-attempt-authority">Attempt-Authority,
 24.07.</a> Karte: AGT-2182.</p>
 <p class="dim">Die Tabelle trennt Schreiber, mutierten Zustand und wirksame Schutzmechanismen.</p>
@@ -673,8 +666,8 @@ genau dieser Fall.</p>
         <td>Push-Probe, verified-push, read-only-Admission</td>
         <td>Outbox als einziger Schreibkanal (AGT-2183); Ref-Namespace-Policy: Runner-Identität darf <i>nur</i> <code>runner/&lt;id&gt;/*</code> pushen</td></tr>
     <tr><td><b>CLI-Agenten (codex, claude, …)</b></td><td>Quellcode im Worktree, results/, potenziell <i>alles</i></td>
-        <td>Runtime contract + Git command guard; the HEAD comparison emits <code>agent-git-violation</code> and quarantines the run</td>
-        <td>Trust-graded sampling and signal review; commit and push remain platform-only regardless of trust level</td></tr>
+        <td>Worktree-Isolation + ruhige Prompt-Regel + Guard; linearer Commit wird als Info bereinigt</td>
+        <td>Contract + Detect + Cleanup; Quarantäne nur bei echtem Schaden, siehe unten</td></tr>
     <tr><td><b>Operator / UI</b></td><td>Lanes, Registry, Settings, Steer-Antworten</td>
         <td><code>X-Client-Id</code>; Registry-Writes teils unvalidiert (→ PROJ-017)</td>
         <td>Validierung an jeder Registry-Schreibstelle (Pfad absolut + existent); Steer mit Timeout + definierter Konsequenz</td></tr>
@@ -694,7 +687,7 @@ Anweisungen fencen. Vier Kontrollen begrenzen den Schreibbereich, erkennen Abwei
 Evidenz und verweigern veraltete API-Mutationen.</p>
 
 <figure>
-<svg viewBox="0 0 1040 300" role="img" aria-label="Vier Ebenen: Begrenzen, Erkennen, Quarantäne, API-Fence">
+<svg viewBox="0 0 1040 300" role="img" aria-label="Vier Ebenen: Begrenzen, Erkennen, Bereinigen oder Eskalieren, API-Fence">
   <g>
     <rect class="s-node" x="20" y="30" width="240" height="120" rx="10"/>
     <text class="s-label" x="38" y="56">1 · Begrenzen</text>
@@ -713,11 +706,11 @@ Evidenz und verweigern veraltete API-Mutationen.</p>
   </g>
   <g>
     <rect class="badge-warn" x="540" y="30" width="240" height="120" rx="10" stroke-width="1.5"/>
-    <text class="s-label" x="558" y="56">3 · Quarantäne</text>
-    <text class="s-sub" x="558" y="80">Out-of-contract-Write ⇒ Gate-Punkt</text>
-    <text class="s-sub" x="558" y="100">„out-of-contract-write“ ⇒ Karte in</text>
-    <text class="s-sub" x="558" y="120">Human-Review, Evidenz konserviert.</text>
-    <text class="s-sub" x="558" y="140">Kein automatischer Merge oder Delete.</text>
+    <text class="s-label" x="558" y="56">3 · Bereinigen</text>
+    <text class="s-sub" x="558" y="80">Linearer Commit ⇒ INFO +</text>
+    <text class="s-sub" x="558" y="100">Soft-Reset in Plattform-Commit.</text>
+    <text class="s-sub" x="558" y="120">Sonst sichtbarer Cleanup-Hinweis.</text>
+    <text class="s-sub" x="558" y="140">Eskalation nur bei echtem Schaden.</text>
   </g>
   <g>
     <rect class="s-node" x="800" y="30" width="220" height="120" rx="10"/>
@@ -731,13 +724,14 @@ Evidenz und verweigern veraltete API-Mutationen.</p>
   <path class="s-flow" d="M520 90 H540" marker-end="url(#arr)"/>
   <path class="s-flow" d="M780 90 H800" marker-end="url(#arr)"/>
   <rect class="s-node2" x="20" y="185" width="1000" height="90" rx="10"/>
-  <text class="s-label" x="40" y="213">Behandlung</text>
-  <text class="s-sub" x="40" y="236">Ein Schreibzugriff außerhalb des Vertrags erzeugt einen <tspan font-weight="600">Evidenzfall</tspan>.</text>
-  <text class="s-sub" x="40" y="256">Der Zustand wird erhalten, die Karte quarantänisiert und eine veraltete API-Mutation abgewiesen.</text>
+  <text class="s-label" x="40" y="213">Leitsatz</text>
+  <text class="s-sub" x="40" y="236">Ein normaler Worker-Commit ist ein sichtbarer <tspan font-weight="600">Evidenz- und Cleanup-Fall</tspan>, kein Grund für Run-Abbruch oder Quarantäne.</text>
+  <text class="s-sub" x="40" y="256">Status-Konvention: worker-head-advanced = INFO; needs cleanup bleibt sichtbar; agent-git-violation = nur echter Shared-History-Schaden.</text>
 </svg>
-<figcaption><b>Abb. 9: Kontrollen für Agenten-Schreibzugriffe.</b> Prompts und Konventionen definieren
-den zulässigen Bereich. Technische Kontrollen erkennen Abweichungen, erhalten den Zustand und
-verweigern veraltete Board-Mutationen.</figcaption>
+<figcaption><b>Abb. 9: Umgang mit unfencbaren Schreibern.</b> Prompts und Konventionen bleiben die erste
+Verteidigungslinie, aber die Architektur verlässt sich nicht auf sie. Normale lineare Commit-Abweichungen
+werden als Info angezeigt und automatisch bereinigt, wenn die Ancestry-, HEAD- und ursprüngliche Branch-Ref-Prüfung das sicher erlaubt.
+Nur geschützte Pushes und Rewrites fremder Historie werden konserviert und dem Menschen vorgelegt.</figcaption>
 </figure>
 
 <!-- ============================================================ -->
@@ -1105,11 +1099,6 @@ Commit-Kette. AGT-2183/2184 ersetzen die verbleibende Scope-Kaskade durch <code>
 
 <!-- ============================================================ -->
 <h2 id="programm"><span class="no">§7</span>Umsetzungsprogramm</h2>
-<p class="stx stx-ok"><b>Current state, 25 Jul:</b> The P0 Review-plane gap is
-closed in the task branch. The existing <code>RemoteReviewDaemon</code> can
-claim canonical cards through the monolith mount while all writes remain fenced
-by the existing persisted AttemptAuthority. Standalone Task Server deployment
-and store takeover remain the next migration tranche.</p>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Phase 0 ist abgeschlossen. In Phase 1 sind AGT-2177 und
 AGT-2182 geliefert; AGT-2183/2184 bleiben offen. Die Gate-Isolation aus Phase 2 ist als SSH-Brücke
 produktiv. AGT-2229 und die Testdisziplin-Bausteine schließen den Zielzustand.</p>
@@ -1174,7 +1163,6 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
     <tr id="incident-remote-gates"><td>22./23.07.</td><td>Gate-Stau und falsche Eskalationen im lokalen Pfad</td><td>AGT-2222: SSH-Gate-Brücke, vier Slots, exakte Subjekt-SHA</td><td><span class="pill done">live</span> <span class="pill queued">AGT-2229 offen</span></td></tr>
     <tr id="incident-review-epochs"><td>23.07.</td><td>Ältere Verdikte konnten Operator-Requeues überholen</td><td>AGT-2260-Kern: Verdikte an Operator-Epoche binden</td><td><span class="pill done">aktiv</span></td></tr>
     <tr id="incident-attempt-authority"><td>24.07.</td><td>Fehlende persistente Autorität für Run- und Review-Versuche</td><td>AGT-2182: Attempt-Authority und Fencing</td><td><span class="pill done">geliefert, Grade B</span></td></tr>
-    <tr id="incident-review-plane"><td>25.07.</td><td>Canonical cards waited in Auto Review because no deployed process hosted the versioned Review API</td><td>Tranche 0 mounts the V1 Review plane in the monolith against the existing store and AttemptAuthority</td><td><span class="pill done">task branch verified</span></td></tr>
   </tbody>
 </table>
 

@@ -96,6 +96,23 @@ const STREAM_JSON_SHAPE_KEYS: readonly string[] = [
 /** Roles a bare `{ role, content }` Messages envelope may carry. */
 const MESSAGE_ENVELOPE_ROLES: ReadonlySet<string> = new Set(['user', 'assistant', 'system']);
 
+const SUPERVISOR_ENVELOPE =
+  /^\[(?<clock>\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)\]\s+\[supervisor\]\s+\[(?<action>[^\]]+)\]\s*(?<body>.*)$/i;
+
+const GENUINE_CLI_ERROR_PATTERNS: readonly RegExp[] = [
+  /^\s*(?:error|exception|fatal|panic)(?:\b|:)/i,
+  /^\s*(?:npm|pnpm|yarn)\s+err!/i,
+  /^\s*\[force-fail\]/i,
+  /\btraceback \(most recent call last\)/i,
+  /\berror_during_execution\b/i,
+  /"is_error"\s*:\s*true/i,
+  /\b(?:cli|command|process)\s+(?:failed|exited)\s+(?:with\s+)?(?:code|status)\s+[1-9]\d*\b/i,
+  /\bexit(?:ed)?\s+(?:code|status)\s*[=:]?\s*[1-9]\d*\b/i,
+];
+
+const CODEX_EXEC_RUNNER_MARKER = /^\s*\[runner\]\s+spawning\s+codex\s+exec\b/i;
+const CODEX_TEXT_MODE_BANNER = /^\s*OpenAI Codex\b/i;
+
 /**
  * Codex JSONL frame `type` prefixes. The library owns these (it maps them to
  * tool / message groups), so the guard must never redact them.
@@ -217,13 +234,34 @@ export function sanitizeProjectionLines(
 ): CliOutputLine[] {
   let anyRedacted = false;
   const out: CliOutputLine[] = [];
+  // coding-agent-chat 0.3.2 recognises a Codex text-mode run as one stderr
+  // transcript, then projects the following stdout as the agent's complete
+  // answer. Preserve that stream boundary. Generic stderr prose outside this
+  // envelope is still neutralised below so it cannot become one CLI failure
+  // per physical line.
+  let inCodexTextModeTranscript = false;
   // Non-null while the previous emitted line is an `[internal event]` marker,
   // so a run of consecutive frames folds into that one marker.
   let runDetails: string[] | null = null;
 
   for (const line of lines) {
     const cleanText = stripAnsi(line.text);
-    const cleanLine = cleanText === line.text ? line : { ...line, text: cleanText };
+    if (
+      (line.stream === 'system' && CODEX_EXEC_RUNNER_MARKER.test(cleanText))
+      || (line.stream === 'stderr' && CODEX_TEXT_MODE_BANNER.test(cleanText))
+    ) {
+      inCodexTextModeTranscript = true;
+    } else if (
+      inCodexTextModeTranscript
+      && (
+        SUPERVISOR_ENVELOPE.test(cleanText)
+        || (line.stream !== 'stderr' && cleanText.trim() !== '')
+      )
+    ) {
+      inCodexTextModeTranscript = false;
+    }
+
+    const cleanLine = normalizeProjectionLine(line, cleanText, inCodexTextModeTranscript);
     if (cleanLine !== line) anyRedacted = true;
     if (isNonRenderableRawLine(cleanText)) {
       anyRedacted = true;
@@ -253,6 +291,40 @@ export function sanitizeProjectionLines(
   }
 
   return anyRedacted ? out : (lines as CliOutputLine[]);
+}
+
+function normalizeProjectionLine(
+  line: CliOutputLine,
+  cleanText: string,
+  preserveCodexStderr: boolean,
+): CliOutputLine {
+  const supervisor = SUPERVISOR_ENVELOPE.exec(cleanText);
+  if (supervisor?.groups) {
+    const action = titleCaseAction(supervisor.groups['action']);
+    const body = supervisor.groups['body'].trim();
+    return {
+      ...line,
+      stream: 'supervisor',
+      text: body ? `**${action}** · ${body}` : `**${action}**`,
+    };
+  }
+
+  if (line.stream === 'stderr' && !preserveCodexStderr && !isGenuineCliError(cleanText)) {
+    return { ...line, stream: 'stdout', text: cleanText };
+  }
+
+  return cleanText === line.text ? line : { ...line, text: cleanText };
+}
+
+function isGenuineCliError(text: string): boolean {
+  return GENUINE_CLI_ERROR_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function titleCaseAction(action: string): string {
+  return action
+    .trim()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 /** Cap the disclosed raw detail so a pathological frame burst cannot bloat the

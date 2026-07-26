@@ -182,6 +182,19 @@
   font-size: 12px;
 }
 
+.host__delivery-failures {
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--notify-error-border);
+  border-radius: 8px;
+  background: var(--notify-error-tint);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+.host__delivery-failures strong { color: var(--studio-error); }
+.host__delivery-failures p { margin: var(--studio-spacing-1) 0 0; }
+.host__delivery-failures span { font-weight: 700; }
+
 // --- chips (capabilities + quota) --------------------------------------------
 .chips {
   list-style: none;

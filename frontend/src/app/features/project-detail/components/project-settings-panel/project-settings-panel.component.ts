@@ -12,7 +12,7 @@ import { ProjectDetailComponent } from '../project-detail/project-detail';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
-import { QuotaApiService } from '../../../../features/quota';
+import { QuotaApiService, type ProjectCliQuotaWaitPolicy } from '../../../../features/quota';
 // Service-only direct import avoids evaluating the heavy shell component barrel,
 // which closes a runtime cycle when Project Settings mounts in Project Hub.
 import { WorkspaceOverlaysService } from '../../../shell/state/workspace-overlays.service';
@@ -112,6 +112,8 @@ export class ProjectSettingsPanelComponent implements OnInit {
   readonly wikiSourceSaving = signal(false);
   readonly wikiSourceError = signal<string | null>(null);
   readonly wikiBranchOptions = signal<string[]>([]);
+  readonly projectQuotaWait = signal<ProjectCliQuotaWaitPolicy | null>(null);
+  readonly quotaWaitSaving = signal(false);
 
   // --- AGT-1812: editable workspace-default orchestrator settings ---------
   /** The workspace that owns this project; the tier these defaults write to. */
@@ -195,6 +197,10 @@ export class ProjectSettingsPanelComponent implements OnInit {
       error: () => { /* default 1 */ },
     });
     this.loadWorkspaceOrchestratorSettings();
+    this.quotaApi.getProjectQuotaWaitPolicy(this.projectName()).subscribe({
+      next: policy => this.projectQuotaWait.set(policy),
+      error: () => { /* card keeps its safe inherited fallback */ },
+    });
   }
 
   /**
@@ -306,6 +312,35 @@ export class ProjectSettingsPanelComponent implements OnInit {
     this.http
       .put(`/api/projects/${encodeURIComponent(this.projectName())}/max-parallelism`, { maxParallelism: v })
       .subscribe({ next: () => { /* applied live */ }, error: () => { /* surfaced on next load */ } });
+  }
+
+  quotaWaitOverride(): 'inherit' | 'enabled' | 'disabled' {
+    const value = this.projectQuotaWait()?.projectEnabled;
+    return value === null || value === undefined ? 'inherit' : value ? 'enabled' : 'disabled';
+  }
+
+  setProjectQuotaWaitOverride(value: string): void {
+    const enabled = value === 'inherit' ? null : value === 'enabled';
+    const threshold = value === 'inherit'
+      ? null
+      : (this.projectQuotaWait()?.projectThresholdMinutes ?? this.projectQuotaWait()?.thresholdMinutes ?? 30);
+    this.saveProjectQuotaWait(enabled, threshold);
+  }
+
+  setProjectQuotaWaitThreshold(value: number): void {
+    const enabled = this.quotaWaitOverride() === 'disabled' ? false : true;
+    this.saveProjectQuotaWait(enabled, Math.max(1, Math.min(240, Math.round(Number(value) || 30))));
+  }
+
+  private saveProjectQuotaWait(enabled: boolean | null, thresholdMinutes: number | null): void {
+    this.quotaWaitSaving.set(true);
+    this.quotaApi.setProjectQuotaWaitPolicy(this.projectName(), enabled, thresholdMinutes).subscribe({
+      next: policy => {
+        this.projectQuotaWait.set(policy);
+        this.quotaWaitSaving.set(false);
+      },
+      error: () => this.quotaWaitSaving.set(false),
+    });
   }
 
   private readStoredCli(): CliType | null {

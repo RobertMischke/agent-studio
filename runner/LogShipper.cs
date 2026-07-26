@@ -30,6 +30,7 @@ public sealed class LogShipper
     // of building one giant request (and, on the v1 path, one giant burst of
     // per-line POSTs) that would hold the whole batch live at once.
     private const int MaxBatchLines = 2_000;
+    private const int MaxLineChars = 64 * 1024;
 
     private readonly TaskServerClient _client;
     private readonly string _taskKey;
@@ -40,6 +41,8 @@ public sealed class LogShipper
     private int _pendingCount;
     private long _dropped;
     private long _reportedDropped;
+    private int _transportInterrupted;
+    private CliOutputLine? _reconnectEvidence;
 
     public LogShipper(
         TaskServerClient client,
@@ -63,6 +66,8 @@ public sealed class LogShipper
 
     public void Add(string stream, string text)
     {
+        if (text.Length > MaxLineChars)
+            text = text[..MaxLineChars] + " [runner: event payload truncated]";
         if (_outbox is not null)
         {
             _outbox.Enqueue(
@@ -91,10 +96,40 @@ public sealed class LogShipper
     {
         if (_outbox is not null)
         {
-            await _outbox.ReplayAsync(
-                (item, token) => _client.SendOutboxItemAsync(_outbox.Authority, item, token),
-                ct);
-            return true;
+            try
+            {
+                await _outbox.ReplayAsync(
+                    (item, token) => _client.SendOutboxItemAsync(_outbox.Authority, item, token),
+                    ct);
+                if (Volatile.Read(ref _transportInterrupted) == 1
+                    && _reconnectEvidence is not null)
+                {
+                    _outbox.Enqueue(
+                        "log",
+                        JsonSerializer.Serialize(
+                            _reconnectEvidence,
+                            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                    await _outbox.ReplayAsync(
+                        (item, token) => _client.SendOutboxItemAsync(_outbox.Authority, item, token),
+                        ct);
+                    Interlocked.Exchange(ref _transportInterrupted, 0);
+                    _reconnectEvidence = null;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (Interlocked.Exchange(ref _transportInterrupted, 1) == 0)
+                {
+                    Add("system", "[runner] runner transport disconnected; bounded replay pending");
+                    _reconnectEvidence = new CliOutputLine(
+                        DateTime.UtcNow,
+                        "system",
+                        "[runner] runner transport reconnected; replay acknowledged");
+                }
+                _diag($"log ingest failed, will retry: {ex.Message}");
+                return false;
+            }
         }
         var batch = new List<CliOutputLine>();
         while (batch.Count < MaxBatchLines && _pending.TryDequeue(out var line))
@@ -118,6 +153,19 @@ public sealed class LogShipper
                 AuthorityEpoch: _lease.AuthorityEpoch,
                 IdempotencyKey: $"logs:{_lease.AttemptId}:{WireDigest.Hash(delivery)}"), ct);
 
+            if (Volatile.Read(ref _transportInterrupted) == 1
+                && _reconnectEvidence is not null)
+            {
+                await _client.IngestLogsAsync(new LogIngestRequest(
+                    _taskKey,
+                    [_reconnectEvidence],
+                    _lease.RunnerId,
+                    _lease.LeaseId,
+                    _lease.FencingToken),
+                    ct);
+                Interlocked.Exchange(ref _transportInterrupted, 0);
+                _reconnectEvidence = null;
+            }
             var dropped = Volatile.Read(ref _dropped);
             var reported = Volatile.Read(ref _reportedDropped);
             if (dropped > reported)
@@ -138,6 +186,14 @@ public sealed class LogShipper
                 Interlocked.Increment(ref _pendingCount);
             }
             TrimToCap();
+            if (Interlocked.Exchange(ref _transportInterrupted, 1) == 0)
+            {
+                Add("system", "[runner] runner transport disconnected; bounded replay pending");
+                _reconnectEvidence = new CliOutputLine(
+                    DateTime.UtcNow,
+                    "system",
+                    "[runner] runner transport reconnected; replay acknowledged");
+            }
             _diag($"log ingest failed, will retry: {ex.Message}");
             return false;
         }

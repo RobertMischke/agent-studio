@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 
@@ -19,6 +20,12 @@ import {
 } from '../../../../components/steering-detail';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatDateTimeUtc } from '../../../../services/format.util';
+import { PendingButtonDirective } from '../../../../components/async-feedback';
+import {
+  laneActionsFor,
+  type TriageActionPayload,
+  type TriageButton,
+} from '../../state/triage-actions.model';
 import {
   buildEscalationSummaryView,
   type EscalationGateSource,
@@ -42,12 +49,22 @@ import {
   selector: 'app-escalation-summary',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, PendingButtonDirective],
   templateUrl: './escalation-summary.component.html',
   styleUrl: './escalation-summary.component.scss',
 })
 export class EscalationSummaryComponent {
   readonly detail = input.required<TaskDetail>();
+  readonly mutationsBlocked = input(false);
+  readonly triageActingId = input<string | null>(null);
+  readonly triageAction = output<TriageActionPayload>();
+
+  /** The three terminal operator choices shown beside NEEDS DECISION. */
+  readonly decisionActions = computed(() =>
+    this.detail().info.state === TaskState.Escalated
+      ? laneActionsFor(TaskState.Escalated).filter((action) => DECISION_ACTION_IDS.has(action.id))
+      : [],
+  );
 
   private readonly jobs = inject(TaskService);
   private readonly timelinePoll = inject(TaskTimelinePollService);
@@ -179,6 +196,12 @@ export class EscalationSummaryComponent {
     writeCollapsePref(this.collapseJobId, next);
   }
 
+  /** Route inline decisions through the detail view's existing triage pipeline. */
+  triggerDecision(action: TriageButton): void {
+    if (this.mutationsBlocked() || this.triageActingId() !== null) return;
+    this.triageAction.emit({ id: action.id, label: action.label, intent: action.intent });
+  }
+
   formatRunAt(iso: string | null): string {
     return iso ? formatDateTimeUtc(iso) : '';
   }
@@ -186,6 +209,11 @@ export class EscalationSummaryComponent {
 
 /** localStorage key holding the per-task collapse map (`{ [jobId]: boolean }`). */
 const COLLAPSE_KEY = 'taskboard.escalation.collapsed';
+const DECISION_ACTION_IDS: ReadonlySet<string> = new Set([
+  'reissue-escalated',
+  'accept-escalated',
+  'discard-escalated',
+]);
 
 /**
  * Initial collapse for a freshly-opened task: an explicit stored preference

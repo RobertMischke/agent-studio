@@ -83,7 +83,7 @@ describe('UpdateCenterComponent (smoke)', () => {
 
     const fixture = TestBed.createComponent(UpdateCenterComponent);
     fixture.detectChanges();
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    const text = document.body.textContent ?? '';
     expect(text).toContain('v1.2.0');
     expect(text).toContain('CAR 0.5.0');
     expect(text).toContain('CAC 0.1.0');

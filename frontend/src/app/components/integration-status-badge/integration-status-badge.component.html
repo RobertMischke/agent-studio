@@ -10,4 +10,15 @@
     <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
     <span class="integration-badge__label">{{ label() }}</span>
   </span>
+  @if (value.status === 'conflict-skipped' && jobId()) {
+    <button type="button"
+            class="integration-recovery"
+            data-testid="task-card-integration-recovery"
+            [appPendingButton]="recoveryPending()"
+            pendingLabel="Queueing…"
+            aria-label="Queue a steer round to rebase this delivery onto the current integration branch"
+            (click)="queueRecovery($event)">
+      Rebase &amp; retry
+    </button>
+  }
 }

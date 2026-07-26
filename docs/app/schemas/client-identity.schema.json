@@ -68,6 +68,26 @@
       "format": "date-time",
       "description": "UTC time of the latest remote-daemon Git push capability probe."
     },
+    "runnerProjectPreflights": {
+      "type": "array",
+      "description": "Cached per-project delivery proofs for this host. A repository registration change invalidates the matching entry before another claim.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["projectId", "projectName", "registrationFingerprint", "repositoryUrl", "fetchUrl", "pushUrl", "status", "detail", "checkedAt"],
+        "properties": {
+          "projectId": { "type": "string" },
+          "projectName": { "type": "string" },
+          "registrationFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "repositoryUrl": { "type": "string" },
+          "fetchUrl": { "type": "string" },
+          "pushUrl": { "type": "string" },
+          "status": { "type": "string", "enum": ["ready", "failed"] },
+          "detail": { "type": "string", "maxLength": 1000 },
+          "checkedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
     "drainRequestedAt": { "type": ["string", "null"], "format": "date-time" },
     "retireRequestedAt": { "type": ["string", "null"], "format": "date-time" },
     "runnerDaemonState": { "type": ["string", "null"], "enum": ["running", "read-only", "stopped", null] },

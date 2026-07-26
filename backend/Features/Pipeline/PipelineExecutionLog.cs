@@ -43,6 +43,7 @@ public sealed class PipelineExecutionLog
 
     private readonly ILogger<PipelineExecutionLog> _logger;
     private readonly ConcurrentDictionary<string, object> _locks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AsyncLocal<AttemptFence?> _attemptFence = new();
 
     public PipelineExecutionLog(ILogger<PipelineExecutionLog> logger)
     {
@@ -210,18 +211,6 @@ public sealed class PipelineExecutionLog
         DateTime started,
         PipelineExecutionRecord? prior = null)
     {
-        var steps = new List<PipelineStepExecution>();
-        foreach (var step in pipeline.AllSteps)
-        {
-            steps.Add(new PipelineStepExecution
-            {
-                StepId = step.Id,
-                Kind = step.Kind,
-                Model = step.Model,
-                Status = step.Stub ? PipelineStepStatus.Planned : PipelineStepStatus.Pending,
-            });
-        }
-
         var attempt = 1;
         var previous = new List<PipelineExecutionRecord>();
         if (prior != null)
@@ -235,6 +224,19 @@ public sealed class PipelineExecutionLog
             {
                 previous = previous.Take(MaxArchivedAttempts).ToList();
             }
+        }
+
+        var steps = new List<PipelineStepExecution>();
+        foreach (var step in pipeline.AllSteps)
+        {
+            steps.Add(new PipelineStepExecution
+            {
+                StepId = step.Id,
+                Kind = step.Kind,
+                Attempt = attempt,
+                Model = step.Model,
+                Status = step.Stub ? PipelineStepStatus.Planned : PipelineStepStatus.Pending,
+            });
         }
 
         return new PipelineExecutionRecord
@@ -251,6 +253,20 @@ public sealed class PipelineExecutionLog
     }
 
     /// <summary>
+    /// Fence all step writes and completion stamps in the current async flow to
+    /// one pipeline attempt. The scope flows through awaited and parallel
+    /// post-steps via <see cref="AsyncLocal{T}"/>. If a rerun opens a newer
+    /// attempt while older work is still finishing, those late writes are
+    /// ignored instead of contaminating the fresh step table.
+    /// </summary>
+    public IDisposable EnterAttempt(string jobFolderPath, int attempt)
+    {
+        var previous = _attemptFence.Value;
+        _attemptFence.Value = new AttemptFence(NormalizeKey(jobFolderPath), attempt, previous);
+        return new AttemptFenceScope(this, previous);
+    }
+
+    /// <summary>
     /// Record one step's outcome (or in-flight start). Merges into the
     /// in-memory record under a per-folder lock, rewrites the file. Safe
     /// to call from concurrent parallel step tasks.
@@ -262,6 +278,16 @@ public sealed class PipelineExecutionLog
         {
             var current = TryRead(jobFolderPath);
             if (current == null) return;
+            if (!WriteBelongsToCurrentAttempt(
+                    jobFolderPath, current, stepResult.Attempt, stepResult.StartedAt))
+            {
+                _logger.LogInformation(
+                    "PipelineExecutionLog: ignored stale step update for {Folder}/{StepId}; current attempt is {Attempt}",
+                    jobFolderPath, stepResult.StepId, current.Attempt);
+                return;
+            }
+
+            stepResult = stepResult with { Attempt = current.Attempt };
 
             var updatedSteps = new List<PipelineStepExecution>(current.Steps.Count);
             var replaced = false;
@@ -302,6 +328,14 @@ public sealed class PipelineExecutionLog
         {
             var current = TryRead(jobFolderPath);
             if (current == null) return;
+            if (!WriteBelongsToCurrentAttempt(
+                    jobFolderPath, current, stampedAttempt: null, startedAt: null))
+            {
+                _logger.LogInformation(
+                    "PipelineExecutionLog: ignored stale completion for {Folder}; current attempt is {Attempt}",
+                    jobFolderPath, current.Attempt);
+                return;
+            }
             var completed = current with { CompletedAt = nowUtc ?? DateTime.UtcNow };
             WriteAtomic(jobFolderPath, NormalizeCompletedRecord(completed, pendingStepReason));
         }
@@ -444,4 +478,48 @@ public sealed class PipelineExecutionLog
 
     private static string NormalizeKey(string folder) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+
+    private bool WriteBelongsToCurrentAttempt(
+        string jobFolderPath,
+        PipelineExecutionRecord current,
+        int? stampedAttempt,
+        DateTime? startedAt)
+    {
+        var key = NormalizeKey(jobFolderPath);
+        for (var fence = _attemptFence.Value; fence != null; fence = fence.Parent)
+        {
+            if (!string.Equals(fence.FolderKey, key, StringComparison.OrdinalIgnoreCase)) continue;
+            return fence.Attempt == current.Attempt;
+        }
+
+        if (stampedAttempt.HasValue) return stampedAttempt.Value == current.Attempt;
+
+        // Direct and legacy callers may not have an ambient scope. On a rerun,
+        // a step that started before the fresh record can only belong to an
+        // archived attempt. Attempt 1 remains fully compatible with older
+        // callers and fixtures whose timestamps predate the record itself.
+        return current.Attempt <= 1
+            || !startedAt.HasValue
+            || startedAt.Value >= current.StartedAt;
+    }
+
+    private sealed record AttemptFence(string FolderKey, int Attempt, AttemptFence? Parent);
+
+    private sealed class AttemptFenceScope : IDisposable
+    {
+        private PipelineExecutionLog? _owner;
+        private readonly AttemptFence? _previous;
+
+        public AttemptFenceScope(PipelineExecutionLog owner, AttemptFence? previous)
+        {
+            _owner = owner;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            if (owner != null) owner._attemptFence.Value = _previous;
+        }
+    }
 }

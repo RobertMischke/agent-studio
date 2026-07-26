@@ -174,6 +174,8 @@ public sealed class DriftPostStepRunner
         foreach (var step in enabled)
         {
             ct.ThrowIfCancellationRequested();
+            var pipelineRecord = EnsureRunRecord(jobFolderPath, project, jobId);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(jobFolderPath, pipelineRecord.Attempt);
             var cliType = PipelineStepConfigResolver.ResolveCliType(settings, step) ?? DefaultCli;
             var model = PipelineStepConfigResolver.ResolveModel(settings, step, DefaultModel);
             var thinkingLevel = PipelineStepConfigResolver.ResolveThinkingLevel(
@@ -206,7 +208,6 @@ public sealed class DriftPostStepRunner
         string workspace,
         CancellationToken ct)
     {
-        EnsureRunRecord(jobFolderPath, project, jobId);
         var startedAt = DateTime.UtcNow;
         RecordStep(jobFolderPath, step.Id, model, PipelineStepStatus.Running, null, null, startedAt);
 
@@ -357,15 +358,13 @@ public sealed class DriftPostStepRunner
             ? agentText
             : $"# {report.Project} drift (automatic post-step)\n\nNo agent narrative supplied; evidence-only report. Summary: {report.Summary}";
 
-    private void EnsureRunRecord(string jobFolderPath, string project, string jobId)
+    private PipelineExecutionRecord EnsureRunRecord(string jobFolderPath, string project, string jobId)
     {
         // Record into the existing run when one is present (the core + aspect
         // stages of this same run created it); only begin a fresh record when
         // none exists yet, so RecordStep is never a silent no-op.
-        if (_pipelineLog.Read(jobFolderPath) == null)
-        {
-            _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
-        }
+        return _pipelineLog.Read(jobFolderPath)
+            ?? _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
     }
 
     private void RecordStep(

@@ -201,7 +201,7 @@ describe('GitFileTreeComponent path disambiguation (AGT-2008)', () => {
 
     // Both README.md rows disambiguate; the unique app.ts row gets no hint.
     expect(hints).toContain('root');
-    expect(hints).toContain('docs/');
+    expect(hints).toContain('start/');
     expect(hints.length).toBe(2);
   });
 
@@ -221,7 +221,7 @@ describe('GitFileTreeComponent path disambiguation (AGT-2008)', () => {
     });
 
     expect(cmp.fileTooltip(fileNode('docs/start/README.md'))).toBe('docs/start/README.md');
-    expect(cmp.dirHint(fileNode('docs/start/README.md'))).toBe('docs/');
+    expect(cmp.dirHint(fileNode('docs/start/README.md'))).toBe('start/');
     expect(cmp.dirHint(fileNode('README.md'))).toBe('root');
     // Unique basename -> no hint even though the method is called per row.
     expect(cmp.dirHint(fileNode('src/app.ts'))).toBe('');

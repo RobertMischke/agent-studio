@@ -17,8 +17,8 @@ export const TaskState = {
   FailedPickup: '3a-failed-pickup',
   CodeNotComplete: '3b-code-not-complete',
   AutoReview: '4-auto-review',
-  HumanReview: '5-human-review',
   Escalated: '5e-escalated',
+  HumanReview: '5-human-review',
   Completed: '6-completed',
   Archive: '7-archive',
 } as const;
@@ -140,6 +140,12 @@ export interface WaitsOnStatus {
   cycleDetected: boolean;
 }
 
+/** Server-computed active cards that transitively wait on a human decision. */
+export interface TransitiveWaitersStatus {
+  keys: string[];
+  count: number;
+}
+
 /**
  * Response body of `PUT /api/tasks/{id}/references` (AGT-2029). The write now
  * persists even when a referenced key is unknown; those edges come back as
@@ -211,6 +217,14 @@ export interface TaskInfo {
     cliType: string;
     model: string | null;
     reason: string | null;
+  } | null;
+  /** Intentional, bounded wait for a confirmed nearby CLI quota reset. */
+  quotaWait?: {
+    cliType: string;
+    startedAt: string;
+    resetAt: string;
+    thresholdMinutes: number;
+    reason: string;
   } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
@@ -352,6 +366,8 @@ export interface TaskInfo {
    * board card. Null/absent means "no dependencies".
    */
   waitsOn?: WaitsOnStatus | null;
+  /** Active cards that reach this human-review card through dependsOn edges. */
+  transitiveWaiters?: TransitiveWaitersStatus | null;
   /**
    * Append-only commit-provenance record (ASS-1724). Mirrors backend
    * `TaskInfo.Provenance` and ships on every board card so the git-state pill
@@ -401,6 +417,12 @@ export interface TaskInfo {
    * Progress-lane tasks; null/absent on every other lane. Pure visibility.
    */
   runActivity?: TaskRunActivity | null;
+
+  /**
+   * Current-attempt pipeline liveness projected from existing run/step events
+   * and queue membership. Previous attempts are never included.
+   */
+  liveStatus?: TaskLiveStatus | null;
 
   /**
    * Set when the task was completed out-of-band (operator chat, external
@@ -547,6 +569,7 @@ export interface ClientSummary {
   runnerGitStatus?: 'ready' | 'read-only' | null;
   runnerGitDetail?: string | null;
   runnerGitCheckedAt?: string | null;
+  runnerProjectPreflights?: RunnerProjectPreflight[];
   drainRequestedAt?: string | null;
   retireRequestedAt?: string | null;
   runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
@@ -555,6 +578,18 @@ export interface ClientSummary {
   runnerAvailableSlots?: number | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
+}
+
+export interface RunnerProjectPreflight {
+  projectId: string;
+  projectName: string;
+  registrationFingerprint: string;
+  repositoryUrl: string;
+  fetchUrl: string;
+  pushUrl: string;
+  status: 'ready' | 'failed';
+  detail: string;
+  checkedAt: string;
 }
 
 /**
@@ -890,7 +925,7 @@ export interface GroupedJobs {
   codeNotComplete: TaskInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
   autoReview: TaskInfo[];
-  /** ADR-0025 lane: waiting for the user (5-human-review). */
+  /** Acceptance lane for finished deliveries backed by evidence (5-human-review). */
   humanReview: TaskInfo[];
   /** Decision lane: true escalations that need operator input (5e-escalated). */
   escalated: TaskInfo[];
@@ -1301,6 +1336,33 @@ export interface TaskRunActivity {
   lastError?: string | null;
 }
 
+export interface TaskLiveStep {
+  stepId: string;
+  displayName: string;
+  kind: string;
+  startedAt?: string | null;
+  model?: string | null;
+  cliType?: string | null;
+}
+
+export interface TaskLiveStepPreview {
+  stepId: string;
+  displayName: string;
+}
+
+export interface TaskLiveQueue {
+  kind: 'runner' | 'review' | string;
+  position: number;
+}
+
+export interface TaskLiveStatus {
+  attempt: number;
+  activeStep?: TaskLiveStep | null;
+  nextSteps: TaskLiveStepPreview[];
+  queue?: TaskLiveQueue | null;
+  latestEventAt?: string | null;
+}
+
 export interface CliOutputLine {
   timestamp: string;
   stream: string;
@@ -1321,8 +1383,6 @@ export interface ProjectRunnerStatus {
   mode: string;
   activeJobId: string | null;
   activeExecution: CliExecution | null;
-  /** Server-authoritative live `3-progress` card count for this project. */
-  runningTaskCount?: number;
   quotaFallbackModel?: string | null;
   quotaFallbackReason?: string | null;
   queuedJobIds: string[];
@@ -1390,11 +1450,6 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
-  /**
-   * Server-authoritative count of live `3-progress` cards across the visible
-   * projects. Includes local execution slots and active fenced remote leases.
-   */
-  runningCount?: number;
 }
 
 /**

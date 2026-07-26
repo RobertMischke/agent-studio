@@ -75,6 +75,7 @@ public sealed class SummaryGenerationService
     public async Task GenerateAsync(TaskInfo info, TerminalRunOutcome? runOutcome, CancellationToken ct = default)
     {
         var key = info.TaskKey;
+        var runIndex = _fileGenerationIndex?.CurrentRunIndex(info.FolderPath);
 
         // Inflight guard: if a previous GenerateAsync for the same job is
         // still inside its Haiku window, dropping this duplicate avoids
@@ -133,7 +134,7 @@ public sealed class SummaryGenerationService
 
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
-            RegisterGeneratedStatus(info, result);
+            RegisterGeneratedStatus(info, result, runIndex);
             RecordBrokenImageReferences(info, summary);
 
             _states[key] = new TaskSummaryState
@@ -341,7 +342,7 @@ public sealed class SummaryGenerationService
         }
     }
 
-    private void RegisterGeneratedStatus(TaskInfo info, HaikuSummaryResult result)
+    private void RegisterGeneratedStatus(TaskInfo info, HaikuSummaryResult result, int? runIndex)
     {
         if (_fileGenerationIndex == null) return;
         try
@@ -362,6 +363,7 @@ public sealed class SummaryGenerationService
                 StartedAt = result.StartedAt,
                 EndedAt = result.EndedAt,
                 DurationMs = result.DurationMs,
+                RunIndex = runIndex,
                 StepId = AdHocUsageSources.SummaryGeneration,
             });
         }

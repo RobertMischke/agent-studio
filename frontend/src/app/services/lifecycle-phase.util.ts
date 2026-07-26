@@ -42,6 +42,7 @@ export const PHASE_LABELS: Readonly<Record<string, string>> = {
   'intake-passed': 'Intake passed',
   'execution-running': 'Execution running',
   'execution-stalled': 'Execution stalled',
+  'quota-waiting': 'Waiting for quota reset',
   'loop-waiting': 'Waiting for loop continuation',
   'steer-pending': 'Waiting for answer',
   'post-processing-running': 'Post processing',

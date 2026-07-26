@@ -1,12 +1,15 @@
 # Task Server deployment and recovery
 
-Status: initial separated-service contract, AGT-2192, 2026-07-17.
+Status: production bootstrap, topology release, and sole v1 ownership contract,
+AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
-The service is the durable task and orchestration authority. Agent Studio and
-Agent Runner are clients. Do not expose this initial service beyond loopback or
-an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.
+The service is the durable task and orchestration authority. Agent Studio,
+OrchestratorApi, and Agent Runner are clients. The Task Server is the only
+owner of its SQLite store and `/api/v1`. Internet-reachable deployments require HTTPS,
+authenticated mode, protected credentials, and the broader AGT-2193 controls
+in [networked Task Server](networked-task-server.md).
 
 ## Package and process boundary
 
@@ -26,22 +29,46 @@ agent libraries, repository worktree code, or host process execution.
 Publish each process independently:
 
 ```bash
-dotnet publish task-server/TaskServer.csproj -c Release -o out/task-server
+dotnet publish task-server/TaskServer.csproj -p:PublishProfile=linux-x64 -o out/task-server
 dotnet publish studio-bff/StudioBff.csproj -c Release -o out/studio-bff
 dotnet publish runner/AgentRunner.csproj -c Release -o out/runner
 ```
 
-For Linux, install `out/task-server/` under `/opt/agent-task-server`, copy
+The Task Server profile emits one self-contained `linux-x64` executable with
+the SQLite native runtime embedded. It needs neither a repository checkout nor
+a .NET installation and reads host-specific bootstrap values only from
+`server.env`.
+
+For Linux, install the release under the versioned
+`/opt/agent-orchestrator/<version>/` directory and point
+`/opt/agent-orchestrator/current` at it. Copy
 [`agent-task-server.service`](../../../deploy/systemd/agent-task-server.service)
-to `/etc/systemd/system/`, and create `/etc/agent-task-server/server.env` from
+and the
+[`backup service`](../../../deploy/systemd/agent-task-server-backup.service)
+and [`timer`](../../../deploy/systemd/agent-task-server-backup.timer) to
+`/etc/systemd/system/`. Create `/etc/agent-orchestrator/server.env` from
 [`agent-task-server.env.example`](../../../deploy/systemd/agent-task-server.env.example).
 The data directory must be owned by the dedicated service account and backed up
 independently of the installation directory.
+
+Create the bootstrap bearer file without putting the secret in shell history:
+
+```bash
+sudo install -d -m 0750 -o root -g agent-orchestrator /etc/agent-orchestrator
+sudo sh -c 'umask 0077; read -r secret; printf "%s\n" "$secret" > /etc/agent-orchestrator/task-server.token'
+sudo chown root:agent-orchestrator /etc/agent-orchestrator/task-server.token
+sudo chmod 0640 /etc/agent-orchestrator/task-server.token
+```
+
+Use a randomly generated value of at least 32 characters and transfer client
+copies through the host administration channel. Never put the value in a
+command line, task, log, or committed file.
 
 The service manager owns process start, stop, restart, and upgrade:
 
 ```bash
 sudo systemctl enable --now agent-task-server
+sudo systemctl enable --now agent-task-server-backup.timer
 sudo systemctl status agent-task-server
 sudo systemctl stop agent-task-server
 sudo systemctl restart agent-task-server
@@ -54,18 +81,31 @@ migrations before `/readyz` reports that lease and fence authority is restored.
 
 ## Configuration and health
 
-Configuration uses the `TaskServer` section or standard double-underscore
-environment variables.
+The production binary consumes one host-owned `server.env` bootstrap contract.
+These values are process prerequisites and are not agent-editable operational
+settings.
 
 | Setting | Meaning | Default |
 |---|---|---|
-| `TaskServer:DataDirectory` | Private database, backups, and migration evidence root | `data` beside the installed service |
-| `TaskServer:ListenUrl` | Loopback listener when `ASPNETCORE_URLS` is absent | `http://127.0.0.1:5071` |
+| `LISTEN_URL` | Kestrel addresses. `AUTH=none` is rejected unless every address is loopback. | `http://127.0.0.1:5071` |
+| `STORE_PATH` | Private database and migration evidence root, outside every version directory | `data` beside the installed service |
+| `BACKUP_PATH` | Verified SQLite backup destination | `<STORE_PATH>/backups` |
+| `AUTH` | `bearer` in production; `none` is loopback-only | `none` |
+| `AUTH_TOKEN_FILE` | Host-owned bearer secret file, minimum 32 characters | Required with `AUTH=bearer` unless `AUTH_TOKEN` is set |
+| `AUTH_TOKEN` | Direct secret alternative, mainly for ephemeral deployments | Unset |
 | `TaskServer:MinimumLeaseSeconds` | Lower clamp for Runner leases | `30` |
 | `TaskServer:MaximumLeaseSeconds` | Upper clamp for Runner leases | `600` |
 | `TaskServer:InvariantReconciliationSeconds` | Interval for Tranche 0 invariant comparison | `30` |
 | `TaskServer:InventoryGraceSeconds` | Minimum age before inventory mismatches are actionable | `120` |
+| `TaskServer:MaximumEventPayloadBytes` | Hard UTF-8 size limit for one typed event payload | `262144` |
+| `TaskServer:RequireAuthentication` | Require distinct Studio and Runner bearer credentials on `/api/v1` | `false` |
+| `TaskServer:StudioBearerToken` | Studio/BFF read and management credential | unset |
+| `TaskServer:RunnerBearerToken` | Runner registration, claim, renew, event, artifact, and completion credential | unset |
 
+- Configure exactly one of `AUTH_TOKEN_FILE` or `AUTH_TOKEN`.
+- `GET /api/v1/protocol` and `POST /api/v1/protocol/compatibility` remain open
+  so a client can negotiate before registration. All other v1 requests require
+  the bearer credential when `AUTH=bearer`.
 - `GET /healthz` proves the process is live.
 - `GET /readyz` succeeds only after schema integrity and durable lease/fence
   authority are restored.
@@ -73,9 +113,42 @@ environment variables.
   data root, mode, and supported protocol range.
 - `GET /api/v1/management/invariants` reports invariant definitions, recent
   violations, and pending idempotent runner actions.
-- `GET /api/v1/protocol` publishes the compatibility range. Runner requests
-  must carry `X-Task-Protocol-Version`. An unsupported or missing version gets
-  HTTP 426 before registration or claim.
+- `GET /api/v1/protocol` publishes the compatibility range. Every versioned
+  resource request must carry `X-Task-Protocol-Version`. An unsupported or
+  missing version gets HTTP 426 with a structured reason before any mutation.
+- `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history?after={cursor}`
+  is the canonical reconnect projection. It includes every run, cursor-ordered
+  typed events after the requested cursor, artifacts, related audit records,
+  and the last returned cursor.
+
+Every release answers `task-server --version` with the release and stamped Git
+SHA. This output is also used by deployment verification:
+
+```text
+task-server 1.0.0+sha.<40-character-commit>
+```
+
+## Sole v1 owner and transition proxy
+
+When OrchestratorApi has `TaskServer:BaseUrl` configured, it maps `/api/v1`
+only as a transparent proxy to that origin and does not map its local
+management v1 routes. `TaskServer:AuthTokenFile` or `TaskServer:AuthToken`
+supplies the proxy's service credential. Without `TaskServer:BaseUrl`, the
+legacy local management route remains available for the interim monolith
+profile. Any AGT-2325 compatibility review routes belong only to that fallback
+profile. They must never be mounted beside the standalone proxy.
+
+The canonical production bootstrap uses one service credential through
+`AUTH=bearer`. The interim compatibility profile may instead set
+`TaskServer:RequireAuthentication` and distinct `StudioBearerToken` and
+`RunnerBearerToken` values. Do not configure both modes. Studio BFF reads
+`TaskServer:AuthTokenFile`, `TaskServer:AuthToken`, or the compatibility
+`TaskServer:BearerToken`. Agent Runner reads its secret from
+`RUNNER_AUTH_TOKEN_FILE` or `RUNNER_AUTH_TOKEN`. A private-CA or rehearsal
+deployment may pin the Task Server leaf certificate by SHA-256 through
+`TaskServer:TlsServerCertificateSha256` on the BFF and
+`RUNNER_TLS_CERTIFICATE_SHA256` on the Runner. Public deployments should use
+the operating-system trust store.
 
 For a zero-argument local profile, set `TASK_SERVER_PROFILE=local-compatibility`.
 The service listens on `127.0.0.1:5031` and uses the current user's application
@@ -155,6 +228,17 @@ project/task/run identities, task state, events, artifact content, audit,
 Runner records, coding and review leases, immutable review subjects, fenced
 reports, and fence counters.
 
+The packaged timer calls the same implementation through the binary:
+
+```bash
+/opt/agent-orchestrator/current/task-server backup --name timer
+```
+
+The command reads the same `server.env`, applies schema migrations
+idempotently, takes and verifies the snapshot, writes the audit record, prints
+the backup result as JSON, and exits. It does not turn live leases into
+`process-unknown`; taking a backup is not a server restart.
+
 Verify a backup without changing data:
 
 ```json
@@ -199,3 +283,24 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+## Release topology rehearsal
+
+The release-blocking harness is intentionally separate from browser E2E. Build
+the deployables once, then run the topology and compatibility gate:
+
+```bash
+dotnet build agent-taskboard.sln
+dotnet test runner.Tests/AgentRunner.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~AgentRunner.Tests.LogShipperCapTests|FullyQualifiedName~AgentRunner.Tests.BoundedOutputBufferTests"
+dotnet test task-server.Tests/TaskServer.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
+  --logger "console;verbosity=normal"
+```
+
+The test owns only its exact child PIDs and temporary directories. It never
+sweeps by process name. Its parent-PID assertions require Task Server, Studio
+BFF, and Runner to be siblings owned by the harness, so stopping Studio cannot
+implicitly stop either service.

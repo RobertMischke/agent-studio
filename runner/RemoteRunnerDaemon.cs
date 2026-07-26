@@ -137,12 +137,38 @@ public sealed class RemoteRunnerDaemon
         var admissionEnabled = gitCapability.CanPush;
         if (!admissionEnabled)
             _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
+        var capabilityGeneration = DateTime.UtcNow.Ticks;
+        await WithServerRetryAsync<object?>(
+            "capability advertisement",
+            async () =>
+            {
+                await _client.AdvertiseCapabilitiesAsync(
+                    RunnerCapabilityProbe.Advertise(_options, gitCapability.CanPush),
+                    null,
+                    capabilityGeneration,
+                    shutdown);
+                return null;
+            },
+            shutdown);
+        if (!gitCapability.CanPush)
+        {
+            await _client.ReportCapabilityFailureAsync(
+                AgentStudio.TaskServer.Contracts.CapabilityProtocol.GitPush,
+                "GitPushUnavailable",
+                gitCapability.Detail ?? "Git push probe failed.",
+                $"startup-git-push:{_options.RunnerId}:{capabilityGeneration}",
+                null,
+                null,
+                null,
+                shutdown);
+        }
 
         var telemetry = new HostTelemetrySampler();
         var loadGate = new RunnerLoadGate(
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         HostTelemetrySample? latestTelemetry = null;
+        var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         HostTelemetrySample? TakeTelemetry()
         {
             try
@@ -171,6 +197,16 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                {
+                    var capabilityTelemetry = TakeTelemetry();
+                    await _client.AdvertiseCapabilitiesAsync(
+                        RunnerCapabilityProbe.Advertise(_options, gitPushReady: true),
+                        RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
+                        ++capabilityGeneration,
+                        shutdown);
+                    nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+                }
                 var claimedAny = false;
                 var inventorySnapshot = inventory.Snapshot();
                 var activeTaskKeys = inventorySnapshot.Processes
@@ -272,7 +308,7 @@ public sealed class RemoteRunnerDaemon
                         .Select(process => process.TaskKey)
                         .Distinct(StringComparer.Ordinal)
                         .ToArray();
-                    var claim = await _client.ClaimAsync(new RunnerClaimRequest(
+                    var claim = await ClaimWithProjectPreflightAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         TakeTelemetry(),
@@ -281,17 +317,19 @@ public sealed class RemoteRunnerDaemon
                         IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}",
                         ActiveTaskKeys: activeTaskKeys,
                         Inventory: inventorySnapshot),
-                    // A claim is an atomic server-side mutation. Once sent, do
-                    // not cancel the HTTP request on SIGTERM: the server may
-                    // already have committed it, leaving the replacement with
-                    // no durable slot evidence. The HttpClient timeout still
-                    // bounds this handoff below systemd's TimeoutStopSec.
-                        CancellationToken.None);
+                        // A claim is an atomic server-side mutation. Once sent,
+                        // do not cancel the HTTP request on SIGTERM.
+                        CancellationToken.None,
+                        shutdown);
                     AcknowledgeInventory(inventory, inventorySnapshot, claim);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)
                         || claim.Lease is null)
+                    {
+                        if (claim.Status is RunnerClaimStatus.PreflightFailed or RunnerClaimStatus.Invalid)
+                            _log($"claim refused status={claim.Status} project={claim.ProjectName ?? "unknown"} reason={claim.Message ?? "no detail"}");
                         break;
+                    }
 
                     var taskRunner = new RemoteTaskRunner(
                         _options,
@@ -389,6 +427,42 @@ public sealed class RemoteRunnerDaemon
                 await Task.Delay(TimeSpan.FromMilliseconds(250));
         }
         return slot;
+    }
+
+    private async Task<RunnerClaimResponse> ClaimWithProjectPreflightAsync(
+        RunnerClaimRequest request,
+        CancellationToken claimCancellation,
+        CancellationToken preflightCancellation)
+    {
+        var claim = await _client.ClaimAsync(request, claimCancellation);
+        if (claim.Status != RunnerClaimStatus.PreflightRequired) return claim;
+        if (string.IsNullOrWhiteSpace(claim.ProjectId)
+            || string.IsNullOrWhiteSpace(claim.RepositoryUrl)
+            || string.IsNullOrWhiteSpace(claim.DefaultBranch)
+            || string.IsNullOrWhiteSpace(claim.RegistrationFingerprint))
+            return claim with
+            {
+                Status = RunnerClaimStatus.Invalid,
+                Message = "Server requested project preflight without project id, repository URL, and registration fingerprint."
+            };
+
+        _log($"project-delivery-preflight-started project={claim.ProjectName ?? claim.ProjectId} projectId={claim.ProjectId}");
+        var result = await GitWorkspace.PreflightProjectAsync(
+            _options, claim.ProjectId, claim.RepositoryUrl, claim.DefaultBranch, _log, preflightCancellation);
+        _log($"project-delivery-preflight-finished project={claim.ProjectName ?? claim.ProjectId} status={(result.Succeeded ? "ready" : "failed")} detail={result.Detail}");
+
+        return await _client.ClaimAsync(request with
+        {
+            Telemetry = null,
+            ProjectPreflight = new RunnerProjectPreflightReport(
+                claim.ProjectId,
+                claim.RegistrationFingerprint,
+                result.Succeeded,
+                result.Detail,
+                DateTime.UtcNow,
+                result.FetchUrl,
+                result.PushUrl),
+        }, claimCancellation);
     }
 
     private static async Task DelayThroughShutdown(TimeSpan delay, CancellationToken shutdown)

@@ -82,7 +82,7 @@ describe('UndoController', () => {
     expect(stack[0].message).toContain('B');
   });
 
-  it('clicking Undo issues a reverse moveJob and shows a Restored success toast (no second undo)', () => {
+  it('clicking Undo issues a reverse moveJob and shows a Restored success toast (no second undo)', async () => {
     const moveSpy = vi.spyOn(jobService, 'moveJob').mockReturnValue(of({}));
     vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue(null);
     vi.spyOn(jobService, 'refresh').mockImplementation(() => undefined);
@@ -99,6 +99,7 @@ describe('UndoController', () => {
 
     const action = notifications.notifications()[0].actions![0];
     action.callback();
+    await vi.waitFor(() => expect(moveSpy).toHaveBeenCalled());
 
     expect(moveSpy).toHaveBeenCalledWith('t', '5-human-review', '/wp', 3);
     // Need to dismiss the original (caller of action does that), then
@@ -112,7 +113,7 @@ describe('UndoController', () => {
     void fresh;
   });
 
-  it('surfaces the error dialog when the reverse call fails', () => {
+  it('surfaces the error dialog when the reverse call fails', async () => {
     const err = { status: 500 };
     vi.spyOn(jobService, 'moveJob').mockReturnValue(throwError(() => err));
     vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue(null);
@@ -126,6 +127,7 @@ describe('UndoController', () => {
       prevState: '2-ready', prevIndex: 0,
     });
     notifications.notifications()[0].actions![0].callback();
+    await vi.waitFor(() => expect(errorDialogShow).toHaveBeenCalled());
 
     expect(errorDialogShow).toHaveBeenCalled();
   });

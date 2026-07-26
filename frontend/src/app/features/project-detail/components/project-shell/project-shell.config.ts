@@ -14,6 +14,7 @@ export type ProjectRailKey =
   | 'deployment'
   | 'project-urls'
   | 'git'
+  | 'integration'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
@@ -98,6 +99,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'No deployment history is available for this project.',
     icon: 'â‡§',
     railIcon: 'activity',
+  },
+  {
+    key: 'integration',
+    group: 'insight',
+    label: 'Integration',
+    panelTitle: 'Integration',
+    description: 'Accepted-card merge queue, curated publisher merges, and the develop-to-main promotion delta',
+    empty: 'No integration state is available for this project.',
+    icon: '⇉',
+    railIcon: 'diff',
   },
   {
     key: 'git',

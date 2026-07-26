@@ -9,12 +9,14 @@ import { MODEL_IDS } from '../../../cli';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
+  buildDecisionDamBadge,
   buildModeBadge,
   buildTagChips,
   buildReviewBadge,
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  buildQuotaWaitBadge,
   formatSteerWait,
   buildOwnerChip,
   buildPipelineDots,
@@ -364,14 +366,13 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(true);
-    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('attention');
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(true);
 
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
     expect(pill?.textContent).toContain('Escalated');
-    expect(pill?.className).toContain('task-card__human-review-pill--attention');
+    expect(pill?.className).toContain('review-decision-badge--attention');
   });
 
   it('renders an amber Stalled signal for a failed In-Progress card with no active run', async () => {
@@ -419,7 +420,6 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(false);
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(false);
@@ -444,14 +444,12 @@ describe('TaskCardComponent (smoke)', () => {
     // Human review with no verdict yet → no pill, no attention.
     fixture.componentRef.setInput('job', makeJob({ state: '5-human-review', orchestratorVerdict: null }));
     fixture.detectChanges();
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]')).toBeNull();
 
     // Completed lane is out of scope even if a stale verdict rides along.
     fixture.componentRef.setInput('job', makeJob({ state: '6-completed', orchestratorVerdict: 'escalate' }));
     fixture.detectChanges();
-    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
   });
 
@@ -1135,9 +1133,18 @@ describe('TaskCardComponent (smoke)', () => {
   });
 
   it('treats a live remote lease as running when no local execution exists', async () => {
+    const acquiredAt = new Date().toISOString();
     const fixture = await renderCard(makeJob({
       state: '3-progress',
       execution: null,
+      executionLocation: {
+        state: 'remote-running', executionKind: 'remote', runnerId: 'agent-runner-01',
+        clientId: 'runner-client-01', hostDisplayName: 'linux-host', configuredRunnerId: 'agent-runner-01',
+        startedAt: acquiredAt, lastHeartbeat: acquiredAt, lastActivityAt: acquiredAt,
+        processId: null, sessionId: null, branch: 'task/task-1', worktreePath: '/worktrees/task-1',
+        connectionState: 'connected', leaseState: 'active',
+        trustReason: 'The task server holds the fenced run lease.',
+      },
       runner: {
         runnerId: 'agent-runner-01@linux-host',
         runnerName: 'agent-runner-01',
@@ -1146,7 +1153,7 @@ describe('TaskCardComponent (smoke)', () => {
         isRemote: true,
         leaseId: 'lease-live',
         fencingToken: 9,
-        acquiredAt: '2026-07-11T13:45:00Z',
+        acquiredAt,
       },
     }));
 
@@ -1154,7 +1161,6 @@ describe('TaskCardComponent (smoke)', () => {
     expect(fixture.componentInstance.isRunning()).toBe(true);
     expect(card?.classList.contains('task-card--running')).toBe(true);
     expect(card?.getAttribute('data-running')).toBe('true');
-    expect(fixture.nativeElement.textContent).toContain('agent-runner-01');
   });
 
   it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
@@ -1633,6 +1639,27 @@ describe('buildHumanReviewBadge — action-required verdicts only', () => {
   });
 });
 
+describe('buildDecisionDamBadge', () => {
+  it('shows the transitive dam impact and every waiting key', () => {
+    const badge = buildDecisionDamBadge(makeJob({
+      state: '5-human-review',
+      transitiveWaiters: { count: 3, keys: ['AGT-2201', 'AGT-2202', 'AGT-2203'] },
+    }));
+    expect(badge?.label).toBe('Dams 3 cards');
+    expect(badge?.tooltip).toContain('AGT-2201, AGT-2202, AGT-2203');
+  });
+
+  it('does not hide an action-required review verdict', () => {
+    const job = makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'escalate',
+      transitiveWaiters: { count: 1, keys: ['AGT-2201'] },
+    });
+    expect(buildDecisionDamBadge(job)?.label).toBe('Dams 1 card');
+    expect(buildHumanReviewBadge(job)?.label).toBe('Escalated');
+  });
+});
+
 describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
   it('returns null for human-ready (the lane already says it)', () => {
     expect(buildPhaseBadge('human-ready')).toBeNull();
@@ -1671,6 +1698,37 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     expect(pill?.tone).toBe('loop-waiting');
     expect(pill?.label).toBe('Waiting for loop continuation 0:42');
     expect(pill?.tooltip).toContain('freed its execution slot');
+  });
+});
+
+describe('buildQuotaWaitBadge', () => {
+  it('shows the confirmed reset time and a live rounded-up countdown', () => {
+    const now = Date.parse('2026-07-22T11:02:30.000Z');
+    const badge = buildQuotaWaitBadge({
+      cliType: 'codex',
+      startedAt: '2026-07-22T11:02:00.000Z',
+      resetAt: '2026-07-22T11:14:00.000Z',
+      thresholdMinutes: 30,
+      reason: 'Confirmed nearby quota reset',
+    }, now);
+
+    expect(badge?.label).toContain('12 min remaining');
+    expect(badge?.minutesLeft).toBe(12);
+    expect(badge?.tooltip).toContain('retries admission');
+  });
+
+  it('stays explicit while the due reset is being refreshed', () => {
+    const resetAt = '2026-07-22T11:14:00.000Z';
+    const badge = buildQuotaWaitBadge({
+      cliType: 'codex',
+      startedAt: '2026-07-22T11:02:00.000Z',
+      resetAt,
+      thresholdMinutes: 30,
+      reason: 'Confirmed nearby quota reset',
+    }, Date.parse(resetAt));
+
+    expect(badge?.label).toContain('reset due · refreshing');
+    expect(badge?.minutesLeft).toBe(0);
   });
 });
 

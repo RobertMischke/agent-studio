@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "pipeline-time-economy",
+  "title": "Pipeline Time Economy: where time and tokens actually go",
+  "summary": "A whole-pipeline time and cost analysis over 847 tasks: compute vs. waiting vs. redo, the retry tax and its causes, and why tokens dwarf compute. Separates hard evidence from derived interpretation.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-25T00:00:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": ["AGT-2293", "AGT-2200"]
+}

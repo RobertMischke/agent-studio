@@ -108,6 +108,13 @@ public sealed class AutoPushStrategyTests : IDisposable
     {
         InstallSlowPushHook(3);
         WriteJobWithoutCommit(TaskStates.Progress, "immediate-task");
+        var sessionLogs = Path.Combine(_watchPath, TaskStates.Progress, "immediate-task", "logs");
+        Directory.CreateDirectory(sessionLogs);
+        File.WriteAllText(Path.Combine(sessionLogs, "session-events.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new SessionEvent
+            {
+                Ts = DateTime.UtcNow.AddSeconds(-1), Kind = "start", Cli = "codex"
+            }) + Environment.NewLine);
         File.WriteAllText(Path.Combine(_repoRoot, "immediate.txt"), "push me\n");
         var queue = new CompletedPushQueue();
         var deps = BuildDeps(queue);
@@ -228,7 +235,8 @@ public sealed class AutoPushStrategyTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: null, pushQueue: pushQueue);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
         return new Deps(config, scanner, settings, transitions);
     }
 

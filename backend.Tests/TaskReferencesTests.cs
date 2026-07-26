@@ -221,6 +221,32 @@ public class TaskReferencesTests : IDisposable
         Assert.Equal(new[] { "ATP-2" }, index.DependsOnGraph["ATP-1"].ToArray());
     }
 
+    [Fact]
+    public void Index_TransitiveWaiters_DeduplicatesDiamonds_StopsAtFulfilledNodes_AndSurvivesCycles()
+    {
+        var tasks = new[]
+        {
+            Task("decision", "ATP-1", state: TaskStates.HumanReview),
+            Task("direct", "ATP-2", deps: new[] { "ATP-1" }, state: TaskStates.Ready),
+            Task("left", "ATP-3", deps: new[] { "ATP-2" }, state: TaskStates.Ready),
+            Task("diamond", "ATP-4", deps: new[] { "ATP-2", "ATP-3" }, state: TaskStates.Ready),
+            Task("cycle-a", "ATP-5", deps: new[] { "ATP-4", "ATP-6" }, state: TaskStates.Ready),
+            Task("cycle-b", "ATP-6", deps: new[] { "ATP-5" }, state: TaskStates.Ready),
+            Task("done", "ATP-7", deps: new[] { "ATP-1" }, state: TaskStates.Completed),
+            Task("behind-done", "ATP-8", deps: new[] { "ATP-7" }, state: TaskStates.Ready),
+        };
+
+        var impact = TaskReferenceIndex.Build(tasks).FindTransitiveWaiters("ATP-1");
+
+        Assert.Equal(5, impact.Count);
+        Assert.Equal(new[] { "ATP-2", "ATP-3", "ATP-4", "ATP-5", "ATP-6" }, impact.Keys);
+
+        var visibleImpact = TaskReferenceIndex.Build(tasks).FindTransitiveWaiters(
+            "ATP-1",
+            new HashSet<string>(new[] { "ATP-4", "ATP-5" }, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(new[] { "ATP-4", "ATP-5" }, visibleImpact.Keys);
+    }
+
     // ---- on-disk round-trip --------------------------------------------
 
     [Fact]
@@ -292,12 +318,17 @@ public class TaskReferencesTests : IDisposable
         return dict;
     }
 
-    private static TaskInfo Task(string id, string? key, string[]? deps = null, string[]? related = null) => new()
+    private static TaskInfo Task(
+        string id,
+        string? key,
+        string[]? deps = null,
+        string[]? related = null,
+        string state = TaskStates.Backlog) => new()
     {
         Id = id,
         Key = key,
         Title = id.ToUpperInvariant(),
-        State = TaskStates.Backlog,
+        State = state,
         WatchPath = "/ws/demo",
         References = new TaskReferences
         {

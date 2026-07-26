@@ -100,6 +100,14 @@ public static class ReviewDecisionLog
 
     public static void Append(string workspaceRoot, ReviewDecisionRecord record)
     {
+        if (record.Kind == ReviewDecisionKind.Escalate)
+        {
+            record = record with
+            {
+                Reason = HumanReviewEscalation.EnsureFormattedReason(record.Reason),
+            };
+        }
+
         var dir = DecisionsDir(workspaceRoot);
         Directory.CreateDirectory(dir);
         var path = DecisionsFile(workspaceRoot, record.Project);

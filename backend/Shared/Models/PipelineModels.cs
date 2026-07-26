@@ -195,6 +195,13 @@ public sealed record PipelineStepExecution
     public string StepId { get; init; } = string.Empty;
     public StepKind Kind { get; init; }
     /// <summary>
+    /// Pipeline attempt epoch that owns this step state. Writers stamp the
+    /// current attempt when the update is accepted. A late update from an
+    /// older attempt is fenced out before it can replace the fresh row.
+    /// Null is accepted only for legacy records read from disk.
+    /// </summary>
+    public int? Attempt { get; init; }
+    /// <summary>
     /// Model actually used. May differ from <see cref="PipelineStep.Model"/>
     /// when the runtime fell back to the project / client default.
     /// </summary>
