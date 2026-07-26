@@ -231,6 +231,18 @@ state.
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
+- `DispatchQueueDepthWatcher` keeps the Remote claimable Ready depth aligned
+  with fresh runner-reported host slots. It shares the non-repository
+  eligibility predicate with `/api/runner/claim`, promotes dependency-ready
+  Backlog cards first, and queues at most one undecomposed Epic only after
+  ordinary Backlog work is exhausted or blocked. Every promotion emits
+  `auto_dispatch_queued` plus a `queue-depth` orchestrator-feed action. The
+  per-interval cap, full-host guard, per-card `autoDispatch: false`, manual
+  dispatch tags, and configured task/project exclusions prevent flooding and
+  protect sight-review work. AGT-2321 reconciliation remains responsible for
+  process, lease, worktree, and load invariants; this watcher only consumes its
+  runner slot facts and does not repair attempt authority.
+
 - Side-sheet project and task chat follows the same remote pickup ownership.
   A remote-assigned project's chat work is claimable only by its assigned
   Runner and executes inside a host checkout from the same project git cache as

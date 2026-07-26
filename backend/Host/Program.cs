@@ -567,6 +567,8 @@ builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
+builder.Services.AddSingleton<DispatchQueueDepthWatcher>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DispatchQueueDepthWatcher>());
 builder.Services.AddSingleton<GitCleanupService>();
 // Slice P (ASS-1663): build-profile onboarding validation dry-run.
 builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();

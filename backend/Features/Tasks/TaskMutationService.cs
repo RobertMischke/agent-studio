@@ -395,6 +395,17 @@ public class TaskMutationService
         return Updated();
     }
 
+    public bool SetJobAutoDispatch(string jobId, bool? autoDispatch, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        if (autoDispatch is null)
+            TaskJsonFile.RemoveField(info.FolderPath, "autoDispatch", _logger);
+        else
+            TaskJsonFile.UpdateField(info.FolderPath, "autoDispatch", autoDispatch.Value, _logger);
+        return Updated();
+    }
+
     /// <summary>
     /// Replace-all write of the per-job tag id array. Tag ids are normalized
     /// via <see cref="NormalizeTagId"/> (lowercase, <c>[a-z0-9-]</c>, max 32
@@ -726,6 +737,8 @@ public class TaskMutationService
         // (research on, else off) - see planning-research-task-kinds note.
         var effectiveMode = TaskModes.Normalize(req.Mode);
         jobJson["mode"] = effectiveMode;
+        if (req.AutoDispatch is not null)
+            jobJson["autoDispatch"] = req.AutoDispatch.Value;
         jobJson["allowWebAccess"] = req.AllowWebAccess ?? (effectiveMode == TaskModes.Research);
         if (req.Fixture)
             jobJson["fixture"] = true;

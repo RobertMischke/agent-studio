@@ -342,18 +342,12 @@ public static class LeaseEndpoints
 
                 var eligible = liveSnapshot
                     .Where(t => t.State == TaskStates.Ready)
-                    .Where(t =>
-                    {
-                        var project = settings.Get(t.ProjectName);
-                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
-                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
-                               && AgentTypes.IsAutoPickupEligible(t.Agent)
-                               && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
-                               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
-                               && (!project.IntakeEnabled.GetValueOrDefault()
-                                   || t.Phase == LifecyclePhases.IntakePassed)
-                               && !waitsOn.EvaluateWaitsOn(t).Blocked;
-                    })
+                    .Where(t => RemoteDispatchEligibility.IsAssignedAndRunnable(
+                        t,
+                        settings.Get(t.ProjectName),
+                        req.RunnerId,
+                        req.RunnerName,
+                        waitsOn))
                     .OrderBy(t => t.Order)
                     .ThenBy(t => t.CreatedAt);
 

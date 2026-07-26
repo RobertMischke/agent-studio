@@ -81,6 +81,13 @@ public record TaskInfo
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
+    /// Optional per-card queue-depth automation flag. False keeps the card out
+    /// of automatic Backlog-to-Ready promotion and automatic Epic
+    /// decomposition. Null or true allows the normal queue-depth policy to
+    /// decide. Manual lane moves and manual starts are unaffected.
+    /// </summary>
+    public bool? AutoDispatch { get; init; }
+    /// <summary>
     /// Whether the agent may use web search / fetch for this run. Default off for
     /// coding/planning, on for research (set at create time). See decision 2 in
     /// docs/concepts/planning-research-task-kinds-2026-05.md.

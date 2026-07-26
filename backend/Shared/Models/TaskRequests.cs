@@ -271,6 +271,11 @@ public record CreateTaskRequest
     public string? EpicId { get; init; }
     /// <summary>Execution mode: <c>coding</c> (default) | <c>planning</c> | <c>research</c> | <c>concept</c>. See <see cref="TaskModes"/>.</summary>
     public string? Mode { get; init; }
+    /// <summary>
+    /// False prevents the queue-depth watcher from automatically promoting
+    /// this card or starting its Epic decomposition. Null uses normal policy.
+    /// </summary>
+    public bool? AutoDispatch { get; init; }
     /// <summary>Allow web search/fetch for this run. When null, defaults by mode (research = on, else off).</summary>
     public bool? AllowWebAccess { get; init; }
     /// <summary>
@@ -408,6 +413,15 @@ public record SetJobTagsRequest
 public record SetJobTaskTypeRequest
 {
     public string TaskType { get; init; } = TaskTypes.Chore;
+}
+
+/// <summary>
+/// Body for <c>PUT /api/tasks/{id}/auto-dispatch</c>. False blocks automatic
+/// Backlog promotion and Epic decomposition; null restores inherited policy.
+/// </summary>
+public record SetJobAutoDispatchRequest
+{
+    public bool? AutoDispatch { get; init; }
 }
 
 public record ReorderRequest

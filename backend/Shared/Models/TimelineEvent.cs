@@ -100,6 +100,12 @@ public static class TimelineEventKinds
     /// </summary>
     public const string RunnerSlotAdmission = "runner_slot_admission";
     /// <summary>
+    /// The queue-depth watcher promoted Backlog work or admitted an Epic
+    /// decomposition because claimable Ready depth fell below host capacity.
+    /// Details carry depth, slot occupancy, source, and the interval cap.
+    /// </summary>
+    public const string AutoDispatchQueued = "auto_dispatch_queued";
+    /// <summary>
     /// ADR-0052 multi-system follow-up: the Task Server granted, rejected, or
     /// released the fenced integration lease that serializes direct merges into
     /// a project's integration branch across runner machines.

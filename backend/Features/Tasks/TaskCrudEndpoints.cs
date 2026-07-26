@@ -807,6 +807,13 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
+        group.MapPut("/{jobId}/auto-dispatch", (string jobId, string? project, string? watchPath, SetJobAutoDispatchRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var success = mutations.SetJobAutoDispatch(jobId, req?.AutoDispatch, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
         // Replace-all: the request's Tags array becomes the new full set on
         // the job. Empty list clears tags. Unknown ids are accepted (the
         // registry may evolve out from under a job); ghost rendering is the
