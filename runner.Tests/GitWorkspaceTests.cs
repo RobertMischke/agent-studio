@@ -273,7 +273,6 @@ public sealed class GitWorkspaceTests : IDisposable
         await workspace.PrepareAsync(CancellationToken.None);
         await CommitFileAsync(workspace.RepoPath, "result.txt", "wrong destination", "valuable result");
         var localHead = (await GitAsync(workspace.RepoPath, "rev-parse", "HEAD")).StdOut;
-        await GitAsync(workspace.SharedRepoPath, "config", "--replace-all", "remote.origin.url", wrongOrigin);
         await GitAsync(workspace.SharedRepoPath, "config", "--replace-all", "remote.origin.pushurl", wrongOrigin);
 
         var error = await Assert.ThrowsAsync<WorktreeSalvageException>(
@@ -282,6 +281,10 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.Equal(workspace.RepoPath, error.WorktreePath);
         Assert.Equal("runner/runner-test/QS-30", error.Branch);
         Assert.Equal(localHead, error.LocalCommitSha);
+        Assert.Contains(
+            "registered project repository",
+            error.InnerException?.Message,
+            StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(workspace.RepoPath));
         Assert.Equal(localHead, (await GitAsync(wrongOrigin, "rev-parse", $"refs/heads/{error.Branch}")).StdOut);
         var expectedRepoRef = await RunGitAsync(
@@ -290,7 +293,7 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
-    public async Task Correct_push_records_registered_repo_ref_and_commit_proof()
+    public async Task Correct_push_with_missing_sentinel_builds_verified_out_of_band_completion()
     {
         await SeedOriginAsync();
         var workspace = CreateProjectWorkspace(_origin);
@@ -306,6 +309,15 @@ public sealed class GitWorkspaceTests : IDisposable
                 "refs/heads/runner/runner-test/QS-30",
                 localHead),
             result.DeliveryProof);
+        var request = RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            new RunOutcome(RunOutcomeKind.Unknown, "terminal sentinel missing"),
+            result,
+            "runner-test");
+        Assert.NotNull(request);
+        Assert.Contains(localHead, request!.Summary);
+        Assert.Contains(
+            request.Deliverables!,
+            item => item.Path == $"refs/heads/runner/runner-test/QS-30@{localHead}");
     }
 
     [Fact]

@@ -653,7 +653,8 @@ public sealed class GitWorkspace
         var published = await RemoteBranchHeadAsync(branch, ct);
         if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
-                $"origin/{branch} resolved to '{published ?? "missing"}' after push, expected '{expectedHead}'.");
+                $"Registered project repository ref 'refs/heads/{branch}' resolved to " +
+                $"'{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
     }
 

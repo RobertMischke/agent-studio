@@ -663,7 +663,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
-    public async Task Fenced_worktree_cleanup_failure_routes_to_human_review_with_durable_gate_evidence()
+    public async Task Fenced_worktree_delivery_failure_routes_to_escalated_error_with_recovery_coordinates()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Remote cleanup failure", "Prompt.");
 
@@ -676,7 +676,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
         Assert.True(lease.Granted);
 
-        const string gate = "worktree-blocked: unsecured worktree on runner-host: /runner/worktrees/AGT-100";
+        const string gate =
+            "worktree-blocked: host=runner-host; worktree=/runner/worktrees/AGT-100; " +
+            "branch=runner/runner-host/AGT-100; failure=registered repository ref missing. " +
+            "Recovery recipe: publish the retained HEAD to the registered repository, then requeue.";
         var completion = await client.CompleteRunAsync(new RRemoteComplete(
             TaskKey,
             lease.Lease!.LeaseId,
@@ -691,7 +694,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         Assert.Equal(TaskStates.Escalated, completion!.TargetState);
         var moved = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
-        Assert.Contains(gate, File.ReadAllText(Path.Combine(moved, "orchestrator-follow-up.md")));
+        var followUp = File.ReadAllText(Path.Combine(moved, "orchestrator-follow-up.md"));
+        Assert.Contains(gate, followUp);
+        Assert.Contains("host=runner-host", followUp);
+        Assert.Contains("worktree=/runner/worktrees/AGT-100", followUp);
+        Assert.Contains("branch=runner/runner-host/AGT-100", followUp);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)));
         var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
             $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
         Assert.Equal(AttemptLifecycleState.Failed, projection!.CurrentRunAttempt!.State);
