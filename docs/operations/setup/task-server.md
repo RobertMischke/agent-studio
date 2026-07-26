@@ -110,7 +110,10 @@ settings.
 - `GET /readyz` succeeds only after schema integrity and durable lease/fence
   authority are restored.
 - `GET /api/v1/management/status` reports server identity, version, schema,
-  data root, mode, and supported protocol range.
+  data root, mode, and supported protocol range. In the local Studio
+  compatibility profile, the loopback `local-default` operator can use the
+  management plane without creating a human account. Networked Studio
+  deployments require a signed-in owner or operator.
 - `GET /api/v1/management/invariants` reports invariant definitions, recent
   violations, and pending idempotent runner actions.
 - `GET /api/v1/protocol` publishes the compatibility range. Every versioned

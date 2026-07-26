@@ -5,6 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskServerPanelComponent } from './task-server-panel';
+import { AuthSessionState } from '../../../../services/auth.service';
 
 /**
  * Render-path test: the panel loads live management status and renders the
@@ -40,6 +41,41 @@ describe('TaskServerPanelComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     return fixture;
+  }
+
+  async function mountUnavailableNetworked() {
+    await TestBed.configureTestingModule({
+      imports: [TaskServerPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const auth = TestBed.inject(AuthSessionState);
+    auth.status.set({
+      profile: 'networked',
+      bootstrapRequired: false,
+      authenticated: true,
+      user: {
+        id: 'usr_owner', username: 'owner', displayName: 'Owner', role: 'owner',
+        projects: [], disabled: false, mustChangePassword: false,
+      },
+    });
+    const fixture = TestBed.createComponent(TaskServerPanelComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/management/status').flush(
+      {
+        error: 'authentication-required',
+        message: 'Sign in with an owner or operator account to manage the Task Server.',
+        loginUrl: '/api/auth/login',
+      },
+      { status: 401, statusText: 'Unauthorized' },
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, auth };
   }
 
   it('mounts, loads the status, and renders every block', async () => {
@@ -95,6 +131,21 @@ describe('TaskServerPanelComponent', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('[data-testid="task-server-result-archive-sweep"]')).toBeTruthy();
+
+    fixture.destroy();
+  });
+
+  it('renders the networked authentication reason and a sign-in entry', async () => {
+    const { fixture, auth } = await mountUnavailableNetworked();
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('[data-testid="task-server-unavailable"]')?.textContent)
+      .toContain('Sign in with an owner or operator account');
+    const signIn = el.querySelector('[data-testid="task-server-sign-in"]') as HTMLButtonElement;
+    expect(signIn).toBeTruthy();
+
+    signIn.click();
+    expect(auth.studioAllowed()).toBe(false);
 
     fixture.destroy();
   });

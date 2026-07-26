@@ -8,13 +8,9 @@ public static class AccessSecurityEndpoints
 
         auth.MapGet("/status", (HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
         {
-            var principal = context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
-                            ?? store.AuthenticateSession(
-                                context.Request.Cookies[AccessSecurityStore.SessionCookieName]
-                                ?? context.Request.Cookies[AccessSecurityStore.InsecureSessionCookieName],
-                                touch: false);
+            var principal = FindHuman(context, store, touch: false);
             return Results.Ok(new AuthStatusResponse(
-                ActiveProfile(configuration),
+                SecurityProfiles.ActiveProfile(configuration),
                 store.BootstrapRequired,
                 principal is not null,
                 principal is null ? null : ToResponse(principal.User)));
@@ -25,7 +21,7 @@ public static class AccessSecurityEndpoints
             {
                 var created = store.Bootstrap(request);
                 SetSessionCookies(context, created.SessionToken, created.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(created.User), created.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(created.User), created.CsrfToken));
             }));
 
         auth.MapPost("/login", (LoginRequest request, HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
@@ -34,18 +30,28 @@ public static class AccessSecurityEndpoints
                 var key = $"{(request.Username ?? string.Empty).Trim().ToLowerInvariant()}|{context.Connection.RemoteIpAddress}";
                 var result = store.Login(request.Username ?? string.Empty, request.Password ?? string.Empty, key);
                 SetSessionCookies(context, result.SessionToken, result.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(result.User), result.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(result.User), result.CsrfToken));
             }));
 
-        // Keep these checks in the handlers as well as the networked middleware.
         // The local profile treats X-Client-Id as attribution only, so it must not
         // become an alternate credential for any auth administration endpoint.
+        // A missing human session yields a graceful 401 (never a 500) so the
+        // local profile can present the sign-in affordance instead of an error.
         auth.MapGet("/session", (HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
-            Execute(() =>
-            {
-                var principal = RequireHuman(context, store);
-                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(principal.User)));
-            }));
+        {
+            var principal = FindHuman(context, store);
+            return principal is null
+                ? Results.Json(
+                    new
+                    {
+                        error = "authentication-required",
+                        message = "Sign in to establish a human Studio session.",
+                        loginUrl = "/api/auth/login"
+                    },
+                    statusCode: StatusCodes.Status401Unauthorized)
+                : Results.Ok(new AuthStatusResponse(
+                    SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(principal.User)));
+        });
 
         auth.MapPost("/logout", (HttpContext context, AccessSecurityStore store) =>
             Execute(() =>
@@ -161,13 +167,6 @@ public static class AccessSecurityEndpoints
         catch (SecurityOperationException ex) { return Results.Json(new { error = ex.Code, message = ex.Message }, statusCode: ex.Status); }
     }
 
-    // The active security profile the client-facing AuthStatus must reflect. Login,
-    // bootstrap, and session previously hardcoded "networked"; that mislabelled the
-    // status shape when those endpoints were exercised under the local profile, so
-    // the reported profile is now derived from configuration like /status already is.
-    private static string ActiveProfile(IConfiguration configuration)
-        => SecurityProfiles.IsNetworked(configuration) ? SecurityProfiles.Networked : SecurityProfiles.Local;
-
     private static HumanPrincipal RequireHuman(HttpContext context, AccessSecurityStore store)
         => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
            ?? store.AuthenticateSession(
@@ -181,6 +180,15 @@ public static class AccessSecurityEndpoints
         if (principal.User.Role != StudioRoles.Owner)
             throw new SecurityOperationException(403, "owner-required", "Owner role is required.");
         return principal;
+    }
+
+    private static HumanPrincipal? FindHuman(HttpContext context, AccessSecurityStore store, bool touch = true)
+    {
+        if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal principal)
+            return principal;
+        var token = context.Request.Cookies[AccessSecurityStore.SessionCookieName]
+                    ?? context.Request.Cookies[AccessSecurityStore.InsecureSessionCookieName];
+        return store.AuthenticateSession(token, touch);
     }
 
     private static AuthUserResponse ToResponse(StudioUser user)

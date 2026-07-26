@@ -18,7 +18,24 @@
     </button>
   </header>
 
-  @if (error(); as err) {
+  @if (unavailable(); as unavailableState) {
+    <section class="ts__unavailable"
+             role="alert"
+             data-testid="task-server-unavailable">
+      <div>
+        <h3 class="ts__unavailable-title">Management unavailable</h3>
+        <p class="ts__unavailable-reason">{{ unavailableState.reason }}</p>
+      </div>
+      @if (unavailableState.signInRequired) {
+        <button class="ts__sign-in"
+                type="button"
+                data-testid="task-server-sign-in"
+                (click)="requestSignIn()">
+          Sign in
+        </button>
+      }
+    </section>
+  } @else if (error(); as err) {
     <div class="ts__error" data-testid="task-server-error">{{ err }}</div>
   }
 
@@ -159,7 +176,7 @@
         [busyAction]="busyAction()"
         (run)="onRun($event)" />
     </section>
-  } @else if (!loading()) {
+  } @else if (!loading() && !unavailable()) {
     <div class="ts__empty" data-testid="task-server-empty">
       No task-server status available.
     </div>

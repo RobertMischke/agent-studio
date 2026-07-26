@@ -163,6 +163,34 @@ public sealed class LocalProfileAuthEndpointTests : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    [Fact]
+    public async Task Local_profile_management_accepts_the_loopback_default_operator_without_a_human_session()
+    {
+        using var factory = BuildFactory();
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        browser.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        var response = await browser.GetAsync("/api/v1/management/status");
+
+        response.EnsureSuccessStatusCode();
+        var status = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("healthy", status.GetProperty("health").GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task Session_without_a_session_returns_unauthorized_instead_of_an_unhandled_error()
+    {
+        using var factory = BuildFactory();
+        using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        browser.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        var response = await browser.GetAsync("/api/auth/session");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("authentication-required", body.GetProperty("error").GetString());
+    }
+
     private WebApplicationFactory<Program> BuildFactory() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Test");

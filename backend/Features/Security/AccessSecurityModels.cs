@@ -9,6 +9,9 @@ public static class SecurityProfiles
 
     public static bool IsNetworked(IConfiguration configuration)
         => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
+
+    public static string ActiveProfile(IConfiguration configuration)
+        => IsNetworked(configuration) ? Networked : Local;
 }
 
 public static class StudioRoles

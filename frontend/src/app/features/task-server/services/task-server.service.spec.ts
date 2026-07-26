@@ -4,6 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TaskServerService } from './task-server.service';
+import { AuthSessionState } from '../../../services/auth.service';
 
 const STATUS = {
   server: { id: 'ts-1', url: 'https://tasks.example', version: '1.0.0', protocolMinimum: '1.0', protocolMaximum: '1.0', uptimeSeconds: 60 },
@@ -33,6 +34,39 @@ describe('TaskServerService', () => {
     await pending;
     expect(service.status()?.connection.id).toBe('ts-1');
     expect(service.status()?.clients.map(x => x.id)).toEqual(['runner-1']);
+  });
+
+  it('explains a missing networked session and offers the login entry', async () => {
+    const auth = TestBed.inject(AuthSessionState);
+    auth.status.set({
+      profile: 'networked',
+      bootstrapRequired: false,
+      authenticated: true,
+      user: {
+        id: 'usr_owner', username: 'owner', displayName: 'Owner', role: 'owner',
+        projects: [], disabled: false, mustChangePassword: false,
+      },
+    });
+
+    const pending = service.reload();
+    http.expectOne('/api/v1/management/status').flush(
+      {
+        error: 'authentication-required',
+        message: 'Sign in with an owner or operator account to manage the Task Server.',
+        loginUrl: '/api/auth/login',
+      },
+      { status: 401, statusText: 'Unauthorized' },
+    );
+    await pending;
+
+    expect(service.unavailable()).toEqual({
+      reason: 'Sign in with an owner or operator account to manage the Task Server.',
+      signInRequired: true,
+    });
+    expect(service.error()).toContain('Sign in');
+
+    service.requestSignIn();
+    expect(auth.studioAllowed()).toBe(false);
   });
 
   it('previews a command and records its durable command id', async () => {
