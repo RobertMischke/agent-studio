@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Das Epic als lebendes Dokument — Planung | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --blue: #2a78d6; --ok: #1f8a70; --bad: #c93736; --warn: #9a6b00; --violet:#7a5bd0;
+    --blue-soft: #eaf1fb; --ok-soft: #e7f4ef; --warn-soft: #f8f0dd; --violet-soft:#efeafb; --amber-soft:#f6efdc;
+    --lane: #8a8983;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --blue: #3987e5; --ok: #46b89a; --bad: #e66767; --warn: #d9a63f; --violet:#a58be6;
+      --blue-soft: #1e2a3a; --ok-soft: #1f2f2a; --warn-soft: #33301e; --violet-soft:#26203a; --amber-soft:#332d1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 90px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.65 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1060px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 46px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.16; margin: 0 0 14px; }
+  .lede { font-size: 18.5px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 25px; margin: 54px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 28px 0 4px; }
+  p { max-width: 74ch; } p.dim { color: var(--ink-2); }
+  code { background: var(--surface-3); border-radius: 4px; padding: 1px 6px; font: 13px/1.5 "Cascadia Code", Consolas, monospace; }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child { margin-bottom: 0; }
+  .box.blue { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 30%, var(--line)); }
+  .box.violet { background: var(--violet-soft); border-color: color-mix(in srgb, var(--violet) 32%, var(--line)); }
+  figure { margin: 26px 0; } figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 11px; max-width: 92ch; } figcaption b { color: var(--ink-1); }
+  ul { padding-left: 22px; } li { margin: 6px 0; max-width: 74ch; }
+  .s-label { fill: var(--ink-1); font: 600 12.5px system-ui, sans-serif; } .s-sub { fill: var(--ink-2); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-plan { fill: var(--violet-soft); stroke: var(--violet); } .s-build { fill: var(--blue-soft); stroke: var(--blue); } .s-done { fill: var(--ok-soft); stroke: var(--ok); }
+
+  /* ---- Mockup chrome ---- */
+  .mock { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 22px 0; background: var(--surface-1); box-shadow: 0 1px 0 var(--line); }
+  .mock-bar { display: flex; align-items: center; gap: 7px; padding: 9px 13px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .mock-bar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .mock-bar .addr { margin-left: 10px; font: 12px "Cascadia Code", monospace; color: var(--ink-3); }
+  .mock-tag { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing:.04em; text-transform: uppercase; color: var(--ink-3); }
+  .split { display: grid; grid-template-columns: 1.35fr 1fr; min-height: 340px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+  .pane { padding: 16px 18px; } .pane.doc { border-right: 1px solid var(--line); }
+  @media (max-width: 720px){ .pane.doc { border-right: none; border-bottom: 1px solid var(--line);} }
+  .pane .eyebrow { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
+  .doc-title { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
+  .doc-sub { font-size: 12.5px; color: var(--ink-2); margin: 0 0 12px; }
+  .doc-diagram { height: 78px; border-radius: 8px; background: repeating-linear-gradient(135deg, var(--surface-2), var(--surface-2) 9px, var(--surface-3) 9px, var(--surface-3) 18px); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); font-size: 11px; margin-bottom: 12px; }
+  .doc-line { height: 8px; border-radius: 4px; background: var(--surface-3); margin: 7px 0; }
+  .doc-line.s { width: 55%; } .doc-line.m { width: 78%; } .doc-h { height: 11px; width: 40%; border-radius: 4px; background: color-mix(in srgb, var(--blue) 30%, var(--surface-3)); margin: 16px 0 9px; }
+  /* Epic ops panel */
+  .epic-head { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
+  .epic-chip { font-size: 10.5px; font-weight: 800; letter-spacing:.05em; color: #fff; background: var(--violet); border-radius: 5px; padding: 2px 7px; }
+  .epic-name { font-size: 14.5px; font-weight: 700; }
+  .prog { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 10px 0 4px; }
+  .prog > span { display: block; height: 100%; background: var(--ok); }
+  .prog-txt { font-size: 11px; color: var(--ink-3); margin-bottom: 12px; }
+  .tabs { display: flex; gap: 4px; margin: 4px 0 10px; }
+  .tab { font-size: 11px; padding: 4px 10px; border-radius: 6px 6px 0 0; background: var(--surface-2); border: 1px solid var(--line); border-bottom: none; color: var(--ink-2); }
+  .tab.on { background: var(--surface-1); color: var(--ink-1); font-weight: 700; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); margin: 6px 0; font-size: 12.5px; }
+  .row.sel { border-color: var(--blue); background: var(--blue-soft); }
+  .row .key { font: 700 11px "Cascadia Code", monospace; color: var(--ink-2); }
+  .row .ttl { flex: 1; color: var(--ink-1); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .lane { font-size: 9.5px; font-weight: 800; letter-spacing:.03em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .lane.ready { background: var(--amber-soft); color: var(--warn); }
+  .lane.prog { background: var(--blue-soft); color: var(--blue); }
+  .lane.done { background: var(--ok-soft); color: var(--ok); }
+  .lane.rev { background: var(--violet-soft); color: var(--violet); }
+  .detail { border: 1px solid var(--line); border-radius: 7px; background: var(--surface-1); padding: 9px 11px; margin-top: 8px; font-size: 11.5px; color: var(--ink-2); }
+  .detail .mono { font: 11px/1.5 "Cascadia Code", monospace; color: var(--ink-2); display: block; margin-top: 5px; white-space: pre-wrap; }
+  .caption-lite { font-size: 12.5px; color: var(--ink-3); margin-top: 8px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media (max-width: 720px){ .two { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  td.k { white-space: nowrap; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Planung</p>
+  <h1>Das Epic als lebendes Dokument</h1>
+  <p class="lede">Ein Muster: Jedes Epic bekommt <b>ein klares, sich selbst aktualisierendes Dokument als seine Sicht</b> — zum Nachlesen in Ruhe. Der Betrieb (Tasks, Prompts, Status) sitzt <b>daneben</b>, nicht darin. Und wenn das Epic fertig ist, wandert das Dokument automatisch ins Archiv.</p>
+  <div class="meta">
+    <span><b>Typ</b> Planung / Konzept</span>
+    <span><b>Setzt auf</b> Konzept-Pipeline · Epics · Wiki-Klassifikation · Live-Refresh (AGT-2367)</span>
+    <span><b>Gate</b> Sichtblick — Robert entscheidet</span>
+  </div>
+</header>
+
+<h2 id="idee"><span class="no">A</span>Der Gedanke</h2>
+<p>Robert (26.07.): „Für mich ist der Prozess — klares schönes Dokument, was sich aktualisiert, ideal. Hier kann ich in Ruhe nachlesen." Genau das wird hier zum Muster erhoben. Ein Dokument wie das <a href="../remote-gate-cleanup/index.html">Remote-Gate-Doc</a> ist kein Wegwerf-Text, sondern die <b>ruhige, lesbare Sicht auf ein Vorhaben</b>. Der laute, wechselnde Teil — welche Karte läuft, welcher Prompt, welcher Status — gehört sichtbar daneben, aber getrennt, damit die Sicht sauber bleibt.</p>
+
+<h2 id="flow"><span class="no">B</span>Der Flow: von der Idee bis zum Archiv</h2>
+<figure>
+  <svg viewBox="0 0 980 210" role="img" aria-label="Flow von Planung ueber Umsetzung zum Abschluss, mit dem Dokument als durchgehende Sicht">
+    <rect x="24" y="40" width="210" height="66" rx="11" class="s-plan"/>
+    <text x="44" y="66" class="s-label">1 · Planung / Idee</text><text x="44" y="85" class="s-sub">Konzept entsteht</text><text x="44" y="100" class="s-sub">→ das Dokument</text>
+    <path d="M234 73 L 292 73" class="s-flow" marker-end="url(#a)"/>
+    <rect x="296" y="40" width="210" height="66" rx="11" class="s-build"/>
+    <text x="316" y="66" class="s-label">2 · Umsetzung</text><text x="316" y="85" class="s-sub">in Tasks schneiden (Epic)</text><text x="316" y="100" class="s-sub">Karten laufen</text>
+    <path d="M506 73 L 564 73" class="s-flow" marker-end="url(#a)"/>
+    <rect x="568" y="40" width="210" height="66" rx="11" class="s-done"/>
+    <text x="588" y="66" class="s-label">3 · Abschluss</text><text x="588" y="85" class="s-sub">Epic fertig</text><text x="588" y="100" class="s-sub">→ Doc ins Archiv</text>
+    <rect x="812" y="40" width="150" height="66" rx="11" style="fill:var(--surface-2);stroke:var(--line)"/>
+    <text x="832" y="70" class="s-label">Archiv</text><text x="832" y="89" class="s-sub">lesbar, verlinkbar</text>
+    <path d="M778 73 L 810 73" class="s-flow" marker-end="url(#a)"/>
+    <rect x="24" y="140" width="754" height="42" rx="9" style="fill:none;stroke:var(--blue);stroke-dasharray:5 4"/>
+    <text x="40" y="166" class="s-sub" style="fill:var(--blue)">Dasselbe Dokument bleibt die Sicht über alle drei Phasen — es wandert nicht, es reift und wird am Ende klassifiziert.</text>
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Ein Artefakt, drei Phasen.</b> In der Planung <em>entsteht</em> das Dokument (Konzept-Pipeline, Sichtblick-Gate). In der Umsetzung wird es zur <em>Sicht</em>, an die das Epic mit seinen Karten andockt. Beim Abschluss wird es <em>klassifiziert</em> — nicht gelöscht.</figcaption>
+</figure>
+
+<h2 id="mock"><span class="no">C</span>Mockup: eine Ansicht, ein Schalter</h2>
+<p>Roberts Nachtrag löst den Zielkonflikt: nicht zwei konkurrierende Layouts, sondern <b>ein Schalter zwischen zwei Zuständen derselben Ansicht</b>. Standard ist Ruhe — nur das Dokument, volle Breite, zum Nachlesen. Ein Klick expandiert den Betrieb in Panels/Reiter links und rechts. Der Wechsel <b>Ruhe → Betrieb</b> ist ein Toggle, kein Seitenwechsel.</p>
+
+<div class="box blue" style="margin-top:8px">
+  <h4>Wie heißen die zwei Zustände?</h4>
+  <p>Robert schlug <b>CALM ⇄ COCKPIT</b> vor und sucht einen besseren Begriff als „Cockpit". Kandidaten für den aktiven Zustand: <b>CONTROL</b> (CALM ⇄ CONTROL — sauber, beides „C", passt zum englischen Produkt), <b>REGIE</b> (Leitstand-Metapher), oder schlicht deutsch <b>Lesen ⇄ Betrieb</b>. Empfehlung: <b>CALM ⇄ CONTROL</b> als Produkt-Begriff, UI-Label deutsch „Ruhe / Betrieb". Entscheidung bei dir.</p>
+</div>
+
+<p class="caption-lite" style="margin-top:18px">Zustand 1 — <b>CALM</b> (Standard): nur lesen.</p>
+<div class="mock">
+  <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="addr">agent-studio / epics / remote-gate</span>
+    <span class="mock-tag" style="display:flex;align-items:center;gap:6px">CALM <span style="display:inline-block;width:30px;height:16px;border-radius:9px;background:var(--surface-3);border:1px solid var(--line);position:relative"><span style="position:absolute;left:2px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--ink-3)"></span></span> CONTROL</span>
+  </div>
+  <div style="padding:20px 26px;max-width:640px;margin:0 auto">
+    <p class="eyebrow">Sicht · Dokument</p>
+    <p class="doc-title">Remote-Gate: sauber ablösen</p>
+    <p class="doc-sub">Ersatz zuerst, Abriss zuletzt · Stand aktuell</p>
+    <div class="doc-diagram">◇ Diagramm: Brücke → Ersatz → Abriss</div>
+    <div class="doc-h"></div><div class="doc-line m"></div><div class="doc-line"></div><div class="doc-line s"></div>
+    <div class="doc-h"></div><div class="doc-line"></div><div class="doc-line m"></div>
+  </div>
+</div>
+
+<p class="caption-lite">Zustand 2 — <b>CONTROL</b>: Betrieb links &amp; rechts dazugeklappt, Reiter für Prompt/Status.</p>
+<div class="mock">
+  <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="addr">agent-studio / epics / remote-gate</span>
+    <span class="mock-tag" style="display:flex;align-items:center;gap:6px">CALM <span style="display:inline-block;width:30px;height:16px;border-radius:9px;background:var(--blue);border:1px solid var(--blue);position:relative"><span style="position:absolute;right:2px;top:1px;width:12px;height:12px;border-radius:50%;background:#fff"></span></span> CONTROL</span>
+  </div>
+  <div class="split" style="grid-template-columns:0.8fr 1.5fr 1fr">
+    <div class="pane doc">
+      <p class="eyebrow">Navigation</p>
+      <div class="row" style="padding:5px 8px"><span class="ttl">Übersicht</span></div>
+      <div class="row sel" style="padding:5px 8px"><span class="ttl">Kette</span></div>
+      <div class="row" style="padding:5px 8px"><span class="ttl">Warum geparkt</span></div>
+      <div class="row" style="padding:5px 8px"><span class="ttl">Empfehlung</span></div>
+    </div>
+    <div class="pane doc">
+      <p class="eyebrow">Sicht · Dokument</p>
+      <p class="doc-title" style="font-size:17px">Remote-Gate: sauber ablösen</p>
+      <div class="doc-diagram" style="height:64px">◇ Diagramm</div>
+      <div class="doc-h"></div><div class="doc-line m"></div><div class="doc-line"></div><div class="doc-line s"></div>
+    </div>
+    <div class="pane ops">
+      <p class="eyebrow">Betrieb · Epic</p>
+      <div class="epic-head"><span class="epic-chip">EPIC</span><span class="epic-name">Remote-Gate</span></div>
+      <div class="prog"><span style="width:38%"></span></div>
+      <div class="prog-txt">3 / 8 fertig · 1 läuft</div>
+      <div class="tabs"><span class="tab on">Karten</span><span class="tab">Prompt</span><span class="tab">Status</span></div>
+      <div class="row"><span class="key">CG-1</span><span class="ttl">Zielbild-Konzept</span><span class="lane done">done</span></div>
+      <div class="row sel"><span class="key">CG-2</span><span class="ttl">Gates umziehen</span><span class="lane prog">prog</span></div>
+      <div class="row"><span class="key">CG-3</span><span class="ttl">Teardown 2262</span><span class="lane ready">park</span></div>
+    </div>
+  </div>
+</div>
+<p class="caption-lite">Ein Toggle, zwei Zustände. CALM ist der Ruhepol zum Nachlesen; CONTROL macht dasselbe Dokument zum Leitstand des Epics — ohne die Seite zu verlassen. Karte wählen → Reiter Prompt/Status füllt sich.</p>
+
+<h2 id="lifecycle"><span class="no">D</span>Lifecycle: das Epic steuert das Dokument</h2>
+<p>Der Clou, der Roberts Aufräum-Problem löst: <b>Der Zustand des Epics treibt die Klassifikation des Dokuments.</b> Kein manuelles „ist das noch aktuell?" mehr — das Dokument weiß, in welcher Phase es steht, weil das Epic es weiß.</p>
+<figure>
+  <svg viewBox="0 0 900 130" role="img" aria-label="Doc-Zustaende folgen dem Epic-Zustand">
+    <rect x="24" y="40" width="180" height="52" rx="10" class="s-plan"/><text x="44" y="63" class="s-label">Entwurf</text><text x="44" y="81" class="s-sub">Epic in Planung</text>
+    <path d="M204 66 L 256 66" class="s-flow" marker-end="url(#b)"/>
+    <rect x="260" y="40" width="180" height="52" rx="10" class="s-build"/><text x="280" y="63" class="s-label">Aktuell / Aktiv</text><text x="280" y="81" class="s-sub">Epic in Umsetzung</text>
+    <path d="M440 66 L 492 66" class="s-flow" marker-end="url(#b)"/>
+    <rect x="496" y="40" width="180" height="52" rx="10" class="s-done"/><text x="516" y="63" class="s-label">Archiviert</text><text x="516" y="81" class="s-sub">Epic abgeschlossen</text>
+    <path d="M676 66 L 728 66" class="s-flow" marker-end="url(#b)"/>
+    <rect x="732" y="40" width="150" height="52" rx="10" style="fill:var(--surface-2);stroke:var(--line)"/><text x="752" y="63" class="s-label">im Archiv-Filter</text><text x="752" y="81" class="s-sub">weg aus „aktuell"</text>
+    <defs><marker id="b" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Automatik statt Handarbeit.</b> Die Wiki-Klassifikation kennt bereits „aktuell" und „archived" (<code>PUT /wiki/classification</code>). Neu ist die Kopplung: schließt das Epic (alle Karten fertig / Epic auf abgeschlossen), setzt das System die Doc-Klassifikation automatisch auf „archived". Das Dokument bleibt lesbar und verlinkbar — es verschwindet nur aus der „zuletzt geändert"/„aktuell"-Ansicht.</figcaption>
+</figure>
+
+<h2 id="aufsetzt"><span class="no">E</span>Es ist keine grüne Wiese</h2>
+<p>Fast alle Bausteine existieren — es geht ums Verbinden, nicht ums Erfinden:</p>
+<table>
+  <thead><tr><th>Baustein</th><th>Vorhanden?</th><th>Was fehlt für dieses Muster</th></tr></thead>
+  <tbody>
+    <tr><td class="k">Konzept-Pipeline</td><td>ja (AGT-2358)</td><td>Das Konzept-Doc als „Sicht" eines Epics deklarieren (Verknüpfung Doc ↔ Epic).</td></tr>
+    <tr><td class="k">Epics</td><td>ja (Karten-Gruppierung)</td><td>Ein Feld „Sicht-Dokument" am Epic; Fortschritt aus den Karten.</td></tr>
+    <tr><td class="k">Wiki-Klassifikation</td><td>ja (aktuell/archived)</td><td>Automatik: Epic-Abschluss → Doc auf „archived".</td></tr>
+    <tr><td class="k">Live-Refresh</td><td>in Arbeit (AGT-2367)</td><td>Deckt schon „Doc aktualisiert sich" ab. Der Betriebs-Panel braucht denselben Live-Puls.</td></tr>
+    <tr><td class="k">Split-View-Ansicht</td><td>nein</td><td>Die eigentliche neue UI: Doc links, Epic-Ops rechts.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="entscheidung"><span class="no">F</span>Vorschlag &amp; offene Fragen (Sichtblick)</h2>
+<div class="box violet">
+  <h4>Vorgeschlagenes Epic: „Epic-Sicht" (nach deinem GO als Karten schneiden)</h4>
+  <ul style="margin:6px 0 0">
+    <li><b>Konzept/Design</b> — Verknüpfung Doc ↔ Epic + Zustandsmodell festnageln (dieses Doc ist der erste Entwurf davon).</li>
+    <li><b>Split-View-Ansicht</b> — Mockup A bauen: Doc-Pane + Epic-Ops-Pane mit Karten/Prompt/Status, Kollaps-Knopf.</li>
+    <li><b>Lifecycle-Automatik</b> — Epic-Abschluss → Doc-Klassifikation „archived"; Rück-Öffnen möglich.</li>
+    <li><b>Betriebs-Panel Live-Puls</b> — Karten/Status im Panel aktualisieren sich (baut auf AGT-2367).</li>
+  </ul>
+</div>
+<p><b>Was ich von dir bräuchte (Sichtblick):</b></p>
+<ul>
+  <li><b>Begriffe:</b> CALM ⇄ <b>CONTROL</b> (empfohlen), CALM ⇄ COCKPIT, oder deutsch „Ruhe ⇄ Betrieb"? Und startet die Ansicht immer in CALM (empfohlen)?</li>
+  <li><b>„Fertig"-Auslöser:</b> Archiv, wenn <em>alle</em> Karten des Epics fertig sind — oder erst, wenn du das Epic bewusst auf „abgeschlossen" setzt? (Ich empfehle: bewusster Abschluss, damit nichts vorzeitig verschwindet.)</li>
+  <li><b>Reichweite:</b> Gilt das für alle Konzept-Docs oder nur für die, die du explizit zu einer Epic-Sicht ernennst?</li>
+</ul>
+<p class="dim">Wenn du magst, schneide ich nach deiner Antwort das Epic mit den vier Karten. Dieses Dokument ist bereits nach dem eigenen Muster gebaut — es kann die Sicht für genau dieses Epic werden und am Ende selbst ins Archiv wandern.</p>
+
+</main>
+</body>
+</html>
