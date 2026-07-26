@@ -445,10 +445,11 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `workspace-settings-panel-screenshots.spec.ts` | captures light-theme screenshot of Settings Workspaces section |
 | `workspace-settings-panel.spec.ts` | Settings - Workspaces section (F47) |
 
-### `studio-shell/` - 13 specs
+### `studio-shell/` - 14 specs
 
 | Spec | Summary |
 |------|---------|
+| `active-tab-auto-scroll.spec.ts` | studio-shell · active tab remains visible in the scrolling strip |
 | `activity-bar-board-removed.spec.ts` | studio-shell · All-projects board opens only via Explorer header |
 | `activity-bar-single-active.spec.ts` | studio-shell · Activity Bar marks exactly one active item |
 | `explorer-project-board-and-view-links.spec.ts` | Explorer · project links to Board / Project Hub / Wiki / Epics |
