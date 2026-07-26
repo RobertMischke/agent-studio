@@ -1,0 +1,14 @@
+<label class="step-toggle"
+       [class.step-toggle--locked]="!canDisable()"
+       [cacTooltip]="tooltip()"
+       tabindex="-1"
+       (click)="$event.stopPropagation()"
+       (keydown)="$event.stopPropagation()">
+  <input type="checkbox"
+         [attr.aria-label]="(enabled() ? 'Disable ' : 'Enable ') + stepName()"
+         [attr.data-testid]="'pipeline-step-enabled-' + stepId()"
+         [disabled]="!canDisable() || busy()"
+         [ngModel]="enabled()"
+         (ngModelChange)="enabledChange.emit($event)">
+  <span>{{ enabled() ? 'On' : 'Off' }}</span>
+</label>
