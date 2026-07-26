@@ -985,6 +985,15 @@ public sealed class RemoteTaskRunner
                    || string.Equals(resp.Outcome, "NotFound", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(resp.Outcome, "AlreadyReleased", StringComparison.OrdinalIgnoreCase);
         }
+        catch (TaskServerException ex) when (
+            ex.StatusCode == 409
+            && ex.Message.Contains("\"code\":\"stale-fence\"", StringComparison.Ordinal))
+        {
+            _log(
+                "lease release settled locally: Task Server no longer recognizes this fenced authority " +
+                $"({ex.Message})");
+            return true;
+        }
         catch (Exception ex)
         {
             _log($"lease release failed (server TTL will reclaim it): {ex.Message}");

@@ -511,6 +511,7 @@ public sealed class RemoteRunnerDaemon
         var journal = new HostOrchestratorJournal(Path.Combine(
             _options.WorkDir,
             "host-orchestrator",
+            GitWorkspace.SafeSegment(_options.RunnerId),
             "journal.json"));
         var acceptedWork = journal.RecoverAcceptedWork();
         foreach (var accepted in acceptedWork)
@@ -625,7 +626,11 @@ public sealed class RemoteRunnerDaemon
                             acceptance.Task.TaskKey,
                             lease,
                             shutdown,
-                            acceptance.Task.ProjectId)));
+                            acceptance.Task.ProjectId,
+                            _options.GitRemote,
+                            _options.BaseBranch,
+                            runId: acceptance.Run.RunId,
+                            leaseInstanceId: acceptance.Lease.InstanceId)));
                     _log(
                         $"local admission started {acceptance.Task.TaskKey} in slot " +
                         $"{active.Count}/{_options.HostMaxParallelism}");
@@ -667,7 +672,8 @@ public sealed class RemoteRunnerDaemon
             acceptance.Lease.LeaseId,
             acceptance.Lease.Fence,
             acceptance.Lease.AcquiredAt,
-            acceptance.Lease.ExpiresAt);
+            acceptance.Lease.ExpiresAt,
+            acceptance.Run.RunId);
 
     private sealed record HostActiveRun(string TaskId, string TaskKey, Task<int> Execution);
 }

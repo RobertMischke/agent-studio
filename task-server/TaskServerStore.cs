@@ -1434,6 +1434,12 @@ public sealed partial class TaskServerStore
                 UPDATE leases SET status = 'fenced' WHERE run_id = $run;
                 UPDATE runs SET status = 'interrupted', finished_at = $now WHERE id = $run;
                 UPDATE tasks SET state = $state, version = version + 1, updated_at = $now WHERE id = $task;
+                DELETE FROM work_permits WHERE run_id = $run;
+                UPDATE post_step_executions
+                   SET status = 'cancelled',
+                       finished_at = $now,
+                       outcome = 'authority-recovered'
+                 WHERE run_id = $run AND status <> 'completed';
                 """, ct, transaction, ("$run", runId), ("$now", Iso(UtcNow)), ("$state", targetState), ("$task", lease.TaskId));
             await AppendLifecycleEventAsync(
                 connection,

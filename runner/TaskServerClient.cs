@@ -919,6 +919,23 @@ public sealed class TaskServerClient : IDisposable
             {
                 var payload = JsonSerializer.Deserialize<DurableCompletionPayload>(item.PayloadJson, Json)
                               ?? throw new InvalidDataException("Durable completion payload is empty.");
+                if (_v1Acceptances.ContainsKey(authority.TaskKey))
+                {
+                    var liveAuthority = V1Authority(authority.TaskKey);
+                    await RunHostPostProcessingAsync(
+                        new RemoteRunCompletionRequest(
+                            authority.TaskKey,
+                            authority.LeaseId,
+                            authority.Fence,
+                            authority.RunnerId,
+                            payload.Outcome,
+                            payload.Summary,
+                            ResultSha: payload.ResultEnvelopeDigest,
+                            IdempotencyKey: item.IdempotencyKey,
+                            OutcomeDecision: payload.OutcomeDecision),
+                        liveAuthority,
+                        ct);
+                }
                 await SendJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
                     HttpMethod.Post,
                     $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
@@ -936,6 +953,7 @@ public sealed class TaskServerClient : IDisposable
                     ct);
                 _v1Leases.TryRemove(authority.TaskKey, out _);
                 _v1TaskBodies.TryRemove(authority.TaskKey, out _);
+                _v1Acceptances.TryRemove(authority.TaskKey, out _);
                 return;
             }
             default:
