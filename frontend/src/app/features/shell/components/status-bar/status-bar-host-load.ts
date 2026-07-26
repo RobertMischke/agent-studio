@@ -15,7 +15,7 @@ export interface StatusBarHostLoad {
 const MAX_TELEMETRY_AGE_MS = 5 * 60_000;
 
 /**
- * Fold fresh remote-runner telemetry into the tiny status-bar signal.
+ * Fold fresh execution-host telemetry into the tiny status-bar signal.
  * `stats` and the point timestamp both guard freshness: the service clears
  * stats for stale points when hydrating, while the timestamp keeps a
  * long-lived status bar from presenting an old sample as current.
@@ -27,8 +27,7 @@ export function summarizeStatusBarHostLoad(
 ): StatusBarHostLoad | null {
   const points = hosts
     .filter(host =>
-      host.role === 'remote'
-      && host.stats !== null
+      host.stats !== null
       && host.status !== 'offline'
       && host.status !== 'retired')
     .map(host => host.telemetry?.points.at(-1) ?? null)

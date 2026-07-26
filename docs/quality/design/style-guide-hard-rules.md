@@ -42,7 +42,7 @@ R1. Do not use it as a loophole to reintroduce accent stripes elsewhere.
 
 ### R2 - Full-bleed views use the viewport seamlessly
 
-Full-surface views (board, project hub, task detail, settings home) fill the
+Full-surface views (board, deck, task detail, settings home) fill the
 viewport with no artificial `max-width` cap. Do not centre a wide view inside a
 narrow column. This is existing product policy; a `max-width` on a top-level view
 is the regression.

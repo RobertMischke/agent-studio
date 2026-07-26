@@ -63,3 +63,48 @@ describe('WorkspaceOverlaysService coexistence with a board filter segment', () 
     expect(window.location.hash).toBe(`#${FILTERS}`);
   });
 });
+
+describe('WorkspaceOverlaysService canonical settings routes', () => {
+  beforeEach(() => {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  });
+
+  it('writes every settings section below one canonical path', () => {
+    const service = new WorkspaceOverlaysService();
+
+    service.open('tokens');
+    expect(window.location.hash).toBe('#/workspace/settings/tokens');
+
+    service.selectTokenUsagePage('codex');
+    expect(window.location.hash).toBe('#/workspace/settings/tokens/codex');
+
+    service.select('screenshots');
+    expect(window.location.hash).toBe('#/workspace/settings/screenshots');
+
+    service.select('remote-hosts');
+    expect(window.location.hash).toBe('#/workspace/settings/execution-hosts');
+  });
+
+  it('reads legacy loose routes and republishes the canonical path', () => {
+    history.replaceState(null, '', '/#/workspace/tokens/claude');
+    const service = new WorkspaceOverlaysService();
+
+    service.syncFromHash();
+
+    expect(service.settingsOpen()).toBe(true);
+    expect(service.section()).toBe('tokens');
+    expect(service.tokenUsagePage()).toBe('claude');
+    expect(window.location.hash).toBe('#/workspace/settings/tokens/claude');
+  });
+
+  it('migrates the former remote-hosts route to Execution Hosts', () => {
+    history.replaceState(null, '', '/#/workspace/settings/remote-hosts');
+    const service = new WorkspaceOverlaysService();
+
+    service.syncFromHash();
+
+    expect(service.settingsOpen()).toBe(true);
+    expect(service.section()).toBe('remote-hosts');
+    expect(window.location.hash).toBe('#/workspace/settings/execution-hosts');
+  });
+});

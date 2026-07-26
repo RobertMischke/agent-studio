@@ -1,4 +1,7 @@
+using System.Diagnostics;
+
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
@@ -143,6 +146,53 @@ public class WikiFolderViewTests : IDisposable
     }
 
     [Fact]
+    public void GetWikiFolder_FreshCheckoutUsesCachedGitAuthorDates_AndMarksUntrackedMtime()
+    {
+        var committedAt = new DateTime(2021, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        const int pageCount = 381;
+        for (var i = 0; i < pageCount; i++)
+            WritePage($"target-architecture/page-{i:D3}.md", $"# Page {i}\n");
+
+        InitRepo(_tempDir);
+        RunGit(_tempDir, "add", "-A");
+        RunGitAt(_tempDir, committedAt, "commit", "-q", "-m", "seed old architecture pages");
+
+        // A fresh clone/checkout gives every working-tree file a current mtime.
+        // That serving-copy timestamp must not make historical pages look new.
+        var checkoutTime = DateTime.UtcNow;
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(_docsDir, "target-architecture"), "*", SearchOption.AllDirectories))
+            File.SetLastWriteTimeUtc(file, checkoutTime);
+
+        var log = new CapturingLogger<ProjectDocsService>();
+        var docs = BuildDocsService(log);
+        var git = BuildGitService();
+
+        var root = docs.GetWikiFolder(ProjectName, "", git);
+        var coldRollup = LastRollup(log);
+        var folder = root!.Children.Single(c => c.RelPath == "target-architecture");
+        Assert.Equal(committedAt, folder.UpdatedAt);
+        Assert.Equal("git", folder.UpdatedAtSource);
+        Assert.Equal(3, coldRollup.Spawns); // repo-root lookup + HEAD probe + one batched log
+
+        var pages = docs.GetWikiFolder(ProjectName, "target-architecture", git);
+        var warmRollup = LastRollup(log);
+        Assert.Equal(pageCount, pages!.Children.Count);
+        Assert.All(pages.Children, page =>
+        {
+            Assert.Equal(committedAt, page.UpdatedAt);
+            Assert.Equal("git", page.UpdatedAtSource);
+        });
+        Assert.Equal(0, warmRollup.Spawns); // the complete 381-page index is HEAD-cached
+
+        WritePage("target-architecture/local-draft.md", "# Local draft\n");
+        var local = docs.GetWikiFolder(ProjectName, "target-architecture", git)!
+            .Children.Single(c => c.Name == "local-draft.md");
+        Assert.Equal("mtime", local.UpdatedAtSource);
+        Assert.True(local.UpdatedAt > DateTime.UtcNow.AddMinutes(-5));
+    }
+
+    [Fact]
     public void GetWikiFolder_SkipsCompanionsJsonHiddenAndEmptyFolders()
     {
         WritePage("real.md", "# Real\n");
@@ -194,7 +244,9 @@ public class WikiFolderViewTests : IDisposable
         Assert.Null(finding.Classification.Status);
 
         var note = docs.GetWikiFolder(ProjectName, "plain")!.Children.Single(c => c.Name == "note.md");
-        Assert.Null(note.Classification);
+        Assert.NotNull(note.Classification);
+        Assert.Equal("doc", note.Classification!.PageType);
+        Assert.Null(note.Classification.Status);
 
         // Folder rows never carry a classification.
         var root = docs.GetWikiFolder(ProjectName, "")!;
@@ -227,13 +279,19 @@ public class WikiFolderViewTests : IDisposable
         File.WriteAllText(full, content);
     }
 
-    private ProjectDocsService BuildDocsService()
+    private ProjectDocsService BuildDocsService(ILogger<ProjectDocsService>? logger = null)
     {
         var config = BuildConfig();
         return new ProjectDocsService(
             BuildScanner(config),
             new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
-            NullLogger<ProjectDocsService>.Instance);
+            logger ?? NullLogger<ProjectDocsService>.Instance);
+    }
+
+    private GitService BuildGitService()
+    {
+        var config = BuildConfig();
+        return new GitService(NullLogger<GitService>.Instance, BuildScanner(config), config);
     }
 
     private IConfiguration BuildConfig() => new ConfigurationBuilder()
@@ -249,5 +307,47 @@ public class WikiFolderViewTests : IDisposable
     {
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+    }
+
+    private static (int Spawns, int Files) LastRollup(CapturingLogger<ProjectDocsService> log)
+    {
+        var entry = log.Entries.Last(e =>
+            e.Any(kv => kv.Key == "Label" && Equals(kv.Value, "wiki/folder")));
+        int Field(string key) => Convert.ToInt32(entry.Single(kv => kv.Key == key).Value);
+        return (Field("Spawns"), Field("FileReads"));
+    }
+
+    private static void InitRepo(string repoRoot)
+    {
+        RunGit(repoRoot, "init", "-q", "-b", "main");
+        RunGit(repoRoot, "config", "user.email", "test@example.com");
+        RunGit(repoRoot, "config", "user.name", "test");
+    }
+
+    private static void RunGit(string cwd, params string[] args)
+        => RunGitAt(cwd, null, args);
+
+    private static void RunGitAt(string cwd, DateTime? at, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        if (at is { } timestamp)
+        {
+            var iso = timestamp.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            psi.Environment["GIT_AUTHOR_DATE"] = iso;
+            psi.Environment["GIT_COMMITTER_DATE"] = iso;
+        }
+        using var process = Process.Start(psi)!;
+        process.WaitForExit(15_000);
+        Assert.True(process.HasExited && process.ExitCode == 0,
+            $"git {string.Join(' ', args)} failed: {process.StandardError.ReadToEnd()}");
     }
 }

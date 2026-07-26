@@ -5,7 +5,6 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { StatusBarComponent } from './status-bar';
-import { TaskService } from '../../../../services/task.service';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -39,68 +38,3 @@ describe('StatusBarComponent (smoke)', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 });
-
-describe('StatusBarComponent running count', () => {
-  async function build() {
-    await TestBed.configureTestingModule({
-      imports: [StatusBarComponent],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-      ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(StatusBarComponent);
-    const tasks = TestBed.inject(TaskService);
-    return { fixture, tasks };
-  }
-
-  it('uses the server count for a local running card', async () => {
-    const { fixture, tasks } = await build();
-    tasks.runnerStatus.set({
-      runningCount: 1,
-      projects: {
-        alpha: runnerProject('alpha', 'local-task', 1),
-      },
-    });
-
-    expect(fixture.componentInstance.runningCount()).toBe(1);
-  });
-
-  it('uses the server count when the running card is remote', async () => {
-    const { fixture, tasks } = await build();
-    tasks.runnerStatus.set({
-      runningCount: 1,
-      projects: {
-        alpha: runnerProject('alpha', null, 1),
-      },
-    });
-
-    expect(fixture.componentInstance.runningCount()).toBe(1);
-  });
-
-  it('uses the server aggregate for a local and remote mixture', async () => {
-    const { fixture, tasks } = await build();
-    tasks.runnerStatus.set({
-      runningCount: 3,
-      projects: {
-        alpha: runnerProject('alpha', 'local-task', 2),
-        beta: runnerProject('beta', null, 1),
-      },
-    });
-
-    expect(fixture.componentInstance.runningCount()).toBe(3);
-  });
-});
-
-function runnerProject(projectName: string, activeJobId: string | null, runningTaskCount: number) {
-  return {
-    projectName,
-    mode: 'manual',
-    activeJobId,
-    activeExecution: null,
-    queuedJobIds: [],
-    runningTaskCount,
-  };
-}

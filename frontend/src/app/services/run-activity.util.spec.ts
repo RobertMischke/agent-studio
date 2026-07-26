@@ -80,7 +80,8 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
       );
       expect(badge!.kind).toBe('failed-backoff');
       expect(badge!.tone).toBe('failed');
-      expect(badge!.label).toMatch(/^failed · Backoff bis \d{2}:\d{2}$/);
+      const clock = new Date(backoffUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      expect(badge!.label).toBe(`failed · Backoff bis ${clock}`);
       expect(badge!.tooltip.body).toContain('Versuch:');
       expect(badge!.tooltip.body).toContain('git push rejected');
     });

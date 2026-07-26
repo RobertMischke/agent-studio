@@ -174,6 +174,46 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void VersionedReissueExperimentTemplates_PreserveControlAndSeparateTreatmentEvidence()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["title"] = "Fix the toolbar spacing",
+            ["prompt_text"] = "Original task context.",
+            ["reissue_findings"] = ReissuePromptExperiment.BuildTreatmentFindings(
+                new[] { "Fix wrapping in `toolbar.component.scss`." },
+                escalate: false),
+            ["reissue_followup"] = "RAW-REVIEW-EVIDENCE",
+            ["reissue_evidence"] = "RAW-REVIEW-EVIDENCE",
+            ["prompt_path"] = "prompt.md",
+            ["job_folder"] = "job",
+            ["working_directory"] = "work",
+            ["repository_path"] = "repo",
+            ["attachments_list"] = "(none)",
+            ["mode_framing"] = "",
+        };
+        var prompts = Prompts();
+        var control = prompts.Render(RuntimePromptService.RunnerReissueControlV1, values);
+        var treatment = prompts.Render(RuntimePromptService.RunnerReissueTreatmentV1, values);
+
+        Assert.Contains("Full reissue context", control);
+        Assert.Contains("Numbered findings to resolve", treatment);
+        Assert.Contains("1.", treatment);
+        Assert.Contains("Exact deficiency:", treatment);
+        Assert.Contains("File, symbol, or artifact:", treatment);
+        Assert.Contains("Required change:", treatment);
+        Assert.Contains("Focused verification or acceptance evidence:", treatment);
+        Assert.Contains("Evidence block", treatment);
+        Assert.True(
+            treatment.IndexOf("Focused verification or acceptance evidence:", StringComparison.Ordinal)
+            < treatment.IndexOf("RAW-REVIEW-EVIDENCE", StringComparison.Ordinal));
+        Assert.Contains("[[TASK_DONE]]", control);
+        Assert.Contains("[[TASK_DONE]]", treatment);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", control);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", treatment);
+    }
+
+    [Fact]
     public void AllRunnerTemplates_SpellOutTheOutputContract()
     {
         var prompts = Prompts();
@@ -293,7 +333,7 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
-    public void AllRunnerTemplates_ForbidAgentCommitAndPush()
+    public void AllRunnerTemplates_UseCalmPlatformCommitOwnership()
     {
         var prompts = Prompts();
         foreach (var template in new[]
@@ -320,9 +360,18 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
 
-            Assert.Contains("Do not run `git commit`", rendered);
-            Assert.Contains("`git push`", rendered);
-            Assert.Contains("unless this individual task explicitly asks", rendered);
+            // Fresh/recovery/reissue use the calm wording, while the two resume
+            // templates still carry the earlier direct form. Both state the
+            // current platform-owned commit boundary without punitive language.
+            var usesCalmWording = rendered.Contains(
+                "Please do not commit or push yourself",
+                StringComparison.Ordinal);
+            var usesDirectWording = rendered.Contains(
+                "Do not run `git commit`",
+                StringComparison.Ordinal);
+            Assert.True(usesCalmWording || usesDirectWording);
+            Assert.Contains("push", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("process violation", rendered, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -477,6 +526,8 @@ public class TaskRunnerPromptTests
         var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
         {
             ["diff"] = "diff --git a/x b/x",
+            ["diff_summary"] = "1 file changed",
+            ["candidate_manifest"] = "[{\"Path\":\"x\",\"Included\":true}]",
             ["task_title"] = "Git-Problem",
             ["task_prompt_first_paragraph"] = "Orchestrator should commit and push when a task finishes.",
             ["last_user_continue"] = "Please also enrich the commit message."
@@ -487,6 +538,10 @@ public class TaskRunnerPromptTests
         Assert.Contains("Orchestrator should commit and push", rendered);
         Assert.Contains("Please also enrich the commit message.", rendered);
         Assert.Contains("diff --git a/x b/x", rendered);
+        Assert.Contains("candidate manifest", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COMMIT_REVIEW: ALLOW", rendered);
+        Assert.Contains("COMMIT_REVIEW: SUSPICIOUS", rendered);
+        Assert.Contains("Never reproduce a credential", rendered);
 
         // Structural guard: the template must instruct the model to prefer
         // intent over a literal diff summary, otherwise enriching the prompt
@@ -510,6 +565,8 @@ public class TaskRunnerPromptTests
         var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
         {
             ["diff"] = "diff --git a/x b/x",
+            ["diff_summary"] = "1 file changed",
+            ["candidate_manifest"] = "[]",
             ["task_title"] = "",
             ["task_prompt_first_paragraph"] = "",
             ["last_user_continue"] = ""
@@ -518,6 +575,8 @@ public class TaskRunnerPromptTests
         Assert.DoesNotContain("{{task_title}}", rendered);
         Assert.DoesNotContain("{{task_prompt_first_paragraph}}", rendered);
         Assert.DoesNotContain("{{last_user_continue}}", rendered);
+        Assert.DoesNotContain("{{candidate_manifest}}", rendered);
+        Assert.DoesNotContain("{{diff_summary}}", rendered);
         Assert.Contains("diff --git a/x b/x", rendered);
     }
 
@@ -626,6 +685,19 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RenderModeFraming_Concept_CarriesBoundedWorkbenchContract()
+    {
+        var framing = Prompts().RenderModeFraming("concept", allowWebAccess: false);
+
+        Assert.Contains("docs-only Workbench delivery", framing);
+        Assert.Contains("docs/operations/<topic>/", framing);
+        Assert.Contains("workbench.json", framing);
+        Assert.Contains("index.html", framing);
+        Assert.Contains("[[TASK_NEEDS_INPUT:", framing);
+        Assert.DoesNotContain("Read-only run", framing);
+    }
+
+    [Fact]
     public void RenderModeFraming_CodingWithWeb_AddsWebHintOnly()
     {
         // Decision 2: the web toggle is independent of the mode. A coding task
@@ -686,7 +758,9 @@ public class TaskRunnerPromptTests
     [Fact]
     public void ModeFramingSnippets_DoNotContainEmDashes()
     {
-        var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
+        var framing =
+            Prompts().RenderModeFraming("research", allowWebAccess: true)
+            + Prompts().RenderModeFraming("concept", allowWebAccess: false);
         Assert.DoesNotContain("—", framing);
     }
 

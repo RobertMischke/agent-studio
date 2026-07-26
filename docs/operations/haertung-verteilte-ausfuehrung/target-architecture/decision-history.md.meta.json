@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Decision history",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/decision-history.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "10807afbda33a4c9effcaee3c55e8f2b3c8d10d8e852023be2174a57d0da325b",
+      "sizeBytes": 1196,
+      "lineCount": 8,
+      "capturedAt": "2026-07-24T21:17:41Z"
+    }
+  },
+  "classification": {
+    "owner": "distributed-execution",
+    "documentMode": "documentation",
+    "temporalState": "current",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "adr",
+    "analyzedAt": "2026-07-24"
+  }
+}

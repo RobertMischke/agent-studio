@@ -1,14 +1,15 @@
 <div class="statusbar" data-testid="status-bar">
   <div class="statusbar__group statusbar__group--left">
     <app-statusbar-item
-      [button]="false"
       bullet="●"
       [pulsing]="runningCount() > 0"
       [signalTone]="hostLoad()?.tone ?? 'unknown'"
       [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
       [label]="runningCount() + ' running'"
       [tooltip]="runningTooltip()"
-      testid="status-bar-running" />
+      [warning]="runningSourcesDiverge()"
+      testid="status-bar-running"
+      (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item
       [button]="false"
       icon="refresh"

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Target Architecture — five actors, three contracts, quality as a contract</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --bg-soft: #f6f6f7; --bg-elv: #fbfbfc;
+  --ink-1: #3c3c43; --ink-2: #67676c; --ink-3: #929295;
+  --line: #e2e2e3; --border: #c2c2c4;
+  --truth: #2a78d6;    /* task server — the single truth */
+  --engine: #4a3aa7;   /* orchestrator engine */
+  --runner: #eb6834;   /* runner host */
+  --studio: #0f8a5f;   /* agent studio (UI client) */
+  --libs: #b58500;     /* versioned libraries */
+  --quality: #a33f6f;  /* quality contract band */
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 980px; padding: 32px 24px 80px; font: 15px/1.55 system-ui, sans-serif; color: var(--ink-1); background: var(--bg); }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 40px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+.sub { color: var(--ink-2); margin: 0 0 24px; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--ink-2); margin-left: 8px; vertical-align: middle; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; background: var(--bg-soft); }
+code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+.pages a { display: block; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; text-decoration: none; color: var(--ink-1); background: var(--bg-elv); }
+.pages a:hover { border-color: var(--border); }
+.pages small { color: var(--ink-3); display: block; }
+
+/* ——— main diagram: actors as boxes, contracts as labeled edges ——— */
+.diagram { border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--bg-elv); overflow-x: auto; }
+.dgrid { display: grid; grid-template-columns: 1fr 44px 1.2fr 44px 1fr; grid-template-rows: auto 34px auto 30px auto; gap: 0; min-width: 720px; align-items: stretch; }
+.actor { border: 2px solid; border-radius: 10px; padding: 12px 14px; background: #fff; }
+.actor b { display: block; font-size: 14px; }
+.actor span { font-size: 12px; color: var(--ink-2); }
+.actor small { display: block; margin-top: 6px; font-size: 11px; color: var(--ink-3); }
+.a-engine { border-color: var(--engine); grid-area: 1 / 1; }
+.a-truth  { border-color: var(--truth);  grid-area: 1 / 3; }
+.a-runner { border-color: var(--runner); grid-area: 1 / 5; }
+.a-studio { border-color: var(--studio); grid-area: 3 / 3; }
+.a-libs   { border-color: var(--libs);   grid-area: 3 / 1; }
+.edge { position: relative; }
+.e1 { grid-area: 1 / 2; } .e2 { grid-area: 1 / 4; } .e3 { grid-area: 2 / 3; }
+.edge::before { content: ""; position: absolute; inset: 0; margin: auto; background: var(--border); }
+.e1::before, .e2::before { height: 2px; width: 100%; }
+.e3::before { width: 2px; height: 100%; }
+.elabel { font-size: 10.5px; color: var(--ink-2); background: var(--bg); position: absolute; padding: 0 4px; white-space: nowrap; }
+.e1 .elabel, .e2 .elabel { top: -18px; left: 50%; transform: translateX(-50%); }
+.e3 .elabel { left: 54%; top: 50%; transform: translateY(-50%); }
+.quality-band { grid-area: 5 / 1 / 6 / 4; border: 2px dashed var(--quality); border-radius: 10px; padding: 8px 14px; font-size: 12px; color: var(--quality); background: repeating-linear-gradient(45deg, transparent, transparent 10px, #a33f6f0d 10px, #a33f6f0d 12px); }
+.libs-edge { grid-area: 4 / 1; position: relative; }
+.libs-edge::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--border); }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+</style>
+</head>
+<body>
+
+<h1>Target Architecture <span class="badge">decision-ready</span></h1>
+<p class="sub">Five actors, three contracts, quality as a contract — the consolidated view that merges
+<em>Architecture</em>, <em>Quality Layer</em> and <em>Decoupled Lifecycles</em> into one picture.
+Entry point: <a href="../index.html">Hardening of distributed execution</a>.</p>
+
+<!-- ————————————————— DIAGRAM (strictly separated from the concept text below) ————————————————— -->
+<h2>The one diagram</h2>
+<div class="diagram">
+  <div class="dgrid">
+    <div class="actor a-engine"><b>Orchestrator Engine</b><span>council &amp; review pipelines, post-processing, gate dispatch</span><small>own process (systemd unit) · pure API client</small></div>
+    <div class="edge e1"><span class="elabel">Task API + quality evidence</span></div>
+    <div class="actor a-truth"><b>Task Server</b><span>the single truth: store, API, leases, provenance, management/recovery</span><small>owns nothing that executes · knows who reported when (last-seen)</small></div>
+    <div class="edge e2"><span class="elabel">Task API + lease/epoch</span></div>
+    <div class="actor a-runner"><b>Runner (per host)</b><span>claims, worktrees, CLI slots, salvage</span><small>own daemon · reconnect with backoff</small></div>
+    <div class="edge e3"><span class="elabel">Task API (read/write, UI)</span></div>
+    <div class="actor a-studio"><b>Agent Studio</b><span>board, deck, wiki — pure UI client</span><small>own release cycle (web app)</small></div>
+    <div class="libs-edge"></div>
+    <div class="actor a-libs"><b>Libraries</b><span>versioned npm packages (e.g. coding-agent-chat 0.3.x)</span><small>consumed by Studio &amp; Engine · semver + trusted publishing</small></div>
+    <div class="quality-band">Quality layer = the contract on the Engine ↔ Task&nbsp;Server edge: the Engine <b>executes</b> quality (deterministic gates, LLM aspects/grades, council loops) — the Task&nbsp;Server <b>keeps the evidence</b> (grades, outcomes, provenance, review epochs). Quality is not an actor.</div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--truth)"></i>truth</span>
+    <span><i style="background:var(--engine)"></i>decides</span>
+    <span><i style="background:var(--runner)"></i>executes</span>
+    <span><i style="background:var(--studio)"></i>shows</span>
+    <span><i style="background:var(--libs)"></i>ships</span>
+    <span><i style="background:var(--quality)"></i>quality contract</span>
+  </div>
+</div>
+
+<!-- ————————————————— CONCEPT (text only, no diagrams) ————————————————— -->
+<h2>Concept in six sentences</h2>
+<ol>
+  <li>The <b>Task Server is the single truth</b> — store, API, leases, provenance, management/recovery API. It never executes work and never calls an LLM.</li>
+  <li>The <b>Orchestrator Engine is its own process</b> next to the Task Server, talking only through the public API. Runs are server state, not process children — an Engine restart orphans nothing (the one-process past did, empirically, on 23–24 Jul).</li>
+  <li>The <b>Runner</b> is one daemon per host: claim → worktree → CLI slot → deliver via result-SHA handoff. It keeps itself alive (systemd) and reconnects with backoff.</li>
+  <li><b>Agent Studio is a pure client</b> with its own release cycle; it needs an offline indicator, nothing more.</li>
+  <li><b>Quality is a contract, not an actor</b>: the Engine executes gates/aspects/council; the Task Server keeps the evidence. This single sentence is where Architecture and Quality Layer meet.</li>
+  <li><b>Nobody supervises anybody.</b> Every actor keeps itself stable; the Task Server passively records last-seen per actor and the Deck makes it visible. No active pinging, no supervision hierarchy, no split-brain questions.</li>
+</ol>
+
+<h2>Subtopics</h2>
+<div class="pages">
+  <a href="actors.md"><b>Actors &amp; processes</b><small>the five actors, their responsibilities and mini lifecycle strips</small></a>
+  <a href="contracts.md"><b>The three contracts</b><small>Task API · result-SHA handoff · lease/epoch semantics — and quality as the fourth, cross-cutting one</small></a>
+  <a href="restart-matrix.md"><b>Restart matrix &amp; decoupled lifecycles</b><small>who may die, what survives, who reconnects — target vs. today</small></a>
+  <a href="connection-health.md"><b>Connection health</b><small>self-stability + last-seen instead of a supervising system; the tunnel as a dying interim</small></a>
+  <a href="migration-path.md"><b>Migration path</b><small>tranches to the Linux host; what is already delivered (AGT-2182, AGT-2194, …)</small></a>
+  <a href="distributable.md"><b>Control plane as a distributable</b><small>open decision: extract + version the package before public hosting (AGT-2277 parked)</small></a>
+  <a href="resource-governance.md"><b>Runner-host resource governance</b><small>Linux cgroup quotas per coding/review role; host capacity and AIMD slots</small></a>
+  <a href="decision-history.md"><b>Decision history</b><small>nomenclature and architecture decisions with dates</small></a>
+</div>
+
+</body>
+</html>

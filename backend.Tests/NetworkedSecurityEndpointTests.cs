@@ -30,7 +30,12 @@ public sealed class NetworkedSecurityEndpointTests : IDisposable
         using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://studio.test"), HandleCookies = false });
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/tasks")).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/management/status")).StatusCode);
+        var anonymousManagement = await anonymous.GetAsync("/api/v1/management/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousManagement.StatusCode);
+        var anonymousManagementBody = await anonymousManagement.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("authentication-required", anonymousManagementBody.GetProperty("error").GetString());
+        Assert.Equal("/api/auth/login", anonymousManagementBody.GetProperty("loginUrl").GetString());
+        Assert.Contains("Sign in", anonymousManagementBody.GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/clients/register", new { displayName = "open-runner", kind = "service" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync("/hubs/jobs/negotiate", null)).StatusCode);
 

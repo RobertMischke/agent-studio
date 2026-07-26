@@ -1,4 +1,5 @@
 import type { TaskInfo } from '../../../models/task.model';
+import { routeSegmentOf, withRouteSegment } from '../../../services/url-hash.util';
 
 export type TaskUrlHistoryMode = 'push' | 'replace';
 
@@ -13,10 +14,11 @@ export function taskUrlKey(info: Pick<TaskInfo, 'key' | 'displayKey' | 'id'>): s
 /** Build a shareable task URL while retaining unrelated query/hash state. */
 export function taskUrl(reference: string, current: URL): string {
   const next = new URL(current.href);
-  next.searchParams.set('task', reference);
+  next.searchParams.delete('task');
   next.searchParams.delete('job');
   next.searchParams.delete('watchPath');
-  return `${next.pathname}${next.search}${next.hash}`;
+  const hash = withRouteSegment(next.hash, `/tasks/${encodeURIComponent(reference)}`);
+  return `${next.pathname}${next.search}${hash}`;
 }
 
 /** Remove task-selection params without disturbing the active shell route. */
@@ -25,7 +27,28 @@ export function withoutTaskUrl(current: URL): string {
   next.searchParams.delete('task');
   next.searchParams.delete('job');
   next.searchParams.delete('watchPath');
-  return `${next.pathname}${next.search}${next.hash}`;
+  const route = routeSegmentOf(next.hash);
+  const hash = route?.startsWith('/tasks/') || route?.startsWith('/epics/')
+    ? withRouteSegment(next.hash, null)
+    : next.hash;
+  return `${next.pathname}${next.search}${hash}`;
+}
+
+/** Read the canonical hash route, falling back to the pre-route query shape. */
+export function taskReferenceFromUrl(current: URL): string | null {
+  const route = routeSegmentOf(current.hash);
+  if (route?.startsWith('/tasks/') || route?.startsWith('/epics/')) {
+    const path = route.split('?', 1)[0];
+    const raw = path.slice(path.startsWith('/tasks/') ? '/tasks/'.length : '/epics/'.length);
+    if (raw && !raw.includes('/')) {
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+  }
+  return current.searchParams.get('task')?.trim() || null;
 }
 
 export function writeTaskUrl(reference: string, mode: TaskUrlHistoryMode): void {

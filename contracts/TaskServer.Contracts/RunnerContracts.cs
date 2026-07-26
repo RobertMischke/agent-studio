@@ -24,7 +24,8 @@ public sealed record ClaimRequest(
     string InstanceId,
     int RequestedTtlSeconds = 120,
     int AvailableSlots = 1,
-    RunnerProcessInventory? Inventory = null);
+    RunnerProcessInventory? Inventory = null,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 public sealed record ClaimResponse(
     string Status,
@@ -32,7 +33,9 @@ public sealed record ClaimResponse(
     TaskDto? Task = null,
     LeaseDto? Lease = null,
     string? Message = null,
-    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
+    IReadOnlyList<string>? RequiredCapabilities = null,
+    IReadOnlyList<string>? CanaryCapabilities = null);
 
 public sealed record LeaseDto(
     string LeaseId,

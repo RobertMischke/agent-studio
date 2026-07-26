@@ -63,6 +63,8 @@ public static class ProjectSettingsEndpoints
                     crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
+                    pickupMode = ProjectExecutionPolicy.ResolvePickupMode(kv.Value),
+                    executionLocation = ProjectExecutionPolicy.ResolveExecutionLocation(kv.Value),
                     executionRunner = kv.Value.ExecutionRunner,
                     remoteExecutionEnabled = kv.Value.RemoteExecutionEnabled,
                     orchestratorModel = kv.Value.OrchestratorModel,
@@ -75,6 +77,8 @@ public static class ProjectSettingsEndpoints
                     epicSubTasksToReady = kv.Value.EpicSubTasksToReady ?? false,
                     intakeEnabled = kv.Value.IntakeEnabled,
                     autonomyLevel = kv.Value.AutonomyLevel,
+                    waitOnQuotaEnabled = kv.Value.WaitOnQuotaEnabled,
+                    waitOnQuotaThresholdMinutes = kv.Value.WaitOnQuotaThresholdMinutes,
                     // ADR-0052: parallel-execution knobs. maxParallelism == 1
                     // means the runner stays sequential; the branch/strategy
                     // pair only matters once it is raised above 1.
@@ -146,9 +150,15 @@ public static class ProjectSettingsEndpoints
             }
 
             var pipeline = PipelineCatalogue.Standard;
-            var steps = pipeline.Pre.Select(s => ProjectPipelineStepDto(s, "pre"))
-                .Concat(pipeline.Core.Select(s => ProjectPipelineStepDto(s, "core")))
-                .Concat(pipeline.Post.Select(s => ProjectPipelineStepDto(s, PhaseForPostStep(s))))
+            var catalogueSteps = PipelineCatalogue.All
+                .SelectMany(p => p.Pre.Select(s => (Step: s, Phase: "pre", PipelineId: p.Id))
+                    .Concat(p.Core.Select(s => (Step: s, Phase: "core", PipelineId: p.Id)))
+                    .Concat(p.Post.Select(s => (Step: s, Phase: PhaseForPostStep(s), PipelineId: p.Id))))
+                .GroupBy(x => x.Step.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+            var steps = catalogueSteps
+                .Select(x => ProjectPipelineStepDto(x.Step, x.Phase, x.PipelineId))
                 .ToList();
 
             static string PhaseForPostStep(PipelineStep step)
@@ -161,7 +171,7 @@ public static class ProjectSettingsEndpoints
                 return "post";
             }
 
-            object ProjectPipelineStepDto(PipelineStep s, string phase)
+            object ProjectPipelineStepDto(PipelineStep s, string phase, string? pipelineId = null)
             {
                 var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
                 var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
@@ -177,6 +187,7 @@ public static class ProjectSettingsEndpoints
                 return new
                 {
                     id = s.Id,
+                    pipelineId,
                     displayName = s.DisplayName,
                     kind = s.Kind.ToString(),
                     phase,
@@ -212,6 +223,10 @@ public static class ProjectSettingsEndpoints
                     // initial state when the project has no explicit override.
                     defaultEnabled = s.DefaultEnabled,
                     supportsCondition = s.Kind != StepKind.Core,
+                    supportsMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase),
+                    defaultMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase)
+                        ? UiIterationGate.DefaultMaxIterations
+                        : (int?)null,
                 };
             }
 
@@ -243,6 +258,9 @@ public static class ProjectSettingsEndpoints
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
                 return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });
+
+            if (req.MaxIterations is < UiIterationGate.MinimumIterations or > UiIterationGate.MaximumIterations)
+                return Results.BadRequest(new { error = $"maxIterations must be between {UiIterationGate.MinimumIterations} and {UiIterationGate.MaximumIterations}" });
 
             // Validate any run condition: the token must be known and
             // value-bearing tokens need a value. An "always" / blank condition
@@ -293,6 +311,7 @@ public static class ProjectSettingsEndpoints
             {
                 Enabled = req.Enabled,
                 EconomyModel = req.EconomyModel,
+                MaxIterations = req.MaxIterations,
                 Mode = req.Mode,
                 CliType = req.CliType,
                 Model = req.Model,
@@ -490,25 +509,63 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(settings.Get(projectName));
         });
 
-        // Remote runner assignment is server-owned so local and remote pickup
-        // cannot drift apart. Blank executionRunner hands the project back to
-        // the local runner. Eligibility defaults true; screenshots/headless UI
-        // work is supported remotely, while machine-bound projects opt out.
+        // Compatibility route for both the old composite executionRunner field
+        // and the canonical pickupMode + executionLocation pair.
         app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req,
-            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients) =>
+            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients,
+            TaskRunnerService runners) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             try
             {
-                var runner = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients);
-                settings.RekeyProject(
+                string? pickupMode = req.PickupMode;
+                string? executionLocation = req.ExecutionLocation;
+
+                if (pickupMode is not null && !PickupModes.IsValid(pickupMode))
+                    return Results.BadRequest(new { error = $"Unsupported pickup mode '{pickupMode}'. Allowed: auto, manual, paused." });
+
+                if (req.ExecutionLocation is null
+                    && req.ExecutionRunner is null
+                    && pickupMode is not null)
+                {
+                    executionLocation = null;
+                }
+                else if (req.ExecutionLocation is not null)
+                {
+                    executionLocation = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionLocation, clients)
+                                        ?? ExecutionLocations.Local;
+                }
+                else if (ProjectExecutionPolicy.IsLegacyComposite(req.ExecutionRunner))
+                {
+                    pickupMode = string.Equals(req.ExecutionRunner, "auto-continuous", StringComparison.OrdinalIgnoreCase)
+                        ? PickupModes.Auto
+                        : PickupModes.Normalize(req.ExecutionRunner);
+                    executionLocation = string.Equals(req.ExecutionRunner, "auto-continuous", StringComparison.OrdinalIgnoreCase)
+                        ? ExecutionLocations.Local
+                        : null;
+                }
+                else
+                {
+                    executionLocation = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients)
+                                        ?? ExecutionLocations.Local;
+                    if (executionLocation != ExecutionLocations.Local
+                        && req.RemoteExecutionEnabled != false)
+                        pickupMode ??= PickupModes.Auto;
+                }
+
+                settings.SetExecutionSettings(
                     projectName,
-                    projectName,
-                    updateExecutionRunner: true,
-                    executionRunner: runner,
-                    remoteExecutionEnabled: req.RemoteExecutionEnabled);
+                    pickupMode,
+                    executionLocation,
+                    req.RemoteExecutionEnabled);
+
+                if (pickupMode is not null)
+                    runners.RequestModeChange(
+                        projectName,
+                        PickupModes.ToRunnerMode(pickupMode),
+                        "api: PUT /api/projects/{projectName}/execution-runner");
                 return Results.Ok(settings.Get(projectName));
             }
             catch (ArgumentException ex)
@@ -523,12 +580,17 @@ public static class ProjectSettingsEndpoints
 
         // ADR-0052: integration branch parallel task worktrees branch off and
         // merge back into. Blank reverts to the default (develop).
-        app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req,
+            ProjectSettingsService settings, TaskScannerService scanner, ProjectRegistry projects,
+            ClientIdentityStore clients) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetIntegrationBranch(projectName, req.Branch);
+            var project = projects.FindByIdOrDisplayName(projectName);
+            if (project is not null)
+                clients.InvalidateRunnerProjectPreflights(project.Id);
             return Results.Ok(settings.Get(projectName));
         });
 
@@ -689,6 +751,32 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new { level = settings.Get(projectName).AutonomyLevel ?? 2 });
         });
 
+        app.MapGet("/api/projects/{projectName}/quota-wait-policy", (
+            string projectName,
+            ProjectSettingsService settings,
+            CliQuotaWaitPolicyService waitPolicy,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            return Results.Ok(waitPolicy.Resolve(settings.Get(projectName)));
+        });
+
+        app.MapPut("/api/projects/{projectName}/quota-wait-policy", (
+            string projectName,
+            SetProjectQuotaWaitPolicyRequest req,
+            ProjectSettingsService settings,
+            CliQuotaWaitPolicyService waitPolicy,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (req.ThresholdMinutes is < CliQuotaWaitPolicyService.MinThresholdMinutes or > CliQuotaWaitPolicyService.MaxThresholdMinutes)
+                return Results.BadRequest(new { error = $"thresholdMinutes must be between {CliQuotaWaitPolicyService.MinThresholdMinutes} and {CliQuotaWaitPolicyService.MaxThresholdMinutes}" });
+            settings.SetQuotaWaitPolicy(projectName, req.Enabled, req.ThresholdMinutes);
+            return Results.Ok(waitPolicy.Resolve(settings.Get(projectName)));
+        });
+
         // F35: per-lane sort strategy. GET returns the resolved map (every
         // lane key present, defaults filled in) so the settings UI can render
         // a dropdown per lane without a second round-trip. PUT writes one
@@ -778,8 +866,14 @@ public static class ProjectSettingsEndpoints
     private static bool IsKnownPipelineStep(string? stepId)
     {
         if (string.IsNullOrWhiteSpace(stepId)) return false;
-        return PipelineCatalogue.Standard.AllSteps
+        return PipelineCatalogue.All.SelectMany(p => p.AllSteps)
                 .Any(s => string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase))
             || string.Equals(PipelineCatalogue.AbortReviewStep.Id, stepId, StringComparison.OrdinalIgnoreCase);
     }
+}
+
+public sealed record SetProjectQuotaWaitPolicyRequest
+{
+    public bool? Enabled { get; init; }
+    public int? ThresholdMinutes { get; init; }
 }

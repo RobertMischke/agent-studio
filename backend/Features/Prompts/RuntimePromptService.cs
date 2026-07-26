@@ -18,10 +18,13 @@ public sealed partial class RuntimePromptService
     public const string RunnerResumeRestart = "runner-resume-restart.md";
     public const string RunnerRecoveryContinuation = "runner-recovery-continuation.md";
     public const string RunnerReissueChange = "runner-reissue-change.md";
+    public const string RunnerReissueControlV1 = "runner-reissue-control-v1.md";
+    public const string RunnerReissueTreatmentV1 = "runner-reissue-treatment-v1.md";
     public const string EpicDecomposition = "epic-decomposition.md";
     public const string SummaryProtocol = "summary-protocol.md";
     public const string CommitMessage = "commit-message.md";
     public const string ModeFramingReadOnly = "mode-framing-readonly.md";
+    public const string ModeFramingConcept = "mode-framing-concept.md";
     public const string ModeFramingWeb = "mode-framing-web.md";
     public const string ProposalFeedbackRefine = "proposal-feedback-refine.md";
     public const string ProposalDraftGenerate = "proposal-draft-generate.md";
@@ -61,18 +64,19 @@ public sealed partial class RuntimePromptService
 
     /// <summary>
     /// Composes the per-mode framing block injected into runner prompts via the
-    /// <c>{{mode_framing}}</c> placeholder. Read-only modes (planning / research)
-    /// get the read-only block; web access (research default, or any mode the
-    /// user opted into) appends the web block. Coding with web off yields an
-    /// empty string so the rendered prompt is byte-identical to the pre-mode
-    /// behavior. A non-empty result ends with a blank-line separator so it slots
-    /// in front of the following section cleanly.
+    /// <c>{{mode_framing}}</c> placeholder. Report-only modes (planning /
+    /// research) get the strict read-only block; concept gets its docs-only
+    /// Workbench contract; web access appends the web block. Coding with web off
+    /// yields an empty string. A non-empty result ends with a blank-line
+    /// separator so it slots in front of the following section cleanly.
     /// </summary>
     public string RenderModeFraming(string? mode, bool allowWebAccess)
     {
         var parts = new List<string>();
-        if (TaskModes.IsReadOnly(mode))
+        if (TaskModes.IsReportOnly(mode))
             parts.Add(Render(ModeFramingReadOnly, NoValues).Trim());
+        if (TaskModes.IsConcept(mode))
+            parts.Add(Render(ModeFramingConcept, NoValues).Trim());
         if (allowWebAccess)
             parts.Add(Render(ModeFramingWeb, NoValues).Trim());
         if (parts.Count == 0) return string.Empty;

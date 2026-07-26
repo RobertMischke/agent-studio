@@ -7,6 +7,21 @@ Use this when a change touches job folders, lane states, task metadata,
 workspace registry records, task CRUD, ordering, review evidence, run timeline,
 or commit attribution.
 
+## Execution modes
+
+- `coding` is the default source-mutating mode.
+- `planning` and `research` are report-only modes. They run without git
+  mutation steps and must finish with a clean product checkout.
+- `concept` is document-first. It uses an isolated worktree but may change only
+  one `docs/operations/<topic>/` Workbench. The published document, not
+  `status.md`, is the promotion source.
+- A delivered concept waits in `5-human-review` with a
+  `concept-sight-review` marker. This is a successful delivery state, including
+  when the agent reports `NEEDS_INPUT`; it is not an escalation.
+- Sight-review acceptance moves the concept to `6-completed`. The concept
+  promotion endpoint creates idempotent coding cards in `1-preparation` and
+  relates them to the source concept.
+
 ## Entry Points
 
 - [docs/system/contracts/filesystem.md](../contracts/filesystem.md) defines the durable
@@ -66,6 +81,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [../concepts/api-project-identity-and-watchpath.md](../../concepts/api-project-identity-and-watchpath.md).
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
+- Accepted integration commits that already exist in the project repository
+  can be appended through
+  `POST /api/tasks/{id}/commits/integration?watchPath=...` with
+  `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
+  task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
+  it as the final singular `commit`, and never creates or rewrites Git history.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
@@ -150,6 +171,11 @@ cannot erase an operator decision.
 
 ## Key Code
 
+- `task-server/TaskServerStore.cs` and `TaskServerEndpoints.cs`: separated
+  control-plane task, run, lease, event, artifact, audit, and canonical replay
+  store. The path-free
+  `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history` projection is
+  the reconnect source for detached Studio clients.
 - `backend/Endpoints/Tasks/*`: task CRUD, runner, files, git, review evidence,
   merge, pipeline, and query endpoints.
 - `backend/Services/TaskAccess/*`: typed read/list/mutate/transition/subscribe

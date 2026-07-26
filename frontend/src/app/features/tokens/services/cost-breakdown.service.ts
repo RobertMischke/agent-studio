@@ -50,7 +50,7 @@ export class CostBreakdownService {
   readonly title = signal('Cost calculation');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly provider = signal('CodingAgentRunner (CAR)');
+  readonly provider = signal('TokenEconomy');
   readonly items = signal<CostBreakdownResultItem[]>([]);
 
   show(items: CostBreakdownRequestItem[], title = 'Cost calculation'): void {

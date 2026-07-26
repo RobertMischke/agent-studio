@@ -7,6 +7,26 @@ navigation entry for all technology-aware engineering guides is
 
 Operator-facing index of the **canonical UI vocabulary** the shell uses: tokens, primitives, components, and the migration status that tracks how far each surface has converged onto them.
 
+## Product names
+
+**Board & Deck** is the canonical name pair for the two primary project
+surfaces:
+
+- **Board** is the task-flow surface with lanes and cards.
+- **Deck** is the project-level surface for overview, quality, context, and
+  configuration.
+
+Use **Deck** unchanged in English documentation. Do not expand it to "Project
+Deck" and do not reintroduce the former hub label. Internal compatibility keys,
+test aliases, and routes may retain `hub`; those identifiers must not leak into
+user-facing copy.
+
+The [Visual Style Guide Workbench](../../../concepts/visual-style-guide.html) is
+the rendered companion to this engineering guide. Use it to inspect today's
+language in both themes, compare focused variants, and record vNext decisions.
+This folder continues to own the implementation vocabulary and migration
+contract; the Workbench makes that vocabulary visible and reviewable.
+
 This folder is the **second-look** for any visual or styling change. The first stop is still [`docs/quality/frontend/design-system.md`](../design-system.md) (the "why" of the shell: Material 3 mapping, color philosophy, type ramp, motion grammar). The style guide is the **"what to grab"** for a concrete change:
 
 - "I need a small button" → [buttons.md](./buttons.md)
@@ -45,7 +65,7 @@ A change at layer N must not duplicate a fact at layer N-1. A button never hardc
 | Page action bar    | [`<app-page-action-bar>`](../../../../frontend/src/app/features/project-detail/components/page-action-bar/page-action-bar.ts) | document / concept / Workbench / incident / report | ✅ shipped |
 | Menu               | [`<app-menu>`](../../../../frontend/src/app/components/menu/menu.component.ts)                                        | text-only rows                    | ✅ shipped        |
 | Notification       | [`<app-notification>`](../../../../frontend/src/app/components/notification/notification.component.ts)                | toast / banner                    | ✅ shipped (F37)  |
-| Tooltip            | `[appTooltip]` directive on [`<app-tooltip>`](../../../frontend/src/app/components/tooltip/tooltip.component.ts)   | instant HTML body                 | ✅ shipped        |
+| Tooltip            | [`[appTooltip]`](../../../../frontend/src/app/components/tooltip/app-tooltip.directive.ts) directive   | instant HTML body                 | ✅ shipped        |
 | Empty state        | [`<app-empty-state>`](../../../../frontend/src/app/components/empty-state/empty-state.component.ts)                    | default + named                   | ✅ shipped        |
 | Free-form button   | _none_                                                                                                          | —                                 | ⚠️ **gap** — see [buttons.md](./buttons.md) "Open question: do we need `<app-button>`?" |
 | Card surface       | _none_                                                                                                          | —                                 | ⚠️ **gap** — see [cards.md](./cards.md) "Open question: do we need `<app-card>`?" |
@@ -91,7 +111,9 @@ See AGENTS.md "Code Conventions" for the broader code-style rules; this guide is
 
 ## Phase 2 / Phase 3 — what is intentionally out of scope here
 
-- A live in-app `/style-guide` page that renders every variant. Worth doing once the canonical-component decisions settle (see [migration-status.md](./migration-status.md) "Phase 2").
+- A live in-app `/style-guide` product route that renders Angular components.
+  The Wiki Workbench linked above is deliberately self-contained HTML and does
+  not add a product route or runtime dependency.
 - Storybook integration. Same trigger: useful once the components stabilise.
 - A new theme. We stay on Catppuccin (dark default) + the F19 light shell.
 

@@ -1,0 +1,28 @@
+@if (view(); as live) {
+  <section class="task-live"
+           [class]="'task-live--' + live.tone"
+           [class.task-live--detail]="variant() === 'detail'"
+           [class.task-live--dense]="dense()"
+           data-testid="task-live-status"
+           [attr.data-live-tone]="live.tone"
+           [attr.data-attempt]="live.attempt"
+           aria-live="polite">
+    <div class="task-live__current" data-testid="task-live-current">
+      <span class="task-live__label">Current</span>
+      <span class="task-live__signal" aria-hidden="true"></span>
+      <span class="task-live__headline">{{ live.headline }}</span>
+      @if (variant() === 'detail') {
+        <span class="task-live__attempt">Attempt {{ live.attempt }}</span>
+      }
+    </div>
+    @if (live.detail) {
+      <div class="task-live__detail">{{ live.detail }}</div>
+    }
+    @if (live.next.length > 0) {
+      <div class="task-live__next" data-testid="task-live-next">
+        <span class="task-live__next-label">Next</span>
+        <span>{{ live.next.join(' → ') }}</span>
+      </div>
+    }
+  </section>
+}

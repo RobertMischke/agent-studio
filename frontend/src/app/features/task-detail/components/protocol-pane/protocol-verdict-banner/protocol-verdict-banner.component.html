@@ -2,6 +2,7 @@
 @let v = verdict();
 <div class="protocol-verdict"
      [attr.data-kind]="v.kind"
+     [attr.data-status]="v.status || null"
      [class.protocol-verdict--expanded]="expanded()"
      [attr.data-testid]="'protocol-verdict-' + v.kind"
      role="status">
@@ -55,87 +56,28 @@
     </span>
   }
 </div>
-@if (v.superseded; as sup) {
-  <!-- BEFUND 2 + 3: a Blocked/Failed run outcome the accepted stand has
-       overtaken. It never leads; it sits here as collapsed history and expands
-       with the verdict so the user can follow the sequence (accepted stand now
-       leads, superseded run below). -->
-  <div class="protocol-verdict-superseded"
-       [class.protocol-verdict-superseded--open]="expanded()"
-       data-testid="protocol-verdict-superseded">
+@if (v.signals && v.signals.length > 0) {
+  <div class="protocol-verdict-signals" data-testid="protocol-verdict-signals">
     <button type="button"
-            class="protocol-verdict-superseded__toggle"
-            data-testid="protocol-verdict-superseded-toggle"
+            class="protocol-verdict-signals__toggle"
+            data-testid="protocol-verdict-signals-toggle"
             [attr.aria-expanded]="expanded()"
             (click)="toggle()">
-      <span class="protocol-verdict-superseded__glyph" aria-hidden="true">↩</span>
-      <span class="protocol-verdict-superseded__label">Superseded run outcome: {{ sup.label }}</span>
-      <span class="protocol-verdict-superseded__caret" aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
+      <span>Why this status?</span>
+      <span aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
     </button>
     @if (expanded()) {
-      <p class="protocol-verdict-superseded__detail"
-         data-testid="protocol-verdict-superseded-detail">{{ sup.detail }}</p>
-    }
-  </div>
-}
-}
-@if (chain(); as c) {
-  <!-- BEFUND 2: the visible verdict chain (Run → Gate → Review aspects → Lane
-       decision) with links to each step's evidence, so the user can see which
-       signal leads the head state and how it got there. BEFUND 3: the causal
-       line connects the earlier steps to the leading decision (e.g. why the
-       card escalated even though the run's checks passed). Collapsed by
-       default; opens with the reason/history via the same expand toggle. -->
-  <div class="protocol-verdict-chain"
-       [class.protocol-verdict-chain--open]="expanded()"
-       data-testid="protocol-verdict-chain">
-    <button type="button"
-            class="protocol-verdict-chain__toggle"
-            data-testid="protocol-verdict-chain-toggle"
-            [attr.aria-expanded]="expanded()"
-            (click)="toggle()">
-      <span class="protocol-verdict-chain__glyph" aria-hidden="true">⛓</span>
-      <span class="protocol-verdict-chain__title">Verdict chain</span>
-      <span class="protocol-verdict-chain__caret" aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
-    </button>
-    @if (expanded()) {
-      <ol class="protocol-verdict-chain__steps" data-testid="protocol-verdict-chain-steps">
-        @for (step of c.steps; track step.key) {
-          <li class="protocol-verdict-chain__step"
-              [attr.data-status]="step.status"
-              [class.protocol-verdict-chain__step--leading]="step.key === c.leadingStepKey"
-              [attr.data-testid]="'protocol-verdict-chain-step-' + step.key">
-            <span class="protocol-verdict-chain__dot" [attr.data-status]="step.status" aria-hidden="true"></span>
-            <div class="protocol-verdict-chain__step-body">
-              <div class="protocol-verdict-chain__step-head">
-                <span class="protocol-verdict-chain__step-title">{{ step.title }}</span>
-                @if (step.key === c.leadingStepKey) {
-                  <span class="protocol-verdict-chain__leading-pill"
-                        data-testid="protocol-verdict-chain-leading">leads</span>
-                }
-              </div>
-              <p class="protocol-verdict-chain__step-summary">{{ step.summary }}</p>
-              @if (step.evidence.length > 0) {
-                <div class="protocol-verdict-chain__evidence">
-                  @for (link of step.evidence; track link.label) {
-                    <button type="button"
-                            class="protocol-verdict-chain__evidence-link"
-                            [attr.data-target]="link.target"
-                            [attr.data-testid]="'protocol-verdict-chain-evidence-' + link.target"
-                            [cacTooltip]="'Open evidence: ' + link.label"
-                            (click)="onEvidence(link)">
-                      <span class="protocol-verdict-chain__evidence-icon" aria-hidden="true">🔗</span>
-                      {{ link.label }}
-                    </button>
-                  }
-                </div>
-              }
-            </div>
+      <ul class="protocol-verdict-signals__list" data-testid="protocol-verdict-signals-list">
+        @for (signal of v.signals; track signal.source + signal.label) {
+          <li class="protocol-verdict-signals__item" [attr.data-status]="signal.status">
+            <span class="protocol-verdict-signals__dot" aria-hidden="true"></span>
+            <span class="protocol-verdict-signals__source">{{ signal.source }}</span>
+            <strong>{{ signal.label }}</strong>
+            <span>{{ signal.detail }}</span>
           </li>
         }
-      </ol>
-      <p class="protocol-verdict-chain__narrative"
-         data-testid="protocol-verdict-chain-narrative">{{ c.causalNarrative }}</p>
+      </ul>
     }
   </div>
+}
 }

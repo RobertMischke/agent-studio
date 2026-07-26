@@ -26,11 +26,61 @@ public sealed class ProtocolTests
         Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ApiError>();
         Assert.Equal("protocol-unsupported", error!.Code);
+        Assert.Contains("supported range", error.Message, StringComparison.OrdinalIgnoreCase);
 
         var claim = await client.PostAsJsonAsync(
             "/api/v1/runners/old-runner/claims",
             new ClaimRequest("old-runner", "old-instance"));
         Assert.Equal(HttpStatusCode.UpgradeRequired, claim.StatusCode);
+    }
+
+    [Fact]
+    public async Task Versioned_resource_request_without_protocol_header_is_honestly_rejected()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/workspaces");
+
+        Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("protocol-unsupported", error!.Code);
+        Assert.Contains("missing", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Bearer_mode_protects_resources_but_keeps_handshake_available()
+    {
+        using var temp = new TempDirectory();
+        const string token = "task-server-test-token-000000000000000000000001";
+        await using var factory = new TaskServerFactory(
+            temp.Path,
+            new Dictionary<string, string?>
+            {
+                ["TaskServer:AuthMode"] = "bearer",
+                ["TaskServer:AuthToken"] = token,
+            });
+        using var client = factory.CreateClient();
+
+        var handshake = await client.PostAsJsonAsync(
+            "/api/v1/protocol/compatibility",
+            new ProtocolCompatibilityRequest(
+                "runner",
+                "1.0.0",
+                TaskServerProtocol.Current));
+        Assert.Equal(HttpStatusCode.OK, handshake.StatusCode);
+
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        var denied = await client.GetAsync("/api/v1/management/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        var accepted = await client.GetAsync("/api/v1/management/status");
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
     }
 
     [Fact]
@@ -50,6 +100,95 @@ public sealed class ProtocolTests
         Assert.Equal(HttpStatusCode.OK, studio.StatusCode);
         Assert.Equal(HttpStatusCode.OK, runner.StatusCode);
         Assert.True((await runner.Content.ReadFromJsonAsync<ProtocolCompatibilityResponse>())!.Supported);
+    }
+
+    [Fact]
+    public async Task Orchestrator_engine_negotiates_before_claiming_work()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/protocol/compatibility",
+            new ProtocolCompatibilityRequest(
+                TaskServerProtocol.EngineClientKind,
+                "0.1.0",
+                TaskServerProtocol.Current));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var compatibility = await response.Content.ReadFromJsonAsync<ProtocolCompatibilityResponse>();
+        Assert.True(compatibility!.Supported);
+        Assert.Contains(TaskServerProtocol.EngineClientKind, compatibility.Server.ClientKinds);
+    }
+
+    [Fact]
+    public async Task Public_orchestration_api_owns_definition_run_claim_and_settlement()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add("X-Client-Id", "engine-api-test");
+
+        (await client.PostAsJsonAsync(
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest("Engine API", "wsp-engine-api")))
+            .EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync(
+            "/api/v1/projects",
+            new CreateProjectRequest(
+                "wsp-engine-api", "Engine API", "EAP", "prj-engine-api")))
+            .EnsureSuccessStatusCode();
+        var taskResponse = await client.PostAsJsonAsync(
+            "/api/v1/projects/prj-engine-api/tasks",
+            new CreateTaskRequest(
+                "API-only orchestration",
+                State: "4-auto-review",
+                TaskId: "tsk-engine-api"));
+        taskResponse.EnsureSuccessStatusCode();
+        var definitionResponse = await client.PutAsJsonAsync(
+            "/api/v1/orchestration/projects/prj-engine-api/flow-definition",
+            new UpsertFlowDefinitionRequest(
+                null,
+                [OrchestrationStage.ReviewDecision, OrchestrationStage.CompletionJudge]));
+        definitionResponse.EnsureSuccessStatusCode();
+        var runResponse = await client.PostAsJsonAsync(
+            "/api/v1/orchestration/projects/prj-engine-api/runs",
+            new CreateOrchestrationRunRequest(
+                "tsk-engine-api",
+                """{"agentOutcome":"done"}""",
+                "api-run-1"));
+        runResponse.EnsureSuccessStatusCode();
+        var run = (await runResponse.Content.ReadFromJsonAsync<OrchestrationRunDto>())!;
+
+        var claimResponse = await client.PostAsJsonAsync(
+            "/api/v1/orchestration/claims",
+            new OrchestrationClaimRequest(
+                "engine-api-test",
+                "instance-1",
+                [OrchestrationStage.ReviewDecision]));
+        claimResponse.EnsureSuccessStatusCode();
+        var claim = (await claimResponse.Content.ReadFromJsonAsync<OrchestrationClaimResponse>())!;
+        Assert.Equal(run.RunId, claim.Run!.RunId);
+
+        var settlement = await client.PostAsJsonAsync(
+            $"/api/v1/orchestration/runs/{run.RunId}/stages/complete",
+            new CompleteOrchestrationStageRequest(
+                "engine-api-test",
+                "instance-1",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                OrchestrationStage.ReviewDecision,
+                OrchestrationAction.Continue,
+                """{"decision":"continue"}""",
+                "api-stage-1"));
+        settlement.EnsureSuccessStatusCode();
+        var advanced = (await settlement.Content.ReadFromJsonAsync<OrchestrationRunDto>())!;
+        Assert.Equal("pending", advanced.Status);
+        Assert.Equal(OrchestrationStage.CompletionJudge, advanced.CurrentStage);
     }
 
     [Fact]
@@ -89,7 +228,13 @@ public sealed class ProtocolTests
 
         var register = await client.PutAsJsonAsync(
             "/api/v1/runners/runner-outcome",
-            new RegisterRunnerRequest("runner-outcome", "host-a", "instance-a", "1.0.0", 1));
+            new RegisterRunnerRequest(
+                "runner-outcome",
+                "host-a",
+                "instance-a",
+                "1.0.0",
+                1,
+                [ReviewCapabilities.CodingExecutor]));
         register.EnsureSuccessStatusCode();
         var claimResponse = await client.PostAsJsonAsync(
             "/api/v1/runners/runner-outcome/claims",
@@ -100,8 +245,8 @@ public sealed class ProtocolTests
         var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
             claim.Run!.RunId,
             ExecutionAttemptKind.Coding,
-            StdErr: "429 quota exceeded",
-            ExitCode: 1));
+            FinalAssistantOutput: "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            ExitCode: 0));
         var completion = await client.PostAsJsonAsync(
             $"/api/v1/runs/{claim.Run.RunId}/completion",
             new CompleteRunRequest(
@@ -119,9 +264,12 @@ public sealed class ProtocolTests
             "/api/v1/projects/prj-outcome/tasks/OUT-1/attempts");
         var attempt = Assert.Single(attempts!);
         Assert.Equal(claim.Run.RunId, attempt.Run.RunId);
-        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, attempt.OutcomeDecision!.Outcome);
-        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, attempt.OutcomeDecision.RecoveryAction);
-        Assert.Equal("429 quota exceeded", attempt.OutcomeDecision.RawFacts.StdErr);
+        Assert.Equal(ExecutionOutcomeKind.ExplicitAgentBlocker, attempt.OutcomeDecision!.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.AskForHumanInput, attempt.OutcomeDecision.RecoveryAction);
+        Assert.Equal("deck-panel-v1-decision-missing", attempt.OutcomeDecision.Detail);
+        Assert.Equal(
+            "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            attempt.OutcomeDecision.RawFacts.FinalAssistantOutput);
     }
 
     internal static string RepositoryRoot()
@@ -132,17 +280,26 @@ public sealed class ProtocolTests
         return current?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
     }
 
-    private sealed class TaskServerFactory(string dataDirectory) : WebApplicationFactory<Program>
+    private sealed class TaskServerFactory(
+        string dataDirectory,
+        IReadOnlyDictionary<string, string?>? overrides = null)
+        : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
             builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                var values = new Dictionary<string, string?>
                 {
                     ["TaskServer:DataDirectory"] = dataDirectory,
                     ["TaskServer:ListenUrl"] = string.Empty,
-                }));
+                };
+                if (overrides is not null)
+                    foreach (var (key, value) in overrides)
+                        values[key] = value;
+                configuration.AddInMemoryCollection(values);
+            });
         }
     }
 }

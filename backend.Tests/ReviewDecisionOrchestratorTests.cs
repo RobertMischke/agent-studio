@@ -1012,6 +1012,75 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void BuildOrchestratorVerdictLookup_DropsVerdictOlderThanLatestClaim()
+    {
+        var oldDecisionAt = DateTime.UtcNow.AddMinutes(-5);
+        var newClaimAt = DateTime.UtcNow.AddMinutes(-1);
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: oldDecisionAt,
+            JobId: "job-a", Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "old cycle", Prompt: "p", Response: "r", FollowUp: ""));
+
+        var job = new TaskInfo
+        {
+            Id = "job-a",
+            TaskKey = $"{_watchPath}::job-a",
+            ProjectName = Project,
+            WatchPath = _watchPath,
+            State = TaskStates.Progress,
+            Provenance = new TaskProvenance
+            {
+                Transitions =
+                [
+                    new TaskProvenanceTransition { Lane = TaskStates.AutoReview, AtUtc = oldDecisionAt.AddMinutes(-1) },
+                    new TaskProvenanceTransition { Lane = TaskStates.Progress, AtUtc = newClaimAt },
+                ],
+            },
+        };
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
+            .Build();
+
+        var lookup = TaskEndpointHelpers.BuildOrchestratorVerdictLookup([job], config);
+
+        Assert.False(lookup.ContainsKey(job.TaskKey));
+    }
+
+    [Fact]
+    public void CardProjection_DropsOutcomeIssueOlderThanLatestClaim()
+    {
+        var claimAt = DateTime.UtcNow;
+        var stale = new TaskInfo
+        {
+            Id = "job-a",
+            TaskKey = $"{_watchPath}::job-a",
+            ProjectName = Project,
+            WatchPath = _watchPath,
+            State = TaskStates.Progress,
+            OutcomeIssue = new TaskOutcomeIssue
+            {
+                Kind = "environment-blocker",
+                LastSeenAt = claimAt.AddMinutes(-2),
+            },
+            Provenance = new TaskProvenance
+            {
+                Transitions =
+                [
+                    new TaskProvenanceTransition { Lane = TaskStates.Progress, AtUtc = claimAt },
+                ],
+            },
+        };
+        var current = stale with
+        {
+            OutcomeIssue = stale.OutcomeIssue with { LastSeenAt = claimAt.AddMinutes(1) },
+        };
+
+        Assert.True(TaskEndpointHelpers.IsOutcomeIssueFromSupersededAttempt(stale));
+        Assert.False(TaskEndpointHelpers.IsOutcomeIssueFromSupersededAttempt(current));
+    }
+
+    [Fact]
     public void BuildDiffSummary_EmptyHeadCommitWithPriorNonEmptyCommits_ReportsRealChangeset()
     {
         // Regression for the 2026-05-11 false positive: an empty
@@ -1643,7 +1712,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var record = Assert.Single(records);
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
         Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.Reissue);
-        Assert.StartsWith(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
+        Assert.Contains(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
         // No reissue in the chain -> the card's reissue budget is untouched.
         Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, "infra-crash-job"));
 

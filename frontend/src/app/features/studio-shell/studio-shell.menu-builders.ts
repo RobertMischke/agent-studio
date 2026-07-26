@@ -88,7 +88,7 @@ export function buildProjectPickerItems(input: ProjectPickerInputs): readonly Me
       leadingGlyph: { background: p.color, initial: p.initial },
       trailingBadge: String(p.totalJobs),
       active: p.isActive && input.activeTabKind !== 'welcome',
-      tooltip: `${p.name} (double-click for Project Hub)`,
+      tooltip: `${p.name} (double-click for Deck)`,
     });
   }
   return items;

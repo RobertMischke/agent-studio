@@ -167,9 +167,9 @@
                  (keydown)="onTreeKeydown($event)"
                  (dragstart)="onNodeDragStart($event, row.node)"
                  (dragend)="onDragEnd()"
-                 (dragover)="onFolderDragOver($event, row.node)"
-                 (dragleave)="onFolderDragLeave(row.node)"
-                 (drop)="onFolderDrop($event, row.node)"
+                 (dragover)="onNodeDragOver($event, row.node)"
+                 (dragleave)="onNodeDragLeave(row.node)"
+                 (drop)="onNodeDrop($event, row.node)"
                  (contextmenu)="onContextMenu($event, row.node)">
               @if (row.node.type === 'folder' && row.hasChildren) {
                 <button class="pwiki__chevron" type="button"
@@ -284,7 +284,7 @@
           <app-wiki-search-results
               [projectName]="projectName()"
               [query]="searchQuery()"
-              [response]="searchResponse()"
+              [response]="searchResponse()" [documentOrder]="wikiDocumentOrder()"
               [loading]="searchLoading()"
               [semanticLoading]="semanticLoading()"
               [semanticRequested]="semanticRequested()"
@@ -674,8 +674,8 @@
           <app-wiki-folder-view
               [projectName]="projectName()"
               [relPath]="folderRel"
-              [reloadNonce]="folderReloadNonce()"
-              (openFolder)="openFolderOverview($event)"
+              [reloadNonce]="folderReloadNonce()" [orderedFileNames]="selectedFolderDocumentOrder()" [writable]="wikiWritable()"
+              (fileOrderChange)="runFileOrderMutation(folderRel, $event)" (openFolder)="openFolderOverview($event)"
               (openPage)="openFile($event.relPath, $event.type)"
               (copyLink)="copyFolderLink($event)"
               (openRoot)="showWikiLanding()" />

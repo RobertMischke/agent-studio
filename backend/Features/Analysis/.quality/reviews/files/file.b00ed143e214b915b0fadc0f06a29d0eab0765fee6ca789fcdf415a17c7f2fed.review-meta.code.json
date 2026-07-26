@@ -1,0 +1,365 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/83568c2aaf77d4d6994ba8c32fd99bf7cc8057308d853ac10df47b9d801ffb8d",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+    "displayName": "AnalysisReportEndpoints.cs"
+  },
+  "reviewedAt": "2026-07-21T11:27:08.9579064Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-fe8da60f74c7410889b946aea52f826e"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "d72aeb52a05942318103f0779e072dc6455a873ac2d7a3b985fb449bcf9a1227"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+      "selector": "file",
+      "contentHash": "sha256:bed58b686ad5dc5fec521e044addb4e5468b006fee0b2c6270107d0f4893d8bf"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "8aab84d146963b87dea2c79efdaae0ed1effb5d26d200f4236863d738904d9b7"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:3337df96d3aeb1ff0dc5a1e76626c62c379d321ca317dd066f7d1d125ec963ce"
+    }
+  },
+  "grade": {
+    "score": 68,
+    "band": "D",
+    "rationale": "The endpoint surface is readable and generally follows consistent response shapes, but it has a significant project-path validation weakness, inconsistent roadmap bus behavior, and post-persistence failure handling that can report failure after successfully creating a report. Extensive duplication and ambient filesystem, clock, and identifier dependencies also reduce maintainability and testability."
+  },
+  "summary": "The implementation is understandable and its structured response records are clear. The highest-priority changes are to validate project identifiers and enforce path containment, make bus publication genuinely best-effort and consistent between actions, reject invalid filters, and extract the duplicated action workflow behind injectable dependencies.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 72,
+        "band": "C",
+        "rationale": "Core list, detail, creation, and action flows are coherent, but the roadmap evidence-only path incorrectly publishes a supporting-agent event and malformed enum filters silently broaden results."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 73,
+        "band": "C",
+        "rationale": "Naming and comments are strong, but the two action endpoint pairs duplicate validation, scope assembly, report construction, persistence, and bus publication logic, which has already developed behavioral drift."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 84,
+        "band": "B",
+        "rationale": "The routes, DTOs, and intended workflows are well documented. Some comments promise behavior that the code does not implement, particularly best-effort bus publication and evidence-only roadmap handling."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 55,
+        "band": "F",
+        "rationale": "Filesystem inputs are insufficiently constrained, bus failures can escape after the canonical write succeeds, invalid filters are ignored, and project-not-found responses disclose absolute server paths."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 66,
+        "band": "D",
+        "rationale": "Injected services support endpoint testing, but direct use of DateTime.UtcNow, Guid, AppContext.BaseDirectory, the current directory, and static filesystem APIs makes important behavior nondeterministic and environment-dependent."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "AR-001",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Project input can escape the configured projects directory",
+      "description": "The route-supplied project value is passed into Path.Combine and several storage or settings services without identifier validation or a canonical containment check. On Windows, a value containing backslashes and parent segments can resolve outside TaskRepository/projects. Directory.Exists then validates the escaped path instead of preventing traversal, potentially allowing analysis of or writes beneath unintended workspace locations.",
+      "recommendation": "Centralize project identifier validation and reject separators, rooted paths, dot segments, and unsupported names. For filesystem operations, resolve the full candidate path and verify that it remains beneath the canonical projects root before accessing it. Apply the same validation to report and schedule routes before passing project to downstream services.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 162,
+              "column": 1
+            },
+            "end": {
+              "line": 165,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 201,
+              "column": 1
+            },
+            "end": {
+              "line": 204,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 335,
+              "column": 1
+            },
+            "end": {
+              "line": 338,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 377,
+              "column": 1
+            },
+            "end": {
+              "line": 380,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-002",
+      "aspect": "error_handling",
+      "severity": "high",
+      "title": "Bus failures can turn a successful report write into a failed request",
+      "description": "The report is persisted before the awaited registration and emission calls. Despite the comment describing those calls as best-effort, there is no exception boundary. A bus exception or cancellation can therefore return an error after the canonical report already exists. A client retry may create a duplicate report with a new identifier.",
+      "recommendation": "Put bus publication behind a narrowly scoped best-effort boundary that records failures without changing the successful persistence response. Prefer a durable outbox or independently retried publication when bus delivery matters. Define cancellation semantics so cancellation after persistence cannot make the operation appear wholly unsuccessful.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 274,
+              "column": 1
+            },
+            "end": {
+              "line": 303,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 446,
+              "column": 1
+            },
+            "end": {
+              "line": 482,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-003",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Roadmap evidence-only runs are emitted as supporting-agent activity",
+      "description": "The roadmap action correctly labels a request without agentResponse as Manual/user, but it unconditionally registers a supporting agent and emits a supporting-agent report afterward. This contradicts the preceding policy comment and the steering-docs implementation, and can make the timeline claim that an agent ran when only evidence was assembled.",
+      "recommendation": "Guard roadmap bus registration and emission with hasAgentRun, as the steering-docs action does. If manual evidence requests must appear on the bus, publish them through a distinct manual-event API and retain their manual participant and trigger semantics.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 249,
+              "column": 1
+            },
+            "end": {
+              "line": 265,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 276,
+              "column": 1
+            },
+            "end": {
+              "line": 303,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-004",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Invalid enum filters are silently ignored",
+      "description": "When trigger or severity is nonblank but cannot be parsed, the endpoint applies no filter and returns the broader report set. A client typo can therefore look like a valid empty-or-filtered request while exposing unrelated results and hiding the integration error.",
+      "recommendation": "Return HTTP 400 with the accepted values whenever a supplied trigger or severity cannot be parsed. Consider binding dedicated query enums or a validated query DTO so invalid inputs are handled consistently.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 58,
+              "column": 1
+            },
+            "end": {
+              "line": 62,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-005",
+      "aspect": "error_handling",
+      "severity": "low",
+      "title": "Not-found responses disclose absolute server paths",
+      "description": "Both action families include the resolved projectRoot in their 404 payload. This reveals workspace layout and host filesystem details that clients do not need.",
+      "recommendation": "Return a stable message such as \u0022project not found\u0022 and place the absolute path only in appropriately protected server-side diagnostics.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 162,
+              "column": 1
+            },
+            "end": {
+              "line": 165,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 335,
+              "column": 1
+            },
+            "end": {
+              "line": 338,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-006",
+      "aspect": "maintainability",
+      "severity": "low",
+      "title": "Duplicated action orchestration has already diverged",
+      "description": "The roadmap and steering-docs action pairs repeat project validation, root resolution, scope selection, prompt rendering, evidence-only branching, report metadata selection, persistence, and bus publication. The inconsistent hasAgentRun guard demonstrates the risk of maintaining these copies independently.",
+      "recommendation": "Extract shared validation, prompt-action orchestration, report identifier creation, and bus publication helpers or a small application service. Keep topic-specific scope, parse, and report-building behavior behind supplied delegates or an interface.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 149,
+              "column": 1
+            },
+            "end": {
+              "line": 305,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 322,
+              "column": 1
+            },
+            "end": {
+              "line": 485,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-007",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Clock, identifier, and repository-root behavior use ambient state",
+      "description": "Report creation reads DateTime.UtcNow multiple times and directly generates GUIDs, while ResolveRepoRoot searches process-global directories through static filesystem APIs. Tests cannot deterministically control identifiers, timestamps, or repository discovery without arranging global process state.",
+      "recommendation": "Inject TimeProvider, a report ID generator, and a repository-root provider. Capture the current time once per request and use that same value for both the identifier and CreatedAt.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 114,
+              "column": 1
+            },
+            "end": {
+              "line": 118,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 528,
+              "column": 1
+            },
+            "end": {
+              "line": 546,
+              "column": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

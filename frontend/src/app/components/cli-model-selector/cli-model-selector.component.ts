@@ -2,49 +2,60 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  HostListener,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import type { CliType } from '../../models/task.model';
 import { CLI_TYPES } from '../../models/task.model';
-import type { CliModelInfo } from '../../features/cli';
+import { orderModelCatalog, type CliModelInfo } from '../../features/cli';
 import {
   cliTypeIcon as fmtCliTypeIcon,
   cliTypeLabel as fmtCliTypeLabel,
 } from '../../services/format.util';
-import { ModelSelectorComponent } from 'coding-agent-chat/composer';
-import type { ChatCliOption, ChatModelSelection } from 'coding-agent-chat/core';
+import { shortModelLabel } from 'coding-agent-chat/core';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
+import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
+import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
+import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';
+import { moveRadioSelection, normalizeThinkingLevel } from './cli-model-selector.util';
+
+interface CliOption {
+  id: CliType;
+  label: string;
+  icon: string;
+}
 
 /**
- * Unified CLI + model selector — thin app adapter around the library's
- * `<cac-model-selector>` (picker UI, draft/commit semantics, keyboard
- * navigation all live in `coding-agent-chat/composer`). This wrapper keeps
- * the historical `app-cli-model-selector` API so the ~10 call-sites and
- * their e2e testids stay untouched, and binds the app-only concerns the
- * library deliberately doesn't know about:
+ * Unified Studio CLI + model selector shared by board, task, pipeline, and
+ * settings surfaces. The catalog and its lifecycle signals are app-owned:
  *
  * - the CLI vocabulary (`CLI_TYPES` + label/icon formatting),
  * - the catalog data source (`CliCatalogStore`, hydrated per ADR-0046):
- *   the library asks via `catalogRequested`/`refreshRequested` and this
- *   adapter answers with `models`/`catalogLoading`/`catalogError`,
+ *   the picker refreshes on open and keeps cached data visible,
+ * - generation projection: current models lead while deprecated and
+ *   convention-derived superseded generations stay selectable in a quieter
+ *   "Older models" group,
  * - the modal stack (Escape/close coordination with app dialogs).
  *
- * Event surfaces are unchanged: `commit({cliType, model, thinkingLevel})`
- * plus the derived `cliTypeChange`/`modelChange`/`thinkingLevelChange`.
+ * Selecting a model or level auto-commits while the CLI is unchanged. A CLI
+ * change keeps the picker open until Done so the selection commits atomically.
  */
 @Component({
   selector: 'app-cli-model-selector',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ModelSelectorComponent],
+  imports: [AppTooltipDirective, ConnectedOverlayDirective, OverlayPortalDirective],
   templateUrl: './cli-model-selector.component.html',
+  styleUrl: './cli-model-selector.component.scss',
 })
 export class CliModelSelectorComponent {
   readonly cliType = input<CliType | null>(null);
@@ -78,9 +89,16 @@ export class CliModelSelectorComponent {
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
 
-  private readonly selector = viewChild(ModelSelectorComponent);
+  private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('trigger');
+  readonly triggerEl = computed(() => this.trigger()?.nativeElement ?? null);
+  readonly pickerOpen = signal(false);
+  readonly draftCliType = signal<CliType | null>(null);
+  readonly draftModel = signal('');
+  readonly draftThinkingLevel = signal<string | null>(null);
+  readonly draftModels = signal<readonly CliModelInfo[]>([]);
+  private readonly draftModelPinned = signal(true);
 
-  readonly cliOptions = computed<readonly ChatCliOption[]>(() =>
+  readonly cliOptions = computed<readonly CliOption[]>(() =>
     CLI_TYPES.map((t) => ({ id: t, label: fmtCliTypeLabel(t), icon: fmtCliTypeIcon(t) })),
   );
 
@@ -92,19 +110,83 @@ export class CliModelSelectorComponent {
   private lastRequestedCli: CliType | null = null;
 
   readonly effectiveModels = computed<readonly CliModelInfo[]>(
-    () => this.catalogModels() ?? this.availableModels(),
+    () => orderModelCatalog(this.catalogModels() ?? this.availableModels()),
   );
+  readonly draftAvailableModels = computed(() => this.draftModels());
+  readonly currentModels = computed(() =>
+    this.draftModels().filter((model) => !model.deprecated),
+  );
+  readonly olderModels = computed(() =>
+    this.draftModels().filter((model) => Boolean(model.deprecated)),
+  );
+  readonly draftSelectedModel = computed(() => {
+    const id = this.draftModel();
+    return id ? this.draftModels().find((model) => model.id === id) ?? null : null;
+  });
+  readonly draftThinkingLevels = computed(
+    () => this.draftSelectedModel()?.thinkingLevels ?? [],
+  );
+  readonly effectiveDisabledReason = computed(() => {
+    if (!this.disabled()) return null;
+    return this.disabledReason() ?? 'Stop the run first to change the model.';
+  });
+  readonly displayName = computed(() => shortModelLabel(this.model()));
+  readonly cliIcon = computed(() => {
+    const cli = this.cliType();
+    return cli ? this.cliOptions().find((option) => option.id === cli)?.icon ?? '·' : '·';
+  });
+  readonly currentBadgeText = computed(() =>
+    this.badgeText(this.cliType(), this.model(), this.thinkingLevel()),
+  );
+  readonly draftHeaderText = computed(() =>
+    this.badgeText(
+      this.draftCliType(),
+      this.draftModel().length > 0 ? this.draftModel() : null,
+      this.draftThinkingLevel(),
+    ),
+  );
+  readonly tooltip = computed(() => {
+    const override = this.tooltipOverride();
+    if (override !== null) return override;
+    const reason = this.effectiveDisabledReason();
+    return reason
+      ? `${this.currentBadgeText()}\n${reason}`
+      : `${this.currentBadgeText()} - click to change`;
+  });
+  readonly ariaLabel = computed(
+    () => this.ariaLabelOverride() ?? `Model: ${this.currentBadgeText()}`,
+  );
+  readonly hasChanges = computed(() => {
+    if (!this.pickerOpen()) return false;
+    const cliChanged = this.draftCliType() !== this.cliType();
+    const modelChanged = this.draftModel() !== (this.model() ?? '').trim();
+    const currentLevel = normalizeThinkingLevel(
+      this.draftModels(),
+      this.draftModel(),
+      this.thinkingLevel(),
+    );
+    return cliChanged || modelChanged || this.draftThinkingLevel() !== currentLevel;
+  });
 
   constructor() {
-    // Mirror the library picker's open state onto the app modal stack so
-    // Escape closes the picker before any outer dialog.
     effect(() => {
-      const open = this.selector()?.pickerOpen() ?? false;
+      const open = this.pickerOpen();
       if (open) {
         this.acquireModalStack();
       } else {
         this.releaseModalStack();
       }
+    });
+
+    effect(() => {
+      if (!this.disabled() || !this.pickerOpen()) return;
+      untracked(() => this.closePicker());
+    });
+
+    effect(() => {
+      const models = this.effectiveModels();
+      if (!this.pickerOpen()) return;
+      untracked(() => this.applyCatalog(models));
     });
   }
 
@@ -165,16 +247,163 @@ export class CliModelSelectorComponent {
     });
   }
 
-  onCommit(selection: ChatModelSelection): void {
-    this.commit.emit({
-      cliType: selection.cliType as CliType,
-      model: selection.model,
-      thinkingLevel: selection.thinkingLevel,
-    });
+  openPicker(event: Event): void {
+    if (this.effectiveDisabledReason() !== null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const currentModel = (this.model() ?? '').trim();
+    this.draftCliType.set(this.cliType());
+    this.draftModel.set(currentModel);
+    this.draftModelPinned.set(true);
+    this.draftModels.set(this.selectableModels(this.effectiveModels()));
+    this.draftThinkingLevel.set(
+      normalizeThinkingLevel(this.draftModels(), currentModel, this.thinkingLevel()),
+    );
+    this.pickerOpen.set(true);
+    const cli = this.cliType();
+    if (cli) this.onCatalogRequested(cli);
   }
 
-  onCliTypeChange(cli: string): void {
-    this.cliTypeChange.emit(cli as CliType);
+  closePicker(): void {
+    this.pickerOpen.set(false);
+    queueMicrotask(() => this.trigger()?.nativeElement.focus());
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.pickerOpen()) this.closePicker();
+  }
+
+  onCliPillClick(cli: CliType): void {
+    if (cli !== this.draftCliType()) {
+      this.draftCliType.set(cli);
+      this.draftModels.set([]);
+      this.draftModel.set('');
+      this.draftThinkingLevel.set(null);
+      this.draftModelPinned.set(false);
+    }
+    this.onCatalogRequested(cli);
+  }
+
+  onCliPillKeydown(cli: CliType, event: KeyboardEvent): void {
+    moveRadioSelection(
+      event,
+      this.cliOptions().map((option) => option.id),
+      cli,
+      (next) => this.onCliPillClick(next),
+    );
+  }
+
+  onModelPillClick(modelId: string): void {
+    const previousLevel = this.draftThinkingLevel();
+    this.draftModel.set(modelId);
+    this.draftModelPinned.set(true);
+    this.draftThinkingLevel.set(
+      normalizeThinkingLevel(this.draftModels(), modelId, previousLevel),
+    );
+    if (this.draftCliType() === this.cliType()) this.onDoneClick();
+  }
+
+  onDefaultModelClick(): void {
+    this.draftModel.set('');
+    this.draftModelPinned.set(true);
+    this.draftThinkingLevel.set(null);
+    if (this.draftCliType() === this.cliType()) this.onDoneClick();
+  }
+
+  onModelPillKeydown(modelId: string, event: KeyboardEvent): void {
+    moveRadioSelection(
+      event,
+      ['', ...this.draftModels().map((model) => model.id)],
+      modelId,
+      (next) => next === '' ? this.onDefaultModelClick() : this.onModelPillClick(next),
+    );
+  }
+
+  onThinkingLevelPillClick(level: string): void {
+    this.draftThinkingLevel.set(level);
+    if (this.draftCliType() === this.cliType()) this.onDoneClick();
+  }
+
+  onThinkingLevelPillKeydown(level: string, event: KeyboardEvent): void {
+    moveRadioSelection(
+      event,
+      [...this.draftThinkingLevels()],
+      level,
+      (next) => this.onThinkingLevelPillClick(next),
+    );
+  }
+
+  onDoneClick(): void {
+    if (!this.pickerOpen()) return;
+    if (this.disabled()) {
+      this.closePicker();
+      return;
+    }
+    const cli = this.draftCliType();
+    if (!cli) {
+      this.closePicker();
+      return;
+    }
+    if (this.hasChanges()) {
+      const selection = {
+        cliType: cli,
+        model: this.draftModel(),
+        thinkingLevel: this.draftThinkingLevel(),
+      };
+      if (cli !== this.cliType()) this.cliTypeChange.emit(cli);
+      this.modelChange.emit(selection.model);
+      this.thinkingLevelChange.emit(selection.thinkingLevel);
+      this.commit.emit(selection);
+    }
+    this.closePicker();
+  }
+
+  onRefreshClick(): void {
+    const cli = this.draftCliType();
+    if (cli) this.onRefreshRequested(cli);
+  }
+
+  olderModelNote(model: CliModelInfo): string {
+    return model.availabilityNote?.trim() || 'Older generation';
+  }
+
+  olderModelAriaLabel(model: CliModelInfo): string {
+    return `${model.label || model.id}. Older generation. ${this.olderModelNote(model)}`;
+  }
+
+  private applyCatalog(models: readonly CliModelInfo[]): void {
+    const selectable = this.selectableModels(models);
+    this.draftModels.set(selectable);
+    const current = this.draftModel();
+    const stillValid = current === '' || selectable.some((model) => model.id === current);
+    if (this.draftModelPinned() && stillValid) {
+      this.draftThinkingLevel.set(
+        normalizeThinkingLevel(this.draftModels(), current, this.draftThinkingLevel()),
+      );
+      return;
+    }
+    const defaultModel = selectable.find((model) => model.isDefault);
+    this.draftModel.set(defaultModel?.id ?? '');
+    this.draftThinkingLevel.set(defaultModel?.defaultThinkingLevel ?? null);
+  }
+
+  private selectableModels(models: readonly CliModelInfo[]): readonly CliModelInfo[] {
+    return models.filter((model) => model.available !== false);
+  }
+
+  private badgeText(
+    cliType: CliType | null,
+    model: string | null,
+    thinkingLevel: string | null,
+  ): string {
+    const cli = cliType
+      ? this.cliOptions().find((option) => option.id === cliType)?.label ?? cliType
+      : 'no CLI';
+    const modelLabel = model?.trim() || 'CLI default';
+    return thinkingLevel
+      ? `${cli} · ${modelLabel} · ${thinkingLevel}`
+      : `${cli} · ${modelLabel}`;
   }
 
   private acquireModalStack(): void {
@@ -182,7 +411,7 @@ export class CliModelSelectorComponent {
     this.modalStackDispose = this.modalStack.pushUntilDestroyed(
       'cli-model-selector-picker',
       () => {
-        this.selector()?.closePicker();
+        this.closePicker();
         return true;
       },
       this.destroyRef,

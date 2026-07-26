@@ -160,7 +160,7 @@ mobile; for a developer workbench we want more information per row.
 | -------------- | ------ | ------ | ------------ | -------------------------------------------------- |
 | `heading-xl`   | `24px` | 600    | Inter        | Empty-state heroes ("Welcome to the Studio")       |
 | `heading-lg`   | `20px` | 600    | Inter        | Sheet titles, sheet eyebrows                       |
-| `heading-md`   | `16px` | 600    | Inter        | Panel titles, project hub rail panel header        |
+| `heading-md`   | `16px` | 600    | Inter        | Panel titles, Deck rail panel header               |
 | `heading-sm`   | `14px` | 600    | Inter        | Card titles, section heads                         |
 | `body`         | `13px` | 400    | Inter        | Default body text inside panels and sheets         |
 | `body-strong`  | `13px` | 500    | Inter        | Inline emphasis, list-item titles                  |
@@ -282,7 +282,7 @@ type / motion rules. New components should be added to this list.
 - **Editor / tab host**
   [frontend/src/app/features/studio-shell/services/studio-tab-state.service.ts](../../../frontend/src/app/features/studio-shell/services/studio-tab-state.service.ts)
   — tab strip with drag-reorder + localStorage persistence, projected
-  content per tab kind (board, project hub, task detail, diff,
+  content per tab kind (board, Deck, task detail, diff,
   activity).
 - **Status bar**
   [frontend/src/app/features/shell/components/status-bar.ts](../../frontend/src/app/features/shell/components/status-bar.ts)
@@ -293,7 +293,7 @@ type / motion rules. New components should be added to this list.
 
 - **Board view** — the three-super-column kanban (Backlog / Active /
   Done & Decide) projected as the default tab content.
-- **Project Hub**
+- **Deck**
   [frontend/src/app/features/studio-shell/components/project-hub-view/project-hub-view.component.ts](../../../frontend/src/app/features/studio-shell/components/project-hub-view/project-hub-view.component.ts)
   — embeds `<app-project-shell>` with all rail items (Overview,
   Design, Visual Evidence, Architecture, Drift, UX/UI, Observability,
@@ -316,9 +316,9 @@ type / motion rules. New components should be added to this list.
 - **Confirm / Error / Update / Lightbox dialogs** — standardised
   centred modals.
 
-### Project Hub rails
+### Deck rails
 
-The Project Hub rail items live in
+The Deck rail items live in
 [project-shell.config.ts](../../../frontend/src/app/features/project-detail/components/project-shell/project-shell.config.ts).
 They are grouped into four buckets:
 
@@ -423,7 +423,7 @@ Hosts onboarding card is the reference consumer.
 
 ### Pattern: monochrome rail with one accent
 
-Vertical lists of navigation items (the activity bar, the Project Hub
+Vertical lists of navigation items (the activity bar, the Deck
 rail, the Steering Docs list) use a single muted foreground colour for
 icons and labels, with `--studio-accent` reserved for the active /
 selected state. No two rail items share a colour.

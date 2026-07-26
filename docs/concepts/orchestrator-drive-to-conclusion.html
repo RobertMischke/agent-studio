@@ -738,6 +738,25 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2206</code><br><span class="small">completion gate treated <code>steer-pending.json</code> as open work</span></td>
+          <td>
+            A completed UI-pipeline implementation described its versioned <code>steer-pending.json</code> Human Review
+            contract in the final log. The completion gate extracted the same successful description from stdout and stderr as
+            two unfinished-work findings, reissued the task twice, and then escalated the exhausted gate.
+          </td>
+          <td>
+            The generic incomplete-work expression matched the standalone word <code>pending</code> inside a hyphenated JSON
+            filename. It did not distinguish a status word from an artifact identifier.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the <code>pending</code> signal now requires identifier-safe boundaries, so
+            <code>steer-pending.json</code> and similar names are diagnostic context while real prose such as
+            <em>"route wiring is still pending"</em> remains blocking. A regression fixture pins the duplicated production log
+            lines and the exhausted-budget pass decision.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-12</td>
           <td><code>AGT-2149</code><br><span class="small">completion gate interpreted prose as open work</span></td>
           <td>
@@ -1024,6 +1043,47 @@
         </tr>
         <tr>
           <td>2026-07-25</td>
+          <td><code>AGT-2341</code><br><span class="small">blocked sentinel overridden by diagnostic narrative<br>(observed on <code>AGT-2280</code>)</span></td>
+          <td>
+            The CLI exited zero with the honest terminal
+            <code>[[TASK_BLOCKED:deck-panel-v1-decision-missing]]</code>. Diagnostic narrative mentioned an OOM scenario,
+            so the shared classifier emitted <code>OutOfMemory</code> with <code>TerminateHonestly</code> while the legacy
+            outcome remained <code>Unknown</code>. No real OOM fact existed.
+          </td>
+          <td>
+            The diagnostic-regex guard covered only exit-zero <code>TASK_DONE</code> and <code>TASK_NOOP</code>.
+            <code>TASK_BLOCKED</code> therefore remained vulnerable to narrative OOM, quota, authentication, session, and
+            configuration matches. The typed blocker also discarded the sentinel's reason slug.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every explicit exit-zero terminal now suppresses diagnostic-only
+            infrastructure regex matches, while authoritative facts such as <code>OomKilled</code> still win.
+            <code>ExplicitAgentBlocker</code> remains the stable typed terminal and carries the exact reason slug in its
+            additive <code>Detail</code> field for Task Server and board consumers.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
+          <td><code>AGT-2335</code><br><span class="small">expired dead-attempt release kept daemon in startup retry<br>(observed on <code>AGT-2326</code>)</span></td>
+          <td>
+            Startup found a dead persisted Drain-Stop attempt. The Task Server answered its release with
+            <code>Expired</code>, but the runner retained the durable slot and threw the fail-closed startup exception.
+            systemd repeatedly restarted the unit while it remained activating. Operations recovered by quarantining the
+            durable runner state.
+          </td>
+          <td>
+            <code>RemoteTaskRunner.ReleaseAsync</code> recognized only <code>Released</code> and <code>NotHeld</code> as
+            successful release terminals. It treated the idempotent lease-absent outcomes <code>Expired</code>,
+            <code>NotFound</code>, and <code>AlreadyReleased</code> like release failures even though no lease remained.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> all explicit lease-absent outcomes now delete the dead persisted slot and let
+            daemon startup continue. Unknown outcomes and request failures still retain the slot and reach the fail-closed
+            retry terminal. The restart regression pins the observed <code>Expired</code> response.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
           <td><code>AGT-2320</code><br><span class="small">remote lease-loss requeue and deleted-cwd spiral</span></td>
           <td>
             A backend restart invalidated leases for active remote runs. Their cards returned to
@@ -1046,6 +1106,67 @@
             only after a 120-second grace and the assigned runner's explicit inactive-task report.
             New claims close above load/core 1.5. Focused tests pin all four boundaries; the run
             terminates as fenced lease loss, never as another overlapping coding generation.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2208</code><br><span class="small">conflicting run-outcome UI<br>(observed on <code>AGT-2205</code>, <code>AGT-2206</code>, and <code>QS-26</code>)</span></td>
+          <td>
+            Remote-run task detail showed mutually exclusive primary statements at once: Unclear, Task Complete, and a
+            failed-run Activity banner on running cards; QS-26 showed watchdog failure, Accepted, and Blocked / Partial together.
+          </td>
+          <td>
+            Protocol, Activity, Result case, Pipeline decision, lane, and runner-issue surfaces each classified their own subset
+            of signals. The lane/review rule could also promote Accepted over a failed or blocked run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> task detail now computes one current-run presentation with precedence
+            <code>failed &gt; needs-decision &gt; unclear &gt; succeeded</code>. Banner, Result, and Pipeline consume the same object;
+            raw signals live under <em>Why this status?</em>. Running runs ignore stale terminal records. The three observed cases
+            are covered by unit fixtures, with the QS-26 conflict also covered in Playwright.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2348</code><br><span class="small">remote review baseline comparison</span></td>
+          <td>
+            Remote Review ran a successful build and then the non-MachineBound test suite for every
+            subject. About eleven known failures on the integration branch made the test command exit
+            nonzero for every card, producing 28 false ProductFailure outcomes overnight and further
+            false failures for clean deliveries.
+          </td>
+          <td>
+            The Review Executor and Task Server classified any nonzero review command as a product
+            defect. They did not compare failing-test identities with the subject's merge-base, cache
+            the shared baseline, or retry failures that were new only because of a one-run flake.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> baseline-marked test commands now block only on
+            <code>subject failures - merge-base failures</code> after one retry of new failures.
+            Reports separate and name new and pre-existing failures. Baselines are single-flight
+            cached by repository, baseline SHA, and command hash, so cards return to meaningful
+            Pass or ProductFailure terminals while baseline cleanup continues independently.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2345</code><br><span class="small">boot backfill overruled operator lane verdicts</span></td>
+          <td>
+            Every backend restart swept run-backed cards with no provenance verdict out of their operator-selected lanes.
+            Two deploys on 26 July each displaced about six cards, including freshly requeued
+            <span class="lane">2-ready</span> work and Human Review cards; the 25 July restart displaced more than 30.
+            The operator had to restore the intended lanes after every boot.
+          </td>
+          <td>
+            The verdictless Human Review repair consulted only the decision journal, card age, and run provenance. It did
+            not treat the latest human-authored lane transition as a verdict, did not state terminal-lane exclusions, and
+            dropped <code>MoveJobRequest.Reason</code> before writing the <code>lane_changed</code> ledger row.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a latest <code>human</code> or <code>human:&lt;client-id&gt;</code>
+            lane transition now protects the operator-selected lane. Completed and Archive are explicit boot-repair
+            terminals, operator requeues in Ready remain untouched, and every reasoned lane move, including the legacy
+            repair itself, records the reason in <code>timeline.jsonl</code>.
           </td>
         </tr>
       </tbody>

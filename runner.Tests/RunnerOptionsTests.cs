@@ -50,6 +50,36 @@ public class RunnerOptionsTests
     }
 
     [Fact]
+    public void Agent_host_environment_aliases_are_accepted()
+    {
+        using var environment = new EnvironmentVariableScope(
+            ("RUNNER_SERVER_URL", null),
+            ("RUNNER_ID", null),
+            ("RUNNER_MAX_PARALLELISM", null),
+            ("AGENT_HOST_SERVER_URL", "http://127.0.0.1:5031"),
+            ("AGENT_HOST_ID", "agent-runner-01"),
+            ("AGENT_HOST_MAX_PARALLELISM", "3"));
+
+        var (options, _, _, _) = RunnerOptions.Parse(["--poll"]);
+
+        Assert.Equal("http://127.0.0.1:5031", options.ServerUrl);
+        Assert.Equal("agent-runner-01", options.RunnerId);
+        Assert.Equal(3, options.HostMaxParallelism);
+    }
+
+    [Fact]
+    public void Bootstrap_runner_environment_takes_precedence_over_agent_host_alias()
+    {
+        using var environment = new EnvironmentVariableScope(
+            ("RUNNER_NAME", "agent-runner-01"),
+            ("AGENT_HOST_NAME", "new-host-name"));
+
+        var (options, _, _, _) = RunnerOptions.Parse(["--poll"]);
+
+        Assert.Equal("agent-runner-01", options.RunnerName);
+    }
+
+    [Fact]
     public void Provider_specific_resume_args_require_and_preserve_session_placeholder()
     {
         var (options, _, _, _) = RunnerOptions.Parse(
@@ -154,6 +184,19 @@ public class RunnerOptionsTests
         => Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
             "--server", "https://tasks.example.com", "--auth-token", "rnr.test.secret-value-long-enough"]));
 
+    [Fact]
+    public void Private_ca_certificate_pin_is_not_treated_as_a_secret()
+    {
+        using var token = new TemporaryTokenFile();
+        var fingerprint = new string('A', 64);
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--server", "https://tasks.example.com",
+            "--auth-token-file", token.Path,
+            "--tls-certificate-sha256", fingerprint]);
+
+        Assert.Equal(fingerprint, options.TlsServerCertificateSha256);
+    }
+
     private sealed class TemporaryTokenFile : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "runner-token-" + Guid.NewGuid().ToString("N"));
@@ -165,6 +208,26 @@ public class RunnerOptionsTests
         }
 
         public void Dispose() => File.Delete(Path);
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly (string Name, string? Value)[] _original;
+
+        public EnvironmentVariableScope(params (string Name, string? Value)[] values)
+        {
+            _original = values
+                .Select(value => (value.Name, Environment.GetEnvironmentVariable(value.Name)))
+                .ToArray();
+            foreach (var (name, value) in values)
+                Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            foreach (var (name, value) in _original)
+                Environment.SetEnvironmentVariable(name, value);
+        }
     }
 }
 

@@ -1,5 +1,6 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { test } from '../fixtures/dev-backend';
 import { api, BACKEND } from '../helpers/api';
 
 /**
@@ -78,20 +79,27 @@ async function deleteTask(jobId: string, watchPath: string): Promise<void> {
 async function cleanup(): Promise<void> {
   const all = await listTasks();
   const stale = all.filter(j => j.id.startsWith(PREFIX));
-  await Promise.all(stale.map(j => deleteTask(j.id, j.watchPath).catch(() => {})));
+  await Promise.all(stale.map(j => deleteTask(j.id, j.watchPath).catch(() => undefined)));
 }
 
-async function mockEpic(page: Page, epicId: string, watchPath: string): Promise<void> {
+async function mockEpic(
+  page: Page,
+  epicId: string,
+  watchPath: string,
+  onRequest: () => void = () => undefined,
+): Promise<void> {
   const body = JSON.stringify({
     id: epicId, key: MOCK_KEY, title: MOCK_TITLE, projectName: 'agent-taskboard',
     watchPath, state: '2-ready', subTaskTotal: 0, completed: 0, inProgress: 0, open: 0,
     byState: {}, subTasks: [],
   });
-  await page.route(`**/api/epics/${encodeURIComponent(epicId)}**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body }));
+  await page.route(`**/api/epics/${encodeURIComponent(epicId)}**`, (route) => {
+    onRequest();
+    return route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
 }
 
-async function mockEpicDetail(page: Page, epicId: string, watchPath: string, onRequest: () => void): Promise<void> {
+async function mockEpicDetail(page: Page, epicId: string, watchPath: string, onRequest: (url: URL) => void): Promise<void> {
   const body = JSON.stringify({
     info: {
       id: epicId,
@@ -113,21 +121,37 @@ async function mockEpicDetail(page: Page, epicId: string, watchPath: string, onR
     log: [],
   });
   await page.route(`**/api/tasks/${encodeURIComponent(epicId)}**`, (route) => {
-    onRequest();
+    const url = new URL(route.request().url());
+    if (url.pathname !== `/api/tasks/${encodeURIComponent(epicId)}`) {
+      return route.fallback();
+    }
+    onRequest(url);
     return route.fulfill({ status: 200, contentType: 'application/json', body });
   });
 }
 
 async function openTask(page: Page, t: TaskLite): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`/?job=${encodeURIComponent(t.id)}&watchPath=${encodeURIComponent(t.watchPath)}`);
+  await page.goto(
+    `/?job=${encodeURIComponent(t.id)}&watchPath=${encodeURIComponent(t.watchPath)}`,
+    { waitUntil: 'domcontentloaded', timeout: 30_000 },
+  );
+  await dismissCrashRecovery(page);
+}
+
+async function dismissCrashRecovery(page: Page): Promise<void> {
+  const recoveryOverlay = page.getByTestId('crash-recovery-prompt-overlay');
+  if (await recoveryOverlay.isVisible().catch(() => false)) {
+    await page.getByTestId('crash-recovery-dismiss-all').click();
+    await expect(recoveryOverlay).toBeHidden({ timeout: 10_000 });
+  }
 }
 
 test.describe('Task-detail epic-membership banner', () => {
   test.beforeEach(() => test.setTimeout(120_000));
   test.afterEach(() => cleanup());
 
-  test('sub-task shows its epic as a flat band and requests the parent epic on click', async ({ page }) => {
+  test('sub-task shows its epic as a flat band and requests the parent epic on click', async ({ page, devBackend: _devBackend }) => {
     const wp = await getTestWatchPath();
     await cleanup();
     const epicId = await createTask({
@@ -145,9 +169,10 @@ test.describe('Task-detail epic-membership banner', () => {
       }),
       watchPath: wp.path,
     };
-    let epicDetailRequests = 0;
-    await mockEpic(page, epicId, sub.watchPath);
-    await mockEpicDetail(page, epicId, sub.watchPath, () => { epicDetailRequests++; });
+    const epicDetailRequestUrls: URL[] = [];
+    let epicRollupRequests = 0;
+    await mockEpic(page, epicId, sub.watchPath, () => epicRollupRequests++);
+    await mockEpicDetail(page, epicId, sub.watchPath, (url) => epicDetailRequestUrls.push(url));
     await openTask(page, sub);
 
     const banner = page.getByTestId('epic-membership-banner');
@@ -172,15 +197,19 @@ test.describe('Task-detail epic-membership banner', () => {
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'sub-task-epic-banner.png'), fullPage: false });
 
-    // Clicking the flat band delegates to the app-level related-job opener.
-    // Epic targets are kept out of the current task URL by design.
+    // Clicking the flat band resolves through the path-free project handle and
+    // retargets the current task editor into the parent Epic tab.
+    epicDetailRequestUrls.length = 0;
+    epicRollupRequests = 0;
+    await dismissCrashRecovery(page);
     await banner.click();
-    await expect.poll(() => epicDetailRequests, { timeout: 15_000 }).toBeGreaterThan(0);
-
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'after-parent-epic-request.png'), fullPage: false });
+    await expect.poll(() => epicDetailRequestUrls.length, { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(epicDetailRequestUrls[0].searchParams.get('project')).toBeTruthy();
+    expect(epicDetailRequestUrls[0].searchParams.has('watchPath')).toBe(false);
+    await expect.poll(() => epicRollupRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   });
 
-  test('a task without an epic shows no banner', async ({ page }) => {
+  test('a task without an epic shows no banner', async ({ page, devBackend: _devBackend }) => {
     const wp = await getTestWatchPath();
     await cleanup();
     const plain: TaskLite = {

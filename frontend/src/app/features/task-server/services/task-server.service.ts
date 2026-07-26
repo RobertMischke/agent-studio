@@ -7,6 +7,12 @@ import type {
   TaskServerStatus,
 } from '../models/task-server.model';
 import { isLocalUrl } from '../models/task-server.model';
+import { AuthSessionState } from '../../../services/auth.service';
+
+export interface TaskServerUnavailable {
+  reason: string;
+  signInRequired: boolean;
+}
 
 interface ApiStatus {
   server: { id: string; url: string; version: string; protocolMinimum: string; protocolMaximum: string; uptimeSeconds: number };
@@ -37,9 +43,11 @@ interface ApiCommandResult {
 @Injectable({ providedIn: 'root' })
 export class TaskServerService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthSessionState);
   readonly status = signal<TaskServerStatus | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly unavailable = signal<TaskServerUnavailable | null>(null);
   readonly busyAction = signal<ManagementActionKind | null>(null);
   readonly recentResults = computed<readonly ManagementActionResult[]>(() => this.status()?.recentResults ?? []);
   private loaded = false;
@@ -49,16 +57,24 @@ export class TaskServerService {
   async reload(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
+    this.unavailable.set(null);
     try {
       const api = await firstValueFrom(this.http.get<ApiStatus>('/api/v1/management/status'));
       const prior = this.status()?.recentResults ?? [];
       this.status.set(this.mapStatus(api, prior));
       this.loaded = true;
-    } catch {
-      this.error.set('The authenticated Task Server management API is unavailable.');
+    } catch (error: unknown) {
+      const unavailable = this.describeUnavailable(error);
+      this.status.set(null);
+      this.unavailable.set(unavailable);
+      this.error.set(unavailable.reason);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  requestSignIn(): void {
+    this.auth.expireNetworkedSession();
   }
 
   async runAction(kind: ManagementActionKind, confirmed = false, runnerId?: string, runnerName?: string): Promise<void> {
@@ -140,6 +156,43 @@ export class TaskServerService {
       backups: api.backups,
       security: api.security,
       recentResults,
+    };
+  }
+
+  private describeUnavailable(error: unknown): TaskServerUnavailable {
+    if (error instanceof HttpErrorResponse) {
+      const apiMessage = typeof error.error?.message === 'string' ? error.error.message : null;
+      const loginUrl = typeof error.error?.loginUrl === 'string' ? error.error.loginUrl : null;
+      const networked = this.auth.status()?.profile === 'networked' || loginUrl === '/api/auth/login';
+      if (error.status === 401 && networked) {
+        return {
+          reason: apiMessage ?? 'Sign in with an owner or operator account to manage the Task Server.',
+          signInRequired: true,
+        };
+      }
+      if (error.status === 403) {
+        return {
+          reason: apiMessage ?? 'Your signed-in account does not have the owner or operator role required for Task Server management.',
+          signInRequired: false,
+        };
+      }
+      if (error.status === 401) {
+        return {
+          reason: apiMessage ?? 'The local Task Server rejected the loopback local-default operator identity.',
+          signInRequired: false,
+        };
+      }
+      if (error.status === 0) {
+        return {
+          reason: 'The Task Server could not be reached. Check that the local service is running and reload this panel.',
+          signInRequired: false,
+        };
+      }
+      if (apiMessage) return { reason: apiMessage, signInRequired: false };
+    }
+    return {
+      reason: 'The Task Server management API did not return a usable status. Reload the panel or inspect the server logs.',
+      signInRequired: false,
     };
   }
 }

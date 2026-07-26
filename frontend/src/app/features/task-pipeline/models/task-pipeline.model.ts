@@ -45,6 +45,8 @@ export interface TaskPipeline {
 export interface PipelineStepExecution {
   stepId: string;
   kind: StepKind;
+  /** Pipeline attempt epoch that owns this row. Null only on legacy records. */
+  attempt?: number | null;
   model?: string | null;
   thinkingLevel?: string | null;
   recommendedModel?: string | null;
@@ -236,6 +238,7 @@ export interface OnDemandPostStepAttempt {
  */
 export interface PipelineCatalogueStep {
   id: string;
+  pipelineId?: string | null;
   displayName: string;
   kind: StepKind;
   phase?: string | null;
@@ -267,6 +270,8 @@ export interface PipelineCatalogueStep {
    * to render the condition control in the project settings pipeline editor.
    */
   supportsCondition: boolean;
+  supportsMaxIterations?: boolean;
+  defaultMaxIterations?: number | null;
 }
 
 /**
@@ -304,6 +309,7 @@ export interface PipelineCatalogue {
 export interface PipelineStepSetting {
   enabled?: boolean | null;
   economyModel?: boolean | null;
+  maxIterations?: number | null;
   mode?: string | null;
   cliType?: string | null;
   model?: string | null;

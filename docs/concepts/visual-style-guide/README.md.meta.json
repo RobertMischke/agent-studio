@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Visual Style Guide Workbench index",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "58f403f9373810111649bf112d2f84f78b0cc05e655f84b1941795b9cd53b9b7",
+      "sizeBytes": 4371,
+      "lineCount": 89,
+      "capturedAt": "2026-07-23T18:30:00.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-23"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2274",
+      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2237",
+      "title": "Tone of Voice Style Guide",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}

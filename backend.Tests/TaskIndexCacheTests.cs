@@ -120,7 +120,7 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
-    public void CachedSnapshot_ExcludesArchive_ButRawAndLazyFindStillResolveIt()
+    public void CachedSnapshot_ExcludesArchive_ButArchiveFindUsesCachedPartition()
     {
         WriteJob(TaskStates.Ready, "job-1", "First");
         WriteJob(TaskStates.Archive, "archived-1", "Archived");
@@ -137,6 +137,8 @@ public class TaskIndexCacheTests : IDisposable
         Assert.NotNull(archived);
         Assert.Equal(TaskStates.Archive, archived!.State);
         Assert.Equal("Archived", archived.Title);
+        Assert.Equal(1, _cache.Misses);
+        Assert.Equal(1, _cache.Hits);
     }
 
     [Fact]
@@ -191,6 +193,72 @@ public class TaskIndexCacheTests : IDisposable
 
         _cache.Invalidate();
         Assert.Equal(2, _scanner.ScanArchivedJobs().Count);
+    }
+
+    [Fact]
+    public void UnchangedArchiveFolder_IsHydratedOnceAcrossSnapshotRefreshes()
+    {
+        WriteJob(TaskStates.Archive, "archived-1", "Archived");
+        var first = Assert.Single(_scanner.ScanArchivedJobs());
+
+        _cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        var second = Assert.Single(_scanner.ScanArchivedJobs());
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void ReferenceIndex_IsReusedUntilSnapshotInvalidation()
+    {
+        WriteJob(TaskStates.Ready, "job-1", "First");
+        var first = _scanner.GetReferenceIndex();
+        var warm = _scanner.GetReferenceIndex();
+
+        Assert.Same(first, warm);
+        Assert.NotNull(first.Resolve("JOB-1"));
+
+        WriteJob(TaskStates.Ready, "job-2", "Second");
+        _cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        var refreshed = _scanner.GetReferenceIndex();
+
+        Assert.NotSame(first, refreshed);
+        Assert.NotNull(refreshed.Resolve("JOB-2"));
+    }
+
+    [Fact]
+    public void LiveSnapshotAndReferenceIndex_AreCapturedFromOneGeneration()
+    {
+        WriteJob(TaskStates.Ready, "job-1", "First");
+
+        var snapshot = _scanner.GetLiveSnapshotWithReferenceIndex();
+
+        Assert.Single(snapshot.Live);
+        Assert.Same(_scanner.GetReferenceIndex(), snapshot.References);
+        Assert.NotNull(snapshot.References.Resolve("JOB-1"));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public void WarmArchiveInclusiveScan_Over1000Folders_FinishesUnderOneSecond()
+    {
+        for (var i = 0; i < 1_000; i++)
+        {
+            var state = i < 800 ? TaskStates.Archive : TaskStates.Ready;
+            WriteJob(state, $"perf-{i:D4}", $"Performance {i:D4}");
+        }
+
+        Assert.Equal(1_000, _scanner.ScanAllJobsWithArchive().Count);
+        var missesAfterWarmup = _cache.Misses;
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var warm = _scanner.ScanAllJobsWithArchive();
+        stopwatch.Stop();
+
+        Assert.Equal(1_000, warm.Count);
+        Assert.Equal(missesAfterWarmup, _cache.Misses);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+            $"Warm scan of 1000 folders took {stopwatch.Elapsed.TotalMilliseconds:0.###} ms.");
     }
 
     [Fact]
@@ -496,7 +564,16 @@ public class TaskIndexCacheTests : IDisposable
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            JsonSerializer.Serialize(new { id = slug, title, state, order = 1, agent = "claude" }));
+            JsonSerializer.Serialize(new
+            {
+                id = slug,
+                key = slug.ToUpperInvariant(),
+                title,
+                state,
+                order = 1,
+                agent = "claude",
+                ownerClientId = DefaultClientIdentity.Id,
+            }));
     }
 
     public void Dispose()

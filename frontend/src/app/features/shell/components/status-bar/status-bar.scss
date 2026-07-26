@@ -148,8 +148,13 @@ app-status-bar {
   color: var(--severity-pass);
   animation: statusbar-pulse 1.4s infinite;
 }
+.statusbar__warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--severity-warn);
+}
 
-// Remote host load stays woven into the existing running pulse. Calm load is
+// Execution host load stays woven into the existing running pulse. Calm load is
 // only a faint green undertone, working/hot move gently toward amber, and a
 // correlation mismatch adds one static ring instead of another widget.
 .statusbar__item[data-signal-tone='calm'] .statusbar__icon {

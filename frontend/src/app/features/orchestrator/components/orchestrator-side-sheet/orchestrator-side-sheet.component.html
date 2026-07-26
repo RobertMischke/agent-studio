@@ -66,23 +66,17 @@
             <button type="button"
                     [class.sheet__context-action--active]="pinned()"
                     [attr.aria-pressed]="pinned()"
-                    [appTooltip]="pinned()
-                      ? 'Follow navigation when you want this chat to track the project or task you open.'
-                      : 'Pin this context when you want the chat to stay on the current project or task while you navigate elsewhere.'"
                     (click)="togglePin()"
                     data-testid="orch-side-sheet-pin">{{ pinned() ? 'Follow navigation' : 'Pin context' }}</button>
             @if (effectiveJobId() && effectiveWatchPath()) {
               <button type="button"
-                      appTooltip="Open verbose runtime details when you need to investigate this task chat."
                       (click)="onOpenVerboseDebug()"
                       data-testid="orch-side-sheet-verbose-debug">Debug</button>
             }
             <button type="button"
-                    appTooltip="Open Orchestrator settings when you need to change its behavior or defaults."
                     (click)="onOpenSettings()"
                     data-testid="orch-side-sheet-settings">Settings</button>
             <button type="button"
-                    appTooltip="Reload this context digest and chat when you need the latest available state."
                     (click)="refreshCurrentContext()"
                     [disabled]="loading() || contextDigestState.refreshing()"
                     data-testid="orch-side-sheet-refresh">
@@ -90,9 +84,6 @@
             </button>
             <button type="button"
                     [attr.aria-pressed]="!contextDismissed()"
-                    [appTooltip]="contextDismissed()
-                      ? 'Include the current context with your next message when it is relevant to the request.'
-                      : 'Send your next message without the current context when it would distract from the request.'"
                     (click)="toggleNextMessageContext()"
                     data-testid="orch-context-send-toggle">
               {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}

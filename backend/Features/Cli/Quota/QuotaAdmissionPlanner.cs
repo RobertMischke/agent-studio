@@ -29,7 +29,8 @@ public sealed record QuotaAdmissionPlan(
     string Reason,
     DateTime? NextResetAt,
     QuotaProjection? Projection,
-    QuotaProjectionWarning? ProjectionWarning = null)
+    QuotaProjectionWarning? ProjectionWarning = null,
+    bool NearbyResetWait = false)
 {
     /// <summary>True when the runner should proceed to a launch (primary or fallback).</summary>
     public bool ShouldLaunch => Outcome is QuotaAdmissionOutcome.LaunchPrimary or QuotaAdmissionOutcome.LaunchFallback;
@@ -65,7 +66,8 @@ public static class QuotaAdmissionPlanner
         CliQuotaCapsService caps,
         Func<string?, QuotaSnapshot?> snapshotFor,
         DateTime nowUtc,
-        int occupiedSlots)
+        int occupiedSlots,
+        ResolvedCliQuotaWaitPolicy? waitPolicy = null)
     {
         var cli = string.IsNullOrWhiteSpace(requestedCli)
             ? CliTypes.Claude
@@ -85,9 +87,39 @@ public static class QuotaAdmissionPlanner
                    ?? CapEvaluation.NotBlocked;
         }
 
+        // 1) The opt-in CAR 0.6 wait policy owns the first decision when the
+        // primary is already capped and its confirmed reset is nearby. This is
+        // intentionally before route resolution: nearby wait -> model switch ->
+        // throttle. Unknown, elapsed, or distant resets fail open to the
+        // existing fallback/admission route.
+        var strictPrimaryEarly = Strict(cli);
+        var nearbyReset = EarliestReset(primarySnapshot, nowUtc, caps, blockedOnly: true);
+        if (waitPolicy?.Enabled == true
+            && strictPrimaryEarly.Blocked
+            && !strictPrimaryEarly.Suspicious
+            && nearbyReset?.ResetAt is { } resetAt)
+        {
+            var remaining = resetAt - nowUtc;
+            if (remaining > TimeSpan.Zero && remaining < TimeSpan.FromMinutes(waitPolicy.ThresholdMinutes))
+            {
+                var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+                return new QuotaAdmissionPlan(
+                    QuotaAdmissionOutcome.Wait,
+                    cli,
+                    requestedModel,
+                    requestedThinking,
+                    IsFallback: false,
+                    Reason: $"waiting for quota reset {resetAt:HH:mm} UTC, {minutes} min remaining (threshold {waitPolicy.ThresholdMinutes} min)",
+                    NextResetAt: resetAt,
+                    Projection: QuotaWindowProjection.WorstProjection(primarySnapshot, caps, nowUtc),
+                    ProjectionWarning: projectionWarning,
+                    NearbyResetWait: true);
+            }
+        }
+
         var route = fallback?.Resolve(cli, requestedModel, requestedThinking, Admission);
 
-        // 1) The router switched us to the fallback (primary capped or projected;
+        // 2) The router switched us to the fallback (primary capped or projected;
         //    a usable fallback exists). Documented model switch before start.
         if (route?.IsFallback == true)
         {
@@ -110,7 +142,7 @@ public static class QuotaAdmissionPlanner
         var strictPrimary = Strict(cli);
         var admissionPrimary = route?.PrimaryCap ?? Admission(cli);
 
-        // 2) Primary is ACTUALLY over cap and no fallback saved us: everything is
+        // 3) Primary is ACTUALLY over cap and no fallback saved us: everything is
         //    exhausted. Wait quietly with a reason and the next reset time.
         if (strictPrimary.Blocked)
         {
@@ -127,7 +159,7 @@ public static class QuotaAdmissionPlanner
                 ProjectionWarning: projectionWarning);
         }
 
-        // 3) Primary is only PROJECTED to breach and there is no usable fallback.
+        // 4) Primary is only PROJECTED to breach and there is no usable fallback.
         //    Throttle (reduce parallelism) rather than block - but never throttle
         //    to zero: the first/only run always proceeds, else nothing ever runs.
         if (admissionPrimary.Blocked)
@@ -143,7 +175,7 @@ public static class QuotaAdmissionPlanner
                 NextResetAt: reset?.ResetAt, Projection: proj, ProjectionWarning: projectionWarning);
         }
 
-        // 4) Healthy: launch on primary.
+        // 5) Healthy: launch on primary.
         return new QuotaAdmissionPlan(
             QuotaAdmissionOutcome.LaunchPrimary, cli, model, thinking,
             IsFallback: false,
@@ -196,6 +228,7 @@ public static class QuotaAdmissionPlanner
         foreach (var w in snapshot.Windows)
         {
             if (w.ResetAt is null) continue;
+            if (w.ResetAt.Value <= nowUtc) continue;
             if (blockedOnly)
             {
                 if (w.UsedPct is null) continue;

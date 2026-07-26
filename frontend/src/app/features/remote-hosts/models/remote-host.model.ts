@@ -1,9 +1,10 @@
 import type { CliType } from '../../../models/task.model';
+import type { RunnerProjectPreflight } from '../../../models/task.model';
 
 /**
  * Remote-hosts registry model (AGT-1921).
  *
- * The "Remote Hosts" settings page shows every execution location - the
+ * The "Execution Hosts" settings page shows every execution location - the
  * operator's local machine and each remote runner host - in one list, so the
  * whole fleet reads as a single picture (see
  * docs/research/remote-ready-kickoff-2026-07.md). Host definitions are seeded
@@ -85,6 +86,10 @@ export interface HostTelemetryFinding {
   label: string;
   since: string;
   until: string;
+  /** Number of completed phases represented by this window-level finding. */
+  occurrences?: number;
+  /** Omitted by older servers, whose findings represented active phases only. */
+  isActive?: boolean;
 }
 
 export interface HostTelemetrySeries {
@@ -95,6 +100,46 @@ export interface HostTelemetrySeries {
 }
 
 export type HostLiveDataState = 'loading' | 'ready' | 'error';
+
+export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-open';
+
+export interface CapabilityRecoveryEvent {
+  occurredAt: string;
+  fromState: CapabilityHealthState;
+  toState: CapabilityHealthState;
+  reason: string;
+  claimId?: string | null;
+}
+
+export interface RemoteHostCapabilityHealth {
+  key: string;
+  category: string;
+  advertisedStatus: string;
+  healthState: CapabilityHealthState;
+  reason?: string | null;
+  advertisedAt: string;
+  freshUntil: string;
+  isFresh: boolean;
+  firstFailureAt?: string | null;
+  lastFailureAt?: string | null;
+  cooldownUntil?: string | null;
+  canaryClaimId?: string | null;
+  consecutiveFailures: number;
+  version?: string | null;
+  identity?: string | null;
+  detail?: string | null;
+  affectedClaims: readonly string[];
+  recoveryHistory: readonly CapabilityRecoveryEvent[];
+}
+
+export interface RemoteHostAdmission {
+  hostId: string;
+  admissionState: 'open' | 'automatic-draining' | 'operator-draining';
+  automaticDrainReason?: string | null;
+  automaticDrainAt?: string | null;
+  operatorDrainReason?: string | null;
+  operatorDrainAt?: string | null;
+}
 
 /** A single execution location in the registry. */
 export interface RemoteHost {
@@ -123,10 +168,12 @@ export interface RemoteHost {
   liveDataState?: HostLiveDataState;
   /** Telemetry has a separate request so runtime truth never waits on history. */
   telemetryLoading?: boolean;
-  /** Latest daemon startup proof of origin write access. */
-  gitPushStatus?: 'ready' | 'read-only' | null;
+  /** Latest daemon startup proof of contents and workflow write access. */
+  gitPushStatus?: 'ready' | 'ready-no-workflow-scope' | 'read-only' | null;
   gitPushDetail?: string | null;
   gitPushCheckedAt?: string | null;
+  /** Last server-accepted delivery proof for every project offered to this host. */
+  projectPreflights?: readonly RunnerProjectPreflight[];
   daemonState?: 'running' | 'read-only' | 'stopped';
   lastClaimAt?: string | null;
   activeTaskCount?: number;
@@ -134,6 +181,8 @@ export interface RemoteHost {
   activeGateCount?: number;
   gateCapacity?: number;
   retireRequestedAt?: string | null;
+  capabilityHealth?: readonly RemoteHostCapabilityHealth[];
+  hostAdmission?: RemoteHostAdmission | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

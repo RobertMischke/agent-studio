@@ -23,6 +23,12 @@
       "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
       "linkedAt": "2026-07-22T09:15:41.6668987Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2196",
+      "title": "Distributed lifecycle release gate: Studio off while Task Server and Runner continue",
+      "linkedAt": "2026-07-24T17:17:20.4501051Z",
+      "source": "auto"
     }
   ]
 }

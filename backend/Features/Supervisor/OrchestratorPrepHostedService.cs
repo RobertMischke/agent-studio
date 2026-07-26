@@ -256,7 +256,10 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
             // Attach to the in-flight run when the core / aspect stages already
             // created one; otherwise begin a fresh record so the step is not a
             // silent no-op while the card is still in preparation.
-            _pipelineLog.EnsureRun(job.FolderPath, pipeline, job.ProjectName, job.Id);
+            var pipelineRecord = _pipelineLog.EnsureRun(
+                job.FolderPath, pipeline, job.ProjectName, job.Id);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(
+                job.FolderPath, pipelineRecord.Attempt);
             _pipelineLog.RecordStep(job.FolderPath, new PipelineStepExecution
             {
                 StepId = PipelineCatalogue.PreOrchestratorPrepStepId,

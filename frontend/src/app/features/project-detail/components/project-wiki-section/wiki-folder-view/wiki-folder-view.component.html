@@ -60,11 +60,27 @@
         @for (child of children(); track child.relPath) {
           <tr class="wfolder__row"
               [class.wfolder__row--folder]="child.kind === 'folder'"
+              [class.wfolder__row--drop]="dropTargetRel() === child.relPath"
               [attr.data-kind]="child.kind"
               [attr.data-testid]="'wiki-folder-row-' + child.relPath"
+              (dragover)="onFileDragOver($event, child)"
+              (dragleave)="onFileDragLeave(child)"
+              (drop)="onFileDrop($event, child)"
               (click)="onRowClick(child)">
             <td class="wfolder__cell-title">
               <span class="wfolder__title-line">
+                @if (child.kind !== 'folder' && writable()) {
+                  <button class="wfolder__drag" type="button"
+                          draggable="true"
+                          [attr.aria-label]="'Reorder ' + (child.title || child.name)"
+                          [attr.data-testid]="'wiki-folder-drag-' + child.relPath"
+                          cacTooltip="Drag to reorder"
+                          (click)="stopRowClick($event)"
+                          (dragstart)="onFileDragStart($event, child)"
+                          (dragend)="onFileDragEnd()">
+                    <app-studio-icon name="drag" [size]="13"></app-studio-icon>
+                  </button>
+                }
                 <app-studio-icon [name]="child.kind === 'folder' ? 'folder' : (child.fileType === 'html' ? 'code' : 'file')" [size]="13"></app-studio-icon>
                 <span class="wfolder__title-text">{{ child.title || child.name }}</span>
                 @if (child.kind !== 'folder') {
@@ -108,6 +124,11 @@
               @if (child.updatedAt) {
                 <time [attr.datetime]="child.updatedAt"
                       [cacTooltip]="absoluteTime(child.updatedAt)">{{ relativeTime(child.updatedAt) }}</time>
+                @if (child.updatedAtSource === 'mtime') {
+                  <abbr [attr.data-testid]="'wiki-folder-mtime-' + child.relPath"
+                        title="Filesystem time because no Git date is available yet"
+                        aria-label="Filesystem time because no Git date is available yet">*</abbr>
+                }
               } @else {
                 <span aria-hidden="true">–</span>
               }

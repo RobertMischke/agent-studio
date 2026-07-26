@@ -46,6 +46,17 @@ public sealed class AccessSecurityMiddleware
             return;
         }
 
+        // A service bearer presented to the proxied versioned plane belongs to
+        // the standalone Task Server. Do not interpret it against the monolith's
+        // credential store; the upstream remains fail-closed and authoritative.
+        if (TaskServerPlaneProxy.IsConfigured(_configuration)
+            && path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
+            && context.Request.Headers.ContainsKey("Authorization"))
+        {
+            await _next(context);
+            return;
+        }
+
         context.Items[AttributionClientIdItem] = context.Request.Headers["X-Client-Id"].FirstOrDefault();
         if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase))
             context.Response.Headers.CacheControl = "no-store";
@@ -111,7 +122,19 @@ public sealed class AccessSecurityMiddleware
             return;
         }
 
-        if (human is null) { await Reject(context, 401, "authentication-required", "An authenticated Studio session is required."); return; }
+        if (human is null)
+        {
+            var managementRequest = path.StartsWith("/api/v1/management", StringComparison.OrdinalIgnoreCase);
+            await Reject(
+                context,
+                401,
+                "authentication-required",
+                managementRequest
+                    ? "Sign in with an owner or operator account to manage the Task Server."
+                    : "An authenticated Studio session is required.",
+                loginUrl: managementRequest ? "/api/auth/login" : null);
+            return;
+        }
         if (human.User.MustChangePassword && path is not "/api/auth/change-password" and not "/api/auth/logout" and not "/api/auth/session")
         {
             await Reject(context, 403, "password-change-required", "Change the temporary password before continuing.");
@@ -151,24 +174,6 @@ public sealed class AccessSecurityMiddleware
 
     private static string? RequiredRunnerScope(string method, string path)
     {
-        if (HttpMethods.IsPost(method)
-            && path.Equals("/api/v1/protocol/compatibility", StringComparison.OrdinalIgnoreCase))
-            return RunnerScopes.Claim;
-        if (HttpMethods.IsPut(method)
-            && path.StartsWith("/api/v1/runners/", StringComparison.OrdinalIgnoreCase))
-            return RunnerScopes.Claim;
-        if (HttpMethods.IsPost(method)
-            && path.StartsWith("/api/v1/runners/", StringComparison.OrdinalIgnoreCase)
-            && path.EndsWith("/review-claims", StringComparison.OrdinalIgnoreCase))
-            return RunnerScopes.Claim;
-        if (path.StartsWith("/api/v1/reviews/attempts/", StringComparison.OrdinalIgnoreCase))
-            return path.EndsWith("/lease/renew", StringComparison.OrdinalIgnoreCase)
-                ? RunnerScopes.Lease
-                : RunnerScopes.Completion;
-        if (HttpMethods.IsGet(method)
-            && path.StartsWith("/api/v1/runs/", StringComparison.OrdinalIgnoreCase)
-            && path.EndsWith("/result-handoff", StringComparison.OrdinalIgnoreCase))
-            return RunnerScopes.Artifacts;
         if (HttpMethods.IsPost(method) && path.Equals("/api/runner/claim", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Claim;
         if (path.StartsWith("/api/runner/lease", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Lease;
         if (HttpMethods.IsPost(method) && path.Equals("/api/runner/logs", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Logs;
@@ -271,12 +276,20 @@ public sealed class AccessSecurityMiddleware
                || ProjectAccessAuthorization.Allows(user, Uri.UnescapeDataString(requested), _projects);
     }
 
-    private static async Task Reject(HttpContext context, int status, string code, string message)
+    private static async Task Reject(
+        HttpContext context,
+        int status,
+        string code,
+        string message,
+        string? loginUrl = null)
     {
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json";
         context.Response.Headers.CacheControl = "no-store";
-        await context.Response.WriteAsJsonAsync(new { error = code, message });
+        if (loginUrl is null)
+            await context.Response.WriteAsJsonAsync(new { error = code, message });
+        else
+            await context.Response.WriteAsJsonAsync(new { error = code, message, loginUrl });
     }
 }
 

@@ -180,6 +180,14 @@ public sealed record ArtifactContentDto(
     string ContentBase64,
     long SizeBytes);
 
+public sealed record TaskHistoryDto(
+    TaskDto Task,
+    IReadOnlyList<RunDto> Runs,
+    IReadOnlyList<EventDto> Events,
+    IReadOnlyList<ArtifactDto> Artifacts,
+    IReadOnlyList<AuditRecordDto> Audit,
+    long LastCursor);
+
 public sealed record AuditRecordDto(
     long Sequence,
     DateTime OccurredAt,
@@ -188,3 +196,21 @@ public sealed record AuditRecordDto(
     string TargetType,
     string TargetId,
     string DetailJson);
+
+public static class LifecycleEventKinds
+{
+    public const string AgentMessage = "agent.message";
+    public const string ToolTrace = "tool.trace";
+    public const string RunnerTrace = "runner.trace";
+    public const string RunCompleted = "lifecycle.run-completed";
+    public const string PostProcessingCompleted = "lifecycle.post-processing-completed";
+    public const string ReviewCompleted = "lifecycle.review-completed";
+    public const string Reissued = "lifecycle.reissued";
+    public const string TerminalHandoff = "lifecycle.terminal-handoff";
+    public const string RunnerDisconnected = "lifecycle.runner-disconnected";
+    public const string RunnerReconnected = "lifecycle.runner-reconnected";
+    public const string TaskServerUnavailable = "lifecycle.task-server-unavailable";
+    public const string ProcessUnknown = "lifecycle.process-unknown";
+    public const string RunnerUnavailable = "lifecycle.runner-unavailable";
+    public const string NoOverlapProven = "lifecycle.no-overlap-proven";
+}

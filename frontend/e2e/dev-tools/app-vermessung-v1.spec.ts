@@ -145,11 +145,11 @@ test('App-Vermessung v1 real stable sweep', async ({ page }) => {
   await page.waitForTimeout(1_500);
   await dismissRecovery(page);
   const projectRow = page.getByTestId('studio-explorer-project-Agent Studio');
-  const hubButton = projectRow.getByRole('button', { name: 'Open Project Hub' });
+  const hubButton = projectRow.getByRole('button', { name: 'Open Deck' });
   if (await hubButton.isVisible().catch(() => false)) {
     await hubButton.click();
     await page.waitForTimeout(1_200);
-    await capture(page, 'Project Hub', 'overview');
+    await capture(page, 'Deck', 'overview');
     const rails = await page.locator('[data-testid^="project-shell-rail-"]').evaluateAll(nodes =>
       nodes.map(node => ({ id: node.getAttribute('data-testid') ?? '', label: (node.textContent ?? '').trim() })).filter(x => x.id));
     for (const rail of rails.slice(0, 14)) {
@@ -158,12 +158,12 @@ test('App-Vermessung v1 real stable sweep', async ({ page }) => {
         await item.click().catch(() => undefined);
         await page.waitForTimeout(600);
         const state = rail.label || rail.id;
-        const surface = /wiki/i.test(state) ? 'Wiki and Pulse' : 'Project Hub';
+        const surface = /wiki/i.test(state) ? 'Wiki and Pulse' : 'Deck';
         await capture(page, surface, state);
       }
     }
   } else {
-    await recordMissing(page, 'Project Hub', 'overview', 'Agent Studio Project Hub control was not visible.');
+    await recordMissing(page, 'Deck', 'overview', 'Agent Studio Deck control was not visible.');
   }
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -194,9 +194,9 @@ test('App-Vermessung v1 real stable sweep', async ({ page }) => {
     }
     const rail = page.getByTestId(`workspace-settings-rail-${key}`);
     if (await rail.isVisible().catch(() => false)) {
-      await capture(page, key === 'remote-hosts' ? 'Remote hosts' : 'Settings', key);
+      await capture(page, key === 'remote-hosts' ? 'Execution Hosts' : 'Settings', key);
     } else {
-      await recordMissing(page, key === 'remote-hosts' ? 'Remote hosts' : 'Settings', key, 'Settings rail was not visible in real Stable.');
+      await recordMissing(page, key === 'remote-hosts' ? 'Execution Hosts' : 'Settings', key, 'Settings rail was not visible in real Stable.');
     }
   }
 

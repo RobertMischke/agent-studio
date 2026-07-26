@@ -1,0 +1,251 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/3aacff34f2a9e4ca4ea51ca644c7a780eacb1ee583b7b03b88a615c7a0a3d4ff",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+    "displayName": "AdHocUsageRecorder.cs"
+  },
+  "reviewedAt": "2026-07-21T11:23:55.7269209Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-441a02cf782c4785bb08ac25623a7c06"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "e082e351052f4bbaae1127b6ecbc47a3dcca1dcfa96dbcde0448a73bd22c9b1f"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+      "selector": "file",
+      "contentHash": "sha256:eb889f97e545da73742cd839dfc02a252b51281e02c137ea8855c62dabb4e9a6"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "85f3fe17c6924d141392a19ad258c08d02beaa765304591ae49e340eb370d7b7"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:0aece25de4c932d359fc4d03224fec48a7282e0f2adcac648f1572eb76f8c859"
+    }
+  },
+  "grade": {
+    "score": 76,
+    "band": "C",
+    "rationale": "The implementation is readable and provides useful best-effort persistence, but it has correctness risks around numeric narrowing, timestamp handling, concurrency, and unobserved asynchronous failures. Error reporting and filesystem isolation also limit operability and testability."
+  },
+  "summary": "The recorder has a clear purpose, straightforward JSONL handling, and sensible tolerance for malformed records. The most important improvements are to preserve token-count ranges, observe bus publication failures, normalize timestamps correctly, and make append synchronization cover all recorder instances or processes that may share the file.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 72,
+        "band": "C",
+        "rationale": "The canonical JSONL write is straightforward, but bus projections can contain overflowed token counts or incorrectly labelled timestamps, and concurrent recorder instances can compromise the one-record-per-line guarantee."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 82,
+        "band": "B",
+        "rationale": "The class is cohesive and documented, but direct filesystem access, duplicated data publication, and implicit concurrency assumptions increase future maintenance risk."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 87,
+        "band": "B",
+        "rationale": "Names and comments communicate intent well. A few comments overstate guarantees, particularly that synchronous writing does not affect latency and that the bus provides a single source of truth."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 68,
+        "band": "D",
+        "rationale": "Primary file operations are handled on a best-effort basis, but ignored asynchronous publication failures and a completely silent Stat failure make operational problems difficult to detect."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 75,
+        "band": "C",
+        "rationale": "TaskRepository configuration enables temporary-path tests, but static filesystem and environment dependencies make failure injection, concurrency testing, and deterministic path behavior unnecessarily difficult."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "F001",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Token counts are narrowed from long to int without validation",
+      "description": "Each token count is cast directly to int. Values outside the Int32 range wrap in the default unchecked context, causing the bus projection to report negative or otherwise corrupted usage while the JSONL record retains the correct values.",
+      "recommendation": "Use long-valued fields throughout OrchestratorTokenUsage. If its contract must remain Int32, use checked conversion and explicitly handle overflow by rejecting, clamping with a warning, or omitting the bus projection.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 110,
+              "column": 35
+            },
+            "end": {
+              "line": 113,
+              "column": 79
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F002",
+      "aspect": "error_handling",
+      "severity": "medium",
+      "title": "Fire-and-forget bus failures are never observed",
+      "description": "The task returned by EmitTokenUsageAsync is discarded. Failures occurring after the method returns bypass the surrounding try/catch and are neither logged nor made visible to callers, so aggregation can silently diverge from the JSONL log.",
+      "recommendation": "Observe completion with a dedicated best-effort helper that awaits the operation and logs exceptions, or attach a continuation that safely records faulted completion. If delivery reliability matters, expose an asynchronous RecordAsync API and await publication there.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 119,
+              "column": 17
+            },
+            "end": {
+              "line": 125,
+              "column": 109
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F003",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "SpecifyKind can mislabel a local timestamp as UTC",
+      "description": "DateTime.SpecifyKind changes only the Kind flag and does not convert the clock value. If record.Ts is local or has unspecified semantics, the emitted instant will be incorrect even though it is labelled UTC.",
+      "recommendation": "Prefer DateTimeOffset for recorded instants. Otherwise define the timestamp contract explicitly and normalize with ToUniversalTime when appropriate, handling DateTimeKind.Unspecified according to that contract rather than relabelling it.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 125,
+              "column": 32
+            },
+            "end": {
+              "line": 125,
+              "column": 109
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F004",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Write synchronization is limited to one recorder instance",
+      "description": "The private lock protects writes only among callers sharing the same AdHocUsageRecorder instance. Multiple dependency-injection instances or processes targeting the workspace-wide file can append concurrently, and the implementation does not establish that complete JSON lines cannot interleave or race with other writers.",
+      "recommendation": "Document and enforce singleton lifetime if only in-process concurrency is supported. If multiple instances or processes are expected, use a shared path-scoped synchronization strategy or an append protocol with explicit interprocess locking and bounded retry behavior.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 92,
+              "column": 13
+            },
+            "end": {
+              "line": 95,
+              "column": 14
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F005",
+      "aspect": "error_handling",
+      "severity": "low",
+      "title": "Stat silently converts all failures into a missing-file result",
+      "description": "Permission errors, invalid paths, and transient filesystem failures are indistinguishable from a genuinely absent file because the catch block suppresses every exception without logging. This can make the UI display misleading metadata and removes useful diagnostic evidence.",
+      "recommendation": "Catch expected filesystem exceptions and log them at an appropriate best-effort level before returning the fallback. Consider returning status or error information separately when callers need to distinguish absence from failure.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 186,
+              "column": 9
+            },
+            "end": {
+              "line": 189,
+              "column": 10
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "F006",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Static environment and filesystem dependencies hinder isolated tests",
+      "description": "Path resolution and all file operations use static framework APIs directly. Tests can redirect TaskRepository, but cannot cleanly inject read, append, metadata, permission, or concurrency behavior without manipulating the real filesystem.",
+      "recommendation": "Introduce a small filesystem/path abstraction or inject the resolved storage path. Keep the abstraction narrow so tests can deterministically cover append failures, malformed reads, metadata failures, and concurrent access.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 64,
+              "column": 5
+            },
+            "end": {
+              "line": 76,
+              "column": 10
+            }
+          }
+        },
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageRecorder.cs",
+          "range": {
+            "start": {
+              "line": 88,
+              "column": 13
+            },
+            "end": {
+              "line": 95,
+              "column": 14
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

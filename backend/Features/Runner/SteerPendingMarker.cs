@@ -54,6 +54,25 @@ public sealed record SteerPendingRecord
 
     /// <summary>The active CLI type, so the resolver / continue path can resume the same runner.</summary>
     [JsonPropertyName("cliType")] public string? CliType { get; init; }
+
+    /// <summary>
+    /// Present only for <see cref="SteerPendingKinds.UiIterationReview"/>. This
+    /// is the stable hand-off consumed by the Human-Gate UI: it identifies the
+    /// pipeline iteration, its mandatory evidence, and whether rejecting it
+    /// would cross the configured cap.
+    /// </summary>
+    [JsonPropertyName("uiIterationReview")] public UiIterationReviewContract? UiIterationReview { get; init; }
+}
+
+public sealed record UiIterationReviewContract
+{
+    [JsonPropertyName("contractVersion")] public int ContractVersion { get; init; } = 1;
+    [JsonPropertyName("pipelineId")] public string PipelineId { get; init; } = Pipeline.PipelineCatalogue.UiPipelineId;
+    [JsonPropertyName("iteration")] public int Iteration { get; init; }
+    [JsonPropertyName("maxIterations")] public int MaxIterations { get; init; }
+    [JsonPropertyName("capReached")] public bool CapReached { get; init; }
+    [JsonPropertyName("artifactPaths")] public IReadOnlyList<string> ArtifactPaths { get; init; } = [];
+    [JsonPropertyName("changeDescriptionPath")] public string ChangeDescriptionPath { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -136,6 +155,16 @@ public static class SteerPendingKinds
     public const string Steer = "steer";
     public const string NeedsInput = "needs-input";
     public const string BlockedDeferral = "blocked-deferral";
+    /// <summary>
+    /// A completed UI iteration waiting for Robert's finish-or-feedback choice.
+    /// Unlike an unanswered steer this is intentionally not timeout-driven.
+    /// </summary>
+    public const string UiIterationReview = "ui-iteration-review";
+    /// <summary>
+    /// A complete concept Workbench waiting for deliberate human sight review.
+    /// This is a successful delivery gate and is never timeout-escalated.
+    /// </summary>
+    public const string ConceptSightReview = "concept-sight-review";
 }
 
 /// <summary>Shared defaults for the steer-timeout so the marker, policy, and config agree on one number.</summary>

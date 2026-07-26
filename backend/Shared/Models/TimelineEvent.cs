@@ -160,6 +160,12 @@ public static class TimelineEventKinds
     /// new epoch, and rotated artefact count.
     /// </summary>
     public const string OperatorRequeued = "operator_requeued";
+    /// <summary>
+    /// A fenced remote review report arrived after an operator had already
+    /// accepted or archived the task. The report remains evidence, but cannot
+    /// reopen the terminal lane.
+    /// </summary>
+    public const string PostAcceptanceReviewReportRecorded = "post_acceptance_review_report_recorded";
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>
@@ -233,6 +239,13 @@ public static class TimelineEventKinds
     /// the acceptance still lands, this only makes the state visible.
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";
+    /// <summary>
+    /// An operator invoked the accepted-delivery recovery action after a merge
+    /// conflict. The task was queued in Ready with a focused steer prompt that
+    /// resumes its fenced delivery ref and rebases it onto the current
+    /// integration branch.
+    /// </summary>
+    public const string IntegrationRecoveryQueued = "integration_recovery_queued";
 }
 
 /// <summary>

@@ -7,7 +7,13 @@ import { LanePagerService, type LanePagerEntry } from './lane-pager.service';
 import { BoardFiltersService } from '../../board/state/board-filters.service';
 import { laneLabelFor } from './triage-actions.model';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
-import { clearTaskUrl, taskUrlKey, writeTaskUrl, type TaskUrlHistoryMode } from './task-url';
+import {
+  clearTaskUrl,
+  taskReferenceFromUrl,
+  taskUrlKey,
+  writeTaskUrl,
+  type TaskUrlHistoryMode,
+} from './task-url';
 import { ProjectLookupService } from '../../../services/project-lookup.service';
 
 export interface TaskDetailLoadError {
@@ -23,7 +29,7 @@ export interface TaskDetailLoadError {
  *   - `selected`        which TaskDetail (if any) the side panel renders
  *   - `triageToast`     transient banner shown by the triage panel
  *   - `triageLanePeers` siblings in the same lane (drives j/k navigation)
- *   - URL sync          `?task=<AGT-NNN>` reproduces the open detail without
+ *   - URL sync          `#/tasks/<AGT-NNN>` reproduces the open detail without
  *                       leaking a filesystem path
  *   - request token     drops late getDetail replies so panel doesn't
  *                       flash back open after Esc/lane-cleared close
@@ -449,7 +455,7 @@ export class TaskSelectionService {
    * paints its detail instead of the "No task selected" placeholder.
    *
    * On success the composite internal key is projected to the public
-   * `?task=<AGT-NNN>` route. The watch path never enters browser history.
+   * `#/tasks/<AGT-NNN>` route. The watch path never enters browser history.
    */
   openDetailByTaskKey(taskKey: string): void {
     const liveInfo = this.jobService.jobs().find(task => task.taskKey === taskKey);
@@ -511,20 +517,22 @@ export class TaskSelectionService {
     this.clearTaskParamsFromUrl();
   }
 
-  /** Strip only task-routing query params, preserving path + hash. */
+  /** Strip task routing from the canonical hash or legacy query. */
   private clearTaskParamsFromUrl(): void {
     clearTaskUrl('replace');
   }
 
   /**
-   * Reload and browser-history survival. `?task=<key>` is canonical and is
-   * resolved without a watch path. The legacy `?job=<slug>&watchPath=<path>`
-   * shape remains readable, but a successful lookup replaces it with the
-   * canonical key URL so the local path is not retained in history.
+   * Reload and browser-history survival. `#/tasks/<key>` is canonical and is
+   * resolved without a watch path. The legacy `?task=<key>` and
+   * `?job=<slug>&watchPath=<path>` shapes remain readable, but a successful
+   * lookup replaces them with the canonical key URL so the local path is not
+   * retained in history.
    */
   restoreFromUrl(fromPopState = false): void {
-    const params = new URLSearchParams(window.location.search);
-    const taskReference = params.get('task')?.trim() || null;
+    const currentUrl = new URL(window.location.href);
+    const params = currentUrl.searchParams;
+    const taskReference = taskReferenceFromUrl(currentUrl);
     const legacyJobId = params.get('job')?.trim() || null;
     const legacyWatchPath = params.get('watchPath')?.trim() || null;
     const legacy = !taskReference && !!legacyJobId;

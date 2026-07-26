@@ -5,7 +5,7 @@
       <p class="ts__subtitle">
         The durable task server the whole platform talks to. Read its connected
         URL, the workspace store it owns, the durable evidence status, and the
-        authoritative Runners, backups, migrations, and maintenance state.
+        authoritative hosts, backups, migrations, and maintenance state.
       </p>
     </div>
     <button class="ts__refresh"
@@ -18,7 +18,24 @@
     </button>
   </header>
 
-  @if (error(); as err) {
+  @if (unavailable(); as unavailableState) {
+    <section class="ts__unavailable"
+             role="alert"
+             data-testid="task-server-unavailable">
+      <div>
+        <h3 class="ts__unavailable-title">Management unavailable</h3>
+        <p class="ts__unavailable-reason">{{ unavailableState.reason }}</p>
+      </div>
+      @if (unavailableState.signInRequired) {
+        <button class="ts__sign-in"
+                type="button"
+                data-testid="task-server-sign-in"
+                (click)="requestSignIn()">
+          Sign in
+        </button>
+      }
+    </section>
+  } @else if (error(); as err) {
     <div class="ts__error" data-testid="task-server-error">{{ err }}</div>
   }
 
@@ -28,7 +45,7 @@
       <span class="ts__sep" aria-hidden="true">·</span>
       <span class="ts__count"><strong>{{ s.store.taskCount }}</strong> tasks</span>
       <span class="ts__sep" aria-hidden="true">·</span>
-      <span class="ts__count"><strong>{{ s.clients.length }}</strong> Runners</span>
+      <span class="ts__count"><strong>{{ s.clients.length }}</strong> Hosts</span>
     </div>
 
     <div class="ts__blocks">
@@ -124,7 +141,7 @@
         <header class="ts__block-head"><h3 class="ts__block-title">Access security</h3><span class="ts__badge">{{ s.security.available ? 'Integrated' : 'Pending dependency' }}</span></header>
         <dl class="ts__rows">
           <div class="ts__row"><dt>Users</dt><dd>{{ s.security.userCount }}</dd></div>
-          <div class="ts__row"><dt>Runner credentials</dt><dd>{{ s.security.credentialRunnerCount }}</dd></div>
+          <div class="ts__row"><dt>Host credentials</dt><dd>{{ s.security.credentialRunnerCount }}</dd></div>
           <div class="ts__row"><dt>Sessions</dt><dd class="ts__mono">{{ s.security.sessionUrl }}</dd></div>
           <div class="ts__row"><dt>Authority</dt><dd>{{ s.security.integration }}</dd></div>
         </dl>
@@ -133,7 +150,7 @@
 
     <section class="ts__section" data-testid="task-server-clients-section">
       <header class="ts__section-head">
-        <h3 class="ts__section-title">Runner registry</h3>
+        <h3 class="ts__section-title">Host registry</h3>
         <span class="ts__section-count">
           <strong>{{ s.clients.length }}</strong> {{ s.clients.length === 1 ? 'identity' : 'identities' }}
         </span>
@@ -159,7 +176,7 @@
         [busyAction]="busyAction()"
         (run)="onRun($event)" />
     </section>
-  } @else if (!loading()) {
+  } @else if (!loading() && !unavailable()) {
     <div class="ts__empty" data-testid="task-server-empty">
       No task-server status available.
     </div>

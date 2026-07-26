@@ -211,7 +211,11 @@ const HOME: WikiHome = {
   ],
 };
 
-async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
+async function setup(
+  tree: WikiTree = TREE,
+  pulse: WikiPulse = PULSE,
+  projectId: string | null = null,
+) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
     providers: [
@@ -226,6 +230,7 @@ async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
   const fixture = TestBed.createComponent(ProjectWikiSectionComponent);
   const http = TestBed.inject(HttpTestingController);
   fixture.componentRef.setInput('projectName', 'Demo');
+  if (projectId) fixture.componentRef.setInput('projectId', projectId);
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
@@ -1376,6 +1381,58 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('drag-drops a document onto a sibling and persists the file order in place', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    const root = el(fixture);
+    const overview = root.querySelector<HTMLElement>(
+      '[data-testid="project-wiki-node-concepts/overview.md"]')!;
+    const html = root.querySelector<HTMLElement>(
+      '[data-testid="project-wiki-node-concepts/page.html"]')!;
+
+    const dataTransfer = makeDataTransfer();
+    fireDrag(overview, 'dragstart', dataTransfer);
+    fireDrag(html, 'dragover', dataTransfer);
+    fireDrag(html, 'drop', dataTransfer);
+    fixture.detectChanges();
+
+    // The signal-backed tree paints before the request completes.
+    const fileOrder = () => [...root.querySelectorAll('[data-testid^="project-wiki-file-concepts/"]')]
+      .map(node => node.getAttribute('data-testid'));
+    expect(fileOrder()).toEqual([
+      'project-wiki-file-concepts/page.html',
+      'project-wiki-file-concepts/overview.md',
+      'project-wiki-file-concepts/page.metadata.json',
+    ]);
+
+    const put = http.expectOne(req =>
+      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/file-order');
+    expect(put.request.body).toEqual({
+      parentRelPath: 'concepts',
+      orderedNames: ['page.html', 'overview.md', 'page.metadata.json'],
+    });
+    put.flush({ relPath: 'app/config/wiki-order.json', sha: 'abc1234' });
+
+    const persistedTree: WikiTree = {
+      ...TREE,
+      root: [{
+        ...TREE.root[0],
+        children: [TREE.root[0].children[1], TREE.root[0].children[0], TREE.root[0].children[2]],
+      }, TREE.root[1]],
+    };
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(persistedTree);
+    flushWikiPulse(http);
+    fixture.detectChanges();
+
+    expect(fileOrder()).toEqual([
+      'project-wiki-file-concepts/page.html',
+      'project-wiki-file-concepts/overview.md',
+      'project-wiki-file-concepts/page.metadata.json',
+    ]);
+    expect(el(fixture).querySelector('[data-testid="project-wiki-loading"]')).toBeNull();
+    http.verify();
+  });
+
   it('drag-drops a folder onto a sibling folder and persists the category order', async () => {
     const { fixture, http } = await setup(REORDER_TREE);
     const root = el(fixture);
@@ -1746,6 +1803,23 @@ describe('ProjectWikiSectionComponent', () => {
     expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
     expect(el(fixture).querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  it('restores and keeps a page on the immutable project-id route', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#/projects/PROJ-900/wiki?page=concepts%2Foverview.md',
+    );
+    const { fixture, http } = await setup(TREE, PULSE, 'PROJ-900');
+    flushDoc(http, 'concepts/overview.md', '# Restored via stable id\n');
+    fixture.detectChanges();
+    flushWikiHomeIfRendered(http);
+
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
+    expect(window.location.hash)
+      .toBe('#/projects/PROJ-900/wiki?page=concepts%2Foverview.md');
     http.verify();
   });
 

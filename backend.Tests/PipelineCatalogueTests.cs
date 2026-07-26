@@ -699,6 +699,7 @@ public class PipelineCatalogueTests
         Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.StandardPipelineId));
         Assert.NotNull(PipelineCatalogue.Get("STANDARD-TASK-PIPELINE")); // case-insensitive
         Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.ReadOnlyPipelineId));
+        Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.ConceptPipelineId));
         Assert.Null(PipelineCatalogue.Get("does-not-exist"));
     }
 
@@ -749,9 +750,32 @@ public class PipelineCatalogueTests
     {
         Assert.Same(PipelineCatalogue.ReadOnly, PipelineCatalogue.ForMode("planning"));
         Assert.Same(PipelineCatalogue.ReadOnly, PipelineCatalogue.ForMode("research"));
+        Assert.Same(PipelineCatalogue.Concept, PipelineCatalogue.ForMode("concept"));
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("coding"));
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode(null));
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("anything-else"));
+    }
+
+    [Fact]
+    public void ConceptPipeline_IsDocumentReviewThenSightGateThenPromotion()
+    {
+        var concept = PipelineCatalogue.Concept;
+
+        Assert.Empty(concept.Pre);
+        Assert.Equal(
+            [
+                PipelineCatalogue.CoreAgentRunStepId,
+                PipelineCatalogue.ConceptWorkbenchPlacementStepId,
+                PipelineCatalogue.ConceptReviewStepId,
+                PipelineCatalogue.ConceptSightReviewGateStepId,
+                PipelineCatalogue.ConceptPromotionStepId,
+            ],
+            concept.AllSteps.Select(step => step.Id));
+        Assert.DoesNotContain(concept.AllSteps, step =>
+            step.Kind == StepKind.Aspect
+            || step.Id.Contains("build", StringComparison.OrdinalIgnoreCase)
+            || PipelineCatalogue.GitStepIds.Contains(step.Id));
+        Assert.True(concept.Post[^1].Deferred);
     }
 
     [Fact]

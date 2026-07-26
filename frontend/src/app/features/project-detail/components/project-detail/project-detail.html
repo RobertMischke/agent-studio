@@ -87,18 +87,6 @@
       [modeRows]="cliEnvironmentModeRows()"
       [contextModeRows]="cliEnvironmentContextModeRows()" />
 
-    <section class="proj-detail__group">
-      <h3>Runner mode</h3>
-      <div class="proj-detail__modes">
-        @for (m of modes; track m.id) {
-          <button class="proj-detail__mode"
-                  [class.proj-detail__mode--active]="effectiveMode() === m.id"
-                  [cacTooltip]="m.tooltip"
-                  (click)="setMode(m.id)">{{ m.label }}</button>
-        }
-      </div>
-      <p class="proj-detail__hint">{{ modeHint() }}</p>
-    </section>
     <app-project-workspace-section [projectName]="projectName()" [currentWatchPath]="paths().path" />
 
     <section class="proj-detail__group">

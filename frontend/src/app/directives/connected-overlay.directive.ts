@@ -2,6 +2,7 @@ import { Directive, ElementRef, OnDestroy, OnInit, effect, inject, input } from 
 import {
   ConnectedOverlayPositionRef,
   OverlayAlignment,
+  OverlayPortalLayer,
   OverlayPlacement,
   OverlayPortalRef,
   OverlayPortalService,
@@ -26,6 +27,8 @@ export class ConnectedOverlayDirective implements OnInit, OnDestroy {
   readonly connectedOverlayGap = input(6);
   readonly connectedOverlayViewportPadding = input(8);
   readonly connectedOverlayMinWidth = input<number | null>(null);
+  /** Layer used when the connected control opens from inside an app modal. */
+  readonly connectedOverlayLayer = input<OverlayPortalLayer>('panel');
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly overlayPortal = inject(OverlayPortalService);
@@ -43,7 +46,10 @@ export class ConnectedOverlayDirective implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    this.portalRef = this.overlayPortal.attachPanel(this.host.nativeElement);
+    this.portalRef = this.overlayPortal.attachLayer(
+      this.host.nativeElement,
+      this.connectedOverlayLayer(),
+    );
     this.bindPosition(this.appConnectedOverlay());
   }
 

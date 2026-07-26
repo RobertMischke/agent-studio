@@ -26,6 +26,7 @@ public sealed class TaskTransitionService
     private readonly TaskIntegrationStatusService? _integrationStatus;
     private readonly TimelineLog? _timeline;
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
+    private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -56,7 +57,8 @@ public sealed class TaskTransitionService
         AgentStudio.Bus.AgentMessageBusBridge? bus = null,
         TaskIntegrationStatusService? integrationStatus = null,
         TimelineLog? timeline = null,
-        OperatorReviewRequeueService? operatorReviewRequeue = null)
+        OperatorReviewRequeueService? operatorReviewRequeue = null,
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null)
     {
         _scanner = scanner;
         _states = states;
@@ -75,6 +77,7 @@ public sealed class TaskTransitionService
         _integrationStatus = integrationStatus;
         _timeline = timeline;
         _operatorReviewRequeue = operatorReviewRequeue;
+        _pipelineLog = pipelineLog;
     }
 
     /// <summary>
@@ -94,7 +97,8 @@ public sealed class TaskTransitionService
         string? cause = null,
         string? reason = null,
         AttemptWriteReference? authorityWrite = null,
-        bool suppressProductExecution = false)
+        bool suppressProductExecution = false,
+        string? expectedSourceState = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -147,7 +151,14 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause, authorityWrite);
+        var outcome = _states.MoveJob(
+            jobId,
+            targetState,
+            watchPath,
+            cause,
+            authorityWrite,
+            expectedSourceState,
+            reason);
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
         if (operatorRequeue && _operatorReviewRequeue != null)
@@ -236,6 +247,13 @@ public sealed class TaskTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
+            if (TaskModes.IsConcept(info.Mode)
+                && fromState == TaskStates.HumanReview
+                && targetState == TaskStates.Completed)
+            {
+                RecordConceptSightReviewCompletion(info, watchPath, cause);
+            }
+
             // ASS-1724: the ONE commit-provenance recording hook. Anchor the
             // task/<id> tip + integration head at this lane crossing so the board
             // can graph "where does this work live" historically. Best-effort and
@@ -285,7 +303,7 @@ public sealed class TaskTransitionService
             // step has had its chance, re-derive the honest git integration verdict
             // for the just-accepted card. If its work is NOT in develop (pending /
             // conflict), make it loud - a Warn timeline event + an
-            // integration:pending tag the completed-lane audit can list - WITHOUT
+            // integrationpending tag the completed-lane audit can list - WITHOUT
             // blocking the acceptance that already landed (Robert wants visibility,
             // not a new brake). Fully guarded and read-only.
             if (targetState == TaskStates.Completed && !isReadOnly)
@@ -305,6 +323,44 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private void RecordConceptSightReviewCompletion(
+        TaskInfo original,
+        string? watchPath,
+        string? cause)
+    {
+        var moved = _scanner.FindJob(original.Id, watchPath);
+        var folder = moved?.FolderPath;
+        if (string.IsNullOrWhiteSpace(folder)) return;
+
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(folder, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptSightReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Passed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "sight-review-approved",
+            VerdictSummary = "Human sight review approved the concept.",
+        });
+        if (!string.Equals(cause, "concept-sight-review-approved", StringComparison.Ordinal))
+        {
+            _pipelineLog?.RecordStep(folder, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptPromotionStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Skipped,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "no-implementation",
+                VerdictSummary = "Sight review completed without promoting implementation cards.",
+                Reason = "The operator completed the concept without promotion.",
+            });
+        }
+        _pipelineLog?.Complete(folder, now);
+        SteerPendingMarker.Clear(folder, _logger);
     }
 
     private bool CanCompleteEscalatedJob(TaskInfo info, ProjectSettings settings)
@@ -392,7 +448,8 @@ public sealed class TaskTransitionService
     /// </summary>
     public async Task<IReadOnlyList<BatchMoveItemResult>> BatchMoveAsync(
         IEnumerable<BatchMoveItem> items,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? cause = null)
     {
         var results = new List<BatchMoveItemResult>();
         foreach (var item in items)
@@ -431,7 +488,7 @@ public sealed class TaskTransitionService
                     item.WatchPath,
                     ct,
                     item.TargetIndex,
-                    cause: TimelineActors.Human(""),
+                    cause: string.IsNullOrWhiteSpace(cause) ? TimelineActors.Human("") : cause,
                     reason: item.Reason);
             }
             catch (Exception ex)
@@ -564,7 +621,8 @@ public sealed class TaskTransitionService
                 moved.FolderPath,
                 moved.WatchPath,
                 settings.IntegrationBranch,
-                ct).ConfigureAwait(false);
+                ct,
+                settings.IntegrationStrategy).ConfigureAwait(false);
 
             // ASS-1752: persist the develop-merge fact so the board card can show
             // the landed state (`develop @sha`) instead of a dead worktree path,
@@ -587,11 +645,11 @@ public sealed class TaskTransitionService
     /// <summary>
     /// AGT-2202 accept-without-merge guard. Derives the honest git integration
     /// verdict for a freshly accepted card and, when its work is not in develop,
-    /// records a Warn timeline event and stamps the <c>integration:pending</c> tag
+    /// records a Warn timeline event and stamps the <c>integrationpending</c> tag
     /// so the state is visible on the board and listable by the completed-lane
     /// audit. Deliberately NOT a hard block: the acceptance already landed, this
     /// only makes "Accept != Merge" loud. When the card IS integrated, any stale
-    /// <c>integration:pending</c> tag from an earlier accept is cleared so the
+    /// <c>integrationpending</c> tag from an earlier accept is cleared so the
     /// marker self-heals. Best-effort and fully guarded.
     /// </summary>
     private void FlagIntegrationOnAccept(TaskInfo accepted)
@@ -603,7 +661,7 @@ public sealed class TaskTransitionService
             if (!lookup.TryGetValue(accepted.TaskKey, out var status)) return;
 
             var tags = (accepted.Tags ?? []).ToList();
-            var hasTag = tags.Any(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase));
+            var hasTag = tags.Any(IntegrationStatuses.IsPendingTag);
 
             if (IntegrationStatuses.IsNotIntegrated(status.Status))
             {
@@ -643,7 +701,7 @@ public sealed class TaskTransitionService
             {
                 // Self-heal: the card is now integrated (or has no branch to
                 // integrate); drop the stale pending marker.
-                tags.RemoveAll(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase));
+                tags.RemoveAll(t => IntegrationStatuses.IsPendingTag(t));
                 _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
             }
         }

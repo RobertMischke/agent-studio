@@ -183,7 +183,8 @@ public static class RunOutcomePolicy
         {
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndStop,
-                MetaMessage: "Process violation: the worker agent changed git history during its run. Worker CLIs must not commit or push; the platform owns commit and push after review transitions.",
+                MetaMessage: outcome.Summary
+                    ?? "Genuine git damage was verified: the worker changed a protected remote branch or rewrote history that predates this run. Routing to human review.",
                 IsHeuristicFallback: false)
             {
                 IssueKind = RunIssueKind.AgentGitViolation,

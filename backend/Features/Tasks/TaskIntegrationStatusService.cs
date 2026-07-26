@@ -167,6 +167,38 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
+    /// Returns whether the exact fenced remote delivery reviewed for this task is
+    /// already an ancestor of the configured integration branch. This is a
+    /// recovery-only distinction: a curated rebase can make the card truthfully
+    /// <c>integrated</c> without preserving the original result SHA, while a
+    /// process crash after the local merge leaves that exact SHA contained but
+    /// may lose the pipeline record and queued push.
+    /// </summary>
+    public bool IsFencedDeliveryIntegrated(TaskInfo job)
+    {
+        try
+        {
+            var subject = ReviewSubjectStore.Read(job.FolderPath);
+            if (subject is null || !ReviewSubjectStore.IsValidResultSha(subject.ResultSha))
+                return false;
+
+            var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+
+            var branch = _git.ResolveIntegrationBranch(
+                root,
+                ConfiguredIntegrationBranch(job.ProjectName));
+            return _git.IsAncestor(root, subject.ResultSha, branch);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskIntegrationStatusService: fenced delivery ancestry is best-effort");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// The verdict for one card given its repo's cached integration facts. A
     /// curated / recorded merge forces <c>integrated</c>; otherwise the verdict is
     /// derived ENTIRELY from the develop-ancestry of the card's attributed
@@ -300,7 +332,14 @@ public sealed class TaskIntegrationStatusService
                 string.Equals(s.StepId, PipelineCatalogue.MergeIntoDevelopStepId, StringComparison.Ordinal));
             if (step is null) return null;
             if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
-                return step.VerdictSummary ?? step.Reason ?? "Merge into develop hit a conflict; not merged.";
+            {
+                var evidence = step.VerdictSummary ?? step.Reason ?? "Merge into develop hit a conflict; not merged.";
+                var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
+                    ?? WorktreeTaskLifecycle.BranchFor(job.Id);
+                return $"{evidence} Start the integration recovery action to run a steer round: "
+                       + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job.ProjectName)}', "
+                       + "resolve the conflicts, and deliver the updated branch.";
+            }
             if (step.Status == PipelineStepStatus.Failed
                 && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
                 return step.Reason ?? "Merge into develop failed; not merged.";

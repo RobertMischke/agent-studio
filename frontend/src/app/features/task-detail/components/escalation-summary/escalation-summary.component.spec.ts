@@ -144,8 +144,43 @@ describe('EscalationSummaryComponent', () => {
     const gateItems = el.querySelectorAll('[data-testid="escalation-gate-items"] li');
     expect(gateItems.length).toBe(1);
     expect(gateItems[0].textContent).toContain('missing regression');
-    // No code-review grade on file.
-    expect(el.querySelector('[data-testid="escalation-review-empty"]')).not.toBeNull();
+    // Empty review context is omitted instead of rendering a placeholder column.
+    expect(el.querySelector('[data-testid="escalation-review-head"]')).toBeNull();
+  });
+
+  it('places the three decisions in the panel and emits the existing triage action', () => {
+    const fixture = mount({ reviews: [] });
+    const el: HTMLElement = fixture.nativeElement;
+    const emitted: unknown[] = [];
+    fixture.componentInstance.triageAction.subscribe((action) => emitted.push(action));
+
+    expect(el.querySelector('[data-testid="escalation-action-reissue-escalated"]')?.textContent?.trim()).toBe('Continue (reissue)');
+    expect(el.querySelector('[data-testid="escalation-action-accept-escalated"]')?.textContent?.trim()).toBe('Accept as-is');
+    expect(el.querySelector('[data-testid="escalation-action-discard-escalated"]')?.textContent?.trim()).toBe('Abort');
+
+    (el.querySelector('[data-testid="escalation-action-accept-escalated"]') as HTMLButtonElement).click();
+    expect(emitted).toEqual([{
+      id: 'accept-escalated',
+      label: 'Accept as-is',
+      intent: { kind: 'move', targetState: '6-completed' },
+    }]);
+  });
+
+  it('replaces three empty context columns with one compact message', () => {
+    const base = detail();
+    const empty = {
+      ...base,
+      info: { ...base.info, commits: [], mergeSignal: null },
+    } as TaskDetail;
+    const el: HTMLElement = mount({ reviews: [], detail: empty }).nativeElement;
+
+    expect(el.querySelector('[data-testid="escalation-context-empty"]')?.textContent?.trim()).toBe(
+      'No structured context was recorded.',
+    );
+    expect(el.querySelector('[data-testid="escalation-gate-items"]')).toBeNull();
+    expect(el.querySelector('[data-testid="escalation-review-head"]')).toBeNull();
+    expect(el.querySelector('[data-testid="escalation-delivery"]')).toBeNull();
+    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).not.toContain('gate points');
   });
 });
 
@@ -165,6 +200,7 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
     expect(el.querySelector('[data-testid="escalation-body"]')).toBeNull();
     expect(el.querySelector('[data-testid="escalation-toggle"]')?.getAttribute('aria-expanded')).toBe('false');
     expect(el.querySelector('[data-testid="escalation-essence"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="escalation-action-reissue-escalated"]')).toBeNull();
   });
 
   it('toggles on header click and persists the choice for the task', () => {

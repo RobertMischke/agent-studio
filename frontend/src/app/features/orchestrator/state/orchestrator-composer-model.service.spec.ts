@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { TestBed } from '@angular/core/testing';
 import type { CliModelInfo } from '../../cli';
+import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { OrchestratorComposerModelService } from './orchestrator-composer-model.service';
 import { availableCodexModels, resolveComposerSelection } from './orchestrator-composer-model.util';
 
 const liveCatalog: CliModelInfo[] = [
@@ -59,5 +62,27 @@ describe('OrchestratorComposerModelService', () => {
     expect(resolveComposerSelection(liveCatalog, null, null, null)).toEqual({
       cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'ultra',
     });
+  });
+
+  it('lists every Studio CLI and explains the disabled GPT-only routes', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        OrchestratorComposerModelService,
+        {
+          provide: CliCatalogStore,
+          useValue: { modelsFor: () => liveCatalog },
+        },
+      ],
+    });
+
+    const options = TestBed.inject(OrchestratorComposerModelService).control().cliOptions;
+
+    expect(options?.map(option => option.id)).toEqual(['claude', 'codex', 'gemini']);
+    expect(options?.find(option => option.id === 'codex')?.disabledReason).toBeUndefined();
+    expect(options?.filter(option => option.id !== 'codex'))
+      .toEqual([
+        expect.objectContaining({ disabledReason: 'Unavailable in this GPT-only chat' }),
+        expect.objectContaining({ disabledReason: 'Unavailable in this GPT-only chat' }),
+      ]);
   });
 });

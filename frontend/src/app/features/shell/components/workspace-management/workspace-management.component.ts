@@ -3,20 +3,33 @@ import {
   Component,
   ElementRef,
   OnInit,
+  computed,
   effect,
   inject,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
+import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import { FormsModule } from '@angular/forms';
+import { forkJoin } from 'rxjs';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
+import type { RegistryProjectSummary, RegistryWorkspaceListItem } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
 import { WorkspaceSettingsService } from '../../state/workspace-settings.service';
+
+interface WorkspaceProjectDragData {
+  projectId: string;
+  sourceWorkspaceId: string | null;
+}
+
+interface WorkspaceManagementRow extends RegistryWorkspaceListItem {
+  synthetic?: 'unassigned';
+}
 
 /**
  * AGT-2035 — Workspace management, extracted from the studio-shell sidebar
@@ -34,7 +47,7 @@ import { WorkspaceSettingsService } from '../../state/workspace-settings.service
 @Component({
   selector: 'app-workspace-management',
   standalone: true,
-  imports: [FormsModule, TooltipDirective, SectionHeaderComponent],
+  imports: [CdkDrag, CdkDropList, CdkDropListGroup, FormsModule, TooltipDirective, SectionHeaderComponent, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-management.component.html',
   styleUrl: './workspace-management.component.scss',
@@ -46,12 +59,74 @@ export class WorkspaceManagementComponent implements OnInit {
   readonly wsSettings = inject(WorkspaceSettingsService);
 
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
+  readonly registryProjects = signal<readonly RegistryProjectSummary[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
   readonly registryWorkspaceBusyId = signal<string | null>(null);
   readonly registryProjectBusyId = signal<string | null>(null);
+  readonly projectMoveMenuProjectId = signal<string | null>(null);
+  readonly projectMoveMenuSourceWorkspaceId = signal<string | null>(null);
+  readonly projectMoveMenuAnchor = signal<HTMLElement | null>(null);
   /** Toggle whether archived projects are shown. Off by default. */
   readonly showArchivedProjects = signal(false);
+
+  readonly workspaceRows = computed<readonly WorkspaceManagementRow[]>(() => {
+    const workspaces = this.registryWorkspaces();
+    const assignedIds = new Set(workspaces.flatMap(workspace => workspace.projects.map(project => project.id)));
+    const unassigned = this.registryProjects().filter(project => !assignedIds.has(project.id));
+    if (unassigned.length === 0) return workspaces;
+    return [
+      ...workspaces,
+      {
+        id: '__unassigned__',
+        displayName: 'Unassigned',
+        sortOrder: Number.MAX_SAFE_INTEGER,
+        isDefault: false,
+        color: null,
+        createdAt: '',
+        projects: unassigned,
+        synthetic: 'unassigned',
+      },
+    ];
+  });
+
+  readonly workspaceEnterPredicate = (
+    drag: CdkDrag<WorkspaceProjectDragData>,
+    drop: CdkDropList<WorkspaceManagementRow>,
+  ): boolean => !this.isUnassignedWorkspace(drop.data)
+    && drag.data.sourceWorkspaceId !== drop.data.id;
+
+  readonly projectMoveMenuItems = computed<readonly MenuItem[]>(() => {
+    const sourceWorkspaceId = this.projectMoveMenuSourceWorkspaceId();
+    if (!this.projectMoveMenuProjectId()) return [];
+    const targets = this.registryWorkspaces().filter(workspace => workspace.id !== sourceWorkspaceId);
+    if (targets.length === 0) {
+      return [
+        { kind: 'header', label: 'Move to workspace' },
+        { kind: 'row', id: 'no-target', label: 'No other workspace available', disabled: true },
+      ];
+    }
+    return [
+      { kind: 'header', label: 'Move to workspace' },
+      ...targets.map(workspace => ({
+        kind: 'row' as const,
+        id: workspace.id,
+        label: workspace.displayName,
+        hint: workspace.id,
+      })),
+    ];
+  });
+
+  onWorkspaceDrop(
+    event: CdkDragDrop<WorkspaceManagementRow, WorkspaceManagementRow, WorkspaceProjectDragData>,
+    target: WorkspaceManagementRow,
+  ): void {
+    this.wsSettings.onProjectDragEnd();
+    if (!event.isPointerOverContainer
+      || this.isUnassignedWorkspace(target)
+      || event.item.data.sourceWorkspaceId === target.id) return;
+    this.wsSettings.moveProject(event.item.data.projectId, target.id, target.displayName);
+  }
 
   /** Reload whenever the create-dialog / delete path bumps the counter. */
   private readonly registryChangedFx = effect(() => {
@@ -67,9 +142,14 @@ export class WorkspaceManagementComponent implements OnInit {
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces({ includeArchived: this.showArchivedProjects() }).subscribe({
-      next: (ws) => {
+    const includeArchived = this.showArchivedProjects();
+    forkJoin({
+      workspaces: this.jobService.getRegistryWorkspaces({ includeArchived }),
+      projects: this.jobService.getRegistryProjects({ includeArchived }),
+    }).subscribe({
+      next: ({ workspaces: ws, projects }) => {
         this.registryWorkspaces.set(ws ?? []);
+        this.registryProjects.set(projects ?? []);
         this.projectLookup.setWorkspaces(ws ?? []);
         this.registryWorkspacesLoading.set(false);
       },
@@ -160,6 +240,10 @@ export class WorkspaceManagementComponent implements OnInit {
     return !ws.isDefault && ws.projects.length === 0;
   }
 
+  isUnassignedWorkspace(ws: WorkspaceManagementRow): boolean {
+    return ws.synthetic === 'unassigned';
+  }
+
   workspaceDeleteTooltip(ws: RegistryWorkspaceListItem): string {
     if (ws.isDefault) return 'Default workspace cannot be deleted';
     const count = ws.projects.length;
@@ -203,20 +287,31 @@ export class WorkspaceManagementComponent implements OnInit {
     this.runProjectPatch(projId, color ? { color } : { clearColor: true });
   }
 
-  /** F45b — reassign project to a different workspace via prompt. */
-  changeRegistryProjectWorkspace(projId: string, currentWorkspaceId: string): void {
-    const options = this.registryWorkspaces();
-    if (options.length < 2) {
-      window.alert('Create another workspace first via "+ New workspace" above.');
-      return;
-    }
-    const list = options
-      .map(w => `  ${w.id} — ${w.displayName}${w.id === currentWorkspaceId ? ' (current)' : ''}`)
-      .join('\n');
-    const choice = window.prompt(
-      `Move project ${projId} to which workspace? Enter id:\n\n${list}`, currentWorkspaceId)?.trim();
-    if (!choice || choice === currentWorkspaceId) return;
-    this.runProjectPatch(projId, { workspaceId: choice });
+  /** Opens the keyboard-accessible workspace picker for the non-drag move path. */
+  openProjectMoveMenu(event: MouseEvent, projectId: string, sourceWorkspaceId: string | null): void {
+    event.stopPropagation();
+    this.projectMoveMenuProjectId.set(projectId);
+    this.projectMoveMenuSourceWorkspaceId.set(sourceWorkspaceId);
+    this.projectMoveMenuAnchor.set(event.currentTarget as HTMLElement);
+  }
+
+  closeProjectMoveMenu(): void {
+    this.projectMoveMenuProjectId.set(null);
+    this.projectMoveMenuSourceWorkspaceId.set(null);
+    this.projectMoveMenuAnchor.set(null);
+  }
+
+  onProjectMoveMenuItemClick(event: MenuItemClickEvent): void {
+    const projectId = this.projectMoveMenuProjectId();
+    const sourceWorkspaceId = this.projectMoveMenuSourceWorkspaceId();
+    const target = this.registryWorkspaces().find(workspace => workspace.id === event.id);
+    this.closeProjectMoveMenu();
+    if (!projectId || !target || target.id === sourceWorkspaceId) return;
+    this.wsSettings.moveProject(projectId, target.id, target.displayName);
+  }
+
+  isProjectBusy(projectId: string): boolean {
+    return this.registryProjectBusyId() === projectId || this.wsSettings.movingProjectId() === projectId;
   }
 
   /** F45b — archive (or un-archive) a project. */

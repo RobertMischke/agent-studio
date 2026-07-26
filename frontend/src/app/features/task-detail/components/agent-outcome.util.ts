@@ -1,3 +1,6 @@
+import type { CliOutputLine } from '../../../models/task.model';
+import { buildConversationTurns, parseActivityLog } from './activity-log.parser';
+
 /**
  * Pure heuristic classifier for the agent's last assistant turn.
  *
@@ -47,6 +50,40 @@ export interface QuickReply {
    * false so the user always confirms before a follow-up goes out.
    */
   autoSend?: boolean;
+}
+
+/**
+ * Classify the latest run-sized activity tail. A newer system error is a
+ * terminal signal of its own and must not fall back to an older agent reply.
+ */
+export function classifyLatestActivityOutcome(lines: CliOutputLine[]): OutcomeAssessment | null {
+  if (lines.length === 0) return null;
+  const turns = buildConversationTurns(parseActivityLog(lines));
+  let lastAgent: string | null = null;
+  let sawErrorAfterAgent = false;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (turn.kind === 'agent') {
+      lastAgent = turn.text;
+      break;
+    }
+    if (turn.kind === 'system' && turn.status === 'error') sawErrorAfterAgent = true;
+  }
+  if (sawErrorAfterAgent) {
+    return {
+      kind: 'failed',
+      summary: 'Last run ended with an error - agent did not produce a reply.',
+      question: null,
+      suggestions: [
+        {
+          label: 'Continue (rebuild)',
+          prompt: 'Continue from where the previous run left off - rebuild context from the job folder.',
+        },
+        { label: 'Retry as new task', prompt: 'Treat this as a fresh request and start over: ' },
+      ],
+    };
+  }
+  return classifyOutcome(lastAgent ?? '');
 }
 
 const DONE_PATTERNS = [

@@ -101,7 +101,7 @@ async function openProjectHub(page: Page): Promise<void> {
   await openBoard(page);
   const row = page.getByTestId(`studio-explorer-project-${DEMO_APP}`);
   await expect(row).toBeVisible();
-  await row.getByRole('button', { name: 'Open Project Hub' }).click();
+  await row.getByRole('button', { name: 'Open Deck' }).click();
   await expect(page.getByTestId('project-shell-rail-token-usage')).toBeVisible({ timeout: 60_000 });
 }
 

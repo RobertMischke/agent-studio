@@ -30,6 +30,7 @@ public sealed class ExternalCompletionService
     private readonly TaskTransitionService _transitions;
     private readonly TimelineLog _timeline;
     private readonly WorkspaceArtifactCommitService _artifactCommits;
+    private readonly HumanReviewEscalation _escalation;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ExternalCompletionService> _logger;
 
@@ -39,6 +40,7 @@ public sealed class ExternalCompletionService
         TaskTransitionService transitions,
         TimelineLog timeline,
         WorkspaceArtifactCommitService artifactCommits,
+        HumanReviewEscalation escalation,
         IConfiguration configuration,
         ILogger<ExternalCompletionService> logger)
     {
@@ -47,6 +49,7 @@ public sealed class ExternalCompletionService
         _transitions = transitions;
         _timeline = timeline;
         _artifactCommits = artifactCommits;
+        _escalation = escalation;
         _configuration = configuration;
         _logger = logger;
     }
@@ -117,7 +120,15 @@ public sealed class ExternalCompletionService
             });
 
         var moveCause = string.IsNullOrWhiteSpace(actor) ? TimelineActors.External : actor;
-        var move = await _transitions.MoveAsync(jobId, targetState, watchPath, ct, cause: moveCause);
+        var move = targetState == TaskStates.Escalated
+            ? await _escalation.EscalateAsync(
+                jobId,
+                watchPath ?? info.WatchPath,
+                info.ProjectName,
+                ExternalEscalationCategory(request.GateItems),
+                summary,
+                ct)
+            : await _transitions.MoveAsync(jobId, targetState, watchPath, ct, cause: moveCause);
         var afterFolder = beforeFolder;
         switch (move.Status)
         {
@@ -160,6 +171,19 @@ public sealed class ExternalCompletionService
             JobId: jobId,
             TargetState: targetState,
             EvidenceCommitSha: commit.DidCommit ? commit.Sha : null);
+    }
+
+    private static string ExternalEscalationCategory(IReadOnlyList<string>? gateItems)
+    {
+        if ((gateItems ?? []).Any(item =>
+                item.TrimStart().StartsWith(
+                    HumanReviewEscalationCategories.WorktreeBlocked + ":",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            return HumanReviewEscalationCategories.WorktreeBlocked;
+        }
+
+        return HumanReviewEscalationCategories.ExternalCompletionBlocked;
     }
 
     private void WriteGateItems(string folderPath, IReadOnlyList<string>? gateItems)

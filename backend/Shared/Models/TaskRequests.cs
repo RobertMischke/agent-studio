@@ -128,7 +128,8 @@ public enum MoveJobStatus
     NotFound,
     TargetFolderExists,
     DirectoryLocked,
-    Failure
+    Failure,
+    SourceStateMismatch
 }
 
 /// <summary>
@@ -268,7 +269,7 @@ public record CreateTaskRequest
     public string? Kind { get; init; }
     /// <summary>Optional parent epic id (assignment way 1: at create time). The new card is created as a sub-task of this epic.</summary>
     public string? EpicId { get; init; }
-    /// <summary>Execution mode: <c>coding</c> (default) | <c>planning</c> | <c>research</c>. See <see cref="TaskModes"/>.</summary>
+    /// <summary>Execution mode: <c>coding</c> (default) | <c>planning</c> | <c>research</c> | <c>concept</c>. See <see cref="TaskModes"/>.</summary>
     public string? Mode { get; init; }
     /// <summary>Allow web search/fetch for this run. When null, defaults by mode (research = on, else off).</summary>
     public bool? AllowWebAccess { get; init; }
@@ -492,7 +493,20 @@ public record SetMaxParallelismRequest
 /// <summary>Body for the server-owned remote runner assignment.</summary>
 public record SetExecutionRunnerRequest
 {
+    /// <summary>
+    /// Legacy composite field. Values <c>auto-continuous</c>, <c>manual</c>,
+    /// and <c>paused</c> change pickup intent; any registered runner id means
+    /// automatic pickup at that runner; null/local selects local execution.
+    /// </summary>
     public string? ExecutionRunner { get; init; }
+
+    /// <summary>Canonical pickup dimension: auto, manual, or paused.</summary>
+    public string? PickupMode { get; init; }
+
+    /// <summary>Canonical placement dimension: local or a registered runner id.</summary>
+    public string? ExecutionLocation { get; init; }
+
+    /// <summary>Legacy compatibility input. False resolves placement to local.</summary>
     public bool? RemoteExecutionEnabled { get; init; }
 }
 
@@ -593,6 +607,8 @@ public record SetPipelineStepRequest
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
     public bool? EconomyModel { get; init; }
+    /// <summary>Bounded loop cap for steps that expose iteration semantics.</summary>
+    public int? MaxIterations { get; init; }
     public string? Mode { get; init; }
     public string? CliType { get; init; }
     public string? Model { get; init; }

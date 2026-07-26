@@ -12,7 +12,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { RegistryWorkspaceListItem, RegistryProjectUrl } from '../../../../models/task.model';
+import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
+import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 import { ProjectUrlProbeService } from '../../../../services/project-url-probe.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
@@ -24,7 +25,7 @@ import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
-import { boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { boardLaneCountsLabel, laneCountsFor } from '../../studio-shell.project-rows';
 import { ExplorerLaneDashboardComponent, type ExplorerTreeMetricView } from '../explorer-lane-dashboard/explorer-lane-dashboard.component';
 import {
   aggregateAutoPickup,
@@ -35,51 +36,19 @@ import {
 import { ExplorerAutoPickupIndicatorComponent } from '../explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component';
 import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchListComponent } from '../explorer-workbench-list/explorer-workbench-list.component';
-
-/** Flat project row as computed by the shell (`ProjectSidebarRow`). */
-export interface ExplorerProjectRow {
-  name: string;
-  initial: string;
-  color: string;
-  totalJobs: number;
-  laneCounts?: ExplorerLaneCounts;
-  isActive: boolean;
-}
-
-/** A project row decorated with its registry metadata, ready to render. */
-export interface ExplorerProjectNode extends ExplorerProjectRow {
-  /** Registry id (PROJ-NNN) for matched rows; null for synthetic rows
-   *  ("__all__" / "__unassigned__"), which are not draggable. */
-  projectId: string | null;
-  /** Owning registry workspace id for matched rows (rejects same-workspace
-   *  drops); null when unmatched. */
-  workspaceId: string | null;
-  /** Registry `displayName` for matched rows (falls back to `name`); the row
-   *  stays keyed by `name` so a rename never breaks grouping. */
-  displayLabel: string;
-  /** Registry short code for matched rows; the delete confirm accepts it. */
-  shortCode: string | null;
-  urls: readonly RegistryProjectUrl[]; // configured URLs → extra child rows
-}
-
-export interface ExplorerWorkspaceGroup {
-  id: string;
-  displayName: string;
-  color: string | null;
-  projects: ExplorerProjectNode[];
-}
+import {
+  buildExplorerWorkspaceGroups,
+  type ExplorerProjectNode,
+  type ExplorerProjectRow,
+  type ExplorerWorkspaceGroup,
+} from './explorer-workspace-groups';
+export type {
+  ExplorerProjectNode,
+  ExplorerProjectRow,
+  ExplorerWorkspaceGroup,
+} from './explorer-workspace-groups';
 
 export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'workbench' | 'epics';
-function folderTail(path: string): string {
-  const parts = path.split(/[\\/]+/).filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : path;
-}
-
-/** Canonicalise a storage path (unify slashes, drop trailing sep, lower-case)
- *  for the rename-stable WatchPath==storageLocation join key. */
-function normalizeStorage(path: string): string {
-  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
-}
 
 /**
  * F46 — Explorer two-level workspace → project tree. Purely presentational
@@ -93,7 +62,7 @@ function normalizeStorage(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPickupIndicatorComponent, ExplorerLaneDashboardComponent, ExplorerWorkbenchListComponent],
+  imports: [CdkDrag, CdkDropList, CdkDropListGroup, SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPickupIndicatorComponent, ExplorerLaneDashboardComponent, ExplorerWorkbenchListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -102,6 +71,9 @@ function normalizeStorage(path: string): string {
 export class ExplorerWorkspaceTreeComponent {
   readonly projectRows = input<readonly ExplorerProjectRow[]>([]);
   readonly registryWorkspaces = input<readonly RegistryWorkspaceListItem[]>([]);
+  /** Flat registry list also contains records whose workspaceId is empty or
+   *  invalid, which GET /workspaces cannot embed under a real workspace. */
+  readonly registryProjects = input<readonly RegistryProjectSummary[]>([]);
   /** Row name → resolved storage path (from the host's WatchPaths). Lets the
    *  workspace→project join key on storage instead of the mutable display
    *  name, so a registry rename keeps the row under its workspace (F46 step 7). */
@@ -210,73 +182,13 @@ export class ExplorerWorkspaceTreeComponent {
   readonly totalProjectCount = computed(() => this.projectRows().length);
 
 
-  readonly groups = computed<ExplorerWorkspaceGroup[]>(() => {
-    const rows = this.projectRows();
-    const storageByName = this.projectStorageByName();
-    const node = (
-      r: ExplorerProjectRow,
-      projectId: string | null,
-      workspaceId: string | null,
-      displayLabel: string,
-      shortCode: string | null,
-      urls: readonly RegistryProjectUrl[] = [],
-    ): ExplorerProjectNode => ({
-      ...r,
-      projectId,
-      workspaceId,
-      displayLabel,
-      shortCode,
-      urls,
-    });
-
-    const workspaces = [...this.registryWorkspaces()].sort((a, b) => a.sortOrder - b.sortOrder);
-    if (workspaces.length === 0) {
-      return rows.length
-        ? [{ id: '__all__', displayName: 'Workspace', color: null, projects: rows.map(r => node(r, null, null, r.name, null)) }]
-        : [];
-    }
-
-    const byName = new Map(rows.map(r => [r.name, r] as const));
-    // Rename-stable join: a row's resolved storage path equals the registry
-    // `storageLocation` and never changes on a display rename, so match on it
-    // first. Fall back to the display-name / folder-tail joins for rows whose
-    // storage the host did not supply (legacy callers pass an empty map).
-    const byStorage = new Map<string, ExplorerProjectRow>();
-    for (const r of rows) {
-      const storage = storageByName.get(r.name);
-      if (storage) byStorage.set(normalizeStorage(storage), r);
-    }
-    const used = new Set<string>();
-    const groups: ExplorerWorkspaceGroup[] = [];
-    for (const ws of workspaces) {
-      const projects: ExplorerProjectNode[] = [];
-      for (const rp of ws.projects) {
-        const match =
-          byStorage.get(normalizeStorage(rp.storageLocation)) ??
-          byName.get(rp.displayName) ??
-          byName.get(folderTail(rp.storageLocation));
-        if (match && !used.has(match.name)) {
-          used.add(match.name);
-          // Carry the registry id + owning workspace so the drag source knows
-          // what to reassign and which workspace drop is a no-op; carry the
-          // registry display name + short code so the row renders the live
-          // label and the delete confirm can accept the short code.
-          projects.push(node(match, rp.id, ws.id, rp.displayName, rp.shortCode, rp.urls ?? []));
-        }
-      }
-      projects.sort((a, b) => a.displayLabel.localeCompare(b.displayLabel));
-      groups.push({ id: ws.id, displayName: ws.displayName, color: ws.color, projects });
-    }
-
-    const leftover = rows
-      .filter(r => !used.has(r.name))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(r => node(r, null, null, r.name, null));
-    if (leftover.length) {
-      groups.push({ id: '__unassigned__', displayName: 'Unassigned', color: null, projects: leftover });
-    }
-    return groups;
-  });
+  readonly groups = computed<ExplorerWorkspaceGroup[]>(() =>
+    buildExplorerWorkspaceGroups(
+      this.projectRows(),
+      this.registryWorkspaces(),
+      this.registryProjects(),
+      this.projectStorageByName(),
+    ));
 
   isCollapsed(key: string): boolean {
     return this.sections.isCollapsed(key);
@@ -453,43 +365,42 @@ export class ExplorerWorkspaceTreeComponent {
     this.renameWorkspace.emit({ id, displayName: value });
   }
 
-  /** True when dropping the dragged project here would actually move it. */
   canDropOnWorkspace(targetWorkspaceId: string): boolean {
     return this.projectDrag.canDropOnWorkspace(targetWorkspaceId);
   }
 
-  /** Hover-title for a project row pointing at the drag-to-move gesture. */
+  readonly workspaceEnterPredicate = (
+    drag: CdkDrag<ExplorerProjectNode>,
+    drop: CdkDropList<ExplorerWorkspaceGroup>,
+  ): boolean => this.projectDrag.canMoveProjectToWorkspace(drag.data, drop.data.id);
+
   rowTitle(p: ExplorerProjectNode): string {
     return p.projectId
       ? 'Drag onto a workspace folder to move this project there'
-      : 'This project is not in the registry yet — drag to move is unavailable';
+      : 'Not registered. Use + on the destination workspace to onboard this project before moving it.';
   }
-
-  onDragStart(event: DragEvent, p: ExplorerProjectNode): void {
-    this.projectDrag.onDragStart(event, {
+  onDragStart(p: ExplorerProjectNode): void {
+    this.projectDrag.onDragStart({
       projectId: p.projectId,
       name: p.name,
       workspaceId: p.workspaceId,
     });
   }
 
-  onWorkspaceDragOver(event: DragEvent, g: ExplorerWorkspaceGroup): void {
-    this.projectDrag.onWorkspaceDragOver(event, g.id);
+  onWorkspaceDragEnter(g: ExplorerWorkspaceGroup): void {
+    this.projectDrag.onWorkspaceDragEnter(g.id);
   }
 
-  // Clear the highlight only when leaving the whole wrapper, else moving
-  // between header and child rows flickers it off.
-  onWorkspaceDragLeave(event: DragEvent, g: ExplorerWorkspaceGroup): void {
-    const related = event.relatedTarget as Node | null;
-    const wrapper = event.currentTarget as HTMLElement | null;
-    if (related && wrapper?.contains(related)) return;
+  onWorkspaceDragLeave(g: ExplorerWorkspaceGroup): void {
     this.projectDrag.onWorkspaceDragLeave(g.id);
   }
 
-  onWorkspaceDrop(event: DragEvent, g: ExplorerWorkspaceGroup): void {
-    event.preventDefault();
-    const projectId = this.projectDrag.draggingProjectId();
-    const valid = !!projectId && this.projectDrag.canDropOnWorkspace(g.id);
+  onWorkspaceDrop(
+    event: CdkDragDrop<ExplorerWorkspaceGroup, ExplorerWorkspaceGroup, ExplorerProjectNode>,
+    g: ExplorerWorkspaceGroup,
+  ): void {
+    const projectId = event.item.data.projectId;
+    const valid = this.projectDrag.canMoveProjectToWorkspace(event.item.data, g.id);
     this.projectDrag.onDragEnd();
     if (valid && projectId) {
       this.projectDrop.emit({ projectId, targetWorkspaceId: g.id });

@@ -295,12 +295,22 @@ public static class IntegrationStatuses
     public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
 
     /// <summary>
-    /// Tag stamped on a card that was accepted (moved into 6-completed) while its
-    /// work was not yet in develop (AGT-2202). Durable audit marker: the
-    /// completed-lane audit lists it and clears it once the card becomes
-    /// integrated. Not a hard block.
+    /// Persisted tag stamped on a card that was accepted (moved into 6-completed)
+    /// while its work was not yet in develop (AGT-2202). Tag ids allow only
+    /// <c>[a-z0-9-]</c>; the former call-site literal <c>integration:pending</c>
+    /// was therefore normalized to this value by <c>SetJobTags</c>. Durable audit
+    /// marker: the completed-lane audit lists it and clears it once the card
+    /// becomes integrated. Not a hard block.
     /// </summary>
-    public const string PendingTag = "integration:pending";
+    public const string PendingTag = "integrationpending";
+
+    /// <summary>
+    /// Matches the persisted tag and the pre-normalization spelling that can
+    /// still occur in hand-authored fixtures or legacy task JSON.
+    /// </summary>
+    public static bool IsPendingTag(string? tag)
+        => string.Equals(tag, PendingTag, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(tag, "integration:pending", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending or conflict).</summary>
     public static bool IsNotIntegrated(string? status)

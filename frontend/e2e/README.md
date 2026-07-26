@@ -388,7 +388,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 39 specs
+### `project/` - 40 specs
 
 | Spec | Summary |
 |------|---------|
@@ -409,6 +409,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-drift-architecture-marble.spec.ts` | no architecture model: empty state with explanatory copy |
 | `project-drift-overview.spec.ts` | empty state: section visible with action buttons; no scored block |
 | `project-execution-assignment.spec.ts` | assigns a remote host and completes the guided readiness probe |
+| `project-hub-deep-links.spec.ts` | an id-based Project Hub URL survives reload and rail history |
 | `project-hub-nav-ia.spec.ts` | default rail shows four collapsible segments with Agent Docs + Prompts in Context |
 | `project-identity.spec.ts` | Project identity & running prominence |
 | `project-observability-panel.spec.ts` | rail entry opens the observability panel and shows empty state when no bus traffic |
@@ -424,6 +425,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
 | `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |
+| `project-wiki-file-order.spec.ts` | document drag order stays in place, survives reload, and fits the fixed table in both themes |
 | `project-wiki-interactive-html.spec.ts` | AGT-2083 exploration runs scripts while parent access stays blocked |
 | `project-wiki-section.spec.ts` | Project detail - Knowledge section |
 | `proposals-hub.spec.ts` | Project Hub proposals render in both themes |
@@ -437,7 +439,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | Spec | Summary |
 |------|---------|
 | `appearance-layout-toggles.spec.ts` | Settings - Appearance/Layout segmented toggles |
-| `remote-hosts.spec.ts` | Remote Hosts settings section |
+| `remote-hosts.spec.ts` | Execution Hosts settings section |
 | `settings-consolidation.spec.ts` | Settings consolidation (AGT-2035) |
 | `task-server.spec.ts` | Task Server settings section |
 | `workspace-settings-panel-screenshots.spec.ts` | captures light-theme screenshot of Settings Workspaces section |

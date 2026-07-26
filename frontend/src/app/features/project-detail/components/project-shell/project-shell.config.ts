@@ -14,6 +14,7 @@ export type ProjectRailKey =
   | 'deployment'
   | 'project-urls'
   | 'git'
+  | 'integration'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
@@ -65,7 +66,7 @@ export interface ProjectRailItem {
 
 export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
-  // Order matches the current Project Hub IA:
+  // Order matches the current Deck IA:
   // Overview · Visual Evidence · Drift · Observability · Token Usage.
   // Architecture used to live here; it now sits in Context (ASS-1711)
   // because it is thematically a doc surface, not a live-health surface.
@@ -98,6 +99,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'No deployment history is available for this project.',
     icon: 'â‡§',
     railIcon: 'activity',
+  },
+  {
+    key: 'integration',
+    group: 'insight',
+    label: 'Integration',
+    panelTitle: 'Integration',
+    description: 'Accepted-card merge queue, curated publisher merges, and the develop-to-main promotion delta',
+    empty: 'No integration state is available for this project.',
+    icon: '⇉',
+    railIcon: 'diff',
   },
   {
     key: 'git',
@@ -342,7 +353,7 @@ export function isProjectRailKey(value: string | null | undefined): value is Pro
 
 export const DEFAULT_PROJECT_RAIL_KEY: ProjectRailKey = 'overview';
 
-/** Canonical user-facing label for a Project Hub rail section. */
+/** Canonical user-facing label for a Deck rail section. */
 export function projectRailLabel(section: string | null | undefined): string {
   const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
   return PROJECT_RAIL_ITEMS.find(item => item.key === key)?.label ?? 'Overview';

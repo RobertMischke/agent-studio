@@ -1,7 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type { ClientSummary } from '../../../models/task.model';
-import type { HostActionKind, HostTelemetrySeries, RemoteHost } from '../models/remote-host.model';
+import type {
+  HostActionKind,
+  HostTelemetrySeries,
+  RemoteHost,
+  RemoteHostAdmission,
+  RemoteHostCapabilityHealth,
+} from '../models/remote-host.model';
 import { seedRemoteHosts } from './remote-hosts.seed';
 
 /**
@@ -34,7 +40,7 @@ export class RemoteHostsService {
 
   /**
    * Refresh the compact live view without replacing a longer telemetry series
-   * already loaded by the Remote Hosts page.
+   * already loaded by the Execution Hosts page.
    */
   refresh(): void {
     if (this.hosts().length === 0) {
@@ -128,6 +134,7 @@ export class RemoteHostsService {
             : { ...current, stats: null, telemetry: null, telemetryLoading: true });
           this.hydrateTelemetry(host.id, host.clientId, telemetryWindow, preserveLongTelemetry);
         }
+        this.hydrateCapabilityRegistry();
       },
       error: error => {
         this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
@@ -138,6 +145,85 @@ export class RemoteHostsService {
           durationMs: Math.round(performance.now() - startedAt),
         });
       },
+    });
+  }
+
+  private hydrateCapabilityRegistry(): void {
+    if (!this.http) return;
+    this.http.get<TaskServerRunnerCapabilitySnapshot[]>('/api/v1/management/remote-hosts').subscribe({
+      next: snapshots => {
+        const now = Date.now();
+        this.hosts.update(hosts => {
+          const projected = [...hosts];
+          for (const snapshot of snapshots ?? []) {
+            const index = projected.findIndex(host =>
+              host.clientId === snapshot.runnerId || host.id === snapshot.runnerId);
+            const current = index >= 0 ? projected[index] : {
+              id: snapshot.runnerId,
+              name: snapshot.name,
+              role: 'remote' as const,
+              address: null,
+              clientId: snapshot.runnerId,
+              status: 'offline' as const,
+              os: 'Remote runner',
+              lastHeartbeatAt: null,
+              uptimeLabel: null,
+              capabilities: [],
+              cliQuotas: [],
+              stats: null,
+            };
+            const lastSeenMs = Date.parse(snapshot.lastSeenAt);
+            const heartbeatFresh = Number.isFinite(lastSeenMs)
+              && now - lastSeenMs <= RemoteHostsService.DEGRADED_CLIENT_MS;
+            const capabilityDegraded = snapshot.capabilities.some(capability =>
+              !capability.isFresh || capability.healthState !== 'healthy' || capability.advertisedStatus !== 'ready');
+            const hostDraining = snapshot.hostAdmission.admissionState !== 'open';
+            const telemetryAt = snapshot.telemetry ? Date.parse(snapshot.telemetry.observedAt) : Number.NaN;
+            const telemetryFresh = snapshot.telemetry && Number.isFinite(telemetryAt)
+              && now - telemetryAt <= RemoteHostsService.DEGRADED_CLIENT_MS
+              && heartbeatFresh;
+            const status = hostDraining
+              ? 'draining'
+              : !heartbeatFresh
+                ? current.status
+                : capabilityDegraded ? 'degraded' : current.status === 'offline' ? 'online' : current.status;
+            const stats = telemetryFresh && snapshot.telemetry
+              ? telemetryStats(snapshot.telemetry)
+              : status === 'offline' ? null : current.stats;
+            const gitPush = snapshot.capabilities.find(capability => capability.key === 'git:push');
+            const gitWorkflowPush = snapshot.capabilities.find(
+              capability => capability.key === 'git:workflow-push',
+            );
+            const gitPushStatus = gitPush && gitPush.advertisedStatus !== 'ready'
+              ? 'read-only' as const
+              : gitWorkflowPush?.advertisedStatus === 'ready-no-workflow-scope'
+                ? 'ready-no-workflow-scope' as const
+                : gitWorkflowPush?.advertisedStatus === 'ready' || gitPush?.advertisedStatus === 'ready'
+                  ? 'ready' as const
+                  : current.gitPushStatus;
+            const next: RemoteHost = {
+              ...current,
+              name: snapshot.name,
+              status,
+              lastHeartbeatAt: snapshot.lastSeenAt,
+              capabilityHealth: snapshot.capabilities,
+              capabilities: snapshot.capabilities.map(capability =>
+                capability.version ? `${capability.key} ${capability.version}` : capability.key),
+              gitPushStatus,
+              gitPushDetail: gitWorkflowPush?.detail ?? gitPush?.detail ?? current.gitPushDetail,
+              gitPushCheckedAt:
+                gitWorkflowPush?.advertisedAt ?? gitPush?.advertisedAt ?? current.gitPushCheckedAt,
+              hostAdmission: snapshot.hostAdmission,
+              stats,
+            };
+            if (index >= 0) projected[index] = next;
+            else projected.push(next);
+          }
+          return projected;
+        });
+        this.log('capabilities-hydrated', { runners: snapshots?.length ?? 0 });
+      },
+      error: error => this.log('capabilities-hydrate-failed', { message: error?.message ?? 'unknown' }),
     });
   }
 
@@ -208,7 +294,16 @@ export class RemoteHostsService {
     this.log('wizard-completed', { hostId: id, address: host.address });
   }
 
-  reprobe(id: string): void { this.log('reprobe-requested', { hostId: id }); this.reload(); }
+  reprobe(id: string): void {
+    const host = this.hosts().find(item => item.id === id);
+    if (!host || host.busyAction || !this.http) return;
+    this.log('reprobe-requested', { hostId: id });
+    this.patch(id, item => ({ ...item, busyAction: 'reprobe' }));
+    this.http.post(`/api/clients/${encodeURIComponent(host.clientId)}/runner-project-preflights/invalidate`, {}).subscribe({
+      next: () => this.reload(),
+      error: error => this.actionFailed(id, error),
+    });
+  }
 
   /** Ask a host to finish current work and stop taking more. */
   drain(id: string): void {
@@ -271,6 +366,43 @@ export class RemoteHostsService {
   }
 }
 
+interface TaskServerTelemetrySnapshot {
+  observedAt: string;
+  cpuPercent: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
+  cpuCores: number;
+  diskFreeBytes?: number | null;
+  diskTotalBytes?: number | null;
+}
+
+interface TaskServerRunnerCapabilitySnapshot {
+  runnerId: string;
+  name: string;
+  hostId: string;
+  instanceId: string;
+  runnerVersion: string;
+  protocolVersion: number;
+  status: string;
+  registeredAt: string;
+  lastSeenAt: string;
+  hostAdmission: RemoteHostAdmission;
+  capabilities: RemoteHostCapabilityHealth[];
+  telemetry?: TaskServerTelemetrySnapshot | null;
+}
+
+function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {
+  return {
+    ramTotalMb: (telemetry.memoryTotalBytes ?? 0) / 1024 / 1024,
+    ramFreeMb: Math.max(0, ((telemetry.memoryTotalBytes ?? 0) - (telemetry.memoryUsedBytes ?? 0)) / 1024 / 1024),
+    cpuCores: telemetry.cpuCores,
+    cpuModel: 'reported by daemon',
+    cpuLoadPct: telemetry.cpuPercent ?? 0,
+    diskTotalGb: (telemetry.diskTotalBytes ?? 0) / 1024 / 1024 / 1024,
+    diskFreeGb: (telemetry.diskFreeBytes ?? 0) / 1024 / 1024 / 1024,
+  };
+}
+
 function statusFor(lastSeenAt: string | null, now: number): RemoteHost['status'] {
   const seen = lastSeenAt ? Date.parse(lastSeenAt) : Number.NaN;
   if (Number.isNaN(seen) || now - seen > 5 * 60_000) return 'offline';
@@ -283,6 +415,7 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     liveDataState: 'ready', telemetryLoading: status !== 'retired',
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
+    projectPreflights: client.runnerProjectPreflights ?? [],
     daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? (client.runnerGitStatus === 'read-only' ? 'read-only' : 'running'),
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
@@ -303,7 +436,10 @@ function mergeRecentTelemetry(
   );
   const findings = new Map(
     [...existing.findings, ...recent.findings]
-      .map(finding => [`${finding.kind}:${finding.since}:${finding.until}`, finding]),
+      .map(finding => [
+        `${finding.kind}:${finding.isActive === false ? 'history' : 'active'}`,
+        finding,
+      ]),
   );
   return {
     ...existing,

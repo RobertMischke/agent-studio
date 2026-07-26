@@ -50,9 +50,25 @@ public record ProjectSettings
     public string? DesiredRunnerMode { get; init; }
 
     /// <summary>
-    /// Server-owned assignment for remote execution. A non-empty value names
-    /// the remote runner allowed to claim this project's ready cards. The local
-    /// in-process runner skips those cards while the project is remote-capable.
+    /// Canonical automatic pickup intent, independent from execution placement.
+    /// One of <see cref="PickupModes.Auto"/>, <see cref="PickupModes.Manual"/>,
+    /// or <see cref="PickupModes.Paused"/>. Null is accepted only for legacy
+    /// records and resolves through <see cref="ProjectExecutionPolicy"/>.
+    /// </summary>
+    public string? PickupMode { get; init; }
+
+    /// <summary>
+    /// Canonical execution placement, independent from pickup intent.
+    /// <see cref="ExecutionLocations.Local"/> selects the in-process runner;
+    /// any other value is the registered remote runner id. Null is accepted
+    /// only for legacy records and resolves through
+    /// <see cref="ProjectExecutionPolicy"/>.
+    /// </summary>
+    public string? ExecutionLocation { get; init; }
+
+    /// <summary>
+    /// Legacy compatibility mirror for <see cref="ExecutionLocation"/>.
+    /// New code must resolve placement through <see cref="ProjectExecutionPolicy"/>.
     /// </summary>
     public string? ExecutionRunner { get; init; }
 
@@ -102,6 +118,19 @@ public record ProjectSettings
     public int? AutonomyLevel { get; init; }
 
     /// <summary>
+    /// Per-project override for the global wait-on-quota policy. Null inherits
+    /// the global CLI/quota setting; true/false explicitly enables/disables it
+    /// for this project.
+    /// </summary>
+    public bool? WaitOnQuotaEnabled { get; init; }
+
+    /// <summary>
+    /// Per-project override for the longest nearby quota-reset delay worth
+    /// waiting for. Null inherits the global threshold.
+    /// </summary>
+    public int? WaitOnQuotaThresholdMinutes { get; init; }
+
+    /// <summary>
     /// Per-project switch for the orchestrator intake loop. When true, the
     /// coding runner waits for orchestrator intake to finish before picking
     /// up a 2-ready card (gates pickup on <c>phase == intake-passed</c>).
@@ -130,9 +159,11 @@ public record ProjectSettings
     /// per-step override of <c>enabled</c> / <c>mode</c> / <c>model</c>.
     /// A missing step id, or a null field inside an entry, falls through
     /// to the built-in pipeline default. The known step ids come from
-    /// <c>PipelineCatalogue.Standard</c>; this map only overrides those
-    /// code-defined steps because the runtime maps each step id to a concrete
-    /// service. Resolution order for <c>model</c> is step -&gt;
+    /// <c>PipelineCatalogue.All</c>; this map only overrides code-defined steps
+    /// because the runtime maps each step id to a concrete service. The
+    /// catalogue includes standard, read-only, and UI iteration
+    /// step sets. The UI routing entry also accepts <c>maxIterations</c>.
+    /// Resolution order for <c>model</c> is step -&gt;
     /// <see cref="OrchestratorModel"/> -&gt; global default -&gt; runtime default;
     /// for <c>mode</c> it is step -&gt; built-in default.
     /// Persisted in <c>project-settings.json</c>.
@@ -398,6 +429,13 @@ public record PipelineStepCondition
 /// </summary>
 public record PipelineStepSetting
 {
+    /// <summary>
+    /// Optional bounded iteration count for steps that own an iterative loop.
+    /// Today this is consumed by the UI-pipeline routing step. Null preserves
+    /// the catalogue default; unsupported steps ignore it.
+    /// </summary>
+    public int? MaxIterations { get; init; }
+
     /// <summary>
     /// Opts this LLM-backed step into the TokenEconomy recommendation path.
     /// An explicit per-step <see cref="Model"/> still wins. The runtime falls

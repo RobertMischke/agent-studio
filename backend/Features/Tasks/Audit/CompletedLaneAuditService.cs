@@ -72,7 +72,7 @@ public sealed class CompletedLaneAuditService
     /// <summary>
     /// AGT-2202 — lists the accepted cards (6-completed / 7-archive) whose work is
     /// still not in the integration branch. Re-derives the live git integration
-    /// verdict for every card carrying the <c>integration:pending</c> tag, clears
+    /// verdict for every card carrying the <c>integrationpending</c> tag, clears
     /// the tag from any that have since become integrated (the marker self-heals),
     /// and returns the ones still pending / conflicted. Project scope accepts the
     /// PROJ-NNN id, the display name, or a watch path; a null/blank project scans
@@ -93,7 +93,7 @@ public sealed class CompletedLaneAuditService
         var candidates = _scanner.ScanAllJobsWithArchive()
             .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
             .Where(j => watchPath == null || string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
-            .Where(j => (j.Tags ?? []).Any(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase)))
+            .Where(j => (j.Tags ?? []).Any(IntegrationStatuses.IsPendingTag))
             .ToList();
 
         var statusByKey = _integrationStatus?.BuildLookup(candidates)
@@ -109,8 +109,9 @@ public sealed class CompletedLaneAuditService
             if (!IntegrationStatuses.IsNotIntegrated(verdict))
             {
                 // Now integrated (or nothing to integrate): drop the stale tag.
-                var tags = (job.Tags ?? []).Where(t =>
-                    !string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase)).ToList();
+                var tags = (job.Tags ?? [])
+                    .Where(t => !IntegrationStatuses.IsPendingTag(t))
+                    .ToList();
                 _mutations.SetJobTags(job.Id, tags, job.WatchPath);
                 cleared++;
                 continue;

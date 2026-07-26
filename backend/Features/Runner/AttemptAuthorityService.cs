@@ -13,6 +13,8 @@ namespace AgentStudio.Runner;
 public sealed class AttemptAuthorityService
 {
     public const string RelativePath = ".metadata/attempt-authority.json";
+    public const int ReviewInfrastructureRetryBudget = 3;
+    public const string UnmaterializableReviewSubjectReason = "review-subject-unmaterialisierbar";
     private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(10);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -597,6 +599,81 @@ public sealed class AttemptAuthorityService
                 requestedTtlSeconds,
                 $"v1-review-claim:{executorId}:{instanceId}:{candidate.AttemptId}",
                 instanceId);
+        }
+    }
+
+    /// <summary>
+    /// Returns whether another infrastructure retry may be created for the
+    /// immutable subject owned by <paramref name="attemptId"/>. The initial
+    /// ReviewAttempt is not a retry; at most three linked retry attempts may be
+    /// scheduled after it.
+    /// </summary>
+    public bool HasReviewInfrastructureRetryBudget(string attemptId)
+    {
+        lock (_gate)
+        {
+            var review = FindReview(attemptId);
+            if (review is null) return false;
+
+            var retryCount = 0;
+            var cursor = review;
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                cursor.AttemptId,
+            };
+            while (!Blank(cursor.SourceReviewAttemptId)
+                   && retryCount < ReviewInfrastructureRetryBudget)
+            {
+                retryCount++;
+                var source = FindReview(cursor.SourceReviewAttemptId!);
+                if (source is null || !visited.Add(source.AttemptId)) break;
+                cursor = source;
+            }
+
+            return retryCount < ReviewInfrastructureRetryBudget;
+        }
+    }
+
+    /// <summary>
+    /// Terminalizes current ReviewSubjects created from pre-plane completions
+    /// that have no immutable Result-Envelope. Returning every matching current
+    /// record lets the claim endpoint retry a failed lane escalation without
+    /// changing the terminal attempt a second time.
+    /// </summary>
+    public IReadOnlyList<ReviewAttemptDto> TerminalizeLegacyReviewSubjectsWithoutResultEnvelope()
+    {
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var changed = false;
+            foreach (var review in _state.ReviewAttempts.Where(IsCurrentReview))
+            {
+                var run = FindRun(review.SourceRunAttemptId);
+                if (run?.ResultEnvelope is not null)
+                    continue;
+
+                if (!Terminal(review.State))
+                {
+                    review.State = AttemptLifecycleState.Failed;
+                    review.Outcome = ReviewTerminalOutcome.InfrastructureFailure;
+                    review.FailureClassification = "SnapshotUnavailable";
+                    review.TerminalReason = UnmaterializableReviewSubjectReason;
+                    review.TerminalAt = now;
+                    review.Lease = null;
+                    changed = true;
+                }
+            }
+
+            if (changed) PersistLocked();
+            return _state.ReviewAttempts
+                .Where(IsCurrentReview)
+                .Where(review =>
+                    review.State == AttemptLifecycleState.Failed
+                    && review.Outcome == ReviewTerminalOutcome.InfrastructureFailure
+                    && Same(review.FailureClassification, "SnapshotUnavailable")
+                    && Same(review.TerminalReason, UnmaterializableReviewSubjectReason))
+                .Select(ToDto)
+                .ToList();
         }
     }
 

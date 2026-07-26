@@ -13,7 +13,8 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem, RegistryProjectSummary, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
+import { forkJoin } from 'rxjs';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
@@ -83,7 +84,7 @@ function cliColorFor(cli: string): string {
  * Top-level "Agent Software Studio" shell — the VS-Code-inspired chrome
  * that replaces the legacy single-pane layout. Behind the `vsCodeLayout`
  * feature flag for now; flip to default once the rest of the views
- * (Project Hub, full-screen diff, full-screen activity) are migrated.
+ * (Deck, full-screen diff, full-screen activity) are migrated.
  *
  * Owns the chrome (titlebar / activity bar / sidebar host / tab host /
  * status bar) and delegates state to the studio-shell services so child
@@ -190,7 +191,7 @@ export class StudioShellComponent {
   readonly globalSearchOpen = signal(false);
   /**
    * Which Explorer-tree project rows are expanded (showing Board / Project
-   * Hub / Activity sub-items). Persists across reloads so the user's
+   * Deck / Activity sub-items). Persists across reloads so the user's
    * preferred tree shape survives an F5.
    */
   private readonly _expandedProjects = signal<Set<string>>(
@@ -262,7 +263,7 @@ export class StudioShellComponent {
    * Centralised click handler for project-picker entries. `name === null`
    * means "All projects" (clears the active project filter); otherwise the
    * named project becomes the active board. `openHub` flag promotes the
-   * click to a Project Hub open (double-click affordance).
+   * click to a Deck open (double-click affordance).
    */
   pickProject(name: string | null, openHub = false): void {
     this.closePickerMenu();
@@ -355,6 +356,7 @@ export class StudioShellComponent {
    * `moveRegistryWorkspace`, `deleteRegistryWorkspace`.
    */
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
+  readonly registryProjects = signal<readonly RegistryProjectSummary[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
   /** Ids waiting on an Explorer-tree registry mutation (rename / delete), used
@@ -398,9 +400,13 @@ export class StudioShellComponent {
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces({ includeArchived: false }).subscribe({
-      next: (ws) => {
+    forkJoin({
+      workspaces: this.jobService.getRegistryWorkspaces({ includeArchived: false }),
+      projects: this.jobService.getRegistryProjects({ includeArchived: false }),
+    }).subscribe({
+      next: ({ workspaces: ws, projects }) => {
         this.registryWorkspaces.set(ws ?? []);
+        this.registryProjects.set(projects ?? []);
         this.projectLookup.setWorkspaces(ws ?? []);
         this.registryWorkspacesLoading.set(false);
       },
@@ -454,7 +460,7 @@ export class StudioShellComponent {
 
   /**
    * Auto-expand the active project in the Explorer tree so the lane
-   * children (backlog / active / human review / Project Hub / archive)
+   * children (backlog / active / human review / Deck / archive)
    * are visible the moment the user opens a board or task. Matches the
    * agent-orchestrator.zip mockup, which always shows the active project
    * expanded.
@@ -565,7 +571,7 @@ export class StudioShellComponent {
 
   /**
    * The project the user is contextually "in" — drives the active titlebar
-   * pill and the default project for sidebar CTAs. Board/Hub tabs name a
+   * pill and the default project for sidebar CTAs. Board/Deck tabs name a
    * project directly; Task/Activity tabs resolve through the job index;
    * Diff/Welcome fall back to the last-known board project.
    */
@@ -642,7 +648,7 @@ export class StudioShellComponent {
 
   openHub(projectName: string): void {
     // Clicking "Project" is an explicit request for the Overview rail, even
-    // when the Hub tab is already open on another section (e.g. Wiki). We
+    // when the Deck tab is already open on another section (e.g. Wiki). We
     // pass section=overview rather than leaving it undefined so the intent is
     // unambiguous and re-opening moves the rail back to Overview.
     this.tabState.open({ kind: 'hub', projectName, section: 'overview' });
@@ -660,8 +666,8 @@ export class StudioShellComponent {
 
   /**
    * Explorer "Wiki" link for a single project. Opens (or focuses) the
-   * project's Project Hub tab deep-linked to its Wiki rail, so the wiki is
-   * reachable as a top-level sidebar item under Project Hub.
+   * project's Deck tab deep-linked to its Wiki rail, so the wiki is
+   * reachable as a top-level sidebar item under Deck.
    */
   openWiki(projectName: string): void {
     this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
@@ -1080,8 +1086,11 @@ export class StudioShellComponent {
         const job = this.findJob(tab.taskKey);
         return job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey);
       }
-      case 'hub':
-        return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
+      case 'hub': {
+        const railItem = this.railItemForSection(tab.section);
+        const surfaceLabel = railItem.key === DEFAULT_PROJECT_RAIL_KEY ? 'Deck' : railItem.label;
+        return `${this.projectShortLabel(tab.projectName)} · ${surfaceLabel}`;
+      }
       case 'workbench':
         return tab.title || tab.workbenchId;
       case 'diff':
@@ -1111,7 +1120,7 @@ export class StudioShellComponent {
 
   /** Marker for the tab list — used for the small chip on the left
    *  edge of the tab (e.g. `#90` for tasks). The hub / diff / activity
-   *  tab labels already include the kind ("· Hub" / commit SHA /
+   *  tab labels already include the kind ("· Deck" / commit SHA /
    *  "Activity · …"), so we only render a leading num pill for
    *  task tabs where the `#order` adds info the title doesn't repeat. */
   tabNum(tab: StudioTab): string | null {
@@ -1123,7 +1132,7 @@ export class StudioShellComponent {
     return null;
   }
 
-  /** Leading icon for the tab strip. Hub tabs show their active section's
+  /** Leading icon for the tab strip. Deck tabs show their active section's
    *  rail icon (e.g. `book` for Wiki); other kinds render none here (the
    *  epic tab keeps its own dedicated glyph in the template). */
   tabIcon(tab: StudioTab): StudioIconName | null {
@@ -1167,7 +1176,7 @@ export class StudioShellComponent {
    * the shared `projectIdentity()` palette — the same hue the Explorer tree
    * and board cards use — so a project's colour reads consistently across the
    * whole shell. No new colour source. The dot only encodes origin; the
-   * shortCode (Board/Hub tabs) or task key (Task tabs) beside it stays the
+   * shortCode (Board/Deck tabs) or task key (Task tabs) beside it stays the
    * primary text label, so colour is never the sole carrier (A11y).
    */
   tabDotColor(tab: StudioTab): string | null {

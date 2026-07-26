@@ -42,9 +42,7 @@ public sealed class RemoteReviewExecutor
                 _log($"materializing review attempt={attempt.AttemptId} subject={subject.SubjectId} expected={subject.ExpectedResultSha}");
                 await workspace.PrepareAsync(_client, shutdown);
                 evidence = await workspace.ExecutePlanAsync(shutdown);
-                summary = evidence.Outcome == "Pass"
-                    ? "All applicable remote review aspects passed."
-                    : "At least one remote review aspect found a product concern.";
+                summary = ExecutionSummary(evidence);
             }
             catch (ReviewInfrastructureException exception)
             {
@@ -52,6 +50,19 @@ public sealed class RemoteReviewExecutor
                 summary = exception.Message;
                 evidence = InfrastructureEvidence(workspace, subject, lease, exception.Classification);
                 _log($"review infrastructure outcome attempt={attempt.AttemptId} classification={exception.Classification}: {exception.Message}");
+                var failedCapability = CapabilityFor(exception.Classification);
+                if (failedCapability is not null)
+                {
+                    await _client.ReportCapabilityFailureAsync(
+                        failedCapability,
+                        exception.Classification,
+                        exception.Message.Length <= 500 ? exception.Message : exception.Message[..500],
+                        $"review-capability:{attempt.AttemptId}:{lease.Fence}:{failedCapability}",
+                        "review",
+                        attempt.AttemptId,
+                        lease.Fence,
+                        CancellationToken.None);
+                }
             }
 
             var request = new ReviewReportRequest(
@@ -67,8 +78,7 @@ public sealed class RemoteReviewExecutor
                 workspace.EnvironmentEvidence(),
                 evidence.Commands,
                 evidence.Artifacts,
-                evidence.Verdicts,
-                lease.AuthorityEpoch);
+                evidence.Verdicts);
             report = await _client.ReportReviewAsync(attempt.AttemptId, request, CancellationToken.None);
             _log($"review report accepted attempt={attempt.AttemptId} outcome={report.Outcome} classification={report.FailureClassification ?? "none"} taskState={report.TaskState}");
             return report.Outcome == "Pass" ? 0 : report.Outcome == "ProductFailure" ? 2 : 3;
@@ -103,8 +113,7 @@ public sealed class RemoteReviewExecutor
                         removed,
                         removed ? null : report is null
                             ? "ExecutorStoppedBeforeReport"
-                            : "WorkspaceCleanupFailed",
-                        lease.AuthorityEpoch),
+                            : "WorkspaceCleanupFailed"),
                     CancellationToken.None);
                 _log($"review cleanup recorded attempt={attempt.AttemptId} status={cleanup.Status} retry={cleanup.RetryScheduled}");
             }
@@ -133,10 +142,22 @@ public sealed class RemoteReviewExecutor
                     lease.LeaseId,
                     lease.Fence,
                     $"review-renew:{attemptId}:{lease.Fence}:{++sequence}",
-                    _options.TtlSeconds,
-                    lease.AuthorityEpoch),
+                    _options.TtlSeconds),
                 stop);
         }
+    }
+
+    private static string ExecutionSummary(ReviewExecutionEvidence evidence)
+    {
+        var baseline = evidence.Verdicts
+            .Where(verdict => verdict.Classification is "BaselineCompared" or "NewTestFailures")
+            .Select(verdict => $"{verdict.Aspect}: {verdict.Summary}")
+            .ToArray();
+        if (baseline.Length > 0)
+            return string.Join(" ", baseline);
+        return evidence.Outcome == "Pass"
+            ? "All applicable remote review aspects passed."
+            : "At least one remote review aspect found a product concern.";
     }
 
     private static ReviewExecutionEvidence InfrastructureEvidence(
@@ -165,4 +186,16 @@ public sealed class RemoteReviewExecutor
             [],
             []);
     }
+
+    private static string? CapabilityFor(string classification)
+        => classification switch
+        {
+            "SnapshotUnavailable" or "RepositoryMismatch" or "ShaMismatch"
+                => CapabilityProtocol.RepositoryAccess,
+            "ToolUnavailable" => ReviewCapabilities.SemanticReview,
+            "VisionUnavailable" => CapabilityProtocol.Vision,
+            "DiskFull" => CapabilityProtocol.Disk,
+            "LeaseAuthorityInvalid" => CapabilityProtocol.LeaseAuthority,
+            _ => null,
+        };
 }

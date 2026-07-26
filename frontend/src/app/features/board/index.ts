@@ -9,12 +9,14 @@ export { BoardFiltersService, type ActiveFilterPill } from './state/board-filter
 export { LaneCollapseService } from './state/lane-collapse.service';
 export { CreateTaskFormService } from './state/create-task-form.service';
 export { BoardMutationsService } from './state/board-mutations.service';
+export { BoardDragStateService } from './state/board-drag-state.service';
 export { EpicOverviewService } from './state/epic-overview.service';
 
 // components
 export { EpicOverviewScreenComponent, type EpicOverviewScope } from './components/epic-overview-screen/epic-overview-screen.component';
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';
 export { CreateTaskDialogComponent, type PendingAttachment } from './components/create-task-dialog/create-task-dialog.component';
+export { DecisionBacklogHintComponent } from './components/decision-backlog-hint/decision-backlog-hint.component';
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';
 export { KanbanFilterSidesheetComponent } from './components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 export { TaskCardComponent } from './components/task-card/task-card.component';

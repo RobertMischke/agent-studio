@@ -1,0 +1,69 @@
+using Xunit;
+
+namespace AgentStudio.Tests;
+
+public sealed class ProjectExecutionPolicyTests
+{
+    [Theory]
+    [InlineData(PickupModes.Auto, ExecutionLocations.Local, true, false)]
+    [InlineData(PickupModes.Auto, "runner-01", false, true)]
+    [InlineData(PickupModes.Manual, ExecutionLocations.Local, false, false)]
+    [InlineData(PickupModes.Manual, "runner-01", false, false)]
+    [InlineData(PickupModes.Paused, ExecutionLocations.Local, false, false)]
+    [InlineData(PickupModes.Paused, "runner-01", false, false)]
+    public void ClaimPolicy_SeparatesAutomaticOfferFromPlacement(
+        string pickupMode,
+        string executionLocation,
+        bool localMayClaim,
+        bool remoteMayClaim)
+    {
+        var settings = new ProjectSettings
+        {
+            PickupMode = pickupMode,
+            ExecutionLocation = executionLocation,
+        };
+
+        Assert.Equal(
+            localMayClaim,
+            ProjectExecutionPolicy.AllowsAutomaticPickup(settings)
+            && ProjectExecutionPolicy.IsLocalExecution(settings));
+        Assert.Equal(
+            remoteMayClaim,
+            ProjectExecutionPolicy.AllowsAutomaticPickup(settings)
+            && ProjectExecutionPolicy.IsAssignedRemote(settings, "runner-01"));
+    }
+
+    [Theory]
+    [InlineData("auto-continuous", PickupModes.Auto, ExecutionLocations.Local)]
+    [InlineData("manual", PickupModes.Manual, ExecutionLocations.Local)]
+    [InlineData("paused", PickupModes.Paused, ExecutionLocations.Local)]
+    [InlineData("runner-01", PickupModes.Auto, "runner-01")]
+    public void Migrate_ResolvesLegacyCompositeValues(
+        string legacyValue,
+        string expectedPickupMode,
+        string expectedLocation)
+    {
+        var migrated = ProjectExecutionPolicy.Migrate(new ProjectSettings
+        {
+            ExecutionRunner = legacyValue,
+        });
+
+        Assert.Equal(expectedPickupMode, migrated.PickupMode);
+        Assert.Equal(expectedLocation, migrated.ExecutionLocation);
+    }
+
+    [Fact]
+    public void Migrate_PausedLegacyMode_KeepsCanonicalRemoteLocation()
+    {
+        var migrated = ProjectExecutionPolicy.Migrate(new ProjectSettings
+        {
+            PickupMode = PickupModes.Paused,
+            ExecutionLocation = "runner-01",
+            ExecutionRunner = "paused",
+        });
+
+        Assert.Equal(PickupModes.Paused, migrated.PickupMode);
+        Assert.Equal("runner-01", migrated.ExecutionLocation);
+        Assert.Equal("runner-01", migrated.ExecutionRunner);
+    }
+}

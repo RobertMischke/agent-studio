@@ -1,0 +1,36 @@
+@if (completions().length > 0) {
+  <section class="replay" aria-label="Recorded runner replay" data-testid="runner-replay-metadata">
+    <header class="replay__header">
+      <h4>Recorded turns</h4>
+      <span>{{ completions().length }} typed {{ completions().length === 1 ? 'event' : 'events' }}</span>
+    </header>
+
+    <ol class="replay__events">
+      @for (event of completions(); track event.id) {
+        <li class="replay__event"
+            [attr.data-kind]="event.kind"
+            [attr.data-testid]="'runner-replay-' + event.id">
+          <div class="replay__event-head">
+            <strong>{{ label(event) }}</strong>
+            <time [attr.datetime]="event.timestamp">{{ formatTime(event.timestamp) }}</time>
+          </div>
+          <dl class="replay__metadata">
+            @if (event.sessionId) { <div><dt>Session</dt><dd><code>{{ event.sessionId }}</code></dd></div> }
+            @if (event.model) { <div><dt>Model</dt><dd>{{ event.model }}</dd></div> }
+            @if (event.thinkingLevel) { <div><dt>Thinking</dt><dd>{{ event.thinkingLevel }}</dd></div> }
+            @if (event.durationMs !== null && event.durationMs !== undefined) { <div><dt>Duration</dt><dd>{{ formatDuration(event.durationMs) }}</dd></div> }
+            @if (event.inputTokens !== null && event.inputTokens !== undefined) { <div><dt>Input</dt><dd>{{ formatTokens(event.inputTokens) }} tokens</dd></div> }
+            @if (event.outputTokens !== null && event.outputTokens !== undefined) { <div><dt>Output</dt><dd>{{ formatTokens(event.outputTokens) }} tokens</dd></div> }
+            @if (event.reasoningTokens !== null && event.reasoningTokens !== undefined) { <div><dt>Reasoning</dt><dd>{{ formatTokens(event.reasoningTokens) }} tokens</dd></div> }
+            @if (event.implementationStatus) {
+              <div data-testid="runner-replay-implementation"><dt>Implementation</dt><dd>{{ event.implementationStatus }}</dd></div>
+            }
+            @if (event.pipelineStatus) {
+              <div data-testid="runner-replay-pipeline"><dt>Pipeline</dt><dd>{{ event.pipelineStatus }}</dd></div>
+            }
+          </dl>
+        </li>
+      }
+    </ol>
+  </section>
+}

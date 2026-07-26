@@ -44,10 +44,21 @@ public sealed class RunnerOptions
     /// <summary>Runner service credential sent as Authorization on every networked-profile request.</summary>
     public string? AuthToken { get; init; }
 
-    /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
+    /// <summary>
+    /// Optional SHA-256 pin for a private or rehearsal Task Server certificate.
+    /// Public deployments should normally rely on the operating-system trust
+    /// store; the pin keeps CI and private-CA topologies explicit and fail closed.
+    /// </summary>
+    public string? TlsServerCertificateSha256 { get; init; }
+
+    /// <summary>Fallback git remote for one-shot runs and the daemon startup capability probe.</summary>
     public string? GitRemote { get; init; }
 
-    /// <summary>Optional write-only URL installed as origin.pushurl while fetches keep using <see cref="GitRemote"/>.</summary>
+    /// <summary>
+    /// Optional write-only URL for the daemon startup capability probe and legacy
+    /// one-shot runs. Project-scoped clones always use their registry URL for both
+    /// fetch and push and never inherit this fallback.
+    /// </summary>
     public string? GitPushRemote { get; init; }
 
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>
@@ -64,6 +75,14 @@ public sealed class RunnerOptions
 
     /// <summary>Durable daemon slot records and detached-worker logs.</summary>
     public string StateDir { get; init; } = Path.Combine(Path.GetTempPath(), "agent-runner-state");
+
+    /// <summary>
+    /// Additional host capabilities required by every claim for this service
+    /// identity, for example toolchain:dotnet, toolchain:node, or
+    /// toolchain:playwright. The Task Server combines these with the role,
+    /// provider, source, disk, and connectivity requirements.
+    /// </summary>
+    public IReadOnlyList<string> RequiredCapabilities { get; init; } = [];
 
     /// <summary>Branch to check out for the run. When empty, the runner stays on <see cref="BaseBranch"/>.</summary>
     public string? Branch { get; init; }
@@ -117,10 +136,20 @@ public sealed class RunnerOptions
     public bool HealthCheckOnly { get; init; }
 
     public static string Env(string name, string fallback = "")
-        => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : fallback;
+    {
+        if (Environment.GetEnvironmentVariable(name) is { Length: > 0 } value)
+            return value;
+
+        const string bootstrapPrefix = "RUNNER_";
+        if (name.StartsWith(bootstrapPrefix, StringComparison.Ordinal)
+            && Environment.GetEnvironmentVariable($"AGENT_HOST_{name[bootstrapPrefix.Length..]}") is { Length: > 0 } alias)
+            return alias;
+
+        return fallback;
+    }
 
     public static int EnvInt(string name, int fallback)
-        => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
+        => int.TryParse(Env(name), out var v) && v > 0 ? v : fallback;
 
     public static double EnvDouble(string name, double fallback)
         => double.TryParse(
@@ -183,6 +212,11 @@ public sealed class RunnerOptions
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             Role = Val("role", "RUNNER_ROLE", "coding").Trim().ToLowerInvariant(),
             AuthToken = authToken.Length > 0 ? authToken : null,
+            TlsServerCertificateSha256 = Val(
+                "tls-certificate-sha256",
+                "RUNNER_TLS_CERTIFICATE_SHA256").Trim() is { Length: > 0 } certificateSha
+                    ? certificateSha
+                    : null,
             GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
             GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
@@ -196,6 +230,13 @@ public sealed class RunnerOptions
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             StateDir = Val("state-dir", "RUNNER_STATE_DIR",
                 Path.Combine(Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")), ".runner-state")),
+            RequiredCapabilities = Val(
+                    "required-capabilities",
+                    "RUNNER_REQUIRED_CAPABILITIES")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(value => value.ToLowerInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),

@@ -8,10 +8,9 @@ public static class AccessSecurityEndpoints
 
         auth.MapGet("/status", (HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
         {
-            var principal = context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
-                            ?? store.AuthenticateSession(context.Request.Cookies[AccessSecurityStore.SessionCookieName], touch: false);
+            var principal = FindHuman(context, store, touch: false);
             return Results.Ok(new AuthStatusResponse(
-                ActiveProfile(configuration),
+                SecurityProfiles.ActiveProfile(configuration),
                 store.BootstrapRequired,
                 principal is not null,
                 principal is null ? null : ToResponse(principal.User)));
@@ -22,7 +21,7 @@ public static class AccessSecurityEndpoints
             {
                 var created = store.Bootstrap(request);
                 SetSessionCookies(context, created.SessionToken, created.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(created.User), created.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(created.User), created.CsrfToken));
             }));
 
         auth.MapPost("/login", (LoginRequest request, HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
@@ -31,51 +30,77 @@ public static class AccessSecurityEndpoints
                 var key = $"{(request.Username ?? string.Empty).Trim().ToLowerInvariant()}|{context.Connection.RemoteIpAddress}";
                 var result = store.Login(request.Username ?? string.Empty, request.Password ?? string.Empty, key);
                 SetSessionCookies(context, result.SessionToken, result.CsrfToken);
-                return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(result.User), result.CsrfToken));
+                return Results.Ok(new AuthStatusResponse(SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(result.User), result.CsrfToken));
             }));
 
-        auth.MapGet("/session", (HttpContext context, IConfiguration configuration) =>
+        // The local profile treats X-Client-Id as attribution only, so it must not
+        // become an alternate credential for any auth administration endpoint.
+        // A missing human session yields a graceful 401 (never a 500) so the
+        // local profile can present the sign-in affordance instead of an error.
+        auth.MapGet("/session", (HttpContext context, AccessSecurityStore store, IConfiguration configuration) =>
         {
-            var principal = RequireHuman(context);
-            return Results.Ok(new AuthStatusResponse(ActiveProfile(configuration), false, true, ToResponse(principal.User)));
+            var principal = FindHuman(context, store);
+            return principal is null
+                ? Results.Json(
+                    new
+                    {
+                        error = "authentication-required",
+                        message = "Sign in to establish a human Studio session.",
+                        loginUrl = "/api/auth/login"
+                    },
+                    statusCode: StatusCodes.Status401Unauthorized)
+                : Results.Ok(new AuthStatusResponse(
+                    SecurityProfiles.ActiveProfile(configuration), false, true, ToResponse(principal.User)));
         });
 
         auth.MapPost("/logout", (HttpContext context, AccessSecurityStore store) =>
-        {
-            store.Logout(RequireHuman(context).Session);
-            context.Response.Cookies.Delete(AccessSecurityStore.SessionCookieName, SessionCookieOptions(https: true));
-            context.Response.Cookies.Delete("__Host-agentstudio-csrf", CsrfCookieOptions(https: true));
-            context.Response.Cookies.Delete(AccessSecurityStore.InsecureSessionCookieName, SessionCookieOptions(https: false));
-            context.Response.Cookies.Delete("agentstudio-csrf", CsrfCookieOptions(https: false));
-            return Results.NoContent();
-        });
-
-        auth.MapPost("/change-password", (ChangePasswordRequest request, HttpContext context, AccessSecurityStore store) =>
-            Execute(() => Results.Ok(ToResponse(store.ChangePassword(RequireHuman(context), request)))));
-
-        auth.MapGet("/users", (AccessSecurityStore store) =>
-            Results.Ok(store.ListUsers().Select(ToResponse)));
-
-        auth.MapPost("/users", (CreateUserRequest request, AccessSecurityStore store) =>
             Execute(() =>
             {
+                store.Logout(RequireHuman(context, store).Session);
+                context.Response.Cookies.Delete(AccessSecurityStore.SessionCookieName, SessionCookieOptions(https: true));
+                context.Response.Cookies.Delete("__Host-agentstudio-csrf", CsrfCookieOptions(https: true));
+                context.Response.Cookies.Delete(AccessSecurityStore.InsecureSessionCookieName, SessionCookieOptions(https: false));
+                context.Response.Cookies.Delete("agentstudio-csrf", CsrfCookieOptions(https: false));
+                return Results.NoContent();
+            }));
+
+        auth.MapPost("/change-password", (ChangePasswordRequest request, HttpContext context, AccessSecurityStore store) =>
+            Execute(() => Results.Ok(ToResponse(store.ChangePassword(RequireHuman(context, store), request)))));
+
+        auth.MapGet("/users", (HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
+                return Results.Ok(store.ListUsers().Select(ToResponse));
+            }));
+
+        auth.MapPost("/users", (CreateUserRequest request, HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
                 var result = store.CreateUser(request);
                 return Results.Ok(new { user = ToResponse(result.User), temporaryPassword = result.TemporaryPassword, mustChangePassword = true });
             }));
 
         auth.MapPut("/users/{id}", (string id, UpdateUserRequest request, HttpContext context, AccessSecurityStore store) =>
-            Execute(() => Results.Ok(ToResponse(store.UpdateUser(id, request, RequireHuman(context).User.Id)))));
-
-        auth.MapPost("/users/{id}/reset-password", (string id, PasswordResetRequest request, AccessSecurityStore store) =>
             Execute(() =>
             {
+                var owner = RequireOwner(context, store);
+                return Results.Ok(ToResponse(store.UpdateUser(id, request, owner.User.Id)));
+            }));
+
+        auth.MapPost("/users/{id}/reset-password", (string id, PasswordResetRequest request, HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
                 var reset = store.ResetPassword(id, request);
                 return Results.Ok(new PasswordResetResponse(reset.User.Id, reset.TemporaryPassword, true));
             }));
 
-        auth.MapPost("/runner-enrollments", (RunnerEnrollmentRequest request, AccessSecurityStore store) =>
+        auth.MapPost("/runner-enrollments", (RunnerEnrollmentRequest request, HttpContext context, AccessSecurityStore store) =>
             Execute(() =>
             {
+                RequireOwner(context, store);
                 var created = store.CreateEnrollment(request);
                 return Results.Ok(new OneTimeEnrollmentResponse(created.Code, created.Enrollment.Name, created.Enrollment.Scopes, created.Enrollment.ExpiresAt));
             }));
@@ -88,7 +113,12 @@ public static class AccessSecurityEndpoints
                     enrolled.Secret, enrolled.Credential.Scopes, enrolled.Credential.ExpiresAt));
             }));
 
-        auth.MapGet("/runners", (AccessSecurityStore store) => Results.Ok(store.ListRunners().Select(ToRunnerResponse)));
+        auth.MapGet("/runners", (HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
+                return Results.Ok(store.ListRunners().Select(ToRunnerResponse));
+            }));
 
         // Provisioning can prove the authenticated service identity without
         // reopening the legacy client registry. No secret material is echoed.
@@ -105,19 +135,30 @@ public static class AccessSecurityEndpoints
             });
         });
 
-        auth.MapPost("/runners/{id}/credentials", (string id, RunnerRotateRequest request, AccessSecurityStore store) =>
+        auth.MapPost("/runners/{id}/credentials", (string id, RunnerRotateRequest request, HttpContext context, AccessSecurityStore store) =>
             Execute(() =>
             {
+                RequireOwner(context, store);
                 var rotated = store.RotateRunner(id, request);
                 return Results.Ok(new OneTimeSecretResponse(rotated.Runner.Id, rotated.Runner.Name, rotated.Credential.Id,
                     rotated.Secret, rotated.Credential.Scopes, rotated.Credential.ExpiresAt));
             }));
 
-        auth.MapDelete("/runners/{id}/credentials/{credentialId}", (string id, string credentialId, AccessSecurityStore store) =>
-            Execute(() => { store.RevokeCredential(id, credentialId); return Results.NoContent(); }));
+        auth.MapDelete("/runners/{id}/credentials/{credentialId}", (string id, string credentialId, HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
+                store.RevokeCredential(id, credentialId);
+                return Results.NoContent();
+            }));
 
-        auth.MapDelete("/runners/{id}", (string id, AccessSecurityStore store) =>
-            Execute(() => { store.RevokeRunner(id); return Results.NoContent(); }));
+        auth.MapDelete("/runners/{id}", (string id, HttpContext context, AccessSecurityStore store) =>
+            Execute(() =>
+            {
+                RequireOwner(context, store);
+                store.RevokeRunner(id);
+                return Results.NoContent();
+            }));
     }
 
     private static IResult Execute(Func<IResult> operation)
@@ -126,16 +167,29 @@ public static class AccessSecurityEndpoints
         catch (SecurityOperationException ex) { return Results.Json(new { error = ex.Code, message = ex.Message }, statusCode: ex.Status); }
     }
 
-    // The active security profile the client-facing AuthStatus must reflect. Login,
-    // bootstrap, and session previously hardcoded "networked"; that mislabelled the
-    // status shape when those endpoints were exercised under the local profile, so
-    // the reported profile is now derived from configuration like /status already is.
-    private static string ActiveProfile(IConfiguration configuration)
-        => SecurityProfiles.IsNetworked(configuration) ? SecurityProfiles.Networked : SecurityProfiles.Local;
-
-    private static HumanPrincipal RequireHuman(HttpContext context)
+    private static HumanPrincipal RequireHuman(HttpContext context, AccessSecurityStore store)
         => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal
+           ?? store.AuthenticateSession(
+               context.Request.Cookies[AccessSecurityStore.SessionCookieName]
+               ?? context.Request.Cookies[AccessSecurityStore.InsecureSessionCookieName])
            ?? throw new SecurityOperationException(401, "authentication-required", "A human session is required.");
+
+    private static HumanPrincipal RequireOwner(HttpContext context, AccessSecurityStore store)
+    {
+        var principal = RequireHuman(context, store);
+        if (principal.User.Role != StudioRoles.Owner)
+            throw new SecurityOperationException(403, "owner-required", "Owner role is required.");
+        return principal;
+    }
+
+    private static HumanPrincipal? FindHuman(HttpContext context, AccessSecurityStore store, bool touch = true)
+    {
+        if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal principal)
+            return principal;
+        var token = context.Request.Cookies[AccessSecurityStore.SessionCookieName]
+                    ?? context.Request.Cookies[AccessSecurityStore.InsecureSessionCookieName];
+        return store.AuthenticateSession(token, touch);
+    }
 
     private static AuthUserResponse ToResponse(StudioUser user)
         => new(user.Id, user.Username, user.DisplayName, user.Role, user.Projects, user.Disabled, user.MustChangePassword);

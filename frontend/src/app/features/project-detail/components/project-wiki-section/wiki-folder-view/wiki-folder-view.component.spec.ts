@@ -14,18 +14,21 @@ const OVERVIEW: WikiFolderOverview = {
     // Pages deliberately listed before the folder: the view sorts folders first.
     {
       name: 'detail.md', relPath: 'concepts/deep/detail.md', kind: 'page', fileType: 'md',
-      title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', size: 2048, childCount: null,
+      title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', updatedAtSource: 'git',
+      size: 2048, childCount: null,
       classification: {
         status: 'ueberholt', supersededBy: 'concepts/new.md', type: 'konzept', analyzedAt: '2026-07-18',
       },
     },
     {
       name: 'viz.html', relPath: 'concepts/deep/viz.html', kind: 'page', fileType: 'html',
-      title: 'Visualisierung', summary: null, updatedAt: null, size: 500, childCount: null,
+      title: 'Visualisierung', summary: null, updatedAt: '2026-07-12T08:00:00Z', updatedAtSource: 'mtime',
+      size: 500, childCount: null,
     },
     {
       name: 'sub', relPath: 'concepts/deep/sub', kind: 'folder', fileType: null,
-      title: 'Unterbereich', summary: null, updatedAt: '2026-07-11T08:00:00Z', size: null, childCount: 1,
+      title: 'Unterbereich', summary: null, updatedAt: '2026-07-11T08:00:00Z', updatedAtSource: 'git',
+      size: null, childCount: 1,
     },
   ],
 };
@@ -57,6 +60,22 @@ async function setup(overview: WikiFolderOverview | 'error' = OVERVIEW) {
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
+
+function makeDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'none',
+    effectAllowed: 'all',
+    setData(type: string, value: string) { store.set(type, value); },
+    getData(type: string) { return store.get(type) ?? ''; },
+  } as unknown as DataTransfer;
+}
+
+function fireDrag(target: Element, type: string, dataTransfer: DataTransfer): void {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer, configurable: true });
+  target.dispatchEvent(event);
+}
 
 function clearStarStorage(): void {
   for (const key of Object.keys(localStorage)) {
@@ -98,6 +117,10 @@ describe('WikiFolderViewComponent', () => {
     expect(root.querySelector('[data-testid="wiki-folder-summary-concepts/deep/detail.md"]')!.textContent)
       .toContain('Zweite Zeile.');
     expect(root.querySelector('[data-testid="wiki-folder-row-concepts/deep/detail.md"] time')).toBeTruthy();
+    expect(root.querySelector('[data-testid="wiki-folder-mtime-concepts/deep/detail.md"]')).toBeNull();
+    const mtimeMarker = root.querySelector('[data-testid="wiki-folder-mtime-concepts/deep/viz.html"]');
+    expect(mtimeMarker?.textContent).toBe('*');
+    expect(mtimeMarker?.getAttribute('title')).toBe('Filesystem time because no Git date is available yet');
     http.verify();
   });
 
@@ -192,6 +215,60 @@ describe('WikiFolderViewComponent', () => {
     fixture.detectChanges();
     expect(star().getAttribute('aria-pressed')).toBe('false');
     expect(stars.entries('Demo')).toEqual([]);
+    http.verify();
+  });
+
+  it('reorders document rows immediately from the drag handle and emits their names', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    const emitted: string[][] = [];
+    fixture.componentInstance.fileOrderChange.subscribe(names => emitted.push(names));
+
+    const handle = root.querySelector<HTMLElement>('[data-testid="wiki-folder-drag-concepts/deep/viz.html"]')!;
+    const target = root.querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep/detail.md"]')!;
+    expect(handle.getAttribute('draggable')).toBe('true');
+    expect(root.querySelector('[data-testid="wiki-folder-drag-concepts/deep/sub"]')).toBeNull();
+
+    const dataTransfer = makeDataTransfer();
+    fireDrag(handle, 'dragstart', dataTransfer);
+    fireDrag(target, 'dragover', dataTransfer);
+    fireDrag(target, 'drop', dataTransfer);
+    fixture.detectChanges();
+
+    const rowIds = [...root.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
+      .map(row => row.getAttribute('data-testid'));
+    expect(rowIds).toEqual([
+      'wiki-folder-row-concepts/deep/sub',
+      'wiki-folder-row-concepts/deep/viz.html',
+      'wiki-folder-row-concepts/deep/detail.md',
+    ]);
+    expect(emitted).toEqual([['viz.html', 'detail.md']]);
+    http.verify();
+  });
+
+  it('hides document reorder handles when the wiki source is read-only', async () => {
+    const { fixture, http } = await setup();
+
+    fixture.componentRef.setInput('writable', false);
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid^="wiki-folder-drag-"]')).toBeNull();
+    http.verify();
+  });
+
+  it('mirrors an optimistic tree order without re-fetching the folder', async () => {
+    const { fixture, http } = await setup();
+
+    fixture.componentRef.setInput('orderedFileNames', ['viz.html', 'detail.md']);
+    fixture.detectChanges();
+
+    const rowIds = [...el(fixture).querySelectorAll('[data-testid^="wiki-folder-row-"]')]
+      .map(row => row.getAttribute('data-testid'));
+    expect(rowIds).toEqual([
+      'wiki-folder-row-concepts/deep/sub',
+      'wiki-folder-row-concepts/deep/viz.html',
+      'wiki-folder-row-concepts/deep/detail.md',
+    ]);
     http.verify();
   });
 

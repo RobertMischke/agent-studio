@@ -104,13 +104,26 @@ public sealed record RunnerClaimRequest(
     int AvailableSlots = 1,
     int? ActiveSlots = null,
     string? IdempotencyKey = null,
-    IReadOnlyList<string>? ActiveTaskKeys = null);
+    IReadOnlyList<string>? ActiveTaskKeys = null,
+    RunnerProjectPreflightReport? ProjectPreflight = null);
+
+/// <summary>Host result for the unleased project offered by the previous claim poll.</summary>
+public sealed record RunnerProjectPreflightReport(
+    string ProjectId,
+    string RegistrationFingerprint,
+    bool Succeeded,
+    string Detail,
+    DateTime CheckedAt,
+    string FetchUrl,
+    string PushUrl);
 
 /// <summary>Typed status handed back by one daemon pickup poll.</summary>
 public enum RunnerClaimStatus
 {
     Claimed,
     Empty,
+    PreflightRequired,
+    PreflightFailed,
     Invalid,
 }
 
@@ -125,7 +138,8 @@ public sealed record RunnerClaimResponse(
     string? ProjectId = null,
     string? RepositoryUrl = null,
     string? DefaultBranch = null,
-    string? TaskKind = null);
+    string? TaskKind = null,
+    string? RegistrationFingerprint = null);
 
 /// <summary>Fenced request for the server-rendered Epic decomposition prompt.</summary>
 public sealed record RemoteEpicPlanningPromptRequest(

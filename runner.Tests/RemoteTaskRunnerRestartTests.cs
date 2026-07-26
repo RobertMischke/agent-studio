@@ -84,6 +84,32 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.Empty(replacementStore.LoadAll());
     }
 
+    [Fact]
+    public async Task Restarted_runner_accepts_an_expired_dead_job_lease_as_already_released()
+    {
+        var work = Path.Combine(_root, "runner-work");
+        var stateRoot = Path.Combine(_root, "state");
+        var worktree = Path.Combine(work, "expired-dead-worktree");
+        Directory.CreateDirectory(worktree);
+        var options = Options(work, stateRoot, Path.Combine(_root, "unused-origin.git"));
+        var lease = Lease();
+        var originalStore = new RunnerStateStore(stateRoot);
+        originalStore.Create(lease.TaskKey, lease, worktree);
+
+        var replacementStore = new RunnerStateStore(stateRoot);
+        var recovered = Assert.Single(replacementStore.LoadAll());
+        var server = new RunnerApiHandler(lease, releaseOutcome: "Expired");
+        using var http = new HttpClient(server) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(http, options.RunnerId);
+        var replacement = new RemoteTaskRunner(options, client, _ => { }, replacementStore);
+
+        var released = await replacement.ReleaseDeadAsync(recovered, "lease expired during daemon downtime");
+
+        Assert.True(released);
+        Assert.Equal(["/api/runner/lease/release"], server.Paths);
+        Assert.Empty(replacementStore.LoadAll());
+    }
+
     private static RunnerOptions Options(string work, string stateRoot, string origin) => new()
     {
         ServerUrl = "http://task-server",
@@ -139,7 +165,9 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.True(result.ExitCode == 0, $"git {string.Join(' ', args)} failed: {result.StdErr}");
     }
 
-    private sealed class RunnerApiHandler(RunLeaseInfoDto lease) : HttpMessageHandler
+    private sealed class RunnerApiHandler(
+        RunLeaseInfoDto lease,
+        string releaseOutcome = "Released") : HttpMessageHandler
     {
         private readonly object _gate = new();
         public List<string> Paths { get; } = [];
@@ -171,7 +199,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
                     {"taskKey":"{{lease.TaskKey}}","outcome":"Done","targetState":"4-auto-review"}
                     """,
                 "/api/runner/lease/release" => $$"""
-                    {"outcome":"Released","granted":false,"lease":{{LeaseJson(lease)}}}
+                    {"outcome":"{{releaseOutcome}}","granted":false,"lease":{{LeaseJson(lease)}}}
                     """,
                 _ => "{}",
             };

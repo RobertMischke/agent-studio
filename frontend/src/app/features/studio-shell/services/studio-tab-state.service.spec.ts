@@ -104,7 +104,7 @@ describe('StudioTabStateService', () => {
     expect(svc.activeKey()).toBe('task:demo|x');
   });
 
-  describe('Project Hub and Wiki tab identity', () => {
+  describe('Deck and Wiki tab identity', () => {
     it('keeps an open Overview Hub and Explorer-opened Wiki as distinct tabs', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });

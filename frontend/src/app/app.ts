@@ -26,6 +26,7 @@ import {
   LaneCollapseService,
   ProjectTabsComponent,
   TypeFilterOption,
+  BoardDragStateService,
   BoardMutationsService,
   CreateTaskFormService,
   buildProjectTokenChip,
@@ -85,10 +86,18 @@ import {
   ProjectHubViewComponent,
   StudioDiffViewComponent,
   StudioActivityViewComponent,
+  ProjectHubUrlService,
   StudioTabStateService,
   StudioPanelStateService,
   studioTabKey,
+  parseStudioRoute,
+  replaceStudioRoute,
+  replaceTaskViewRoute,
+  studioProjectSlug,
+  studioRouteForTab,
   type StudioTab,
+  type TaskDetailRouteTab,
+  type TaskInspectorRouteTab,
 } from './features/studio-shell';
 import { TaskService } from './services/task.service';
 import { ClientService } from './services/client.service';
@@ -215,11 +224,16 @@ export class App implements OnInit, OnDestroy {
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
+  readonly projectHubUrls = inject(ProjectHubUrlService);
   private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   readonly pageContext = inject(PageContextService);
+  readonly routeDetailTab = signal<TaskDetailRouteTab | null>(null);
+  readonly routeInspectorTab = signal<TaskInspectorRouteTab | null>(null);
+  private readonly studioRouteReady = signal(false);
+  private pendingStudioTaskReference: string | null = null;
   readonly orchestratorComposerContext = computed(() => buildComposerLocationContext(
     this.studioTabState.activeTab(),
     this.jobService.jobs(),
@@ -326,6 +340,7 @@ export class App implements OnInit, OnDestroy {
   readonly createJobForm = inject(CreateTaskFormService);
   /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
   private readonly boardMutations = inject(BoardMutationsService);
+  private readonly boardDrag = inject(BoardDragStateService);
   /** Re-exposed for the column template so the Archive-all button can disable
    *  itself + show a spinner while a bulk archive is in flight. */
   readonly archivingInProgress = this.boardMutations.archiving;
@@ -571,8 +586,8 @@ export class App implements OnInit, OnDestroy {
     }
     lanes.push(
       { state: TaskState.AutoReview, title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
-      { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
+      { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
       { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
@@ -584,25 +599,16 @@ export class App implements OnInit, OnDestroy {
    *
    *  - backlog: 0-backlog, 1-preparation, 2-ready
    *  - active:  3-progress, 4-auto-review
-   *  - decide:  5-human-review, 5e-escalated, 6-completed, 7-archive ("Done & Decide" -
-   *             the user-owned tail of the pipeline; sign-off plus the
-   *             archive sit together because they all wait on the user.)
+   *  - decide:  5e-escalated, 5-human-review, 6-completed, 7-archive ("Done & Decide" -
+   *             intervention precedes acceptance in the user-owned tail.)
    *
    * The previous human/agent axis suffix was misleading (Backlog mixes
    * agent prep with human triage) and is removed.
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
-    // Orchestrator prep is no longer a backlog lane — it runs in-place on
-    // 1-preparation as the optional `pre-orchestrator-prep` pipeline step
-    // (see PipelineCatalogue).
-    //
-    // Order inside the Backlog super-column (top → bottom): the most
-    // actionable lanes come first so the user reading the column from the
-    // top reaches "what should I pick up next?" without scrolling. Earlier
-    // ordering (0-backlog → 2-ready) buried the Ready lane under hundreds
-    // of backlog items.
-    //
+    // Backlog lanes put the most actionable work first; the old order buried
+    // Ready under large backlogs.
     //   1. 2-ready      "Ready"              — pick-up candidates
     //   2. 1-preparation                     — in human preparation
     //   3. 0-backlog                         — fresh inbox / triage
@@ -659,6 +665,10 @@ export class App implements OnInit, OnDestroy {
       icon: '🤖',
       jobs: grouped.autoReview,
     });
+    const escalatedJobs = grouped.escalated ?? [];
+    // Future option: metadata could apply this empty-lane policy to exception
+    // lanes such as 1-preparation. For now it is intentionally Escalated-only.
+    const showEscalated = escalatedJobs.length > 0 || this.boardDrag.active();
     return [
       {
         id: 'backlog',
@@ -674,10 +684,9 @@ export class App implements OnInit, OnDestroy {
         id: 'decide',
         label: 'Done & Decide',
         lanes: [
-          // ADR-0025: human-review waits on the user; it sits alongside
-          // completed and archive in the user-owned tail.
+          // Intervention comes before acceptance in the visible workflow.
+          ...(showEscalated ? [{ state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: escalatedJobs }] : []),
           { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
-          { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
           { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
           { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
         ],
@@ -728,8 +737,8 @@ export class App implements OnInit, OnDestroy {
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
     { state: TaskState.Preparation,   label: 'Preparation' },
     { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Escalated,     label: 'Escalated' },
+    { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Completed,     label: 'Delivered' },
     { state: TaskState.Archive,       label: 'Archive' },
   ];
@@ -917,6 +926,11 @@ export class App implements OnInit, OnDestroy {
       if (allowed && !this.studioInitialized) untracked(() => this.initializeStudio());
       else if (statusKnown && !allowed && this.studioInitialized) untracked(() => this.teardownStudio());
     });
+    effect(() => {
+      if (this.projectHubUrls.appliedRevision() === 0) return;
+      untracked(() => this.studioRouteReady.set(true));
+    });
+
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateTaskFormService doesn't call jobService.refresh itself
     // because that orchestration concern lives here. F2: also flag the
@@ -1010,7 +1024,18 @@ export class App implements OnInit, OnDestroy {
       this.laneNavRetarget = false;
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
-      untracked(() => this.mirrorSelectionToStudioTab(selected, retargetNav));
+      untracked(() => {
+        this.mirrorSelectionToStudioTab(selected, retargetNav);
+        if (this.pendingStudioTaskReference) {
+          const publicReference = selected.info.key?.trim()
+            || selected.info.displayKey?.trim()
+            || selected.info.id;
+          if (publicReference.toLowerCase() === this.pendingStudioTaskReference.toLowerCase()) {
+            this.pendingStudioTaskReference = null;
+            this.studioRouteReady.set(true);
+          }
+        }
+      });
     });
 
     // Browser Back from a key-based task URL to a non-task URL must move the
@@ -1031,7 +1056,7 @@ export class App implements OnInit, OnDestroy {
 
     // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
     // active studio tab the single source of truth for `selectedJob()` and
-    // the canonical `?task=` URL param, so a reload restores the *current* view:
+    // the canonical `#/tasks/<key>` route, so a reload restores the *current* view:
     //
     //   - Active tab is a task  → ensure `selectedJob` holds that task
     //     (re-hydrating from the persisted tab on a cold reload, so the
@@ -1039,7 +1064,7 @@ export class App implements OnInit, OnDestroy {
     //     covering in-session selectTab() which only flips the active key).
     //   - Active tab is NOT a task (board / project / hub / diff / activity)
     //     → drop any lingering selection and strip stale task route params.
-    //     Without this, switching task→board leaves `?task=` in the URL and
+    //     Without this, switching task→board leaves the task route in the URL and
     //     the next F5 re-opens the task detail instead of the board.
     //
     // Only `activeTab()` is tracked; `selectedJob()` is read untracked so
@@ -1055,6 +1080,11 @@ export class App implements OnInit, OnDestroy {
     // from a task", so the param is preserved for `restoreFromUrl`.
     effect(() => {
       if (!this.featureFlags.vsCodeLayout()) return;
+      // A cold shared route resolves asynchronously. Until that route has
+      // opened its target tab, the persisted/default active tab is stale
+      // hydration input and must not clear the selection that just resolved.
+      // The route-in mirror below opens the task tab and releases this gate.
+      if (!this.studioRouteReady()) return;
       const tab = this.studioTabState.activeTab();
       untracked(() => {
         const selected = this.selectedJob();
@@ -1076,11 +1106,35 @@ export class App implements OnInit, OnDestroy {
       });
     });
 
+    effect(() => {
+      if (!this.featureFlags.vsCodeLayout() || !this.studioRouteReady()) return;
+      const tab = this.studioTabState.activeTab();
+      if (!tab) return;
+      // Project Hub routes are owned by ProjectHubUrlService because their
+      // canonical identity is the immutable registry id, not a display slug.
+      if (tab.kind === 'hub') return;
+      let publicTaskReference: string | null = null;
+      if (tab.kind === 'task' || tab.kind === 'epic') {
+        const selected = this.selectedJob();
+        if (selected) publicTaskReference = selected.info.key?.trim() || selected.info.displayKey?.trim() || selected.info.id;
+      }
+      const route = studioRouteForTab(tab, publicTaskReference);
+      if (!route) return;
+      const detailTab = this.routeDetailTab() ?? 'overview';
+      const selected = this.selectedJob();
+      const inspectorTab = this.routeInspectorTab()
+        ?? (selected?.info.state === TaskState.Progress ? 'activity' : 'protocol');
+      untracked(() => {
+        replaceStudioRoute(route);
+        if (tab.kind === 'task') replaceTaskViewRoute(detailTab, inspectorTab);
+      });
+    });
+
     // Studio Workspace Settings render as an editor tab. Keep the existing
     // WorkspaceOverlaysService as the section/hash state holder, but close
     // that state when the settings tab is no longer the active surface.
     effect(() => {
-      if (!this.featureFlags.vsCodeLayout()) return;
+      if (!this.featureFlags.vsCodeLayout() || !this.studioRouteReady()) return;
       const tab = this.studioTabState.activeTab();
       const open = this.workspaceOverlays.settingsOpen();
       untracked(() => {
@@ -1168,6 +1222,7 @@ export class App implements OnInit, OnDestroy {
     this.nowMsTickHandle = setInterval(() => this.nowMs.set(Date.now()), 1000);
     this.refresh();
     this.jobService.startLiveUpdates();
+    this.projectHubUrls.start();
     this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
@@ -1183,12 +1238,14 @@ export class App implements OnInit, OnDestroy {
       if (this.featureFlags.vsCodeLayout() && this.workspaceOverlays.settingsOpen()) {
         this.openWorkspaceSettingsInStudio(this.workspaceOverlays.section());
       }
-      this.applyProjectShellHash();
+      const studioHandled = this.syncStudioRouteFromHash();
+      if (!studioHandled) this.applyProjectShellHash();
       this.syncEpicsTabFromHash();
     };
     applyHash();
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
+    window.addEventListener('popstate', this.hashListener);
 
     // Keyboard shortcuts for kanban container focus-expand: 1/2/3 focus
     // the corresponding container, 0 exits focus. Suppressed while the
@@ -1245,6 +1302,7 @@ export class App implements OnInit, OnDestroy {
     this.jobService.stopLiveUpdates();
     if (this.hashListener) {
       window.removeEventListener('hashchange', this.hashListener);
+      window.removeEventListener('popstate', this.hashListener);
       this.hashListener = null;
     }
     if (this.kanbanKeyListener) {
@@ -1256,6 +1314,7 @@ export class App implements OnInit, OnDestroy {
       this.nowMsTickHandle = null;
     }
     this.studioInitialized = false;
+    this.projectHubUrls.stop();
   }
 
   ngOnDestroy() { this.teardownStudio(); }
@@ -1273,6 +1332,8 @@ export class App implements OnInit, OnDestroy {
       this.openEpicAsTab(job);
       return;
     }
+    this.routeDetailTab.set(null);
+    this.routeInspectorTab.set(null);
     this.jobSelection.openDetail(job);
   }
   closeDetail() {
@@ -1574,7 +1635,8 @@ export class App implements OnInit, OnDestroy {
         // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
         // the slug → project name needs the watch-path list, so re-apply
         // once entries are available.
-        this.applyProjectShellHash();
+        const studioHandled = this.syncStudioRouteFromHash();
+        if (!studioHandled) this.applyProjectShellHash();
 
         // Refresh the board so a deleted project's jobs disappear right away
         // rather than on the next live-update tick.
@@ -1841,11 +1903,22 @@ export class App implements OnInit, OnDestroy {
 
   onOpenEpicFromTaskAnchor(currentTask: TaskInfo, event: { jobId: string; watchPath: string }): void {
     const requestToken = ++this.relatedOpenToken;
-    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+    this.jobService.getDetailByProject(
+      event.jobId,
+      currentTask.projectName,
+      event.watchPath,
+    ).subscribe({
       next: (detail) => {
         if (requestToken !== this.relatedOpenToken) return;
         if (detail.info.kind !== 'epic') {
-          this.selectFetchedDetail(detail);
+          this.errorDialog.show(
+            new Error(`Task ${event.jobId} is not an epic.`),
+            {
+              title: 'Failed to open epic',
+              fallbackMessage: 'The selected parent is not an epic.',
+              source: `task ${event.jobId}`,
+            },
+          );
           return;
         }
         this.openEpicDetailFromTaskAnchor(detail, currentTask.taskKey);
@@ -1902,7 +1975,7 @@ export class App implements OnInit, OnDestroy {
 
   private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {
     this.epicTabTaskDetail.set(null);
-    const target = { kind: 'epic' as const, epicKey: detail.info.taskKey, viewTaskKey: anchorTaskKey };
+    const target = { kind: 'epic' as const, epicKey: detail.info.taskKey };
     const active = this.studioTabState.activeTab();
     const sourceKey =
       active?.kind === 'task' && active.taskKey === anchorTaskKey
@@ -2078,11 +2151,83 @@ export class App implements OnInit, OnDestroy {
   closeAnalysisReport(): void {
     this.projectOverlays.closeAnalysisReport();
   }
-  private applyProjectShellHash(): void {
-    this.projectOverlays.syncShellFromHash(this.watchPaths());
+  private applyProjectShellHash(fromHistory = false): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.projectHubUrls.applyHash(fromHistory);
+    } else {
+      this.projectOverlays.syncShellFromHash(this.watchPaths());
+    }
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
   }
 
+  private syncStudioRouteFromHash(): boolean {
+    if (!this.featureFlags.vsCodeLayout()) return false;
+    const route = parseStudioRoute(window.location.hash);
+    if (!route) {
+      const legacyTask = new URLSearchParams(window.location.search).get('task')
+        || new URLSearchParams(window.location.search).get('job');
+      if (legacyTask) {
+        this.pendingStudioTaskReference = legacyTask;
+        return true;
+      }
+      this.studioRouteReady.set(true);
+      return false;
+    }
+    this.studioRouteReady.set(false);
+
+    if (route.kind === 'hub') {
+      if (this.projectHubUrls.applyHash(false)) {
+        this.studioRouteReady.set(true);
+      }
+      return true;
+    }
+
+    const projectName = 'projectSlug' in route && route.projectSlug
+      ? this.watchPaths().find(entry => studioProjectSlug(entry.name) === route.projectSlug)?.name ?? null : null;
+    if ('projectSlug' in route && route.projectSlug && !projectName) {
+      return true;
+    }
+
+    switch (route.kind) {
+      case 'board':
+        this.studioTabState.open({ kind: 'board', projectName: projectName ?? '__all__' });
+        break;
+      case 'workbench':
+        this.studioTabState.open({ kind: 'workbench', projectName: projectName!, workbenchId: route.workbenchId });
+        break;
+      case 'task':
+        this.routeDetailTab.set(route.tab);
+        this.routeInspectorTab.set(route.inspector);
+        this.pendingStudioTaskReference = route.reference;
+        this.jobSelection.restoreFromUrl();
+        return true;
+      case 'epics':
+        this.studioTabState.open({ kind: 'epics', projectName });
+        break;
+      case 'epic':
+        this.pendingStudioTaskReference = route.reference;
+        this.jobSelection.restoreFromUrl();
+        return true;
+      case 'workspace-settings':
+        if (!this.workspaceOverlays.settingsOpen()) {
+          this.studioRouteReady.set(true);
+          return false;
+        }
+        this.studioTabState.open({ kind: 'workspace-settings' });
+        break;
+    }
+    this.pendingStudioTaskReference = null;
+    this.studioRouteReady.set(true);
+    return true;
+  }
+
+  onTaskDetailTabChange(tab: TaskDetailRouteTab): void {
+    this.routeDetailTab.set(tab);
+  }
+
+  onTaskInspectorTabChange(tab: TaskInspectorRouteTab): void {
+    this.routeInspectorTab.set(tab);
+  }
   private syncEpicsTabFromHash(): void {
     const rawHash = window.location.hash || '';
     if (!rawHash.startsWith('#epics')) return;

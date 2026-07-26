@@ -18,7 +18,7 @@
       <button type="submit" [disabled]="submitting()">Create owner</button>
     } @else {
       <h1>Sign in</h1>
-      <p class="auth-gate__muted">Use your organization account. Runner credentials cannot sign in here.</p>
+      <p class="auth-gate__muted">Use your organization account. Host credentials cannot sign in here.</p>
       <label>Username<input name="username" autocomplete="username" [(ngModel)]="username" required></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" [(ngModel)]="password" required></label>
       <button type="submit" [disabled]="submitting()">Sign in</button>

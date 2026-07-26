@@ -150,9 +150,9 @@ public static class ProjectDocsEndpoints
         // sniffed titles, plain-text summaries, and folder child counts. An
         // empty relPath lists the wiki root. Sits before the /files catch-all
         // for path precedence, like its sibling routes.
-        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs) =>
+        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs, GitService git) =>
         {
-            var folder = docs.GetWikiFolder(projectName, relPath);
+            var folder = docs.GetWikiFolder(projectName, relPath, git);
             return folder == null
                 ? Results.NotFound(new { error = "Folder not found or path rejected" })
                 : Results.Ok(folder);
@@ -349,6 +349,19 @@ public static class ProjectDocsEndpoints
                 $"wiki: reorder categories under {(parent.Length == 0 ? "root" : parent)}");
         });
 
+        // Persist the sibling display order of documents through the same
+        // config and commit-backed mutation shape as category ordering.
+        app.MapPut("/api/projects/{projectName}/wiki/file-order", (string projectName, WikiFileOrderRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            if (body.OrderedNames == null)
+                return Results.BadRequest(new { error = "orderedNames field required" });
+            var parent = Normalize(body.ParentRelPath) ?? string.Empty;
+            var result = docs.SetWikiFileOrder(projectName, parent, body.OrderedNames);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!,
+                $"wiki: reorder documents under {(parent.Length == 0 ? "root" : parent)}");
+        });
+
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
@@ -442,6 +455,7 @@ public record WikiCreatePageRequest(string RelPath, string? Content);
 public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
 public record WikiFolderOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
+public record WikiFileOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
 public record WikiSaveRequest(string? Content);
 public record WikiClassificationRequest(string? Status);
 public record WikiHomePinRequest(

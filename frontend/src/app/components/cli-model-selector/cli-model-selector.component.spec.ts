@@ -1,22 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 import { CliModelSelectorComponent } from './cli-model-selector.component';
-import { ModelSelectorComponent } from 'coding-agent-chat/composer';
 import type { CliModelInfo } from '../../features/cli';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ModalStackService } from '../../services/modal-stack.service';
 
 /**
- * Adapter specs: the picker UI and its draft/commit semantics live in the
- * library's `<cac-model-selector>` (covered by the library's own specs).
- * These tests pin the app-side contract: the historical inputs/outputs and
- * testids survive, the catalog flows through `CliCatalogStore`, and the
- * popover participates in the app modal stack.
+ * Studio picker specs: the historical inputs/outputs and testids survive, the
+ * catalog flows through `CliCatalogStore`, generations render in separate
+ * groups, and the popover participates in the app modal stack.
  */
-describe('CliModelSelectorComponent (library adapter)', () => {
+describe('CliModelSelectorComponent', () => {
   const claudeModels: CliModelInfo[] = [
     { id: 'claude-opus-4-7', label: 'Opus 4.7', multiplier: 5, vendor: 'anthropic', isDefault: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high' },
     { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', multiplier: 1, vendor: 'anthropic', isDefault: false, thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
@@ -47,7 +43,7 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     modalStack = createModalStackMock(),
   ): Promise<{
     fixture: ComponentFixture<CliModelSelectorComponent>;
-    child: ModelSelectorComponent;
+    component: CliModelSelectorComponent;
     store: ReturnType<typeof createStoreMock>;
     modalStack: ReturnType<typeof createModalStackMock>;
   }> {
@@ -64,9 +60,7 @@ describe('CliModelSelectorComponent (library adapter)', () => {
       fixture.componentRef.setInput(key, value);
     }
     await fixture.whenStable();
-    const child = fixture.debugElement.query(By.directive(ModelSelectorComponent))
-      .componentInstance as ModelSelectorComponent;
-    return { fixture, child, store, modalStack };
+    return { fixture, component: fixture.componentInstance, store, modalStack };
   }
 
   function openPicker(fixture: ComponentFixture<CliModelSelectorComponent>): void {
@@ -90,24 +84,77 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     const store = createStoreMock();
     store.modelsFor.mockReturnValue(codexModels);
     store.ensure.mockReturnValue(of(codexModels));
-    const { fixture, child } = await create({ cliType: 'codex', model: 'gpt-5.6-sol' }, store);
+    const { fixture, component } = await create({ cliType: 'codex', model: 'gpt-5.6-sol' }, store);
 
     openPicker(fixture);
     await fixture.whenStable();
-    const sol = child.draftAvailableModels().find((m) => m.id === 'gpt-5.6-sol');
+    const sol = component.draftAvailableModels().find((m) => m.id === 'gpt-5.6-sol');
     expect(sol).toBeTruthy();
     expect(sol!.label).toBe('GPT-5.6-Sol');
     expect(sol!.thinkingLevels).toContain('ultra');
   });
 
+  it('passes leading generations first while keeping older models selectable', async () => {
+    const unsortedModels: CliModelInfo[] = [
+      { ...claudeModels[0], id: 'claude-opus-4-7', label: 'Opus 4.7', isDefault: false },
+      { ...claudeModels[0], id: 'claude-opus-5', label: 'Opus 5', isDefault: true },
+      { ...claudeModels[0], id: 'claude-opus-4-8', label: 'Opus 4.8', isDefault: false },
+    ];
+    const store = createStoreMock();
+    store.modelsFor.mockReturnValue(unsortedModels);
+    store.ensure.mockReturnValue(of(unsortedModels));
+    const { fixture, component } = await create(
+      { cliType: 'claude', model: 'claude-opus-5' },
+      store,
+    );
+
+    openPicker(fixture);
+    await fixture.whenStable();
+
+    expect(component.draftAvailableModels().map((item) => item.id)).toEqual([
+      'claude-opus-5',
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+    ]);
+    expect(component.draftAvailableModels().slice(1)).toEqual([
+      expect.objectContaining({
+        id: 'claude-opus-4-8',
+        deprecated: true,
+        availabilityNote: 'Older generation',
+      }),
+      expect.objectContaining({
+        id: 'claude-opus-4-7',
+        deprecated: true,
+        availabilityNote: 'Older generation',
+      }),
+    ]);
+    expect(component.draftAvailableModels().every((item) => item.available !== false)).toBe(true);
+
+    const olderHeading = document.querySelector(
+      '[data-testid="cli-model-selector-picker-older-heading"]',
+    );
+    const olderRows = document.querySelectorAll<HTMLButtonElement>(
+      '[data-generation="older"][role="radio"]',
+    );
+    expect(olderHeading?.textContent).toContain('Older models');
+    expect(olderRows).toHaveLength(2);
+    expect(olderRows[0].getAttribute('data-deprecated')).toBe('true');
+    expect(olderRows[0].textContent).toContain('Older generation');
+    expect(olderRows[0].disabled).toBe(false);
+
+    const commits: string[] = [];
+    component.modelChange.subscribe((modelId) => commits.push(modelId));
+    olderRows[0].click();
+    expect(commits).toEqual(['claude-opus-4-8']);
+  });
+
   it('serves a fresh catalog from the store and schedules the silent picker-open refresh', async () => {
-    const { fixture, child, store } = await create({ cliType: 'claude', model: 'claude-opus-4-7' });
+    const { fixture, component, store } = await create({ cliType: 'claude', model: 'claude-opus-4-7' });
     openPicker(fixture);
     expect(store.modelsFor).toHaveBeenCalledWith('claude');
     expect(store.refreshForPickerOpen).toHaveBeenCalledWith('claude');
     await fixture.whenStable();
-    // Unavailable entries are filtered by the library picker.
-    expect(child.draftAvailableModels().map((m) => m.id)).toEqual(['claude-opus-4-7', 'claude-sonnet-4-6']);
+    expect(component.draftAvailableModels().map((m) => m.id)).toEqual(['claude-opus-4-7', 'claude-sonnet-4-6']);
   });
 
   it('loads via ensure() when the store has no fresh catalog', async () => {
@@ -115,7 +162,7 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     const pendingCatalog = new Subject<readonly CliModelInfo[]>();
     store.hasFresh.mockReturnValue(false);
     store.ensure.mockReturnValue(pendingCatalog);
-    const { fixture, child } = await create({ cliType: 'claude', model: 'claude-opus-4-7' }, store);
+    const { fixture, component } = await create({ cliType: 'claude', model: 'claude-opus-4-7' }, store);
 
     openPicker(fixture);
     expect(store.ensure).toHaveBeenCalledWith('claude');
@@ -125,7 +172,7 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     pendingCatalog.complete();
     await fixture.whenStable();
     expect(fixture.componentInstance.catalogLoading()).toBe(false);
-    expect(child.draftAvailableModels().length).toBe(2);
+    expect(component.draftAvailableModels().length).toBe(2);
   });
 
   it('surfaces a catalog error when ensure() fails', async () => {
@@ -139,8 +186,8 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     expect(fixture.componentInstance.catalogError()).toMatch(/could not load/i);
   });
 
-  it('re-emits the library commit with the app CliType payload', async () => {
-    const { fixture, child } = await create({ cliType: 'claude', model: 'claude-opus-4-7', thinkingLevel: 'high' });
+  it('emits an atomic commit with the app CliType payload', async () => {
+    const { fixture, component } = await create({ cliType: 'claude', model: 'claude-opus-4-7', thinkingLevel: 'high' });
     const commits: { cliType: string; model: string; thinkingLevel: string | null }[] = [];
     fixture.componentInstance.commit.subscribe((c) => commits.push(c));
     const modelChanges: string[] = [];
@@ -148,7 +195,7 @@ describe('CliModelSelectorComponent (library adapter)', () => {
 
     openPicker(fixture);
     await fixture.whenStable();
-    child.onModelPillClick('claude-sonnet-4-6');
+    component.onModelPillClick('claude-sonnet-4-6');
 
     expect(commits).toEqual([
       { cliType: 'claude', model: 'claude-sonnet-4-6', thinkingLevel: 'high' },
@@ -157,12 +204,12 @@ describe('CliModelSelectorComponent (library adapter)', () => {
   });
 
   it('pushes onto the modal stack while open and disposes on close', async () => {
-    const { fixture, child, modalStack } = await create({ cliType: 'claude', model: 'claude-opus-4-7' });
+    const { fixture, component, modalStack } = await create({ cliType: 'claude', model: 'claude-opus-4-7' });
     openPicker(fixture);
     await fixture.whenStable();
     expect(modalStack.service.pushUntilDestroyed).toHaveBeenCalledTimes(1);
 
-    child.closePicker();
+    component.closePicker();
     await fixture.whenStable();
     expect(modalStack.dispose).toHaveBeenCalledTimes(1);
   });

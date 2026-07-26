@@ -151,6 +151,43 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Blocked_completion_is_not_reclassified_as_infra()
+    {
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 0,
+            FinalAssistantOutput: "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            StdErr: "Narrative covered out of memory, 401 unauthorized, 429 quota exceeded, "
+                    + "invalid session recovery, and invalid model configuration."));
+
+        Assert.Equal(ExecutionOutcomeKind.ExplicitAgentBlocker, result.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.AskForHumanInput, result.RecoveryAction);
+        Assert.False(result.IsInfrastructureOutcome);
+    }
+
+    [Fact]
+    public void Real_oom_kill_still_wins_even_with_blocked_sentinel()
+    {
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 0,
+            FinalAssistantOutput: "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            OomKilled: true));
+
+        Assert.Equal(ExecutionOutcomeKind.OutOfMemory, result.Outcome);
+        Assert.True(result.IsInfrastructureOutcome);
+    }
+
+    [Fact]
+    public void Blocked_completion_carries_reason_slug_as_detail()
+    {
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 0,
+            FinalAssistantOutput: "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]"));
+
+        Assert.Equal(ExecutionOutcomeKind.ExplicitAgentBlocker, result.Outcome);
+        Assert.Equal("deck-panel-v1-decision-missing", result.Detail);
+    }
+
+    [Fact]
     public void Same_session_resume_is_bounded_once_then_falls_back_once_then_stops()
     {
         var first = ExecutionOutcomeAdapter.Classify(Coding(

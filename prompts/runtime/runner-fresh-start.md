@@ -15,12 +15,12 @@
 
 Rules for this run:
 
-- Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 - Work on this task only. Do not scan for or pick up other tasks.
+- Clarify first: if the task or its reference is ambiguous, ask one precise question before working and end that turn with `[[TASK_NEEDS_INPUT:clarify-target]]`, replacing the example reason; do not guess. Ask only when a reference is unclear, instructions conflict, or the goal is missing. If the request is clear, work without asking.
 - Do not move the job folder. Do not edit `state` in `job.json`. The application owns pickup, stop, continue, and state transitions.
 - Do the implementation in the working directory above. Read or write task evidence in the job folder.
 - Run git status and git diff in the repository path above when you need to inspect changes.
-- Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The platform owns commit and push after the run.
+- Please do not commit or push yourself; the platform commits after review. If you did commit, that is not a problem: it will be shown and cleaned up where safe. Never push to a protected branch or rewrite history that existed before this run.
 - Place review-relevant screenshots / result files under the job folder's `results/` directory.
 - Label each evidence screenshot's source in its filename: `--real` for a shot against a running backend, `--mocked` for an e2e run with mocked API routes. For UI-acceptance evidence, a `--real` shot against a live backend is recommended; mocked shots stay allowed but must be labelled. Composite / stitched before-after images are welcome - name them `--composite` and list their parts, for example `before-after--composite-real-mocked.png`. Unlabelled filenames make no source claim.
 - Make sure every image you link from a protocol or note actually exists under `results/` (or `attachments/`); a link to a missing file is surfaced to the reviewer as a broken-reference finding.

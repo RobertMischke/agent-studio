@@ -220,7 +220,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <see cref="ReviewDecisionRecord"/> that the lint-scss post-step
     /// emitted. Used for the infinite-spin guard (a prior reissue with
     /// this prefix means the agent already had one chance to clear the
-    /// gate; the next failure escalates to human review).
+    /// gate; the next failure escalates for operator intervention).
     /// </summary>
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
@@ -363,8 +363,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Pure data-repair, run on EVERY boot regardless of the Enabled flag:
         // give an old 5-human-review card with durable run provenance but no
         // orchestrator verdict a retroactive Escalate verdict + status.md stub
-        // so the board can explain it. Age and provenance keep fresh operator
-        // cards that have never run out of this legacy migration.
+        // so the board can explain it. Age, provenance, terminal-lane, and
+        // latest-operator-move guards keep accepted or explicitly placed cards
+        // out of this legacy migration.
         try { BackfillVerdictlessHumanReview(workspace!, stoppingToken); }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less human-review backfill failed"); }
@@ -716,6 +717,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return;
 
             case ReviewSignalKind.Done:
+                if (TaskModes.IsConcept(pending.Job.Mode))
+                {
+                    await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
                 var aspects = ResolveAspectRunners();
                 if (aspects.Count == 0 ||
                     !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
@@ -726,6 +732,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return;
 
             case ReviewSignalKind.NeedsInput:
+                if (TaskModes.IsConcept(pending.Job.Mode))
+                {
+                    await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
                 if (!RateLimitOk(maxPerHour))
                 {
                     _logger.LogInformation(
@@ -979,7 +990,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// verdict record + old enough + durable run provenance", and the status
     /// stub is never written over a real summary, so re-running on later boots is
     /// a no-op. A freshly-created manual card without a run is never legacy
-    /// evidence. Public so tests can drive it.
+    /// evidence. An operator-authored latest lane transition is itself a verdict
+    /// and always wins over missing legacy provenance. Completed and archived
+    /// cards are acceptance terminals and never enter this repair. Public so
+    /// tests can drive it.
     /// </summary>
     public void BackfillVerdictlessHumanReview(string workspace, CancellationToken ct)
     {
@@ -1004,7 +1018,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         foreach (var job in jobs)
         {
             if (ct.IsCancellationRequested) return;
+            if (job.State is TaskStates.Completed or TaskStates.Archive) continue;
             if (job.State != TaskStates.HumanReview) continue;
+            if (HasLatestOperatorLaneVerdict(job)) continue;
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
             if (DateTime.UtcNow - job.CreatedAt < VerdictlessBackfillMinimumAge) continue;
             if (!HasRunProvenance(job)) continue;
@@ -1037,6 +1053,38 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (repaired > 0)
             _logger.LogInformation("ReviewDecisionOrchestrator: verdict-less human-review backfill repaired {Repaired} card(s).", repaired);
+    }
+
+    private bool HasLatestOperatorLaneVerdict(TaskInfo job)
+    {
+        if (_timeline == null) return false;
+
+        try
+        {
+            var latestLaneChange = _timeline.ReadAll(job.FolderPath)
+                .LastOrDefault(evt => string.Equals(
+                    evt.Kind,
+                    TimelineEventKinds.LaneChanged,
+                    StringComparison.Ordinal));
+            if (latestLaneChange == null) return false;
+
+            var actor = latestLaneChange.Actor?.Trim() ?? string.Empty;
+            // Actor is also authoritative for legacy rows: before AGT-2345 the
+            // Move API accepted a reason but dropped it before lane_changed was
+            // written, so requiring Details["reason"] here would re-break the
+            // operator corrections made immediately before the first fixed boot.
+            return string.Equals(actor, TimelineActors.Human(""), StringComparison.OrdinalIgnoreCase)
+                || actor.StartsWith("human:", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: operator lane-verdict read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+            return false;
+        }
     }
 
     private bool HasRunProvenance(TaskInfo job)
@@ -1134,9 +1182,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var fallback = new OrchestratorDecisionVerdict(
                 OrchestratorDecisionAction.Escalate,
-                "Review-decision model returned no parseable [[ORCHESTRATOR_DECISION]]; human review required.");
+                "Review-decision model returned no parseable [[ORCHESTRATOR_DECISION]]; operator intervention required.");
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to human review",
+                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to 5e-escalated",
                 entry.Name, pending.Job.Id);
             await HandleEscalateAsync(workspace, entry, pending, prompt, response, fallback, cliBinary, ct);
             return;
@@ -1154,6 +1202,124 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict, cliBinary);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Concept-specific post-processing. A complete, published Workbench is a
+    /// successful outcome even when the core run ended in NeedsInput: the
+    /// question is precisely what the sight-review gate exists to answer.
+    /// Review is deterministic and document-focused; build/test and code aspects
+    /// never run for this pipeline.
+    /// </summary>
+    private Task ProcessConceptAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        CancellationToken ct)
+    {
+        _ = ct;
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var repositoryRoot = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RootPath
+            : entry.RepositoryPath;
+        var stored = ConceptWorkbenchStore.Read(current.FolderPath);
+        ConceptWorkbenchReview review;
+        if (stored is null)
+        {
+            review = new ConceptWorkbenchReview(
+                false, null, null, null,
+                ["Workbench placement did not publish a source document."]);
+        }
+        else if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
+        {
+            review = new ConceptWorkbenchReview(
+                false, null, stored.RepoRelativeDirectory, null,
+                ["Project repository is unavailable for concept review."]);
+        }
+        else
+        {
+            review = ConceptWorkbenchContract.ReviewDirectory(
+                repositoryRoot,
+                stored.RepoRelativeDirectory);
+        }
+
+        var settings = _projectSettings?.Get(entry.Name);
+        _pipelineLog?.EnsureRun(
+            current.FolderPath,
+            ProjectPipelineOrder.Apply(PipelineCatalogue.Concept, settings),
+            entry.Name,
+            current.Id);
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.ConceptReviewStepId,
+            Kind = StepKind.Orchestrator,
+            Status = review.IsComplete ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = review.IsComplete ? "concept-complete" : "concept-incomplete",
+            VerdictSummary = review.Summary,
+            Reason = review.IsComplete ? null : review.Summary,
+        });
+
+        if (!review.IsComplete)
+        {
+            _pipelineLog?.Complete(
+                current.FolderPath,
+                pendingStepReason: "Concept review failed: " + review.Summary);
+            var reason = HumanReviewEscalation.FormatReason(
+                HumanReviewEscalationCategories.AutoReviewEscalation,
+                "Concept review failed: " + review.Summary);
+            _chatLog.AppendSupervisor(
+                current,
+                "escalate",
+                $"Concept review found an incomplete or uncontained Workbench. {review.Summary} Promoted to {TaskStates.Escalated}.");
+            var failedMove = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            if (failedMove.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "Concept review could not move {Project}/{JobId} to Escalated: {Status} {Message}",
+                    entry.Name, current.Id, failedMove.Status, failedMove.Message);
+            }
+            return Task.CompletedTask;
+        }
+
+        SteerPendingMarker.Write(current.FolderPath, new SteerPendingRecord
+        {
+            WaitStartedAt = now,
+            Kind = SteerPendingKinds.ConceptSightReview,
+            Question = "Review the concept Workbench, then promote its implementation cards or finish with no implementation.",
+            CliType = current.CliType,
+        }, _logger);
+        _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.ConceptSightReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Running,
+            StartedAt = now,
+            Verdict = "awaiting-sight-review",
+            VerdictSummary = "Concept delivered successfully; awaiting human sight review.",
+        });
+        _chatLog.Append(
+            current,
+            OrchestratorMessageKind.Decision,
+            $"Concept delivered: `{stored!.RepoRelativeEntrypoint}`. Awaiting sight review; NeedsInput is expected and is not an escalation.");
+
+        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "Complete concept {Project}/{JobId} could not move to sight review: {Status} {Message}",
+                entry.Name, current.Id, move.Status, move.Message);
+        }
+        else
+        {
+            _statusSnapshot.RecordAccept();
+            _logger.LogInformation(
+                "concept_delivered project={Project} job={JobId} path={Path} outcome=success-awaiting-sight-review",
+                entry.Name, current.Id, stored.RepoRelativeEntrypoint);
+        }
+        return Task.CompletedTask;
     }
 
     private async Task ProcessNoOpAsync(
@@ -1278,7 +1444,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         // ADR-0049: escalation records the event on the original card's
-        // timeline and leaves it in the human-review lane - no wrapper card.
+        // timeline and leaves it in the intervention lane - no wrapper card.
         EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildEscalateDetails("noop-escalate", reason,
@@ -1303,7 +1469,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Deterministic-completion contract (requirement 4): the run finished
     /// without emitting any terminal sentinel. Mirrors <see cref="ProcessNoOpAsync"/> -
     /// reissue with a sentinel-demanding follow-up while the shared reissue
-    /// budget allows, otherwise escalate to human review. The run is NEVER
+    /// budget allows, otherwise escalate for operator intervention. The run is NEVER
     /// accepted as done here: a job counts as completed only when the
     /// deterministic signal is present.
     /// </summary>
@@ -1496,6 +1662,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        reason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.NoCompletionSignal,
+            reason);
 
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
@@ -1539,9 +1708,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var reason = string.IsNullOrWhiteSpace(pending.Reason)
+        var detail = string.IsNullOrWhiteSpace(pending.Reason)
             ? "Agent emitted [[TASK_BLOCKED]] without further detail; user attention required."
             : $"Agent emitted [[TASK_BLOCKED]]: {pending.Reason}";
+        var reason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.AgentBlocked,
+            detail);
 
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator escalated BLOCKED for human decision. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
@@ -1804,11 +1976,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
         var projectSettings = _projectSettings?.Get(entry.Name);
-        _pipelineLog?.EnsureRun(
+        var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
             ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
             entry.Name,
             current.Id);
+        using var pipelineAttempt = pipelineRecord == null
+            ? null
+            : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
 
         // Post-core completeness gate. Persist the exact requirement source,
         // machine evidence, blockers, and lifecycle states before review. Never
@@ -3439,8 +3614,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (gate.Action == CompletionGate.CompletionGateAction.Escalate)
         {
+            var escalationReason = HumanReviewEscalation.FormatReason(
+                HumanReviewEscalationCategories.CompletionGateUnresolved,
+                gate.Reason);
             _chatLog.AppendSupervisor(current, "escalate",
-                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
+                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {escalationReason}. Promoted to {TaskStates.Escalated}.");
 
             var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
@@ -3453,24 +3631,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
             var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
             RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
-                DecisionVerdictEscalate, gate.Reason);
+                DecisionVerdictEscalate, escalationReason);
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
-                summary: gate.Reason,
+                summary: escalationReason,
                 stepId: PipelineCatalogue.OrchestratorReviewStepId,
                 evidenceRef: "pipeline-execution.json",
                 findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
                 performer: PostProcessingPerformers.Orchestrator);
 
             EmitVerdictTimeline(escalatedFolder,
-                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
-                BuildEscalateDetails("completion-gate", gate.Reason, priorReissues));
+                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, escalationReason,
+                BuildEscalateDetails("completion-gate", escalationReason, priorReissues));
 
             AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
                 Kind: ReviewDecisionKind.Escalate,
-                Reason: gate.Reason,
+                Reason: escalationReason,
                 Prompt: "(completion-gate static scan)",
                 Response: findingsBlock,
                 FollowUp: string.Empty),
@@ -5883,6 +6061,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var escalationReason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.NeedsHumanInput,
+            verdict.Reason);
 
         // ADR-0049: the orchestrator could not decide this 4-auto-review
         // task unattended. It flips the *original* card to 5e-escalated
@@ -5907,17 +6088,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsHumanInput,
-            summary: verdict.Reason,
+            summary: escalationReason,
             performerCliType: NormalizeReviewCliType(cliBinary),
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json");
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
-            $"Auto-review escalated \"{title}\" to {TaskStates.Escalated} for human attention. Reason: {verdict.Reason}.");
+            $"Auto-review escalated \"{title}\" to {TaskStates.Escalated} for human attention. Reason: {escalationReason}.");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
-            TimelineActors.Orchestrator, verdict.Reason,
-            BuildEscalateDetails("needs-input-escalate", verdict.Reason,
+            TimelineActors.Orchestrator, escalationReason,
+            BuildEscalateDetails("needs-input-escalate", escalationReason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
@@ -5925,7 +6106,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             JobId: current.Id,
             Project: entry.Name,
             Kind: ReviewDecisionKind.Escalate,
-            Reason: verdict.Reason,
+            Reason: escalationReason,
             Prompt: prompt,
             Response: response,
             FollowUp: string.Empty),
@@ -6250,7 +6431,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 // partial outcome here. Such a run must never be silently
                 // accepted as completed; it has to keep looping (reissue
                 // demanding a sentinel) until the shared reissue budget is
-                // spent, then escalate to human review.
+                // spent, then escalate for operator intervention.
                 //
                 // LacksTerminalSentinelInLatestRun separates that from a
                 // sentinel that was already resolved on a prior tick (the

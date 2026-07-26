@@ -47,13 +47,16 @@ import { shouldShowFailureToast } from './services/run-outcome.util';
 import { GitPaneComponent } from './components/git-pane/git-pane/git-pane.component';
 import { CliOutputPollService } from '../polling/services/cli-output-poll.service';
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
-import { PromptPaneComponent } from './components/prompt-pane/prompt-pane.component';
+import { PromptPaneComponent, type PromptPaneTabId } from './components/prompt-pane/prompt-pane.component';
 import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
 import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
+import { deriveProtocolVerdict } from './components/protocol-pane/protocol-verdict';
+import { classifyLatestActivityOutcome } from './components/agent-outcome.util';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
+import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -78,6 +81,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     ProtocolPaneComponent,
     EscalationSummaryComponent,
     DetailHeaderComponent,
+    TaskLiveStatusComponent,
     PaneToggleBarComponent,
     TooltipDirective,
   ],
@@ -117,7 +121,6 @@ export class TaskDetailComponent implements OnDestroy {
   private errorDialog = inject(ErrorDialogService);
   private clientService = inject(ClientService);
   private undo = inject(UndoController);
-
   readonly detail = input.required<TaskDetail>();
   readonly defaultThinkingLevel = computed(() =>
     this.clientService.resolve(this.detail().info.ownerClientId).defaultThinkingLevel ?? null
@@ -126,6 +129,8 @@ export class TaskDetailComponent implements OnDestroy {
   /** Peers in the same on-disk lane as the current job, in kanban order. */
   readonly lanePeers = input<TaskInfo[]>([]);
   readonly selectedSubTaskId = input<string | null>(null);
+  readonly routeDetailTab = input<PromptPaneTabId | null>(null);
+  readonly routeInspectorTab = input<'protocol' | 'activity' | null>(null);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -135,7 +140,6 @@ export class TaskDetailComponent implements OnDestroy {
    *  task by id (app.onOpenJobDetailFromSheet). */
   readonly openEpicRequested = output<{ jobId: string; watchPath: string }>();
   readonly openSubTaskRequested = output<{ jobId: string; watchPath: string }>();
-
   /** Forwarded from the prompt-pane Evidence tab into the existing job
    *  service mutation endpoint; the protocol pane no longer hosts the
    *  panel after the user moved Evidence into the left-pane tab. */
@@ -150,7 +154,6 @@ export class TaskDetailComponent implements OnDestroy {
         },
       });
   }
-
   onEvidenceCreateFollowup(entry: ReviewEvidenceEntry): void {
     const job = this.detail().info;
     this.jobService.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
@@ -178,7 +181,8 @@ export class TaskDetailComponent implements OnDestroy {
   readonly nextInLaneRequested = output<void>();
   /** Walk to the previous peer in the current lane (k / ↑ / ← / Prev button). */
   readonly prevInLaneRequested = output<void>();
-
+  readonly detailTabChange = output<PromptPaneTabId>();
+  readonly inspectorTabChange = output<'protocol' | 'activity'>();
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
   private readonly jobSelection = inject(TaskSelectionService);
@@ -211,9 +215,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly pagerLaneState = computed(
     () => this.lanePager.snapshot()?.lane ?? this.detail().info.state,
   );
-
   readonly editingPrompt = signal(false);
-
   // Three-pane layout state + resize handlers — owned by LayoutPanesService
   // (provided locally on this component); fields below re-expose as facades.
   private readonly layout = inject(LayoutPanesService);
@@ -283,7 +285,6 @@ export class TaskDetailComponent implements OnDestroy {
       && !status.error
       && status.files.length > 0;
   });
-  // CLI output buffer + run-state lives in CliOutputPollService.
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
@@ -490,8 +491,9 @@ export class TaskDetailComponent implements OnDestroy {
       // an existing summary keeps Result primary in every settled lane.
       const opensOnResult = d.info.state !== TaskState.Progress &&
         (!!d.statusMarkdown || d.info.state === TaskState.HumanReview || d.info.state === TaskState.Escalated);
-      this.activeInspectorTab.set(opensOnResult ? 'protocol' : 'activity');
-      this.userTouchedInspectorTab = false;
+      const routeInspectorTab = this.routeInspectorTab();
+      this.activeInspectorTab.set(routeInspectorTab ?? (opensOnResult ? 'protocol' : 'activity'));
+      this.userTouchedInspectorTab = routeInspectorTab !== null;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
       this.editingPrompt.set(false);
@@ -560,6 +562,19 @@ export class TaskDetailComponent implements OnDestroy {
         this.showError(err);
       },
     });
+  });
+
+  private routeInspectorEffect = effect(() => {
+    const routeTab = this.routeInspectorTab();
+    void this.detail().info.taskKey;
+    if (!routeTab) return;
+    // An explicit deep-link choice is user intent even when it already
+    // matches the initial tab. Mark it before the progress-state default can
+    // demote Protocol to Activity and make the two effects fight each other.
+    this.userTouchedInspectorTab = true;
+    if (this.activeInspectorTab() !== routeTab) {
+      this.activeInspectorTab.set(routeTab);
+    }
   });
   private cliConfigEffect = effect(() => {
     const requestId = this.errorDialog.cliConfigRequest();
@@ -678,25 +693,40 @@ export class TaskDetailComponent implements OnDestroy {
     this.planPoll.syncTo(this.detail()?.info ?? null);
   });
 
-  // ...and for the per-job pipeline poller (10 s cadence). Drives the
-  // Overview tab's pipeline block (pre/post steps + per-step tokens/cost
-  // + task total). The overview pane injects the service for its signals.
   private readonly taskPipelinePoll = inject(TaskPipelinePollService);
   private readonly taskPipelineEffect = effect(() => {
     this.taskPipelinePoll.syncTo(this.detail()?.info ?? null);
   });
+  readonly statusIsSuperseded = computed<boolean>(() => {
+    const generation = this.detail().statusGeneration;
+    const execution = this.taskPipelinePoll.pipeline()?.execution;
+    const currentAttempt = execution?.attempt;
+    if (currentAttempt == null) return false;
+    if (generation?.runIndex != null) return generation.runIndex < currentAttempt;
+    return currentAttempt > 1
+      && execution?.completedAt == null
+      && !!this.detail().statusMarkdown?.trim();
+  });
+  readonly runOutcomePresentation = computed(() => deriveProtocolVerdict({
+    isRunning: this.isRunning(),
+    summaryStatus: this.detail().summaryState?.status ?? 'none',
+    statusMarkdown: this.detail().statusMarkdown,
+    outcomeIssue: this.detail().info.outcomeIssue,
+    hasActivity: this.cliOutput().length > 0,
+    laneState: this.detail().info.state,
+    orchestratorVerdict: this.detail().info.orchestratorVerdict,
+    statusSuperseded: this.statusIsSuperseded(),
+    execution: this.detail().info.execution,
+    pipelineExecution: this.taskPipelinePoll.pipeline()?.execution ?? null,
+    activityOutcome: classifyLatestActivityOutcome(this.cliOutput()),
+  }));
 
-  // ...and for the per-job screenshots poller (10 s cadence). The
-  // protocol pane reads its signal directly via inject(); the prompt
-  // pane (for the Visual Evidence section inside its Evidence tab)
-  // reads it via the `screenshots` getter below.
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
   readonly screenshots = this.screenshotsPoll.screenshots;
   private readonly screenshotsEffect = effect(() => {
     this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
 
-  // F48: Files-tab manifest is owned by TaskArtifactsService.
   private readonly artifactsService = inject(TaskArtifactsService);
   readonly artifacts = this.artifactsService.artifacts;
   private readonly artifactsEffect = effect(() => {
@@ -1251,6 +1281,7 @@ export class TaskDetailComponent implements OnDestroy {
   onInspectorTabChange(tab: 'protocol' | 'activity') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
+    this.inspectorTabChange.emit(tab);
   }
 
   /** Flips the setup bar between compact (default while running) and the full

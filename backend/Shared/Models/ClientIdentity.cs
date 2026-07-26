@@ -64,10 +64,17 @@ public record ClientIdentity
     /// </summary>
     public string? DefaultThinkingLevel { get; init; }
 
-    /// <summary>Latest daemon startup proof: <c>ready</c> or <c>read-only</c>; null for legacy clients.</summary>
+    /// <summary>Latest daemon startup proof: <c>ready</c>, <c>ready-no-workflow-scope</c>, or <c>read-only</c>; null for legacy clients.</summary>
     public string? RunnerGitStatus { get; init; }
     public string? RunnerGitDetail { get; init; }
     public DateTime? RunnerGitCheckedAt { get; init; }
+
+    /// <summary>
+    /// Last delivery-path proof for each remotely assigned project. The
+    /// registration fingerprint makes a cached result unusable as soon as the
+    /// project's repository registration changes.
+    /// </summary>
+    public IReadOnlyList<RunnerProjectPreflight> RunnerProjectPreflights { get; init; } = [];
 
     /// <summary>Persisted operator lifecycle. A drain blocks claims; retire completes after active slots reach zero.</summary>
     public DateTime? DrainRequestedAt { get; init; }
@@ -146,6 +153,7 @@ public record ClientSummary
     public string? RunnerGitStatus { get; init; }
     public string? RunnerGitDetail { get; init; }
     public DateTime? RunnerGitCheckedAt { get; init; }
+    public IReadOnlyList<RunnerProjectPreflight> RunnerProjectPreflights { get; init; } = [];
     public DateTime? DrainRequestedAt { get; init; }
     public DateTime? RetireRequestedAt { get; init; }
     public string? RunnerDaemonState { get; init; }
@@ -179,6 +187,7 @@ public record ClientSummary
         RunnerGitStatus = i.RunnerGitStatus,
         RunnerGitDetail = i.RunnerGitDetail,
         RunnerGitCheckedAt = i.RunnerGitCheckedAt,
+        RunnerProjectPreflights = i.RunnerProjectPreflights,
         DrainRequestedAt = i.DrainRequestedAt,
         RetireRequestedAt = i.RetireRequestedAt,
         RunnerDaemonState = i.RunnerDaemonState,
@@ -186,6 +195,20 @@ public record ClientSummary
         RunnerActiveSlots = i.RunnerActiveSlots,
         RunnerAvailableSlots = i.RunnerAvailableSlots
     };
+}
+
+/// <summary>Persisted per-host proof that one registered project can be delivered.</summary>
+public sealed record RunnerProjectPreflight
+{
+    public string ProjectId { get; init; } = "";
+    public string ProjectName { get; init; } = "";
+    public string RegistrationFingerprint { get; init; } = "";
+    public string RepositoryUrl { get; init; } = "";
+    public string FetchUrl { get; init; } = "";
+    public string PushUrl { get; init; } = "";
+    public string Status { get; init; } = "failed";
+    public string Detail { get; init; } = "";
+    public DateTime CheckedAt { get; init; }
 }
 
 public record RunnerGitCapabilityRequest

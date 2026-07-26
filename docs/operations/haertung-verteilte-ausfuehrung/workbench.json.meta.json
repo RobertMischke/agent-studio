@@ -17,6 +17,12 @@
       "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
       "linkedAt": "2026-07-22T09:15:41.6668987Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2184",
+      "title": "P0 Remote Review Executor: exact-SHA materialization and all review aspects in isolation",
+      "linkedAt": "2026-07-24T17:36:26.6555046Z",
+      "source": "auto"
     }
   ]
 }

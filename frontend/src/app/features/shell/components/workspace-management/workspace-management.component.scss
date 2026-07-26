@@ -201,9 +201,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border-left: 1px solid var(--studio-border);
   margin-left: 4px;
   padding-left: 6px;
+  background: color-mix(in srgb, var(--studio-bg) 35%, transparent);
+  border-radius: 3px;
 }
 
 .studio-settings-project-row {

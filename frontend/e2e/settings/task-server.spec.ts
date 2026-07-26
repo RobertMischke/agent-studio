@@ -9,7 +9,7 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  * The new "Task Server" section of the consolidated Workspace-settings home is
  * the operator's read-context for the durable task server the platform talks
  * to: the connected URL (localhost today, a central URL in Phase 2), the
- * workspace store it owns, the evidence status, the authoritative Runner
+ * workspace store it owns, the evidence status, the authoritative host
  * identities, and the management commands.
  *
  * The page renders from the authenticated management API, shared with the
@@ -106,6 +106,8 @@ test.describe('Task Server settings section', () => {
     await expect(page.getByTestId('task-server-store')).toBeVisible();
     await expect(page.getByTestId('task-server-evidence')).toBeVisible();
     await expect(page.getByTestId('task-server-management')).toBeVisible();
+    await expect(page.getByTestId('task-server-clients-section')).toContainText('Host registry');
+    await expect(page.getByTestId('task-server-clients-section')).toContainText('Enroll host');
 
     await expect(page.getByTestId('task-server-url')).toContainText('http://localhost:4010');
 
@@ -114,6 +116,7 @@ test.describe('Task Server settings section', () => {
     const count = await rows.count();
     expect(count).toBeGreaterThanOrEqual(2);
     await expect(page.getByTestId('task-server-summary')).toContainText(String(count));
+    await expect(page.getByTestId('task-server-summary')).toContainText('Hosts');
 
     await page.screenshot({ path: join(SHOT_DIR, 'task-server-section--mocked.png'), fullPage: false });
   });
@@ -141,6 +144,41 @@ test.describe('Task Server settings section', () => {
     await expect(settingsHome(page)).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('workspace-settings-rail-task-server')).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('task-server-panel')).toBeVisible();
+  });
+
+  test('networked management 401 returns the operator to a concrete sign-in entry', async ({ page }) => {
+    await page.unroute('**/api/auth/status');
+    await page.route('**/api/auth/status', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'networked',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: {
+          id: 'usr_owner', username: 'owner', displayName: 'Owner', role: 'owner',
+          projects: [], disabled: false, mustChangePassword: false,
+        },
+      }),
+    }));
+    await page.unroute('**/api/v1/management/status');
+    await page.route('**/api/v1/management/status', route => route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'authentication-required',
+        message: 'Sign in with an owner or operator account to manage the Task Server.',
+        loginUrl: '/api/auth/login',
+      }),
+    }));
+
+    // Change the document URL, not only the hash, so AuthService reinitializes
+    // from the networked status route installed above.
+    await page.goto('/?auth-profile=networked#/workspace/settings/task-server');
+
+    await expect(page.getByTestId('auth-gate')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
   });
 
   test('renders on the light theme too (R5)', async ({ page }) => {

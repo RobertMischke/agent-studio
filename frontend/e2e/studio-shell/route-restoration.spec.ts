@@ -1,0 +1,463 @@
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+const PROJECT = 'Route Project';
+const PROJECT_SLUG = 'route-project';
+const TASK_REFERENCE = 'AGT-2291';
+const TASK_ID = 'route-restoration-task';
+const EPIC_REFERENCE = 'AGT-2200';
+const EPIC_ID = 'route-restoration-epic';
+const WATCH_PATH = '/tmp/route-project';
+const TASK_KEY = `${WATCH_PATH}::${TASK_ID}`;
+
+const EMPTY_GROUPED = {
+  backlog: [], preparation: [], orchestratorPrep: [],
+  ready: [], progress: [], failedPickup: [], codeNotComplete: [],
+  review: [], autoReview: [], humanReview: [], escalated: [],
+  completed: [], archive: [],
+};
+
+const TASK_DETAIL = {
+  info: {
+    id: TASK_ID,
+    key: TASK_REFERENCE,
+    displayKey: TASK_REFERENCE,
+    taskKey: TASK_KEY,
+    title: 'Route restoration task',
+    state: '3-progress',
+    order: 1,
+    agent: 'route-agent',
+    createdAt: '2026-07-24T10:00:00Z',
+    watchPath: WATCH_PATH,
+    projectName: PROJECT,
+    folderPath: `${WATCH_PATH}/5-human-review/${TASK_ID}`,
+    lastActivity: '2026-07-24T10:00:00Z',
+    sessionName: null,
+    model: null,
+    cliType: null,
+    useOwnSession: null,
+    lastUsage: null,
+    execution: null,
+    commit: null,
+    references: { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] },
+  },
+  promptMarkdown: '# Route restoration',
+  promptHistory: [],
+  titleHistory: [],
+  statusMarkdown: null,
+  contextUsage: null,
+  log: [],
+  summaryState: null,
+  reviewEvidence: [],
+};
+
+const EPIC_DETAIL = {
+  ...TASK_DETAIL,
+  info: {
+    ...TASK_DETAIL.info,
+    id: EPIC_ID,
+    key: EPIC_REFERENCE,
+    displayKey: EPIC_REFERENCE,
+    taskKey: `${WATCH_PATH}::${EPIC_ID}`,
+    title: 'Route restoration epic',
+    kind: 'epic',
+    state: '1-backlog',
+    folderPath: `${WATCH_PATH}/1-backlog/${EPIC_ID}`,
+  },
+};
+
+function evidencePath(testInfo: TestInfo, name: string): string {
+  const root = process.env['JOB_RESULTS_DIR']?.trim()
+    ? path.resolve(process.env['JOB_RESULTS_DIR'])
+    : testInfo.outputDir;
+  fs.mkdirSync(root, { recursive: true });
+  return path.join(root, name);
+}
+
+async function stubRouteData(page: Page): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = (body: unknown) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+
+    if (url.pathname === '/api/auth/status') {
+      return json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
+    }
+    if (url.pathname === '/api/workspaces') return json([]);
+    if (url.pathname === '/api/cli/quota') return json({ snapshots: [], ttlSeconds: 600 });
+    if (url.pathname.startsWith('/api/runner/token-summary-aggregate')) {
+      return json({
+        projects: 0,
+        orchestratorEntries: 0,
+        orchestratorLlmCalls: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        allModelsPriced: true,
+        byModel: [],
+        byProject: [],
+        fetchedAt: '2026-07-24T10:00:00Z',
+        disclaimer: '',
+      });
+    }
+    if (url.pathname.startsWith('/api/workspace/tokens/timeline')) {
+      return json({
+        windowStart: '2026-07-23T10:00:00Z',
+        windowEnd: '2026-07-24T10:00:00Z',
+        windowHours: Number(url.searchParams.get('windowHours') ?? 24),
+        bucketMinutes: Number(url.searchParams.get('bucketMinutes') ?? 60),
+        bucketCount: 0,
+        cells: [],
+        projects: [],
+        fetchedAt: '2026-07-24T10:00:00Z',
+        disclaimer: '',
+      });
+    }
+    if (url.pathname.startsWith('/api/workspace/tokens/expensive-jobs')) return json({ jobs: [] });
+    if (url.pathname.startsWith('/api/adhoc-usage')) {
+      return json({
+        calls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        allModelsPriced: true,
+        bySource: [],
+        byDay: [],
+        byModel: [],
+        logPath: '',
+        logSizeBytes: 0,
+        logModifiedAt: null,
+        disclaimer: '',
+      });
+    }
+    if (url.pathname === '/api/tags' || url.pathname === '/api/clients/') return json([]);
+    if (/\/api\/bus\/[^/]+\/messages$/.test(url.pathname)) return json([]);
+    if (url.pathname === '/api/watch-paths') {
+      return json([{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
+    }
+    if (url.pathname === '/api/tasks/archive') return json({ items: [], total: 0 });
+    if (url.pathname === '/api/tasks/grouped') return json(EMPTY_GROUPED);
+    if (url.pathname === '/api/epics') return json([]);
+    if (url.pathname === '/api/epics/completed/count') return json({ count: 0 });
+    if (url.pathname === `/api/epics/${EPIC_ID}`) {
+      return json({
+        id: EPIC_ID,
+        title: 'Route restoration epic',
+        projectName: PROJECT,
+        watchPath: WATCH_PATH,
+        state: '1-backlog',
+        subTaskTotal: 0,
+        completed: 0,
+        inProgress: 0,
+        open: 0,
+        subTasks: [],
+      });
+    }
+    if (url.pathname === '/api/runner/status') return json({ projects: {} });
+    if (url.pathname === `/api/tasks/${TASK_REFERENCE}` || url.pathname === `/api/tasks/${TASK_ID}`) {
+      return json(TASK_DETAIL);
+    }
+    if (url.pathname === `/api/tasks/${EPIC_REFERENCE}` || url.pathname === `/api/tasks/${EPIC_ID}`) {
+      return json(EPIC_DETAIL);
+    }
+    if (url.pathname === '/api/tasks') return json([]);
+    if (url.pathname.endsWith('/wiki/tree')) {
+      return json({
+        projectName: PROJECT,
+        baseDir: `${WATCH_PATH}/docs`,
+        exists: true,
+        root: [{
+          name: 'concepts',
+          title: 'Concepts',
+          relPath: 'concepts',
+          type: 'folder',
+          children: [{
+            name: 'routing.md',
+            title: 'Routing',
+            relPath: 'concepts/routing.md',
+            type: 'md',
+            children: [],
+          }],
+        }],
+      });
+    }
+    if (url.pathname.endsWith('/wiki/files/concepts/routing.md')) {
+      return json({ relPath: 'concepts/routing.md', content: '# Routing\n\nRestored Wiki page.' });
+    }
+    if (url.pathname.endsWith('/wiki/history/concepts/routing.md')) {
+      return json({
+        relPath: 'concepts/routing.md',
+        model: null,
+        metadata: {
+          model: null, updatedAt: null, reason: null, taskKey: null,
+          status: null, runCount: null, hasFrontmatter: false,
+        },
+        commits: [],
+      });
+    }
+    if (url.pathname.endsWith('/wiki/pulse')) {
+      return json({
+        projectName: PROJECT,
+        baseDir: `${WATCH_PATH}/docs`,
+        exists: true,
+        generatedAtUtc: '2026-07-24T10:00:00Z',
+        feed: { available: true, reason: null, items: [] },
+        inbox: { available: true, reason: null, count: 0, items: [] },
+        drift: {
+          available: true, reason: null, overallGrade: 'Fresh', areas: [],
+          counts: { fresh: 1, aging: 0, stale: 0, graded: 1 },
+        },
+        critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+      });
+    }
+    if (url.pathname.endsWith('/wiki/grading/status')) return json({ status: null });
+    if (url.pathname === '/api/cli/maintenance-model') {
+      return json({ cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null });
+    }
+    if (url.pathname.endsWith('/style-guides')) {
+      return json({
+        projectKey: 'ROUTE', projectDisplayName: PROJECT, technologies: [],
+        guides: [], warnings: [], snapshotId: 'route', capturedAtUtc: null, refreshAfterUtc: null,
+      });
+    }
+    if (url.pathname.endsWith('/wiki/home')) return json({ sections: [] });
+    if (url.pathname.endsWith('/workbenches')) {
+      return json({
+        projectName: PROJECT,
+        includesHistory: false,
+        count: 1,
+        items: [{
+          id: 'route-lab',
+          title: 'Route Lab',
+          summary: 'Deep-link restoration proof.',
+          status: 'active',
+          phase: 'testing',
+          updatedAtUtc: '2026-07-24T10:00:00Z',
+          entryPath: 'docs/concepts/route-lab.html',
+          valid: true,
+          error: null,
+          sourceTaskKeys: [TASK_REFERENCE],
+        }],
+      });
+    }
+    if (url.pathname.endsWith('/workbenches/route-lab')) {
+      return json({
+        workbench: {
+          id: 'route-lab',
+          title: 'Route Lab',
+          summary: 'Deep-link restoration proof.',
+          status: 'active',
+          phase: 'testing',
+          updatedAtUtc: '2026-07-24T10:00:00Z',
+          entryPath: 'docs/concepts/route-lab.html',
+          valid: true,
+          error: null,
+          sourceTaskKeys: [TASK_REFERENCE],
+        },
+        html: '<h1>Route Lab</h1><p>Restored Workbench.</p>',
+        branch: 'task/route',
+        revision: '1234567890abcdef',
+        workingTreeModified: false,
+      });
+    }
+    if (/\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
+      return json({ models: [], source: 'route-e2e' });
+    }
+    if (url.pathname === '/api/crash-recovery/pending') return json({ pending: [] });
+    if (url.pathname.includes('/screenshots')) return json({ screenshots: [] });
+    if (url.pathname.includes('/timeline')) return json([]);
+    if (url.pathname.includes('/plan')) {
+      return json({
+        hasPlan: false,
+        source: null,
+        snapshotCount: 0,
+        activeItemId: null,
+        softEstimateMedian: null,
+        items: [],
+        unassignedSubActions: [],
+      });
+    }
+    if (url.pathname.includes('/runs')) {
+      return json({
+        runCount: 0,
+        firstStartedAt: null,
+        lastActivityAt: null,
+        hasActiveRun: false,
+        runs: [],
+      });
+    }
+    if (url.pathname.includes('/pipeline')) return json(null);
+    if (url.pathname.includes('/session-events')) return json({ events: [], sessionChain: [] });
+    if (url.pathname.includes('/claude-session')) return json(null);
+    if (url.pathname.includes('/agent-work-summary')) {
+      return json({
+        calls: 0,
+        recovered: false,
+        toolCalls: 0,
+        toolCounts: [],
+        startedAt: null,
+        lastTouchAt: null,
+        currentSessionId: null,
+      });
+    }
+    if (url.pathname.includes('/output')) return json([]);
+    if (request.method() === 'GET') return json({});
+    return json({});
+  });
+}
+
+test.describe('Studio route restoration', () => {
+  test.setTimeout(180_000);
+
+  test.beforeEach(async ({ page }) => {
+    await stubRouteData(page);
+  });
+
+  test('Task detail route restores its tab state and survives reload', async ({ page }, testInfo) => {
+    await page.goto(`/#/tasks/${TASK_REFERENCE}?view=evidence%3Aprotocol`, { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('prompt-tab-evidence')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('inspector-tab-protocol')).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/tasks/AGT-2291?view=evidence%3Aprotocol');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+
+    await page.screenshot({ path: evidencePath(testInfo, 'route-restoration-task-tabs.png') });
+    await page.getByTestId('prompt-tab-timeline').click();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/tasks/AGT-2291?view=timeline%3Aprotocol');
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('prompt-tab-timeline')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('inspector-tab-protocol')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
+  test('Wiki page route restores, generates an honest route, and survives reload', async ({ page }, testInfo) => {
+    const route = `/#/projects/${PROJECT_SLUG}/wiki?page=concepts%2Frouting.md`;
+    await page.goto(route, { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('project-wiki-viewer-path')).toContainText('concepts/routing.md');
+    await expect(page.getByTestId('project-wiki-viewer')).toContainText('Restored Wiki page');
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project/wiki?page=concepts%2Frouting.md');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+
+    await page.goto(`/#/projects/${PROJECT_SLUG}/wiki`, { waitUntil: 'commit' });
+    await page.getByTestId('project-wiki-file-concepts/routing.md').click();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project/wiki?page=concepts%2Frouting.md');
+    await page.screenshot({ path: evidencePath(testInfo, 'route-restoration-wiki-page.png') });
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('project-wiki-viewer-path')).toContainText('concepts/routing.md');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
+  test('Workbench route restores and survives reload', async ({ page }, testInfo) => {
+    await page.goto(`/#/projects/${PROJECT_SLUG}/workbenches/route-lab`, { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
+    await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
+      .getByRole('heading', { name: 'Route Lab' })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toBe('#/projects/route-project/workbenches/route-lab');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+
+    await page.goto('/#/board', { waitUntil: 'commit' });
+    const projectRow = page.getByTestId(`studio-explorer-project-${PROJECT}`);
+    await expect(projectRow).toBeVisible();
+    if (await projectRow.getAttribute('aria-expanded') === 'false') await projectRow.click();
+    await page.getByTestId(`studio-explorer-project-workbenches-${PROJECT}`).click();
+    await page.getByTestId(`studio-explorer-workbench-${PROJECT}-route-lab`).click();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toBe('#/projects/route-project/workbenches/route-lab');
+    await page.screenshot({ path: evidencePath(testInfo, 'route-restoration-workbench.png') });
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
+  test('Board and Hub routes restore project scope and survive reload', async ({ page }) => {
+    await page.goto(`/#/projects/${PROJECT_SLUG}/board`, { waitUntil: 'commit' });
+    await expect(page.getByTestId('studio-board')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project/board');
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('studio-board')).toBeVisible();
+
+    await page.goto(`/#/projects/${PROJECT_SLUG}`, { waitUntil: 'commit' });
+    await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project');
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
+  });
+
+  test('Project Settings route restores the active Hub rail and survives reload', async ({ page }) => {
+    await page.goto(`/#/projects/${PROJECT_SLUG}/settings`, { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('project-shell-panel-settings')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project/settings');
+
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('project-shell-panel-settings')).toBeVisible();
+  });
+
+  test('workspace and project Epics routes restore scope and survive reload', async ({ page }) => {
+    await page.goto('/#/epics', { waitUntil: 'commit' });
+    await expect(page.getByTestId('epic-overview-screen')).toBeVisible();
+    await expect(page.getByTestId('epic-overview-scope')).toHaveCount(0);
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('epic-overview-screen')).toBeVisible();
+
+    await page.goto(`/#/projects/${PROJECT_SLUG}/epics`, { waitUntil: 'commit' });
+    await expect(page.getByTestId('epic-overview-screen')).toBeVisible();
+    await expect(page.getByTestId('epic-overview-scope')).toHaveText(PROJECT);
+    await expect.poll(() => new URL(page.url()).hash)
+      .toContain('#/projects/route-project/epics');
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('epic-overview-scope')).toHaveText(PROJECT);
+  });
+
+  test('Epic detail route restores the public reference and survives reload', async ({ page }) => {
+    await page.goto(`/#/epics/${EPIC_REFERENCE}`, { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('epic-rollup-pane')).toBeVisible();
+    await expect(page.getByTestId('epic-title-text')).toContainText('Route restoration epic');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/epics/AGT-2200');
+
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('epic-rollup-pane')).toBeVisible();
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
+  test('Workspace Settings uses one canonical route, mirrors section changes, and survives reload', async ({ page }, testInfo) => {
+    await page.goto('/#/workspace/settings/task-server', { waitUntil: 'commit' });
+
+    await expect(page.getByTestId('workspace-settings-inline')).toBeVisible();
+    await expect(page.getByTestId('workspace-task-server-overlay')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toBe('#/workspace/settings/task-server');
+
+    await page.getByTestId('workspace-settings-rail-tokens').click();
+    await expect(page.getByTestId('workspace-tokens-overlay')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toBe('#/workspace/settings/tokens');
+
+    await page.screenshot({
+      path: evidencePath(testInfo, 'route-restoration-workspace-settings.png'),
+    });
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('workspace-tokens-overlay')).toBeVisible();
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
+});

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Empty-state Workbench",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/empty-states.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "2b19d6c1aa3796d28024835595845bf3bab5d2a35fd0007569deefd8f678eb8d",
+      "sizeBytes": 7179,
+      "lineCount": 106,
+      "capturedAt": "2026-07-23T18:30:00.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-23"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2274",
+      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2237",
+      "title": "Tone of Voice Style Guide",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}

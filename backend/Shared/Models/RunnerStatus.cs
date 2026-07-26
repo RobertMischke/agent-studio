@@ -160,16 +160,17 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
-    /// <summary>
-    /// Server-authoritative number of <c>3-progress</c> tasks that currently
-    /// hold either a local execution slot or a live fenced run lease.
-    /// Consumers must not reconstruct this from <see cref="ProjectRunnerStatus.ActiveJobId"/>
-    /// or remote-runner telemetry.
-    /// </summary>
-    public int RunningCount { get; init; }
 }
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
+
+/// <summary>Read-time projection of a task's intentional quota-reset wait.</summary>
+public sealed record QuotaWaitStatus(
+    string CliType,
+    DateTime StartedAt,
+    DateTime ResetAt,
+    int ThresholdMinutes,
+    string Reason);
 
 public record ProjectRunnerStatus
 {
@@ -260,11 +261,6 @@ public record ProjectRunnerStatus
     /// task is active under the sequential model.
     /// </summary>
     public int OccupiedSlots { get; init; }
-    /// <summary>
-    /// Server-authoritative number of live <c>3-progress</c> cards in this
-    /// project. Includes local execution slots and active fenced remote leases.
-    /// </summary>
-    public int RunningTaskCount { get; init; }
     /// <summary>
     /// ADR-0052: the most recent pick-gate rationale
     /// (<see cref="AgentStudio.Runner.SlotAdmission.Reason"/>) the

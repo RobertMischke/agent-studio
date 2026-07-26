@@ -1,0 +1,24 @@
+@if (entries(); as backlog) {
+  @if (backlog.length > 0) {
+    <aside class="decision-backlog" data-testid="decision-backlog" aria-label="Decision backlog">
+      <div class="decision-backlog__heading">
+        <span class="decision-backlog__dot" aria-hidden="true"></span>
+        <span>Decision backlog</span>
+      </div>
+      <ol class="decision-backlog__list">
+        @for (entry of backlog; track entry.task.taskKey) {
+          <li>
+            <button type="button"
+                    class="decision-backlog__item"
+                    [attr.data-testid]="'decision-backlog-item-' + entry.key"
+                    [attr.title]="'Waiting cards: ' + entry.waitingKeys.join(', ')"
+                    (click)="taskClick.emit(entry.task)">
+              <span class="decision-backlog__key">{{ entry.key }}</span>
+              <span class="decision-backlog__count">{{ entry.count }} waiting</span>
+            </button>
+          </li>
+        }
+      </ol>
+    </aside>
+  }
+}

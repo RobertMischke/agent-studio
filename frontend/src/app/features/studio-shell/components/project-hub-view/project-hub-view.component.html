@@ -31,6 +31,11 @@
       <app-project-git-panel [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'integration') {
+    @if (activeRail() === 'integration') {
+      <app-project-integration-panel [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'security') {
     @if (activeRail() === 'security') {
       <app-security-panel
@@ -108,7 +113,10 @@
   }
   @defer (when activeRail() === 'wiki') {
     @if (activeRail() === 'wiki') {
-      <app-project-wiki-section [projectName]="projectName()" (openWorkbench)="openWorkbench($event)" />
+      <app-project-wiki-section
+        [projectName]="projectName()"
+        [projectId]="projectId()"
+        (openWorkbench)="openWorkbench($event)" />
     }
   }
   @defer (when activeRail() === 'pipeline') {

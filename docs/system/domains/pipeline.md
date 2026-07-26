@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-26
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -40,24 +40,49 @@ pipeline view.
   recommendation layer for cheap pipeline work. It passes only live-discovered
   Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
   falls back to the normal runtime model when no qualified Spark model exists.
-- `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
-  pipeline definitions, step ids, default ordering, step run modes, and display
-  names.
+- `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
+  concept, and UI pipeline definitions, step ids, default ordering, step run
+  modes, and display names.
+- `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
+  `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
+  document-first concept contract. One isolated concept run may author exactly
+  one `docs/operations/<topic>/` Workbench, publishes it through the managed
+  project-artifact commit boundary, reviews document completeness and evidence,
+  waits for human sight review, then creates coding cards from the descriptor.
+- `backend/Features/Pipeline/PipelineCatalogue.cs`,
+  `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
+  `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
+  shared EvidenceGate-based routing, mandatory iteration result layout, and
+  bounded hand-off to Human Review. The durable Part 2 consumer shape is defined
+  in [the UI task pipeline contract](../contracts/ui-task-pipeline.md).
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
+  `task-server/TaskServerOrchestrationStore.cs`, and
+  `orchestrator-engine/`: the separated flow boundary. Project flow
+  definitions are versioned Task Server data. The API-only Engine executes
+  ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
+  stages under bounded per-stage concurrency. A run snapshots the definition
+  version and ordered stages at creation, so later definition edits do not
+  rewrite in-flight work.
 - `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
   runs belong to commits rather than cards and expose planned order, scope,
   host, state, result, duration, and derived card attachments through
   `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
   step telemetry.
-- `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
+- `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
-  `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
-  the operator accepts a done-green task (the `HumanReview -> Completed`
-  transition wired in `TaskTransitionService`), then records the outcome so the
-  pending step flips to passed / failed / skipped in place. After a successful
-  merge it also pushes the integration branch itself to `origin`
+  delivery merge when the operator accepts a done-green task (the
+  `HumanReview -> Completed` transition wired in `TaskTransitionService`).
+  Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
+  `ResultSha` from `logs/review-subject.json`, fetch that exact
+  `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
+  mismatch. The configured integration ref is fetched and fast-forwarded
+  before the merge; a missing local branch is created from origin and a
+  divergent one fails visibly. The outcome is recorded so the pending step
+  flips to passed / failed / skipped in place. After a successful merge it
+  also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as
@@ -68,9 +93,23 @@ pipeline view.
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
 - `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
-  read model fed by the SSH gate start/completion events. The Remote Hosts view
+  read model fed by the SSH gate start/completion events. The Execution Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
   visibility-only and never admits, cancels, or reorders a gate.
+- `runner/RemoteReviewWorkspace.cs` and
+  `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
+  verification. Test commands marked `CompareToBaseline` compare their parsed
+  failing-test set with the merge-base on the plan's integration ref. Baseline
+  results are single-flight cached by repository, baseline SHA, and command
+  hash. Only failures still new after one subject retry block the review.
+- `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
+  deliveries after a backend restart when the durable lane move landed but the
+  merge did not. It also repairs the legacy `no-branch` outcome caused by
+  looking only for `task/<slug>`.
+- `IntegrationPushBackstopHostedService` reconstructs lost
+  `IntegrationPushQueue` work from durable passed-merge and pending-push
+  pipeline facts. The channel is a latency optimization, not the durability
+  boundary.
 - `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
   `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
   `post-task-spawner` step (AGT-2028). After a task settles it asks the best
@@ -117,6 +156,14 @@ pipeline view.
 - `backend/Services/Runner/ReviewDecisionOrchestrator.cs`: post-core review and
   final orchestrator decision recording. `RunCodeReviewGradePostStepAsync` wires
   the automatic quality-grade step (see below) after the aspect fan-out.
+- `backend/Features/Runner/ReissuePromptExperiment.cs` and
+  `scripts/reissue-prompt-experiment-analysis.mjs`: versioned, reproducible
+  task-level control/treatment assignment for eligible finding-bearing
+  reissues, hard assignment telemetry, and the right-censor-aware experimental
+  report. The treatment changes prompt organization only and never selects a
+  coding model, reviewer, rubric, pipeline, or gate. The predeclared contract
+  and promotion threshold live in
+  [Finding-first reissue prompt experiment](../../quality/pipeline-time-economy/reissue-prompt-experiment.md).
 - `backend/Services/Review/CodeReviewStepService.cs`: the shared code-review
   engine. `CodeReviewMode.Verdict` is the legacy user-triggered pass/concerns/block
   review; `CodeReviewMode.Grade` is the automatic pipeline pass that assigns an
@@ -153,6 +200,10 @@ pipeline view.
 - `backend/Features/Tasks/TaskPipelineEndpoints.cs`: API surface for task
   pipeline data, including `GET /{jobId}/step-prompts`, the read-model the
   Overview "Prompt" affordance parses from `.metadata/prompts.jsonl`.
+- `backend/Features/Tasks/TaskLiveStatusProjection.cs`: board and detail
+  read-model for the current pipeline step, recorded CLI/model provenance,
+  enabled upcoming steps, current runner/review queue position, and latest
+  activity time. It reads the current execution root only.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
 
@@ -179,6 +230,13 @@ pipeline view.
   failure is non-blocking at the pre-main full-suite boundary. If one physical
   command belongs to both the baseline and the diff-selected set, the stricter
   work-package classification wins.
+- A remote ReviewAttempt does not require an historically red integration
+  branch to become absolutely green. For each baseline-compared test command,
+  its verdict is based on `subject failures - merge-base failures`.
+  Intersecting failures remain visible as pre-existing, while the aspect summary
+  names every new failure. A command with unparseable failing-test output stays
+  fail-closed as a new failure. This comparison does not weaken the absolute
+  full-suite boundary before advancing `main`.
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.
@@ -214,8 +272,34 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+- Eligible mapped reissues participate in `finding-first-v1` at the task level.
+  The stable hash assignment keeps all attempts for one task in the same arm.
+  Both versioned arms receive the identical open-finding payload and preserve
+  scope and terminal-sentinel guardrails. Assignment and attempt events are hard
+  telemetry; Grade A and orchestrator acceptance remain model-judged evidence;
+  arm effects are experimental comparisons. Production-default promotion is
+  forbidden until the predeclared benefit and deterministic-gate safeguards
+  pass.
+- Board cards and task detail share one live-status projection. The active step
+  comes from the newest root `PipelineExecutionRecord`; `PreviousAttempts` is
+  never eligible for a current-work or inactivity signal. CLI/model labels come
+  from the recorded step or matching `StepPromptLog` entry, host identity comes
+  from the existing execution-location projection, and queue positions come
+  from the runner and post-processing queues that already schedule the work.
+  The projection is read-only and introduces no telemetry or persisted task
+  state. A Ready task treats an existing completed root as the previous attempt
+  and previews the fresh enabled chain. Without an active step or queue
+  position, active-lane cards report the newest recorded activity time and
+  explicitly flag ten minutes of silence as a possible hang.
 
 ### Post-step lifecycle and ownership
+
+The separated control-plane path preserves the same ownership rule:
+definitions live in the Task Server, while execution lives in
+`orchestrator-engine`. The Engine receives the task payload and prior stage
+results only through the public API. Its `engine.env` contains bootstrap
+connectivity, identity/credential, lease timing, and concurrency caps, never
+project flow definitions, model routing, or gate policy.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**
@@ -239,17 +323,6 @@ code-owned, so that same destination is where an operator overrides it. A
 card-level addition is a separate execution-plan fact, not an activation source
 or a new arbitrary executable definition; it can only reference a known
 catalogue step.
-
-The task Overview pipeline uses progressive disclosure and the shared compact
-row-density tokens. Quiet groups start collapsed, while danger, warning, and
-concern groups start open. Every group header retains the aggregate status,
-ran/total count, disabled and concern counts, and token total. Uniform
-activation and model metadata appears once on the group header. Metric headers
-and cells exist only when at least one visible row has real data for that
-metric. Expanding a group keeps step details, enable/disable, post-step
-controls, token details, cost breakdown, and non-uniform per-step model context
-reachable. The existing Agent model picker remains outside the collapsible
-pipeline rows; durable per-step overrides remain on Project Hub -> Pipeline.
 
 On-demand execution is bounded to post-steps that declare themselves
 idempotent and have an implemented runner. It is allowed after the main run and
@@ -283,7 +356,8 @@ operator changes cause the step to fail before its writer runs.
   or steer follow-up with an empty working diff still shows the real change set;
   the job's `results/` folder inventory (`ResultsInventory.Render`, file list +
   short excerpts); and a one-line card-mode framing (`ReviewCardMode.Describe`)
-  so a read-only planning/research card is not read as missing work. The
+  so a report-only planning/research card or docs-only concept card is not read
+  as missing work. The
   "deliverables missing" verdict is legitimate ONLY when the branch diff is empty
   AND `results/` has no artefacts AND no external deliverable (e.g. a `docs/`
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
@@ -403,6 +477,18 @@ operator changes cause the step to fail before its writer runs.
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
   be forced through write-oriented post steps.
+- The concept pipeline is distinct from the report-only pipeline. It runs in an
+  isolated worktree, permits a diff only inside one
+  `docs/operations/<topic>/` directory, and never merges that task branch.
+  Workbench placement publishes `workbench.json` plus `index.html` through the
+  managed project-artifact commit boundary. Concept review checks alternatives,
+  recommendation, evidence, open decisions, and implementation-card source
+  data. It deliberately does not run build, test, code aspects, or integration.
+  A complete Workbench moves to `5-human-review` with a durable
+  `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
+  successful delivery at this gate. Sight-review acceptance completes the
+  source card; `POST /api/tasks/{id}/promote-concept` additionally creates the
+  selected coding cards from the published document.
 - A `Deferred` step (e.g. `post-merge-into-develop`) is fully implemented but
   runs only on an external operator trigger, not automatically in the
   post-bracket. It is distinct from a `Stub`: a stub has no implementation and

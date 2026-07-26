@@ -71,18 +71,20 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var raw = ProjectAccessAuthorization.FilterTasks(ctx, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
             var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
             var testRunLookup = testRuns.BuildLookup(raw);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+            var liveLookup = liveStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
+                          .WithLiveStatus(liveLookup)
                           .WithMergeSignal(mergeLookup)
                           .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
@@ -98,18 +100,20 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var raw = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
             var integrationLookup = integrationStatus.BuildLookup(raw);
             var publishLookup = publishStatus.BuildLookup(raw);
             var testRunLookup = testRuns.BuildLookup(raw);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+            var liveLookup = liveStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
+                          .WithLiveStatus(liveLookup)
                           .WithMergeSignal(mergeLookup)
                           .WithIntegrationStatus(integrationLookup)
                           .WithPublishSignal(publishLookup)
@@ -260,7 +264,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns) =>
+        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, HttpContext context, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var detail = scanner.GetJobDetail(jobId, watchPath);
@@ -274,8 +278,14 @@ public static class TaskCrudEndpoints
             detail = JobCommitsAggregation.WithReconstructedInProgressCommits(detail, sessions, watchPath, git);
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
-            var waitsOnLookup = BuildWaitsOnLookup(new[] { detail.Info }, scanner);
-            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup);
+            var eligibleWaiters = ProjectAccessAuthorization
+                .FilterTasks(context, scanner.ScanAllJobs(), projects)
+                .Where(job => !job.Fixture);
+            var dependencyLookups = BuildDependencyGraphLookups(new[] { detail.Info }, scanner, eligibleWaiters);
+            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters);
+            var liveLookup = liveStatus.BuildLookup(new[] { withRuntime.Info });
+            if (liveLookup.TryGetValue(withRuntime.Info.TaskKey, out var currentLiveStatus))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { LiveStatus = currentLiveStatus } };
             // AGT-2046: fold the batched merge signal onto the detail's info too, so
             // a card opened from the board keeps the same [develop|main] indicator.
             var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
@@ -329,6 +339,110 @@ public static class TaskCrudEndpoints
             return Results.Ok(plan with { Attachments = attachments });
         });
 
+        // Concept promotion is an explicit sight-review action. It reads only
+        // validated implementation proposals from the published Workbench,
+        // creates coding cards in preparation, and completes the source concept
+        // card after recording the human gate.
+        group.MapGet("/{jobId}/promote-concept", (string jobId, string? project, string? watchPath,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!TaskModes.IsConcept(info.Mode))
+                return Results.BadRequest(new { error = "Only concept tasks have implementation-card proposals." });
+
+            var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
+            return plan is null
+                ? Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." })
+                : Results.Ok(plan);
+        });
+
+        group.MapPost("/{jobId}/promote-concept", async (
+            string jobId,
+            string? project,
+            string? watchPath,
+            PromoteConceptRequest request,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Pipeline.ConceptPromotionService promotion,
+            TaskTransitionService transitions,
+            AgentStudio.Pipeline.PipelineExecutionLog pipelineLog,
+            CancellationToken ct) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!TaskModes.IsConcept(info.Mode))
+                return Results.BadRequest(new { error = "Only concept tasks can be promoted." });
+            if (info.State is not (TaskStates.HumanReview or TaskStates.Completed))
+                return Results.Conflict(new { error = "Complete sight review before promoting implementation cards." });
+
+            var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
+            if (plan is null)
+                return Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." });
+
+            PromoteConceptTasksResponse result;
+            try
+            {
+                result = promotion.Promote(info, plan, request);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+
+            if (info.State == TaskStates.HumanReview)
+            {
+                var now = DateTime.UtcNow;
+                pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptSightReviewGateStepId,
+                    Kind = StepKind.Orchestrator,
+                    Status = PipelineStepStatus.Passed,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    Verdict = "sight-review-approved",
+                    VerdictSummary = "Human sight review approved the concept.",
+                });
+                pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptPromotionStepId,
+                    Kind = StepKind.Tool,
+                    Status = PipelineStepStatus.Passed,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    Verdict = result.Created.Count == 0 ? "no-implementation" : "implementation-cards-created",
+                    VerdictSummary = result.Created.Count == 0
+                        ? "Sight review completed without implementation cards."
+                        : $"Created {result.Created.Count} implementation card(s) from the Workbench.",
+                });
+                pipelineLog.Complete(info.FolderPath, now);
+                SteerPendingMarker.Clear(info.FolderPath);
+
+                var move = await transitions.MoveAsync(
+                    jobId,
+                    TaskStates.Completed,
+                    watchPath,
+                    ct,
+                    cause: "concept-sight-review-approved",
+                    reason: "Concept sight review approved and implementation promotion completed.");
+                if (move.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new
+                    {
+                        error = move.Message ?? "Implementation cards were created, but the concept card could not be completed.",
+                        result,
+                    });
+            }
+
+            return Results.Ok(result);
+        });
+
         // AGT-2069 — declare (or clear) "bewusst keine Umsetzung" (deliberately
         // no follow-up) for a planning task. This is the escape hatch that lets a
         // planning task satisfy the spawn-contract completion gate without
@@ -366,6 +480,7 @@ public static class TaskCrudEndpoints
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
             AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
@@ -380,10 +495,11 @@ public static class TaskCrudEndpoints
             // MoveJob without a cause and are recorded as system.
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: TimelineActors.Human(""), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
             AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
@@ -394,7 +510,7 @@ public static class TaskCrudEndpoints
 
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: TimelineActors.Human(""), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason));
         });
 
         // Batch move / restore. Per-item atomic: a failure on item N must
@@ -425,7 +541,7 @@ public static class TaskCrudEndpoints
                     new { error = "project-scope-denied", message = "This account is not a member of every task in the batch." },
                     statusCode: StatusCodes.Status403Forbidden);
 
-            var results = await transitions.BatchMoveAsync(req.Items, ct);
+            var results = await transitions.BatchMoveAsync(req.Items, ct, OperatorActor(ctx));
             return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
         });
 
@@ -718,7 +834,7 @@ public static class TaskCrudEndpoints
             if (info == null) return Results.NotFound();
 
             var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+            var index = scanner.GetReferenceIndex();
             var validation = TaskReferenceValidator.Validate(
                 info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
 
@@ -764,9 +880,16 @@ public static class TaskCrudEndpoints
             if (string.IsNullOrWhiteSpace(info.Key))
                 return Results.Ok(Array.Empty<TaskReferenceLink>());
 
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            var index = scanner.GetReferenceIndex();
             return Results.Ok(index.Dependents(info.Key, kind));
         });
+    }
+
+    private static string OperatorActor(HttpContext context)
+    {
+        var clientId = context.Items["ClientId"] as string
+            ?? context.Request.Headers["X-Client-Id"].FirstOrDefault();
+        return TimelineActors.Human(clientId ?? string.Empty);
     }
 
     internal static string? AppendDeliveryAcceptanceCriteria(

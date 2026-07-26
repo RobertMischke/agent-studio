@@ -12,10 +12,13 @@ or signal, timeout, OOM, cancellation, host shutdown, lease state, transport
 state, provider session state, and durable output state. A terminal sentinel and
 an exit code are evidence, not independent routing authorities.
 
-The adapter emits a typed outcome, confidence or ambiguity, and one recovery
-action. Authentication, quota, invalid model/configuration, launch failure, CLI
-crash, timeout, OOM, transport loss, host shutdown, lease loss, invalid session,
-explicit blocker, successful completion, and protocol-inconclusive are distinct.
+The adapter emits a typed outcome, confidence or ambiguity, one recovery
+action, and an optional detail. Authentication, quota, invalid
+model/configuration, launch failure, CLI crash, timeout, OOM, transport loss,
+host shutdown, lease loss, invalid session, explicit blocker, successful
+completion, and protocol-inconclusive are distinct. `ExplicitAgentBlocker`
+preserves the exact `TASK_BLOCKED` or `TASK_NEEDS_INPUT` reason in `Detail`, so
+the Task Server timeline and board consumers can show the blocking reason.
 `ProtocolInconclusive` remains visible and never aliases a product defect.
 
 Review infrastructure recovery is constrained by an immutable
@@ -27,11 +30,41 @@ attempt from durable salvage; exhausted chains terminate visibly. Infrastructure
 outcomes set every product-defect, completion, and coding-rework budget flag to
 false.
 
+### Repository identity
+
+`RepositoryIdentity` is the materializable Git repository identity, not the
+task-board project handle. `PROJ-016` identifies a project and is never a valid
+repository identity in a new RunAttempt, result envelope, ReviewSubject, or
+review workspace proof.
+
+The shared `RepositoryIdentityContract.FromUrl` function is the single
+derivation rule. It trims the resolved repository URL, removes trailing `/`,
+lowercases it invariantly, hashes the UTF-8 value with SHA-256, and prefixes the
+lowercase hex digest with `repo_`. Repository resolution uses the registry
+`repo` URL when present. Otherwise it reads the `origin` URL from the project's
+configured repository path. Both project shapes therefore produce the same
+kind of URL-based identity before the coding lease is acquired, and completion
+copies that identity unchanged into the result and review subjects.
+
+For already persisted ReviewAttempts created with a project handle, the review
+plane resolves the subject's repository URL, or the current project registry
+binding when the URL is absent, and publishes the canonical URL-based identity
+to the Review Executor. Reports are checked against that same resolved identity.
+A `ReviewInfra` report still creates a new ReviewAttempt on the exact persisted
+subject and never creates a coding attempt, so incident retries can recover
+without weakening the Result-SHA or subject fences.
+
 Provider terminal frames are normalized before classification. In particular, a
 Claude-style `type=result` frame with `is_error=true`, an `error_*` subtype, or
 an error status is failure evidence, never provider completion. When several
 terminal frames are present, the last terminal state wins. A session rejected
 by the provider cannot select `ResumeSameSession` again.
+
+An exit-zero invocation with any explicit terminal sentinel (`TASK_DONE`,
+`TASK_NOOP`, `TASK_BLOCKED`, or `TASK_NEEDS_INPUT`) suppresses infrastructure
+regex matches found only in diagnostic narrative. Authoritative facts such as
+`OomKilled`, lease loss, timeout, transport loss, invalid session state, or
+launch failure still win over the sentinel.
 
 Fresh-attempt recovery requires a published salvage reference whose
 durable state is `Published` or `Acknowledged`. A host-local worktree path is
@@ -67,8 +100,8 @@ Hard sentinel matches win over process exit code. This is load-bearing on Window
 - Summary generation must enforce `ProtocolResult` after the Haiku summary is produced.
 - UI failure surfacing must use the `runOutcome` field when present and fall back to legacy `execution.status === 'failed'` only when it is absent.
 - Raw process status and exit code remain visible for diagnostics, but they do not override a terminal sentinel.
-- **UI head-state precedence.** A single run outcome is not the leading head state on the task-detail surface: the *current lane / review decision leads*. The protocol pane's verdict pill (`frontend/.../protocol-pane/protocol-verdict.ts`) demotes a run-outcome `Blocked`/`Failed` to a collapsed "superseded run outcome" history strip once the card reaches an accepted stand (`orchestratorVerdict === 'accept'`, or lane `6-completed`/`7-archive`). A `Blocked` from an overhauled run context must never contradict an accepted stand as the head banner. See `frontend/src/app/features/task-detail/README.md` ("Protocol verdict precedence").
-- **UI verdict chain.** Beneath the head pill, the protocol pane renders a visible **verdict chain** (`frontend/.../protocol-pane/protocol-verdict-chain.ts` → `deriveVerdictChain`): `Run → Gate → Review aspects → Lane decision`, each step statused and linked to its evidence, with the *leading* step marked (the lane decision when one exists). A one-line causal narrative connects the earlier steps to that leading decision so a reviewer can see *why* the head state is what it is (e.g. why a card was escalated to a human even though the run's automated checks passed). The chain is derived from the same signals as the head pill, so the two never disagree.
+- **UI outcome precedence.** Task detail derives one current-run presentation in `protocol-verdict.ts` with strict precedence `failed > needs-decision > unclear > succeeded`. A live run excludes stale terminal records and remains `Running`. Runner issues, terminal execution, `status.md`, Activity, pipeline, review, and lane are raw inputs, never independent head states.
+- **One UI projection.** The task-detail parent passes that same presentation object to the protocol banner, Result chip, and final Pipeline verdict. No consumer reclassifies it. Raw inputs remain available only in the collapsed `Why this status?` disclosure. The separate verdict chain, outcome-issue chip, Activity outcome banner, and Overview FAILURE row are not primary status surfaces.
 
 ## Expected Cases
 

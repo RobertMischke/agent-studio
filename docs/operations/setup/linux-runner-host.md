@@ -1,6 +1,6 @@
-# Linux runner host (standalone remote runner)
+# Linux agent host (`agent-host`)
 
-Status: Remote daemon runbook. The runner continuously executes server-assigned
+Status: Remote daemon runbook. `agent-host` continuously executes server-assigned
 projects on a Linux host while retaining the RM-5 one-task diagnostic mode.
 
 Related work: AGT-2092 (runner operations baseline) and AGT-2094 (Admin UI
@@ -15,9 +15,9 @@ and the binding lease contract in
 the Runner API surface added by RM-3 (fenced lease) and RM-4 (log + artifact
 upload).
 
-## What the standalone runner is
+## What the agent host is
 
-A single self-contained .NET console process (`agent-runner`) that runs on a
+A single self-contained .NET console process (`agent-host`) that runs on a
 Linux host and fills a bounded set of task slots without owning task state:
 
 - **Code arrives and leaves via git `origin`** - the runner fetches over the
@@ -45,6 +45,30 @@ Linux host and fills a bounded set of task slots without owning task state:
   clone at `$RUNNER_WORKDIR/<project-id>/repo`; it is fetched before a claimed
   task starts. A coding worktree is removed only after the Task Server has
   durably acknowledged the matching immutable result envelope.
+
+### Remote Review Executor service
+
+Run review as a second systemd identity, even when it shares the physical host
+with coding. Set `RUNNER_ROLE=review`, use a different `RUNNER_ID`, service
+account, credential file, and `RUNNER_REVIEW_WORKDIR`. The managed agent-host
+unit supplies the role cgroup policy described in
+[runner-host resource governance](../haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
+Do not point the review root at `RUNNER_WORKDIR`.
+
+The Review Executor advertises Git/source-bundle, semantic, and vision
+capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
+temporary directory, eight-port block, Compose namespace, database namespace,
+and fenced cleanup lifecycle. Child processes start from a cleared environment.
+Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted; the corresponding
+service credentials must be read-only. Coding deploy keys and write-enabled
+provider credentials must not be present in the review unit.
+
+The executor fetches the immutable result ref or verified Git bundle, proves
+repository identity, HEAD, tree, and clean state, then proves HEAD again before
+every completion, build/test, requirement, quality, documentation, evidence,
+artifact, or vision command. A missing ref reports
+`ReviewInfra/SnapshotUnavailable`; there is no coding-worktree or Task Server
+checkout fallback.
 
 ### Remote Review Executor service
 
@@ -91,10 +115,10 @@ outbound to the authenticated HTTPS origin with its enrolled service identity.
 The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
-## Product onboarding from Remote Hosts
+## Product onboarding from Execution Hosts
 
-The primary setup path is **Workspace Settings -> Remote hosts -> Set up
-runner**. The action creates a normal visible CLI task, so the existing task
+The primary setup path is **Workspace Settings -> Execution Hosts -> Set up agent
+host**. The action creates a normal visible CLI task, so the existing task
 conversation owns live output, operator input, completion, and durable history.
 The local controller then runs
 [`scripts/remote-runner-onboard.sh`](../../../scripts/remote-runner-onboard.sh);
@@ -131,13 +155,14 @@ The controller is intentionally repeatable after a host wipe:
    then `codex login status` and `claude auth status --text` report the active
    account. Credential files are never copied as the normal path.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
-   runner identity, optional `RUNNER_CLIENT_ID`, credential-file path, and fallback git origin. Install and start the
-   service through systemd. The SSH session never owns the daemon process.
-5. Prove `systemctl is-enabled`, `systemctl is-active`, Runner health, and an
+   stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
+   and fallback git origin. Install and start `agent-host.service` through
+   systemd. The SSH session never owns the daemon process.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, and an
    authenticated claim or empty-queue response before setup completes.
 
 The NuGet package must be published with package type `DotnetTool` and expose
-the `agent-runner` command. A library-only `CodingAgentRunner` package cannot be
+the `agent-host` command. A library-only `CodingAgentRunner` package cannot be
 installed with `dotnet tool`; setup reports that packaging mismatch explicitly
 and does not silently switch to a source build. The source-publish procedure
 below remains a troubleshooting and development fallback, not the product
@@ -184,20 +209,31 @@ for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 [`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
 
-## 2. Build the runner
+## 2. Build agent-host
 
 ```bash
 git clone <origin> agent-taskboard && cd agent-taskboard
-dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-runner
+sudo dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host
+if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
+  sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
+fi
+sudo ln -sfnT /opt/agent-host /opt/agent-runner
 ```
 
-The output binary is `agent-runner`.
+The output binary is `/opt/agent-host/agent-host`. `/opt/agent-runner` is a
+transition symlink for existing automation; new deployments and units use only
+`/opt/agent-host`.
 
 ## 3. Configure
 
 Every value has an environment-variable default (systemd-friendly); the per-task
-identifiers can also be passed as flags. `agent-runner --help` prints the full
+identifiers can also be passed as flags. `agent-host --help` prints the full
 list.
+
+`RUNNER_*` remains the bootstrap-compatible canonical prefix. Every variable
+also accepts the matching `AGENT_HOST_*` alias, for example
+`AGENT_HOST_SERVER_URL`; when both forms are set, `RUNNER_*` wins. Stable
+identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 
 | Env var | Flag | Default | Meaning |
 |---|---|---|---|
@@ -205,8 +241,8 @@ list.
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
 | `RUNNER_CLIENT_ID` | `--client-id` | (none) | Optional attribution label. It is not authentication and grants no access. |
-| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Credential-free fetch URL and startup push-probe repository. Required for daemon onboarding; normally use HTTPS. |
-| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Write URL installed as Git `origin.pushurl`; normally the SSH URL backed by this host/repository deploy key. |
+| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Startup push-probe repository and legacy one-shot fallback. It is never inherited by a project clone. |
+| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Startup push-probe and legacy one-shot write URL. It is never inherited by a project clone. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
@@ -250,24 +286,120 @@ $RUNNER_WORKDIR/
   PROJ-007/worktrees/QS-104
 ```
 
-The Task Server resolves the repository URL from the project's registry URL
-entry whose id or label is `repo` (label `repository` is also accepted). If that
-entry is absent, it derives `remote.origin.url` and the default branch from the
-registered local `RepositoryPath`. Local filesystem remotes are not usable on a
-different host. An assigned project with no resolvable network repository URL
-is skipped before a lease is created and is logged as
-`remote-runner-project-skipped`; the card remains Ready and is not escalated.
+The Task Server resolves the repository URL only from the project's registry URL
+entry whose id or label is `repo` (label `repository` is also accepted). The
+registered local `RepositoryPath` may supply default-branch metadata, but its
+origin is never used as a remote fallback. An assigned project without that
+registry URL is reported as not remote-capable and skipped before a lease is
+created. The server logs `remote-runner-project-not-remote-capable`; the card
+remains Ready and no project clone is created.
 
-`RUNNER_GIT_REMOTE` is also the repository used by the daemon's one-time startup
-write probe. Configure it together with `RUNNER_GIT_PUSH_REMOTE` for the
-host/repository assignment. Do not point one global push URL at unrelated claim
-repositories.
+On every project-clone contact, including the first clone, the daemon replaces
+the complete `remote.origin.url` and `remote.origin.pushurl` value sets with the
+project registry URL. This repairs stale existing clones and prevents the
+startup probe or one-shot fallback from redirecting project pushes. The runner
+emits `git-remote-configured` with `source=project-registry`, the project id,
+and both effective URLs.
+
+`RUNNER_GIT_REMOTE` and `RUNNER_GIT_PUSH_REMOTE` are used by the daemon's
+one-time startup write probe. They verify baseline host capability only. Every
+claimed project must have write credentials for its registry URL; the global
+probe URLs do not rewrite project clone remotes.
 
 ### Push identity setup
 
-The recommended identity is one write-enabled repository deploy key per runner
-host and repository. Generate it as the systemd runner user. Only the public key
-leaves the host:
+Project clones keep their registered HTTPS URL for both fetch and push. The
+simplest write identity is a fine-grained personal access token owned by a
+dedicated machine account. Follow [Token requirements](#token-requirements)
+before storing it in the runner user's credential helper. Keep the HTTPS URL
+free of embedded secrets. Do not put a token in `runner.env`, a command line,
+task output, or evidence.
+
+### Token requirements
+
+The coding runner must be able to publish ordinary source changes and changes
+under `.github/workflows`. Use one of these exact permission sets:
+
+| Token type | Repository selection | Required permissions |
+|---|---|---|
+| Fine-grained personal access token, preferred | Resource owner: the organization that owns the repository, or the personal account for a personally owned repository. Select only repositories assigned to this runner. | Repository permissions: **Contents: Read and write** and **Workflows: Read and write**. Metadata read access is added by GitHub. |
+| Personal access token (classic), compatibility fallback | The token follows all repository access of its user. Use only when organization policy or a fine-grained-token limitation requires it. | Scopes: **`repo`** and **`workflow`**. For a public-only repository, `public_repo` plus `workflow` is sufficient, but the runner baseline uses `repo` because private repositories are supported. |
+
+PATs are always tied to the user that creates them. A personal token is not an
+organization identity. For an organization repository, prefer a dedicated
+machine account, choose the organization as the fine-grained token's resource
+owner, and wait for organization approval when its policy requires approval.
+The account itself must have repository write access. Authorize a classic token
+for the organization's SAML SSO when applicable. For a long-lived integration
+that acts on behalf of an organization rather than one user, use a GitHub App
+instead of sharing a human user's PAT.
+
+Git credential lookup is path-sensitive when `useHttpPath` is enabled. The
+repository URL with `.git` and the same URL without `.git` are different exact
+keys. Store the same token under both keys. Run this as the systemd runner user
+after configuring an appropriate credential helper:
+
+```bash
+git config --global credential.https://github.com.useHttpPath true
+
+read -rp 'GitHub machine-account username: ' runner_github_user
+read -rp 'Repository slug (OWNER/REPOSITORY): ' runner_repo_slug
+read -rsp 'GitHub token: ' runner_github_token
+printf '\n'
+
+for runner_repo_path in "$runner_repo_slug" "$runner_repo_slug.git"; do
+  printf 'protocol=https\nhost=github.com\npath=%s\nusername=%s\npassword=%s\n\n' \
+    "$runner_repo_path" "$runner_github_user" "$runner_github_token" |
+    git credential approve
+done
+unset runner_github_token
+
+for runner_repo_url in \
+  "https://github.com/$runner_repo_slug" \
+  "https://github.com/$runner_repo_slug.git"; do
+  GIT_TERMINAL_PROMPT=0 git ls-remote "$runner_repo_url" HEAD >/dev/null &&
+    printf 'credential ok: %s\n' "$runner_repo_url"
+done
+unset runner_github_user runner_repo_slug runner_repo_path runner_repo_url
+```
+
+Never paste the token into a remote URL. `git credential approve` passes it on
+standard input so it does not enter shell history. On a headless host, make sure
+the selected credential helper persists for the runner user and protects its
+storage with user-only permissions.
+
+Set an expiration date and record the owner, repositories, permissions, expiry,
+and runner hosts in the operator inventory. Rotate before expiry:
+
+1. Create and approve the replacement token with the same repository selection
+   and permissions.
+2. Remove both old exact-match entries, then repeat the copy-paste storage block
+   above with the replacement token:
+
+   ```bash
+   read -rp 'Repository slug (OWNER/REPOSITORY): ' runner_repo_slug
+   for runner_repo_path in "$runner_repo_slug" "$runner_repo_slug.git"; do
+     printf 'protocol=https\nhost=github.com\npath=%s\n\n' "$runner_repo_path" |
+       git credential reject
+   done
+   unset runner_repo_slug runner_repo_path
+   ```
+
+3. Re-run both `git ls-remote` checks, restart `agent-host.service`, and confirm
+   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Execution Hosts**.
+4. Revoke the old token only after every assigned repository and runner is
+   green. A token owner's departure or repository-access removal also
+   invalidates the runner identity and requires immediate rotation.
+
+The guided installer tracked by AGT-2334 must link to this section and include a
+**Create token** step before credential storage. That step shows the
+fine-grained and classic checklists above, records both URL forms, runs both
+read checks, then waits for the daemon capability result. Installer UI and
+secret-handling implementation remain on the installer card.
+
+A repository deploy key also works when the host uses an exact per-repository
+Git URL rewrite for transport. Generate it as the systemd runner user. Only the
+public key leaves the host:
 
 ```bash
 install -d -m 0700 ~/.ssh
@@ -280,7 +412,7 @@ organization security/settings policy. If the GitHub API returns `422 Deploy
 keys are disabled for this repository`, this organization policy is still off.
 After it is enabled, add the public key under repository Settings, Deploy keys,
 select **Allow write access**, and keep the private key on the runner. Pin its
-use without changing the fetch URL:
+use without changing the stored project remote:
 
 ```sshconfig
 Host github-agent-studio
@@ -291,22 +423,37 @@ Host github-agent-studio
 ```
 
 ```bash
+git config --global url."git@github-agent-studio:agent-orc/agent-studio.git".insteadOf \
+  https://github.com/agent-orc/agent-studio.git
 RUNNER_GIT_REMOTE=https://github.com/agent-orc/agent-studio.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:agent-orc/agent-studio.git
 ```
 
-As a fallback when organization policy cannot allow deploy keys, create a
-fine-grained personal access token owned by a dedicated machine account. Limit
-it to this repository with **Contents: Read and write**, store it in the runner
-user's OS credential helper, and keep the HTTPS URL free of embedded secrets.
-Do not put a token in `runner.env`, a command line, task output, or evidence.
+The exact rewrite keeps `remote.origin.url` and `remote.origin.pushurl` equal to
+the registry value while Git uses the deploy-key SSH transport. Add one exact
+rewrite per assigned repository. The `RUNNER_GIT_PUSH_REMOTE` value above is
+still only the startup probe input.
 
-At daemon startup, the runner performs `git push --dry-run` to
-`refs/heads/runner-capability-probe/<runner-id>`, publishes `ready` or
-`read-only` on its client identity, and then polls. Dry-run creates no branch.
-The server refuses claims from a `read-only` runner, and Remote Hosts shows a
-Read-only badge with the probe error. Restore credentials and restart the unit;
-the next startup probe replaces the status.
+At daemon startup, the runner first performs `git push --dry-run` to
+`refs/heads/runner-capability-probe/<runner-id>`. It then commits a disabled
+throwaway workflow with `[skip ci]`, pushes it to a unique branch below that
+namespace, and immediately deletes the branch. This second push proves the
+GitHub workflow permission that a dry-run cannot prove.
+
+The runner publishes one of three statuses:
+
+- `ready`: contents and workflow pushes succeeded.
+- `ready-no-workflow-scope`: contents pushes succeeded, but GitHub rejected the
+  workflow change. Claims remain enabled because card file scope is not known
+  before execution.
+- `read-only`: the normal push path failed. The server refuses new claims.
+
+Execution Hosts shows separate **Contents** and **Workflow** badges. A missing
+workflow permission links back to this section. The same error classifier also
+recognizes GitHub's first real workflow rejection; if salvage fails, its
+`worktree-blocked` message includes the exact permission checklist and this
+documentation path. Restore or rotate credentials and restart the unit; the
+next startup probe replaces the status.
 
 ### Remote completion protocol
 
@@ -343,12 +490,22 @@ Start the foreground daemon with no task argument or with `--poll`:
 export RUNNER_SERVER_URL=http://<studio-host>:5030
 export RUNNER_NAME=agent-runner-01
 export RUNNER_MAX_PARALLELISM=2
-/opt/agent-runner/agent-runner --poll
+/opt/agent-host/agent-host --poll
 ```
 
 The daemon registers once, polls `POST /api/runner/claim`, and fills free host
 slots. The server only returns pickup-eligible `2-ready` cards from assigned,
 remote-capable projects and moves a successful fenced claim to `3-progress`.
+Before the first lease for each host/project pair, the server offers the
+registered repository without moving the card. The daemon creates or refreshes
+`$RUNNER_WORKDIR/<project-id>/repo`, sets both `origin` URLs to the registered
+URL, verifies them with `git remote get-url`, fetches, and runs
+a real write probe that creates and removes a temporary
+`runner/<runner-id>/delivery-preflight-*` ref. It reports that result in a
+second claim request. A failed probe refuses the claim with its Git error and
+leaves the card in `2-ready`. A successful result is cached for following
+cards. Changing the project's repository registration or integration branch
+invalidates it automatically.
 
 Ready Epic containers are eligible for a special remote planning claim. They
 consume one slot and use the normal lease, heartbeat, telemetry, drain, and
@@ -379,28 +536,47 @@ Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
 
+The per-project probe additionally gates the first claim, including an Epic
+planning claim, because a project must have a proven delivery path before the
+host takes any of its work. After a daemon interruption, the next claim requeues
+assigned Progress work once its lease is free and issues a higher fencing token.
+
 ### systemd deployment
 
-Install the shipped unit and an environment file, then enable it:
+Use the product-owned host controller for the first install and every update.
+The Coding example is:
 
 ```bash
-sudo install -D -m 0644 deploy/systemd/agent-runner.service /etc/systemd/system/agent-runner.service
-sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner
-sudoedit /etc/agent-runner/runner.env
-sudo systemctl daemon-reload
-sudo systemctl enable --now agent-runner
-sudo journalctl -u agent-runner -f
+bash scripts/remote-runner-onboard.sh \
+  --host <ssh-target> \
+  --server <task-server-url> \
+  --topology central \
+  --runner-id <enrolled-runner-id> \
+  --runner-name agent-runner-01 \
+  --role coding \
+  --git-remote <fetch-url> \
+  --git-push-remote <push-url>
 ```
+
+Use `--role review`, a separate enrolled identity, and a separate credential
+file to install or update `agent-runner-review.service`. The controller derives
+role resource policy, writes it into the main unit, migrates legacy resource
+drop-ins, runs `daemon-reload`, and restarts the selected service. Do not copy
+`deploy/systemd/agent-runner.service` directly for a managed host; that file is
+the legacy static unit reference and cannot derive a host quota.
 
 At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
 `RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
 sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
-protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
+protected file. `RUNNER_CLIENT_ID` remains optional attribution. The controller
+installs `agent-host.service` and declares the transitional `agent-runner.service`
+alias; new operations target `agent-host.service`. The unit restarts after
+failures, logs to journald,
 requests graceful SIGTERM drain, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
 
-The shipped unit deliberately uses `KillMode=process`. This is required:
+The managed units deliberately use `KillMode=process`. This is required:
 `control-group` kills detached job workers and makes safe reattachment
 impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
 `RestartSec=10s` bound a broken-binary restart loop while allowing ordinary
@@ -413,8 +589,8 @@ A planned Runner deploy no longer waits for host idle. Replace the published
 files and restart the main service process:
 
 ```bash
-sudo systemctl restart agent-runner
-sudo journalctl -u agent-runner --since '-2 minutes' \
+sudo systemctl restart agent-host
+sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
 ```
 
@@ -441,7 +617,7 @@ contracts.
    export RUNNER_SERVER_URL=http://<studio-host>:5030
    export RUNNER_GIT_REMOTE=<origin>
    export RUNNER_BRANCH=task/<the-task-branch>     # optional; falls back to base
-   /opt/agent-runner/agent-runner <TASK-KEY>
+   /opt/agent-host/agent-host <TASK-KEY>
    ```
 
 The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
@@ -456,7 +632,7 @@ Exit code `0` means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
 
-For unattended operation, run `agent-runner --health-check` as a readiness probe
+For unattended operation, run `agent-host --health-check` as a readiness probe
 (exit `0` reachable, `4` not) before assigning a task, and keep the tunnel up as
 a service. Both are covered in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
@@ -555,12 +731,12 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
 - the uploaded evidence is present under the task's `results/` folder and in the
   workspace evidence commit.
 
-For the full Remote Hosts acceptance, also record the setup task id, the exact
+For the full Execution Hosts acceptance, also record the setup task id, the exact
 Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
 status outputs, and the runner client id from `GET /api/clients`. Its
 `lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
 Ready probe task through the normal project execution setting and verify that
-the remote runner badge, fenced lease timeline, CLI log upload, result upload,
+the remote host badge, fenced lease timeline, CLI log upload, result upload,
 and runner completion all name the same runner. This is the AGT-1923 probe
 mechanic; do not substitute the static frontend readiness fixture for this
 proof.
@@ -575,9 +751,15 @@ proof.
   intentionally skips the same assigned project.
 - **`lease not granted: Held` in one-task mode** - another runner already holds
   the task. The daemon claim path normally avoids this before launch.
+- **`Project delivery preflight failed`** - read the full reason on both the
+  Execution Hosts card and the project's Execution card. Run the printed failing
+  Git operation on the host against the registered repository URL. Repair its
+  credential or registration, then choose **Re-Probe** on the host card or
+  update the repository registration so the failed cached result is cleared and
+  probed again.
 - **`connection lost: cannot reach the task server ...` at startup** - the
   preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
-  Confirm with `agent-runner --health-check`; if it also exits `4`, restart the
+  Confirm with `agent-host --health-check`; if it also exits `4`, restart the
   tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
   The runner refuses at preflight by design, so no half-started lease or CLI is
   left behind.
@@ -604,14 +786,21 @@ proof.
   `RUNNER_SERVER_URL` straight at the Studio.
 ## Reading host telemetry
 
-The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Remote Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 
-The host card raises these sustained findings after at least three consecutive samples:
+The host card raises these sustained findings after at least three qualifying
+samples. Up to two non-qualifying sample intervals are bridged so load that
+flaps around a boundary remains one phase. The card shows at most one active
+finding per kind. Completed phases are summarized per kind as an occurrence
+count for the selected time window instead of appearing as individual badges.
 
 - **VM throttled**: CPU steal time stays above 5 percent. On a virtual machine, this means the hypervisor is withholding scheduled CPU time.
-- **Oversubscribed**: the one-minute load average stays above the reported core count. Compare the active-slots line before increasing parallelism.
+- **Oversubscribed**: the one-minute load average stays above 1.5 times the
+  reported core count and either CPU steal exceeds 5 percent or I/O wait exceeds
+  10 percent. Review work is cgroup-capped and can remain runnable without
+  displacing Coding, so high load alone is deliberately not treated as damage.
 - **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.

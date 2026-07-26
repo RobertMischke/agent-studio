@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Standalone remote runner (RM-5, Runner-Split C). A single self-contained
+    Standalone agent host (RM-5, Runner-Split C). A single self-contained
     console process that runs on a Linux host and consumes the local Studio's
     Task-Server API only (REST + lease/heartbeat + log/artifact upload). It owns
     no task state: code arrives via git origin, results leave via the upload +
@@ -18,8 +18,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>AgentRunner</RootNamespace>
-    <AssemblyName>agent-runner</AssemblyName>
+    <AssemblyName>agent-host</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <InformationalVersion Condition="'$(SourceRevisionId)' != ''">$(Version)+sha.$(SourceRevisionId)</InformationalVersion>
+    <InformationalVersion Condition="'$(SourceRevisionId)' == ''">$(Version)+sha.unknown</InformationalVersion>
   </PropertyGroup>
 
   <!--

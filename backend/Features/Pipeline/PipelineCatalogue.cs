@@ -36,6 +36,22 @@ public static class PipelineCatalogue
     /// per run by <see cref="ForMode"/>.
     /// </summary>
     public const string ReadOnlyPipelineId = "read-only-task-pipeline";
+    public const string ConceptPipelineId = "concept-task-pipeline";
+
+    /// <summary>
+    /// Iterative visual-delivery pipeline used for tasks classified by the
+    /// shared <c>EvidenceGate</c> UI heuristic. It ends each evidenced iteration
+    /// at a durable human-review marker instead of running the standard aspect
+    /// fan-out.
+    /// </summary>
+    public const string UiPipelineId = "ui-iteration-task-pipeline";
+    public const string UiPipelineRoutingStepId = "pre-ui-pipeline-routing";
+    public const string UiIterationArtifactStepId = "post-ui-iteration-artifact";
+    public const string UiHumanReviewGateStepId = "post-ui-human-review-gate";
+    public const string ConceptWorkbenchPlacementStepId = "post-concept-workbench-placement";
+    public const string ConceptReviewStepId = "post-concept-review";
+    public const string ConceptSightReviewGateStepId = "post-concept-sight-review";
+    public const string ConceptPromotionStepId = "post-concept-promotion";
 
     /// <summary>
     /// The four aspect step ids ship as parallel post-steps. Kept in
@@ -414,24 +430,34 @@ public static class PipelineCatalogue
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
     private static readonly TaskPipeline ReadOnlyPipeline = BuildReadOnlyPipeline();
+    private static readonly TaskPipeline ConceptPipeline = BuildConceptPipeline();
+    private static readonly TaskPipeline UiPipeline = BuildUiPipeline();
 
     public static TaskPipeline Standard => StandardPipeline;
     public static TaskPipeline ReadOnly => ReadOnlyPipeline;
+    public static TaskPipeline Concept => ConceptPipeline;
+    public static TaskPipeline UiIteration => UiPipeline;
 
     /// <summary>
     /// Select the pipeline for a task's execution mode: read-only modes
     /// (planning / research) get the git-free <see cref="ReadOnly"/> variant;
-    /// everything else gets <see cref="Standard"/>.
+    /// concept gets its Workbench/review/sight-review/promotion chain; everything
+    /// else gets <see cref="Standard"/>.
     /// </summary>
     public static TaskPipeline ForMode(string? mode) =>
-        TaskModes.IsReadOnly(mode) ? ReadOnlyPipeline : StandardPipeline;
+        TaskModes.IsConcept(mode) ? ConceptPipeline
+        : TaskModes.IsReadOnly(mode) ? ReadOnlyPipeline
+        : StandardPipeline;
 
     public static TaskPipeline? Get(string id) =>
         string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline
         : string.Equals(id, ReadOnlyPipelineId, StringComparison.OrdinalIgnoreCase) ? ReadOnlyPipeline
+        : string.Equals(id, ConceptPipelineId, StringComparison.OrdinalIgnoreCase) ? ConceptPipeline
+        : string.Equals(id, UiPipelineId, StringComparison.OrdinalIgnoreCase) ? UiPipeline
         : null;
 
-    public static IReadOnlyList<TaskPipeline> All { get; } = [StandardPipeline, ReadOnlyPipeline];
+    public static IReadOnlyList<TaskPipeline> All { get; } =
+        [StandardPipeline, ReadOnlyPipeline, ConceptPipeline, UiPipeline];
 
     private static TaskPipeline BuildStandardPipeline()
     {
@@ -752,6 +778,115 @@ public static class PipelineCatalogue
             Pre = WithoutGitSteps(StandardPipeline.Pre),
             Core = WithoutGitSteps(StandardPipeline.Core),
             Post = WithoutGitSteps(StandardPipeline.Post),
+        };
+    }
+
+    private static TaskPipeline BuildConceptPipeline()
+    {
+        return new TaskPipeline
+        {
+            Id = ConceptPipelineId,
+            DisplayName = "Concept Workbench pipeline",
+            Version = 1,
+            Core =
+            [
+                new PipelineStep
+                {
+                    Id = CoreAgentRunStepId,
+                    DisplayName = "Concept authoring",
+                    Kind = StepKind.Core,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = false,
+                    PromptTemplate = "prompt.md",
+                },
+            ],
+            Post =
+            [
+                new PipelineStep
+                {
+                    Id = ConceptWorkbenchPlacementStepId,
+                    DisplayName = "Workbench placement",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ConceptReviewStepId,
+                    DisplayName = "Concept review",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [ConceptWorkbenchPlacementStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ConceptSightReviewGateStepId,
+                    DisplayName = "Sight review",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [ConceptReviewStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ConceptPromotionStepId,
+                    DisplayName = "Promote implementation cards",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [ConceptSightReviewGateStepId],
+                    Idempotent = true,
+                    Deferred = true,
+                },
+            ],
+        };
+    }
+
+    private static TaskPipeline BuildUiPipeline()
+    {
+        return new TaskPipeline
+        {
+            Id = UiPipelineId,
+            DisplayName = "UI iteration task pipeline",
+            Version = 1,
+            Pre =
+            [
+                .. StandardPipeline.Pre.Select(step => step with { }),
+                new PipelineStep
+                {
+                    Id = UiPipelineRoutingStepId,
+                    DisplayName = "UI pipeline routing",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+            ],
+            Core = StandardPipeline.Core.Select(step => step with { }).ToList(),
+            Post =
+            [
+                new PipelineStep
+                {
+                    Id = UiIterationArtifactStepId,
+                    DisplayName = "UI iteration evidence",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = UiHumanReviewGateStepId,
+                    DisplayName = "Human iteration review",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [UiIterationArtifactStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+            ],
         };
     }
 

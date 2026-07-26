@@ -52,6 +52,28 @@ export interface RunRecord {
   executionContext?: CliExecutionContext | null;
 }
 
+/** Typed lifecycle/diagnostic event recorded by the standalone runner. */
+export interface RunnerRecordedEvent {
+  id: string;
+  kind: 'session.started' | 'session.completed' | 'turn.started' | 'turn.completed' | 'diagnostic';
+  timestamp: string;
+  sessionId?: string | null;
+  turnId?: string | null;
+  runIndex?: number | null;
+  cli?: string | null;
+  model?: string | null;
+  thinkingLevel?: string | null;
+  durationMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  reasoningTokens?: number | null;
+  severity?: string | null;
+  code?: string | null;
+  message?: string | null;
+  implementationStatus?: string | null;
+  pipelineStatus?: string | null;
+}
+
 /** One context input the CLI loaded for a run. Mirrors backend `CliContextSource`. */
 export interface CliContextSource {
   /** 'memory' | 'instruction-file' | 'session' | 'global-config' | 'mcp' | 'env'. */
@@ -137,6 +159,8 @@ export interface RunTimeline {
   hasActiveRun: boolean;
   runs: RunRecord[];
   promptEntries?: RunPromptEntry[];
+  /** Typed runner replay. Task-level tokenSummary remains a separate aggregate. */
+  runnerEvents?: RunnerRecordedEvent[];
   /** Operator-owned anti-churn epoch. Legacy tasks are epoch zero. */
   reviewAttemptEpoch?: number;
   /** Current and closed review cycles, newest first. */

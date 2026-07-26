@@ -21,6 +21,12 @@ describe('RemoteHostsService', () => {
     svc.ensureLoaded();
     const hosts = svc.hosts();
     expect(hosts.length).toBeGreaterThanOrEqual(2);
+    expect(hosts[0]).toMatchObject({
+      id: 'local',
+      name: 'Local machine',
+      role: 'local',
+      clientId: 'local-default',
+    });
     expect(hosts.some((h) => h.role === 'local')).toBe(true);
     expect(hosts.some((h) => h.role === 'remote')).toBe(true);
     expect(hosts.find((h) => h.id === 'agent-runner-01')).toMatchObject({
@@ -73,7 +79,7 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
-  it('uses a compact refresh window while preserving a loaded 14-day series', () => {
+  it('preserves a loaded 14-day series and replaces an updated active finding', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
     });
@@ -112,8 +118,16 @@ describe('RemoteHostsService client registry hydration', () => {
       clientId: client.id,
       window: '14d',
       points: [point(older, 2)],
-      findings: [],
+      findings: [{
+        kind: 'oversubscribed',
+        label: 'Oversubscribed',
+        since: older,
+        until: older,
+        occurrences: 1,
+        isActive: true,
+      }],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     svc.refresh();
     http.expectOne('/api/clients').flush([client]);
@@ -121,13 +135,23 @@ describe('RemoteHostsService client registry hydration', () => {
       clientId: client.id,
       window: '1h',
       points: [point(latest, 3)],
-      findings: [],
+      findings: [{
+        kind: 'oversubscribed',
+        label: 'Oversubscribed',
+        since: older,
+        until: latest,
+        occurrences: 1,
+        isActive: true,
+      }],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     expect(svc.hosts().find(host => host.id === client.id)?.telemetry).toMatchObject({
       window: '14d',
       points: [{ timestamp: older }, { timestamp: latest }],
+      findings: [{ kind: 'oversubscribed', since: older, until: latest, isActive: true }],
     });
+    expect(svc.hosts().find(host => host.id === client.id)?.telemetry?.findings).toHaveLength(1);
     http.verify();
   });
 
@@ -160,6 +184,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       status: 'online',
       lastHeartbeatAt: new Date(now - 30_000).toISOString(),
@@ -187,6 +212,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('degraded');
 
     svc.reload();
@@ -198,6 +224,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('offline');
 
     svc.reload();
@@ -207,6 +234,69 @@ describe('RemoteHostsService client registry hydration', () => {
       lastSeenAt: new Date(now).toISOString(), tokenBudgetMonthly: null, notes: null,
     }]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('retired');
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    http.verify();
+  });
+
+  it('projects the versioned workflow-push capability without closing task inflow', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const capability = (key: string, advertisedStatus: string, detail: string | null) => ({
+      key,
+      category: 'source',
+      advertisedStatus,
+      healthState: 'healthy',
+      reason: null,
+      advertisedAt: now,
+      freshUntil: new Date(Date.now() + 120_000).toISOString(),
+      isFresh: true,
+      firstFailureAt: null,
+      lastFailureAt: null,
+      cooldownUntil: null,
+      canaryClaimId: null,
+      consecutiveFailures: 0,
+      version: 'available',
+      identity: 'https://github.com/example/repo.git',
+      detail,
+      affectedClaims: [],
+      recoveryHistory: [],
+    });
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'runner-host',
+      instanceId: 'runner-host:42',
+      runnerVersion: '1.0.0',
+      protocolVersion: 2,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'runner-host',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [
+        capability('git:push', 'ready', 'contents ready'),
+        capability('git:workflow-push', 'ready-no-workflow-scope', 'workflow scope missing'),
+      ],
+      telemetry: null,
+    }]);
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      gitPushStatus: 'ready-no-workflow-scope',
+      gitPushDetail: 'workflow scope missing',
+    });
     http.verify();
   });
 
@@ -216,13 +306,31 @@ describe('RemoteHostsService client registry hydration', () => {
     const http = TestBed.inject(HttpTestingController);
     svc.reload();
     http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     svc.drain('agent-runner-01');
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('drain');
     http.expectOne('/api/clients/agent-runner-01/drain').flush({ id: 'agent-runner-01' });
     http.expectOne('/api/clients').flush([{ id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: new Date().toISOString(), lastSeenAt: null, drainRequestedAt: new Date().toISOString() }]);
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({ clientId: 'agent-runner-01', window: '14d', points: [], findings: [] });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
+    http.verify();
+  });
+
+  it('invalidates cached project proofs before reloading a re-probed host', () => {
+    TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    svc.reprobe('agent-runner-01');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('reprobe');
+    http.expectOne('/api/clients/agent-runner-01/runner-project-preflights/invalidate').flush({ id: 'agent-runner-01' });
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     http.verify();
   });
 });

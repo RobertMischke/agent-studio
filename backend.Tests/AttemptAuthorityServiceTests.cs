@@ -348,6 +348,97 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Review_infrastructure_retry_budget_allows_exactly_three_linked_retries()
+    {
+        var service = NewService();
+        var (_, initial) = CompletedRunWithReview(service, "sha-a");
+        var current = initial;
+
+        for (var retryNumber = 1;
+             retryNumber <= AttemptAuthorityService.ReviewInfrastructureRetryBudget;
+             retryNumber++)
+        {
+            var claimed = service.ClaimReview(
+                current.AttemptId,
+                "reviewer",
+                "review-host",
+                60,
+                $"claim-{retryNumber}").ReviewAttempt!;
+            var settled = service.SettleReview(new SettleReviewAttemptRequest(
+                new AttemptWriteReference(
+                    claimed.AttemptId,
+                    claimed.LastFence,
+                    claimed.AuthorityEpoch,
+                    $"infra-{retryNumber}"),
+                "sha-a",
+                ReviewTerminalOutcome.InfrastructureFailure,
+                "SnapshotUnavailable"));
+
+            Assert.True(settled.Accepted);
+            Assert.True(service.HasReviewInfrastructureRetryBudget(claimed.AttemptId));
+            current = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                claimed.TaskKey,
+                claimed.RepositoryId,
+                claimed.Subject.ExpectedResultSha,
+                claimed.SourceRunAttemptId,
+                claimed.Subject.TaskRequirementsHash,
+                claimed.Subject.ReviewPolicyHash,
+                claimed.Subject.EvidenceDigestInputs,
+                $"retry-{retryNumber}",
+                claimed.AttemptId)).ReviewAttempt!;
+        }
+
+        var finalClaim = service.ClaimReview(
+            current.AttemptId,
+            "reviewer",
+            "review-host",
+            60,
+            "claim-terminal").ReviewAttempt!;
+        var final = service.SettleReview(new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                finalClaim.AttemptId,
+                finalClaim.LastFence,
+                finalClaim.AuthorityEpoch,
+                "infra-terminal"),
+            "sha-a",
+            ReviewTerminalOutcome.InfrastructureFailure,
+            "SnapshotUnavailable"));
+
+        Assert.True(final.Accepted);
+        Assert.False(service.HasReviewInfrastructureRetryBudget(finalClaim.AttemptId));
+        Assert.Equal(
+            AttemptAuthorityService.ReviewInfrastructureRetryBudget + 1,
+            service.GetTaskProjection("AGT-1").ReviewAttempts.Count);
+    }
+
+    [Fact]
+    public void Legacy_review_subject_without_result_envelope_is_terminalized_once()
+    {
+        var now = new DateTime(2026, 7, 25, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var (_, legacy) = CompletedRunWithReview(service, "sha-a");
+
+        var first = Assert.Single(
+            service.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
+        var terminalAt = first.TerminalAt;
+        now = now.AddMinutes(5);
+        var second = Assert.Single(
+            service.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
+
+        Assert.Equal(legacy.AttemptId, first.AttemptId);
+        Assert.Equal(AttemptLifecycleState.Failed, first.State);
+        Assert.Equal(ReviewTerminalOutcome.InfrastructureFailure, first.Outcome);
+        Assert.Equal("SnapshotUnavailable", first.FailureClassification);
+        Assert.Equal(
+            AttemptAuthorityService.UnmaterializableReviewSubjectReason,
+            first.TerminalReason);
+        Assert.Equal(terminalAt, second.TerminalAt);
+        Assert.DoesNotContain(
+            service.GetTaskProjection("AGT-1").ReviewAttempts,
+            attempt => attempt.State == AttemptLifecycleState.Pending);
+    }
+
+    [Fact]
     public void Persistence_failure_rolls_memory_back_to_last_durable_fence_and_attempt()
     {
         var now = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);

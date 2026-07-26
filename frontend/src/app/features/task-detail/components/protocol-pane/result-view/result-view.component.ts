@@ -50,6 +50,13 @@ export class ResultViewComponent {
 
   readonly doc = computed(() => buildResultDocument(this.detail(), this.verdict()));
   readonly caseMeta = computed(() => RESULT_CASE_META[this.doc().case.case]);
+  readonly outcomeTone = computed(() => {
+    const status = this.verdict().status;
+    if (status === 'failed') return 'problem';
+    if (status === 'needs-decision') return 'warn';
+    if (status === 'succeeded') return 'accent';
+    return 'neutral';
+  });
 
   /** True when the overview carries at least one usable line. */
   readonly hasOverview = computed<boolean>(() => {

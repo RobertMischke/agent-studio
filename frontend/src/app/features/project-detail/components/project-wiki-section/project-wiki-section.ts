@@ -57,10 +57,14 @@ import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.
 import { WikiRelatedTasksComponent } from './wiki-related-tasks/wiki-related-tasks.component';
 import {
   WikiTreeRow,
+  collectDocumentPaths,
+  collectDirectDocumentNames,
   collectFolderIds,
   filterWikiTree,
   flattenWikiTree,
   nodeId,
+  planWikiSiblingReorder,
+  reorderWikiFiles,
 } from './wiki-tree';
 import { WikiStarsService } from './wiki-stars.service';
 import {
@@ -163,6 +167,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
 })
 export class ProjectWikiSectionComponent implements OnDestroy {
   readonly projectName = input.required<string>();
+  readonly projectId = input<string | null>(null);
   readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
@@ -263,7 +268,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly renamingId = signal<string | null>(null);
   readonly renameValue = signal('');
 
-  // Drag-and-drop (file onto folder → move; folder onto sibling folder → reorder).
   readonly draggingRel = signal<string | null>(null);
   readonly draggingFolderRel = signal<string | null>(null);
   readonly dropTargetId = signal<string | null>(null);
@@ -287,8 +291,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
 
-  /** Kebab slug used in the wiki rail hash (`#/projects/<slug>/wiki`). */
-  private readonly slug = computed(() => toProjectSlug(this.projectName()));
+  private readonly routeProjectRef = computed(() =>
+    this.projectId()?.trim() || toProjectSlug(this.projectName()));
   /**
    * Deep-link target captured from the URL when the project is (re)bound, held
    * until the tree finishes loading so it can open the exact page/folder. A URL
@@ -339,6 +343,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
 
   readonly roots = computed<WikiTreeNode[]>(() => this.tree()?.root ?? []);
+  readonly wikiDocumentOrder = computed<string[]>(() => collectDocumentPaths(this.roots()));
+  readonly selectedFolderDocumentOrder = computed<string[]>(() => {
+    const rel = this.selectedFolderRel();
+    return rel ? collectDirectDocumentNames(this.roots(), rel) : [];
+  });
 
   readonly filteredRoots = computed<WikiTreeNode[]>(() =>
     filterWikiTree(this.roots(), this.filter()));
@@ -1036,7 +1045,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (link.kind === 'task') return `#task:${link.taskReference ?? link.label}`;
     const rel = this.resolveLinkedWikiPage(link);
     return rel
-      ? buildWikiRouteHash(this.slug(), { kind: 'page', relPath: rel })
+      ? buildWikiRouteHash(this.routeProjectRef(), { kind: 'page', relPath: rel })
       : link.target;
   }
 
@@ -1503,11 +1512,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.openOverview();
   }
 
-  // ---- drag and drop ----
-  // Files dragged onto a folder move into it (git mv, the original mechanism);
-  // folders dragged onto a *sibling* folder reorder the category list, which is
-  // persisted through the docs/app/config/wiki-order.json channel.
-
   onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
     if (!this.wikiWritable()) return;
     if (!node.relPath || !ev.dataTransfer) return;
@@ -1530,26 +1534,28 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.dropTargetId.set(null);
   }
 
-  onFolderDragOver(ev: DragEvent, folder: WikiTreeNode): void {
-    if (folder.type !== 'folder' || !folder.relPath) return;
+  onNodeDragOver(ev: DragEvent, target: WikiTreeNode): void {
+    if (!target.relPath) return;
     const draggingFolder = this.draggingFolderRel();
     if (draggingFolder) {
-      if (!this.isReorderTarget(draggingFolder, folder.relPath)) return;
-    } else if (!this.draggingRel()) {
-      return;
+      if (target.type !== 'folder' || !planWikiSiblingReorder(
+        this.roots(), draggingFolder, target.relPath, 'folder')) return;
+    } else {
+      const draggingFile = this.draggingRel();
+      if (!draggingFile) return;
+      if (target.type !== 'folder'
+        && !planWikiSiblingReorder(this.roots(), draggingFile, target.relPath, 'file')) return;
     }
     ev.preventDefault();
     if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
-    this.dropTargetId.set(nodeId(folder));
+    this.dropTargetId.set(nodeId(target));
   }
 
-  onFolderDragLeave(folder: WikiTreeNode): void {
-    if (folder.type !== 'folder') return;
-    if (this.dropTargetId() === nodeId(folder)) this.dropTargetId.set(null);
+  onNodeDragLeave(target: WikiTreeNode): void {
+    if (this.dropTargetId() === nodeId(target)) this.dropTargetId.set(null);
   }
-
-  onFolderDrop(ev: DragEvent, folder: WikiTreeNode): void {
-    if (folder.type !== 'folder' || !folder.relPath) return;
+  onNodeDrop(ev: DragEvent, target: WikiTreeNode): void {
+    if (!target.relPath) return;
     ev.preventDefault();
     const folderRel = ev.dataTransfer?.getData(FOLDER_DRAG_TYPE) || this.draggingFolderRel();
     const fileRel = ev.dataTransfer?.getData(FILE_DRAG_TYPE) || this.draggingRel();
@@ -1557,41 +1563,36 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.draggingRel.set(null);
     this.draggingFolderRel.set(null);
     if (folderRel) {
-      this.reorderFolder(folderRel, folder.relPath);
+      const reorder = target.type === 'folder'
+        ? planWikiSiblingReorder(this.roots(), folderRel, target.relPath, 'folder')
+        : null;
+      if (reorder) this.runMutation(this.docs.setWikiFolderOrder(
+        this.projectName(), reorder.parentRel, reorder.orderedNames));
       return;
     }
     if (!fileRel) return;
+    if (target.type !== 'folder') {
+      const reorder = planWikiSiblingReorder(this.roots(), fileRel, target.relPath, 'file');
+      if (reorder) this.persistFileOrder(reorder.parentRel, reorder.orderedNames);
+      return;
+    }
     const name = this.basename(fileRel);
-    const dest = this.joinRel(folder.relPath, name);
+    const dest = this.joinRel(target.relPath, name);
     if (dest === fileRel) return;
     this.runMutation(this.docs.moveWikiNode(this.projectName(), fileRel, dest));
   }
 
-  /** Reorder is within one parent: a folder only drops onto a *sibling* folder. */
-  private isReorderTarget(draggedRel: string, targetRel: string): boolean {
-    return draggedRel !== targetRel
-      && this.parentDir(draggedRel) === this.parentDir(targetRel);
+  private persistFileOrder(parentRel: string, orderedNames: string[]): void {
+    const current = this.tree();
+    if (current) this.tree.set({
+      ...current,
+      root: reorderWikiFiles(current.root, parentRel, orderedNames),
+    });
+    this.runMutation(this.docs.setWikiFileOrder(this.projectName(), parentRel, orderedNames));
   }
 
-  /**
-   * Moves the dragged folder to the drop target's slot within their shared
-   * parent (dragging up lands before the target, dragging down after it) and
-   * persists the resulting sibling order through the same channel the tree
-   * reads it back from.
-   */
-  private reorderFolder(draggedRel: string, targetRel: string): void {
-    if (!this.isReorderTarget(draggedRel, targetRel)) return;
-    const parent = this.parentDir(draggedRel);
-    const siblings = parent
-      ? (this.findNode(this.roots(), parent)?.children ?? [])
-      : this.roots();
-    const names = siblings.filter(n => n.type === 'folder').map(n => n.name);
-    const from = names.indexOf(this.basename(draggedRel));
-    const to = names.indexOf(this.basename(targetRel));
-    if (from < 0 || to < 0 || from === to) return;
-    const [dragged] = names.splice(from, 1);
-    names.splice(to, 0, dragged);
-    this.runMutation(this.docs.setWikiFolderOrder(this.projectName(), parent, names));
+  runFileOrderMutation(parentRel: string, orderedNames: string[]): void {
+    if (this.wikiWritable()) this.persistFileOrder(parentRel, orderedNames);
   }
 
   // ---- mutation plumbing ----
@@ -1678,9 +1679,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    * and are ignored; a wiki route with no tree yet defers to restorePendingOpen.
    */
   private applyHashTarget(): void {
-    const slug = this.slug();
-    if (!slug) return;
-    const target = parseWikiRouteHash(window.location.hash, slug);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    const target = parseWikiRouteHash(window.location.hash, projectRef);
     if (!target) return;
     const tree = this.tree();
     if (!tree) {
@@ -1724,9 +1725,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   /** Read the shareable target from the URL, ignoring the paramless landing. */
   private captureUrlRestoreTarget(): WikiDeepLinkTarget | null {
     if (typeof window === 'undefined') return null;
-    const slug = this.slug();
-    if (!slug) return null;
-    const target = parseWikiRouteHash(window.location.hash, slug);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return null;
+    const target = parseWikiRouteHash(window.location.hash, projectRef);
     // No param (bare wiki route) leaves localStorage as the fallback.
     return target && target.kind !== 'overview' ? target : null;
   }
@@ -1747,13 +1748,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    */
   private syncDeepLinkUrl(mode: 'push' | 'replace'): void {
     if (typeof window === 'undefined') return;
-    const slug = this.slug();
-    if (!slug) return;
-    if (!isWikiRouteHash(window.location.hash, slug)) return;
-    // buildWikiRouteHash returns a `#/projects/<slug>/wiki?...` route; write it
-    // as the hash's route segment so coexisting segments (e.g. the board's
-    // `filters=...`) survive a page/folder navigation (url-hash.util.ts).
-    const nextRoute = buildWikiRouteHash(slug, this.currentDeepLinkTarget()).slice(1);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    if (!isWikiRouteHash(window.location.hash, projectRef)) return;
+    // Write the target as the route segment so coexisting state such as
+    // board filters survives page and folder navigation.
+    const nextRoute = buildWikiRouteHash(projectRef, this.currentDeepLinkTarget()).slice(1);
     const nextHash = withRouteSegment(window.location.hash, nextRoute);
     if (window.location.hash === nextHash) return;
     const url = `${window.location.pathname}${window.location.search}${nextHash}`;
@@ -1798,9 +1798,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   private copyWikiLink(target: WikiDeepLinkTarget): void {
     if (typeof window === 'undefined') return;
-    const slug = this.slug();
-    if (!slug) return;
-    const url = buildWikiRouteUrl(window.location, slug, target);
+    const projectRef = this.routeProjectRef();
+    if (!projectRef) return;
+    const url = buildWikiRouteUrl(window.location, projectRef, target);
     void copyTextToClipboard(url).then(ok => {
       if (ok) this.notifications.success('Link kopiert', 'Wiki');
       else this.notifications.info('Link konnte nicht kopiert werden', 'Wiki');

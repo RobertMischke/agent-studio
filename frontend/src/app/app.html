@@ -335,16 +335,28 @@
                 <app-detail-load-error [taskLabel]="error.taskLabel" [message]="error.message" (retry)="retryDetailLoad()" />
               } @else if (selectedJob(); as detail) {
                 <main class="workspace__main workspace__main--studio" data-testid="studio-task">
-                  <app-job-detail #jobDetail [detail]="detail" [watchPaths]="watchPaths()"
-                                  [lanePeers]="triageLanePeers()" [mutationsBlocked]="updateClient.mutationsBlocked()"
-                                  (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)"
-                                  (deleteRequested)="onDeleteFromDetail(detail.info)" (navigateLaneRequested)="onNavigateLane($event)"
-                                  (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)" (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
-                                  (triageMoveRequested)="onTriageMove(detail.info, $event)" (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                  <app-job-detail #jobDetail
+                                  [detail]="detail"
+                                  [watchPaths]="watchPaths()"
+                                  [lanePeers]="triageLanePeers()"
+                                  [mutationsBlocked]="updateClient.mutationsBlocked()"
+                                  [routeDetailTab]="routeDetailTab()"
+                                  [routeInspectorTab]="routeInspectorTab()"
+                                  (back)="closeDetail()"
+                                  (fileSaved)="onFileSaved()"
+                                  (projectChanged)="onProjectChanged($event)"
+                                  (deleteRequested)="onDeleteFromDetail(detail.info)"
+                                  (navigateLaneRequested)="onNavigateLane($event)"
+                                  (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
+                                  (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
+                                  (triageMoveRequested)="onTriageMove(detail.info, $event)"
+                                  (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                                   (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
                                   (triageStartRequested)="onTriageStart(detail.info, $event)"
                                   (nextInLaneRequested)="onTriageNext(detail.info)"
-                                  (prevInLaneRequested)="onTriagePrev(detail.info)" />
+                                  (prevInLaneRequested)="onTriagePrev(detail.info)"
+                                  (detailTabChange)="onTaskDetailTabChange($event)"
+                                  (inspectorTabChange)="onTaskInspectorTabChange($event)" />
                 </main>
               } @else {
                 <div class="studio-coming-soon">
@@ -409,7 +421,7 @@
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
-                    [projectName]="tab.projectName"
+                    [projectName]="tab.projectName" [projectId]="projectHubUrls.projectIdForName(tab.projectName)"
                     [initialSection]="tab.section ?? 'overview'" [pipelineStepId]="tab.pipelineStepId"
                     (openTask)="onOpenTaskFromReel($event)" />
                 }

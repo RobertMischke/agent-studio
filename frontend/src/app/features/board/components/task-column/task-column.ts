@@ -22,6 +22,7 @@ import {
 } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
+import { DecisionBacklogHintComponent } from '../decision-backlog-hint/decision-backlog-hint.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -31,6 +32,7 @@ import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic'
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
+import { BoardDragStateService } from '../../state/board-drag-state.service';
 
 /** ASS-1727: page size for the Archive lane's lazy-load / "load more". */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -40,7 +42,13 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 @Component({
   selector: 'app-task-column, app-job-column',
   standalone: true,
-  imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent, PostProcessingSummaryComponent],
+  imports: [
+    TaskCardComponent,
+    DecisionBacklogHintComponent,
+    TooltipDirective,
+    InfoButtonComponent,
+    PostProcessingSummaryComponent,
+  ],
   // Signal inputs let OnPush skip unchanged lanes during board polling.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-column.html',
@@ -48,6 +56,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 })
 export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly taskService = inject(TaskService);
+  private readonly boardDrag = inject(BoardDragStateService);
 
   readonly title = input.required<string>();
   readonly icon = input<string>('');
@@ -348,18 +357,12 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   isDragOver = false;
   dropIndex = -1;
 
-  // Auto-scroll while a card is being dragged near a lane's vertical edges.
-  // HTML5 drag suppresses wheel/keyboard scroll, so without this the user is
-  // stuck at whatever scroll position the drag started in. With every lane
-  // owning its own internal scroll container the auto-scroll target is the
-  // .column__body under the cursor (or the window when no lane sits under
-  // the cursor — e.g. the gap between groups). Active only between dragstart
-  // and dragend on a card from this column.
+  // Auto-scroll while a card is dragged near a lane's vertical edges.
   private autoScrollVelocity = 0;
   private autoScrollRaf: number | null = null;
   private autoScrollTarget: HTMLElement | Window = window;
   private readonly onAutoScrollDragOver = (e: DragEvent) => this.updateAutoScrollVelocity(e);
-  private readonly onAutoScrollEnd = () => this.stopAutoScroll();
+  private readonly onAutoScrollEnd = () => { this.stopAutoScroll(); this.boardDrag.end(); };
 
   canAddTask(): boolean {
     const s = this.state();
@@ -453,6 +456,8 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     if (this.archiveSearchTimer !== null) clearTimeout(this.archiveSearchTimer);
     this.archiveSub?.unsubscribe();
+    this.stopAutoScroll();
+    this.boardDrag.end();
   }
 
   /**
@@ -576,6 +581,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onDragStart(event: DragEvent, job: TaskInfo) {
+    this.boardDrag.start();
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, taskKey: job.taskKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
     // Mark the host so the dimmed-while-dragging style applies. Released

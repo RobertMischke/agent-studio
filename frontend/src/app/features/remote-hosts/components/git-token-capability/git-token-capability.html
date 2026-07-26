@@ -1,0 +1,21 @@
+@if (mode() === 'badges') {
+  <span class="git-badge" [attr.data-tone]="contents().tone"
+        data-testid="remote-host-git-status"
+        [attr.title]="detail() || 'No successful push probe has been reported'"
+        [appTooltip]="detail() || 'No successful push probe has been reported'">
+    {{ contents().label }}
+  </span>
+  <span class="git-badge" [attr.data-tone]="workflow().tone"
+        data-testid="remote-host-workflow-status"
+        [attr.title]="detail() || 'No workflow push probe has been reported'"
+        [appTooltip]="detail() || 'No workflow push probe has been reported'">
+    {{ workflow().label }}
+  </span>
+} @else if (status() === 'ready-no-workflow-scope') {
+  <p class="token-warning" data-testid="remote-host-token-scope-fix">
+    Contents pushes work, but this runner cannot publish changes under <code>.github/workflows</code>.
+    Grant the token's workflow write permission, update both credential URL forms, and restart the runner.
+    <a href="https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/linux-runner-host.md#token-requirements"
+       target="_blank" rel="noopener noreferrer">Open token requirements</a>.
+  </p>
+}

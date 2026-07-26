@@ -347,29 +347,6 @@
       border-color: var(--studio-border-strong);
       background: var(--studio-bg-hover);
     }
-    .task-card__key-chip {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      justify-self: start;
-      height: 22px;
-      max-width: 100%;
-      padding: 0 6px;
-      border-radius: 7px;
-      font-size: 10px;
-      font-weight: 700;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: 0.02em;
-      color: var(--studio-fg-dim);
-      background: var(--studio-card-muted-bg);
-      border: 1px solid var(--studio-card-muted-border);
-      vertical-align: middle;
-      user-select: none;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
     // Epic container badge: a loud accent pill so an epic card is obvious in a
     // lane mixed with ordinary tasks. Sub-task chip is the quiet inverse - a
     // dashed, muted "↳ epic" marker that says "this belongs to an epic" without
@@ -543,7 +520,7 @@
       font-weight: 600;
       letter-spacing: 0.02em;
     }
-    /* Mode badge (planning / research). Only non-coding modes render a pill so
+    /* Mode badge (planning / research / concept). Only non-coding modes render a pill so
        the board stays quiet for the default mode. AGT-2069: planning cards get
        a deliberately loud, filled badge ("here work is PLANNED") so a
        planning-task -> follow-up-card workflow is unmistakable at a glance;
@@ -574,6 +551,11 @@
       background: #0e7490;
       border-color: #155e75;
       box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
+    }
+    .task-card__mode-pill--concept {
+      color: var(--studio-accent-4-strong);
+      background: color-mix(in srgb, var(--studio-accent-4-strong) 14%, transparent);
+      border-color: color-mix(in srgb, var(--studio-accent-4-strong) 36%, transparent);
     }
     .task-card__pending-pill {
       color: var(--severity-warn);
@@ -760,33 +742,6 @@
       background: color-mix(in srgb, var(--studio-fg-dim) 8%, transparent);
       border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
       font-weight: 500;
-    }
-    /* Human-decision pill (Done & Decide column). The attention variant
-       reuses the failure accent (--studio-accent-6) shared with the failed
-       execution pill and high-severity issue pill, so "this needs a human"
-       reads in the same red vocabulary across the board. Accepted cards stay
-       quiet so the board does not repeat "Reviewed" as another chip. */
-    .task-card__human-review-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--studio-spacing-1);
-      min-height: var(--studio-card-pill-height);
-      padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 7px;
-      font-size: var(--studio-card-meta-size);
-      font-weight: 650;
-      letter-spacing: 0.02em;
-      border: 1px solid transparent;
-      cursor: help;
-    }
-    .task-card__human-review-glyph {
-      font-size: 11px;
-      line-height: 1;
-    }
-    .task-card__human-review-pill--attention {
-      color: var(--studio-accent-6-strong);
-      background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
     }
     /* Quality-grade pill (ASS-1657). The automatic code-review step grades
        every pipelined task A/B/C/D; the grade reads loud and colour-coded so

@@ -27,10 +27,6 @@ public static class RunnerEndpoints
                         .Where(pair => ProjectAccessAuthorization.Allows(human.User, pair.Key, projects))
                         .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
                 };
-                status = status with
-                {
-                    RunningCount = status.Projects.Values.Sum(project => project.RunningTaskCount),
-                };
             }
             return Results.Ok(status);
         });

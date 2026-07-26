@@ -21,13 +21,13 @@ export class ExecutionLocationBadgeComponent {
     if (value.state === 'recovering') return 'Recovering';
     if (value.executionKind === 'local') return 'Local';
     const id = value.runnerId || value.hostDisplayName || value.configuredRunnerId || 'remote';
-    return `Remote · ${id}`;
+    return `Host · ${id}`;
   });
   readonly stateLabel = computed(() => ({
     'local-running': 'Local running',
-    'remote-running': 'Remote running',
-    'remote-disconnected': 'Remote disconnected or stale',
-    'queued-remote': 'Queued for remote',
+    'remote-running': 'Host running',
+    'remote-disconnected': 'Host disconnected or stale',
+    'queued-remote': 'Queued for host',
     'recovering': 'Recovering ownership',
     'no-active-execution': 'No active execution',
   }[this.execution()?.state ?? 'no-active-execution']));
@@ -35,13 +35,13 @@ export class ExecutionLocationBadgeComponent {
     const value = this.execution();
     if (!value) return '';
     const actual = value.executionKind === 'none'
-      ? 'No active runner'
-      : `${value.executionKind === 'local' ? 'Local' : 'Remote'}${value.runnerId ? ` · ${value.runnerId}` : ''}${value.hostDisplayName ? ` (${value.hostDisplayName})` : ''}`;
-    const configured = value.configuredRunnerId ? `Remote · ${value.configuredRunnerId}` : 'Local';
+      ? 'No active host'
+      : `${value.executionKind === 'local' ? 'Local' : 'Host'}${value.runnerId ? ` · ${value.runnerId}` : ''}${value.hostDisplayName ? ` (${value.hostDisplayName})` : ''}`;
+    const configured = value.configuredRunnerId ? `Host · ${value.configuredRunnerId}` : 'Local';
     const lines = [
       this.stateLabel(),
-      `Actual runner: ${actual}`,
-      `Configured routing: ${configured}`,
+      `Actual host: ${actual}`,
+      `Configured host: ${configured}`,
       value.startedAt ? `Started: ${this.format(value.startedAt)}` : null,
       value.lastHeartbeat ? `Last heartbeat: ${this.format(value.lastHeartbeat)}` : null,
       value.lastActivityAt ? `Last activity: ${this.format(value.lastActivityAt)}` : null,

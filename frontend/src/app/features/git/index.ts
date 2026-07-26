@@ -23,6 +23,12 @@ export type {
   GitBranchEntry,
   GitCommitEntry,
   GitProjectInventory,
+  IntegrationQueueState,
+  IntegrationQueueItem,
+  PublisherMergeItem,
+  PromotionTaskItem,
+  PromotionDiffView,
+  ProjectIntegrationView,
   // Git-Management cleanup (AGT-2009).
   CleanupTargetKind,
   CleanupMergeStatus,

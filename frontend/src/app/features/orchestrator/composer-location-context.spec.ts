@@ -24,7 +24,7 @@ describe('buildComposerLocationContext', () => {
   });
 
   it.each([
-    [{ kind: 'hub', projectName: 'Agent Studio' } as const, 'Project Hub'],
+    [{ kind: 'hub', projectName: 'Agent Studio' } as const, 'Deck'],
     [{ kind: 'hub', projectName: 'Agent Studio', section: 'overview' } as const, 'Overview'],
     [{ kind: 'hub', projectName: 'Agent Studio', section: 'wiki' } as const, 'Wiki'],
     [{ kind: 'hub', projectName: 'Agent Studio', section: 'project-urls' } as const, 'Project URLs'],

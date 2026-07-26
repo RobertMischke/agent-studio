@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AgentStudio.Pipeline;
 using AgentStudio.Security;
+using AgentStudio.Tasks;
 using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Runner;
@@ -59,7 +60,7 @@ public static class V1ReviewPlaneEndpoints
             }
         });
 
-        api.MapPost("/runners/{runnerId}/review-claims", (
+        api.MapPost("/runners/{runnerId}/review-claims", async (
             HttpContext context,
             string runnerId,
             Contract.ReviewClaimRequest request,
@@ -67,7 +68,9 @@ public static class V1ReviewPlaneEndpoints
             AttemptAuthorityService authority,
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
-            AgentStudio.Projects.ProjectSettingsService settings) =>
+            AgentStudio.Projects.ProjectSettingsService settings,
+            HumanReviewEscalation escalation,
+            CancellationToken ct) =>
         {
             if (!RunnerMatches(context, runnerId)
                 || !string.Equals(runnerId, request.ExecutorId, StringComparison.Ordinal))
@@ -79,6 +82,33 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-executor-not-registered",
                     "Register this identity with the review-executor capability before claiming."));
+            if (!executor.Capabilities.Contains(Contract.ReviewCapabilities.BaselineComparison))
+                return Results.Conflict(new Contract.ApiError(
+                    "review-baseline-comparison-required",
+                    "Update this Review Executor to one that advertises baseline-comparison support."));
+
+            foreach (var legacy in authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope())
+            {
+                var task = FindTask(scanner, legacy.TaskKey);
+                if (task is null
+                    || !string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var moved = await escalation.EscalateAsync(
+                    task.Id,
+                    task.WatchPath,
+                    task.ProjectName,
+                    HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
+                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized.",
+                    ct);
+                if (moved.Status != MoveJobStatus.Success)
+                {
+                    return Results.Json(
+                        new Contract.ApiError(
+                            "review-subject-escalation-failed",
+                            $"Legacy ReviewSubject was terminalized, but its Escalated lane write failed: {moved.Status} {moved.Message}"),
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+            }
 
             var claimed = authority.ClaimNextReview(
                 runnerId,
@@ -147,7 +177,11 @@ public static class V1ReviewPlaneEndpoints
             Contract.ReviewReportRequest request,
             AttemptAuthorityService authority,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Projects.ProjectSettingsService settings,
             TaskTransitionService transitions,
+            HumanReviewEscalation escalation,
+            TimelineLog timeline,
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, request.ExecutorId))
@@ -164,13 +198,16 @@ public static class V1ReviewPlaneEndpoints
                     out var error,
                     allowTerminal: true))
                 return error!;
+            var currentReview = current!;
+            var materializableRepository = MaterializableRepository(
+                currentReview, scanner, projects, settings);
             if (!string.Equals(
                     request.Workspace.RepositoryId,
-                    current!.RepositoryId,
+                    materializableRepository.RepositoryId,
                     StringComparison.Ordinal)
                 || !string.Equals(
                     request.Workspace.ExpectedResultSha,
-                    current.Subject.ExpectedResultSha,
+                    currentReview.Subject.ExpectedResultSha,
                     StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new Contract.ApiError(
@@ -196,7 +233,49 @@ public static class V1ReviewPlaneEndpoints
             if (!settled.Accepted || settled.ReviewAttempt is null)
                 return AttemptError(settled);
 
-            var retry = string.Equals(request.Outcome, "ReviewInfra", StringComparison.OrdinalIgnoreCase);
+            var task = FindTask(scanner, settled.ReviewAttempt.TaskKey);
+            if (task is null)
+                return Results.Json(
+                    new Contract.ApiError("task-not-found", "Review task was not found in the monolith store."),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+
+            var receivedAt = settled.ReviewAttempt.Reports
+                .LastOrDefault(report => string.Equals(
+                    report.IdempotencyKey,
+                    request.IdempotencyKey,
+                    StringComparison.Ordinal))
+                ?.ReceivedAt
+                ?? DateTime.UtcNow;
+            var payload = JsonSerializer.Serialize(request, Json);
+            var reportHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))
+                .ToLowerInvariant();
+            string evidenceFile;
+            try
+            {
+                evidenceFile = await RemoteReviewReportEvidence.WriteAsync(
+                    task.FolderPath,
+                    attemptId,
+                    settled.ReviewAttempt.Subject.SubjectId,
+                    request,
+                    reportHash,
+                    receivedAt,
+                    ct);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return Results.Json(
+                    new Contract.ApiError(
+                        "review-evidence-write-failed",
+                        $"Review grade is durable, but its task evidence file could not be written: {exception.Message}"),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            var infrastructureFailure = string.Equals(
+                request.Outcome,
+                "ReviewInfra",
+                StringComparison.OrdinalIgnoreCase);
+            var retry = infrastructureFailure
+                        && authority.HasReviewInfrastructureRetryBudget(settled.ReviewAttempt.AttemptId);
             var taskState = TaskStates.AutoReview;
             if (retry)
             {
@@ -217,14 +296,9 @@ public static class V1ReviewPlaneEndpoints
                 if (!created.Accepted)
                     return AttemptError(created);
             }
-            else
+            else if (!infrastructureFailure)
             {
-                var task = FindTask(scanner, settled.ReviewAttempt.TaskKey);
-                if (task is null)
-                    return Results.Json(
-                        new Contract.ApiError("task-not-found", "Review task was not found in the monolith store."),
-                        statusCode: StatusCodes.Status503ServiceUnavailable);
-                if (!string.Equals(task.State, TaskStates.HumanReview, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
                     var moved = await transitions.MoveAsync(
                         task.Id,
@@ -237,8 +311,23 @@ public static class V1ReviewPlaneEndpoints
                             request.Fence,
                             request.AuthorityEpoch,
                             $"lane:{request.IdempotencyKey}"),
-                        suppressProductExecution: true);
-                    if (moved.Status != MoveJobStatus.Success)
+                        suppressProductExecution: true,
+                        expectedSourceState: TaskStates.AutoReview);
+                    if (moved.Status == MoveJobStatus.SourceStateMismatch)
+                    {
+                        var racedTask = FindTask(scanner, settled.ReviewAttempt.TaskKey);
+                        if (racedTask is null)
+                        {
+                            return Results.Json(
+                                new Contract.ApiError(
+                                    "task-not-found",
+                                    "Review task disappeared while its report was being recorded."),
+                                statusCode: StatusCodes.Status503ServiceUnavailable);
+                        }
+                        taskState = racedTask.State;
+                        RecordPostAcceptanceReportIfTerminal(timeline, racedTask, attemptId, request, evidenceFile);
+                    }
+                    else if (moved.Status != MoveJobStatus.Success)
                     {
                         return Results.Json(
                             new Contract.ApiError(
@@ -246,13 +335,54 @@ public static class V1ReviewPlaneEndpoints
                                 $"Review grade is durable, but the Human Review lane write failed: {moved.Status} {moved.Message}"),
                             statusCode: StatusCodes.Status503ServiceUnavailable);
                     }
+                    else
+                    {
+                        taskState = TaskStates.HumanReview;
+                    }
                 }
-                taskState = TaskStates.HumanReview;
+                else if (string.Equals(task.State, TaskStates.HumanReview, StringComparison.OrdinalIgnoreCase))
+                {
+                    taskState = TaskStates.HumanReview;
+                }
+                else
+                {
+                    taskState = task.State;
+                    RecordPostAcceptanceReportIfTerminal(timeline, task, attemptId, request, evidenceFile);
+                }
+            }
+            else
+            {
+                var review = settled.ReviewAttempt;
+                if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                {
+                    var moved = await escalation.EscalateAsync(
+                        task.Id,
+                        task.WatchPath,
+                        task.ProjectName,
+                        HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
+                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized.",
+                        ct);
+                    if (moved.Status != MoveJobStatus.Success)
+                    {
+                        return Results.Json(
+                            new Contract.ApiError(
+                                "review-subject-escalation-failed",
+                                $"Review result is durable, but the Escalated lane write failed: {moved.Status} {moved.Message}"),
+                            statusCode: StatusCodes.Status503ServiceUnavailable);
+                    }
+                    taskState = TaskStates.Escalated;
+                }
+                else if (string.Equals(task.State, TaskStates.Escalated, StringComparison.OrdinalIgnoreCase))
+                {
+                    taskState = TaskStates.Escalated;
+                }
+                else
+                {
+                    taskState = task.State;
+                    RecordPostAcceptanceReportIfTerminal(timeline, task, attemptId, request, evidenceFile);
+                }
             }
 
-            var payload = JsonSerializer.Serialize(request, Json);
-            var reportHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))
-                .ToLowerInvariant();
             return Results.Ok(new Contract.ReviewReportDto(
                 "rrpt_" + HashId($"{attemptId}:{request.IdempotencyKey}"),
                 attemptId,
@@ -261,7 +391,7 @@ public static class V1ReviewPlaneEndpoints
                 request.FailureClassification,
                 request.Summary,
                 reportHash,
-                DateTime.UtcNow,
+                receivedAt,
                 retry,
                 taskState));
         });
@@ -317,7 +447,76 @@ public static class V1ReviewPlaneEndpoints
             ["review-plane"]);
     }
 
+    private static void RecordPostAcceptanceReportIfTerminal(
+        TimelineLog timeline,
+        TaskInfo task,
+        string attemptId,
+        Contract.ReviewReportRequest request,
+        string evidenceFile)
+    {
+        if (task.State is not (TaskStates.Completed or TaskStates.Archive))
+            return;
+        if (timeline.ReadAll(task.FolderPath).Any(item =>
+                item.Kind == TimelineEventKinds.PostAcceptanceReviewReportRecorded
+                && string.Equals(item.RunId, attemptId, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        timeline.Append(
+            task.FolderPath,
+            TimelineEventKinds.PostAcceptanceReviewReportRecorded,
+            TimelineActors.System,
+            "post-acceptance review report recorded",
+            runId: attemptId,
+            payloadRef: evidenceFile,
+            details: new Dictionary<string, string>
+            {
+                ["attemptId"] = attemptId,
+                ["fence"] = request.Fence.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["authorityEpoch"] = request.AuthorityEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["outcome"] = request.Outcome,
+                ["lane"] = task.State,
+            });
+    }
+
     private static Contract.ReviewSubjectDto ToSubject(
+        ReviewAttemptDto review,
+        TaskScannerService scanner,
+        AgentStudio.Registry.ProjectRegistry projects,
+        AgentStudio.Projects.ProjectSettingsService settings)
+    {
+        var materializableRepository = MaterializableRepository(
+            review, scanner, projects, settings);
+        var task = FindTask(scanner, review.TaskKey);
+        var project = task is null
+            ? null
+            : projects.FindByStorageLocation(task.WatchPath)
+              ?? projects.FindByIdOrDisplayName(task.ProjectName);
+        var integrationRef = task is null
+            ? null
+            : IntegrationRef(settings.Get(task.ProjectName).IntegrationBranch);
+        var plan = review.Subject.Plan
+                   ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
+        if (string.IsNullOrWhiteSpace(plan.IntegrationRef) && integrationRef is not null)
+            plan = plan with { IntegrationRef = integrationRef };
+        return new Contract.ReviewSubjectDto(
+            review.Subject.SubjectId,
+            task?.Id ?? review.TaskKey,
+            review.SourceRunAttemptId,
+            materializableRepository.RepositoryId,
+            materializableRepository.RepositoryUrl,
+            review.Subject.ExpectedResultSha,
+            review.Subject.ResultRef ?? review.Subject.ExpectedResultSha,
+            null,
+            null,
+            null,
+            review.Subject.ReviewPolicyHash,
+            plan,
+            review.Subject.CreatedAt);
+    }
+
+    private static (string RepositoryId, string? RepositoryUrl) MaterializableRepository(
         ReviewAttemptDto review,
         TaskScannerService scanner,
         AgentStudio.Registry.ProjectRegistry projects,
@@ -333,27 +532,17 @@ public static class V1ReviewPlaneEndpoints
             : RemoteProjectRepositoryResolver.Resolve(
                 project,
                 settings.Get(task.ProjectName).IntegrationBranch);
-        var plan = review.Subject.Plan ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings);
-        return new Contract.ReviewSubjectDto(
-            review.Subject.SubjectId,
-            task?.Id ?? review.TaskKey,
-            review.SourceRunAttemptId,
-            review.RepositoryId,
-            review.Subject.RepositoryUrl ?? repository?.RepositoryUrl,
-            review.Subject.ExpectedResultSha,
-            review.Subject.ResultRef ?? review.Subject.ExpectedResultSha,
-            null,
-            null,
-            null,
-            review.Subject.ReviewPolicyHash,
-            plan,
-            review.Subject.CreatedAt);
+        var repositoryUrl = review.Subject.RepositoryUrl ?? repository?.RepositoryUrl;
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)
+                           ?? review.RepositoryId;
+        return (repositoryId, repositoryUrl);
     }
 
     private static Contract.ReviewPlanDto FallbackPlan(
         string? repositoryPath,
         string? projectName,
-        AgentStudio.Projects.ProjectSettingsService settings)
+        AgentStudio.Projects.ProjectSettingsService settings,
+        string? integrationRef)
     {
         var profile = string.IsNullOrWhiteSpace(projectName)
             ? null
@@ -369,7 +558,8 @@ public static class V1ReviewPlaneEndpoints
                     $"verify-{index + 1}",
                     command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests",
                     "sh",
-                    ["-lc", shellCommand]);
+                    ["-lc", shellCommand],
+                    CompareToBaseline: command.Kind == VerifyCommandKind.Test);
             })
             .ToList();
         if (commands.Count == 0)
@@ -381,7 +571,18 @@ public static class V1ReviewPlaneEndpoints
             commands,
             commands.Select(command => command.Aspect)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList());
+                .ToList(),
+            IntegrationRef: integrationRef);
+    }
+
+    private static string? IntegrationRef(string? branch)
+    {
+        if (string.IsNullOrWhiteSpace(branch)) return null;
+        var value = branch.Trim();
+        if (value.StartsWith("refs/", StringComparison.Ordinal)) return value;
+        if (value.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            value = value["origin/".Length..];
+        return $"refs/heads/{value}";
     }
 
     private static Contract.ReviewAttemptDto ToAttempt(ReviewAttemptDto review)

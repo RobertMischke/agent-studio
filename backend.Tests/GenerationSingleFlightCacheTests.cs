@@ -43,6 +43,7 @@ public sealed class GenerationSingleFlightCacheTests
         Assert.Equal(1, factoryCalls);
     }
 
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task Invalidate_StartsNewGenerationAndOldFlightCannotRepublish()
     {
@@ -131,6 +132,7 @@ public sealed class GenerationSingleFlightCacheTests
         Assert.Equal(20, cache.GetOrCreate("b", TimeSpan.FromHours(1), () => 20));
     }
 
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task InvalidateWhileFactoryRuns_LeavesNoOldGenerationValueOrTracking()
     {

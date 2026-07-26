@@ -57,6 +57,12 @@ public record TaskInfo
     /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
     public QuotaFallbackStatus? QuotaFallback { get; init; }
     /// <summary>
+    /// Visible, bounded quota-reset wait. Read from the durable
+    /// <c>quota-wait.json</c> marker so a board refresh or backend restart does
+    /// not turn an intentional wait into an apparent hang.
+    /// </summary>
+    public QuotaWaitStatus? QuotaWait { get; init; }
+    /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
     /// (a container grouping sub-tasks under one overarching goal). An epic is
     /// not code-executed itself; only its sub-tasks run through the pipeline.
@@ -70,8 +76,8 @@ public record TaskInfo
     public string? EpicId { get; init; }
     /// <summary>
     /// Execution mode (orthogonal to <see cref="Kind"/>): <c>coding</c> (default,
-    /// mutates source) | <c>planning</c> | <c>research</c> (read-only, produce a
-    /// report). See <see cref="TaskModes"/>.
+    /// mutates source) | <c>planning</c> | <c>research</c> (read-only reports) |
+    /// <c>concept</c> (docs-only Workbench). See <see cref="TaskModes"/>.
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
@@ -300,6 +306,14 @@ public record TaskInfo
     public WaitsOnStatus? WaitsOn { get; init; }
 
     /// <summary>
+    /// Read-time decision-backlog impact for cards in <c>5-human-review</c>.
+    /// Contains every active task that transitively waits on this task through
+    /// <see cref="References"/>.<c>DependsOn</c>. The traversal is workspace-wide,
+    /// de-duplicated and cycle-safe. Null when no active task waits on it.
+    /// </summary>
+    public TransitiveWaitersStatus? TransitiveWaiters { get; init; }
+
+    /// <summary>
     /// Append-only commit-provenance record (ASS-1724): the task's worktree
     /// branch, its fork-point base, the per-lane-transition anchors, and the
     /// develop-merge block. Written by the single recording hook in
@@ -364,6 +378,16 @@ public record TaskInfo
     public TaskRunActivity? RunActivity { get; init; }
 
     /// <summary>
+    /// Read-time projection of what the newest pipeline attempt is doing now
+    /// and which enabled steps come next. Built exclusively from the current
+    /// <c>pipeline-execution.json</c> record, recorded step-prompt provenance,
+    /// and the existing runner/post-processing queues. Previous attempts are
+    /// deliberately excluded so stale execution history can never become a
+    /// live card signal.
+    /// </summary>
+    public TaskLiveStatus? LiveStatus { get; init; }
+
+    /// <summary>
     /// Set when the task was completed out-of-band (operator chat, external
     /// agent, remote host) and reconciled through
     /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
@@ -408,6 +432,45 @@ public record TaskInfo
     /// accept-dialog guard against the AGT-1915 trap.
     /// </summary>
     public PlanningSpawnSummary? PlanningSpawn { get; init; }
+}
+
+/// <summary>Compact current-step projection used by board and task detail.</summary>
+public sealed record TaskLiveStep
+{
+    public string StepId { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public DateTime? StartedAt { get; init; }
+    public string? Model { get; init; }
+    public string? CliType { get; init; }
+}
+
+/// <summary>One enabled pipeline step that has not reached a terminal state.</summary>
+public sealed record TaskLiveStepPreview
+{
+    public string StepId { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+}
+
+/// <summary>Existing queue membership for a task waiting on an execution slot.</summary>
+public sealed record TaskLiveQueue
+{
+    /// <summary><c>runner</c> or <c>review</c>.</summary>
+    public string Kind { get; init; } = string.Empty;
+    public int Position { get; init; }
+}
+
+/// <summary>
+/// Current-attempt liveness read model. It carries no new telemetry and is
+/// never persisted to task metadata.
+/// </summary>
+public sealed record TaskLiveStatus
+{
+    public int Attempt { get; init; } = 1;
+    public TaskLiveStep? ActiveStep { get; init; }
+    public List<TaskLiveStepPreview> NextSteps { get; init; } = [];
+    public TaskLiveQueue? Queue { get; init; }
+    public DateTime? LatestEventAt { get; init; }
 }
 
 /// <summary>

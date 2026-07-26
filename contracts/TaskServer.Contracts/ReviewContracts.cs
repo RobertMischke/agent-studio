@@ -8,6 +8,7 @@ public static class ReviewCapabilities
     public const string SourceBundleMaterialization = "review:source-bundle";
     public const string SemanticReview = "review:semantic";
     public const string VisionReview = "review:vision";
+    public const string BaselineComparison = "review:baseline-comparison";
 }
 
 public sealed record ReviewCommandDto(
@@ -16,13 +17,15 @@ public sealed record ReviewCommandDto(
     string FileName,
     IReadOnlyList<string> Arguments,
     bool Required = true,
-    int TimeoutSeconds = 1800);
+    int TimeoutSeconds = 1800,
+    bool CompareToBaseline = false);
 
 public sealed record ReviewPlanDto(
     IReadOnlyList<ReviewCommandDto> Commands,
     IReadOnlyList<string> RequiredAspects,
     bool RequiresVisualReview = false,
-    bool RequireDifferentHostFailureDomain = false);
+    bool RequireDifferentHostFailureDomain = false,
+    string? IntegrationRef = null);
 
 public sealed record CreateReviewSubjectRequest(
     string TaskId,
@@ -87,14 +90,17 @@ public sealed record ReviewClaimRequest(
     string ExecutorId,
     string InstanceId,
     int RequestedTtlSeconds = 120,
-    int AvailableSlots = 1);
+    int AvailableSlots = 1,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 public sealed record ReviewClaimResponse(
     string Status,
     ReviewAttemptDto? Attempt = null,
     ReviewSubjectDto? Subject = null,
     ReviewLeaseDto? Lease = null,
-    string? Message = null);
+    string? Message = null,
+    IReadOnlyList<string>? RequiredCapabilities = null,
+    IReadOnlyList<string>? CanaryCapabilities = null);
 
 public sealed record ReviewLeaseRenewRequest(
     string ExecutorId,
@@ -118,7 +124,12 @@ public sealed record ReviewCommandEvidenceDto(
     int? ExitCode,
     string? Signal,
     string StdoutSha256,
-    string StderrSha256);
+    string StderrSha256,
+    string? BaselineSha = null,
+    IReadOnlyList<string>? NewFailures = null,
+    IReadOnlyList<string>? PreExistingFailures = null,
+    bool BaselineCacheHit = false,
+    bool RetryPerformed = false);
 
 public sealed record ReviewWorkspaceProofDto(
     string RepositoryId,

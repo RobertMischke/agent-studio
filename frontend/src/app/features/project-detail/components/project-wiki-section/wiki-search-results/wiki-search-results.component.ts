@@ -48,7 +48,7 @@ export interface WikiSearchTreeGroup {
   path: string;
   /** Number of hits anywhere below this folder (badge). */
   count: number;
-  /** Smallest result index in the subtree; results arrive score-sorted. */
+  /** Smallest display-order index in the subtree. */
   bestIndex: number;
   children: WikiSearchTreeNode[];
 }
@@ -56,7 +56,7 @@ export interface WikiSearchTreeGroup {
 export interface WikiSearchTreeHit {
   kind: 'hit';
   result: WikiSearchResult;
-  /** Index in the original results array (= score order). */
+  /** Wiki tree position, falling back to the original score order. */
   index: number;
 }
 
@@ -75,8 +75,8 @@ export type WikiSearchRow =
  *
  * Two renderings share the identical hit row: a folder tree (default) that
  * groups hits by their relPath hierarchy — single-child folder chains are
- * compressed ("wiki/concepts"), groups sort by their best hit, folders toggle
- * open/closed — and the flat score-ordered list. The choice persists in
+ * compressed ("wiki/concepts"), groups and hits follow the persisted wiki tree,
+ * folders toggle open/closed, plus the flat score-ordered list. The choice persists in
  * localStorage under {@link VIEW_MODE_STORAGE_KEY}.
  *
  * Snippets are bound via `[innerHTML]`; that is safe here only because
@@ -97,6 +97,8 @@ export class WikiSearchResultsComponent {
   readonly projectName = input('');
   readonly query = input.required<string>();
   readonly response = input<WikiSearchResponse | null>(null);
+  /** Persisted tree order used only by the grouped tree rendering. */
+  readonly documentOrder = input<readonly string[]>([]);
   readonly loading = input(false);
   /** True while the semantic-expansion call is in flight. */
   readonly semanticLoading = input(false);
@@ -126,7 +128,9 @@ export class WikiSearchResultsComponent {
   });
 
   readonly treeRows = computed<WikiSearchRow[]>(() =>
-    flattenWikiSearchTree(buildWikiSearchTree(this.results()), this.collapsedGroups()));
+    flattenWikiSearchTree(
+      buildWikiSearchTree(this.results(), this.documentOrder()),
+      this.collapsedGroups()));
 
   /** Semantic expansion was requested but the backend could not provide it. */
   readonly semanticUnavailable = computed(() => {
@@ -215,11 +219,10 @@ interface DraftFolder {
 }
 
 /**
- * Groups score-ordered results into their relPath folder hierarchy. Folder
+ * Groups results into their relPath folder hierarchy. Folder
  * chains with a single folder child and no direct hits are compressed into one
- * node ("wiki/concepts"). Every level is sorted by the best (lowest) result
- * index it contains, so group order follows the best score of their content
- * and hits inside a group keep their original score order.
+ * node ("wiki/concepts"). Every level follows the saved wiki tree position;
+ * hits missing from that tree follow behind in their original score order.
  *
  * Root-level hits (relPath without a folder): as soon as at least one folder
  * group exists they gather under a synthetic "(Wurzel)" group — otherwise they
@@ -227,8 +230,12 @@ interface DraftFolder {
  * With only root-level hits the tree stays flat (a lone pseudo group would be
  * noise, not structure).
  */
-export function buildWikiSearchTree(results: readonly WikiSearchResult[]): WikiSearchTreeNode[] {
+export function buildWikiSearchTree(
+  results: readonly WikiSearchResult[],
+  documentOrder: readonly string[] = [],
+): WikiSearchTreeNode[] {
   const root: DraftFolder = { name: '', path: '', folders: new Map(), hits: [] };
+  const savedIndex = new Map(documentOrder.map((relPath, index) => [relPath, index]));
   results.forEach((result, index) => {
     const segments = result.relPath.split('/').filter(s => s.length > 0);
     let node = root;
@@ -245,7 +252,11 @@ export function buildWikiSearchTree(results: readonly WikiSearchResult[]): WikiS
       }
       node = child;
     }
-    node.hits.push({ kind: 'hit', result, index });
+    node.hits.push({
+      kind: 'hit',
+      result,
+      index: savedIndex.get(result.relPath) ?? documentOrder.length + index,
+    });
   });
   return groupRootHits(finishChildren(root));
 }

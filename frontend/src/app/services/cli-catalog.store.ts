@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, finalize, tap } from 'rxjs/operators';
 import { CLI_TYPES, type CliType } from '../models/task.model';
-import type { CliModelCatalog, CliModelInfo } from '../features/cli';
+import { orderModelCatalog, type CliModelCatalog, type CliModelInfo } from '../features/cli';
 import { TaskService } from './task.service';
 
 interface CatalogEntry {
@@ -124,9 +124,10 @@ export class CliCatalogStore {
       .getCliModelCatalog(cliType, force)
       .pipe(
         tap((catalog: CliModelCatalog) => {
+          const models = orderModelCatalog(catalog.models ?? []);
           const next = new Map(this.entries());
           next.set(cliType, {
-            models: catalog.models ?? [],
+            models,
             source: catalog.source ?? '',
             fetchedAt: Date.now(),
           });
@@ -143,7 +144,7 @@ export class CliCatalogStore {
       .subscribe({
         next: (catalog) => {
           if (catalog) {
-            subject.next(catalog.models ?? []);
+            subject.next(orderModelCatalog(catalog.models ?? []));
             subject.complete();
           }
         },

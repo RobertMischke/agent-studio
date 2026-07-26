@@ -37,8 +37,8 @@ public class ProjectDocsService
 
     private const string WikiHomeRel = "app/config/home.json";
 
-    // Stored display order of sibling category folders, keyed by parent folder
-    // rel path ("" = docs root). Lives in the code-contract area under docs/app/
+    // Stored display order of sibling category folders and documents, keyed by
+    // parent folder rel path ("" = docs root). Lives in docs/app/
     // (moved out of the dot-prefixed root file in the 2026-07 app/ migration);
     // reserved via IsWikiConfigFile and hidden with the rest of docs/app/.
     internal const string WikiFolderOrderRel = "app/config/wiki-order.json";
@@ -411,7 +411,8 @@ public class ProjectDocsService
             fullWikiDir,
             LoadWikiMetadataIndex(wikiDir),
             _titleCache,
-            LoadWikiFolderOrder(fullWikiDir),
+            LoadWikiOrderMap(fullWikiDir, "folderOrder"),
+            LoadWikiOrderMap(fullWikiDir, "fileOrder"),
             LoadRegisteredWorkbenchEntryPaths(fullWikiDir));
         var tree = new WikiTree(projectName, "docs", true, root, source.Info);
         var etag = FormatETag("wiki-tree-" + sourceKey + "-" + (signature ?? "nosig"));
@@ -454,7 +455,14 @@ public class ProjectDocsService
     }
 
     /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
-    internal static string FormatETag(string token) => "\"" + token + "\"";
+    // The token can carry arbitrary bytes (the tree source key joins its parts
+    // with U+001F); a raw token in the ETag header throws in Kestrel. Hashing
+    // keeps the strong-validator semantics and is always header-safe.
+    internal static string FormatETag(string token)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
+        return "\"" + Convert.ToHexString(bytes, 0, 16).ToLowerInvariant() + "\"";
+    }
 
     /// <summary>
     /// The most-recently-edited wiki documents for the dashboard "recent edits"
@@ -685,7 +693,7 @@ public class ProjectDocsService
         var codeRoots = ResolveCodeRoots(repoRoot);
         var drift = BuildPulseDrift(
             allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
-            BuildFolderOrderIndex(LoadWikiFolderOrder(wikiDir), parentRel: string.Empty));
+            BuildOrderIndex(LoadWikiOrderMap(wikiDir, "folderOrder"), parentRel: string.Empty));
 
         return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity)
         { Lifecycle = lifecycle };
@@ -1372,6 +1380,7 @@ public class ProjectDocsService
         IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath,
         ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache,
         IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> fileOrderByParent,
         IReadOnlySet<string> registeredWorkbenchEntryPaths)
     {
         var nodes = new List<WikiTreeNode>();
@@ -1383,7 +1392,7 @@ public class ProjectDocsService
             if (IsWikiAppPath(subRel)) continue; // docs/app/ is code contract, not a wiki page
             var children = BuildTreeNodes(
                 sub, docsRoot, metadataByRelPath, titleCache, folderOrderByParent,
-                registeredWorkbenchEntryPaths);
+                fileOrderByParent, registeredWorkbenchEntryPaths);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
@@ -1419,8 +1428,9 @@ public class ProjectDocsService
 
         var dirRel = Path.GetRelativePath(docsRoot, dir.FullName).Replace('\\', '/');
         if (dirRel == ".") dirRel = string.Empty;
-        var orderIndex = BuildFolderOrderIndex(folderOrderByParent, dirRel);
-        nodes.Sort((a, b) => CompareTreeNodes(a, b, orderIndex));
+        var folderOrderIndex = BuildOrderIndex(folderOrderByParent, dirRel);
+        var fileOrderIndex = BuildOrderIndex(fileOrderByParent, dirRel);
+        nodes.Sort((a, b) => CompareTreeNodes(a, b, folderOrderIndex, fileOrderIndex));
         return nodes;
     }
 
@@ -1828,22 +1838,23 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Folders before files; folders in the saved drag-order when one is stored
-    /// for this sibling group (unknown folders behind); then by numeric order
-    /// prefix; then name.
+    /// Folders before files; each kind follows its saved drag-order when one is
+    /// stored for this sibling group (unknown entries behind), then numeric
+    /// order prefix, then name.
     /// </summary>
     private static int CompareTreeNodes(
-        WikiTreeNode a, WikiTreeNode b, IReadOnlyDictionary<string, int> folderOrderIndex)
+        WikiTreeNode a,
+        WikiTreeNode b,
+        IReadOnlyDictionary<string, int> folderOrderIndex,
+        IReadOnlyDictionary<string, int> fileOrderIndex)
     {
         var aFolder = a.Type == "folder";
         var bFolder = b.Type == "folder";
         if (aFolder != bFolder) return aFolder ? -1 : 1;
 
-        if (aFolder)
-        {
-            var cmp = CompareBySavedFolderOrder(a.Name, b.Name, folderOrderIndex);
-            if (cmp != 0) return cmp;
-        }
+        var savedOrderIndex = aFolder ? folderOrderIndex : fileOrderIndex;
+        var savedOrderCmp = CompareBySavedOrder(a.Name, b.Name, savedOrderIndex);
+        if (savedOrderCmp != 0) return savedOrderCmp;
 
         var ao = OrderPrefixValue(a.Name);
         var bo = OrderPrefixValue(b.Name);
@@ -1853,31 +1864,31 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Saved drag-order comparison for two sibling folder names: listed folders
-    /// sort by their stored position, unlisted folders behind (falling through
-    /// to the caller's prefix/name ordering).
+    /// Saved drag-order comparison for two sibling names: listed entries sort
+    /// by stored position, unlisted entries behind.
     /// </summary>
-    private static int CompareBySavedFolderOrder(
-        string aName, string bName, IReadOnlyDictionary<string, int> folderOrderIndex)
+    private static int CompareBySavedOrder(
+        string aName, string bName, IReadOnlyDictionary<string, int> orderIndex)
     {
-        if (folderOrderIndex.Count == 0) return 0;
-        var ai = folderOrderIndex.TryGetValue(aName, out var av) ? av : int.MaxValue;
-        var bi = folderOrderIndex.TryGetValue(bName, out var bv) ? bv : int.MaxValue;
+        if (orderIndex.Count == 0) return 0;
+        var ai = orderIndex.TryGetValue(aName, out var av) ? av : int.MaxValue;
+        var bi = orderIndex.TryGetValue(bName, out var bv) ? bv : int.MaxValue;
         return ai.CompareTo(bi);
     }
 
-    // -------- Wiki folder order (saved category drag-order) --------
+    // -------- Wiki folder and document order --------
 
-    private static readonly IReadOnlyDictionary<string, int> EmptyFolderOrderIndex =
+    private static readonly IReadOnlyDictionary<string, int> EmptyOrderIndex =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Reads <c>docs/app/config/wiki-order.json</c>: the persisted display order of sibling
-    /// category folders, keyed by parent folder rel path ("" = docs root).
+    /// Reads one order map from <c>docs/app/config/wiki-order.json</c>, keyed by
+    /// parent folder rel path ("" = docs root).
     /// Missing or malformed files degrade to an empty map (= the default
     /// prefix/name ordering), mirroring how <c>home.json</c> fails open.
     /// </summary>
-    private static IReadOnlyDictionary<string, IReadOnlyList<string>> LoadWikiFolderOrder(string wikiDir)
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> LoadWikiOrderMap(
+        string wikiDir, string propertyName)
     {
         var empty = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
@@ -1887,7 +1898,7 @@ public class ProjectDocsService
             GitProcessTelemetry.RecordFileRead();
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return empty;
-            if (!doc.RootElement.TryGetProperty("folderOrder", out var map)
+            if (!doc.RootElement.TryGetProperty(propertyName, out var map)
                 || map.ValueKind != JsonValueKind.Object)
                 return empty;
 
@@ -1907,18 +1918,18 @@ public class ProjectDocsService
         }
         catch (Exception __ex)
         {
-            SilentCatch.Note(__ex, "ProjectDocsService: unreadable wiki folder-order file ignored; default ordering applies.");
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable wiki order file ignored; default ordering applies.");
             return empty;
         }
     }
 
     /// <summary>Name → saved position for one sibling group; empty when no order is stored.</summary>
-    private static IReadOnlyDictionary<string, int> BuildFolderOrderIndex(
-        IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent,
+    private static IReadOnlyDictionary<string, int> BuildOrderIndex(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> orderByParent,
         string parentRel)
     {
-        if (!folderOrderByParent.TryGetValue(parentRel, out var names) || names.Count == 0)
-            return EmptyFolderOrderIndex;
+        if (!orderByParent.TryGetValue(parentRel, out var names) || names.Count == 0)
+            return EmptyOrderIndex;
         var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < names.Count; i++) index.TryAdd(names[i], i);
         return index;
@@ -1936,6 +1947,8 @@ public class ProjectDocsService
     public WikiMutationResult SetWikiFolderOrder(
         string projectName, string? parentRelPath, IReadOnlyList<string> orderedNames)
     {
+        if (WikiWriteBlockReason(projectName) is { } blocked)
+            return WikiMutationResult.Fail(blocked);
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return WikiMutationResult.Fail("Unknown project.");
 
@@ -1966,14 +1979,17 @@ public class ProjectDocsService
         }
 
         var merged = new Dictionary<string, IReadOnlyList<string>>(
-            LoadWikiFolderOrder(wikiDir), StringComparer.OrdinalIgnoreCase)
+            LoadWikiOrderMap(wikiDir, "folderOrder"), StringComparer.OrdinalIgnoreCase)
         {
             [parent] = cleaned,
         };
         var payload = new Dictionary<string, object>
         {
-            ["schemaVersion"] = "wiki-folder-order/v1",
+            ["schemaVersion"] = "wiki-order/v2",
             ["folderOrder"] = merged
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+            ["fileOrder"] = LoadWikiOrderMap(wikiDir, "fileOrder")
                 .OrderBy(kv => kv.Key, StringComparer.Ordinal)
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
         };
@@ -1985,6 +2001,68 @@ public class ProjectDocsService
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         // The docs signature covers the order file, but timestamp resolution can
         // hide a same-tick rewrite - drop the memo so the next tree read rebuilds.
+        InvalidateWikiTreeCache();
+        return WikiMutationResult.Ok(path);
+    }
+
+    /// <summary>
+    /// Persists the display order of documents directly under one wiki folder.
+    /// Existing category orders and document orders for other folders are kept.
+    /// Documents omitted from the saved list follow it in their default order.
+    /// </summary>
+    public WikiMutationResult SetWikiFileOrder(
+        string projectName, string? parentRelPath, IReadOnlyList<string> orderedNames)
+    {
+        if (WikiWriteBlockReason(projectName) is { } blocked)
+            return WikiMutationResult.Fail(blocked);
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return WikiMutationResult.Fail("Unknown project.");
+
+        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var parent = (parentRelPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+        if (parent.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(parent))
+            return WikiMutationResult.Fail("Invalid parent path.");
+
+        var parentFull = parent.Length == 0 ? wikiDir : Path.GetFullPath(Path.Combine(wikiDir, parent));
+        var rootWithSep = wikiDir.EndsWith(Path.DirectorySeparatorChar) ? wikiDir : wikiDir + Path.DirectorySeparatorChar;
+        if (parent.Length > 0 && !parentFull.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            return WikiMutationResult.Fail("Invalid parent path.");
+        if (!Directory.Exists(parentFull))
+            return WikiMutationResult.Fail("Parent folder not found.");
+        if (orderedNames.Count > 500)
+            return WikiMutationResult.Fail("Too many file names.");
+
+        var cleaned = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in orderedNames)
+        {
+            var name = (raw ?? string.Empty).Trim();
+            if (name.Length == 0)
+                return WikiMutationResult.Fail("File names must not be empty.");
+            if (name.Contains('/') || name.Contains('\\') || name.StartsWith('.'))
+                return WikiMutationResult.Fail($"'{name}' is not a valid file name.");
+            if (seen.Add(name)) cleaned.Add(name);
+        }
+
+        var merged = new Dictionary<string, IReadOnlyList<string>>(
+            LoadWikiOrderMap(wikiDir, "fileOrder"), StringComparer.OrdinalIgnoreCase)
+        {
+            [parent] = cleaned,
+        };
+        var payload = new Dictionary<string, object>
+        {
+            ["schemaVersion"] = "wiki-order/v2",
+            ["folderOrder"] = LoadWikiOrderMap(wikiDir, "folderOrder")
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+            ["fileOrder"] = merged
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+        };
+
+        var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         InvalidateWikiTreeCache();
         return WikiMutationResult.Ok(path);
     }
@@ -2270,15 +2348,21 @@ public class ProjectDocsService
     /// <summary>
     /// One directory level of the wiki for the folder-overview surface: the
     /// folder's own identity plus every direct child, folders first then pages,
-    /// each alphabetical. Pages carry a sniffed title (first H1 / frontmatter
+    /// in the same saved/prefix/name order as the tree. Pages carry a sniffed
+    /// title (first H1 / frontmatter
     /// title for markdown, <c>&lt;title&gt;</c> for HTML, file name fallback)
     /// and a plain-text summary (first text paragraph, markup stripped, max 240
-    /// chars); folders carry a non-recursive child count instead. An empty
+    /// chars); folders carry a non-recursive child count instead. Page dates
+    /// come from the author date of the most recent commit for each file. The
+    /// complete per-file history index is loaded in one batch and cached by
+    /// repository HEAD; filesystem mtime is used only when a page has no git
+    /// history and is identified through <see cref="WikiFolderChild.UpdatedAtSource"/>.
+    /// Folder dates are the newest date among their descendant pages. An empty
     /// <paramref name="relPath"/> lists the wiki root. Returns null when the
     /// project is unknown, the path is unsafe (same traversal guard as the
     /// file endpoints), or the folder does not exist.
     /// </summary>
-    public WikiFolderView? GetWikiFolder(string projectName, string? relPath)
+    public WikiFolderView? GetWikiFolder(string projectName, string? relPath, GitService? git = null)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
@@ -2307,6 +2391,7 @@ public class ProjectDocsService
 
         var dir = new DirectoryInfo(full);
         var children = new List<WikiFolderChild>();
+        var gitDates = LoadWikiGitDateIndex(projectName, root, git);
 
         foreach (var sub in dir.GetDirectories())
         {
@@ -2314,6 +2399,7 @@ public class ProjectDocsService
             var subRel = Path.GetRelativePath(root, sub.FullName).Replace('\\', '/');
             if (IsWikiAppPath(subRel)) continue; // hide docs/app/ from the folder overview
             if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
+            var updated = GetFolderUpdatedAt(sub, root, gitDates);
             children.Add(new WikiFolderChild(
                 Name: sub.Name,
                 RelPath: subRel,
@@ -2321,15 +2407,17 @@ public class ProjectDocsService
                 FileType: null,
                 Title: StripOrderPrefix(sub.Name),
                 Summary: null,
-                UpdatedAt: sub.LastWriteTimeUtc,
+                UpdatedAt: updated?.At,
                 Size: null,
-                ChildCount: CountDirectFolderChildren(sub)));
+                ChildCount: CountDirectFolderChildren(sub),
+                UpdatedAtSource: updated?.Source));
         }
 
         foreach (var file in dir.GetFiles())
         {
             if (!IsWikiFolderPage(file)) continue;
             var fileRel = Path.GetRelativePath(root, file.FullName).Replace('\\', '/');
+            var updated = GetPageUpdatedAt(file, gitDates);
             children.Add(new WikiFolderChild(
                 Name: file.Name,
                 RelPath: fileRel,
@@ -2338,29 +2426,105 @@ public class ProjectDocsService
                 Title: ExtractWikiPageTitle(file.FullName, file.Extension)
                     ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name)),
                 Summary: ExtractWikiPageSummary(file.FullName, file.Extension),
-                UpdatedAt: file.LastWriteTimeUtc,
+                UpdatedAt: updated.At,
                 Size: file.Length,
                 ChildCount: null,
-                Classification: ReadPageClassification(file.FullName, fileRel)));
+                Classification: ReadPageClassification(file.FullName, fileRel),
+                UpdatedAtSource: updated.Source));
         }
 
-        // Same saved category drag-order as the tree; unlisted folders keep the
-        // alphabetical fallback behind the listed ones. Pages stay alphabetical.
-        var orderIndex = BuildFolderOrderIndex(LoadWikiFolderOrder(root), rel);
+        // Same saved category and document drag-orders as the tree. Unlisted
+        // entries stay behind listed siblings in their default order.
+        var folderOrderIndex = BuildOrderIndex(LoadWikiOrderMap(root, "folderOrder"), rel);
+        var fileOrderIndex = BuildOrderIndex(LoadWikiOrderMap(root, "fileOrder"), rel);
         children.Sort((a, b) =>
         {
             var aFolder = a.Kind == "folder";
             var bFolder = b.Kind == "folder";
             if (aFolder != bFolder) return aFolder ? -1 : 1;
-            if (aFolder)
-            {
-                var cmp = CompareBySavedFolderOrder(a.Name, b.Name, orderIndex);
-                if (cmp != 0) return cmp;
-            }
+            var savedOrderIndex = aFolder ? folderOrderIndex : fileOrderIndex;
+            var savedOrderCmp = CompareBySavedOrder(a.Name, b.Name, savedOrderIndex);
+            if (savedOrderCmp != 0) return savedOrderCmp;
+            var aPrefix = OrderPrefixValue(a.Name);
+            var bPrefix = OrderPrefixValue(b.Name);
+            if (aPrefix != bPrefix) return aPrefix.CompareTo(bPrefix);
             return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
 
         return new WikiFolderView(rel, dir.Name, children);
+    }
+
+    private sealed record WikiGitDateIndex(
+        string RepoRoot,
+        IReadOnlyDictionary<string, DateTime> DatesByRepoPath);
+
+    private readonly record struct WikiUpdatedAt(DateTime At, string Source);
+
+    /// <summary>
+    /// Builds the lookup used by every row in a folder response. The underlying
+    /// git service reuses the same <c>git log --name-only</c> parser as the
+    /// recent-edits feed and memoizes the complete result by HEAD, so this is
+    /// one batch spawn on a cold repository state and no per-file git work.
+    /// </summary>
+    private static WikiGitDateIndex? LoadWikiGitDateIndex(
+        string projectName, string wikiRoot, GitService? git)
+    {
+        if (git == null) return null;
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return null;
+
+        repoRoot = Path.GetFullPath(repoRoot);
+        var rootWithSep = repoRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? repoRoot
+            : repoRoot + Path.DirectorySeparatorChar;
+        if (!wikiRoot.Equals(repoRoot, StringComparison.OrdinalIgnoreCase)
+            && !wikiRoot.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiRoot).Replace('\\', '/');
+        var dates = git.GetLatestFileEditsUnderPathCached(repoRoot, docsRepoRel)
+            .ToDictionary(e => e.RepoRelPath, e => e.AuthorDateUtc, StringComparer.OrdinalIgnoreCase);
+        return new WikiGitDateIndex(repoRoot, dates);
+    }
+
+    private static WikiUpdatedAt GetPageUpdatedAt(FileInfo file, WikiGitDateIndex? gitDates)
+    {
+        if (gitDates != null)
+        {
+            var repoRel = Path.GetRelativePath(gitDates.RepoRoot, file.FullName).Replace('\\', '/');
+            if (gitDates.DatesByRepoPath.TryGetValue(repoRel, out var authorDate))
+                return new WikiUpdatedAt(authorDate, "git");
+        }
+
+        return new WikiUpdatedAt(file.LastWriteTimeUtc, "mtime");
+    }
+
+    /// <summary>
+    /// A folder has no commit date of its own. Its displayed date therefore
+    /// follows the newest navigable descendant page. If that winning page is
+    /// untracked, the folder carries the same marked mtime fallback.
+    /// </summary>
+    private static WikiUpdatedAt? GetFolderUpdatedAt(
+        DirectoryInfo folder, string wikiRoot, WikiGitDateIndex? gitDates)
+    {
+        WikiUpdatedAt? newest = null;
+        try
+        {
+            foreach (var path in folder.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                if (!IsWikiFolderPage(path)) continue;
+                var rel = Path.GetRelativePath(wikiRoot, path.FullName).Replace('\\', '/');
+                if (IsHiddenWikiPath(rel) || IsWikiAppPath(rel)) continue;
+                var updated = GetPageUpdatedAt(path, gitDates);
+                if (newest == null || updated.At > newest.Value.At)
+                    newest = updated;
+            }
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable folder while deriving wiki git date.");
+        }
+        return newest;
     }
 
     private static bool IsWikiFolderPage(FileInfo file) =>
@@ -3126,12 +3290,15 @@ public record WikiFolderChild(
     string? FileType,
     string Title,
     string? Summary,
-    DateTime UpdatedAt,
+    DateTime? UpdatedAt,
     long? Size,
     int? ChildCount,
     // Page rows only: the curated classification (sidecar first, folder-default
     // type as fallback); null for folders and unclassified pages.
-    WikiClassification? Classification = null);
+    WikiClassification? Classification = null,
+    // "git" for the last commit's author date; "mtime" only when no commit
+    // exists for the page (typically a new, untracked local file).
+    string? UpdatedAtSource = null);
 
 // ---- Wiki home (curated landing sections) ----
 

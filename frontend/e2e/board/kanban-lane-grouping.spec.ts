@@ -7,8 +7,8 @@ import { test, expect, Page } from '@playwright/test';
  * containers (Backlog / Active / Done & Decide) so the workflow reads
  * as phases. The Active container holds machine-driven lanes
  * (3-progress, 4-auto-review); the Done & Decide
- * container holds the user-owned tail (5-human-review, 6-completed,
- * 7-archive). Any individual lane can also be collapsed into a narrow
+ * container holds the user-owned tail (5e-escalated, 5-human-review,
+ * 6-completed, 7-archive). Any individual lane can also be collapsed into a narrow
  * rail that still surfaces task count plus running / needs-input /
  * error / CLI badges.
  *
@@ -26,6 +26,7 @@ function jobInfo(over: Partial<Record<string, unknown>>): Record<string, unknown
   return {
     id,
     jobKey: `${FIXTURE_WATCH}::${id}`,
+    taskKey: `${FIXTURE_WATCH}::${id}`,
     title: String(over['title'] ?? id),
     state: String(over['state'] ?? '2-ready'),
     order: Number(over['order'] ?? 1),
@@ -65,6 +66,9 @@ function fixtureGrouped(): Record<string, unknown[]> {
   const humanReview = [
     jobInfo({ id: 'fx-human-review-1', title: 'Awaiting your accept', state: '5-human-review' })
   ];
+  const escalated = [
+    jobInfo({ id: 'fx-escalated-1', title: 'Needs operator intervention', state: '5e-escalated' })
+  ];
   return {
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'Drafting next thing', state: '1-preparation' })],
     ready: [
@@ -87,6 +91,7 @@ function fixtureGrouped(): Record<string, unknown[]> {
       })
     ],
     autoReview,
+    escalated,
     humanReview,
     review: autoReview,
     completed: [jobInfo({ id: 'fx-done-1', title: 'Wrapped up', state: '6-completed' })],
@@ -98,7 +103,7 @@ async function installBoardMocks(page: Page): Promise<void> {
   const grouped = fixtureGrouped();
   const allJobs = [
     ...grouped.preparation, ...grouped.ready, ...grouped.progress,
-    ...grouped.autoReview, ...grouped.humanReview, ...grouped.completed, ...grouped.archive
+    ...grouped.autoReview, ...grouped.escalated, ...grouped.humanReview, ...grouped.completed, ...grouped.archive
   ];
 
   // Routes are matched LIFO in Playwright — register the catch-all FIRST so
@@ -112,11 +117,18 @@ async function installBoardMocks(page: Page): Promise<void> {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
-    await route.fallback();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   // (catch-all is intentionally registered first so the specific routes
   // below take precedence — Playwright evaluates routes LIFO.)
 
+  await page.route('**/api/auth/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null })
+    });
+  });
   await page.route('**/api/watch-paths', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([{ name: FIXTURE_PROJECT, path: FIXTURE_WATCH, rootPath: FIXTURE_WATCH }]) });
@@ -126,6 +138,13 @@ async function installBoardMocks(page: Page): Promise<void> {
   });
   await page.route('**/api/tasks/grouped', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped) });
+  });
+  await page.route('**/api/tasks/archive**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50 })
+    });
   });
   await page.route('**/api/runner/status', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
@@ -166,6 +185,10 @@ async function installBoardMocks(page: Page): Promise<void> {
   });
 }
 
+function boardSurface(page: Page) {
+  return page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]');
+}
+
 test.describe('Kanban lane grouping and collapse', () => {
   test.beforeEach(async ({ page }) => {
     await installBoardMocks(page);
@@ -173,7 +196,7 @@ test.describe('Kanban lane grouping and collapse', () => {
 
   test('renders three lane groups in the expected order', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
 
     // The lane group ids are the three top-level kanban containers
     // (the focus-mode keyboard targets `1`/`2`/`3`). The chip strip
@@ -198,17 +221,74 @@ test.describe('Kanban lane grouping and collapse', () => {
     await expect(decide.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(1);
     const active = page.getByTestId('lane-group-active');
     await expect(active.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(0);
+    const escalationLane = decide.locator('[data-testid="lane-5e-escalated"], [data-testid="lane-rail-5e-escalated"]');
+    const reviewLane = decide.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]');
+    await expect(escalationLane).toHaveCount(1);
+    await expect(reviewLane).toHaveCount(1);
+    const decisionLaneOrder = await decide
+      .locator('[data-testid="lane-5e-escalated"], [data-testid="lane-rail-5e-escalated"], [data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-testid')));
+    expect(decisionLaneOrder).toEqual(['lane-5e-escalated', 'lane-5-human-review']);
 
     await page.screenshot({ path: 'test-results/kanban-board-expanded.png', fullPage: true });
   });
 
+  test('Escalated is hidden at zero, appears live with work, and remains a drag target', async ({ page }) => {
+    let grouped = { ...fixtureGrouped(), escalated: [] as Record<string, unknown>[] };
+    await page.unroute('**/api/tasks/grouped');
+    await page.route('**/api/tasks/grouped', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(grouped),
+      });
+    });
+
+    await page.goto('/');
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
+    const escalatedLane = page.locator(
+      '[data-testid="lane-5e-escalated"], [data-testid="lane-rail-5e-escalated"]',
+    );
+    await expect(escalatedLane).toHaveCount(0);
+
+    // A hidden intervention pool must still be available as a direct drop
+    // target. Starting any card drag exposes the empty lane in its canonical
+    // first position inside Done & Decide.
+    const sourceCard = page.getByTestId('lane-2-ready').locator('app-job-card').first();
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await sourceCard.dispatchEvent('dragstart', { dataTransfer });
+    await expect(escalatedLane).toBeVisible();
+    const moveRequest = page.waitForRequest((request) =>
+      request.url().includes('/api/tasks/fx-ready-1/move'),
+    );
+    await page.getByTestId('lane-5e-escalated').dispatchEvent('drop', { dataTransfer });
+    expect((await moveRequest).postDataJSON()).toMatchObject({ targetState: '5e-escalated' });
+    await expect(page.getByTestId('lane-5e-escalated').locator('app-job-card')).toHaveCount(1);
+
+    // Reconcile the optimistic drop with the still-empty server snapshot.
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toHaveCount(0);
+
+    // The workspace refresh uses the same grouped signal updated by the
+    // SignalR fallback path. Prove both 0 -> 1 and 1 -> 0 without reloading.
+    grouped = fixtureGrouped();
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toBeVisible();
+    await expect(page.getByTestId('lane-count-5e-escalated')).toHaveText('1');
+    await page.screenshot({ path: 'test-results/kanban-escalated-intervention-lane.png', fullPage: true });
+
+    grouped = { ...fixtureGrouped(), escalated: [] };
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toHaveCount(0);
+  });
+
   test('collapsing a lane shows a rail with count and indicators, persists across reload', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
     // Make sure no prior-run state lingers in this browser context.
     await page.evaluate(() => window.localStorage.removeItem('collapsedLanes'));
     await page.reload();
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
 
     // Wait for the running job card to appear so we know /api/tasks/grouped has resolved.
     await expect(page.locator('[data-running="true"]')).toHaveCount(1);
@@ -253,7 +333,7 @@ test.describe('Kanban lane grouping and collapse', () => {
     }
 
     await page.reload();
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('lane-rail-1-preparation')).toBeVisible();
     await expect(page.getByTestId('lane-rail-2-ready')).toBeVisible();
     await expect(page.getByTestId('lane-rail-3-progress')).toBeVisible();
@@ -261,7 +341,7 @@ test.describe('Kanban lane grouping and collapse', () => {
 
   test('drag-and-drop drop targets exist on collapsed lanes (rail acts as drop zone)', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
 
     // Collapse Ready - the rail should be a valid drop target so the user
     // can still move a card into a collapsed lane without expanding it.

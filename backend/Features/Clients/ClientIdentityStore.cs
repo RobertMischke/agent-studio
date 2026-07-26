@@ -348,8 +348,78 @@ public class ClientIdentityStore
             {
                 RunnerGitStatus = status,
                 RunnerGitDetail = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim(),
-                RunnerGitCheckedAt = checkedAt.ToUniversalTime()
+                RunnerGitCheckedAt = checkedAt.ToUniversalTime(),
+                // A daemon restart with repaired credentials must be able to
+                // retry failed project proofs. Successful proofs remain cached.
+                RunnerProjectPreflights = status is "ready" or "ready-no-workflow-scope"
+                    ? existing.RunnerProjectPreflights
+                        .Where(preflight => string.Equals(preflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                        .ToList()
+                    : existing.RunnerProjectPreflights
             };
+            WriteLocked(updated);
+            _byId[id] = updated;
+            return updated;
+        }
+    }
+
+    public RunnerProjectPreflight? FindRunnerProjectPreflight(string id, string projectId)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            return _byId.TryGetValue(id, out var existing)
+                ? existing.RunnerProjectPreflights.FirstOrDefault(item =>
+                    string.Equals(item.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+                : null;
+        }
+    }
+
+    public ClientIdentity? SetRunnerProjectPreflight(string id, RunnerProjectPreflight preflight)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var existing)) return null;
+            var next = existing.RunnerProjectPreflights
+                .Where(item => !string.Equals(item.ProjectId, preflight.ProjectId, StringComparison.OrdinalIgnoreCase))
+                .Append(preflight)
+                .OrderBy(item => item.ProjectName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var updated = existing with { RunnerProjectPreflights = next };
+            WriteLocked(updated);
+            _byId[id] = updated;
+            return updated;
+        }
+    }
+
+    /// <summary>Invalidate every host's cached proof after repository registration changes.</summary>
+    public void InvalidateRunnerProjectPreflights(string projectId)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            foreach (var (id, existing) in _byId.ToList())
+            {
+                var next = existing.RunnerProjectPreflights
+                    .Where(item => !string.Equals(item.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (next.Count == existing.RunnerProjectPreflights.Count) continue;
+                var updated = existing with { RunnerProjectPreflights = next };
+                WriteLocked(updated);
+                _byId[id] = updated;
+            }
+        }
+    }
+
+    public ClientIdentity? InvalidateRunnerProjectPreflightsForHost(string id)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var existing)) return null;
+            if (existing.RunnerProjectPreflights.Count == 0) return existing;
+            var updated = existing with { RunnerProjectPreflights = [] };
             WriteLocked(updated);
             _byId[id] = updated;
             return updated;

@@ -169,6 +169,19 @@ public static class CliEndpoints
             });
         });
 
+        // CodingAgentRunner 0.6.0 wait-on-quota policy. Global defaults are
+        // opt-in; individual projects may override them through the project
+        // settings endpoint.
+        cliGroup.MapGet("/quota/wait-policy", (CliQuotaWaitPolicyService policy) =>
+            Results.Ok(policy.GetGlobal()));
+
+        cliGroup.MapPut("/quota/wait-policy", (SetCliQuotaWaitPolicyRequest req, CliQuotaWaitPolicyService policy) =>
+        {
+            if (req.ThresholdMinutes is < CliQuotaWaitPolicyService.MinThresholdMinutes or > CliQuotaWaitPolicyService.MaxThresholdMinutes)
+                return Results.BadRequest(new { error = $"thresholdMinutes must be between {CliQuotaWaitPolicyService.MinThresholdMinutes} and {CliQuotaWaitPolicyService.MaxThresholdMinutes}" });
+            return Results.Ok(policy.SetGlobal(req.Enabled, req.ThresholdMinutes));
+        });
+
         cliGroup.MapGet("/quota/model-routes", (CliQuotaFallbackService routes) =>
             Results.Ok(new { profiles = routes.GetAll() }));
 
@@ -256,4 +269,10 @@ public static class CliEndpoints
             }
         });
     }
+}
+
+public sealed record SetCliQuotaWaitPolicyRequest
+{
+    public bool Enabled { get; init; }
+    public int ThresholdMinutes { get; init; } = CliQuotaWaitPolicyService.DefaultThresholdMinutes;
 }

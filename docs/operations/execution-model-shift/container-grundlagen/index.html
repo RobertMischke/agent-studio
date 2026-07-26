@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Container-Grundlagen &amp; die vier Grundsatzfragen | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834; --rescue: #b58500;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+    --host: #6b5bd6; --cont: #1f8a70; --cred: #c06a1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f; --rescue: #d0a02a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+      --host: #9385ea; --cont: #46b89a; --cred: #d98f43;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 90px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.65 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1060px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 46px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 36px; line-height: 1.15; margin: 0 0 14px; }
+  .lede { font-size: 18.5px; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 25px; margin: 60px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18.5px; margin: 32px 0 4px; }
+  p { max-width: 74ch; } p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 28px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 11px; max-width: 90ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; } li { margin: 6px 0; max-width: 74ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; } .toc a { color: var(--ink-2); text-decoration: none; } .toc a:hover { color: var(--ink-1); text-decoration: underline; } .toc li { break-inside: avoid; }
+  .rec { border-left: 3px solid var(--ok); padding-left: 14px; margin: 16px 0; }
+  .rec b { color: var(--ok); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 11.5px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 10.5px system-ui, sans-serif; }
+  .s-mono { fill: var(--ink-2); font: 11px ui-monospace, monospace; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-host { fill: color-mix(in srgb, var(--host) 14%, var(--surface-1)); stroke: var(--host); }
+  .s-cont { fill: color-mix(in srgb, var(--cont) 14%, var(--surface-1)); stroke: var(--cont); }
+  .s-cred { fill: color-mix(in srgb, var(--cred) 16%, var(--surface-1)); stroke: var(--cred); }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-danger { fill: var(--bad-soft); stroke: var(--bad); }
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; }
+  .pill.a { background: var(--ok-soft); color: var(--ok); } .pill.b { background: var(--warn-soft); color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Grundlagen &amp; Entscheidung</p>
+  <h1>Container-Isolation: Grundlagen und die vier Grundsatzfragen</h1>
+  <p class="lede">Bevor die vier Entscheidungen fallen, das Fundament: Was ein Container eigentlich ist, warum er die Ausführung sicherer macht, und wie die vier Weichen (Mounts, Credentials, Image, Rollout) technisch funktionieren — mit Diagrammen, Vor- und Nachteilen und einer begründeten Empfehlung je Frage.</p>
+  <div class="meta">
+    <span><b>Zweck</b> Entscheidungsgrundlage für Robert</span>
+    <span><b>Bezug</b> Ausführungsmodell: Container-Default</span>
+    <span><b>Status</b> Grundlagen, keine Festlegung</span>
+  </div>
+</header>
+
+<nav>
+  <ul class="toc">
+    <li><a href="#warum">A · Warum Isolation überhaupt</a></li>
+    <li><a href="#wasist">B · Was ein Container ist</a></li>
+    <li><a href="#q1">1 · Mount-Strategie</a></li>
+    <li><a href="#q2">2 · Credential-Weg</a></li>
+    <li><a href="#q3">3 · Image-Herkunft</a></li>
+    <li><a href="#q4">4 · Rollout-Tempo</a></li>
+    <li><a href="#zusammen">C · Zusammenschau</a></li>
+  </ul>
+</nav>
+
+<h2 id="warum"><span class="no">A</span>Warum Isolation überhaupt — das Problem</h2>
+<p>Ein Coding-Agent ist ein Programm, das <b>eigenständig Befehle ausführt</b>: Dateien ändern, Shell-Kommandos laufen lassen, Netzwerk nutzen. Heute läuft dieser Agent <b>direkt auf dem Host</b>, im Maximal-Modus (<code>--sandbox danger-full-access</code>). Das bedeutet wörtlich: keine Grenze. Der Agent kann jede Datei des Hosts lesen und schreiben, auf alle dort liegenden Zugangsdaten zugreifen, beliebige Prozesse starten.</p>
+<figure>
+  <svg viewBox="0 0 960 250" role="img" aria-label="Heute: Agent läuft ungebremst direkt auf dem Host">
+    <rect x="30" y="30" width="900" height="190" rx="12" class="s-host"/>
+    <text x="50" y="55" class="s-label">Host (dein Rechner / Server)</text>
+    <text x="50" y="72" class="s-tiny">Dateisystem · Git-Credentials · CLI-Tokens · alle anderen Projekte · Netzwerk</text>
+    <rect x="60" y="95" width="220" height="95" rx="9" class="s-danger"/>
+    <text x="78" y="122" class="s-label">Coding-Agent</text>
+    <text x="78" y="140" class="s-sub">danger-full-access</text>
+    <text x="78" y="160" class="s-tiny">keine OS-Grenze</text>
+    <text x="78" y="176" class="s-tiny">volle Autonomie</text>
+    <path d="M280 143 L 470 143" class="s-flow" marker-end="url(#ar)"/>
+    <text x="300" y="134" class="s-mono">liest/schreibt ALLES</text>
+    <rect x="480" y="105" width="180" height="34" rx="7" class="s-node"/><text x="498" y="127" class="s-sub">andere Repos</text>
+    <rect x="480" y="147" width="180" height="34" rx="7" class="s-node"/><text x="498" y="169" class="s-sub">~/.git-credentials</text>
+    <rect x="680" y="105" width="230" height="34" rx="7" class="s-node"/><text x="698" y="127" class="s-sub">CLI-Tokens (~/.codex, ~/.claude)</text>
+    <rect x="680" y="147" width="230" height="34" rx="7" class="s-node"/><text x="698" y="169" class="s-sub">System / Netzwerk</text>
+    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--bad)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Der Ist-Zustand.</b> Der Agent ist maximal autonom — und maximal ungebremst. Die „Isolation", die es heute gibt, ist die Git-Worktree-Grenze (er arbeitet in einem eigenen Branch-Verzeichnis) und Prozess-/cgroup-Grenzen für Ressourcen. Das schützt die <em>Arbeit</em> vor Vermischung, aber nicht den <em>Host</em> vor dem Agenten.</p>
+</figure>
+<p>Für den Betrieb heute ist das handhabbar (vertrauenswürdige CLIs, dein eigener Rechner). Für das Produkt-Versprechen „sicher/isoliert" — und für den Fall, dass jemand fremde Repos oder weniger vertrauenswürdige Agenten laufen lässt — ist „keine Grenze" die schwache Stelle. <b>Container schließen genau diese Lücke.</b></p>
+
+<h2 id="wasist"><span class="no">B</span>Was ein Container eigentlich ist</h2>
+<p>Ein Container ist <b>kein virtueller Computer</b> (keine VM). Es ist ein normaler Prozess auf demselben Betriebssystem — aber das OS spannt drei Grenzen um ihn:</p>
+<ul>
+  <li><b>Namespaces</b> — der Prozess sieht nur <em>sein eigenes</em> Dateisystem, seine Prozessliste, sein Netzwerk. Was außerhalb liegt, existiert für ihn schlicht nicht.</li>
+  <li><b>cgroups</b> — Grenzen für CPU, RAM, IO (das nutzen wir heute schon für die Review-Drossel).</li>
+  <li><b>Capabilities/Seccomp</b> — welche Kern-Systemaufrufe erlaubt sind.</li>
+</ul>
+<p>Der entscheidende Punkt: Der Agent bleibt <b>innerhalb</b> des Containers voll autonom (danger-full-access bleibt Konzept) — aber „alles", was er tun darf, ist jetzt nur noch <em>das, was im Container liegt</em>. Autonomie und Isolation sind entkoppelt.</p>
+<figure>
+  <svg viewBox="0 0 960 280" role="img" aria-label="Container als Grenze zwischen Agent und Host">
+    <rect x="30" y="30" width="900" height="220" rx="12" class="s-host"/>
+    <text x="50" y="55" class="s-label">Host</text>
+    <text x="50" y="72" class="s-tiny">sieht der Agent NICHT mehr direkt</text>
+    <rect x="60" y="90" width="430" height="140" rx="11" class="s-cont"/>
+    <text x="80" y="116" class="s-label">Container (Isolationsgrenze)</text>
+    <rect x="80" y="132" width="180" height="80" rx="8" class="s-danger"/>
+    <text x="98" y="158" class="s-label">Coding-Agent</text>
+    <text x="98" y="176" class="s-sub">danger-full-access</text>
+    <text x="98" y="194" class="s-tiny">autonom, aber begrenzt</text>
+    <rect x="278" y="132" width="192" height="36" rx="7" class="s-node"/><text x="296" y="154" class="s-sub">nur: gemountetes Repo</text>
+    <rect x="278" y="176" width="192" height="36" rx="7" class="s-node"/><text x="296" y="198" class="s-sub">nur: durchgereichte Creds</text>
+    <line x1="490" y1="90" x2="490" y2="230" stroke="var(--cont)" stroke-width="2" stroke-dasharray="5 5"/>
+    <text x="520" y="120" class="s-sub">Was NICHT im Container liegt,</text>
+    <text x="520" y="138" class="s-sub">ist für den Agenten unerreichbar:</text>
+    <rect x="520" y="150" width="390" height="30" rx="6" class="s-node"/><text x="536" y="170" class="s-tiny">andere Projekt-Repos · fremde Tokens</text>
+    <rect x="520" y="186" width="390" height="30" rx="6" class="s-node"/><text x="536" y="206" class="s-tiny">Host-Dateisystem · Nachbar-Container</text>
+  </svg>
+  <figcaption><b>Die neue Ebene.</b> Der Container ist die Grenze. Genau hier setzen die vier Fragen an: <b>Was reichen wir in den Container hinein</b> (Repo — Frage 1, Credentials — Frage 2), <b>woraus bauen wir den Container</b> (Image — Frage 3) und <b>für wen ist er ab wann der Default</b> (Rollout — Frage 4).</figcaption>
+</figure>
+
+<h2 id="q1"><span class="no">1</span>Frage: Mount-Strategie — was sieht der Agent vom Dateisystem?</h2>
+<p>Der Agent muss am Code arbeiten. Der Code liegt aber <em>außerhalb</em> des Containers, auf dem Host. Ein <b>Volume-Mount</b> blendet ein Host-Verzeichnis in den Container ein — wie ein Fenster durch die Grenze. Die Frage ist: <b>wie groß machen wir dieses Fenster?</b></p>
+<figure>
+  <svg viewBox="0 0 960 250" role="img" aria-label="Großer Mount vs selektive Repo-Mounts">
+    <text x="30" y="28" class="s-label">A · Großer Mount (ganzer Projekt-Root)</text>
+    <rect x="30" y="40" width="180" height="150" rx="9" class="s-host"/>
+    <text x="46" y="62" class="s-sub">Host: /Projects</text>
+    <rect x="44" y="74" width="150" height="24" rx="5" class="s-node"/><text x="54" y="90" class="s-tiny">repo-A (die Aufgabe)</text>
+    <rect x="44" y="102" width="150" height="24" rx="5" class="s-danger"/><text x="54" y="118" class="s-tiny">repo-B (fremd)</text>
+    <rect x="44" y="130" width="150" height="24" rx="5" class="s-danger"/><text x="54" y="146" class="s-tiny">repo-C (fremd)</text>
+    <rect x="44" y="158" width="150" height="24" rx="5" class="s-danger"/><text x="54" y="174" class="s-tiny">secrets/</text>
+    <path d="M210 115 L 280 115" class="s-flow" marker-end="url(#ar2)"/>
+    <rect x="285" y="70" width="150" height="90" rx="9" class="s-cont"/><text x="300" y="95" class="s-sub">Container sieht</text><text x="300" y="113" class="s-tiny">ALLES (auch B,C,secrets)</text><text x="300" y="140" class="s-mono" fill="var(--bad)">Risiko</text>
+    <text x="520" y="28" class="s-label">B · Selektive Repo-Mounts (nur die Aufgabe)</text>
+    <rect x="520" y="40" width="180" height="150" rx="9" class="s-host"/>
+    <text x="536" y="62" class="s-sub">Host: /Projects</text>
+    <rect x="534" y="74" width="150" height="24" rx="5" class="s-cont"/><text x="544" y="90" class="s-tiny">repo-A (die Aufgabe)</text>
+    <rect x="534" y="102" width="150" height="24" rx="5" class="s-node"/><text x="544" y="118" class="s-tiny">repo-B — nicht gemountet</text>
+    <rect x="534" y="130" width="150" height="24" rx="5" class="s-node"/><text x="544" y="146" class="s-tiny">repo-C — nicht gemountet</text>
+    <rect x="534" y="158" width="150" height="24" rx="5" class="s-node"/><text x="544" y="174" class="s-tiny">secrets — nicht gemountet</text>
+    <path d="M700 90 L 770 90" class="s-flow" marker-end="url(#ar2)"/>
+    <rect x="775" y="60" width="150" height="70" rx="9" class="s-cont"/><text x="790" y="85" class="s-sub">Container sieht</text><text x="790" y="103" class="s-tiny">NUR repo-A</text><text x="790" y="123" class="s-mono" fill="var(--ok)">dicht</text>
+    <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Das Fenster: groß oder maßgeschneidert.</b> Variante A mountet den ganzen Projekt-Ordner — einmal eingerichtet, jede Aufgabe läuft. Aber der Container sieht dann auch alle <em>anderen</em> Repos und was sonst dort liegt. Variante B mountet pro Task nur das eine benötigte Repo — der Container sieht nichts anderes.</figcaption>
+</figure>
+<table>
+  <tr><th>Kriterium</th><th class="pill a">A · Großer Mount</th><th class="pill b">B · Selektive Mounts</th></tr>
+  <tr><td><b>Sicherheit</b></td><td>schwächer — Container sieht Nachbar-Repos + Secrets</td><td>stark — Container sieht nur seine Aufgabe</td></tr>
+  <tr><td><b>Einrichtung</b></td><td>einmal, dann fertig</td><td>je Task ein Mount berechnen (Orchestrator muss wissen, welches Repo)</td></tr>
+  <tr><td><b>Onboarding</b></td><td>einfacher (ein Pfad)</td><td>etwas mehr Logik, aber transparent</td></tr>
+  <tr><td><b>Passt zum Claim</b></td><td>schwächt „isoliert" ab</td><td>trägt „isoliert" glaubwürdig</td></tr>
+</table>
+<div class="rec"><b>Empfehlung: B (selektiv).</b> Wenn „isoliert" ein Marketing-Kern werden soll, muss die Isolation echt sein — ein Container, der alle Nachbar-Repos sieht, ist nur halb isoliert. Der Mehraufwand ist überschaubar: Das Board weiß pro Task ohnehin, welches Repo (die <code>project</code>-Zuordnung), also ist der Mount-Pfad ableitbar. Konvention statt Konfiguration.</div>
+
+<h2 id="q2"><span class="no">2</span>Frage: Credential-Weg — wie kommt der Agent an Git/Tokens, ohne sie zu besitzen?</h2>
+<p>Der Agent muss pushen, Pakete ziehen, evtl. das LLM-CLI authentifizieren — er braucht <b>Zugangsdaten</b>. Aber Tokens sind das Sensibelste überhaupt. Die Frage: reichen wir die Tokens <em>in</em> den Container (er hält sie), oder halten wir sie <em>außerhalb</em> und lassen den Container nur durch einen Vermittler zugreifen?</p>
+<figure>
+  <svg viewBox="0 0 960 260" role="img" aria-label="Token-Passthrough vs Credential-Proxy">
+    <text x="30" y="26" class="s-label">A · Token-Passthrough (Token liegt im Container)</text>
+    <rect x="30" y="40" width="410" height="120" rx="10" class="s-cont"/>
+    <text x="48" y="64" class="s-sub">Container</text>
+    <rect x="48" y="76" width="150" height="66" rx="7" class="s-danger"/><text x="64" y="102" class="s-label">Agent</text><text x="64" y="122" class="s-tiny">+ Token liegt hier</text>
+    <rect x="220" y="90" width="200" height="40" rx="7" class="s-cred"/><text x="236" y="115" class="s-mono">github_pat_… im Container</text>
+    <path d="M440 110 L 500 110" class="s-flow" marker-end="url(#ar3)"/>
+    <rect x="505" y="90" width="120" height="40" rx="7" class="s-node"/><text x="520" y="115" class="s-sub">GitHub</text>
+    <text x="48" y="152" class="s-tiny" fill="var(--bad)">Riskant: ein kompromittierter Agent hat das Token direkt.</text>
+    <text x="30" y="196" class="s-label">B · Credential-Proxy (Token bleibt außerhalb)</text>
+    <rect x="30" y="208" width="230" height="44" rx="9" class="s-cont"/>
+    <text x="46" y="228" class="s-sub">Container</text><text x="46" y="244" class="s-tiny">Agent — KEIN Token</text>
+    <path d="M260 230 L 320 230" class="s-flow" marker-end="url(#ar3)"/>
+    <rect x="325" y="210" width="180" height="40" rx="8" class="s-cred"/><text x="341" y="230" class="s-sub">Proxy (auf dem Host)</text><text x="341" y="245" class="s-tiny">hält Token, signiert Requests</text>
+    <path d="M505 230 L 565 230" class="s-flow" marker-end="url(#ar3)"/>
+    <rect x="570" y="210" width="120" height="40" rx="7" class="s-node"/><text x="585" y="234" class="s-sub">GitHub</text>
+    <text x="720" y="226" class="s-tiny" fill="var(--ok)">Agent kann pushen,</text><text x="720" y="242" class="s-tiny" fill="var(--ok)">besitzt das Token aber nie.</text>
+    <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Besitzen vs. benutzen dürfen.</b> Bei A liegt das Token im Container — einfach, aber ein durchgedrehter oder kompromittierter Agent kann es exfiltrieren. Bei B hält ein kleiner Proxy-Dienst auf dem Host das Token; der Container schickt seine Git-/Netz-Requests durch den Proxy, der sie authentifiziert. Der Agent <em>benutzt</em> die Berechtigung, ohne sie je zu <em>besitzen</em>.</figcaption>
+</figure>
+<table>
+  <tr><th>Kriterium</th><th class="pill a">A · Passthrough</th><th class="pill b">B · Proxy</th></tr>
+  <tr><td><b>Sicherheit</b></td><td>Token im Container exfiltrierbar</td><td>Token verlässt den Host nie</td></tr>
+  <tr><td><b>Bau-Aufwand</b></td><td>gering (Mount/Env)</td><td>höher (kleiner Proxy-Dienst, z.B. Git-Credential-Helper über Socket)</td></tr>
+  <tr><td><b>Widerruf</b></td><td>Token rotieren</td><td>Proxy sperren — sofort, ohne Container-Neubau</td></tr>
+  <tr><td><b>Passt zum Claim</b></td><td>schwächt „sicher" ab</td><td>trägt „sicher" glaubwürdig</td></tr>
+</table>
+<div class="rec"><b>Empfehlung: B (Proxy) als Zielbild, A als Startpunkt.</b> Der Proxy ist die saubere Antwort, aber echter Bau. Pragmatisch: mit A starten (Passthrough, read-only wo möglich, kurzlebige Tokens), den Proxy als Härtung nachziehen. So blockiert die Sicherheits-Ambition nicht den ersten funktionierenden Container-Flow.</div>
+
+<h2 id="q3"><span class="no">3</span>Frage: Image-Herkunft — woraus wird der Container gebaut?</h2>
+<p>Ein Container startet aus einem <b>Image</b> — einer Vorlage, die das Mini-Dateisystem und die installierten Programme enthält (hier: die CLIs codex/claude, node, git, das .NET-Runtime). Die Frage: liefern wir ein <b>fertiges Basis-Image</b> aus, oder <b>baut es jede Maschine beim ersten Lauf selbst</b>?</p>
+<figure>
+  <svg viewBox="0 0 960 210" role="img" aria-label="Basis-Image ziehen vs lokal bauen">
+    <text x="30" y="26" class="s-label">A · Gepflegtes Basis-Image (ziehen)</text>
+    <rect x="30" y="40" width="150" height="44" rx="8" class="s-node"/><text x="46" y="60" class="s-sub">Registry</text><text x="46" y="76" class="s-tiny">agent-host:1.x</text>
+    <path d="M180 62 L 240 62" class="s-flow" marker-end="url(#ar4)"/>
+    <rect x="245" y="42" width="150" height="40" rx="8" class="s-cont"/><text x="261" y="66" class="s-sub">docker pull → fertig</text>
+    <text x="410" y="55" class="s-tiny" fill="var(--ok)">+ schneller Erststart (Sekunden)</text>
+    <text x="410" y="72" class="s-tiny">− Registry/Pull nötig, Image pflegen</text>
+    <text x="30" y="132" class="s-label">B · Build-on-first-run (lokal bauen)</text>
+    <rect x="30" y="146" width="150" height="44" rx="8" class="s-node"/><text x="46" y="166" class="s-sub">Dockerfile lokal</text><text x="46" y="182" class="s-tiny">im Installer</text>
+    <path d="M180 168 L 240 168" class="s-flow" marker-end="url(#ar4)"/>
+    <rect x="245" y="148" width="180" height="40" rx="8" class="s-cont"/><text x="261" y="172" class="s-sub">docker build (einmalig)</text>
+    <text x="440" y="161" class="s-tiny">+ kein Pull, keine Registry-Abhängigkeit</text>
+    <text x="440" y="178" class="s-tiny" fill="var(--warn)">− langsamer Erststart (Minuten, lädt CLIs)</text>
+    <defs><marker id="ar4" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Fertig geliefert oder frisch gebacken.</b> A zieht ein von uns gepflegtes Image aus einer Registry — schneller Start, aber wir müssen das Image bauen, versionieren und hosten. B baut das Image beim Installer-Lauf lokal aus einem mitgelieferten Dockerfile — keine Registry-Abhängigkeit, aber der erste Start dauert (alle CLIs werden installiert).</figcaption>
+</figure>
+<div class="rec"><b>Empfehlung: A (Basis-Image) für das Download-Erlebnis.</b> Der D5-Meilenstein ist „Download + super-easy Onboarding". Ein fertiges Image macht den ersten Container-Start zu Sekunden statt Minuten — das ist der Wow-Moment. B bleibt der Fallback für Offline-/Air-Gap-Situationen. Praktisch: beides anbieten, A vorwählen. Das Image-Bauen wird Teil der Release-Pipeline (die gerade gelandet ist).</div>
+
+<h2 id="q4"><span class="no">4</span>Frage: Rollout-Tempo — für wen ist Container ab wann der Default?</h2>
+<p>Container-Isolation ist das Zielbild — aber die Repo-/Credential-Reibung (Fragen 1+2) ist der „hard part". Die Frage: schalten wir Container <b>sofort als Default</b> für alle Neu-Installationen, oder erst als <b>Opt-in</b>, bis die Reibung nachweislich weg ist?</p>
+<figure>
+  <svg viewBox="0 0 960 150" role="img" aria-label="Sofort-Default vs Opt-in-zuerst Zeitachse">
+    <line x1="40" y1="80" x2="920" y2="80" stroke="var(--line)" stroke-width="2"/>
+    <circle cx="120" cy="80" r="7" class="s-cont"/><text x="90" y="55" class="s-sub">heute</text><text x="80" y="112" class="s-tiny">host-direkt</text>
+    <circle cx="360" cy="80" r="7" class="s-cont"/><text x="300" y="55" class="s-sub">Container läuft</text><text x="300" y="112" class="s-tiny">Mount+Cred gelöst, getestet</text>
+    <circle cx="640" cy="80" r="7" class="s-cont"/><text x="580" y="55" class="s-sub">Opt-in verfügbar</text><text x="580" y="112" class="s-tiny">wer will, wählt Container</text>
+    <circle cx="880" cy="80" r="7" class="s-cont"/><text x="820" y="55" class="s-sub">Default</text><text x="815" y="112" class="s-tiny">Container vorgewählt</text>
+    <path d="M120 80 L 353 80 M360 80 L 633 80 M640 80 L 873 80" stroke="var(--cont)" stroke-width="3" fill="none"/>
+  </svg>
+  <figcaption><b>Der sanfte Pfad.</b> Nicht „Schalter umlegen", sondern die Reibung zuerst nachweislich lösen (Frage 1+2 funktionieren + getestet), dann Container als wählbare Option anbieten, und erst wenn es im Alltag rundläuft, zum vorgewählten Default machen. Host-direkt bleibt dabei immer als Opt-out erhalten.</figcaption>
+</figure>
+<div class="rec"><b>Empfehlung: Opt-in zuerst, Default danach.</b> Der Installer zeigt Container als empfohlene Option, aber der harte Reibungspunkt (Mount+Credentials in fremden Umgebungen) muss erst im echten Betrieb bewiesen sein. Sobald ein paar echte Läufe sauber durch den Container gehen, wird Container die Vorauswahl. Kein Big-Bang.</div>
+
+<h2 id="zusammen"><span class="no">C</span>Zusammenschau — wie die vier zusammenhängen</h2>
+<p>Die vier Fragen sind nicht unabhängig. Die ersten zwei (Mount, Credentials) sind die <b>Sicherheitssubstanz</b> — sie entscheiden, ob „isoliert/sicher" ein ehrlicher Claim wird. Die zweiten zwei (Image, Rollout) sind die <b>Erlebnis-/Tempo-Fragen</b> — sie entscheiden, wie sich Download &amp; Onboarding anfühlen und wie riskant die Einführung ist.</p>
+<table>
+  <tr><th>Frage</th><th>Charakter</th><th>Empfehlung (kurz)</th><th>Blockiert was?</th></tr>
+  <tr><td><b>1 Mount</b></td><td>Sicherheit</td><td>selektiv je Repo</td><td>Kern-Container-Flow</td></tr>
+  <tr><td><b>2 Credentials</b></td><td>Sicherheit</td><td>Passthrough→Proxy</td><td>Push/Pull im Container</td></tr>
+  <tr><td><b>3 Image</b></td><td>Erlebnis</td><td>Basis-Image, ziehen</td><td>Onboarding-Tempo</td></tr>
+  <tr><td><b>4 Rollout</b></td><td>Tempo/Risiko</td><td>Opt-in → Default</td><td>nichts — steuert nur Reihenfolge</td></tr>
+</table>
+<div class="box accent">
+  <h4>Die eine Kernentscheidung darunter</h4>
+  <p>Alle vier hängen an einer Grundhaltung: <b>Wie stark ist „sicher/isoliert" das Produktversprechen?</b> Wenn es der Marketing-Kern wird (dein Instinkt zur Container-Richtung), dann lohnen die teureren Antworten bei 1+2 (selektiv + Proxy) — sie sind der Beleg hinter dem Claim. Wenn es „nice to have" bleibt, reichen die einfacheren (großer Mount + Passthrough) und du sparst Bauaufwand. Diese eine Frage beantwortet die anderen fast von selbst.</p>
+</div>
+<p class="dim">Dieses Dokument ist Grundlage, keine Festlegung. Sobald du die Richtung (v.a. die Sicherheits-Ambition) und die vier Antworten gibst, schneide ich die konkreten Umsetzungskarten — und die Antworten fließen in die Marketing-/Website-Positionierung (AOW-8) ein.</p>
+
+</main>
+</body>
+</html>

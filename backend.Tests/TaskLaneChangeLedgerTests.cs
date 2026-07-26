@@ -42,7 +42,11 @@ public class TaskLaneChangeLedgerTests : IDisposable
 
         var (machine, _, timeline) = BuildMachine();
         var outcome = machine.MoveJob(
-            "promote-me", TaskStates.HumanReview, _watchPath, cause: TimelineActors.Human("alice@example.com"));
+            "promote-me",
+            TaskStates.HumanReview,
+            _watchPath,
+            cause: TimelineActors.Human("alice@example.com"),
+            reason: "Operator accepted the reviewed placement.");
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.NotNull(outcome.NewFolderPath);
@@ -53,6 +57,7 @@ public class TaskLaneChangeLedgerTests : IDisposable
         Assert.NotNull(laneChange.Details);
         Assert.Equal(TaskStates.AutoReview, laneChange.Details!["from"]);
         Assert.Equal(TaskStates.HumanReview, laneChange.Details!["to"]);
+        Assert.Equal("Operator accepted the reviewed placement.", laneChange.Details!["reason"]);
         Assert.Contains(TaskStates.HumanReview, laneChange.Summary);
     }
 
@@ -81,6 +86,27 @@ public class TaskLaneChangeLedgerTests : IDisposable
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         var rows = timeline.ReadAll(outcome.NewFolderPath!);
         Assert.DoesNotContain(rows, r => r.Kind == TimelineEventKinds.LaneChanged);
+    }
+
+    [Fact]
+    public void MoveJob_ExpectedSourceMismatch_DoesNotReopenCompletedTask()
+    {
+        SeedJob(TaskStates.Completed, "accepted");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob(
+            "accepted",
+            TaskStates.HumanReview,
+            _watchPath,
+            expectedSourceState: TaskStates.AutoReview);
+
+        Assert.Equal(MoveJobStatus.SourceStateMismatch, outcome.Status);
+        var completedFolder = Path.Combine(_watchPath, TaskStates.Completed, "accepted");
+        Assert.True(Directory.Exists(completedFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "accepted")));
+        Assert.DoesNotContain(
+            timeline.ReadAll(completedFolder),
+            row => row.Kind == TimelineEventKinds.LaneChanged);
     }
 
     [Fact]

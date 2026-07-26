@@ -6,22 +6,22 @@ public static class ManagementEndpoints
     {
         app.MapGet("/recovery", () => Results.Content(RecoveryConsole.Html, "text/html"));
         var group = app.MapGroup("/api/v1/management");
-        group.MapGet("/status", (HttpContext context, ManagementService service) =>
+        group.MapGet("/status", (HttpContext context, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (!TryAuthorize(context, mutation: false, out var denied, out _, out _)) return denied!;
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
             return Results.Ok(service.Snapshot($"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}"));
         });
-        group.MapGet("/diagnostics", (HttpContext context, ManagementService service) =>
+        group.MapGet("/diagnostics", (HttpContext context, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (!TryAuthorize(context, mutation: false, out var denied, out _, out _)) return denied!;
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
             return Results.Ok(service.Diagnostics());
         });
-        group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service) =>
+        group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (!TryAuthorize(context, mutation: true, out var denied, out var actor, out var role)) return denied!;
+            if (!TryAuthorize(context, configuration, out var denied, out var actor, out var role)) return denied!;
             try
             {
                 return Results.Ok(service.Execute(
@@ -33,26 +33,64 @@ public static class ManagementEndpoints
     }
 
     private static bool TryAuthorize(
-        HttpContext context, bool mutation, out IResult? denied,
+        HttpContext context, IConfiguration configuration, out IResult? denied,
         out string? actor, out string? role)
     {
-        actor = context.Items["ClientId"]?.ToString();
-        role = actor is null ? null : StudioRoles.Operator;
-        if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal principal)
+        actor = null;
+        role = null;
+        if (SecurityProfiles.ActiveProfile(configuration) == SecurityProfiles.Networked)
         {
-            actor = principal.User.Id;
-            role = principal.User.Role;
-            if (mutation && role is not ("owner" or "operator"))
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal principal)
             {
-                denied = Results.Json(new { error = "management-role-required" }, statusCode: 403);
+                denied = Results.Json(
+                    new
+                    {
+                        error = "authentication-required",
+                        message = "Sign in with an owner or operator account to manage the Task Server.",
+                        loginUrl = "/api/auth/login"
+                    },
+                    statusCode: StatusCodes.Status401Unauthorized);
                 return false;
             }
+            actor = principal.User.Id;
+            role = principal.User.Role;
+            if (role is not (StudioRoles.Owner or StudioRoles.Operator))
+            {
+                denied = Results.Json(
+                    new
+                    {
+                        error = "management-role-required",
+                        message = "Owner or operator role is required for Task Server management."
+                    },
+                    statusCode: StatusCodes.Status403Forbidden);
+                return false;
+            }
+            denied = null;
+            return true;
         }
-        if (string.IsNullOrWhiteSpace(actor))
+
+        var headerClientId = context.Request.Headers["X-Client-Id"].FirstOrDefault();
+        var attributedClientId = context.Items["ClientId"]?.ToString();
+        var remoteAddress = context.Connection.RemoteIpAddress;
+        // TestServer has no network peer and therefore reports no remote
+        // address. Kestrel requests must carry an actual loopback address.
+        var loopback = remoteAddress is null || System.Net.IPAddress.IsLoopback(remoteAddress);
+        if (!loopback
+            || !string.Equals(headerClientId, DefaultClientIdentity.Id, StringComparison.Ordinal)
+            || !string.Equals(attributedClientId, DefaultClientIdentity.Id, StringComparison.Ordinal))
         {
-            denied = Results.Json(new { error = "authentication-required" }, statusCode: 401);
+            denied = Results.Json(
+                new
+                {
+                    error = "local-operator-required",
+                    message = "Local Task Server management requires the loopback local-default operator."
+                },
+                statusCode: StatusCodes.Status401Unauthorized);
             return false;
         }
+
+        actor = DefaultClientIdentity.Id;
+        role = StudioRoles.Operator;
         denied = null;
         return true;
     }

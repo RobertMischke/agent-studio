@@ -95,7 +95,7 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null, transitiveWaitersByJobKey: null);
 
     internal static TaskInfo WithRuntime(
         TaskInfo job,
@@ -103,7 +103,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null, transitiveWaitersByJobKey: null);
 
     /// <summary>
     /// Overlay variant that also folds in per-job orchestrator token totals,
@@ -119,7 +119,8 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey,
-        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus>? transitiveWaitersByJobKey)
     {
         // Lane is the single source of truth for "is this card live". A job
         // outside 3-progress has finished or been moved on; surfacing a stale
@@ -160,13 +161,20 @@ internal static class TaskEndpointHelpers
         {
             waitsOn = w;
         }
+        TransitiveWaitersStatus? transitiveWaiters = null;
+        if (transitiveWaitersByJobKey != null
+            && transitiveWaitersByJobKey.TryGetValue(job.TaskKey, out var impact))
+        {
+            transitiveWaiters = impact;
+        }
         // Reconcile a stale Warn-class outcome chip against the final verdict: an
         // accepted card must not surface a classifier-unknown/heuristic-done/
         // missing-terminal-sentinel chip that contradicts its accept (ASS-775).
         // The scanner already clears this when the accept note is in the log; this
         // covers 5-human-review accepts whose accept note never reached the log.
-        var outcomeIssue = TaskOutcomeIssueReconciliation.ShouldSuppress(
-            job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
+        var outcomeIssue = IsOutcomeIssueFromSupersededAttempt(job)
+            || TaskOutcomeIssueReconciliation.ShouldSuppress(
+                job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
             ? null
             : job.OutcomeIssue;
         // ASS-1751: classify why a 3-progress card looks "untouched" — a live
@@ -220,6 +228,7 @@ internal static class TaskEndpointHelpers
             TokenSummary = tokens,
             OrchestratorVerdict = verdict,
             WaitsOn = waitsOn,
+            TransitiveWaiters = transitiveWaiters,
             PlanningSpawn = planningSpawn
         };
     }
@@ -275,6 +284,19 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
+    /// Folds the newest-attempt live pipeline projection onto board/detail
+    /// tasks. The lookup is built once per request; this method is an O(1)
+    /// dictionary read per task.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithLiveStatus(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskLiveStatus> liveByJobKey)
+        => jobs.Select(job =>
+            liveByJobKey.TryGetValue(job.TaskKey, out var status)
+                ? job with { LiveStatus = status }
+                : job);
+
+    /// <summary>
     /// AGT-2202 — folds the batched per-task integration verdict onto each accepted
     /// card. The lookup is built ONCE per request by
     /// <see cref="TaskIntegrationStatusService"/> (O(repos) git spawns, never per
@@ -309,26 +331,48 @@ internal static class TaskEndpointHelpers
     /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
     /// (a dependency is fulfilled when its target reaches 6-completed OR
     /// 7-archive, and the board snapshot omits archive), so the key index is
-    /// built from <see cref="TaskScannerService.ScanAllJobsWithArchive"/> once
-    /// per request. Cards without dependencies are skipped, keeping the common
-    /// case free.
+    /// read from the archive-inclusive snapshot's published reference index.
+    /// Cards without dependencies are skipped, keeping the common case free.
     /// </summary>
-    internal static Dictionary<string, WaitsOnStatus> BuildWaitsOnLookup(
+    internal static DependencyGraphLookups BuildDependencyGraphLookups(
         IEnumerable<TaskInfo> jobs,
-        TaskScannerService scanner)
+        TaskScannerService scanner,
+        IEnumerable<TaskInfo>? eligibleWaiters = null)
     {
-        var result = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
-        var withDeps = jobs.Where(j => j.References?.DependsOn.Count > 0).ToList();
-        if (withDeps.Count == 0) return result;
+        var snapshot = jobs as IReadOnlyCollection<TaskInfo> ?? jobs.ToList();
+        var withDeps = snapshot.Where(j => j.References?.DependsOn.Count > 0).ToList();
+        var humanReview = snapshot.Where(j => j.State == TaskStates.HumanReview).ToList();
+        if (withDeps.Count == 0 && humanReview.Count == 0) return new();
 
-        // One archive-inclusive index for the whole request; keys are globally
-        // unique across projects, so this resolves cross-project targets too.
-        var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+        // The archive-inclusive index is built once per snapshot generation
+        // (AGT-2342 reference-index cache); keys are globally unique across
+        // projects, so this resolves cross-project targets too.
+        var index = scanner.GetReferenceIndex();
+        var eligibleKeys = (eligibleWaiters ?? snapshot)
+            .Where(j => !string.IsNullOrWhiteSpace(j.Key))
+            .Select(j => j.Key!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var waitsOn = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
         foreach (var job in withDeps)
         {
-            result[job.TaskKey] = index.EvaluateWaitsOn(job);
+            waitsOn[job.TaskKey] = index.EvaluateWaitsOn(job);
         }
-        return result;
+        var transitiveWaiters = new Dictionary<string, TransitiveWaitersStatus>(StringComparer.Ordinal);
+        foreach (var job in humanReview)
+        {
+            var impact = index.FindTransitiveWaiters(job.Key, eligibleKeys);
+            if (impact.Count > 0) transitiveWaiters[job.TaskKey] = impact;
+        }
+        return new(waitsOn, transitiveWaiters);
+    }
+
+    internal sealed record DependencyGraphLookups(
+        IReadOnlyDictionary<string, WaitsOnStatus> WaitsOn,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus> TransitiveWaiters)
+    {
+        public DependencyGraphLookups() : this(
+            new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal),
+            new Dictionary<string, TransitiveWaitersStatus>(StringComparer.Ordinal)) { }
     }
 
     /// <summary>
@@ -361,6 +405,8 @@ internal static class TaskEndpointHelpers
                 byProject[job.ProjectName] = latestByJob;
             }
             if (!latestByJob.TryGetValue(job.Id, out var latest)) continue;
+            var attemptEpoch = CurrentAttemptEpoch(job);
+            if (attemptEpoch.HasValue && latest.CreatedAt < attemptEpoch.Value) continue;
             var verdict = latest.Kind switch
             {
                 ReviewDecisionKind.Reissue      => "reissue",
@@ -371,6 +417,39 @@ internal static class TaskEndpointHelpers
             if (verdict != null) verdicts[job.TaskKey] = verdict;
         }
         return verdicts;
+    }
+
+    /// <summary>
+    /// The latest transition into Progress is the claim boundary for the
+    /// currently visible attempt. A decision older than that boundary belongs
+    /// to the superseded attempt and must not drive card badges or banners.
+    /// Legacy tasks without transition provenance retain the old projection.
+    /// </summary>
+    private static DateTime? CurrentAttemptEpoch(TaskInfo job)
+    {
+        var transitions = job.Provenance?.Transitions;
+        if (transitions is not { Count: > 0 }) return null;
+        for (var i = transitions.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(transitions[i].Lane, TaskStates.Progress, StringComparison.Ordinal))
+                return transitions[i].AtUtc;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Runner outcome issues are derived from the output log and may survive a
+    /// lane-only requeue. Once a newer Progress claim exists, an issue last
+    /// observed before that boundary belongs to the superseded attempt and
+    /// must not drive the current card's Blocked banner.
+    /// </summary>
+    internal static bool IsOutcomeIssueFromSupersededAttempt(TaskInfo job)
+    {
+        var issueAt = job.OutcomeIssue?.LastSeenAt;
+        var attemptEpoch = CurrentAttemptEpoch(job);
+        return issueAt.HasValue
+            && attemptEpoch.HasValue
+            && issueAt.Value < attemptEpoch.Value;
     }
 
     /// <summary>
@@ -422,7 +501,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null) };
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null, transitiveWaitersByJobKey: null) };
 
     internal static TaskDetail WithRuntime(
         TaskDetail detail,
@@ -430,6 +509,7 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey,
-        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey) };
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey,
+        IReadOnlyDictionary<string, TransitiveWaitersStatus>? transitiveWaitersByJobKey)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey, transitiveWaitersByJobKey) };
 }

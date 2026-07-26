@@ -150,8 +150,15 @@ function pipelineRestarted() {
           previousAttempts: [],
           steps: [
             execStep('core-agent-run', 'core', 'passed'),
-            execStep('aspect-code-quality', 'aspect', 'failed'),
-            execStep('post-orchestrator-decision', 'orchestrator', 'passed'),
+            {
+              ...execStep('aspect-code-quality', 'aspect', 'failed'),
+              verdict: 'concerns',
+              verdictSummary: 'Historical concern from Attempt #1.',
+            },
+            {
+              ...execStep('post-orchestrator-decision', 'orchestrator', 'failed'),
+              verdict: 'escalate',
+            },
           ],
         },
       ],
@@ -171,8 +178,20 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -286,7 +305,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -308,6 +327,7 @@ test.describe('Pipeline restart indicator', () => {
     await installRoutes(page, '3-progress', pipelineFirstRun);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+      { waitUntil: 'domcontentloaded', timeout: 30_000 },
     );
     await dismissErrorDialog(page);
 
@@ -323,6 +343,7 @@ test.describe('Pipeline restart indicator', () => {
     await installRoutes(page, '3-progress', pipelineRestarted);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+      { waitUntil: 'domcontentloaded', timeout: 30_000 },
     );
     await dismissErrorDialog(page);
 
@@ -339,25 +360,41 @@ test.describe('Pipeline restart indicator', () => {
     await expect(current).toContainText('#2');
     await expect(current.getByTestId('overview-pipeline-run-current')).toContainText('Current');
 
-    // The prior run is preserved as a distinct, scannable chip (#1): old vs. new
-    // runs stay distinguishable without re-reading the full step list, and it is
-    // marked failed (the archived run recorded a failure) via its ✗ outcome glyph.
+    // The prior run is preserved as a distinct, scannable chip (#1), but old
+    // state colours and outcome glyphs are deliberately absent.
     const priorRuns = switcher.locator('[data-testid="overview-pipeline-run-option"]:not([data-current="true"])');
     await expect(priorRuns).toHaveCount(1);
     await expect(priorRuns.first()).toHaveAttribute('data-attempt', '1');
-    await expect(priorRuns.first()).toHaveAttribute('data-kind', 'fail');
-    await expect(priorRuns.first()).toContainText('#1');
-    await expect(priorRuns.first()).toContainText('✗');
+    await expect(priorRuns.first()).toHaveAttribute('data-superseded', 'true');
+    await expect(priorRuns.first()).not.toHaveAttribute('data-kind', /.+/);
+    await expect(priorRuns.first()).toContainText('Attempt #1');
+    await expect(priorRuns.first()).toContainText('superseded');
+    await expect(priorRuns.first()).not.toContainText('✗');
 
     // The current run's own steps are the live ones (core still running).
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
     await expect(coreRow).toHaveAttribute('data-status', 'running');
 
-    if (RESULTS_DIR) {
-      await pipeline.scrollIntoViewIfNeeded();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-restart-indicator.png'),
-        fullPage: true,
+    // Selecting history must make the closed epoch unmistakable and neutralize
+    // both its final Escalate and its aspect concern.
+    await priorRuns.first().click();
+    await expect(page.getByTestId('overview-pipeline-superseded'))
+      .toContainText('Attempt #1 · superseded');
+    await expect(page.getByTestId('overview-pipeline-step-final-verdict'))
+      .toContainText('Final verdict · superseded');
+    await expect(page.locator('[data-testid="overview-pipeline-step-verdict"][data-verdict="concerns"]'))
+      .toContainText('concerns · superseded');
+
+    await pipeline.scrollIntoViewIfNeeded();
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+      }, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      await pipeline.screenshot({
+        path: RESULTS_DIR
+          ? path.join(RESULTS_DIR, `pipeline-superseded-attempt-${theme}--mocked.png`)
+          : `test-results/pipeline-superseded-attempt-${theme}--mocked.png`,
       });
     }
   });
