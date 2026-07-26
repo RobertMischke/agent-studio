@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-bootstrap';
 
 /**
  * Project-chat side-sheet: image attachments must render inline in the same
@@ -132,11 +133,7 @@ async function installChatMocks(page: Page, project: string): Promise<MockState>
 }
 
 async function openSideSheet(page: Page): Promise<string | null> {
-  await page.route('**/api/auth/status', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true }),
-  }));
+  await installOrchestratorChatBootstrap(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page.waitForTimeout(800);
@@ -181,12 +178,17 @@ test.describe('Project chat — inline attachment render + lightbox', () => {
 
     await expect(page.getByTestId('chat-attach')).toHaveCount(0);
     await expect(page.getByTestId('chat-composer').locator('input[type="file"]')).toHaveCount(0);
+    const composer = page.getByTestId('chat-input');
+    await composer.fill('Keyboard order draft');
+    await composer.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('chat-send')).toBeFocused();
+    await composer.fill('');
 
     // Stage the image through the retained clipboard path.
     await pastePngOnComposer(page, 'screenshot.png', TINY_PNG_BASE64);
     await expect(page.getByTestId('chat-drafts')).toBeVisible({ timeout: 2_000 });
 
-    const composer = page.getByTestId('chat-input');
     await composer.fill('here is the screenshot for the bubble');
     await page.getByTestId('chat-send').click();
 

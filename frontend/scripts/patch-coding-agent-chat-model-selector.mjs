@@ -3,23 +3,23 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 /**
- * Compatibility bridge for coding-agent-chat 0.3.1.
+ * Compatibility bridge for coding-agent-chat 0.3.2.
  *
  * Studio consumes the published package, while the selector source is owned by
  * that package rather than this host. Keep the canonical component in place and
  * patch its published partial-Ivy output until the next package release carries
- * disabled CLI reasons and the balanced/faded picker layout. The exact-version
- * and occurrence guards make a package upgrade fail loudly instead of applying
- * stale text rewrites.
+ * disabled CLI reasons, the balanced/faded picker layout, and the paste-only
+ * attachment composer. The exact-version and occurrence guards make a package
+ * upgrade fail loudly instead of applying stale text rewrites.
  */
 const require = createRequire(import.meta.url);
 const packageJsonPath = require.resolve('coding-agent-chat/package.json');
 const packageRoot = dirname(packageJsonPath);
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 
-if (packageJson.version !== '0.3.1') {
+if (packageJson.version !== '0.3.2') {
   throw new Error(
-    `The coding-agent-chat model-selector compatibility patch expects 0.3.1, found ${packageJson.version}.`,
+    `The coding-agent-chat compatibility patch expects 0.3.2, found ${packageJson.version}.`,
   );
 }
 
@@ -32,6 +32,17 @@ function replaceExact(source, before, after, expectedCount, label) {
     );
   }
   return source.replaceAll(before, after);
+}
+
+function removeExact(source, target, expectedCount, label) {
+  const actualCount = source.split(target).length - 1;
+  if (actualCount === 0) return source;
+  if (actualCount !== expectedCount) {
+    throw new Error(
+      `Could not apply ${label}: expected ${expectedCount} source occurrence(s), found ${actualCount}.`,
+    );
+  }
+  return source.replaceAll(target, '');
 }
 
 const composerPath = join(packageRoot, 'fesm2022', 'coding-agent-chat-composer.mjs');
@@ -156,6 +167,61 @@ composer = replaceExact(
   'disabled CLI option layout',
 );
 
+composer = removeExact(
+  composer,
+  `    fileInputRef = viewChild('fileInput', ...(ngDevMode ? [{ debugName: "fileInputRef" }] : /* istanbul ignore next */ []));
+`,
+  1,
+  'composer file input query',
+);
+
+composer = removeExact(
+  composer,
+  `    triggerFilePicker() {
+        this.fileInputRef()?.nativeElement.click();
+    }
+    onFileInputChange(event) {
+        const target = event.target;
+        const files = Array.from(target.files ?? []);
+        for (const file of files) {
+            if (file.type.startsWith('image/'))
+                this.addAttachment(file);
+        }
+        target.value = '';
+    }
+`,
+  1,
+  'composer file picker handlers',
+);
+
+composer = removeExact(
+  composer,
+  `        @if (allowAttachments()) {\\n          <button\\n            type=\\"button\\"\\n            class=\\"chat__icon-btn\\"\\n            [cacTooltip]=\\"'Attach image'\\"\\n            data-testid=\\"chat-attach\\"\\n            [disabled]=\\"disabled()\\"\\n            (click)=\\"triggerFilePicker()\\"\\n          >\\n            \\uD83D\\uDCCE\\n          </button>\\n          <input\\n            #fileInput\\n            type=\\"file\\"\\n            accept=\\"image/*\\"\\n            multiple\\n            class=\\"chat__file-input\\"\\n            (change)=\\"onFileInputChange($event)\\"\\n          />\\n        }\\n`,
+  2,
+  'composer file picker template',
+);
+
+composer = removeExact(
+  composer,
+  `.chat__icon-btn{background:var(--studio-bg-hover, rgba(255, 255, 255, .06));border:1px solid var(--studio-border, rgba(255, 255, 255, .12));color:var(--studio-fg-dim, #cbd5e1);width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1}.chat__icon-btn:hover:not(:disabled){background:var(--studio-bg-elevated, rgba(99, 102, 241, .18));color:var(--studio-fg, #ddd6fe);border-color:var(--studio-accent, rgba(167, 139, 250, .55))}.chat__icon-btn:disabled{opacity:.4;cursor:not-allowed}.chat__file-input{display:none}`,
+  2,
+  'composer file picker styles',
+);
+
+composer = removeExact(
+  composer,
+  `, { propertyName: "fileInputRef", first: true, predicate: ["fileInput"], descendants: true, isSignal: true }`,
+  1,
+  'composer file input query metadata',
+);
+
+composer = removeExact(
+  composer,
+  `, fileInputRef: [{ type: i0.ViewChild, args: ['fileInput', { isSignal: true }] }]`,
+  1,
+  'composer file input decorator metadata',
+);
+
 writeFileSync(composerPath, composer);
 
 const coreTypesPath = join(packageRoot, 'types', 'coding-agent-chat-core.d.ts');
@@ -177,6 +243,21 @@ writeFileSync(coreTypesPath, coreTypes);
 
 const composerTypesPath = join(packageRoot, 'types', 'coding-agent-chat-composer.d.ts');
 let composerTypes = readFileSync(composerTypesPath, 'utf8');
+composerTypes = removeExact(
+  composerTypes,
+  `    private readonly fileInputRef;
+`,
+  1,
+  'composer file input type declaration',
+);
+composerTypes = removeExact(
+  composerTypes,
+  `    triggerFilePicker(): void;
+    onFileInputChange(event: Event): void;
+`,
+  1,
+  'composer file picker handler declarations',
+);
 composerTypes = replaceExact(
   composerTypes,
   `    cliOptionIcon(id: string): string;
@@ -189,4 +270,4 @@ composerTypes = replaceExact(
 );
 writeFileSync(composerTypesPath, composerTypes);
 
-console.log('Applied the coding-agent-chat 0.3.1 model-selector compatibility patch.');
+console.log('Applied the coding-agent-chat 0.3.2 compatibility patch.');

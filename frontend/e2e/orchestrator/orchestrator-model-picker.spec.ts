@@ -33,7 +33,22 @@ async function stubWorkspace(page: Page, sent: Record<string, unknown>[] = []) {
         user: null,
       });
     }
-    if (/\/api\/(?:tags|workspaces|clients|git\/summary|crash-recovery\/pending)\/?$/.test(requestPath)) body = '[]';
+    if (/\/api\/(?:tags|workspaces|clients|git\/summary)\/?$/.test(requestPath)) body = '[]';
+    if (requestPath === '/api/projects') body = '[]';
+    if (requestPath === '/api/crash-recovery/pending') body = '{"pending":[]}';
+    if (requestPath === '/api/auto-review/status') {
+      body = JSON.stringify({
+        lastTickAt: null,
+        accept: 0,
+        reissue: 0,
+        escalate: 0,
+        aspectsRun: 0,
+        pending: 0,
+        currentJob: null,
+        currentProject: null,
+        activeJobs: [],
+      });
+    }
     if (requestPath.startsWith('/api/bus/')) body = '[]';
     if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
     if (requestPath === '/api/runner/status') body = '{"projects":{}}';

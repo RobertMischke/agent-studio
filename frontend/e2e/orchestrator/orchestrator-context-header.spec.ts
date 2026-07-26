@@ -119,7 +119,7 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
     );
   });
 
-  const emptyArrayEndpoints = /\/api\/(?:cli\/(?:claude|codex|gemini)\/models|clients\/?|crash-recovery\/pending|git\/summary|tags|workspaces)(?:\?.*)?$/;
+  const emptyArrayEndpoints = /\/api\/(?:cli\/(?:claude|codex|gemini)\/models|clients\/?|git\/summary|projects|tags|workspaces)(?:\?.*)?$/;
   await page.route(emptyArrayEndpoints, async (route) => {
     await fulfillKnownGet(route, [], unexpectedRequests);
   });
@@ -129,8 +129,27 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
   await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, { sessions: [] }, unexpectedRequests);
   });
+  await page.route(/\/api\/crash-recovery\/pending(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { pending: [] }, unexpectedRequests);
+  });
   await page.route(/\/api\/runner\/status(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, { projects: {} }, unexpectedRequests);
+  });
+  await page.route(/\/api\/auto-review\/status(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      lastTickAt: null,
+      accept: 0,
+      reissue: 0,
+      escalate: 0,
+      aspectsRun: 0,
+      pending: 0,
+      currentJob: null,
+      currentProject: null,
+      activeJobs: [],
+    }, unexpectedRequests);
+  });
+  await page.route(/\/api\/v1\/management\/remote-hosts(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, [], unexpectedRequests);
   });
   await page.route(/\/api\/cli\/quota(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(

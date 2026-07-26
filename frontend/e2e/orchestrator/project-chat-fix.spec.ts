@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { startLongTaskRecorder } from '../helpers/timing';
+import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-bootstrap';
 
 /**
  * Regression spec for project chat: visible failures,
@@ -98,11 +99,7 @@ async function installChatMocks(page: Page, project: string, initial?: Partial<M
 }
 
 async function openSideSheetForProject(page: Page): Promise<string> {
-  await page.route('**/api/auth/status', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true }),
-  }));
+  await installOrchestratorChatBootstrap(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   // Let the watch-paths fetch settle so the project combobox has options.
