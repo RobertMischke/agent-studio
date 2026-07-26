@@ -216,6 +216,68 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('projects the versioned workflow-push capability without closing task inflow', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const capability = (key: string, advertisedStatus: string, detail: string | null) => ({
+      key,
+      category: 'source',
+      advertisedStatus,
+      healthState: 'healthy',
+      reason: null,
+      advertisedAt: now,
+      freshUntil: new Date(Date.now() + 120_000).toISOString(),
+      isFresh: true,
+      firstFailureAt: null,
+      lastFailureAt: null,
+      cooldownUntil: null,
+      canaryClaimId: null,
+      consecutiveFailures: 0,
+      version: 'available',
+      identity: 'https://github.com/example/repo.git',
+      detail,
+      affectedClaims: [],
+      recoveryHistory: [],
+    });
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'runner-host',
+      instanceId: 'runner-host:42',
+      runnerVersion: '1.0.0',
+      protocolVersion: 2,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'runner-host',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [
+        capability('git:push', 'ready', 'contents ready'),
+        capability('git:workflow-push', 'ready-no-workflow-scope', 'workflow scope missing'),
+      ],
+      telemetry: null,
+    }]);
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      gitPushStatus: 'ready-no-workflow-scope',
+      gitPushDetail: 'workflow scope missing',
+    });
+    http.verify();
+  });
+
   it('persists drain through the lifecycle API before reloading', () => {
     TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
     const svc = TestBed.inject(RemoteHostsService);

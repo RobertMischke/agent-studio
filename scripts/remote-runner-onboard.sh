@@ -388,15 +388,19 @@ if [[ "$role" == "coding" ]]; then
   git_status=""
   for _ in $(seq 1 30); do
     journal="$(sudo journalctl -u "$service_name" -n 80 --no-pager)"
+    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready-no-workflow-scope' && { git_status=ready-no-workflow-scope; break; }
     printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
     printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
     sleep 2
   done
-  [[ "$git_status" == ready ]] || {
+  [[ "$git_status" == ready || "$git_status" == ready-no-workflow-scope ]] || {
     sudo journalctl -u "$service_name" -n 40 --no-pager >&2
     printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
     exit 40
   }
+  if [[ "$git_status" == ready-no-workflow-scope ]]; then
+    printf '[remote] Contents push is ready, but GitHub workflow writes need additional token permissions. See docs/operations/setup/linux-runner-host.md#token-requirements.\n' >&2
+  fi
 fi
 printf '[remote] service=%s role=%s active health=passed identity=%s\n' "$service_name" "$role" "$runner_id"
 REMOTE_SYSTEMD

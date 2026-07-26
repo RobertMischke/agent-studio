@@ -910,13 +910,30 @@ public sealed class RemoteTaskRunner
         RunLeaseInfoDto lease,
         WorktreeSalvageException ex)
     {
-        var refs = $"canonical refs/heads/{ex.Branch} at {ex.RemoteCommitSha ?? "unknown"}; " +
-                   $"retained local HEAD {ex.LocalCommitSha ?? "unknown"}";
         var failure = ex.InnerException?.Message.Replace('\r', ' ').Replace('\n', ' ').Trim()
                       ?? ex.Message;
-        var gate = $"worktree-blocked: unsecured worktree on {_options.Hostname}: {ex.WorktreePath} " +
-                   $"({refs}; failure: {failure}). No ref was overwritten. Restore origin push access, publish the retained HEAD to a new ref, then requeue.";
+        var workflowScopeMissing = GitPushProbe.IsWorkflowScopeFailure(failure);
+        var gate = BuildUnsecuredWorktreeGate(_options.Hostname, ex);
         _log($"worktree-salvage-escalated task={taskKey} host={_options.Hostname} path={ex.WorktreePath} branch={ex.Branch} localSha={ex.LocalCommitSha ?? "unknown"} remoteSha={ex.RemoteCommitSha ?? "unknown"}");
+        if (workflowScopeMissing)
+        {
+            try
+            {
+                await _client.ReportGitCapabilityAsync(
+                    _client.ClientId,
+                    new RunnerGitCapabilityRequest(
+                        GitPushProbe.ReadyNoWorkflowScope,
+                        GitPushProbe.WorkflowScopeFix(failure),
+                        DateTime.UtcNow),
+                    CancellationToken.None);
+            }
+            catch (Exception capabilityEx)
+            {
+                _log(
+                    $"runner-git-workflow-capability-report-failed task={taskKey} " +
+                    $"error={capabilityEx.Message}");
+            }
+        }
         try
         {
             await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
@@ -936,6 +953,21 @@ public sealed class RemoteTaskRunner
         {
             _log($"worktree-salvage-escalation-failed task={taskKey} path={ex.WorktreePath} error={reportEx.Message}");
         }
+    }
+
+    internal static string BuildUnsecuredWorktreeGate(
+        string hostname,
+        WorktreeSalvageException ex)
+    {
+        var refs = $"canonical refs/heads/{ex.Branch} at {ex.RemoteCommitSha ?? "unknown"}; " +
+                   $"retained local HEAD {ex.LocalCommitSha ?? "unknown"}";
+        var failure = ex.InnerException?.Message.Replace('\r', ' ').Replace('\n', ' ').Trim()
+                      ?? ex.Message;
+        var remediation = GitPushProbe.IsWorkflowScopeFailure(failure)
+            ? GitPushProbe.WorkflowScopeFix()
+            : "Restore origin push access, publish the retained HEAD to a new ref, then requeue.";
+        return $"worktree-blocked: unsecured worktree on {hostname}: {ex.WorktreePath} " +
+               $"({refs}; failure: {failure}). No ref was overwritten. {remediation}";
     }
 
     private async Task<bool> ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)

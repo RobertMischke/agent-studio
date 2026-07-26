@@ -7,7 +7,9 @@ internal static class RunnerCapabilityProbe
 {
     public static IReadOnlyList<AdvertisedCapabilityDto> Advertise(
         RunnerOptions options,
-        bool gitPushReady)
+        bool gitPushReady,
+        bool gitWorkflowPushReady = true,
+        string? gitDetail = null)
     {
         var provider = Provider(options.CliBin);
         var list = new List<AdvertisedCapabilityDto>
@@ -37,7 +39,19 @@ internal static class RunnerCapabilityProbe
                 "source",
                 ToolVersion("git"),
                 options.GitPushRemote ?? options.GitRemote ?? "server-routed",
-                gitPushReady ? "ready" : "unavailable"));
+                gitPushReady ? "ready" : "unavailable",
+                gitDetail));
+            list.Add(Capability(
+                CapabilityProtocol.GitWorkflowPush,
+                "source",
+                ToolVersion("git"),
+                options.GitPushRemote ?? options.GitRemote ?? "server-routed",
+                !gitPushReady
+                    ? "unavailable"
+                    : gitWorkflowPushReady
+                        ? GitPushProbe.Ready
+                        : GitPushProbe.ReadyNoWorkflowScope,
+                gitDetail));
         }
         else
         {
@@ -132,8 +146,9 @@ internal static class RunnerCapabilityProbe
         string category,
         string? version,
         string? identity,
-        string status = "ready")
-        => new(key, category, status, version, identity);
+        string status = "ready",
+        string? detail = null)
+        => new(key, category, status, version, identity, detail);
 
     private static string Platform()
         => $"{(OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsLinux() ? "linux" : "other")}:{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";

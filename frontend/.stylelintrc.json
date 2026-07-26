@@ -219,6 +219,8 @@
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/wiki-pulse.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/workbench-inbox/workbench-inbox.component.scss",
         "src/app/features/project-detail/components/workbench-viewer/workbench-viewer.component.scss",
+        "src/app/features/remote-hosts/components/git-token-capability/git-token-capability.scss",
+        "src/app/features/remote-hosts/components/host-workload-summary/host-workload-summary.scss",
         "src/app/features/task-detail/components/protocol-pane/runner-replay-metadata/runner-replay-metadata.scss",
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",

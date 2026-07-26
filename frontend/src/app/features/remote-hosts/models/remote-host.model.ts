@@ -164,8 +164,8 @@ export interface RemoteHost {
   liveDataState?: HostLiveDataState;
   /** Telemetry has a separate request so runtime truth never waits on history. */
   telemetryLoading?: boolean;
-  /** Latest daemon startup proof of origin write access. */
-  gitPushStatus?: 'ready' | 'read-only' | null;
+  /** Latest daemon startup proof of contents and workflow write access. */
+  gitPushStatus?: 'ready' | 'ready-no-workflow-scope' | 'read-only' | null;
   gitPushDetail?: string | null;
   gitPushCheckedAt?: string | null;
   /** Last server-accepted delivery proof for every project offered to this host. */

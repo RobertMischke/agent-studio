@@ -1,0 +1,16 @@
+[Unit]
+Description=Agent Orchestrator Task Server verified backup
+After=agent-task-server.service
+
+[Service]
+Type=oneshot
+User=agent-orchestrator
+Group=agent-orchestrator
+WorkingDirectory=/var/lib/agent-orchestrator
+EnvironmentFile=/etc/agent-orchestrator/server.env
+ExecStart=/opt/agent-orchestrator/current/task-server backup --name timer
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agent-orchestrator

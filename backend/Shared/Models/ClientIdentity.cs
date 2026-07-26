@@ -64,7 +64,7 @@ public record ClientIdentity
     /// </summary>
     public string? DefaultThinkingLevel { get; init; }
 
-    /// <summary>Latest daemon startup proof: <c>ready</c> or <c>read-only</c>; null for legacy clients.</summary>
+    /// <summary>Latest daemon startup proof: <c>ready</c>, <c>ready-no-workflow-scope</c>, or <c>read-only</c>; null for legacy clients.</summary>
     public string? RunnerGitStatus { get; init; }
     public string? RunnerGitDetail { get; init; }
     public DateTime? RunnerGitCheckedAt { get; init; }

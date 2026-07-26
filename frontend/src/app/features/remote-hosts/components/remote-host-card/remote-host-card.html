@@ -7,12 +7,7 @@
     <span class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</span>
     <span class="host__badge" [attr.data-tone]="tone()" data-testid="remote-host-status">{{ statusLabel() }}</span>
     @if (h.role === 'remote') {
-      <span class="host__badge" [attr.data-tone]="h.gitPushStatus === 'ready' ? 'ok' : 'error'"
-            data-testid="remote-host-git-status"
-            [attr.title]="h.gitPushDetail || 'No successful push probe has been reported'"
-            [appTooltip]="h.gitPushDetail || 'No successful push probe has been reported'">
-        Writable: {{ h.gitPushStatus === 'ready' ? 'yes' : 'no' }}
-      </span>
+      <app-git-token-capability mode="badges" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
     }
     <span class="host__spacer"></span>
     @if (h.address) {
@@ -30,6 +25,8 @@
     }
   </div>
 
+  <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
+
   <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">
     <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
     <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
@@ -38,27 +35,7 @@
     <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>
 
-  <section class="workloads" data-testid="remote-host-workloads" aria-label="Host workload classes">
-    <div class="workloads__head">
-      <strong>Host work</strong>
-      <span>Process and event truth; lane/claim drift is not folded into these counts.</span>
-    </div>
-    <div class="workloads__grid">
-      <article class="workload" data-testid="remote-host-run-pool">
-        <span class="workload__kind">RUN slots</span>
-        <strong>{{ runSlotsLabel() }}</strong>
-        <small>Daemon telemetry · coding and agent runs</small>
-      </article>
-      <article class="workload" data-testid="remote-host-gate-pool">
-        <span class="workload__kind">GATE work</span>
-        <strong>{{ gateWorkLabel() }}</strong>
-        <small>Gate events · SSH build/test gates outside RUN slots</small>
-      </article>
-    </div>
-    <p class="workloads__explain" data-testid="remote-host-cpu-context">
-      CPU and host load include GATE work and other processes. GATE work does not consume a RUN slot.
-    </p>
-  </section>
+  <app-host-workload-summary [runSlots]="runSlotsLabel()" [gateWork]="gateWorkLabel()" />
 
   @if (stale() && !retired()) {
     <p class="host__stale" data-testid="remote-host-stale">Stale: last seen {{ heartbeatLabel() }}. Historical metrics are hidden.</p>

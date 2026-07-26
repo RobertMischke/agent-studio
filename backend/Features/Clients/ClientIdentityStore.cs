@@ -351,7 +351,7 @@ public class ClientIdentityStore
                 RunnerGitCheckedAt = checkedAt.ToUniversalTime(),
                 // A daemon restart with repaired credentials must be able to
                 // retry failed project proofs. Successful proofs remain cached.
-                RunnerProjectPreflights = string.Equals(status, "ready", StringComparison.OrdinalIgnoreCase)
+                RunnerProjectPreflights = status is "ready" or "ready-no-workflow-scope"
                     ? existing.RunnerProjectPreflights
                         .Where(preflight => string.Equals(preflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
                         .ToList()
