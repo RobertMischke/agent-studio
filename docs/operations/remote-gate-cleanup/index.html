@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AGT-2262: SSH-Gate-Aufräumen — warum erst das saubere Remote-Gate | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --blue: #2a78d6; --ok: #1f8a70; --bad: #c93736; --warn: #9a6b00;
+    --blue-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #e7f4ef; --warn-soft: #f8f0dd; --amber-soft:#f6efdc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --blue: #3987e5; --ok: #46b89a; --bad: #e66767; --warn: #d9a63f;
+      --blue-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f2a; --warn-soft: #33301e; --amber-soft:#332d1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 90px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.65 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 46px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 33px; line-height: 1.18; margin: 0 0 14px; }
+  .lede { font-size: 18.5px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 25px; margin: 54px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 28px 0 4px; }
+  p { max-width: 74ch; } p.dim { color: var(--ink-2); }
+  code { background: var(--surface-3); border-radius: 4px; padding: 1px 6px; font: 13.5px/1.5 "Cascadia Code", Consolas, monospace; }
+  .box { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child { margin-bottom: 0; }
+  .box.blue { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 30%, var(--line)); }
+  .box.warn { background: var(--amber-soft); border-color: color-mix(in srgb, var(--warn) 34%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  figure { margin: 26px 0; } figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 11px; max-width: 90ch; } figcaption b { color: var(--ink-1); }
+  ul { padding-left: 22px; } li { margin: 6px 0; max-width: 74ch; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  td.k { white-space: nowrap; font-weight: 600; }
+  .s-label { fill: var(--ink-1); font: 600 12.5px system-ui, sans-serif; } .s-sub { fill: var(--ink-2); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-slow { fill: var(--bad-soft); stroke: var(--bad); } .s-hack { fill: var(--warn-soft); stroke: var(--warn); }
+  .s-clean { fill: var(--ok-soft); stroke: var(--ok); } .s-cut { fill: var(--blue-soft); stroke: var(--blue); }
+  .badge { display:inline-block; font-size:12px; font-weight:700; border-radius:5px; padding:2px 9px; }
+  .badge.hack{background:var(--warn-soft);color:var(--warn)} .badge.clean{background:var(--ok-soft);color:var(--ok)} .badge.cut{background:var(--blue-soft);color:var(--blue)}
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Betrieb / Remote-Gates</p>
+  <h1>AGT-2262 — SSH-Gate aufräumen: warum erst das saubere Remote-Gate</h1>
+  <p class="lede">Diese Karte entfernt eine bewusste Abkürzung im Gate-Betrieb. Sie kann aber nicht als Erstes laufen — sie ist der <em>letzte</em> Schritt einer Kette. Hier steht, was die Abkürzung ist, warum sie hilft, was „sauber" bedeuten würde, und warum das Aufräumen auf den Ersatz warten muss.</p>
+  <div class="meta">
+    <span><b>Karte</b> AGT-2262 · <code>ssh-gate-shortcut-cleanup</code></span>
+    <span><b>Blockiert durch</b> AGT-2229</span>
+    <span><b>Kontext</b> Tranche-2 / Remote-Ausführung</span>
+  </div>
+</header>
+
+<h2 id="gate"><span class="no">A</span>Was ein „Gate" ist — und warum es der Engpass war</h2>
+<p>Ein <b>Gate</b> ist die Qualitätsprüfung vor der Abnahme: Bevor eine Karte akzeptiert wird, fährt der Orchestrator Build + Testsuite gegen den Karten-Stand. Fällt das Gate durch, geht die Karte nicht durch.</p>
+<p>Lange lief das <b>lokal und seriell</b>: jedes Gate 15–27 Minuten, dazu Repo-Contention (mehrere Gates am selben Arbeitsverzeichnis) und Last-Flakes. Das war der Durchsatz-Boden — der Betrieb wartete auf Gates, nicht auf die Agenten.</p>
+
+<h2 id="bridge"><span class="no">B</span>Die Abkürzung: die SSH-Gate-Brücke (23.07.)</h2>
+<p>Um den Engpass sofort aufzulösen, wurde eine <b>bewusste Brücke</b> gebaut — schnell, funktional, aber ausdrücklich als Provisorium deklariert:</p>
+<ul>
+  <li>Das Gate lokalisiert den geprüften SHA in den <b>Per-Projekt-Repos auf dem Host</b>.</li>
+  <li>Es fährt die Build-Profil-Kommandos <b>über SSH in einem Wegwerf-Worktree</b> — zwei parallel, mit Remote-Timeout.</li>
+  <li>Bei jedem Remote-Infrastrukturproblem <b>fällt es auf lokal zurück</b>.</li>
+</ul>
+<div class="box ok"><h4>Der Effekt war dramatisch</h4><p>Volle Suite: <b>2 min 11 s remote</b> statt 15–27 min lokal. Der Engpass war binnen Stunden weg.</p></div>
+<div class="box warn"><h4>Aber es ist ein Hack — und zwar mit Absicht</h4><p>Die Brücke ist <b>out-of-band</b>: ein direkter SSH-Aufruf neben dem eigentlichen Runner-Protokoll. Der Orchestrator „weiß" nichts von diesem Gate als richtigem Schritt — er schießt ein Kommando per SSH ab und wartet auf Exit-Code. Kein claimbarer Schritt, keine saubere Ereignis-Spur, kein Teil des Ausführungsmodells. Genau deshalb wurde von Anfang an gesagt: <em>erst ein sauberer Ersatz, dann Abriss.</em></p></div>
+
+<h2 id="chain"><span class="no">C</span>Die Kette: Ersatz zuerst, Abriss zuletzt</h2>
+<figure>
+  <svg viewBox="0 0 960 250" role="img" aria-label="Vier Schritte: langsames lokales Gate, SSH-Brücke, claimbares Remote-Gate, Abriss">
+    <rect x="24" y="96" width="200" height="60" rx="11" class="s-slow"/>
+    <text x="44" y="122" class="s-label">Lokal &amp; seriell</text><text x="44" y="140" class="s-sub">15–27 min · Contention</text>
+    <path d="M228 126 L 286 126" class="s-flow" marker-end="url(#a)"/>
+    <rect x="290" y="96" width="200" height="60" rx="11" class="s-hack"/>
+    <text x="310" y="116" class="s-label">SSH-Brücke</text><text x="310" y="133" class="s-sub">AGT-2229-Vorstufe · 2:11</text><text x="310" y="149" class="s-sub">out-of-band, Provisorium</text>
+    <path d="M494 126 L 552 126" class="s-flow" marker-end="url(#a)"/>
+    <rect x="556" y="96" width="210" height="60" rx="11" class="s-clean"/>
+    <text x="576" y="116" class="s-label">Claimbares Remote-Gate</text><text x="576" y="133" class="s-sub">AGT-2229 · Host-Orchestrator</text><text x="576" y="149" class="s-sub">Gates+Post-Steps als Schritte</text>
+    <path d="M770 126 L 828 126" class="s-flow" marker-end="url(#a)"/>
+    <rect x="832" y="96" width="104" height="60" rx="11" class="s-cut"/>
+    <text x="852" y="122" class="s-label">Abriss</text><text x="852" y="140" class="s-sub">AGT-2262</text>
+    <text x="290" y="200" class="s-sub" style="fill:var(--warn)">▲ läuft heute</text>
+    <text x="556" y="200" class="s-sub" style="fill:var(--ok)">▲ muss zuerst existieren</text>
+    <text x="832" y="200" class="s-sub" style="fill:var(--blue)">▲ diese Karte, zuletzt</text>
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
+  </svg>
+  <figcaption><b>Vier Schritte, feste Reihenfolge.</b> Die Brücke (heute live) wird nicht ersatzlos entfernt — sie wird durch <b>claimbare Remote-Gate-Schritte (AGT-2229)</b> ersetzt, und <em>erst danach</em> reißt AGT-2262 die Brücke ab. Ersatz-zuerst-dann-Abriss verhindert, dass der schnelle Gate-Weg für ein Zeitfenster ganz wegfällt.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Schritt</th><th>Karte</th><th>Rolle</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td class="k">SSH-Brücke</td><td>—</td><td>Provisorischer schneller Remote-Gate-Weg über SSH</td><td><span class="badge hack">live</span></td></tr>
+    <tr><td class="k">Sauberer Ersatz</td><td>AGT-2229</td><td>Host-Orchestrator-Instanz: Gates &amp; Post-Steps als <b>claimbare Remote-Schritte</b> im Ausführungsmodell</td><td><span class="badge clean">offen</span></td></tr>
+    <tr><td class="k">Abriss</td><td><b>AGT-2262</b></td><td>Entfernt die SSH-Brücke <b>wholesale</b>, nachdem der Ersatz steht</td><td><span class="badge cut">wartet</span></td></tr>
+  </tbody>
+</table>
+
+<h2 id="why"><span class="no">D</span>Warum AGT-2262 nicht vorgezogen werden kann</h2>
+<p>Der Kern in einem Satz: <b>Man kann eine Abkürzung erst wegräumen, wenn der ordentliche Weg existiert.</b> Zöge man AGT-2262 vor, gäbe es zwei schlechte Ausgänge:</p>
+<ul>
+  <li><b>Abriss ohne Ersatz</b> → der schnelle Remote-Gate-Weg fällt weg, der Betrieb kippt zurück auf 15–27-Minuten-Gates. Das ist der Engpass, der überhaupt erst zur Brücke führte.</li>
+  <li><b>„Sauber" ohne Zielbild</b> → man ersetzt einen Hack durch den nächsten. Was „ordentlich" heißt, ist noch nicht entschieden: Sind Remote-Gates <em>claimbare Schritte</em> im Task-Server-Protokoll (AGT-2229)? Laufen sie über die Review-Plane? Als eigene Capability des Host-Orchestrators? Diese Frage überlappt direkt mit der <b>Tranche-0-Topologie</b> (der Task-Server besitzt die Gates) — sie ist Teil der großen Richtungsentscheidung, nicht eine kleine Umbaute.</li>
+</ul>
+<div class="box blue">
+  <h4>Es ist kein Code-Blocker, sondern ein Design-Blocker</h4>
+  <p>AGT-2262 ist technisch klein — „SSH-Brücke entfernen" ist wenig Code. Blockiert wird sie nicht durch Aufwand, sondern durch eine <b>offene Entscheidung</b>: wie Remote-Gates im Zielmodell aussehen. Diese Entscheidung lebt in AGT-2229 / der Tranche-0-Richtung. Solange die nicht steht, hat der Abriss kein Ziel, auf das er aufsetzt.</p>
+</div>
+
+<h2 id="do"><span class="no">E</span>Empfehlung</h2>
+<ul>
+  <li><b>AGT-2262 bleibt geparkt</b>, bis AGT-2229 (claimbares Remote-Gate) steht. Nicht vorziehen.</li>
+  <li><b>Die eigentliche Arbeit ist AGT-2229 / das Remote-Gate-Design</b> — und das gehört an die Tranche-0-Richtung. Ein sauberer Weg: das Remote-Gate-Zielbild als <b>Konzept-Karte</b> schneiden (Konzept-Pipeline → Workbench-Doc + Sichtblick), damit die Zielform bewusst entschieden ist, bevor gebaut und abgerissen wird.</li>
+  <li><b>Die Brücke darf bis dahin bleiben.</b> Sie ist als Provisorium markiert, hat einen Fallback auf lokal, und hält den Durchsatz oben. Kein Druck, sie voreilig zu entfernen.</li>
+</ul>
+<p class="dim">Zusammengefasst: AGT-2262 ist das Aufräumen am Ende einer Kette, kein eigenständiger Start. Ersatz zuerst (AGT-2229, an Tranche-0 gekoppelt), Abriss zuletzt. Nur so tauscht man den Hack gegen etwas Besseres statt gegen den nächsten Hack.</p>
+
+</main>
+</body>
+</html>
