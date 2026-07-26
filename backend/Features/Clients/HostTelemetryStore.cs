@@ -6,7 +6,13 @@ public sealed record HostTelemetrySample(DateTime Timestamp, double? CpuPercent,
     double? Load15, long? MemoryUsedBytes, long? MemoryTotalBytes, long? SwapInBytesPerSecond,
     long? SwapOutBytesPerSecond, double? CpuStealPercent, double? IoWaitPercent, int CpuCores, int ActiveSlots);
 
-public sealed record HostTelemetryFinding(string Kind, string Label, DateTime Since, DateTime Until);
+public sealed record HostTelemetryFinding(
+    string Kind,
+    string Label,
+    DateTime Since,
+    DateTime Until,
+    int Occurrences,
+    bool IsActive);
 public sealed record HostTelemetryResponse(string ClientId, string Window, IReadOnlyList<HostTelemetrySample> Points,
     IReadOnlyList<HostTelemetryFinding> Findings);
 
@@ -72,23 +78,68 @@ public sealed class HostTelemetryStore(IConfiguration config, ILogger<HostTeleme
             D(x => x.IoWaitPercent), (int)Math.Round(list.Average(x => x.CpuCores)), (int)Math.Round(list.Average(x => x.ActiveSlots)));
     }
 
-    private static IReadOnlyList<HostTelemetryFinding> Findings(List<HostTelemetrySample> points)
+    internal static IReadOnlyList<HostTelemetryFinding> Findings(List<HostTelemetrySample> points)
     {
         if (points.Count < 3) return [];
+        const double oversubscriptionLoadFactor = 1.5;
+        const double displacementStealPercent = 5;
+        const double displacementIoWaitPercent = 10;
         var findings = new List<HostTelemetryFinding>();
-        Add("vm-throttled", "VM throttled", p => p.CpuStealPercent > 5);
-        Add("oversubscribed", "Oversubscribed", p => p.Load1 > p.CpuCores);
+        Add("vm-throttled", "VM throttled", p => p.CpuStealPercent > displacementStealPercent);
+        // Review work is cgroup-capped and may remain runnable without harming Coding.
+        // Require both substantial load headroom consumption and a measured damage signal.
+        Add("oversubscribed", "Oversubscribed", p =>
+            p.Load1 > p.CpuCores * oversubscriptionLoadFactor
+            && (p.CpuStealPercent > displacementStealPercent || p.IoWaitPercent > displacementIoWaitPercent));
         Add("memory-pressure", "Memory pressure", p => (p.SwapInBytesPerSecond ?? 0) + (p.SwapOutBytesPerSecond ?? 0) > 64 * 1024);
         return findings;
+
         void Add(string kind, string label, Func<HostTelemetrySample, bool> predicate)
         {
-            List<HostTelemetrySample> current = [];
+            const int minimumQualifyingSamples = 3;
+            const int maximumBridgeGapSamples = 2;
+            var phases = new List<(DateTime Since, DateTime Until, bool IsActive)>();
+            DateTime? since = null;
+            DateTime? until = null;
+            var qualifyingSamples = 0;
+            var gapSamples = 0;
+
             foreach (var point in points)
             {
-                if (predicate(point)) current.Add(point);
-                else current = [];
+                if (predicate(point))
+                {
+                    since ??= point.Timestamp;
+                    until = point.Timestamp;
+                    qualifyingSamples++;
+                    gapSamples = 0;
+                    continue;
+                }
+
+                if (since is null) continue;
+                gapSamples++;
+                if (gapSamples <= maximumBridgeGapSamples) continue;
+                CompletePhase(isActive: false);
             }
-            if (current.Count >= 3) findings.Add(new(kind, label, current[0].Timestamp, current[^1].Timestamp));
+
+            if (since is not null) CompletePhase(isActive: gapSamples <= maximumBridgeGapSamples);
+
+            var ended = phases.Where(phase => !phase.IsActive).ToList();
+            if (ended.Count > 0)
+                findings.Add(new(kind, label, ended[0].Since, ended[^1].Until, ended.Count, IsActive: false));
+
+            var active = phases.LastOrDefault(phase => phase.IsActive);
+            if (active != default)
+                findings.Add(new(kind, label, active.Since, active.Until, Occurrences: 1, IsActive: true));
+
+            void CompletePhase(bool isActive)
+            {
+                if (qualifyingSamples >= minimumQualifyingSamples)
+                    phases.Add((since!.Value, until!.Value, isActive));
+                since = null;
+                until = null;
+                qualifyingSamples = 0;
+                gapSamples = 0;
+            }
         }
     }
 }

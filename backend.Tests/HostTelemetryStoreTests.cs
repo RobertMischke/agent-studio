@@ -54,6 +54,77 @@ public sealed class HostTelemetryStoreTests : IDisposable
         Assert.Equal(60, compacted[1].CpuPercent);
     }
 
-    private static HostTelemetrySample Sample(DateTime at, double? cpu = 50, double? steal = 0) =>
-        new(at, cpu, 6.4, 6, 5, 32_000_000_000, 64_000_000_000, 0, 0, steal, 2, 12, 6);
+    [Fact]
+    public void Findings_CoalescesFlappingLoadAcrossShortSampleGaps()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-5);
+        var points = new[] { true, true, true, false, true, false, true, true }
+            .Select((pressured, index) => Sample(
+                start.AddSeconds(index * 30),
+                load: pressured ? 20 : 12,
+                ioWait: pressured ? 12 : 2))
+            .ToList();
+
+        var finding = Assert.Single(HostTelemetryStore.Findings(points),
+            candidate => candidate.Kind == "oversubscribed");
+
+        Assert.True(finding.IsActive);
+        Assert.Equal(1, finding.Occurrences);
+        Assert.Equal(points[0].Timestamp, finding.Since);
+        Assert.Equal(points[^1].Timestamp, finding.Until);
+    }
+
+    [Fact]
+    public void Findings_AggregatesEndedPhasesPerKindWithinWindow()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-10);
+        var pressured = new[]
+        {
+            true, true, true, false, false, false,
+            true, true, true, false, false, false,
+            true, true, true, false, false, false,
+        };
+        var points = pressured.Select((isPressured, index) => Sample(
+            start.AddSeconds(index * 30),
+            load: isPressured ? 20 : 12,
+            ioWait: isPressured ? 12 : 2)).ToList();
+
+        var finding = Assert.Single(HostTelemetryStore.Findings(points),
+            candidate => candidate.Kind == "oversubscribed");
+
+        Assert.False(finding.IsActive);
+        Assert.Equal(3, finding.Occurrences);
+        Assert.Equal(points[0].Timestamp, finding.Since);
+        Assert.Equal(points[14].Timestamp, finding.Until);
+    }
+
+    [Fact]
+    public void Findings_RequiresLoadHeadroomAndDamageSignalForOversubscription()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-2);
+        var quotaBoundReviewLoad = Enumerable.Range(0, 4)
+            .Select(index => Sample(start.AddSeconds(index * 30), load: 24, steal: 0, ioWait: 2))
+            .ToList();
+        var belowHeadroomWithDamage = Enumerable.Range(0, 4)
+            .Select(index => Sample(start.AddSeconds(index * 30), load: 17, steal: 0, ioWait: 12))
+            .ToList();
+        var displaced = Enumerable.Range(0, 4)
+            .Select(index => Sample(start.AddSeconds(index * 30), load: 20, steal: 0, ioWait: 12))
+            .ToList();
+
+        Assert.DoesNotContain(HostTelemetryStore.Findings(quotaBoundReviewLoad),
+            candidate => candidate.Kind == "oversubscribed");
+        Assert.DoesNotContain(HostTelemetryStore.Findings(belowHeadroomWithDamage),
+            candidate => candidate.Kind == "oversubscribed");
+        Assert.Contains(HostTelemetryStore.Findings(displaced),
+            candidate => candidate.Kind == "oversubscribed");
+    }
+
+    private static HostTelemetrySample Sample(
+        DateTime at,
+        double? cpu = 50,
+        double? steal = 0,
+        double? load = 6.4,
+        double? ioWait = 2) =>
+        new(at, cpu, load, 6, 5, 32_000_000_000, 64_000_000_000, 0, 0, steal, ioWait, 12, 6);
 }

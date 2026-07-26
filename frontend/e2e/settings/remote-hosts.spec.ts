@@ -447,7 +447,18 @@ test.describe('Remote Hosts settings section', () => {
     await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify({
         clientId: 'agent-runner-01', window: '14d', points,
-        findings: [{ kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp, until: points.at(-1)?.timestamp }],
+        findings: [
+          { kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp,
+            until: points.at(-1)?.timestamp, occurrences: 1, isActive: true },
+          { kind: 'oversubscribed', label: 'Oversubscribed', since: points[1].timestamp,
+            until: points.at(-1)?.timestamp, occurrences: 1, isActive: true },
+          { kind: 'memory-pressure', label: 'Memory pressure', since: points[0].timestamp,
+            until: points[2].timestamp, occurrences: 3, isActive: false },
+          { kind: 'oversubscribed', label: 'Oversubscribed', since: points[0].timestamp,
+            until: points[1].timestamp, occurrences: 2, isActive: false },
+          { kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp,
+            until: points[1].timestamp, occurrences: 4, isActive: false },
+        ],
       }),
     }));
 
@@ -456,6 +467,14 @@ test.describe('Remote Hosts settings section', () => {
     await expect(remote.getByTestId('remote-host-telemetry')).toBeVisible();
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 RUN active · host load 6.4 of 12 cores');
     await expect(remote.getByTestId('remote-host-findings')).toContainText('VM throttled');
+    await expect(remote.getByTestId('remote-host-finding')).toHaveCount(3);
+    await expect(remote.getByTestId('remote-host-findings')).toContainText('3× in window');
+    await expect(remote.getByTestId('remote-host-findings-more')).toHaveText('+2 more');
+    const findingsBox = await remote.getByTestId('remote-host-findings').boundingBox();
+    const cardBox = await remote.boundingBox();
+    expect(findingsBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    expect(findingsBox!.x + findingsBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width);
     await expect(remote.locator('[data-chart]')).toHaveCount(4);
 
     const inspectedIndex = 4;

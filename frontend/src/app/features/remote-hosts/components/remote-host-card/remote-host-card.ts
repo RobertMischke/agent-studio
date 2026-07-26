@@ -19,6 +19,7 @@ import {
   ramUsedPct,
   relativeHeartbeat,
   type HostActionKind,
+  type HostTelemetryFinding,
   type HostTelemetryPoint,
   type MeterTone,
   type RemoteHost,
@@ -120,6 +121,20 @@ export class RemoteHostCardComponent {
     const point = this.telemetryPoints().at(-1);
     return point ? `${point.activeSlots} RUN active · host load ${(point.load1 ?? 0).toFixed(1)} of ${point.cpuCores} cores` : '';
   });
+  readonly telemetryFindings = computed(() => {
+    const byPhase = new Map<string, HostTelemetryFinding>();
+    for (const finding of this.host().telemetry?.findings ?? []) {
+      const phase = finding.isActive === false ? 'history' : 'active';
+      byPhase.set(`${finding.kind}:${phase}`, finding);
+    }
+    return [...byPhase.values()].sort((left, right) => {
+      const activity = Number(right.isActive !== false) - Number(left.isActive !== false);
+      return activity || right.until.localeCompare(left.until);
+    });
+  });
+  readonly visibleTelemetryFindings = computed(() => this.telemetryFindings().slice(0, 3));
+  readonly additionalTelemetryFindingCount = computed(() =>
+    Math.max(0, this.telemetryFindings().length - this.visibleTelemetryFindings().length));
 
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();
@@ -242,6 +257,13 @@ export class RemoteHostCardComponent {
   }
 
   clearTelemetryHover(): void { this.hoveredTelemetryIndex.set(null); }
+
+  findingTooltip(finding: HostTelemetryFinding): string {
+    const range = `${finding.since} to ${finding.until}`;
+    return finding.isActive === false
+      ? `${finding.occurrences ?? 1} completed phase(s), ${range}`
+      : range;
+  }
 }
 
 function sparkline(points: readonly HostTelemetryPoint[], value: (point: HostTelemetryPoint) => number | null, max: number): string {
