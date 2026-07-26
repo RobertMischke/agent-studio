@@ -790,10 +790,17 @@ The runner samples the host every 30 seconds and piggybacks the sample on its ex
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 
-The host card raises these sustained findings after at least three consecutive samples:
+The host card raises these sustained findings after at least three qualifying
+samples. Up to two non-qualifying sample intervals are bridged so load that
+flaps around a boundary remains one phase. The card shows at most one active
+finding per kind. Completed phases are summarized per kind as an occurrence
+count for the selected time window instead of appearing as individual badges.
 
 - **VM throttled**: CPU steal time stays above 5 percent. On a virtual machine, this means the hypervisor is withholding scheduled CPU time.
-- **Oversubscribed**: the one-minute load average stays above the reported core count. Compare the active-slots line before increasing parallelism.
+- **Oversubscribed**: the one-minute load average stays above 1.5 times the
+  reported core count and either CPU steal exceeds 5 percent or I/O wait exceeds
+  10 percent. Review work is cgroup-capped and can remain runnable without
+  displacing Coding, so high load alone is deliberately not treated as damage.
 - **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.

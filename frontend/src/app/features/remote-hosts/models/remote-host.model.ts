@@ -86,6 +86,10 @@ export interface HostTelemetryFinding {
   label: string;
   since: string;
   until: string;
+  /** Number of completed phases represented by this window-level finding. */
+  occurrences?: number;
+  /** Omitted by older servers, whose findings represented active phases only. */
+  isActive?: boolean;
 }
 
 export interface HostTelemetrySeries {

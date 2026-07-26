@@ -436,7 +436,10 @@ function mergeRecentTelemetry(
   );
   const findings = new Map(
     [...existing.findings, ...recent.findings]
-      .map(finding => [`${finding.kind}:${finding.since}:${finding.until}`, finding]),
+      .map(finding => [
+        `${finding.kind}:${finding.isActive === false ? 'history' : 'active'}`,
+        finding,
+      ]),
   );
   return {
     ...existing,

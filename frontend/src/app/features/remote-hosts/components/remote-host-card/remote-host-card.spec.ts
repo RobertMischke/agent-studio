@@ -221,7 +221,14 @@ describe('RemoteHostCardComponent', () => {
           memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
           cpuStealPercent: 7, ioWaitPercent: 3, cpuCores: 12, activeSlots: 6 },
       ],
-      findings: [{ kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:30Z' }],
+      findings: [{
+        kind: 'vm-throttled' as const,
+        label: 'VM throttled',
+        since: '2026-07-10T11:58:00Z',
+        until: '2026-07-10T11:59:30Z',
+        occurrences: 1,
+        isActive: true,
+      }],
     };
     const fixture = mount({ ...HOST, telemetry });
     const el: HTMLElement = fixture.nativeElement;
@@ -231,6 +238,32 @@ describe('RemoteHostCardComponent', () => {
     (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
+  });
+
+  it('aggregates ended phases and bounds the finding row with a more counter', () => {
+    const point = {
+      timestamp: '2026-07-10T11:59:30Z', cpuPercent: 54, load1: 20, load5: 18, load15: 15,
+      memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+      cpuStealPercent: 7, ioWaitPercent: 12, cpuCores: 12, activeSlots: 6,
+    };
+    const findings = [
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T11:58:00Z', until: point.timestamp, occurrences: 1, isActive: true },
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:00Z', occurrences: 1, isActive: true },
+      { kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:57:00Z', until: point.timestamp, occurrences: 1, isActive: true },
+      { kind: 'memory-pressure' as const, label: 'Memory pressure', since: '2026-07-10T08:00:00Z', until: '2026-07-10T09:00:00Z', occurrences: 3, isActive: false },
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T07:00:00Z', until: '2026-07-10T08:00:00Z', occurrences: 2, isActive: false },
+      { kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T06:00:00Z', until: '2026-07-10T07:00:00Z', occurrences: 4, isActive: false },
+    ];
+
+    const el: HTMLElement = mount({
+      ...HOST,
+      telemetry: { clientId: 'agent-runner', window: '14d', points: [point], findings },
+    }).nativeElement;
+
+    expect(el.querySelectorAll('[data-testid="remote-host-finding"]').length).toBe(3);
+    expect(el.querySelectorAll('[data-finding-kind="oversubscribed"][data-finding-active="true"]').length).toBe(1);
+    expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('3× in window');
+    expect(el.querySelector('[data-testid="remote-host-findings-more"]')?.textContent).toContain('+2 more');
   });
 
   it('shows the exact synchronized telemetry point selected on the shared plot', () => {
