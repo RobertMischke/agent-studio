@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Deck-Panel v1",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/deck-panel-v1.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "57ed2a7fc49d986fe15a61c4e9028ce68903f543ad2814d2e53a9e8d1c0d25c8",
+      "sizeBytes": 4498,
+      "lineCount": 119,
+      "capturedAt": "2026-07-25T12:36:54.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "planned",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "style-guide",
+    "analyzedAt": "2026-07-25"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2337",
+      "title": "Visual style guide follow-up: Deck audit page and Deck-Panel v1",
+      "linkedAt": "2026-07-25T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2280",
+      "title": "Unify Deck pages on one panel style",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}
