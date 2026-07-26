@@ -82,6 +82,10 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-executor-not-registered",
                     "Register this identity with the review-executor capability before claiming."));
+            if (!executor.Capabilities.Contains(Contract.ReviewCapabilities.BaselineComparison))
+                return Results.Conflict(new Contract.ApiError(
+                    "review-baseline-comparison-required",
+                    "Update this Review Executor to one that advertises baseline-comparison support."));
 
             foreach (var legacy in authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope())
             {
@@ -489,7 +493,13 @@ public static class V1ReviewPlaneEndpoints
             ? null
             : projects.FindByStorageLocation(task.WatchPath)
               ?? projects.FindByIdOrDisplayName(task.ProjectName);
-        var plan = review.Subject.Plan ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings);
+        var integrationRef = task is null
+            ? null
+            : IntegrationRef(settings.Get(task.ProjectName).IntegrationBranch);
+        var plan = review.Subject.Plan
+                   ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
+        if (string.IsNullOrWhiteSpace(plan.IntegrationRef) && integrationRef is not null)
+            plan = plan with { IntegrationRef = integrationRef };
         return new Contract.ReviewSubjectDto(
             review.Subject.SubjectId,
             task?.Id ?? review.TaskKey,
@@ -531,7 +541,8 @@ public static class V1ReviewPlaneEndpoints
     private static Contract.ReviewPlanDto FallbackPlan(
         string? repositoryPath,
         string? projectName,
-        AgentStudio.Projects.ProjectSettingsService settings)
+        AgentStudio.Projects.ProjectSettingsService settings,
+        string? integrationRef)
     {
         var profile = string.IsNullOrWhiteSpace(projectName)
             ? null
@@ -547,7 +558,8 @@ public static class V1ReviewPlaneEndpoints
                     $"verify-{index + 1}",
                     command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests",
                     "sh",
-                    ["-lc", shellCommand]);
+                    ["-lc", shellCommand],
+                    CompareToBaseline: command.Kind == VerifyCommandKind.Test);
             })
             .ToList();
         if (commands.Count == 0)
@@ -559,7 +571,18 @@ public static class V1ReviewPlaneEndpoints
             commands,
             commands.Select(command => command.Aspect)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList());
+                .ToList(),
+            IntegrationRef: integrationRef);
+    }
+
+    private static string? IntegrationRef(string? branch)
+    {
+        if (string.IsNullOrWhiteSpace(branch)) return null;
+        var value = branch.Trim();
+        if (value.StartsWith("refs/", StringComparison.Ordinal)) return value;
+        if (value.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            value = value["origin/".Length..];
+        return $"refs/heads/{value}";
     }
 
     private static Contract.ReviewAttemptDto ToAttempt(ReviewAttemptDto review)

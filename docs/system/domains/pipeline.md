@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-24
+Version: 2026-07-26
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -90,6 +90,12 @@ pipeline view.
   read model fed by the SSH gate start/completion events. The Remote Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
   visibility-only and never admits, cancels, or reorders a gate.
+- `runner/RemoteReviewWorkspace.cs` and
+  `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
+  verification. Test commands marked `CompareToBaseline` compare their parsed
+  failing-test set with the merge-base on the plan's integration ref. Baseline
+  results are single-flight cached by repository, baseline SHA, and command
+  hash. Only failures still new after one subject retry block the review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   deliveries after a backend restart when the durable lane move landed but the
   merge did not. It also repairs the legacy `no-branch` outcome caused by
@@ -210,6 +216,13 @@ pipeline view.
   failure is non-blocking at the pre-main full-suite boundary. If one physical
   command belongs to both the baseline and the diff-selected set, the stricter
   work-package classification wins.
+- A remote ReviewAttempt does not require an historically red integration
+  branch to become absolutely green. For each baseline-compared test command,
+  its verdict is based on `subject failures - merge-base failures`.
+  Intersecting failures remain visible as pre-existing, while the aspect summary
+  names every new failure. A command with unparseable failing-test output stays
+  fail-closed as a new failure. This comparison does not weaken the absolute
+  full-suite boundary before advancing `main`.
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.

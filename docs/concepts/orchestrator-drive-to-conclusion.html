@@ -1107,6 +1107,28 @@
             are covered by unit fixtures, with the QS-26 conflict also covered in Playwright.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2348</code><br><span class="small">remote review baseline comparison</span></td>
+          <td>
+            Remote Review ran a successful build and then the non-MachineBound test suite for every
+            subject. About eleven known failures on the integration branch made the test command exit
+            nonzero for every card, producing 28 false ProductFailure outcomes overnight and further
+            false failures for clean deliveries.
+          </td>
+          <td>
+            The Review Executor and Task Server classified any nonzero review command as a product
+            defect. They did not compare failing-test identities with the subject's merge-base, cache
+            the shared baseline, or retry failures that were new only because of a one-run flake.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> baseline-marked test commands now block only on
+            <code>subject failures - merge-base failures</code> after one retry of new failures.
+            Reports separate and name new and pre-existing failures. Baselines are single-flight
+            cached by repository, baseline SHA, and command hash, so cards return to meaningful
+            Pass or ProductFailure terminals while baseline cleanup continues independently.
+          </td>
+        </tr>
       </tbody>
     </table>
 

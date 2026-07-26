@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentStudio.TaskServer.Contracts;
 
 namespace AgentRunner;
@@ -17,6 +19,7 @@ public sealed class RemoteReviewWorkspace
     private readonly ReviewLeaseDto _lease;
     private readonly Action<string> _log;
     private string? _initialTree;
+    private string? _baselineSha;
     private bool _dirtyBefore;
 
     public RemoteReviewWorkspace(
@@ -36,6 +39,7 @@ public sealed class RemoteReviewWorkspace
         CachePath = Path.Combine(AttemptRoot, "cache");
         TempPath = Path.Combine(AttemptRoot, "tmp");
         HomePath = Path.Combine(AttemptRoot, "home");
+        BaselineCacheRoot = Path.Combine(root, ".baseline-cache");
     }
 
     public string AttemptRoot { get; }
@@ -44,6 +48,7 @@ public sealed class RemoteReviewWorkspace
     public string CachePath { get; }
     public string TempPath { get; }
     public string HomePath { get; }
+    public string BaselineCacheRoot { get; }
 
     public IReadOnlyDictionary<string, string?> ProcessEnvironment()
     {
@@ -96,6 +101,7 @@ public sealed class RemoteReviewWorkspace
         Directory.CreateDirectory(CachePath);
         Directory.CreateDirectory(TempPath);
         Directory.CreateDirectory(HomePath);
+        Directory.CreateDirectory(BaselineCacheRoot);
 
         if (!string.IsNullOrWhiteSpace(_subject.RepositoryUrl))
             await MaterializeGitAsync(_subject.RepositoryUrl!, ct);
@@ -140,40 +146,31 @@ public sealed class RemoteReviewWorkspace
                 throw new ReviewInfrastructureException(
                     "CommandSubjectMismatch",
                     $"Step '{command.StepId}' would run at '{headBefore}', not '{_subject.ExpectedResultSha}'.");
-            var started = DateTime.UtcNow;
-            ProcessResult process;
-            string? signal = null;
-            try
+            var execution = await RunCommandAsync(command, RepositoryPath, ct);
+            BaselineComparison? comparison = null;
+            var retryPerformed = false;
+            if (command.CompareToBaseline && !execution.Process.Success)
             {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(command.TimeoutSeconds, 1, 7200)));
-                process = await ProcessRunner.RunAsync(
-                    command.FileName,
-                    command.Arguments,
-                    RepositoryPath,
-                    environment: ProcessEnvironment(),
-                    clearEnvironment: true,
-                    ct: timeout.Token);
+                comparison = await CompareToBaselineAsync(command, execution.Process, ct);
+                if (comparison.NewFailures.Count > 0)
+                {
+                    retryPerformed = true;
+                    await AddArtifactsAsync(
+                        $"{SafeSegment(command.StepId)}.initial",
+                        execution.Process,
+                        artifacts,
+                        ct);
+                    execution = await RunCommandAsync(command, RepositoryPath, ct);
+                    comparison = comparison.Reclassify(SubjectFailures(command, execution.Process));
+                }
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                process = new ProcessResult(-1, string.Empty, "Review command timed out.");
-                signal = "timeout";
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                throw new ReviewInfrastructureException(
-                    "ToolUnavailable",
-                    $"Review step '{command.StepId}' could not start: {exception.Message}",
-                    exception);
-            }
-            var finished = DateTime.UtcNow;
+
             var stdoutPath = Path.Combine(ArtifactPath, $"{SafeSegment(command.StepId)}.stdout.log");
             var stderrPath = Path.Combine(ArtifactPath, $"{SafeSegment(command.StepId)}.stderr.log");
-            await File.WriteAllTextAsync(stdoutPath, process.StdOut, ct);
-            await File.WriteAllTextAsync(stderrPath, process.StdErr, ct);
-            var stdout = HashText(process.StdOut);
-            var stderr = HashText(process.StdErr);
+            await File.WriteAllTextAsync(stdoutPath, execution.Process.StdOut, ct);
+            await File.WriteAllTextAsync(stderrPath, execution.Process.StdErr, ct);
+            var stdout = HashText(execution.Process.StdOut);
+            var stderr = HashText(execution.Process.StdErr);
             commands.Add(new ReviewCommandEvidenceDto(
                 command.StepId,
                 command.Aspect,
@@ -182,17 +179,24 @@ public sealed class RemoteReviewWorkspace
                 _subject.ExpectedResultSha,
                 headBefore,
                 treeBefore,
-                started,
-                finished,
-                process.ExitCode,
-                signal,
+                execution.StartedAt,
+                execution.FinishedAt,
+                execution.Process.ExitCode,
+                execution.Signal,
                 stdout,
-                stderr));
+                stderr,
+                comparison?.BaselineSha,
+                comparison?.NewFailures,
+                comparison?.PreExistingFailures,
+                comparison?.CacheHit ?? false,
+                retryPerformed));
             artifacts.Add(new ReviewArtifactEvidenceDto(
                 Path.GetFileName(stdoutPath), "text/plain", stdout, new FileInfo(stdoutPath).Length));
             artifacts.Add(new ReviewArtifactEvidenceDto(
                 Path.GetFileName(stderrPath), "text/plain", stderr, new FileInfo(stderrPath).Length));
-            verdicts.Add(ParseVerdict(command, process));
+            verdicts.Add(comparison is null
+                ? ParseVerdict(command, execution.Process)
+                : BaselineVerdict(command, comparison));
         }
 
         var finalHead = await GitValueAsync("rev-parse", "HEAD", ct);
@@ -207,6 +211,257 @@ public sealed class RemoteReviewWorkspace
             ? "ProductFailure"
             : "Pass";
         return new ReviewExecutionEvidence(outcome, proof, commands, artifacts, verdicts);
+    }
+
+    private async Task<CommandExecution> RunCommandAsync(
+        ReviewCommandDto command,
+        string workingDirectory,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string?>? environment = null)
+    {
+        var started = DateTime.UtcNow;
+        ProcessResult process;
+        string? signal = null;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(command.TimeoutSeconds, 1, 7200)));
+            process = await ProcessRunner.RunAsync(
+                command.FileName,
+                command.Arguments,
+                workingDirectory,
+                environment: environment ?? ProcessEnvironment(),
+                clearEnvironment: true,
+                ct: timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            process = new ProcessResult(-1, string.Empty, "Review command timed out.");
+            signal = "timeout";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new ReviewInfrastructureException(
+                "ToolUnavailable",
+                $"Review step '{command.StepId}' could not start: {exception.Message}",
+                exception);
+        }
+        return new CommandExecution(process, started, DateTime.UtcNow, signal);
+    }
+
+    private async Task<BaselineComparison> CompareToBaselineAsync(
+        ReviewCommandDto command,
+        ProcessResult subjectResult,
+        CancellationToken ct)
+    {
+        var baselineSha = await ResolveBaselineShaAsync(ct);
+        var commandHash = CommandHash(command);
+        var cacheDirectory = Path.Combine(
+            BaselineCacheRoot,
+            HashText(_subject.RepositoryId),
+            baselineSha);
+        Directory.CreateDirectory(cacheDirectory);
+        var cachePath = Path.Combine(cacheDirectory, $"{commandHash}.json");
+        var cached = await ReadBaselineCacheAsync(cachePath, baselineSha, commandHash, ct);
+        if (cached is not null)
+        {
+            _log($"review baseline cache hit repository={_subject.RepositoryId} baseline={baselineSha} step={command.StepId}");
+            return BaselineComparison.Create(
+                baselineSha,
+                cached.Failures,
+                SubjectFailures(command, subjectResult),
+                cacheHit: true);
+        }
+
+        var lockPath = cachePath + ".lock";
+        await using var cacheLock = await AcquireCacheLockAsync(lockPath, ct);
+        cached = await ReadBaselineCacheAsync(cachePath, baselineSha, commandHash, ct);
+        if (cached is not null)
+        {
+            _log($"review baseline cache hit after wait repository={_subject.RepositoryId} baseline={baselineSha} step={command.StepId}");
+            return BaselineComparison.Create(
+                baselineSha,
+                cached.Failures,
+                SubjectFailures(command, subjectResult),
+                cacheHit: true);
+        }
+
+        var baselinePath = Path.Combine(AttemptRoot, $"baseline-{commandHash[..12]}");
+        var worktree = await ProcessRunner.RunAsync(
+            "git",
+            ["worktree", "add", "--detach", baselinePath, baselineSha],
+            RepositoryPath,
+            environment: ProcessEnvironment(),
+            clearEnvironment: true,
+            ct: ct);
+        if (!worktree.Success)
+            throw new ReviewInfrastructureException(
+                "BaselineUnavailable",
+                $"Baseline worktree at '{baselineSha}' could not be created: {worktree.StdErr.Trim()}");
+
+        var execution = await RunCommandAsync(
+            command,
+            baselinePath,
+            ct,
+            BaselineProcessEnvironment(commandHash));
+        if (execution.Signal is not null || execution.Process.ExitCode < 0)
+            throw new ReviewInfrastructureException(
+                "BaselineUnavailable",
+                $"Baseline command '{command.StepId}' did not complete normally.");
+        var failures = ParsedTestFailures(execution.Process);
+        var entry = new BaselineCacheEntry(
+            baselineSha,
+            commandHash,
+            execution.Process.ExitCode,
+            failures,
+            DateTime.UtcNow);
+        await WriteBaselineCacheAsync(cachePath, entry, ct);
+        _log($"review baseline cache fill repository={_subject.RepositoryId} baseline={baselineSha} step={command.StepId} failures={failures.Count}");
+        return BaselineComparison.Create(
+            baselineSha,
+            failures,
+            SubjectFailures(command, subjectResult),
+            cacheHit: false);
+    }
+
+    private IReadOnlyDictionary<string, string?> BaselineProcessEnvironment(string commandHash)
+    {
+        var root = Path.Combine(AttemptRoot, $"baseline-runtime-{commandHash[..12]}");
+        var cache = Path.Combine(root, "cache");
+        var temp = Path.Combine(root, "tmp");
+        var home = Path.Combine(root, "home");
+        Directory.CreateDirectory(cache);
+        Directory.CreateDirectory(temp);
+        Directory.CreateDirectory(home);
+        var environment = ProcessEnvironment()
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        environment["HOME"] = home;
+        environment["TMPDIR"] = temp;
+        environment["TMP"] = temp;
+        environment["TEMP"] = temp;
+        environment["XDG_CACHE_HOME"] = cache;
+        environment["NUGET_PACKAGES"] = Path.Combine(cache, "nuget");
+        environment["npm_config_cache"] = Path.Combine(cache, "npm");
+        environment["PIP_CACHE_DIR"] = Path.Combine(cache, "pip");
+        environment["CARGO_HOME"] = Path.Combine(cache, "cargo");
+        environment["GRADLE_USER_HOME"] = Path.Combine(cache, "gradle");
+        environment["DOTNET_CLI_HOME"] = Path.Combine(cache, "dotnet");
+        return environment;
+    }
+
+    private async Task<string> ResolveBaselineShaAsync(CancellationToken ct)
+    {
+        if (_baselineSha is not null) return _baselineSha;
+        if (string.IsNullOrWhiteSpace(_subject.Plan.IntegrationRef))
+            throw new ReviewInfrastructureException(
+                "BaselineUnavailable",
+                "A baseline-compared review command requires the integration ref in the immutable review plan.");
+
+        var fetch = await ProcessRunner.RunAsync(
+            "git",
+            ["-c", "credential.helper=", "fetch", "--no-tags", "origin", _subject.Plan.IntegrationRef!],
+            RepositoryPath,
+            environment: ProcessEnvironment(),
+            clearEnvironment: true,
+            ct: ct);
+        if (!fetch.Success)
+            throw new ReviewInfrastructureException(
+                "BaselineUnavailable",
+                $"Integration ref '{_subject.Plan.IntegrationRef}' could not be fetched: {fetch.StdErr.Trim()}");
+        _baselineSha = await GitValueAsync(["merge-base", _subject.ExpectedResultSha, "FETCH_HEAD"], ct);
+        if (_baselineSha.Length == 0)
+            throw new ReviewInfrastructureException(
+                "BaselineUnavailable",
+                $"No merge-base exists between the subject and '{_subject.Plan.IntegrationRef}'.");
+        return _baselineSha;
+    }
+
+    private static async Task<FileStream> AcquireCacheLockAsync(string path, CancellationToken ct)
+    {
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(
+                    path,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.Asynchronous);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(100, ct);
+            }
+        }
+    }
+
+    private static async Task<BaselineCacheEntry?> ReadBaselineCacheAsync(
+        string path,
+        string baselineSha,
+        string commandHash,
+        CancellationToken ct)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            await using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+            var entry = await JsonSerializer.DeserializeAsync<BaselineCacheEntry>(stream, cancellationToken: ct);
+            return entry is not null
+                   && string.Equals(entry.BaselineSha, baselineSha, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(entry.CommandHash, commandHash, StringComparison.Ordinal)
+                ? entry
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task WriteBaselineCacheAsync(
+        string path,
+        BaselineCacheEntry entry,
+        CancellationToken ct)
+    {
+        var temporary = path + $".{Guid.NewGuid():N}.tmp";
+        await using (var stream = new FileStream(
+                         temporary,
+                         FileMode.CreateNew,
+                         FileAccess.Write,
+                         FileShare.None,
+                         4096,
+                         FileOptions.Asynchronous))
+        {
+            await JsonSerializer.SerializeAsync(stream, entry, cancellationToken: ct);
+            await stream.FlushAsync(ct);
+        }
+        File.Move(temporary, path, overwrite: true);
+    }
+
+    private async Task AddArtifactsAsync(
+        string name,
+        ProcessResult process,
+        ICollection<ReviewArtifactEvidenceDto> artifacts,
+        CancellationToken ct)
+    {
+        foreach (var (suffix, content) in new[]
+                 {
+                     ("stdout.log", process.StdOut),
+                     ("stderr.log", process.StdErr),
+                 })
+        {
+            var path = Path.Combine(ArtifactPath, $"{name}.{suffix}");
+            await File.WriteAllTextAsync(path, content, ct);
+            artifacts.Add(new ReviewArtifactEvidenceDto(
+                Path.GetFileName(path),
+                "text/plain",
+                HashText(content),
+                new FileInfo(path).Length));
+        }
     }
 
     public ReviewEnvironmentDto EnvironmentEvidence()
@@ -231,6 +486,7 @@ public sealed class RemoteReviewWorkspace
                 ["serviceRole"] = "remote-review-executor",
                 ["workspace"] = AttemptRoot,
                 ["cache"] = CachePath,
+                ["baselineResultCache"] = BaselineCacheRoot,
                 ["temp"] = TempPath,
                 ["ports"] = $"{_lease.PortBase}-{_lease.PortBase + 7}",
                 ["containers"] = _lease.ResourceNamespace,
@@ -272,7 +528,7 @@ public sealed class RemoteReviewWorkspace
             : _subject.ResultRef!;
         var fetch = await ProcessRunner.RunAsync(
             "git",
-            ["-c", "credential.helper=", "fetch", "--no-tags", "--depth=1", "origin", resultRef],
+            ["-c", "credential.helper=", "fetch", "--no-tags", "origin", resultRef],
             RepositoryPath,
             environment: ProcessEnvironment(),
             clearEnvironment: true,
@@ -372,6 +628,66 @@ public sealed class RemoteReviewWorkspace
                 : $"Review command '{command.StepId}' exited {result.ExitCode}.");
     }
 
+    private static ReviewVerdictDto BaselineVerdict(
+        ReviewCommandDto command,
+        BaselineComparison comparison)
+    {
+        var newFailures = comparison.NewFailures.Count == 0
+            ? "0 new failures"
+            : $"{comparison.NewFailures.Count} new failures: {string.Join(", ", comparison.NewFailures)}";
+        var preExisting = comparison.PreExistingFailures.Count == 0
+            ? "0 pre-existing failures"
+            : $"{comparison.PreExistingFailures.Count} pre-existing failures: {string.Join(", ", comparison.PreExistingFailures)}";
+        return new ReviewVerdictDto(
+            command.Aspect,
+            comparison.NewFailures.Count == 0 ? "pass" : "block",
+            comparison.NewFailures.Count == 0 ? "BaselineCompared" : "NewTestFailures",
+            $"{newFailures}; {preExisting}. Baseline {comparison.BaselineSha} ({(comparison.CacheHit ? "cache hit" : "cache fill")}).");
+    }
+
+    private static IReadOnlyList<string> SubjectFailures(
+        ReviewCommandDto command,
+        ProcessResult result)
+    {
+        var failures = ParsedTestFailures(result);
+        if (!result.Success && failures.Count == 0)
+            return [$"<unparsed failure in {command.StepId}>"];
+        return failures;
+    }
+
+    internal static IReadOnlyList<string> ParsedTestFailures(ProcessResult result)
+    {
+        if (result.Success) return [];
+        var failures = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in $"{result.StdOut}\n{result.StdErr}"
+                     .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var match = DotNetFailedPrefix.Match(line);
+            if (!match.Success) match = DotNetFailSuffix.Match(line);
+            if (!match.Success) continue;
+            var name = match.Groups["name"].Value.Trim();
+            if (name.Length > 0 && !name.StartsWith("!", StringComparison.Ordinal))
+                failures.Add(name);
+        }
+        return failures.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    private static string CommandHash(ReviewCommandDto command)
+    {
+        var text = new StringBuilder(command.FileName);
+        foreach (var argument in command.Arguments)
+            text.Append('\0').Append(argument);
+        return HashText(text.ToString());
+    }
+
+    private static readonly Regex DotNetFailedPrefix = new(
+        @"^\s*Failed\s+(?<name>.+?)\s+\[[^\]]+\]\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex DotNetFailSuffix = new(
+        @"^\s*(?:\[[^\]]+\]\s+)?(?<name>.+?)\s+\[FAIL\]\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static string? Field(string marker, string key)
     {
         var content = marker[(marker.IndexOf(':') + 1)..].Replace("]]", string.Empty, StringComparison.Ordinal);
@@ -442,6 +758,49 @@ public sealed record ReviewExecutionEvidence(
     IReadOnlyList<ReviewCommandEvidenceDto> Commands,
     IReadOnlyList<ReviewArtifactEvidenceDto> Artifacts,
     IReadOnlyList<ReviewVerdictDto> Verdicts);
+
+internal sealed record CommandExecution(
+    ProcessResult Process,
+    DateTime StartedAt,
+    DateTime FinishedAt,
+    string? Signal);
+
+internal sealed record BaselineCacheEntry(
+    string BaselineSha,
+    string CommandHash,
+    int ExitCode,
+    IReadOnlyList<string> Failures,
+    DateTime CreatedAt);
+
+internal sealed record BaselineComparison(
+    string BaselineSha,
+    IReadOnlyList<string> BaselineFailures,
+    IReadOnlyList<string> NewFailures,
+    IReadOnlyList<string> PreExistingFailures,
+    bool CacheHit)
+{
+    public static BaselineComparison Create(
+        string baselineSha,
+        IReadOnlyList<string> baselineFailures,
+        IReadOnlyList<string> subjectFailures,
+        bool cacheHit)
+    {
+        var baseline = baselineFailures.ToHashSet(StringComparer.Ordinal);
+        return new BaselineComparison(
+            baselineSha,
+            baselineFailures,
+            subjectFailures.Where(failure => !baseline.Contains(failure))
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+            subjectFailures.Where(baseline.Contains)
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+            cacheHit);
+    }
+
+    public BaselineComparison Reclassify(IReadOnlyList<string> subjectFailures)
+        => Create(BaselineSha, BaselineFailures, subjectFailures, CacheHit);
+}
 
 public sealed class ReviewInfrastructureException : Exception
 {

@@ -42,9 +42,7 @@ public sealed class RemoteReviewExecutor
                 _log($"materializing review attempt={attempt.AttemptId} subject={subject.SubjectId} expected={subject.ExpectedResultSha}");
                 await workspace.PrepareAsync(_client, shutdown);
                 evidence = await workspace.ExecutePlanAsync(shutdown);
-                summary = evidence.Outcome == "Pass"
-                    ? "All applicable remote review aspects passed."
-                    : "At least one remote review aspect found a product concern.";
+                summary = ExecutionSummary(evidence);
             }
             catch (ReviewInfrastructureException exception)
             {
@@ -147,6 +145,19 @@ public sealed class RemoteReviewExecutor
                     _options.TtlSeconds),
                 stop);
         }
+    }
+
+    private static string ExecutionSummary(ReviewExecutionEvidence evidence)
+    {
+        var baseline = evidence.Verdicts
+            .Where(verdict => verdict.Classification is "BaselineCompared" or "NewTestFailures")
+            .Select(verdict => $"{verdict.Aspect}: {verdict.Summary}")
+            .ToArray();
+        if (baseline.Length > 0)
+            return string.Join(" ", baseline);
+        return evidence.Outcome == "Pass"
+            ? "All applicable remote review aspects passed."
+            : "At least one remote review aspect found a product concern.";
     }
 
     private static ReviewExecutionEvidence InfrastructureEvidence(

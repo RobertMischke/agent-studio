@@ -1333,6 +1333,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]));
@@ -1531,6 +1532,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]));
@@ -1703,6 +1705,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]),

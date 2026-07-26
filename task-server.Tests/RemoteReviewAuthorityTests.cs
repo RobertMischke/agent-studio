@@ -317,6 +317,61 @@ public sealed class RemoteReviewAuthorityTests
         Assert.Equal("CommandSubjectMismatch", subjectMismatch.FailureClassification);
     }
 
+    [Theory]
+    [InlineData(false, "Pass")]
+    [InlineData(true, "ProductFailure")]
+    public async Task Baseline_evidence_allows_only_pre_existing_nonzero_test_commands(
+        bool hasNewFailure,
+        string expectedOutcome)
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [new ReviewCommandDto(
+                "verify-2",
+                "build-tests",
+                "dotnet",
+                ["test"],
+                CompareToBaseline: true)],
+            ["build-tests"],
+            IntegrationRef: "refs/heads/develop");
+        await SeedReviewSubjectAsync(store, plan: plan);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var request = PassingReport(claim);
+        request = request with
+        {
+            Commands = request.Commands.Select(command => command with
+            {
+                ExitCode = 1,
+                BaselineSha = new string('c', 40),
+                NewFailures = hasNewFailure ? ["Product.NewFailure"] : [],
+                PreExistingFailures = ["Product.ExistingFailure"],
+                RetryPerformed = hasNewFailure,
+            }).ToArray(),
+            Verdicts =
+            [
+                new ReviewVerdictDto(
+                    "build-tests",
+                    hasNewFailure ? "block" : "pass",
+                    hasNewFailure ? "NewTestFailures" : "BaselineCompared",
+                    hasNewFailure
+                        ? "1 new failure: Product.NewFailure; 1 pre-existing failure."
+                        : "0 new failures; 1 pre-existing failure.")
+            ],
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            request,
+            "review-a",
+            default);
+
+        Assert.Equal(expectedOutcome, report.Outcome);
+    }
+
     [Fact]
     public async Task Stale_review_subject_cannot_overwrite_a_newer_task_lifecycle()
     {
@@ -583,7 +638,8 @@ public sealed class RemoteReviewAuthorityTests
         TaskServerStore store,
         string title = "Task",
         bool policyDifferentHost = false,
-        string codingHost = "coding-host")
+        string codingHost = "coding-host",
+        ReviewPlanDto? plan = null)
     {
         var workspaces = await store.ListWorkspacesAsync(default);
         var workspace = workspaces.FirstOrDefault()
@@ -646,7 +702,7 @@ public sealed class RemoteReviewAuthorityTests
             new CreateReviewSubjectRequest(
                 task.TaskId, coding.Run.RunId, RepositoryId, RepositoryUrl, ResultSha,
                 resultRef, null, null, codingHost,
-                "policy-v1", Plan(policyDifferentHost), $"subject-{task.TaskId}"),
+                "policy-v1", plan ?? Plan(policyDifferentHost), $"subject-{task.TaskId}"),
             "orchestrator",
             default);
     }
@@ -686,6 +742,7 @@ public sealed class RemoteReviewAuthorityTests
                     ReviewCapabilities.GitMaterialization,
                     ReviewCapabilities.SemanticReview,
                     ReviewCapabilities.VisionReview,
+                    ReviewCapabilities.BaselineComparison,
                 ]),
             id,
             default);
