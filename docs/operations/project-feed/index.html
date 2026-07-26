@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projekt-Feed | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 78ch; } p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; } .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 88ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; } li { margin: 5px 0; max-width: 78ch; }
+  /* Feed-Mock */
+  .s-rail { stroke: var(--line); stroke-width: 2; }
+  .s-dot-dec { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 2; }
+  .s-dot-evt { fill: var(--accent-soft); stroke: var(--develop); stroke-width: 2; }
+  .s-dot-idea { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 2; }
+  .s-t { fill: var(--ink-1); font: 600 12.5px system-ui, sans-serif; }
+  .s-s { fill: var(--ink-2); font: 11.5px system-ui, sans-serif; }
+  .s-link { fill: var(--develop); font: 11.5px ui-monospace, monospace; }
+  .s-tok { fill: var(--ink-3); font: 11px ui-monospace, monospace; }
+  .s-time { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Orientierung</p>
+  <h1>Projekt-Feed</h1>
+  <p class="lede">Ein Feed pro Projekt und über alle Projekte: wichtige Entscheidungen und Ereignisse als verlinkte High-Level-Timeline. Für Menschen der Blick „was passiert gerade", für Tasks der beste Einstieg, um Arbeit aufzugreifen — und der Ort, an dem Token-Kosten und Ideen sichtbar werden.</p>
+  <div class="meta">
+    <span><b>Status</b> Konzept</span>
+    <span><b>Publika</b> Menschen · Tasks/Agenten · Stakeholder</span>
+    <span><b>Risiko</b> Token-Verbrauch der Zusammenstellung</span>
+    <span><b>Lücke</b> viele Entscheidungen fallen heute außerhalb des Tools</span>
+  </div>
+</header>
+
+<h2 id="idee"><span class="no">1</span>Idee &amp; Zweck</h2>
+<p>Der Feed ist eine <b>chronologische, extrem High-Level-Sicht</b> auf das, was in einem Projekt zählt: getroffene Entscheidungen, gelandete Integrationen, Eskalationen, neue Konzepte, aufgekommene Ideen. Er ist zugleich <b>Orientierung</b> (der Überblick) und <b>Verbindung</b> (jeder Eintrag verlinkt in die Tiefe — auf Tasks, Workbench-Dokumente, Reviews).</p>
+<table>
+  <tr><th>Publikum</th><th>Was der Feed leistet</th></tr>
+  <tr><td><b>Menschen</b></td><td>Auf einen Blick sehen, was passiert — ohne 80 Karten einzeln zu lesen. High-Level, kuratiert, verlinkt.</td></tr>
+  <tr><td><b>Tasks / Agenten</b></td><td>Ein guter Einstieg, um Arbeit aufzugreifen: „was war zuletzt relevant für meine Aufgabe?" Der Feed liefert den jüngsten Kontext, ohne dass ein Agent das ganze Repo scannen muss.</td></tr>
+  <tr><td><b>Stakeholder</b></td><td>Tägliche/wöchentliche Zusammenfassung als News/Highlights — teilbar, ohne Zugang zum Board.</td></tr>
+</table>
+
+<h2 id="mock"><span class="no">2</span>Wie er aussieht</h2>
+<figure>
+  <svg viewBox="0 0 960 300" role="img" aria-label="Mock eines Projekt-Feeds als verlinkte Timeline mit Token-Badges">
+    <line x1="60" y1="30" x2="60" y2="285" class="s-rail"/>
+    <circle cx="60" cy="52" r="7" class="s-dot-dec"/>
+    <text x="82" y="48" class="s-t">Entscheidung · Container-Default fürs Ausführungsmodell</text>
+    <text x="82" y="66" class="s-s">ersetzt native-first (25.07.) · Bypass-Permissions bleibt Konzept</text>
+    <text x="82" y="84" class="s-link">→ workbench: execution-model-shift · → AGT-2305, AGT-2340</text>
+    <text x="820" y="48" class="s-time">heute 10:20</text>
+    <circle cx="60" cy="120" r="7" class="s-dot-evt"/>
+    <text x="82" y="116" class="s-t">Integriert · Scanner-Cache + Abnahme-Guard live</text>
+    <text x="82" y="134" class="s-s">API 14 s → 0,3 s · Abnahmen jetzt terminal</text>
+    <text x="82" y="152" class="s-link">→ AGT-2342, AGT-2343 · </text><text x="240" y="152" class="s-tok">42k tok · $0.61</text>
+    <text x="820" y="116" class="s-time">heute 03:45</text>
+    <circle cx="60" cy="188" r="7" class="s-dot-idea"/>
+    <text x="82" y="184" class="s-t">Idee · Feed pro Projekt (dieses Konzept)</text>
+    <text x="82" y="202" class="s-s">Orientierung + Einstieg für Tasks · Token-Kosten überall zeigen</text>
+    <text x="82" y="220" class="s-link">→ workbench: project-feed</text>
+    <text x="820" y="184" class="s-time">heute 11:05</text>
+    <circle cx="60" cy="256" r="7" class="s-dot-evt"/>
+    <text x="82" y="252" class="s-t">Integrationsberg gelandet · 28 Karten + Tranche-0</text>
+    <text x="82" y="270" class="s-link">→ AGT-2326 · </text><text x="200" y="270" class="s-tok">Woche: 2,1M tok · $31.40</text>
+    <text x="820" y="252" class="s-time">gestern</text>
+  </svg>
+  <figcaption><b>Link-dichte Timeline, drei Ereignis-Klassen:</b> Entscheidung (gelb), Ereignis (blau), Idee (grün). Jeder Eintrag ist eine Zeile Überschrift, eine Zeile Kontext, verlinkte Tiefe — und, wo sinnvoll, ein <b>Token-/Kosten-Badge</b>. Rechts der Zeitpunkt. Cool, aber ruhig: keine Dauer-Animation, keine Accent-Bars.</figcaption>
+</figure>
+
+<h2 id="daten"><span class="no">3</span>Woher die Daten kommen</h2>
+<p>Vieles liegt schon vor — der Feed ist primär eine <b>Kuratierung vorhandener Signale</b>, kein neuer Datenerzeuger:</p>
+<table>
+  <tr><th>Quelle</th><th>Was sie liefert</th><th>Status</th></tr>
+  <tr><td><b>Task-Timelines</b></td><td>Lane-Wechsel, Human-Review-Entscheide, Eskalationen, Integrationen, Operator-Requeues (<code>TimelineEventKinds</code>).</td><td>vorhanden</td></tr>
+  <tr><td><b>Agent Message Bus</b></td><td>Token-/Usage-Zahlen je Run — die Grundlage für die Kosten-Badges.</td><td>vorhanden (<code>logs/bus/</code>)</td></tr>
+  <tr><td><b>Workbench-Docs</b></td><td>Neue Konzepte/Entscheidungen (dieses Format) als Feed-würdige Ereignisse.</td><td>vorhanden</td></tr>
+  <tr><td><b>Chats (Orchestrator)</b></td><td>Diskussionen und Entscheidungen im Tool — laut Vorgabe die <b>primäre</b> Quelle fürs Zusammenstellen.</td><td>teilweise</td></tr>
+</table>
+<div class="box warn">
+  <h4>Die ehrliche Lücke</h4>
+  <p>Heute fallen viele Diskussionen und Entscheidungen in <b>externen Chats außerhalb des Tools</b>. Damit ist die Datenlage noch nicht gut genug — der Feed ist nur so vollständig wie das, was im Tool ankommt. Zwei Wege (nicht exklusiv): (a) der Orchestrator-Chat wird der bevorzugte Entscheidungsort, sodass Entscheidungen automatisch im Feed landen; (b) ein leichter Weg, externe Entscheidungen einzuspeisen (Einfügen/Import als „Entscheidung"-Eintrag). Der Feed macht die Lücke zugleich <b>sichtbar</b> — was fehlt, fehlt spürbar.</p>
+</div>
+
+<h2 id="token"><span class="no">4</span>Token-Ökonomie — Risiko und Chance</h2>
+<div class="box accent">
+  <h4>Das Risiko, das Robert benennt</h4>
+  <p>Ein Feed, der bei jedem Aufruf „die Welt neu zusammenfasst", verbrennt unnötig Tokens. Das muss die Architektur von Anfang an ausschließen.</p>
+</div>
+<h3>Kostenbewusste Zusammenstellung</h3>
+<ul>
+  <li><b>Inkrementell, nicht neu:</b> Ereignisse werden <em>beim Entstehen</em> angehängt (die Timeline-Events existieren ohnehin). Kein Voll-Rescan, kein Re-Summarize pro Ansicht.</li>
+  <li><b>Deterministisch vor LLM:</b> Die Rohliste (Lane-Wechsel, Integrationen, Tokens) wird ohne Modell gebaut. Ein LLM verdichtet nur dort, wo Prosa nötig ist — die tägliche/wöchentliche Zusammenfassung.</li>
+  <li><b>Billiges Modell für Rollups:</b> Zusammenfassungen laufen als Batch (einmal pro Tag/Woche) mit einem kleinen Modell, nicht bei jedem Blick.</li>
+  <li><b>Gecacht:</b> Eine erzeugte Zusammenfassung ist ein Artefakt mit eigenem Kosten-Eintrag — sichtbar, wiederverwendet.</li>
+</ul>
+<h3>Kosten überall zeigen</h3>
+<p>Die Kehrseite ist eine Chance: Token-Kosten sollen <b>überall sichtbar</b> sein — je Feed-Eintrag, je Task, je Tages-/Wochensumme. Der Feed wird damit auch ein Fenster in die Token-Ökonomie (Anschluss an das Token-Economy-Projekt). „Was hat diese Entscheidung gekostet" steht neben „welche Entscheidung".</p>
+
+<h2 id="rhythmus"><span class="no">5</span>Rhythmus &amp; Reichweite</h2>
+<ul>
+  <li><b>Live-Feed</b> je Projekt: die laufende Timeline.</li>
+  <li><b>Tägliche Zusammenfassung:</b> die 3–5 Highlights des Tages, News-Ton, mit Tageskosten.</li>
+  <li><b>Wöchentliche Zusammenfassung:</b> Stakeholder-tauglich, teilbar — was wurde entschieden, was gelandet, was kostete es.</li>
+  <li><b>Projektübergreifender Feed:</b> ein Meta-Feed über alle Projekte — der Org-weite Puls.</li>
+  <li><b>Ort für Ideen:</b> aufkommende Ideen („lass uns das machen") erscheinen als eigene Ereignis-Klasse und können direkt zu einem Konzept/Task promoted werden — Anschluss an die <a href="../concept-pipeline/index.html">Konzept-Pipeline</a>.</li>
+</ul>
+
+<h2 id="offen"><span class="no">6</span>Offene Entscheidungen (Robert)</h2>
+<div class="box warn">
+  <ul>
+    <li><b>Kuratierung:</b> Was ist „feed-würdig"? Automatische Regeln (jede Entscheidung/Integration) vs. eine leichte Redaktion (nur markierte Ereignisse), damit der Feed nicht verrauscht.</li>
+    <li><b>Entscheidungs-Erfassung:</b> Orchestrator-Chat als primärer Entscheidungsort erzwingen, oder externen Import bauen — oder beides, in welcher Reihenfolge?</li>
+    <li><b>Zusammenfassungs-Kosten:</b> Welches Budget je Tages-/Wochenrollup ist akzeptabel? (Das steuert Modellwahl und Häufigkeit.)</li>
+    <li><b>Stakeholder-Teilen:</b> Als Artifact/Link teilbar — mit welcher Grenze (nichts Sensibles, keine internen Kosten nach außen)?</li>
+  </ul>
+</div>
+<p class="dim">Dieses Konzept ist selbst nach der Konzept-Pipeline entstanden (read-only, Workbench-Deliverable, Abschluss = Sichtblick). Nach deiner Entscheidung wird es zu Umsetzungs-Karten promoted — der erste Schritt wäre der deterministische Live-Feed aus den vorhandenen Timeline-Events, noch ohne LLM-Rollups.</p>
+
+</main>
+</body>
+</html>
