@@ -1,0 +1,23 @@
+@if (key(); as taskKey) {
+  <button type="button"
+          class="copy-key"
+          [class]="'copy-key copy-key--' + variant()"
+          [class.copy-key--copied]="copied()"
+          [attr.data-testid]="testId()"
+          title="Click to copy"
+          [attr.aria-label]="'Copy task key ' + taskKey"
+          [appTooltip]="copied() ? 'Copied' : 'Click to copy'"
+          (click)="copy($event)">
+    @if (copied()) {
+      <span [attr.data-testid]="testId() + '-copy-feedback'" role="status" aria-live="polite">
+        <span aria-hidden="true">✓</span> Copied
+      </span>
+    } @else {
+      {{ label() || taskKey }}
+    }
+  </button>
+} @else {
+  <span class="copy-key copy-key--static"
+        [class]="'copy-key copy-key--' + variant() + ' copy-key--static'"
+        [attr.data-testid]="testId()">{{ label() }}</span>
+}

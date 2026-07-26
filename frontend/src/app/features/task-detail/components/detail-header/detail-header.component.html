@@ -37,10 +37,8 @@
         </div>
         <div class="detail__title-row">
           @if (info().key; as taskKey) {
-            <span class="detail__key-chip"
-                  data-testid="detail-key-chip"
-                  [cacTooltip]="'Right-click to copy'"
-                  (contextmenu)="openTitleContextMenu($event)">{{ taskKey }}</span>
+            <app-copyable-task-key variant="detail" [key]="taskKey" testId="detail-key-chip"
+                                   (contextmenu)="openTitleContextMenu($event)" />
           }
           <h2 class="detail__title"
               (click)="startTitleEdit.emit()"

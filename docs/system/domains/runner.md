@@ -365,7 +365,9 @@ state.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this
-  mode to Claude.
+  mode to Claude. The composer therefore lists Claude and Gemini as disabled
+  host-policy choices with an explicit GPT-only reason; their presence does not
+  make them valid execution routes for this chat.
 - Every coding run is worktree-isolated - single-slot resume/reissue included,
   not just parallel slots. The shared main checkout is read-only reference + the
   integration target; on a failed worktree prepare the run is deferred, never

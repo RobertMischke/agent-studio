@@ -29,6 +29,7 @@ import { buildThinkingLevelIndicator } from '../../../../services/thinking-level
 import { ModelLevelIndicatorComponent } from '../../../../components/model-level-indicator/model-level-indicator.component';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
+import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 /** Top header of the job-detail view: back button, editable title, state pill,
  * and the lane's primary triage action plus
  * an overflow menu of the remaining lane actions. The bottom-of-detail
@@ -40,7 +41,7 @@ import { ExecutionLocationBadgeComponent } from '../../../../components/executio
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ModelLevelIndicatorComponent, PendingButtonDirective, ExecutionLocationBadgeComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ModelLevelIndicatorComponent, PendingButtonDirective, ExecutionLocationBadgeComponent, CopyableTaskKeyComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
