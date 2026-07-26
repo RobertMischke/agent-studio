@@ -589,10 +589,7 @@
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
 
-  &__glyph {
-    color: var(--studio-fg-muted);
-    line-height: 1.4;
-  }
+  &__glyph { color: var(--studio-fg-muted); line-height: 1.4; }
 
   &__copy {
     display: flex;
@@ -603,9 +600,7 @@
     line-height: 1.45;
   }
 
-  &__outcome {
-    color: var(--studio-fg-dim);
-  }
+  &__outcome { color: var(--studio-fg-dim); }
 }
 
 // One collapsible pipeline section: the phase-header button plus its (optionally
