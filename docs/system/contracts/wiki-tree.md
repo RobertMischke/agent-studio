@@ -127,6 +127,10 @@ All paths are rooted at `/api/projects/{projectName}/wiki`. `{projectName}` is a
 `WatchPaths` entry name; an unknown project yields `404`. Wiki paths are always
 relative to `docs/`, must not contain `..`, and must not be rooted.
 
+The tree, recent-edits, per-file history, and immutable revision reads return
+an `ETag` with `Cache-Control: no-cache`. A matching `If-None-Match` returns
+`304 Not Modified` without a response body.
+
 ### `GET /wiki/tree`
 
 Returns the recursive physical docs tree.
@@ -163,6 +167,13 @@ Returns the recursive physical docs tree.
   ]
 }
 ```
+
+### `GET /wiki/recent`
+
+Returns recently edited Wiki pages in newest-first Git order. The Overview uses
+this endpoint as a 15-second conditional poll while it is visible. A `304`
+leaves the rendered feed untouched; a changed response replaces the feed only
+when its page rows differ.
 
 ### `GET /wiki/files/{relPath}`
 
@@ -229,6 +240,12 @@ Provenance precedence: frontmatter `model:` / `last-distilled:` / `why:` wins;
 when absent, `model` falls back to the `Co-authored-by` trailer of the most
 recent commit that touched the file. `commits` is empty when the repo root
 cannot be resolved, but frontmatter still renders.
+
+The history validator is scoped to the selected file: it combines the latest
+commit that touched that file with its live working-tree mtime. Unrelated
+repository commits therefore remain `304`, while committed or uncommitted edits
+to the open file change the ETag. The reader uses that change only to show an
+update banner; content is fetched again after the operator confirms reload.
 
 ### `GET /wiki/revisions/{sha}/{relPath}`
 

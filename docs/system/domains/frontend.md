@@ -235,7 +235,7 @@ The dashboard is a projection over existing domain truths:
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
 | Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
-| Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
+| Wiki activity | Initial `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`, then a visible-only conditional poll of `GET /api/projects/{projectName}/wiki/recent?limit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |
 | Visual evidence | `GET /api/projects/{projectName}/visual-evidence`, with append-only review receipts shared with task detail | Existing Visual Evidence detail surface |
 | Publishing | Publish targets from `GET /api/projects/{projectName}/snapshot`, rendered by the existing publish panel | Publishing panel |

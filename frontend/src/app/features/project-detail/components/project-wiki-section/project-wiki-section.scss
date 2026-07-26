@@ -1,4 +1,5 @@
 @use '../../../../../styles/mixins' as m;
+@use './project-wiki-live-refresh';
 
 // Fill the host's flex slot so the doc browser uses the panel's full height
 // top-to-bottom (no offset short box). Degrades gracefully in a non-flex
