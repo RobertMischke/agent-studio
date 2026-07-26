@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-build-release:
+    name: Test, build and publish release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and repository version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]
+          version="${GITHUB_REF_NAME#v}"
+          test "$(tr -d '\r\n' < VERSION)" = "$version"
+          test "$(git tag --points-at "$GITHUB_SHA" | grep -Fx "$GITHUB_REF_NAME")" = "$GITHUB_REF_NAME"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Pin npm 11
+        run: |
+          npm install --global npm@11.3.0
+          test "$(npm --version)" = "11.3.0"
+
+      - name: Restore .NET dependencies
+        run: dotnet restore agent-taskboard.sln
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Test release shell contracts
+        run: bash scripts/release/release-scripts.test.sh
+
+      - name: Test .NET solution
+        run: >-
+          dotnet test agent-taskboard.sln
+          --configuration Release
+          --no-restore
+          --filter "Category!=MachineBound"
+          --logger "console;verbosity=minimal"
+
+      - name: Test release topology
+        run: |
+          dotnet test runner.Tests/AgentRunner.Tests.csproj \
+            --configuration Release --no-build \
+            --filter "FullyQualifiedName~AgentRunner.Tests.LogShipperCapTests|FullyQualifiedName~AgentRunner.Tests.BoundedOutputBufferTests"
+          dotnet test task-server.Tests/TaskServer.Tests.csproj \
+            --configuration Release --no-build \
+            --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
+            --logger "console;verbosity=normal"
+
+      - name: Lint and type-check frontend
+        working-directory: frontend
+        run: |
+          npm run lint:ci
+          npm run typecheck
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm run test:ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Publish self-contained binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          common=(
+            --configuration Release
+            --self-contained true
+            -p:PublishSingleFile=true
+            -p:IncludeNativeLibrariesForSelfExtract=true
+            -p:PublishTrimmed=false
+            -p:DebugType=None
+            -p:DebugSymbols=false
+            -p:Version="$VERSION"
+            -p:SourceRevisionId="$SHA"
+          )
+          dotnet publish task-server/TaskServer.csproj "${common[@]}" \
+            --runtime linux-x64 --output artifacts/publish/task-server
+          dotnet publish orchestrator-engine/OrchestratorEngine.csproj "${common[@]}" \
+            --runtime linux-x64 --output artifacts/publish/orchestrator-engine
+          dotnet publish runner/AgentRunner.csproj "${common[@]}" \
+            --runtime linux-x64 --output artifacts/publish/agent-host-linux-x64
+          dotnet publish runner/AgentRunner.csproj "${common[@]}" \
+            --runtime osx-arm64 --output artifacts/publish/agent-host-osx-arm64
+
+      - name: Verify published identities and platforms
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          artifacts/publish/task-server/task-server --version | tee /tmp/task-server.version
+          artifacts/publish/orchestrator-engine/orchestrator-engine --version | tee /tmp/orchestrator-engine.version
+          artifacts/publish/agent-host-linux-x64/agent-host --version | tee /tmp/agent-host.version
+          grep -F "$VERSION" /tmp/task-server.version
+          grep -F "$VERSION" /tmp/orchestrator-engine.version
+          grep -F "$VERSION" /tmp/agent-host.version
+          grep -F "$SHA" /tmp/task-server.version
+          grep -F "$SHA" /tmp/orchestrator-engine.version
+          grep -F "$SHA" /tmp/agent-host.version
+          test "$(od -An -tx1 -N4 artifacts/publish/agent-host-linux-x64/agent-host | tr -d ' \n')" = '7f454c46'
+          test "$(od -An -tx1 -N8 artifacts/publish/agent-host-osx-arm64/agent-host | tr -d ' \n')" = 'cffaedfe0c000001'
+
+      - name: Create three archives and SHA-256 checksums
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          scripts/release/package-release.sh \
+            "${{ steps.version.outputs.version }}" \
+            "$GITHUB_SHA" \
+            artifacts/publish \
+            frontend/dist/frontend/browser \
+            artifacts/release
+
+      - name: Attest release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/release/*.tar.gz
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          artifacts/release/*.tar.gz
+          artifacts/release/SHA256SUMS
+          --verify-tag
+          --generate-notes
+          --title "Agent Studio ${{ steps.version.outputs.version }}"

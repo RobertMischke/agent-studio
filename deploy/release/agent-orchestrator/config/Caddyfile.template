@@ -1,0 +1,30 @@
+{
+	email {$ACME_EMAIL}
+}
+
+http://{$STUDIO_DOMAIN} {
+	redir https://{$STUDIO_DOMAIN}{uri} permanent
+}
+
+{$STUDIO_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	@task_server path /api/* /healthz /readyz
+	handle @task_server {
+		reverse_proxy 127.0.0.1:5071
+	}
+
+	handle {
+		root * /opt/agent-studio/current/browser
+		try_files {path} /index.html
+		file_server
+	}
+}

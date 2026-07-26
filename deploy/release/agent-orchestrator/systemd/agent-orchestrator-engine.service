@@ -1,0 +1,28 @@
+[Unit]
+Description=Agent Orchestrator Engine
+After=network-online.target agent-task-server.service
+Wants=network-online.target
+Requires=agent-task-server.service
+
+[Service]
+Type=simple
+User=agent-orchestrator
+Group=agent-orchestrator
+WorkingDirectory=/var/lib/agent-orchestrator
+EnvironmentFile=/etc/agent-orchestrator/engine.env
+ExecStart=/opt/agent-orchestrator/current/orchestrator-engine
+Restart=always
+RestartSec=5s
+TimeoutStopSec=90s
+KillSignal=SIGTERM
+SyslogIdentifier=orchestrator-engine
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agent-orchestrator
+
+[Install]
+WantedBy=multi-user.target
