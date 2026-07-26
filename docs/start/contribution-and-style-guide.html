@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contribution and Style Guide</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fb;
+      --surface: #ffffff;
+      --surface-soft: #f1f4f9;
+      --ink: #182033;
+      --muted: #5d687d;
+      --line: #d9dfeb;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --teal: #0f8b73;
+      --teal-soft: #e4f5f0;
+      --coral: #d64b55;
+      --code: #edf1f7;
+      --shadow: 0 14px 34px rgba(30, 43, 70, .08);
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15171c;
+        --surface: #1d2027;
+        --surface-soft: #242833;
+        --ink: #eef0f5;
+        --muted: #a9b1c0;
+        --line: #383e4a;
+        --blue: #77a5ff;
+        --blue-soft: #1e2b46;
+        --teal: #57d6b9;
+        --teal-soft: #17342f;
+        --coral: #ff8790;
+        --code: #292e38;
+        --shadow: 0 16px 38px rgba(0, 0, 0, .28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--sans); }
+    main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 54px; }
+    h1, h2, h3, p, ul { margin-top: 0; }
+    h1 { max-width: 780px; margin-bottom: 12px; font-size: clamp(2rem, 5vw, 3.6rem); line-height: 1.03; letter-spacing: -.045em; }
+    h2 { margin-bottom: 8px; font-size: 1.2rem; line-height: 1.25; }
+    h3 { margin-bottom: 6px; font-size: .92rem; }
+    p:last-child, ul:last-child { margin-bottom: 0; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code { padding: .12em .36em; border-radius: 5px; background: var(--code); font: .9em/1.4 var(--mono); }
+    pre { margin: 10px 0 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--code); padding: 13px 15px; }
+    pre code { padding: 0; background: transparent; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font: 700 .74rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .eyebrow::before { width: 8px; height: 8px; border-radius: 50%; background: currentColor; content: ""; }
+    .lede { max-width: 820px; color: var(--muted); font-size: 1.08rem; }
+    .authority { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; margin: 26px 0 30px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; box-shadow: var(--shadow); }
+    .authority .mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: var(--blue-soft); color: var(--blue); font-weight: 800; }
+    .authority strong { display: block; margin-bottom: 3px; }
+    .authority p { color: var(--muted); }
+    .map { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0 0 28px; }
+    .map a { display: grid; min-height: 76px; align-content: center; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 12px; color: var(--ink); text-decoration: none; }
+    .map span { color: var(--muted); font: 700 .68rem/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .map b { margin-top: 5px; font-size: .88rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    section { scroll-margin-top: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 20px; box-shadow: var(--shadow); }
+    section.wide { grid-column: 1 / -1; }
+    .number { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 12px; color: var(--coral); font: 700 .72rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .number::before { width: 7px; height: 7px; border-radius: 2px; background: currentColor; content: ""; }
+    .rule { margin: 14px 0; border-radius: 10px; background: var(--surface-soft); padding: 13px 14px; }
+    .rule strong { color: var(--teal); }
+    ul { padding-left: 1.25rem; }
+    li + li { margin-top: 6px; }
+    .branch-grid, .evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .mini { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); padding: 13px; }
+    .mini p { color: var(--muted); }
+    .diagram-link { display: flex; gap: 12px; align-items: center; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--blue-soft); padding: 13px; text-decoration: none; }
+    .diagram-link .dot { width: 11px; height: 11px; flex: none; border-radius: 50%; background: var(--blue); box-shadow: 22px 0 0 var(--teal); margin-right: 22px; }
+    footer { margin-top: 24px; color: var(--muted); font-size: .83rem; }
+    @media (max-width: 780px) {
+      main { width: min(100% - 22px, 1120px); padding-top: 24px; }
+      .map { grid-template-columns: 1fr 1fr; }
+      .grid, .branch-grid, .evidence-grid { grid-template-columns: 1fr; }
+      section.wide { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Repository-wide conventions</div>
+    <h1>Contribution and Style Guide</h1>
+    <p class="lede">The authoritative convention source for repository contributors, built-in agents, and external agents. Read this page before changing code, documentation, tests, diagrams, branches, commits, or review evidence.</p>
+  </header>
+
+  <div class="authority">
+    <div class="mark">A</div>
+    <div>
+      <strong>Authority and scope</strong>
+      <p>This page defines the shared contribution conventions. Repository and directory-level <code>AGENTS.md</code> files may add narrower operational or domain rules, and an explicit task may add requirements for that task. When another general convention conflicts with this page, follow this page.</p>
+    </div>
+  </div>
+
+  <nav class="map" aria-label="Guide sections">
+    <a href="#language"><span>01</span><b>Language</b></a>
+    <a href="#diagrams"><span>02</span><b>Diagrams</b></a>
+    <a href="#tests"><span>03</span><b>Tests</b></a>
+    <a href="#git"><span>04</span><b>Commits and branches</b></a>
+    <a href="#evidence"><span>05</span><b>Evidence</b></a>
+  </nav>
+
+  <div class="grid">
+    <section id="language">
+      <div class="number">01 · Language policy</div>
+      <h2>Public repository artifacts are English</h2>
+      <p>Use English for every artifact that becomes part of a public repository or its public operating history.</p>
+      <div class="rule"><strong>Required:</strong> code identifiers and user-facing strings, source comments, documentation, Wiki pages, prompts, test names and messages, commit messages, branch slugs, issue text, and pull request text are English.</div>
+      <ul>
+        <li>Keep quoted user input or fixture data in its original language only when the language itself is relevant to the test or behavior.</li>
+        <li>Translate existing non-English material when the task makes that material canonical or substantially revises it.</li>
+        <li>Prefer plain, direct language. Define project-specific terms at first use.</li>
+      </ul>
+      <h3>Public tone</h3>
+      <p>Website copy, organization profiles, and public documentation use factual, neutral English.</p>
+      <ul>
+        <li>Use claims that can be verified, such as <q>Every run leaves evidence.</q></li>
+        <li>Do not use marketing adjectives, metaphors, or <code>honest</code> as a product adjective.</li>
+        <li>Do not describe a feature as <q>the mechanism</q> and do not position the product by contrasting it with chat.</li>
+        <li>State an open-source license as a fact. Do not present open source as a value claim.</li>
+        <li>Describe pipeline capability as <q>Custom pipelines with multiple review steps.</q> This wording does not assume prior pipeline knowledge.</li>
+        <li>Use the plural category statement <q>Management layers on top of coding work.</q></li>
+      </ul>
+    </section>
+
+    <section id="diagrams">
+      <div class="number">02 · Diagram style</div>
+      <h2>Apply the Agent Host Protocol diagram specification</h2>
+      <p>Architecture diagrams use grids and whitespace, flat bordered boxes, thin SVG wires, and three defined semantic colors. Blue represents authority or the control plane. Teal represents execution. Coral is reserved for numbers and small labels.</p>
+      <ul>
+        <li>Build self-contained, theme-aware HTML with no external fonts or runtime dependencies.</li>
+        <li>Keep labels as selectable HTML and use SVG only for connection lines.</li>
+        <li>Support reduced motion, responsive overflow, and both light and dark themes.</li>
+      </ul>
+      <a class="diagram-link" href="../app/prompts/diagramm-stil-agent-host-protocol.md">
+        <span class="dot" aria-hidden="true"></span>
+        <span><strong>Canonical diagram specification</strong><br><small>Tokens, components, pitfalls, and verification instructions</small></span>
+      </a>
+    </section>
+
+    <section id="tests" class="wide">
+      <div class="number">03 · Test conventions</div>
+      <h2>Separate machine-dependent tests</h2>
+      <p>Tests that depend on machine timing, host load, real child processes, real ports or sockets, live services, live workspaces, or performance thresholds must carry the xUnit trait <code>[Trait("Category", "MachineBound")]</code>. Put the trait on the class when every test in the class is machine-bound; otherwise put it on each affected method.</p>
+      <div class="rule"><strong>Do not use the trait to hide a fixable test.</strong> Prefer fake time, deterministic synchronization, temporary isolated resources, and mocked boundaries. Apply <code>MachineBound</code> only when the test intentionally exercises a real machine-dependent boundary.</div>
+      <p>The canonical routine .NET test command excludes those tests:</p>
+      <pre><code>dotnet test --filter Category!=MachineBound</code></pre>
+      <p style="margin-top:12px">Run machine-bound tests separately in an appropriate environment when the change affects them, and report both commands and outcomes.</p>
+    </section>
+
+    <section id="git">
+      <div class="number">04 · Commits and branches</div>
+      <h2>Follow the commit and branch naming rules</h2>
+      <p>Commit messages are English and follow Conventional Commits. Describe the task intent and the delivered behavior, not a mechanical file list. Keep subjects concise and use a body when rationale or verification matters.</p>
+      <div class="branch-grid">
+        <div class="mini">
+          <h3><code>task/&lt;slug&gt;</code></h3>
+          <p>Platform-owned branch for isolated task work. The slug is the normalized stable task key, for example <code>task/agt-2237</code>.</p>
+        </div>
+        <div class="mini">
+          <h3><code>runner/&lt;id&gt;/&lt;key&gt;</code></h3>
+          <p>Remote runner delivery or salvage branch, namespaced by runner identity and task key.</p>
+        </div>
+      </div>
+      <div class="rule"><strong>Ownership:</strong> the platform creates, commits, pushes, integrates, and cleans up managed task branches. Run agents must not create or switch branches, commit, amend, push, merge, rebase, or mutate remotes unless the individual task explicitly grants that authority.</div>
+    </section>
+
+    <section id="evidence">
+      <div class="number">05 · Evidence expectations</div>
+      <h2>Store review evidence with the task</h2>
+      <p>Put durable review artifacts under the task job folder's <code>results/</code> directory. Evidence must let a reviewer connect the requirement, the implementation, and the verification without reconstructing the run.</p>
+      <div class="evidence-grid">
+        <div class="mini">
+          <h3>All changes</h3>
+          <p>Report changed files and the exact verification commands with outcomes. Store reports, logs needed for review, and generated artifacts in <code>results/</code>.</p>
+        </div>
+        <div class="mini">
+          <h3>UI changes</h3>
+          <p>Add relevant Playwright coverage and screenshots. Verify both themes and responsive states when affected. Persist review captures under <code>results/</code>.</p>
+        </div>
+      </div>
+      <ul style="margin-top:14px">
+        <li>Label screenshot provenance in the filename with <code>--real</code> or <code>--mocked</code>. Use <code>--composite</code> for an explicitly documented composite.</li>
+        <li>Prefer real-backend screenshots for UI acceptance. Mocked screenshots are valid when labeled and appropriate to the claim.</li>
+        <li>Ensure every linked image exists. Do not cite a path that was not preserved.</li>
+        <li>Documentation-only changes need link and diff verification, not a product build or Playwright run.</li>
+      </ul>
+    </section>
+  </div>
+
+  <footer>Canonical as of 22 July 2026. Keep agent prompts and repository navigation pointed at this page instead of duplicating these conventions.</footer>
+</main>
+</body>
+</html>
