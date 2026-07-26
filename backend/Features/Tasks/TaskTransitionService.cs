@@ -94,7 +94,8 @@ public sealed class TaskTransitionService
         string? cause = null,
         string? reason = null,
         AttemptWriteReference? authorityWrite = null,
-        bool suppressProductExecution = false)
+        bool suppressProductExecution = false,
+        string? expectedSourceState = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -147,7 +148,13 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause, authorityWrite);
+        var outcome = _states.MoveJob(
+            jobId,
+            targetState,
+            watchPath,
+            cause,
+            authorityWrite,
+            expectedSourceState);
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
         if (operatorRequeue && _operatorReviewRequeue != null)

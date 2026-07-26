@@ -160,6 +160,12 @@ public static class TimelineEventKinds
     /// new epoch, and rotated artefact count.
     /// </summary>
     public const string OperatorRequeued = "operator_requeued";
+    /// <summary>
+    /// A fenced remote review report arrived after an operator had already
+    /// accepted or archived the task. The report remains evidence, but cannot
+    /// reopen the terminal lane.
+    /// </summary>
+    public const string PostAcceptanceReviewReportRecorded = "post_acceptance_review_report_recorded";
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>

@@ -128,7 +128,8 @@ public enum MoveJobStatus
     NotFound,
     TargetFolderExists,
     DirectoryLocked,
-    Failure
+    Failure,
+    SourceStateMismatch
 }
 
 /// <summary>

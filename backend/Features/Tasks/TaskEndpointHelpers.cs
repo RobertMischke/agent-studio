@@ -309,9 +309,8 @@ internal static class TaskEndpointHelpers
     /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
     /// (a dependency is fulfilled when its target reaches 6-completed OR
     /// 7-archive, and the board snapshot omits archive), so the key index is
-    /// built from <see cref="TaskScannerService.ScanAllJobsWithArchive"/> once
-    /// per request. Cards without dependencies are skipped, keeping the common
-    /// case free.
+    /// read from the archive-inclusive snapshot's published reference index.
+    /// Cards without dependencies are skipped, keeping the common case free.
     /// </summary>
     internal static Dictionary<string, WaitsOnStatus> BuildWaitsOnLookup(
         IEnumerable<TaskInfo> jobs,
@@ -321,9 +320,9 @@ internal static class TaskEndpointHelpers
         var withDeps = jobs.Where(j => j.References?.DependsOn.Count > 0).ToList();
         if (withDeps.Count == 0) return result;
 
-        // One archive-inclusive index for the whole request; keys are globally
-        // unique across projects, so this resolves cross-project targets too.
-        var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+        // The archive-inclusive index is built once per snapshot generation;
+        // keys are globally unique across projects.
+        var index = scanner.GetReferenceIndex();
         foreach (var job in withDeps)
         {
             result[job.TaskKey] = index.EvaluateWaitsOn(job);

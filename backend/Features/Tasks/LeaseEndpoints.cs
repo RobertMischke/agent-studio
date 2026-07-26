@@ -256,8 +256,6 @@ public static class LeaseEndpoints
                     }
                 }
 
-                var allWithArchive = scanner.ScanAllJobsWithArchive();
-                var waitsOn = TaskReferenceIndex.Build(allWithArchive);
                 var recoveredSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 var activeTaskKeys = req.ActiveTaskKeys is null
                     ? null
@@ -338,12 +336,16 @@ public static class LeaseEndpoints
                         recoveredSources[interruptedKey] = recoveryWrite.AttemptId;
                 }
 
+                var claimSnapshot = scanner.GetLiveSnapshotWithReferenceIndex();
+                var liveSnapshot = claimSnapshot.Live;
+                var waitsOn = claimSnapshot.References;
+
                 if (req.AvailableSlots <= 0)
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
                         Message: "runner status recorded; no free host slots"));
 
-                var eligible = scanner.ScanAllJobs()
+                var eligible = liveSnapshot
                     .Where(t => t.State == TaskStates.Ready)
                     .Where(t =>
                     {

@@ -84,6 +84,27 @@ public class TaskLaneChangeLedgerTests : IDisposable
     }
 
     [Fact]
+    public void MoveJob_ExpectedSourceMismatch_DoesNotReopenCompletedTask()
+    {
+        SeedJob(TaskStates.Completed, "accepted");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob(
+            "accepted",
+            TaskStates.HumanReview,
+            _watchPath,
+            expectedSourceState: TaskStates.AutoReview);
+
+        Assert.Equal(MoveJobStatus.SourceStateMismatch, outcome.Status);
+        var completedFolder = Path.Combine(_watchPath, TaskStates.Completed, "accepted");
+        Assert.True(Directory.Exists(completedFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "accepted")));
+        Assert.DoesNotContain(
+            timeline.ReadAll(completedFolder),
+            row => row.Kind == TimelineEventKinds.LaneChanged);
+    }
+
+    [Fact]
     public void MoveJob_MultipleCrossings_AccumulateAppendOnlyHistory()
     {
         SeedJob(TaskStates.Ready, "round-trip");
