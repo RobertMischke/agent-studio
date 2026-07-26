@@ -615,6 +615,7 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<WikiContentCache>();
 // Lexical wiki search (BM25 in-memory index, lazily rebuilt on a docs
 // fingerprint change) with the fail-open semantic query-expansion layer.
 builder.Services.AddSingleton<WikiSearchService>();
@@ -972,6 +973,22 @@ taskScanner.SetIndexCache(jobIndexCache);
 taskScanner.SetStatsMetadataCache(jobStatsMetadataCache);
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
 watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
+
+// Central wiki read model: bind the process-wide cache, rebuild it eagerly on
+// debounced docs/ watcher events, and preload every registered project before
+// the HTTP listener starts. All wiki endpoints then read an already-published
+// snapshot instead of validating it with a per-request filesystem walk.
+var wikiContentCache = app.Services.GetRequiredService<WikiContentCache>();
+var projectDocs = app.Services.GetRequiredService<ProjectDocsService>();
+projectDocs.SetWikiContentCache(wikiContentCache);
+watcher.OnWikiChanged += (projectName, _) =>
+    wikiContentCache.Invalidate(projectName, WikiContentCache.InvalidationSource.Watcher);
+Parallel.ForEach(
+    taskScanner.GetWatchPaths()
+        .Select(entry => entry.Name)
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Distinct(StringComparer.OrdinalIgnoreCase),
+    projectName => wikiContentCache.Preload(projectName));
 
 // TaskAccess layer (ADR-0024): force a synchronous first index read so
 // boot-time disk problems surface here rather than on the first HTTP

@@ -9,17 +9,15 @@ using Xunit.Abstractions;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// The CACHE + MEASURE half of AGT-2013. Building the wiki tree used to open one
-/// file per doc-node for title extraction and the recent-edits / history panels
-/// spawned a fresh <c>git log</c> on every navigation - O(N) file reads and
-/// repeated multi-hundred-ms git spawns with no memoization. These tests pin the
-/// three properties the fix relies on, measured deterministically via the
+/// Building the wiki tree used to open one file per doc-node for title
+/// extraction and stat the complete docs tree on every request. Recent-edits
+/// and history also spawned a fresh <c>git log</c> on every navigation. These
+/// tests pin the central eager-cache properties, measured deterministically via
 /// per-request <see cref="GitProcessTelemetry"/> rollup (files read + git spawns)
 /// rather than wall-clock timing:
 /// <list type="number">
 /// <item>a warm tree request opens zero files and reuses its ETag;</item>
-/// <item>an edit self-invalidates the tree via its signature and re-reads only
-/// the changed file;</item>
+/// <item>a watcher or mutation rebuilds before the next reader;</item>
 /// <item>recent / history / revision are served with zero git spawns while HEAD
 /// is unchanged, and refresh when a new commit moves HEAD.</item>
 /// </list>
@@ -67,23 +65,22 @@ public class WikiPerformanceCacheTests : IDisposable
         var log = new CapturingLogger<ProjectDocsService>();
         var docs = BuildDocsService(log, ("Tree", projectRoot));
 
+        Assert.True(docs.PreloadWikiContent("Tree"));
         var cold = docs.GetWikiTreeResult("Tree");
-        var coldRollup = LastRollup(log, "wiki/tree");
 
         var warm = docs.GetWikiTreeResult("Tree");
         var warmRollup = LastRollup(log, "wiki/tree");
 
         Assert.NotNull(cold);
         Assert.NotNull(warm);
-        // Cold opened one file per doc-node to sniff a title...
-        Assert.True(coldRollup.Files >= 12, $"cold files={coldRollup.Files}");
-        // ...warm opened none, and returned the identical (byte-for-byte) ETag.
+        // Startup preload paid the only fill. Both HTTP-shaped reads open no
+        // files and return the identical (byte-for-byte) ETag.
         Assert.Equal(0, warmRollup.Files);
         Assert.Equal(cold!.ETag, warm!.ETag);
     }
 
     [Fact]
-    public void GetWikiTreeResult_EditingADoc_SelfInvalidates_AndRereadsOnlyThatFile()
+    public void GetWikiTreeResult_WatcherInvalidation_EagerlyRebuildsBeforeNextRead()
     {
         var projectRoot = Path.Combine(_tempDir, "tree-edit");
         var docsDir = Path.Combine(projectRoot, "docs");
@@ -100,6 +97,7 @@ public class WikiPerformanceCacheTests : IDisposable
         // Change one doc's H1 (and length, so the signature differs regardless of
         // filesystem mtime resolution).
         File.WriteAllText(Path.Combine(docsDir, "doc3.md"), "# Renamed heading now\nbody body");
+        docs.InvalidateWikiContent("Edit", WikiContentCache.InvalidationSource.Watcher);
 
         var after = docs.GetWikiTreeResult("Edit");
         var rebuildRollup = LastRollup(log, "wiki/tree");
@@ -110,8 +108,8 @@ public class WikiPerformanceCacheTests : IDisposable
         var doc3 = FindNode(after.Tree.Root, "doc3.md");
         Assert.NotNull(doc3);
         Assert.Equal("Renamed heading now", doc3!.Title);
-        // Only the one changed file was re-opened; the other 7 came from the title cache.
-        Assert.Equal(1, rebuildRollup.Files);
+        // Rebuild happened eagerly during invalidation, outside the reader.
+        Assert.Equal(0, rebuildRollup.Files);
     }
 
     [Fact]
@@ -140,6 +138,7 @@ public class WikiPerformanceCacheTests : IDisposable
         RunGit(repoRoot, "add -A");
         RunGitArgs(repoRoot, "commit", "-q", "-m", "change outside docs");
         git.InvalidateHeadKeyedCaches();
+        docs.InvalidateWikiContent("Source");
 
         var refreshed = docs.GetWikiTreeResult("Source");
         Assert.NotNull(refreshed);
@@ -255,6 +254,9 @@ public class WikiPerformanceCacheTests : IDisposable
         RunGit(repoRoot, "add -A");
         RunGitArgs(repoRoot, "commit", "-q", "-m", "add gamma");
         git.InvalidateHeadKeyedCaches();
+        docs.InvalidateWikiContent(
+            "Recent",
+            WikiContentCache.InvalidationSource.Watcher);
 
         var refreshed = docs.GetWikiRecentEditsResult("Recent", git, 10);
         Assert.NotNull(refreshed);
@@ -357,7 +359,7 @@ public class WikiPerformanceCacheTests : IDisposable
         // The bytes at a concrete sha never change, so the second read is free.
         Assert.Equal(0, warmRollup.Spawns);
         Assert.Equal(cold.ETag, warm!.ETag);
-        Assert.Equal("\"wiki-rev-" + sha + "\"", warm.ETag);
+        Assert.Equal(ProjectDocsService.FormatETag("wiki-rev-" + sha), warm.ETag);
     }
 
     // ---- Endpoint conditional GET: matching If-None-Match -> 304 ----
@@ -433,6 +435,84 @@ public class WikiPerformanceCacheTests : IDisposable
         Assert.True(warmMs < coldMs, $"warm {warmMs:F2}ms should beat cold {coldMs:F1}ms");
     }
 
+    [Fact]
+    public void CurrentRepository_WarmWikiEndpoints_PrintTimingsAndTelemetry()
+    {
+        var repoRoot = FindRepoRoot();
+        var entries = new[] { (Name: "CurrentRepo", RootPath: repoRoot) };
+        var config = BuildConfig(entries);
+        var scanner = BuildScanner(entries);
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var workbenches = new WorkbenchCatalogueService(scanner, registry, git);
+        var log = new CapturingLogger<ProjectDocsService>();
+        var docs = new ProjectDocsService(scanner, registry, log, git, workbenches);
+        var cache = new WikiContentCache(docs, NullLogger<WikiContentCache>.Instance);
+        docs.SetWikiContentCache(cache);
+        var physicalDocs = Path.Combine(repoRoot, ProjectDocsService.WikiRel);
+        var physicalFiles = Directory.EnumerateFiles(
+            physicalDocs, "*", SearchOption.AllDirectories).Count();
+        var physicalFolders = Directory.EnumerateDirectories(
+            physicalDocs, "*", SearchOption.AllDirectories).Count() + 1;
+
+        var preload = Stopwatch.StartNew();
+        Assert.True(cache.Preload("CurrentRepo"));
+        preload.Stop();
+
+        // Prime only the independent HEAD-keyed Git projections. The docs
+        // projection was already paid by preload.
+        _ = docs.GetWikiRecentEditsResult("CurrentRepo", git, 12);
+        _ = docs.GetWikiPulse("CurrentRepo", git, 12);
+        _ = docs.GetWikiFolder("CurrentRepo", "", git);
+
+        static double AverageMs(int repetitions, Action action)
+        {
+            var sw = Stopwatch.StartNew();
+            for (var i = 0; i < repetitions; i++) action();
+            sw.Stop();
+            return sw.Elapsed.TotalMilliseconds / repetitions;
+        }
+
+        var treeMs = AverageMs(20, () => Assert.NotNull(docs.GetWikiTreeResult("CurrentRepo")));
+        var fullMs = AverageMs(20, () => Assert.NotNull(docs.GetWikiOverview("CurrentRepo")));
+        var recentMs = AverageMs(5, () => Assert.NotNull(docs.GetWikiRecentEditsResult("CurrentRepo", git, 12)));
+        var pulseMs = AverageMs(3, () => Assert.NotNull(docs.GetWikiPulse("CurrentRepo", git, 12)));
+        var folderMs = AverageMs(10, () => Assert.NotNull(docs.GetWikiFolder("CurrentRepo", "", git)));
+        var homeMs = AverageMs(20, () => Assert.NotNull(docs.GetWikiHome("CurrentRepo")));
+
+        var overview = docs.GetWikiOverview("CurrentRepo")!;
+        var treeTelemetry = LastRollup(log, "wiki/tree");
+        var fullTelemetry = LastRollup(log, "wiki");
+        var recentTelemetry = LastRollup(log, "wiki/recent");
+        var pulseTelemetry = LastRollup(log, "wiki/pulse");
+        var folderTelemetry = LastRollup(log, "wiki/folder");
+        var homeTelemetry = LastRollup(log, "wiki/home");
+
+        _output.WriteLine(
+            $"[wiki/cache] files={physicalFiles} folders={physicalFolders} pages={overview.Files.Count} "
+            + $"preload={preload.Elapsed.TotalMilliseconds:F1}ms fills={cache.Fills}");
+        _output.WriteLine(
+            $"[wiki/tree] warm={treeMs:F2}ms spawns={treeTelemetry.Spawns} files={treeTelemetry.Files}");
+        _output.WriteLine(
+            $"[wiki] warm={fullMs:F2}ms spawns={fullTelemetry.Spawns} files={fullTelemetry.Files}");
+        _output.WriteLine(
+            $"[wiki/recent] warm={recentMs:F2}ms spawns={recentTelemetry.Spawns} files={recentTelemetry.Files}");
+        _output.WriteLine(
+            $"[wiki/pulse] warm={pulseMs:F2}ms spawns={pulseTelemetry.Spawns} files={pulseTelemetry.Files}");
+        _output.WriteLine(
+            $"[wiki/folder] warm={folderMs:F2}ms spawns={folderTelemetry.Spawns} files={folderTelemetry.Files}");
+        _output.WriteLine(
+            $"[wiki/home] warm={homeMs:F2}ms spawns={homeTelemetry.Spawns} files={homeTelemetry.Files}");
+
+        Assert.Equal(1, cache.Fills);
+        Assert.Equal((0, 0), treeTelemetry);
+        Assert.Equal((0, 0), fullTelemetry);
+        Assert.Equal((0, 0), recentTelemetry);
+        Assert.Equal((0, 0), pulseTelemetry);
+        Assert.Equal((0, 0), folderTelemetry);
+        Assert.Equal((0, 0), homeTelemetry);
+    }
+
     // ---- helpers ----
 
     private static WikiTreeNode? FindNode(IEnumerable<WikiTreeNode> nodes, string name)
@@ -500,6 +580,17 @@ public class WikiPerformanceCacheTests : IDisposable
         RunGit(repoRoot, "init -q -b main");
         RunGit(repoRoot, "config user.email test@example.com");
         RunGit(repoRoot, "config user.name test");
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = AppContext.BaseDirectory;
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current, "agent-taskboard.sln"))) return current;
+            current = Path.GetDirectoryName(current);
+        }
+        throw new InvalidOperationException("agent-taskboard.sln not found above test base directory.");
     }
 
     private static void RunGit(string cwd, string args)

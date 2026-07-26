@@ -18,11 +18,43 @@ folder, that folder must exist under `docs/`.
 
 - Backend surface: [`backend/Features/Docs/ProjectDocsEndpoints.cs`](../../../backend/Features/Docs/ProjectDocsEndpoints.cs),
   [`backend/Features/Docs/ProjectDocsService.cs`](../../../backend/Features/Docs/ProjectDocsService.cs),
+  [`backend/Features/Docs/WikiContentCache.cs`](../../../backend/Features/Docs/WikiContentCache.cs),
+  watcher integration in
+  [`backend/Features/Tasks/TaskWatcherService.cs`](../../../backend/Features/Tasks/TaskWatcherService.cs),
   git lookups in [`backend/Features/Git/GitService.cs`](../../../backend/Features/Git/GitService.cs).
 - Frontend surface: `frontend/src/app/features/project-detail/components/project-wiki-section/`
   with the tree model in `wiki-tree.ts` and the history panel in
   `wiki-doc-history/`.
 - Wire shapes: [`frontend/src/app/models/project-docs.model.ts`](../../../frontend/src/app/models/project-docs.model.ts).
+
+## Wiki content cache contract
+
+`WikiContentCache` is the single process-wide source for assembled Wiki reads.
+One project snapshot contains the physical tree and its content signature, the
+full page list, metadata and saved order, folder projections, Home sections,
+Pulse filesystem projections, and the Workbench catalogue used by Pulse.
+`/wiki`, `/wiki/tree`, `/wiki/recent`, `/wiki/pulse`, `/wiki/folder`, and
+`/wiki/home` all acquire that same snapshot. They never validate it by walking
+`docs/` again during a request.
+
+The host preloads every registered project before it starts serving HTTP. A
+newly registered project is preloaded when its watcher is installed. Each
+project repository also has a recursive `docs/` watcher. Its burst-debounced
+event performs a synchronous cache invalidation and rebuild. Backend Wiki
+mutations perform the same eager rebuild directly, including page save/create,
+classification, ordering, Home curation, grading completion, move, and delete.
+The mutation does not return across its cache consistency boundary until the
+replacement snapshot has been published. This guarantees read-after-write and
+keeps the next HTTP reader warm.
+
+Cache keys normalize display names and short codes to the immutable project id
+when a registry record exists. A watcher event that carries a display name
+therefore invalidates the same slot used by id-based API routes.
+
+The docs content signature is computed only while filling a snapshot. It is not
+a per-request freshness probe. Git history and per-file date indexes retain
+their existing HEAD-keyed caches, but they consume page existence, titles, and
+folder membership from the central Wiki snapshot.
 
 ## Physical tree contract
 
