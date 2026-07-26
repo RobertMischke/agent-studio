@@ -161,7 +161,6 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens-empty"]')).toBeNull();
     // No runs either -> the consolidated Runs section is also absent.
-    expect(c.hasRunsSection()).toBe(false);
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).toBeNull();
   });
 
@@ -298,16 +297,13 @@ describe('OverviewPaneComponent (smoke)', () => {
     try { fixture.detectChanges(); } catch { /* ignore */ }
     const c = fixture.componentInstance;
     expect(c.runCount()).toBe(2);
-    expect(c.hasRunsSection()).toBe(true);
     // Runs moved out of Tokens & Performance: with no token data that section is gone.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
     // The single Runs section carries the count + duration summary and the strip.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).not.toBeNull();
-    const summary = fixture.nativeElement.querySelector('[data-testid="overview-runs-summary"]');
-    expect(summary).not.toBeNull();
-    expect(summary.textContent).toContain('2 runs');
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-count"]')?.textContent).toContain('2 runs');
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-duration"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-run-icon"]').length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-run-row"]').length).toBe(2);
   });
 
   it('runs section: a killed run with only a CORE-step duration shows the duration, no run count, no strip (ASS-665)', async () => {
@@ -327,12 +323,11 @@ describe('OverviewPaneComponent (smoke)', () => {
     const c = fixture.componentInstance;
     expect(c.runCount()).toBe(0);
     expect(c.totalDuration()).toBeCloseTo(1215.9, 1);
-    expect(c.hasRunsSection()).toBe(true);
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-duration"]')).not.toBeNull();
     // No run recorded -> no count and no status strip.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-count"]')).toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="overview-run-icon"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-run-row"]')).toBeNull();
   });
 
   it('agent-work block surfaces call count + tool counts from the poll service', async () => {
