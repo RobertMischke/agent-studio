@@ -47,33 +47,29 @@ export class ProjectDragDropService {
     return this.draggingSourceWorkspaceId() !== targetWorkspaceId;
   }
 
+  canMoveProjectToWorkspace(
+    project: { projectId: string | null; workspaceId: string | null },
+    targetWorkspaceId: string,
+  ): boolean {
+    return !!project.projectId
+      && this.isRealWorkspace(targetWorkspaceId)
+      && project.workspaceId !== targetWorkspaceId;
+  }
+
   onDragStart(
-    event: DragEvent,
     project: { projectId: string | null; name: string; workspaceId: string | null },
   ): void {
-    if (!event.dataTransfer) return;
-    // Rows with no registry record (the empty-registry "__all__" fallback or
-    // the "__unassigned__" bucket) have no workspace membership to reassign.
-    if (!project.projectId) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.effectAllowed = 'move';
-    try { event.dataTransfer.setData('text/x-studio-project', project.projectId); } catch { /* ignore */ }
+    // A row can appear in either synthetic bucket and still be registered.
+    // Only rows without a registry id have no membership record to update.
+    if (!project.projectId) return;
     this.draggingProjectId.set(project.projectId);
     this.draggingProjectName.set(project.name);
     this.draggingSourceWorkspaceId.set(project.workspaceId);
     this.moveErrorMessage.set(null);
   }
 
-  onWorkspaceDragOver(event: DragEvent, targetWorkspaceId: string): void {
-    if (!this.draggingProjectId()) return;
-    if (!this.canDropOnWorkspace(targetWorkspaceId)) {
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  onWorkspaceDragEnter(targetWorkspaceId: string): void {
+    if (!this.canDropOnWorkspace(targetWorkspaceId)) return;
     if (this.dragOverWorkspaceId() !== targetWorkspaceId) {
       this.dragOverWorkspaceId.set(targetWorkspaceId);
     }

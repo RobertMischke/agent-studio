@@ -78,9 +78,6 @@ test.describe('Sidebar: drag a project onto a workspace folder', () => {
     const dropZone = page.getByTestId(`studio-explorer-ws-drop-${dst.id}`);
     await expect(dropZone).toBeVisible({ timeout: 10_000 });
 
-    // Contract 1: the project row is HTML-draggable.
-    await expect(sourceRow.first()).toHaveAttribute('draggable', 'true');
-
     // Observe the registry reassignment as it leaves the page and answer 200
     // so the running registry is not actually mutated by the test.
     const observed: { projId: string; workspaceId: string }[] = [];
@@ -98,39 +95,8 @@ test.describe('Sidebar: drag a project onto a workspace folder', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
-    // HTML5 drag has to be synthesized — Playwright's dragTo does not emit the
-    // dragstart/dragover/drop sequence the native API needs. Same approach as
-    // the tab-drag specs.
-    const sourceName = (await rowByDisplay.count()) ? src.project.displayName : folderTail(src.project.storageLocation);
-    await page.evaluate(({ sourceName, dropId }) => {
-      const srcEl = document.querySelector(`[data-testid="studio-explorer-project-row-${sourceName}"]`) as HTMLElement | null;
-      const dstEl = document.querySelector(`[data-testid="studio-explorer-ws-drop-${dropId}"]`) as HTMLElement | null;
-      if (!srcEl || !dstEl) throw new Error('drag endpoints missing');
-      const dataTransfer = new DataTransfer();
-      const fire = (el: HTMLElement, type: string) => {
-        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
-      };
-      fire(srcEl, 'dragstart');
-      fire(dstEl, 'dragenter');
-      fire(dstEl, 'dragover');
-    }, { sourceName, dropId: dst.id });
-
-    // The workspace folder picks up the drop-target highlight; the source row fades.
-    await expect(dropZone).toHaveClass(/studio-explorer-tree__ws-group--drop-target/);
-    await expect(sourceRow.first()).toHaveClass(/studio-tree-project--dragging/);
-
-    // Complete the drop.
-    await page.evaluate(({ sourceName, dropId }) => {
-      const srcEl = document.querySelector(`[data-testid="studio-explorer-project-row-${sourceName}"]`) as HTMLElement | null;
-      const dstEl = document.querySelector(`[data-testid="studio-explorer-ws-drop-${dropId}"]`) as HTMLElement | null;
-      if (!srcEl || !dstEl) throw new Error('drag endpoints missing');
-      const dataTransfer = new DataTransfer();
-      const fire = (el: HTMLElement, type: string) => {
-        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
-      };
-      fire(dstEl, 'drop');
-      fire(srcEl, 'dragend');
-    }, { sourceName, dropId: dst.id });
+    // Angular CDK consumes the real mouse/pointer pipeline used by dragTo.
+    await sourceRow.first().dragTo(dropZone);
 
     await expect.poll(() => observed.length, { timeout: 5_000 }).toBeGreaterThan(0);
     expect(observed[0].projId).toBe(src.project.id);

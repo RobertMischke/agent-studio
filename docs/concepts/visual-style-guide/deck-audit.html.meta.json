@@ -1,0 +1,46 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Deck Audit and panel-style configurator",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/deck-audit.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "454ccce777a1179c748f3201ba3bbe78ed344bed9958b9c77eaebc5e2beb14f5",
+      "sizeBytes": 35247,
+      "lineCount": 644,
+      "capturedAt": "2026-07-25T12:36:54.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-25"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2337",
+      "title": "Visual style guide follow-up: Deck audit page and Deck-Panel v1",
+      "linkedAt": "2026-07-25T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2274",
+      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2280",
+      "title": "Unify Deck pages on one panel style",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}

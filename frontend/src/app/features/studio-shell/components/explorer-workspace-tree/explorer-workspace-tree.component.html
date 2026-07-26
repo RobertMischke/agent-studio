@@ -1,7 +1,4 @@
-<section class="studio-explorer-tree">
-  <!-- Panel header (F27 testid preserved): the shared collapsible section
-       header. Collapses the whole tree and hosts the "show all projects"
-       affordance. -->
+<section class="studio-explorer-tree" cdkDropListGroup>
   <app-section-header
     [collapsible]="true"
     [collapsed]="isCollapsed('workspace')"
@@ -39,19 +36,17 @@
 
   @if (!isCollapsed('workspace')) {
     @for (g of groups(); track g.id) {
-      <!-- F46: workspace level — one collapsible folder per registry
-           workspace; the projects below it are the second tree level.
-           Double-clicking a real workspace header opens an inline rename.
-           The wrapper is the project drag-and-drop drop zone: dropping a
-           project row anywhere inside a (different, real) workspace group
-           reassigns the project to that workspace. -->
       <div class="studio-explorer-tree__ws-group"
+           cdkDropList
+           [cdkDropListData]="g"
+           [cdkDropListEnterPredicate]="workspaceEnterPredicate"
+           [cdkDropListSortingDisabled]="true"
            [class.studio-explorer-tree__ws-group--drop-target]="projectDrag.dragOverWorkspaceId() === g.id && canDropOnWorkspace(g.id)"
            [class.studio-explorer-tree__ws-group--drop-invalid]="!!projectDrag.draggingProjectId() && !canDropOnWorkspace(g.id)"
            [attr.data-testid]="'studio-explorer-ws-drop-' + g.id"
-           (dragover)="onWorkspaceDragOver($event, g)"
-           (dragleave)="onWorkspaceDragLeave($event, g)"
-           (drop)="onWorkspaceDrop($event, g)">
+           (cdkDropListEntered)="onWorkspaceDragEnter(g)"
+           (cdkDropListExited)="onWorkspaceDragLeave(g)"
+           (cdkDropListDropped)="onWorkspaceDrop($event, g)">
       @if (renamingWsId() === g.id) {
         <div class="studio-explorer-tree__ws-rename">
           <input #wsRenameInput
@@ -109,18 +104,18 @@
       @if (!isCollapsed('ws:' + g.id)) {
         @for (p of g.projects; track p.name) {
           <div class="studio-tree-project"
-               [attr.draggable]="p.projectId && projectActions.renamingProjectId() !== p.projectId ? 'true' : null"
+               cdkDrag
+               [cdkDragData]="p"
+               [cdkDragDisabled]="!p.projectId || projectActions.renamingProjectId() === p.projectId || !!projectDrag.movingProjectId()"
                [class.studio-tree-project--dragging]="projectDrag.draggingProjectName() === p.name"
                [class.studio-tree-project--moving]="!!p.projectId && projectDrag.movingProjectId() === p.projectId"
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
                [cacTooltip]="rowTitle(p)"
                (contextmenu)="onProjectContextMenu($event, p)"
-               (dragstart)="onDragStart($event, p)"
-               (dragend)="onDragEnd()">
+               (cdkDragStarted)="onDragStart(p)"
+               (cdkDragEnded)="onDragEnd()">
             @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
-              <!-- Inline rename: registry displayName only; PROJ id + storage
-                   stay put. Enter commits, Escape / blur cancels. -->
               <div class="studio-explorer-tree__ws-rename">
                 <input #projectRenameInput
                        type="text"
@@ -161,6 +156,11 @@
                         (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
                   <app-studio-icon name="grid" [size]="10"></app-studio-icon>
                 </button>
+                @if (!p.projectId) {
+                  <span class="studio-explorer-tree__registry-hint"
+                        [attr.data-testid]="'studio-explorer-project-register-hint-' + p.name"
+                        cacTooltip="Use + on the destination workspace to onboard this project">Register first</span>
+                }
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
