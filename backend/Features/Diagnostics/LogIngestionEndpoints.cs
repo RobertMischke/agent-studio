@@ -93,14 +93,14 @@ public static class LogIngestionEndpoints
         AttemptAuthorityService authority,
         Action append)
     {
-        var projection = authority.GetTaskProjection(req.TaskKey);
         if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
             || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
         {
-            return projection.LegacyTask
-                ? null
-                : new AttemptWriteResult(AttemptWriteStatus.Invalid, req.AttemptId ?? string.Empty,
-                    "Canonical runner writes require AttemptId, Fence, AuthorityEpoch, and IdempotencyKey.");
+            // Log ingest is best-effort diagnostic, not an authoritative write: append even
+            // without canonical write authority so a runner on an older agent-host protocol
+            // (no AttemptId/Fence/AuthorityEpoch/IdempotencyKey) does not 409-storm and stall
+            // its runs. Durable authoritative state lives elsewhere; a log line needs no fencing.
+            return null;
         }
         return authority.ExecuteRunWrite(
             new AttemptWriteReference(
