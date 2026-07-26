@@ -1,53 +1,57 @@
 # AGT-2286 verification
 
-Verified on 2026-07-24 from branch
-`runner/agent-runner-01/AGT-2286`.
+Verified on 2026-07-26 from branch
+`runner/agent-runner-01/AGT-2286`, rebuilt on `origin/develop` at `0e0d1c0f4`.
 
-## Review gap addressed
+## Branch and review input
 
-The newest task grade reviewed only the earlier empty salvage commit and could
-not attribute the feature commit or its documentation. The task branch now
-contains the complete implementation commit `c041986c` and evidence commit
-`20c2e108`, rebased directly onto `origin/develop` at `9d522996`.
+The salvaged task commits were rebased onto the current development head and
+adapted to the current `PromptPipelineBindings`, runtime prompt catalogue, and
+frontend navigation. The final scope diff retains the two operations documents
+introduced by the current development head.
 
-The load-bearing prompt contracts are now explicit in
-`docs/system/contracts/runtime-prompts.md`, linked from the contracts index,
-documentation entry page, and frontend domain map. The contract covers source
-precedence, review companions, project override comparison, call telemetry,
-version history, dead-prompt semantics, and historical cost boundaries.
+No `code-review-grade-*.md` artifact exists in this worktree or its task
+results. The recut card and the current product code therefore served as the
+review input. The implementation is in `22cd125ee`; its contract and evidence
+commits are `143a58771`, `82ced8d5c`, and `b11b749c2`.
 
 ## Automated verification
 
-- Backend prompt suite:
-  `dotnet test backend.Tests/OrchestratorApi.Tests.csproj --filter "FullyQualifiedName~PromptAdmin|FullyQualifiedName~PromptCallTelemetry|FullyQualifiedName~RuntimePrompt"`
-  passed 18 of 18 tests.
-- Frontend prompt component suites passed 10 of 10 tests across four files.
+- Backend prompt administration and telemetry suite:
+  `dotnet test backend.Tests/OrchestratorApi.Tests.csproj --no-restore --filter
+  'FullyQualifiedName~PromptAdmin|FullyQualifiedName~PromptCallTelemetry'`
+  passed 20 of 20 tests.
+- The wider prompt and prompt-consumer selection passed 118 tests. One
+  pre-existing development-head contract test fails because
+  `runner-fresh-start.md` and `runner-reissue-change.md` do not contain the
+  model-routing-policy reference that the existing test expects. This task does
+  not change either prompt.
+- Frontend prompt component suites passed 13 of 13 tests across five files.
 - `npm --prefix frontend run build` passed. The existing initial-bundle budget
   warning remains.
-- Task-attributed TypeScript files passed ESLint.
-- `npm --prefix frontend run lint:scss` passed.
-- `npm --prefix frontend run lint:structure` passed.
-- `npm --prefix frontend run lint:components` reports 13 existing component
-  budget violations in files outside this task's diff. The task's new prompt
-  components are not among them.
+- TypeScript ESLint and task-scoped Stylelint passed.
+- `npm --prefix frontend run lint:scss` and
+  `npm --prefix frontend run lint:structure` passed.
+- The repository-wide component-size check reports 17 existing violations in
+  files outside this task's diff. No prompt registry component is among them.
+- `git diff --check` passed.
 
 ## Live acceptance proof
 
 `frontend/e2e/project/prompt-registry-observability.spec.ts` passed in Chromium
-against an isolated dynamic-port worktree stack through the Playwright
-dev-backend fixture. The existing backend for another task on port 5030 was not
-stopped or reused.
+with the Angular frontend served directly from this task worktree and the
+backend managed exclusively by the Playwright dev-backend fixture.
 
 The test proves:
 
-- the all-prompts review runs and persists sidecars;
+- the all-prompts review runs and persists adjacent review sidecars;
 - `recurring-output-pattern-review.md` is flagged as a real dead prompt;
 - the overview exposes prompt classes, calls, last call, last change, last
-  review, cost, and status;
+  review, cost, and status, with sortable columns;
 - a project pipeline override is shown with project and step provenance plus
   its difference from the shipped file prompt;
-- the detail view exposes last change, last review, runtime calls, version and
-  cost data;
+- the detail view exposes last change, last review, runtime calls, version
+  history, and date-aware theoretical cost;
 - overview and detail render in both dark and light themes.
 
 Screenshots:
