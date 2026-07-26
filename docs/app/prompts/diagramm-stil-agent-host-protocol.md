@@ -1,81 +1,79 @@
-# Skill: Architektur-Diagramme im „Agent Host Protocol"-Stil
+# Skill: Architecture diagrams in the Agent Host Protocol style
 
-**Zweck.** Dieses Dokument macht den Diagramm- und Seitenstil von
+**Purpose.** This document makes the diagram and page style of
 [microsoft.github.io/agent-host-protocol](https://microsoft.github.io/agent-host-protocol/)
-reproduzierbar. Es liefert (a) die Stil-Prinzipien, (b) fertige Design-Tokens als
-CSS-Variablen für Light **und** Dark, (c) HTML/CSS-Template-Snippets für die
-Bausteine (Einheiten-Box, Lane/Host, Verbindung/Wire, Nummern-Badge, Pool,
-Sequenz-Zeile) und (d) eine Anwendungs-Anweisung für einen Agenten.
+reproducible. It provides (a) the style principles, (b) design
+tokens as CSS variables for light and dark themes, (c) HTML/CSS template
+snippets for the building blocks (unit box, lane/host, connection/wire, number
+badge, pool, and sequence row), and (d) instructions an agent can follow.
 
-**Referenz-Umsetzung:** `docs/concepts/zielarchitektur-diagramm.html` (die
-Agent-Studio-Zielarchitektur in genau diesem Stil, self-contained, theme-aware).
+**Reference implementation:** `docs/concepts/zielarchitektur-diagramm.html`,
+the Agent Studio target architecture in this self-contained,
+theme-aware style.
 
-**Einsatzhinweis (wichtig).** Dieser Stil ist zugleich die Grundlage für Diagramme
-und Sektionen auf der **Agent-Studio-Website** (`agent-studio-marketing`). Die
-Tokens und Snippets hier sind bewusst framework-frei (kein VitePress nötig) und
-lassen sich direkt in die Marketing-Seite übernehmen — dieselbe Palette, dieselben
-Wire-Diagramme, konsistenter Marken-Look zwischen Wiki-Konzept und öffentlicher
-Seite.
+**Usage.** The **Agent Studio website** (`agent-studio-marketing`) also uses
+this style for diagrams and sections. The tokens and snippets do not require
+VitePress or another framework. They can be used in the Wiki and public site.
 
 ---
 
-## (a) Prinzipien — worauf der Stil beruht
+## (a) Principles
 
-1. **Ruhe durch Raster und Weißraum.** Wenige Elemente, großzügige Abstände,
-   klare vertikale Rhythmen. Das Diagramm ist zentriert, symmetrisch, atmet.
-2. **Flache Boxen, keine Verzierung.** 1&nbsp;px-Rahmen, dezenter Radius (8–14&nbsp;px),
-   sehr weicher Schatten. Kein Verlauf in den Boxen, kein 3D, keine dicken Ränder.
-3. **Gedeckte Fläche, genau zwei Akzente.** Neutrale Graustufen tragen die Fläche;
-   **Blau = Autorität/Kontrollebene**, **Teal = Ausführungsebene**. Ein drittes
-   Signal-Coral nur für Nummern/Labels. Nie mehr als diese drei Farben tragen Bedeutung.
-4. **Verbindungen sind dünne Bezier-Kurven, keine Kästen-Pfeile.** Eine feine graue
-   „Rail" liegt statisch da; darüber laufen farbige, gestrichelte „Flow"-Dashes
-   (dezent animiert) in Akzentfarbe. Richtung entsteht durch Farbe + optionalen Pfeil,
-   nicht durch schwere Pfeilköpfe.
-5. **Technik: HTML-Boxen + dünne SVG-Wire-Ebene.** Das SVG zeichnet **nur** die
-   Verbindungslinien (`preserveAspectRatio="none"`, Pfade in `<defs>`, per `<use>`
-   wiederverwendet). Alle Boxen und Labels sind normales, absolut positioniertes HTML
-   darüber. So bleibt Text scharf, selektierbar und theme-aware.
-6. **Mono für Metadaten, Sans für Inhalt.** Fließtext und Überschriften in einem
-   Inter-nahen Sans; Labels, Nummern, Endpunkte, Kanal-Etiketten in Monospace mit
-   `letter-spacing` und `UPPERCASE`.
-7. **Nummern-Badges statt Kapitel-Overhead.** Abschnitte tragen ein kleines
-   Coral-Mono-Label („§1 · HAUPT-ARCHITEKTUR"), Pills bekommen eine dünne
-   Akzent-Outline und einen Punkt/Icon.
-8. **Theme-aware als Grundhaltung.** Jeder Wert existiert in Light und Dark. Dark ist
-   nicht „Farben invertiert", sondern eine eigene, tiefe, ruhige Palette; Akzente
-   leuchten in Dark etwas heller, die Host-Box bekommt einen weichen Glow.
+1. **Grid and whitespace.** Use few elements, defined spacing, and a consistent
+   vertical rhythm. Center the diagram and align elements to a grid.
+2. **Flat boxes.** Use 1&nbsp;px borders, an 8-14&nbsp;px radius, and the shadow
+   token from section (b). Do not use gradients, 3D effects, or thick borders.
+3. **Muted surfaces and exactly two accents.** Neutral gray tones carry the
+   surface. **Blue means authority or control plane** and **teal means execution
+   plane**. Use coral as a third signal color only for numbers and labels. No
+   other colors should carry meaning.
+4. **Connections are thin Bezier curves.** A gray rail is static. Colored
+   dashed flows move over it. Indicate direction through color and an optional
+   arrow. Do not use thick arrowheads.
+5. **Technique: HTML boxes plus a thin SVG wire layer.** SVG draws only the
+   connections (`preserveAspectRatio="none"`, paths in `<defs>`, reused with
+   `<use>`). All boxes and labels are normal, absolutely positioned HTML above
+   it. Text therefore stays sharp, selectable, and theme-aware.
+6. **Monospace for metadata, sans-serif for content.** Use an Inter-like
+   sans-serif for body text and headings. Use monospace with `letter-spacing`
+   and uppercase for labels, numbers, endpoints, and channel labels.
+7. **Number badges instead of chapter overhead.** Give sections a compact
+   coral monospace label such as `§1 · MAIN ARCHITECTURE`. Give pills a thin
+   accent outline and a dot or icon.
+8. **Light and dark themes.** Define every value for both themes. Use the dark
+   theme values in section (b) instead of color inversion. The dark theme uses
+   brighter accent values and the host box uses the defined glow token.
 
 ---
 
-## (b) Design-Tokens (Light + Dark)
+## (b) Design tokens (light and dark)
 
-Kopiere diesen Block unverändert in den `<style>`-Kopf. Alles Weitere referenziert
-nur diese Variablen — Farben nie hart im Snippet setzen.
+Copy this block unchanged into the `<style>` element. Everything else should
+reference these variables. Never hardcode colors in a snippet.
 
 ```css
 :root {
   color-scheme: light;
-  /* Flächen / Ink */
+  /* Surfaces / ink */
   --bg: #ffffff; --bg-soft: #f6f6f7; --bg-elv: #ffffff;
   --ink-1: #3c3c43; --ink-2: #67676c; --ink-3: #929295;
   --line: #e2e2e3; --border: #c2c2c4;
-  /* Akzent A — Blau = Autorität / Kontrollebene */
+  /* Accent A: blue = authority / control plane */
   --blue: #3b82f6; --blue-ink: #2f6fd6; --blue-soft: #e7f0fe;
   --blue-bd: rgba(59,130,246,.42); --blue-glow: rgba(59,130,246,.20);
-  /* Akzent B — Teal = Ausführungsebene */
+  /* Accent B: teal = execution plane */
   --teal: #14a37f; --teal-ink: #0f8e6e; --teal-soft: #e6f6f1;
   --teal-bd: rgba(20,163,127,.42); --teal-glow: rgba(20,163,127,.18);
-  /* Signal / Nummern */
+  /* Signal / numbers */
   --coral: #e5484d;
-  /* Schrift — Systemfont-Stack, dem Inter-Look nah (kein externer Font!) */
+  /* System font stack with an Inter-like look, no external font */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --chip-shadow: 0 3px 12px rgba(0,0,0,.10);
 }
-/* Dark: per prefers-color-scheme UND per data-theme (Toggle gewinnt in beide Richtungen) */
+/* Dark mode via prefers-color-scheme and data-theme. The explicit toggle wins. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { /* ...gleiche Werte wie unten... */ }
+  :root:not([data-theme="light"]) { /* Use the same values as below. */ }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -91,24 +89,26 @@ nur diese Variablen — Farben nie hart im Snippet setzen.
 }
 ```
 
-> **Token-Herkunft:** per Playwright aus der Vorlage extrahiert (VitePress-Default-Theme
-> + der bespoke `arch-wires`-Hero). Blau `#3b82f6`, Teal `#14a37f`, Rail-Grau `#e2e2e3`,
-> Host-Soft `#e7f0fe`; Dark-Fläche `#1b1b1f`/`#202127`, Text `#dfdfd6`. Font: Inter →
-> hier als System-Sans nachgebildet.
+> **Token origin:** extracted from the reference with Playwright (VitePress
+> default theme and the `arch-wires` implementation). Blue `#3b82f6`, teal
+> `#14a37f`, rail gray `#e2e2e3`, host soft `#e7f0fe`; dark surfaces
+> `#1b1b1f`/`#202127`, text `#dfdfd6`. The Inter font is represented here by
+> the system sans-serif stack.
 
-**Geometrie-Konstanten:** Chip-Radius `8–9px`, Host-Radius `14px`, Padding Chip
-`8px 13px` / Host `16px 20px`; Rahmen überall `1px`; Wire-`stroke-width` `~1.6`
-(Rail) und `~2.4` (Flow) in viewBox-Einheiten; Dash `7 12`, Animation `1.4–1.7s`.
+**Geometry constants:** chip radius `8-9px`, host radius `14px`, chip padding
+`8px 13px`, host padding `16px 20px`, `1px` borders throughout, wire
+`stroke-width` around `1.6` for rails and `2.4` for flows in viewBox units,
+dash `7 12`, and animation duration `1.4-1.7s`.
 
 ---
 
-## (c) Template-Snippets
+## (c) Template snippets
 
-### 1 · Einheiten-Box (Chip)
+### 1 · Unit box (chip)
 
 ```html
 <div class="chip client"><span class="ic"></span> Studio UI · Board · Wiki</div>
-<div class="chip exec"><span class="ic"></span> Runner-Host</div>
+<div class="chip exec"><span class="ic"></span> Runner Host</div>
 ```
 ```css
 .chip { display:inline-flex; align-items:center; gap:8px;
@@ -120,12 +120,12 @@ nur diese Variablen — Farben nie hart im Snippet setzen.
 .chip.exec   { border-color:var(--teal-bd); } .chip.exec   .ic { background:var(--teal); }
 ```
 
-### 2 · Zentrale Host-/Autoritäts-Box
+### 2 · Central host or authority box
 
 ```html
 <div class="host">
   <span class="lbl">Task Server</span>
-  <span class="sub">zentrale Konfig &amp; Wahrheit · Leases · Events · Management-API</span>
+  <span class="sub">central configuration and truth · leases · events · management API</span>
 </div>
 ```
 ```css
@@ -136,47 +136,49 @@ nur diese Variablen — Farben nie hart im Snippet setzen.
 .host .sub { display:block; font-size:12.5px; color:var(--ink-2); line-height:1.5; }
 ```
 
-### 3 · Verbindung / Wire (SVG-Ebene über HTML-Boxen)
+### 3 · Connection or wire (SVG layer above HTML boxes)
 
-Der Kern des Stils. Das SVG liegt absolut über einem relativen Stage; Boxen werden
-per `left:%` + `top/bottom` darüber positioniert. Pfade einmal in `<defs>`, dann als
-statische Rail **und** animierten Flow wiederverwenden.
+Place the SVG absolutely over a relative stage.
+Position boxes above it with percentage `left` plus `top` or `bottom`. Define
+paths once in `<defs>`, then reuse them as both static rails and animated flows.
 
 ```html
-<div class="arch-stage"><!-- position:relative; aspect-ratio passend zum viewBox -->
+<div class="arch-stage"><!-- position:relative; aspect-ratio matches the viewBox -->
   <svg class="wires" viewBox="0 0 360 300" preserveAspectRatio="none" aria-hidden="true">
     <defs>
-      <path id="w1" d="M168,54 C168,92 174,92 174,120"/>   <!-- oben: Client↔Host -->
-      <path id="w2" d="M158,182 C120,224 96,214 84,250"/>  <!-- unten: Host→Runner -->
+      <path id="w1" d="M168,54 C168,92 174,92 174,120"/>   <!-- top: client to host -->
+      <path id="w2" d="M158,182 C120,224 96,214 84,250"/>  <!-- bottom: host to runner -->
     </defs>
     <g class="rails"><use href="#w1"/><use href="#w2"/></g>
     <use class="flow up"   href="#w1" style="animation-duration:1.5s"/>
     <use class="flow down" href="#w2" style="animation-duration:1.6s"/>
   </svg>
-  <!-- ... HTML-Boxen hier, absolut positioniert ... -->
+  <!-- Absolutely positioned HTML boxes go here. -->
 </div>
 ```
 ```css
 .arch-stage { position:relative; width:100%; min-width:640px; aspect-ratio:360/300; }
 .wires { position:absolute; inset:0; width:100%; height:100%; }
-/* WICHTIG: fill:none MUSS auf die <use>-Elemente greifen, sonst Default-Fill = schwarz */
+/* IMPORTANT: fill:none must reach the use elements, or the default fill is black. */
 .wires .rails, .wires .rails use { fill:none; stroke:var(--line); stroke-width:1.6; opacity:.9; }
 .wires .flow { fill:none; stroke-width:2.4; stroke-linecap:round;
   stroke-dasharray:7 12; animation:dash 1.5s linear infinite; }
-.wires .flow.up   { stroke:var(--blue); }   /* Autoritäts-Kanal */
-.wires .flow.down { stroke:var(--teal); }   /* Ausführungs-Kanal */
+.wires .flow.up   { stroke:var(--blue); }   /* Authority channel */
+.wires .flow.down { stroke:var(--teal); }   /* Execution channel */
 @keyframes dash { to { stroke-dashoffset:-38; } }
 @media (prefers-reduced-motion:reduce){ .wires .flow { animation:none; } }
 ```
-**Fallstrick:** `class="rails"` und CSS `.rails` müssen exakt matchen — sonst rendert
-der Pfad mit schwarzer Default-Füllung als massiver Keil. Immer `fill:none` auch auf
-`use` setzen. viewBox-Seitenverhältnis = Stage-`aspect-ratio`, sonst verzerren die Dashes.
 
-### 4 · Nummern-Badge & Pill
+**Pitfall:** `class="rails"` and the `.rails` selector must match exactly. If
+they do not, the path renders with a black default fill as a solid wedge.
+Always set `fill:none` on `use` too. The viewBox aspect ratio must match the
+stage `aspect-ratio`, or the dashes will distort.
+
+### 4 · Number badge and pill
 
 ```html
-<p class="sec-no"><span class="n">§1</span> · Haupt-Architektur</p>
-<span class="kicker">Konzept · Zielarchitektur</span>
+<p class="sec-no"><span class="n">§1</span> · Main architecture</p>
+<span class="kicker">Concept · Target architecture</span>
 ```
 ```css
 .sec-no { display:inline-flex; align-items:center; gap:8px;
@@ -190,12 +192,12 @@ der Pfad mit schwarzer Default-Füllung als massiver Keil. Immer `fill:none` auc
 .kicker::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--blue); }
 ```
 
-### 5 · Pool / Unterfach (gestrichelt, in einer Host-Karte)
+### 5 · Pool or compartment (dashed, inside a host card)
 
 ```html
 <div class="pools">
-  <div class="pool"><span class="pn">Build-Slots</span><span class="pd">dynamisch, on the fly</span></div>
-  <div class="pool"><span class="pn">API-Lanes</span><span class="pd">Post-Processing</span></div>
+  <div class="pool"><span class="pn">Build slots</span><span class="pd">dynamic, on demand</span></div>
+  <div class="pool"><span class="pn">API lanes</span><span class="pd">post-processing</span></div>
 </div>
 ```
 ```css
@@ -205,16 +207,17 @@ der Pfad mit schwarzer Default-Füllung als massiver Keil. Immer `fill:none` auc
 .pool .pd { display:block; font-size:10.5px; color:var(--ink-2); margin-top:2px; }
 ```
 
-### 6 · Sequenz-Zeile (Wire-Format)
+### 6 · Sequence row in wire format
 
-Zwei Lifelines (gestrichelte Vertikalen), zentrierte Nachricht-Boxen; Richtung nur
-über Farbe + Pfeil (Teal = zum Server/ausgehend, Blau = zurück). Keine schweren Pfeile.
+Use two lifelines made from dashed vertical lines and centered message boxes.
+Show direction only through color and arrows: teal goes to the server or
+outward, and blue comes back. Do not use heavy arrows.
 
 ```html
 <div class="seq-body">
   <div class="seq-note">Claim</div>
   <div class="seq-step"><div class="seq-msg to-s">POST /api/runner/claim <span class="arw">→</span></div></div>
-  <div class="seq-step"><div class="seq-msg to-c"><span class="arw">←</span> fenced lease + Run-Plan</div></div>
+  <div class="seq-step"><div class="seq-msg to-c"><span class="arw">←</span> fenced lease + run plan</div></div>
 </div>
 ```
 ```css
@@ -225,44 +228,50 @@ Zwei Lifelines (gestrichelte Vertikalen), zentrierte Nachricht-Boxen; Richtung n
 .seq-step { display:flex; justify-content:center; padding:11px 0; }
 .seq-msg { max-width:74%; font:600 12px/1.4 var(--font-mono); background:var(--bg-elv);
   border:1px solid var(--line); border-radius:8px; padding:8px 14px; text-align:center; box-shadow:var(--chip-shadow); }
-.seq-msg.to-s { border-color:var(--teal-bd); color:var(--teal-ink); }  /* ausgehend */
-.seq-msg.to-c { border-color:var(--blue-bd); color:var(--blue-ink); }  /* zurück */
+.seq-msg.to-s { border-color:var(--teal-bd); color:var(--teal-ink); }  /* Outbound */
+.seq-msg.to-c { border-color:var(--blue-bd); color:var(--blue-ink); }  /* Return */
 .seq-note { text-align:center; font:600 11px/1.4 var(--font-mono); letter-spacing:.06em;
   text-transform:uppercase; color:var(--ink-3); padding:14px 0 2px; }
 ```
 
 ---
 
-## (d) Anwendungs-Anweisung für einen Agenten
+## (d) Instructions for an agent
 
-> **Baue Diagramm X im „Agent Host Protocol"-Stil.** Erzeuge eine **self-contained**
-> HTML-Datei — kein externes CSS, kein externer Font, keine CDN-Skripte; nutze den
-> System-Sans/-Mono-Stack aus den Tokens. Gehe so vor:
+> **Build diagram X in the Agent Host Protocol style.** Create a
+> **self-contained** HTML file with no external CSS, font, or CDN script. Use
+> the system sans-serif and monospace stacks from the tokens.
 >
-> 1. **Tokens einsetzen:** Kopiere den vollständigen `:root`-Block aus Abschnitt (b)
->    unverändert. Setze im ganzen Dokument **nie** Farben hart — immer die Variablen.
-> 2. **Semantik auf zwei Akzente abbilden:** Ordne jede Rolle einer Ebene zu —
->    **Blau** für Kontroll-/Autoritäts-/Client-Seite, **Teal** für Ausführung/Backend.
->    Höchstens diese zwei Farben plus Coral für Nummern tragen Bedeutung.
-> 3. **Diagramm bauen:** Boxen als HTML-`.chip`/`.host`/Karten (Snippets 1, 2, 5),
->    Verbindungen als dünne SVG-Wire-Ebene (Snippet 3) — SVG zeichnet **nur** Linien,
->    nie Text. Richtung über Flow-Farbe (`up`=Blau, `down`=Teal).
-> 4. **Struktur beschriften:** Abschnitte mit `.sec-no`-Coral-Badges (Snippet 4),
->    Kanäle mit Mono-Etiketten (`pull · outbound-only`), optional ein Sequenz-Diagramm
->    im Wire-Format (Snippet 6).
-> 5. **Theme-aware:** Light + Dark aus den Tokens; kleiner Toggle, der `data-theme`
->    auf `:root` stampft und in beide Richtungen gewinnt. Prüfe **beide** Themes.
-> 6. **Responsiv & ruhig:** Diagramm in einen `overflow-x:auto`-Wrapper mit `min-width`;
->    der Body scrollt nie horizontal. Viel Weißraum, wenige Elemente, kein Deko-Ballast.
-> 7. **Verifizieren:** Mit Playwright in Light und Dark rendern und die Screenshots
->    sichten (Rail nicht schwarz gefüllt, Dashes nicht verzerrt, kein Overflow).
+> 1. **Apply the tokens:** copy the complete `:root` block from section (b)
+>    unchanged. Never hardcode colors elsewhere in the document.
+> 2. **Map semantics to two accents:** assign every role to a plane. Use
+>    **blue** for the control, authority, or client side, and **teal** for
+>    execution or backend. Only these two colors plus coral for numbers may
+>    carry meaning.
+> 3. **Build the diagram:** use HTML `.chip`, `.host`, and card boxes from
+>    snippets 1, 2, and 5. Use the thin SVG wire layer from snippet 3 for
+>    connections. SVG draws lines only, never text. Indicate direction with
+>    flow color (`up` is blue, `down` is teal).
+> 4. **Label the structure:** use coral `.sec-no` badges from snippet 4 for
+>    sections and monospace channel labels such as `pull · outbound-only`.
+>    Optionally add a wire-format sequence diagram from snippet 6.
+> 5. **Support themes:** include the light and dark tokens. Add a small toggle
+>    that stamps `data-theme` on `:root` and overrides the system preference in
+>    both directions. Check both themes.
+> 6. **Support responsive layouts:** put the diagram in an `overflow-x:auto`
+>    wrapper with a `min-width`. The body must never scroll horizontally. Use
+>    the defined spacing and include only elements required by the diagram.
+> 7. **Verify it:** render light and dark modes with Playwright and inspect the
+>    screenshots. Confirm that rails are not black-filled, dashes are not
+>    distorted, and nothing overflows.
 >
-> **Definition of done:** Sieht neben `docs/concepts/zielarchitektur-diagramm.html`
-> wie aus einem Guss aus; öffnet ohne Netzwerk; korrekt in Light und Dark.
+> **Definition of done:** the result uses the specified tokens and components,
+> opens without network access, and renders correctly in light and dark themes.
 
 ---
 
-*Stil seziert am 22.07.2026 per Playwright gegen microsoft.github.io/agent-host-protocol
-(VitePress + bespoke `arch-wires`-Hero). Screenshots & Token-Dump im Session-Scratchpad.
-Referenz-Umsetzung: `docs/concepts/zielarchitektur-diagramm.html`. Einsatz auch für
-`agent-studio-marketing` (öffentliche Website).*
+*Style analyzed on 22 July 2026 with Playwright against
+microsoft.github.io/agent-host-protocol (VitePress and the `arch-wires`
+implementation). Screenshots and token dump are in the session scratchpad.
+Reference implementation: `docs/concepts/zielarchitektur-diagramm.html`. This
+style is also used for the public `agent-studio-marketing` website.*

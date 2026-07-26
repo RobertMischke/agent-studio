@@ -11,7 +11,7 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -470,6 +470,16 @@ public sealed partial class TaskServerStore
         RequireWritable();
         if (!TaskServerProtocol.Supports(request.ProtocolVersion))
             throw new TaskServerProtocolException(request.ProtocolVersion);
+        if ((!string.IsNullOrWhiteSpace(request.HostOrchestratorMinimum)
+             || !string.IsNullOrWhiteSpace(request.HostOrchestratorMaximum))
+            && !HostOrchestratorContract.Overlaps(
+                request.HostOrchestratorMinimum,
+                request.HostOrchestratorMaximum))
+        {
+            throw new HostOrchestratorContractException(
+                request.HostOrchestratorMinimum,
+                request.HostOrchestratorMaximum);
+        }
         if (string.IsNullOrWhiteSpace(request.InstanceId) || string.IsNullOrWhiteSpace(request.HostId))
             throw new ArgumentException("Runner host and instance ids are required.");
         var capabilities = request.Capabilities ?? [];
@@ -482,6 +492,9 @@ public sealed partial class TaskServerStore
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
         var bootstrapMaxParallelism = Math.Clamp(request.BootstrapMaxParallelism, 1, 256);
+        var managesCodingCapacity = capabilities.Contains(
+            ReviewCapabilities.CodingExecutor,
+            StringComparer.Ordinal);
         RuntimeCapacitySettingsDto? runtimeCapacity = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
@@ -510,10 +523,12 @@ public sealed partial class TaskServerStore
                 INSERT INTO runners(
                     id, name, host_id, instance_id, runner_version, protocol_version,
                     capabilities_json, status, registered_at, last_seen_at,
+                    host_orchestrator_minimum, host_orchestrator_maximum,
                     effective_max_parallelism, runtime_capacity_applied_at)
                 VALUES (
                     $id, $name, $host, $instance, $version, $protocol,
-                    $capabilities, 'active', $now, $now, $bootstrap, $now)
+                    $capabilities, 'active', $now, $now, $hostOrchestratorMinimum,
+                    $hostOrchestratorMaximum, $effective, $applied)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     host_id = excluded.host_id,
@@ -521,37 +536,46 @@ public sealed partial class TaskServerStore
                     runner_version = excluded.runner_version,
                     protocol_version = excluded.protocol_version,
                     capabilities_json = excluded.capabilities_json,
+                    host_orchestrator_minimum = excluded.host_orchestrator_minimum,
+                    host_orchestrator_maximum = excluded.host_orchestrator_maximum,
                     status = CASE WHEN runners.status = 'retired' THEN 'retired' ELSE 'active' END,
                     last_seen_at = excluded.last_seen_at;
                 """, ct, transaction,
                 ("$id", id), ("$name", request.Name.Trim()), ("$host", request.HostId.Trim()),
                 ("$instance", request.InstanceId.Trim()), ("$version", request.RunnerVersion),
                 ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)),
-                ("$bootstrap", bootstrapMaxParallelism), ("$now", now));
-            await ExecuteAsync(connection, """
-                INSERT INTO runtime_capacity_settings(
-                    host_id, max_parallelism, target_load_percent, ramp_strategy,
-                    version, updated_at)
-                VALUES ($host, $max, 80, 'balanced', 1, $now)
-                ON CONFLICT(host_id) DO NOTHING;
-                """, ct, transaction,
-                ("$host", request.HostId.Trim()),
-                ("$max", bootstrapMaxParallelism),
+                ("$hostOrchestratorMinimum", request.HostOrchestratorMinimum),
+                ("$hostOrchestratorMaximum", request.HostOrchestratorMaximum),
+                ("$effective", managesCodingCapacity ? bootstrapMaxParallelism : null),
+                ("$applied", managesCodingCapacity ? now : null),
                 ("$now", now));
-            runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
-                connection,
-                transaction,
-                request.HostId.Trim(),
-                ct);
-            await ExecuteAsync(connection, """
-                UPDATE runners
-                   SET effective_max_parallelism = $effective,
-                       runtime_capacity_applied_at = $now
-                 WHERE id = $id;
-                """, ct, transaction,
-                ("$effective", runtimeCapacity!.MaxParallelism),
-                ("$now", now),
-                ("$id", id));
+            if (managesCodingCapacity)
+            {
+                await ExecuteAsync(connection, """
+                    INSERT INTO runtime_capacity_settings(
+                        host_id, max_parallelism, target_load_percent, ramp_strategy,
+                        version, updated_at)
+                    VALUES ($host, $max, 80, 'balanced', 1, $now)
+                    ON CONFLICT(host_id) DO NOTHING;
+                    """, ct, transaction,
+                    ("$host", request.HostId.Trim()),
+                    ("$max", bootstrapMaxParallelism),
+                    ("$now", now));
+                runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
+                    connection,
+                    transaction,
+                    request.HostId.Trim(),
+                    ct);
+                await ExecuteAsync(connection, """
+                    UPDATE runners
+                       SET effective_max_parallelism = $effective,
+                           runtime_capacity_applied_at = $now
+                     WHERE id = $id;
+                    """, ct, transaction,
+                    ("$effective", runtimeCapacity!.MaxParallelism),
+                    ("$now", now),
+                    ("$id", id));
+            }
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new
                 {
@@ -559,6 +583,8 @@ public sealed partial class TaskServerStore
                     request.InstanceId,
                     request.RunnerVersion,
                     request.ProtocolVersion,
+                    request.HostOrchestratorMinimum,
+                    request.HostOrchestratorMaximum,
                     bootstrapMaxParallelism,
                     runtimeCapacity?.MaxParallelism,
                 }), ct);
@@ -1006,6 +1032,17 @@ public sealed partial class TaskServerStore
                 request.InstanceId,
                 request.LeaseId,
                 ct);
+            var incompletePostSteps = Convert.ToInt32(await ScalarAsync(connection, """
+                SELECT count(*)
+                  FROM post_step_executions
+                 WHERE run_id = $run AND status <> 'completed';
+                """, ct, transaction, ("$run", runId)) ?? 0L, CultureInfo.InvariantCulture);
+            if (incompletePostSteps > 0)
+            {
+                throw new TaskServerConflictException(
+                    "host-post-processing-incomplete",
+                    $"{incompletePostSteps} host post-processing step(s) are not complete.");
+            }
             StoredResultHandoff? resultHandoff = null;
             if (RequiresResultEnvelope(request.Outcome))
             {
@@ -1850,6 +1887,8 @@ public sealed partial class TaskServerStore
                 status TEXT NOT NULL,
                 registered_at TEXT NOT NULL,
                 last_seen_at TEXT NOT NULL,
+                host_orchestrator_minimum TEXT,
+                host_orchestrator_maximum TEXT,
                 effective_max_parallelism INTEGER,
                 runtime_capacity_applied_at TEXT
             );
@@ -2092,6 +2131,42 @@ public sealed partial class TaskServerStore
                 task_key TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS host_reports(
+                runner_id TEXT PRIMARY KEY REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                report_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS work_permits(
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
+                policy_version INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                accepted_runner_id TEXT REFERENCES runners(id),
+                accepted_instance_id TEXT,
+                accepted_at TEXT,
+                accept_idempotency_key TEXT UNIQUE,
+                run_id TEXT UNIQUE REFERENCES runs(id)
+            );
+            CREATE TABLE IF NOT EXISTS post_step_executions(
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES runs(id),
+                step_id TEXT NOT NULL,
+                eligible_runner_id TEXT NOT NULL REFERENCES runners(id),
+                status TEXT NOT NULL,
+                claim_fence INTEGER,
+                claimed_instance_id TEXT,
+                started_at TEXT,
+                finished_at TEXT,
+                outcome TEXT,
+                artifact_hashes_json TEXT NOT NULL DEFAULT '[]',
+                claim_idempotency_key TEXT UNIQUE,
+                complete_idempotency_key TEXT UNIQUE
+            );
             CREATE INDEX IF NOT EXISTS ix_tasks_project_state ON tasks(project_id, state);
             CREATE INDEX IF NOT EXISTS ix_leases_task_status ON leases(task_id, status);
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
@@ -2106,11 +2181,17 @@ public sealed partial class TaskServerStore
                 ON orchestration_runs(status, current_stage, updated_at);
             CREATE INDEX IF NOT EXISTS ix_orchestration_stage_results_run
                 ON orchestration_stage_results(run_id, sequence);
+            CREATE INDEX IF NOT EXISTS ix_permits_status_expiry
+                ON work_permits(status, expires_at);
+            CREATE INDEX IF NOT EXISTS ix_post_steps_run_status
+                ON post_step_executions(run_id, status);
             """, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "runners", "host_orchestrator_minimum", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
         await ExecuteAsync(connection, """
@@ -2119,6 +2200,7 @@ public sealed partial class TaskServerStore
                 version, updated_at)
             SELECT host_id, 2, 80, 'balanced', 1, $now
               FROM runners
+             WHERE capabilities_json LIKE '%"executor:coding"%'
              GROUP BY host_id
             ON CONFLICT(host_id) DO NOTHING;
             """, ct, ("$now", Iso(UtcNow)));

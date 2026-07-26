@@ -271,7 +271,13 @@ public sealed class PostAbortReviewStepService
         };
         try
         {
-            return _prompts.Render(PromptTemplate, values);
+            return _prompts.Render(
+                PromptTemplate,
+                values,
+                new PromptCallContext(
+                    request.Project,
+                    PipelineCatalogue.PostAbortReviewStepId,
+                    request.Model));
         }
         catch (Exception ex)
         {

@@ -376,7 +376,9 @@ builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
+builder.Services.AddSingleton<PromptCallTelemetryService>();
 builder.Services.AddSingleton<RuntimePromptService>();
+builder.Services.AddSingleton<PromptReviewService>();
 builder.Services.AddSingleton<PromptAdminService>();
 builder.Services.AddSingleton<TitleGenerationService>();
 builder.Services.AddSingleton<PromptEnhancementService>();
@@ -498,6 +500,10 @@ builder.Services.AddHostedService(sp =>
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskLiveStatusProjection>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyRegistry>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelRoutingModeProvider>(sp =>
+    sp.GetRequiredService<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>());
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineModelCatalogueProvider,
     AgentStudio.Pipeline.CliPipelineModelCatalogueProvider>();

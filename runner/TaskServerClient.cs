@@ -159,7 +159,7 @@ public sealed class TaskServerClient : IDisposable
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
                 capabilities,
-                options.HostMaxParallelism);
+                BootstrapMaxParallelism: options.HostMaxParallelism);
             try
             {
                 var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(

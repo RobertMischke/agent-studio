@@ -209,6 +209,24 @@ boundary, route map, and visual ownership diagram are in
   summary. It does not own project onboarding or a project-source catalogue.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
+- The System prompts destination is the prompt registry and observability
+  surface. Its overview groups runtime-step, orchestrator, drift, and framing
+  templates, explains application and project pipeline override precedence, and
+  provides a sortable activity table. `RuntimePromptService.Render` appends one
+  row per use to `<TaskRepository>/logs/prompt-calls.jsonl` with the effective
+  content hash, estimated rendered-input tokens, timestamp, and any available
+  project, step, and model context. The API aggregates total and seven-day
+  calls, last call, a 14-day series, current and historical versions, and
+  historical theoretical input cost through `TokenPricing`. Unknown models
+  remain explicitly unpriced. Review actions check the static usage catalogue,
+  repository references, and project pipeline overrides, then persist
+  `prompts/runtime/<name>.md.meta.json`.
+  The durable source, precedence, companion, telemetry, and cost rules are
+  defined by the
+  [runtime prompt registry contract](../contracts/runtime-prompts.md).
+  Result-quality benchmarking by prompt version is deliberately vNext. The
+  versioned call ledger is its data foundation, but this surface does not claim
+  that call volume or cost measures outcome quality.
 - `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
   project onboarding workflow. Its roomy, scrollable form groups project
   identity, repository paths/URL, and execution defaults without a source-type
@@ -235,7 +253,7 @@ The dashboard is a projection over existing domain truths:
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
 | Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
-| Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
+| Wiki activity | Initial `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`, then a visible-only conditional poll of `GET /api/projects/{projectName}/wiki/recent?limit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |
 | Visual evidence | `GET /api/projects/{projectName}/visual-evidence`, with append-only review receipts shared with task detail | Existing Visual Evidence detail surface |
 | Publishing | Publish targets from `GET /api/projects/{projectName}/snapshot`, rendered by the existing publish panel | Publishing panel |

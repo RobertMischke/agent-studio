@@ -7,6 +7,7 @@ export interface PromptCatalogItem {
   title: string;
   description: string;
   group: string;
+  promptClass: 'runtime-step' | 'orchestrator' | 'drift' | 'framing';
   hasDefault: boolean;
   /** True when the application-wide user-data override exists. */
   hasGlobalOverride?: boolean;
@@ -22,11 +23,19 @@ export interface PromptCatalogItem {
   lastChangedAt?: string | null;
   lastChangedSha?: string | null;
   lastReviewedAt?: string | null;
+  reviewStatus: PromptReviewStatus | null;
+  reviewFindingCount: number;
+  projectOverrideCount: number;
+  calls: PromptCallAnalytics;
 }
 
 export interface PromptCatalogResponse {
   items: PromptCatalogItem[];
   overrideDirectory: string;
+  orphanedOverrides: PromptProjectOverride[];
+  telemetryPath: string | null;
+  deadPromptDays: number;
+  costDisclaimer: string;
 }
 
 /** One recorded consumer of a template: the class + member that renders it. */
@@ -41,6 +50,7 @@ export interface PromptDetail {
   title: string;
   description: string;
   group: string;
+  promptClass: 'runtime-step' | 'orchestrator' | 'drift' | 'framing';
   hasDefault: boolean;
   hasOverride: boolean;
   defaultContent: string | null;
@@ -53,7 +63,63 @@ export interface PromptDetail {
   overrideUpdatedAt: string | null;
   slots: string[];
   usages: PromptUsageRef[];
-  projectOverrides?: PromptProjectOverride[];
+  lastChangedAt: string | null;
+  lastChangedSha: string | null;
+  review: PromptReviewMetadata | null;
+  projectOverrides: PromptProjectOverride[];
+  calls: PromptCallAnalytics;
+  costDisclaimer: string;
+}
+
+export interface PromptCallAnalytics {
+  totalCalls: number;
+  calls7d: number;
+  lastCalledAt: string | null;
+  inputTokens: number;
+  costUsd: number;
+  costUsd7d: number;
+  unpricedCalls: number;
+  unpricedCalls7d: number;
+  currentVersionCalls: number;
+  isDead: boolean;
+  daily: PromptCallDay[];
+  versions: PromptCallVersion[];
+}
+
+export interface PromptCallDay {
+  date: string;
+  calls: number;
+  inputTokens: number;
+  costUsd: number;
+}
+
+export interface PromptCallVersion {
+  version: string;
+  firstCalledAt: string;
+  lastCalledAt: string;
+  calls: number;
+  inputTokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  isCurrent: boolean;
+  models: string[];
+}
+
+export type PromptReviewStatus = 'current' | 'needs-review' | 'stale';
+
+export interface PromptReviewFinding {
+  code: string;
+  severity: 'info' | 'warning' | 'error';
+  message: string;
+  projectName: string | null;
+  stepId: string | null;
+}
+
+export interface PromptReviewMetadata {
+  lastReviewedAt: string;
+  reviewedBy: string;
+  status: PromptReviewStatus;
+  findings: PromptReviewFinding[];
 }
 
 /**
@@ -72,6 +138,20 @@ export interface PromptProjectOverride {
   removedLines: number;
   baseDefaultSha?: string | null;
   defaultChangedSinceOverride?: boolean;
+}
+
+export interface PromptReviewResult {
+  name: string;
+  metadata: PromptReviewMetadata;
+  projectOverrides: PromptProjectOverride[];
+}
+
+export interface PromptReviewRunResponse {
+  reviewedAt: string;
+  reviewedCount: number;
+  findingCount: number;
+  results: PromptReviewResult[];
+  orphanedOverrides: PromptProjectOverride[];
 }
 
 /** Result of a non-persisting "Probelauf" render against supplied slot values. */
@@ -167,6 +247,24 @@ export class PromptAdminService {
   rebaseline(name: string): Promise<PromptDetail> {
     return firstValueFrom(
       this.http.post<PromptDetail>(`/api/admin/prompts/${encodeURIComponent(name)}/rebaseline`, {})
+    );
+  }
+
+  review(name: string, reviewedBy = 'prompt-admin'): Promise<PromptReviewResult> {
+    return firstValueFrom(
+      this.http.post<PromptReviewResult>(
+        `/api/admin/prompts/${encodeURIComponent(name)}/review`,
+        { reviewedBy }
+      )
+    );
+  }
+
+  reviewAll(reviewedBy = 'prompt-admin'): Promise<PromptReviewRunResponse> {
+    return firstValueFrom(
+      this.http.post<PromptReviewRunResponse>(
+        '/api/admin/prompts/review-all',
+        { reviewedBy }
+      )
     );
   }
 

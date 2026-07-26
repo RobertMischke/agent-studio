@@ -110,7 +110,8 @@ public sealed class SummaryGenerationService
             var truncated = TruncateTail(rawLog, MaxLogChars);
             runOutcome ??= TerminalRunOutcomeClassifier.TryClassifyRenderedLog(rawLog)?.Outcome;
             var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-                BuildSummarySlots(info, truncated, runOutcome?.ProtocolResult ?? "unknown"));
+                BuildSummarySlots(info, truncated, runOutcome?.ProtocolResult ?? "unknown"),
+                new PromptCallContext(info.ProjectName, "summary", SummaryModel()));
 
             var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
             if (!result.Ok || string.IsNullOrWhiteSpace(result.Summary))
@@ -194,7 +195,8 @@ public sealed class SummaryGenerationService
         // Interim peek: the run is still alive, so there is no terminal outcome
         // to feed the classifier. Say so explicitly instead of guessing one.
         var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-            BuildSummarySlots(info, truncated, "in progress"));
+            BuildSummarySlots(info, truncated, "in progress"),
+            new PromptCallContext(info.ProjectName, "summary", SummaryModel()));
 
         var sw = Stopwatch.StartNew();
         var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
@@ -254,7 +256,7 @@ public sealed class SummaryGenerationService
     private async Task<HaikuSummaryResult> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
     {
-        var model = _configuration["ClaudeCli:SummaryModel"] ?? ModelIds.ClaudeHaiku45;
+        var model = SummaryModel();
         var startedAt = DateTime.UtcNow;
         var sw = Stopwatch.StartNew();
 
@@ -341,6 +343,9 @@ public sealed class SummaryGenerationService
             return HaikuSummaryResult.Failure(model, ex.Message, startedAt, DateTime.UtcNow, sw.ElapsedMilliseconds);
         }
     }
+
+    private string SummaryModel() =>
+        _configuration["ClaudeCli:SummaryModel"] ?? ModelIds.ClaudeHaiku45;
 
     private void RegisterGeneratedStatus(TaskInfo info, HaikuSummaryResult result, int? runIndex)
     {

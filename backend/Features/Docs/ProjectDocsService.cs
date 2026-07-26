@@ -1299,10 +1299,8 @@ public class ProjectDocsService
         var source = ResolveWikiSource(projectName);
         List<GitCommitInfo> commits = [];
         string? trailerModel = null;
-        string? head = null;
         if (!string.IsNullOrWhiteSpace(repoRoot))
         {
-            head = source?.Info.Commit ?? git.GetHeadShaCached(repoRoot);
             var repoRel = "docs/" + relPath.Replace('\\', '/');
             var info = git.GetWikiDocGitInfoCached(repoRoot, repoRel, 50, source?.Info.Mode == "branch" ? source.Info.Commit : null);
             commits = info.Commits;
@@ -1321,11 +1319,12 @@ public class ProjectDocsService
             .ToList();
         var payload = new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits, relatedTasks);
 
-        // History depends on HEAD (the git side) and the live file's frontmatter
-        // (the model/why can change with an uncommitted edit before HEAD moves),
-        // so the validator folds both HEAD and the file's mtime.
+        // Scope the validator to this file. The latest touching commit covers
+        // committed history while mtime covers live working-tree edits. Using
+        // repository HEAD here would wake the page banner for unrelated commits.
         var mtime = File.GetLastWriteTimeUtc(full).Ticks;
-        var etag = FormatETag("wiki-hist-" + (head ?? "nohead") + "-" + mtime);
+        var fileCommit = commits.FirstOrDefault()?.Sha ?? "no-commit";
+        var etag = FormatETag("wiki-hist-" + fileCommit + "-" + mtime);
         return new WikiHistoryResult(payload, etag);
     }
 

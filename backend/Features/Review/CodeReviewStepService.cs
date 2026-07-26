@@ -296,7 +296,15 @@ public sealed class CodeReviewStepService
         var template = request.Mode == CodeReviewMode.Grade ? GradePromptTemplate : PromptTemplate;
         try
         {
-            return _prompts.Render(template, values);
+            return _prompts.Render(
+                template,
+                values,
+                new PromptCallContext(
+                    request.Project,
+                    request.Mode == CodeReviewMode.Grade
+                        ? PipelineCatalogue.CodeReviewGradeStepId
+                        : "code-review",
+                    request.Model));
         }
         catch (Exception ex)
         {

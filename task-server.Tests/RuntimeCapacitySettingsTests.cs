@@ -36,6 +36,39 @@ public sealed class RuntimeCapacitySettingsTests
     }
 
     [Fact]
+    public async Task Review_registration_does_not_seed_the_coding_capacity()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+
+        var review = await store.RegisterRunnerAsync(
+            "review-a",
+            new RegisterRunnerRequest(
+                "review",
+                "host-a",
+                "review-a:1",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.ReviewExecutor],
+                BootstrapMaxParallelism: 9),
+            "test",
+            default);
+        var coding = await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("runner-a:1", bootstrap: 3),
+            "test",
+            default);
+
+        Assert.Null(review.RuntimeCapacity);
+        Assert.Equal(3, coding.RuntimeCapacity!.MaxParallelism);
+        var reviewSnapshot = (await store.ListRunnerCapabilitySnapshotsAsync(default))
+            .Single(item => item.RunnerId == "review-a");
+        Assert.Null(reviewSnapshot.EffectiveMaxParallelism);
+        Assert.Null(reviewSnapshot.RuntimeCapacityAppliedAt);
+    }
+
+    [Fact]
     public async Task Update_is_versioned_and_exposed_through_the_runtime_service()
     {
         using var temp = new TempDirectory();
@@ -163,5 +196,5 @@ public sealed class RuntimeCapacitySettingsTests
             "1.0.0",
             TaskServerProtocol.Current,
             [ReviewCapabilities.CodingExecutor],
-            bootstrap);
+            BootstrapMaxParallelism: bootstrap);
 }

@@ -374,6 +374,22 @@
                   (archiveCompleted)="refresh({ soft: true })" />
               </header>
 
+              @if (pageUpdated()) {
+                <div class="pwiki__update-banner"
+                     role="status"
+                     data-testid="project-wiki-update-banner">
+                  <span>Diese Seite wurde aktualisiert.</span>
+                  <button type="button"
+                          data-testid="project-wiki-update-reload"
+                          [disabled]="pageReloading()"
+                          (click)="reloadUpdatedPage()">
+                    {{ pageReloading() ? 'Wird neu geladen...' : 'Neu laden' }}
+                  </button>
+                  <button type="button"
+                          data-testid="project-wiki-update-dismiss"
+                          (click)="dismissPageUpdate()">Ausblenden</button>
+                </div>
+              }
               @if (revisionSha(); as sha) {
                 <div class="pwiki__rev-banner" data-testid="project-wiki-rev-banner">
                   Viewing revision <code>{{ sha }}</code>

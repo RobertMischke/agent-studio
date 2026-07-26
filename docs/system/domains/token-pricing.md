@@ -39,10 +39,18 @@ The shared adapter feeds:
 - CLI Usage modal and detail table, including "Cost per model";
 - board task and project token badges;
 - ad-hoc/supporting usage summaries.
+- prompt-registry call history, where the rendered prompt's estimated input
+  tokens are priced at the event timestamp and grouped by content hash.
 
 These surfaces may aggregate resolved costs, but an aggregate containing an
 unpriced call remains explicitly marked unknown or partial according to its
 wire contract. A per-model row with a missing price always renders `Unknown`.
+
+Prompt-registry cost is a narrower estimate than a completed model call. It
+prices only the rendered prompt input, uses the existing four characters per
+token estimator, and has no output or cache counters. Its UI must retain the
+theoretical API-equivalent and CLI-subscription disclaimer and must mark
+unpriced calls instead of treating them as zero-cost calls.
 
 ## Calculation transparency
 

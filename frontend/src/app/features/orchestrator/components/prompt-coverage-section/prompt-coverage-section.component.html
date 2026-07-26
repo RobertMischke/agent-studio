@@ -1,0 +1,24 @@
+@let cov = coverage();
+<section class="prompt-coverage" data-testid="prompt-admin-coverage">
+  <div class="prompt-coverage__head">
+    <span>Inline-migration coverage</span>
+    <span class="prompt-coverage__muted" data-testid="prompt-admin-coverage-count">
+      {{ cov.coveredSites }} / {{ cov.totalSites }} prompt sites template-backed
+    </span>
+  </div>
+  <table class="prompt-coverage__table">
+    <tbody>
+      @for (item of cov.items; track item.component) {
+        <tr [attr.data-testid]="'prompt-admin-coverage-row-' + item.status">
+          <td>
+            <span class="prompt-coverage__pill"
+              [class.prompt-coverage__pill--ok]="item.status === 'covered'"
+              [class.prompt-coverage__pill--warn]="item.status === 'pending'">{{ item.status }}</span>
+          </td>
+          <td><code>{{ item.component }}</code></td>
+          <td class="prompt-coverage__muted">{{ item.detail }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>

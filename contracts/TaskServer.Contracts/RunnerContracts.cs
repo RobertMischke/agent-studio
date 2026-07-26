@@ -7,6 +7,8 @@ public sealed record RegisterRunnerRequest(
     string RunnerVersion,
     int ProtocolVersion,
     IReadOnlyList<string>? Capabilities = null,
+    string? HostOrchestratorMinimum = null,
+    string? HostOrchestratorMaximum = null,
     int BootstrapMaxParallelism = 2);
 
 /// <summary>

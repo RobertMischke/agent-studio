@@ -16,6 +16,50 @@ public class CompletionGateTests
     private const int MaxReissues = 3;
 
     [Fact]
+    public void EvaluateStructured_Agt2149DoneRun_DoesNotInterpretBlockedProseAsOpenWork()
+    {
+        var log = string.Join('\n',
+            "Status result is Blocked.",
+            "GitHub organization owner must approve deploy keys to unblock real host verification.",
+            "Host access to agent-runner-01 required to confirm push identity.",
+            "No repository-side change can proceed further without external approval.",
+            "[[TASK_DONE]]",
+            "[taskboard] codex CLI exited: status=completed, exitCode=0, duration=42s");
+        var record = CompletionAcceptanceRecord.Capture(
+            "Implement runner push identity.", log, exitCode: 0,
+            runStatusCompleted: true, hasResultsArtifacts: false);
+
+        var decision = CompletionGate.EvaluateStructured(record, priorReissues: 2, maxReissues: 3);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+        Assert.Empty(record.Blockers);
+        Assert.True(record.Lifecycle.TurnComplete);
+        Assert.True(record.Lifecycle.ImplementationComplete);
+        Assert.False(record.Lifecycle.TaskAccepted);
+        Assert.True(record.Lifecycle.DeploymentPushPending);
+        Assert.Contains(record.Requirements, r => r.Source.StartsWith("prompt.md", StringComparison.Ordinal));
+        Assert.All(record.Evidence, e => Assert.False(string.IsNullOrWhiteSpace(e.Source)));
+    }
+
+    [Fact]
+    public void EvaluateStructured_ExplicitBlocker_PersistsSourceAndReasonAndEscalates()
+    {
+        var log = "[[TASK_BLOCKED:deploy key approval required]]\n" +
+                  "[taskboard] codex CLI exited: status=completed, exitCode=0, duration=42s";
+        var record = CompletionAcceptanceRecord.Capture(
+            "Verify on the runner host.", log, exitCode: 0,
+            runStatusCompleted: true, hasResultsArtifacts: false);
+
+        var decision = CompletionGate.EvaluateStructured(record, priorReissues: 0, maxReissues: 3);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Escalate, decision.Action);
+        var blocker = Assert.Single(record.Blockers);
+        Assert.Equal("logs/cli-output.log", blocker.Source);
+        Assert.Equal("deploy key approval required", blocker.Reason);
+        Assert.Contains("source: logs/cli-output.log", Assert.Single(decision.Findings));
+    }
+
+    [Fact]
     public void ExtractFindings_CleanCloseOut_NoFindings()
     {
         var status = string.Join('\n',

@@ -51,6 +51,7 @@ export interface PipelineStepExecution {
   thinkingLevel?: string | null;
   recommendedModel?: string | null;
   recommendedThinkingLevel?: string | null;
+  /** Effective route source: policy, policy-economy, or task-override. */
   selectionSource?: string | null;
   estimatedSavingsPercent?: number | null;
   status: PipelineStepStatus;

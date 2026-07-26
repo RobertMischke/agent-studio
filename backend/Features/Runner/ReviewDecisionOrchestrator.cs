@@ -1985,22 +1985,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ? null
             : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
 
-        // Post-core completeness gate (Orchestrator-Review, the first post-step):
-        // before spending the parallel aspect review, scan the run's OWN close-out
-        // evidence - status Open Items / Notes, the Result line, and the log tail -
-        // for unfinished-work signals: open checklist boxes, self-reported build /
-        // compile / test failures, or a success claim contradicted by a build
-        // error. A hit short-circuits the accept and drives the task to a
-        // conclusion: reissue with the items foregrounded while the shared reissue
-        // budget allows, otherwise escalate to 5e-escalated. This closes the
-        // silent-completion gap (ASS-764 self-reported build error accepted with
-        // concerns; ASS-766 silent finish + open items parked without a verdict)
-        // where a run says done while its own evidence still lists open work.
-        var gate = CompletionGate.Evaluate(
-            statusSummary, recentLog,
-            CountPriorReissues(workspace, entry.Name, current.Id),
-            ConfiguredMaxReissues(),
+        // Post-core completeness gate. Persist the exact requirement source,
+        // machine evidence, blockers, and lifecycle states before review. Never
+        // infer open work from bullets or narrative in status.md: AGT-2149 was
+        // reopened on four historical/external-access prose lines despite a
+        // TASK_DONE, exit-0, verified run.
+        var acceptance = CompletionAcceptanceRecord.Capture(
+            taskBody,
+            recentLog,
+            CompletionGate.ExtractLatestExitCode(recentLog),
+            CompletionGate.ExtractLatestRunCompleted(recentLog),
             HasResultsArtifacts(current.FolderPath));
+        CompletionAcceptanceRecord.Write(current.FolderPath, acceptance, _logger);
+        var gate = CompletionGate.EvaluateStructured(
+            acceptance,
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues());
         if (gate.IsIncomplete)
         {
             await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
@@ -2301,6 +2301,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // and left orphan logs/cli-output.log skeletons in 4-auto-review.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath,
+            "pipeline-execution.json",
+            report.Overall == AspectStatus.Concerns
+                ? $"Structured aspect review accepted with concerns: {FormatConcernCount(report)}"
+                : "Structured aspect review accepted all requirements.",
+            _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -2747,6 +2754,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", loopBreak.Reason, _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -3673,14 +3682,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
-        var count = gate.Findings.Count;
-        var noun = count == 1 ? "item" : "items";
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{title}\" back to 2-ready ({count} unfinished {noun} from its own close-out).");
+            $"Auto-review sent \"{title}\" back to 2-ready. {gate.Reason} Evidence: {findingsBlock}");
 
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
-            $"Reopened: completion gate found {count} unfinished {noun} in the run's own close-out.",
+            $"Reopened: {gate.Reason}",
             BuildReopenDetails("completion-gate",
                 CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
 
@@ -6143,6 +6150,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", reason, _logger);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
             summary: reason,
             performerCliType: NormalizeReviewCliType(cliBinary),

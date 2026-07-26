@@ -27,6 +27,11 @@ export class RuntimeCapacityEditorComponent {
   readonly capacityDraft = signal<number | null>(null);
   readonly targetLoadDraft = signal<number | null>(null);
   readonly rampDraft = signal<HostRampStrategy | null>(null);
+  readonly activeSlots = computed(() => Math.max(0, this.host().activeTaskCount ?? 0));
+  readonly freeSlots = computed(() => Math.max(
+    0,
+    (this.host().runtimeCapacity?.maxParallelism ?? 0) - this.activeSlots(),
+  ));
 
   readonly awaitingAdoption = computed(() => {
     const host = this.host();

@@ -59,16 +59,17 @@ public class TitleGenerationService
             ? trimmed[..MaxInputChars]
             : trimmed;
 
+        var fallbackModel = _configuration["TitleGeneration:Model"]
+                            ?? _configuration["ClaudeCli:SummaryModel"]
+                            ?? ModelIds.ClaudeHaiku45;
         var prompt = _prompts.Render(TemplateName,
-            new Dictionary<string, string?> { ["input"] = bounded });
+            new Dictionary<string, string?> { ["input"] = bounded },
+            new PromptCallContext(Step: "title-generation", Model: fallbackModel));
 
         var sw = AdHocClaudeInvoker.StartTiming();
         var (ok, raw, error) = await InvokeAsync(prompt, ct);
         sw.Stop();
 
-        var fallbackModel = _configuration["TitleGeneration:Model"]
-                            ?? _configuration["ClaudeCli:SummaryModel"]
-                            ?? ModelIds.ClaudeHaiku45;
         var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
         AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.TitleGeneration, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
 

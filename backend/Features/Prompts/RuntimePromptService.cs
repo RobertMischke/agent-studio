@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using AgentStudio.Drift;
+using AgentStudio.Runner;
 
 namespace AgentStudio.Prompts;
 
@@ -35,16 +37,74 @@ public sealed partial class RuntimePromptService
 
     private readonly IConfiguration _configuration;
     private readonly ILogger<RuntimePromptService> _logger;
-    private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, LoadedPrompt> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly PromptCallTelemetryService? _telemetry;
 
     public RuntimePromptService(IConfiguration configuration, ILogger<RuntimePromptService> logger)
+        : this(configuration, logger, null)
+    {
+    }
+
+    public RuntimePromptService(
+        IConfiguration configuration,
+        ILogger<RuntimePromptService> logger,
+        PromptCallTelemetryService? telemetry)
     {
         _configuration = configuration;
         _logger = logger;
+        _telemetry = telemetry;
     }
 
-    public string Render(string templateName, IReadOnlyDictionary<string, string?> values)
-        => RenderContent(Load(templateName), values);
+    public string Render(
+        string templateName,
+        IReadOnlyDictionary<string, string?> values,
+        PromptCallContext? context = null)
+    {
+        var loaded = Load(templateName);
+        var rendered = RenderContent(loaded.Content, values);
+        RecordCall(templateName, loaded, rendered, values, context);
+        return rendered;
+    }
+
+    /// <summary>
+    /// Records and returns a project-level pipeline prompt override. Legacy
+    /// <c>pipelineSteps[*].prompt</c> values are already complete prompt text,
+    /// so they are not slot-rendered, but they still belong to the bound
+    /// runtime prompt's version and call history.
+    /// </summary>
+    public string UseProjectOverride(
+        string templateName,
+        string content,
+        PromptCallContext context)
+    {
+        var loaded = new LoadedPrompt(
+            content,
+            ContentSha(content),
+            "project-override");
+        RecordCall(templateName, loaded, content, NoValues, context);
+        return content;
+    }
+
+    private void RecordCall(
+        string templateName,
+        LoadedPrompt loaded,
+        string rendered,
+        IReadOnlyDictionary<string, string?> values,
+        PromptCallContext? context)
+    {
+        var inferred = InferContext(values, context);
+        _telemetry?.Record(new PromptCallRecord
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            PromptId = templateName,
+            Version = loaded.Version,
+            Source = loaded.Source,
+            InputTokens = PromptTokenEstimator.EstimateOrNull(rendered) ?? 0,
+            Model = inferred.Model,
+            Project = inferred.Project,
+            Step = inferred.Step,
+        });
+    }
 
     /// <summary>
     /// Applies the same <c>{{slot}}</c> substitution as <see cref="Render"/> to a
@@ -70,20 +130,23 @@ public sealed partial class RuntimePromptService
     /// yields an empty string. A non-empty result ends with a blank-line
     /// separator so it slots in front of the following section cleanly.
     /// </summary>
-    public string RenderModeFraming(string? mode, bool allowWebAccess)
+    public string RenderModeFraming(
+        string? mode,
+        bool allowWebAccess,
+        PromptCallContext? context = null)
     {
         var parts = new List<string>();
         if (TaskModes.IsReportOnly(mode))
-            parts.Add(Render(ModeFramingReadOnly, NoValues).Trim());
+            parts.Add(Render(ModeFramingReadOnly, NoValues, context).Trim());
         if (TaskModes.IsConcept(mode))
-            parts.Add(Render(ModeFramingConcept, NoValues).Trim());
+            parts.Add(Render(ModeFramingConcept, NoValues, context).Trim());
         if (allowWebAccess)
-            parts.Add(Render(ModeFramingWeb, NoValues).Trim());
+            parts.Add(Render(ModeFramingWeb, NoValues, context).Trim());
         if (parts.Count == 0) return string.Empty;
         return string.Join("\n\n", parts) + "\n\n";
     }
 
-    private string Load(string templateName)
+    private LoadedPrompt Load(string templateName)
     {
         if (string.IsNullOrWhiteSpace(templateName))
             throw new ArgumentException("Template name is required.", nameof(templateName));
@@ -92,8 +155,28 @@ public sealed partial class RuntimePromptService
         {
             var path = ResolveTemplatePath(name);
             _logger.LogDebug("Loading runtime prompt template {Template} from {Path}", name, path);
-            return File.ReadAllText(path);
+            var content = File.ReadAllText(path);
+            return new LoadedPrompt(
+                content,
+                ContentSha(content),
+                path.StartsWith(
+                    Path.GetFullPath(OverrideDirectory) + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? "application-override"
+                    : "file");
         });
+    }
+
+    public string? TryGetEffectiveVersion(string templateName)
+    {
+        try
+        {
+            return Load(templateName).Version;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -124,6 +207,39 @@ public sealed partial class RuntimePromptService
             if (File.Exists(path)) return path;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Absolute path of the shipped template, ignoring the application-wide
+    /// override. Prompt review uses it for git provenance and the adjacent
+    /// <c>*.md.meta.json</c> companion.
+    /// </summary>
+    public string? TryGetDefaultPath(string templateName) =>
+        TryResolveDefaultPath(templateName);
+
+    /// <summary>
+    /// Path for the review companion of a shipped prompt. An explicitly
+    /// configured runtime root remains authoritative (tests and packaged
+    /// deployments can keep their own companions). During source-checkout
+    /// development, companions live in the repository's
+    /// <c>prompts/runtime</c> tree rather than beside copied bin assets.
+    /// </summary>
+    public string? TryGetReviewCompanionPath(string templateName)
+    {
+        var configured = _configuration["PromptTemplates:RuntimePath"];
+        if (!string.IsNullOrWhiteSpace(configured))
+            return Path.GetFullPath(Path.Combine(configured, templateName)) + ".meta.json";
+
+        var sourcePath = Path.Combine(
+            DriftRepoRootLocator.Resolve(),
+            "prompts",
+            "runtime",
+            templateName);
+        if (File.Exists(sourcePath))
+            return Path.GetFullPath(sourcePath) + ".meta.json";
+
+        var defaultPath = TryGetDefaultPath(templateName);
+        return defaultPath is null ? null : defaultPath + ".meta.json";
     }
 
     private IEnumerable<string?> DefaultRoots()
@@ -253,14 +369,41 @@ public sealed partial class RuntimePromptService
         return seen;
     }
 
+    [GeneratedRegex(@"\{\{\s*(?<key>[A-Za-z0-9_]+)\s*\}\}", RegexOptions.Compiled)]
+    private static partial Regex PlaceholderRegex();
+
+    private static PromptCallContext InferContext(
+        IReadOnlyDictionary<string, string?> values,
+        PromptCallContext? explicitContext)
+    {
+        string? First(params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (values.TryGetValue(key, out var value)
+                    && !string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+            return null;
+        }
+
+        return new PromptCallContext(
+            explicitContext?.Project
+                ?? First("project", "project_name", "source_project", "target_project"),
+            explicitContext?.Step
+                ?? First("step", "step_id", "pipeline_step"),
+            explicitContext?.Model
+                ?? First("model", "model_id", "default_model"));
+    }
+
     /// <summary>Stable normalized SHA used by every prompt override layer.</summary>
     public static string ContentSha(string content)
     {
-        var bytes = SHA256.HashData(
-            Encoding.UTF8.GetBytes(content.Replace("\r\n", "\n")));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        var normalized = content.Replace("\r\n", "\n");
+        return Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))
+            .ToLowerInvariant();
     }
 
-    [GeneratedRegex(@"\{\{\s*(?<key>[A-Za-z0-9_]+)\s*\}\}", RegexOptions.Compiled)]
-    private static partial Regex PlaceholderRegex();
+    private sealed record LoadedPrompt(string Content, string Version, string Source);
 }

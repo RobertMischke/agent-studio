@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace AgentStudio.Pipeline;
 
 public enum TaskComplexity
@@ -78,6 +76,12 @@ public sealed record ModelQualificationDecision
     public string Project { get; init; } = string.Empty;
     public string CliType { get; init; } = string.Empty;
     public string TaskType { get; init; } = string.Empty;
+    public string PolicyVersion { get; init; } = string.Empty;
+    public string PolicyTier { get; init; } = string.Empty;
+    public string PolicyWikiPath { get; init; } = string.Empty;
+    public bool EconomyMode { get; init; }
+    public bool EconomyDowngraded { get; init; }
+    public string? CorrectnessFloorTier { get; init; }
     public string Surface { get; init; } = string.Empty;
     public string Complexity { get; init; } = string.Empty;
     public int Score { get; init; }
@@ -112,26 +116,19 @@ public sealed class ModelQualificationService
 {
     public const string LogFileName = "model-qualification.jsonl";
 
-    private static readonly Regex ArchitectureSignal = new(
-        @"\b(architect|backend|orchestrat|pipeline|concurr|state machine|schema|migration|security|permission|cross-project|api contract)\w*\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex FrontendPolishSignal = new(
-        @"\b(ui polish|frontend polish|spacing|tooltip|colour|color|alignment|copy change|css|scss|pixel)\w*\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex CrossCuttingSignal = new(
-        @"\b(frontend|backend|runner|cli|database|docs)\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private readonly IModelEconomyAdvisor _economy;
+    private readonly ModelRoutingPolicyRegistry _policy;
+    private readonly IModelRoutingModeProvider _routingMode;
     private readonly IJsonlAppender _jsonl;
     private readonly ILogger<ModelQualificationService> _logger;
 
     public ModelQualificationService(
-        IModelEconomyAdvisor economy,
+        ModelRoutingPolicyRegistry policy,
+        IModelRoutingModeProvider routingMode,
         IJsonlAppender jsonl,
         ILogger<ModelQualificationService> logger)
     {
-        _economy = economy;
+        _policy = policy;
+        _routingMode = routingMode;
         _jsonl = jsonl;
         _logger = logger;
     }
@@ -143,39 +140,25 @@ public sealed class ModelQualificationService
         IReadOnlyList<TaskInfo> projectHistory,
         DateTime? nowUtc = null)
     {
-        var text = $"{task.Title}\n{prompt}";
-        var score = task.TaskType switch
+        _ = projectHistory;
+        var recommendation = _policy.Recommend(
+            task.TaskType,
+            catalogue,
+            _routingMode.EconomyMode,
+            task.Title,
+            prompt);
+        var complexity = recommendation.Tier switch
         {
-            TaskTypes.Feature => 1,
-            TaskTypes.Bug => 1,
-            _ => 0,
+            "luna-medium" => TaskComplexity.Small,
+            "terra-medium" => TaskComplexity.Medium,
+            _ => TaskComplexity.Large,
         };
-        if (prompt.Length > 4_000) score += 2;
-        else if (prompt.Length > 1_500) score += 1;
-
-        var architectureHits = ArchitectureSignal.Matches(text).Count;
-        var polishHits = FrontendPolishSignal.Matches(text).Count;
-        score += Math.Min(3, architectureHits);
-        if (polishHits > 0 && architectureHits == 0) score -= 2;
-        var areas = CrossCuttingSignal.Matches(text)
-            .Select(match => match.Value.ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
-        if (areas >= 3) score += 2;
-
-        var similarAttempts = projectHistory
-            .Where(other => other.Id != task.Id && other.TaskType == task.TaskType)
-            .Select(other => ReadAttemptCount(other.FolderPath))
-            .Where(attempts => attempts > 1)
-            .Take(3)
-            .ToList();
-        if (similarAttempts.Count >= 2) score += 1;
-
-        var complexity = score >= 4 ? TaskComplexity.Large : score >= 1 ? TaskComplexity.Medium : TaskComplexity.Small;
-        var surface = architectureHits > 0
-            ? (areas >= 3 ? "cross-cutting architecture" : "backend/architecture")
-            : polishHits > 0 ? "frontend polish" : "general";
-        var recommendation = _economy.SuggestModel(catalogue.Models, complexity);
+        var surface = recommendation.CorrectnessFloorTier switch
+        {
+            "sol-xhigh" => "correctness-critical",
+            "sol-medium" => "cross-subsystem contract",
+            _ => "task-type convention",
+        };
 
         var modelExplicit = task.ModelExplicit;
         var thinkingExplicit = task.ThinkingLevelExplicit;
@@ -186,13 +169,14 @@ public sealed class ModelQualificationService
             ? task.ThinkingLevel
             : string.Equals(selectedModel, recommendation.Model, StringComparison.OrdinalIgnoreCase)
                 ? recommendation.ThinkingLevel
-                : ModelMetadataRegistry.ResolveThinkingLevel(task.CliType, selectedModel, task.ThinkingLevel);
-        var source = modelExplicit || thinkingExplicit ? "task-override" : "qualification";
-        var reason = $"{task.TaskType}/{complexity.ToString().ToLowerInvariant()}/{surface}; score {score}; " +
-                     $"recommend {recommendation.Model} at {recommendation.ThinkingLevel ?? "model default"}; " +
+                : ModelMetadataRegistry.ResolveThinkingLevel(task.CliType, selectedModel, recommendation.ThinkingLevel);
+        var source = modelExplicit || thinkingExplicit
+            ? "task-override"
+            : recommendation.EconomyDowngraded ? "policy-economy" : "policy";
+        var reason = $"{recommendation.Reason}; " +
                      (source == "task-override"
                          ? $"card override wins, selected {selectedModel} at {selectedThinking ?? "model default"}"
-                         : $"selected recommendation; expected saving about {recommendation.EstimatedSavingsPercent}% vs top rung");
+                         : $"selected policy recommendation; expected saving about {recommendation.EstimatedSavingsPercent}% vs top rung");
 
         return new ModelQualificationDecision
         {
@@ -201,15 +185,21 @@ public sealed class ModelQualificationService
             Project = task.ProjectName,
             CliType = CliTypes.Normalize(task.CliType),
             TaskType = task.TaskType,
+            PolicyVersion = recommendation.PolicyVersion,
+            PolicyTier = recommendation.Tier,
+            PolicyWikiPath = recommendation.PolicyWikiPath,
+            EconomyMode = recommendation.EconomyMode,
+            EconomyDowngraded = recommendation.EconomyDowngraded,
+            CorrectnessFloorTier = recommendation.CorrectnessFloorTier,
             Surface = surface,
             Complexity = complexity.ToString().ToLowerInvariant(),
-            Score = score,
+            Score = recommendation.Score,
             RecommendedModel = recommendation.Model,
             RecommendedThinkingLevel = recommendation.ThinkingLevel,
             SelectedModel = selectedModel,
             SelectedThinkingLevel = selectedThinking,
             SelectionSource = source,
-            EstimatedSavingsPercent = source == "qualification" ? recommendation.EstimatedSavingsPercent : 0,
+            EstimatedSavingsPercent = source == "task-override" ? 0 : recommendation.EstimatedSavingsPercent,
             Reason = reason,
             CatalogueSource = catalogue.Source ?? "unknown",
         };
@@ -239,21 +229,4 @@ public sealed class ModelQualificationService
         }
     }
 
-    private static int ReadAttemptCount(string folder)
-    {
-        try
-        {
-            var path = Path.Combine(folder, PipelineExecutionLog.FileName);
-            if (!File.Exists(path)) return 0;
-            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
-            return json.RootElement.TryGetProperty("attempt", out var attempt) && attempt.TryGetInt32(out var value)
-                ? value
-                : 1;
-        }
-        catch (Exception ex)
-        {
-            SilentCatch.Note(ex, "ModelQualificationService: similar-task attempt history is best-effort");
-            return 0;
-        }
-    }
 }

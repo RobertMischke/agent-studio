@@ -1,21 +1,30 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   OnInit,
   computed,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import { PromptCatalogueNavComponent } from '../prompt-catalogue-nav/prompt-catalogue-nav.component';
+import { PromptAdminLandingComponent } from '../prompt-admin-landing/prompt-admin-landing.component';
+import { PromptReviewSectionComponent } from '../prompt-review-section/prompt-review-section.component';
+import { PromptCallTelemetryComponent } from '../prompt-call-telemetry/prompt-call-telemetry.component';
+import { PromptCoverageSectionComponent } from '../prompt-coverage-section/prompt-coverage-section.component';
+import { PromptMetaSummaryComponent } from '../prompt-meta-summary/prompt-meta-summary.component';
 import {
   PromptAdminService,
   PromptDetail,
   PromptPreviewResult,
   PromptProjectOverride,
+  PromptReviewRunResponse,
 } from '../../../../services/prompt-admin.service';
 
 interface PromptDiffLine {
@@ -35,7 +44,18 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe, PromptCatalogueNavComponent, PromptNavSplitterDirective],
+  imports: [
+    FormsModule,
+    DatePipe,
+    TooltipDirective,
+    PromptCatalogueNavComponent,
+    PromptNavSplitterDirective,
+    PromptAdminLandingComponent,
+    PromptReviewSectionComponent,
+    PromptCallTelemetryComponent,
+    PromptCoverageSectionComponent,
+    PromptMetaSummaryComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',
@@ -44,6 +64,7 @@ export class PromptAdminPanelComponent implements OnInit {
   private readonly api = inject(PromptAdminService);
   /** Project scope for the shared catalogue; null renders every origin. */
   readonly projectName = input<string | null>(null);
+  private readonly detailScroll = viewChild<ElementRef<HTMLElement>>('detailScroll');
   readonly catalog = this.api.catalog;
   readonly coverage = this.api.coverage;
   readonly loadError = this.api.loadError;
@@ -60,6 +81,8 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly slotValues = signal<Record<string, string>>({});
   readonly previewResult = signal<PromptPreviewResult | null>(null);
   readonly previewBusy = signal(false);
+  readonly reviewBusy = signal(false);
+  readonly reviewSummary = signal<PromptReviewRunResponse | null>(null);
 
   readonly dirty = computed(() => {
     const d = this.detail();
@@ -78,8 +101,13 @@ export class PromptAdminPanelComponent implements OnInit {
 
   private async init(): Promise<void> {
     await Promise.all([this.api.loadCatalog(), this.api.loadCoverage()]);
-    const first = this.catalog()?.items[0]?.name;
-    if (first) await this.select(first);
+  }
+
+  goHome(): void {
+    this.selectedName.set(null);
+    this.detail.set(null);
+    this.actionError.set(null);
+    this.scrollDetailToTop();
   }
 
   async select(name: string): Promise<void> {
@@ -94,6 +122,7 @@ export class PromptAdminPanelComponent implements OnInit {
       this.selectedName.set(name);
       this.detail.set(detail);
       this.draft.set(detail.effectiveContent);
+      this.scrollDetailToTop();
     } catch (err: unknown) {
       this.actionError.set(this.describe(err, 'Failed to load prompt'));
     } finally {
@@ -101,6 +130,12 @@ export class PromptAdminPanelComponent implements OnInit {
     }
   }
 
+  private scrollDetailToTop(): void {
+    const element = this.detailScroll()?.nativeElement;
+    if (!element) return;
+    element.scrollTop = 0;
+    element.scrollLeft = 0;
+  }
   setSlotValue(slot: string, value: string): void {
     this.slotValues.update((v) => ({ ...v, [slot]: value }));
   }
@@ -118,6 +153,37 @@ export class PromptAdminPanelComponent implements OnInit {
       this.actionError.set(this.describe(err, 'Probelauf failed'));
     } finally {
       this.previewBusy.set(false);
+    }
+  }
+
+  async reviewCurrent(): Promise<void> {
+    const name = this.selectedName();
+    if (!name || this.reviewBusy()) return;
+    this.reviewBusy.set(true);
+    this.actionError.set(null);
+    try {
+      await this.api.review(name);
+      await this.api.loadCatalog();
+      const detail = this.withRegistryArrays(await this.api.getDetail(name));
+      this.detail.set(detail);
+    } catch (err: unknown) {
+      this.actionError.set(this.describe(err, 'Prompt review failed'));
+    } finally {
+      this.reviewBusy.set(false);
+    }
+  }
+
+  async reviewAll(): Promise<void> {
+    if (this.reviewBusy()) return;
+    this.reviewBusy.set(true);
+    this.actionError.set(null);
+    try {
+      this.reviewSummary.set(await this.api.reviewAll());
+      await this.api.loadCatalog();
+    } catch (err: unknown) {
+      this.actionError.set(this.describe(err, 'Prompt review failed'));
+    } finally {
+      this.reviewBusy.set(false);
     }
   }
 
@@ -313,6 +379,27 @@ export class PromptAdminPanelComponent implements OnInit {
       slots: Array.isArray(detail.slots) ? detail.slots : [],
       usages: Array.isArray(detail.usages) ? detail.usages : [],
       projectOverrides: Array.isArray(detail.projectOverrides) ? detail.projectOverrides : [],
+      costDisclaimer: detail.costDisclaimer ?? '',
+      calls: detail.calls ?? {
+        totalCalls: 0,
+        calls7d: 0,
+        lastCalledAt: null,
+        inputTokens: 0,
+        costUsd: 0,
+        costUsd7d: 0,
+        unpricedCalls: 0,
+        unpricedCalls7d: 0,
+        currentVersionCalls: 0,
+        isDead: true,
+        daily: [],
+        versions: [],
+      },
+      review: detail.review
+        ? {
+            ...detail.review,
+            findings: Array.isArray(detail.review.findings) ? detail.review.findings : [],
+          }
+        : null,
     };
   }
 

@@ -4,8 +4,8 @@
     <div class="capacity__copy">
       <strong>Runtime capacity</strong>
       <span data-testid="remote-host-slots">
-        {{ h.activeTaskCount ?? 0 }} active /
-        {{ capacity.maxParallelism - (h.activeTaskCount ?? 0) > 0 ? capacity.maxParallelism - (h.activeTaskCount ?? 0) : 0 }} free /
+        {{ activeSlots() }} active /
+        {{ freeSlots() }} free /
         {{ capacity.maxParallelism }} total
       </span>
       <span>

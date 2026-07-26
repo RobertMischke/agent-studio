@@ -3678,7 +3678,7 @@ public class ProjectRunner
             ?? _projectSettings.Get(ProjectName).OrchestratorModel;
         var modelId = string.IsNullOrWhiteSpace(modelOverride) ? OrchestratorRunner.DefaultModel : modelOverride!;
 
-        var bootPrompt = BuildOrchestratorBootPrompt();
+        var bootPrompt = BuildOrchestratorBootPrompt(modelId);
 
         _logger.LogInformation("[orchestrator] booting session for {Project} on {Model}", ProjectName, modelId);
         var result = await _orchestratorRunner.DecideAsync(bootPrompt, modelId, Entry.RootPath, ct);
@@ -3752,7 +3752,7 @@ public class ProjectRunner
     /// stays cheap. Total target: under 8 KB so even on Opus the boot
     /// is a few cents at most.
     /// </summary>
-    private string BuildOrchestratorBootPrompt()
+    private string BuildOrchestratorBootPrompt(string model)
     {
         var context = new System.Text.StringBuilder();
         context.Append($"- Watch path: {Entry.Path}");
@@ -3782,7 +3782,7 @@ public class ProjectRunner
             ["project_context"] = context.ToString(),
             ["doc_snippets"] = docs.ToString(),
             ["activity_block"] = activity.ToString(),
-        });
+        }, new PromptCallContext(ProjectName, "orchestrator-boot", model));
     }
 
     private static void AppendDocSnippet(System.Text.StringBuilder sb, string fileName, string root, int maxChars)
@@ -4317,8 +4317,10 @@ public class ProjectRunner
 
             await _modelQualification.RecordDecisionAsync(info.FolderPath, decision, ct);
             _logger.LogInformation(
-                "model-qualification jobId={JobId} taskType={TaskType} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
-                info.Id, decision.TaskType, decision.Complexity, decision.Surface,
+                "model-qualification jobId={JobId} taskType={TaskType} policy={PolicyVersion} tier={PolicyTier} economyMode={EconomyMode} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
+                info.Id, decision.TaskType,
+                decision.PolicyVersion, decision.PolicyTier, decision.EconomyMode,
+                decision.Complexity, decision.Surface,
                 decision.RecommendedModel, decision.RecommendedThinkingLevel,
                 decision.SelectedModel, decision.SelectedThinkingLevel,
                 decision.SelectionSource, decision.EstimatedSavingsPercent);
@@ -7152,9 +7154,15 @@ public class ProjectRunner
             ["working_directory"] = runWorkingDir,
             ["repository_path"] = effectiveRepositoryPath,
             ["attachments_list"] = BuildAttachmentsList(info.FolderPath),
-            ["mode_framing"] = _prompts.RenderModeFraming(info.Mode, info.AllowWebAccess)
+            ["mode_framing"] = _prompts.RenderModeFraming(
+                info.Mode,
+                info.AllowWebAccess,
+                new PromptCallContext(info.ProjectName, "core", info.Model))
         };
-        var rendered = _prompts.Render(plan.PromptTemplate, values);
+        var rendered = _prompts.Render(
+            plan.PromptTemplate,
+            values,
+            new PromptCallContext(info.ProjectName, "core", info.Model));
         rendered = RewriteMainCheckoutPathsForRun(rendered, runWorkingDir, worktreeCheckout);
         return IsWorktreePath(runWorkingDir)
             ? BuildWorktreeContainmentNotice(runWorkingDir, worktreeCheckout) + rendered

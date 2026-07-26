@@ -155,8 +155,9 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
     {
         // Two threads race: one moves slug-0 from 3-progress to
         // 4-auto-review, the other deletes the folder outright. The
-        // mutex guarantees a single winner; the loser either fails
-        // cleanly (NotFound) or is a no-op.
+        // mutex guarantees a linear order. Delete may start after move
+        // completes, in which case both operations legitimately succeed
+        // and the final state is deleted.
         SeedJob(TaskStates.Progress, "race-target");
 
         var states = BuildStateMachine();
@@ -168,22 +169,21 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
             () => { moved = states.MoveJob("race-target", TaskStates.AutoReview, _watchPath).Status == MoveJobStatus.Success; },
             () => { deleted = states.DeleteJob("race-target", _watchPath); });
 
-        // Exactly one of the two operations succeeded.
-        Assert.True(moved ^ deleted,
-            $"Expected exactly one of move/delete to succeed; moved={moved}, deleted={deleted}.");
+        Assert.True(moved || deleted,
+            $"Expected move or delete to succeed; moved={moved}, deleted={deleted}.");
 
         var progressFolders = Directory.GetDirectories(Path.Combine(_watchPath, TaskStates.Progress));
         var autoReviewFolders = Directory.GetDirectories(Path.Combine(_watchPath, TaskStates.AutoReview));
 
         Assert.Empty(progressFolders);
-        if (moved)
+        if (deleted)
         {
-            Assert.Single(autoReviewFolders);
-            Assert.True(File.Exists(Path.Combine(autoReviewFolders[0], "task.json")));
+            Assert.Empty(autoReviewFolders);
         }
         else
         {
-            Assert.Empty(autoReviewFolders);
+            Assert.Single(autoReviewFolders);
+            Assert.True(File.Exists(Path.Combine(autoReviewFolders[0], "task.json")));
         }
     }
 

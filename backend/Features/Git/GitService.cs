@@ -1798,6 +1798,8 @@ public class GitService
         if (diff.Length > 60_000) diff = diff[..60_000] + "\n[truncated]";
 
         var intent = ReadTaskIntent(jobId, watchPath);
+        var codexPath = _config["CodexCli:Path"] ?? "codex";
+        var model = ModelIds.Gpt54Mini;
         var prompt = _prompts.Render(RuntimePromptService.CommitMessage,
             new Dictionary<string, string?>
             {
@@ -1812,10 +1814,8 @@ public class GitService
                 ["task_title"] = intent.Title,
                 ["task_prompt_first_paragraph"] = intent.PromptFirstParagraph,
                 ["last_user_continue"] = intent.LastUserContinue
-            });
-
-        var codexPath = _config["CodexCli:Path"] ?? "codex";
-        var model = ModelIds.Gpt54Mini;
+            },
+            new PromptCallContext(Step: "commit-message", Model: model));
 
         var psi = new ProcessStartInfo
         {

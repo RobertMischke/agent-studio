@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
 import { WikiStarsService } from './wiki-stars.service';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
+import { WIKI_LIVE_REFRESH_MS } from '../../services/wiki-live-refresh.service';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -353,6 +354,11 @@ const HISTORY: WikiFileHistory = {
 };
 
 describe('ProjectWikiSectionComponent', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     clearWikiStorage();
     openTaskKey.mockClear();
@@ -382,6 +388,62 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect((el(fixture).querySelector('[data-testid="project-wiki-edit"]') as HTMLButtonElement).disabled).toBe(true);
     http.verify();
+  });
+
+  it('shows the update banner on an ETag change and reloads only after confirmation', async () => {
+    vi.useFakeTimers();
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')?.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Original' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md')
+      .flush(HISTORY, { headers: { ETag: '"page-v1"' } });
+    fixture.detectChanges();
+
+    await vi.advanceTimersByTimeAsync(WIKI_LIVE_REFRESH_MS);
+    const unchanged = http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md');
+    expect(unchanged.request.headers.get('If-None-Match')).toBe('"page-v1"');
+    unchanged.flush(null, {
+      status: 304,
+      statusText: 'Not Modified',
+      headers: { ETag: '"page-v1"' },
+    });
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-update-banner"]')).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Original');
+
+    await vi.advanceTimersByTimeAsync(WIKI_LIVE_REFRESH_MS);
+    const changed = http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md');
+    expect(changed.request.headers.get('If-None-Match')).toBe('"page-v1"');
+    changed.flush({
+      ...HISTORY,
+      commits: [{
+        ...HISTORY.commits[0],
+        sha: 'def',
+        shortSha: 'def5678',
+        subject: 'external update',
+      }],
+    }, { headers: { ETag: '"page-v2"' } });
+    fixture.detectChanges();
+
+    const banner = el(fixture).querySelector('[data-testid="project-wiki-update-banner"]');
+    expect(banner?.textContent).toContain('Diese Seite wurde aktualisiert.');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Original');
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-update-reload"]')!.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Aktualisiert' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md')
+      .flush({ ...HISTORY, commits: [{ ...HISTORY.commits[0], sha: 'def' }] }, {
+        headers: { ETag: '"page-v2"' },
+      });
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-update-banner"]')).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Aktualisiert');
+    fixture.destroy();
+    vi.useRealTimers();
   });
 
   it('renders the physical folder tree with folders collapsed by default and md/html/json files when expanded', async () => {
