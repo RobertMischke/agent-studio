@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reissue prompt sharpness and convergence | Experiment Workbench</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f5f6;
+      --surface: #fff;
+      --soft: #e9eef1;
+      --ink: #172129;
+      --muted: #66727c;
+      --line: #d6dde1;
+      --primary: #285f75;
+      --primary-soft: #dcecf2;
+      --good: #27664a;
+      --good-soft: #dceee4;
+      --warn: #8a6224;
+      --warn-soft: #f4ead5;
+      --judged: #74549b;
+      --judged-soft: #ebe3f4;
+      --shadow: 0 18px 48px rgba(24, 36, 45, .08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d1419;
+      --surface: #151e24;
+      --soft: #25333c;
+      --ink: #edf2f5;
+      --muted: #9eabb4;
+      --line: #34434c;
+      --primary: #8bc6dc;
+      --primary-soft: #1b3946;
+      --good: #8cd0ab;
+      --good-soft: #1d3b2c;
+      --warn: #e5bd72;
+      --warn-soft: #43351d;
+      --judged: #c7afe4;
+      --judged-soft: #352944;
+      --shadow: 0 20px 52px rgba(0, 0, 0, .3);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.55; }
+    a { color: var(--primary); }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
+    button { font: inherit; color: inherit; }
+    button:focus-visible, a:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 13px clamp(16px, 3vw, 42px);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 800;
+    }
+    .brand strong, .brand small { display: block; }
+    .brand small { color: var(--muted); }
+    .theme-button {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    main { padding: 30px clamp(16px, 3vw, 42px) 64px; display: grid; gap: 20px; }
+    .hero { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
+    .panel {
+      min-width: 0;
+      padding: clamp(22px, 3vw, 34px);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0; max-width: 18ch; font-size: clamp(34px, 5vw, 60px); line-height: 1; letter-spacing: -.04em; }
+    h2 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); letter-spacing: -.02em; }
+    p { margin: 0; }
+    .lead { margin-top: 20px; max-width: 70ch; color: var(--muted); font-size: 18px; }
+    .decision { background: var(--good-soft); }
+    .decision p { color: var(--good); }
+    .decision strong { display: block; margin-bottom: 10px; font-size: 24px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+    .metric {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--soft);
+    }
+    .metric strong { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+    .metric span, .metric small { display: block; }
+    .metric span { margin-top: 6px; font-weight: 700; }
+    .metric small { margin-top: 4px; color: var(--muted); }
+    .table-wrap { margin-top: 18px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    td:not(:first-child), th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+    .callout-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+    .callout { padding: 16px; border-radius: 12px; background: var(--soft); }
+    .callout.hard { background: var(--good-soft); color: var(--good); }
+    .callout.judged { background: var(--judged-soft); color: var(--judged); }
+    .callout.confounded { background: var(--warn-soft); color: var(--warn); }
+    .callout strong { display: block; margin-bottom: 6px; }
+    .method { margin-top: 14px; color: var(--muted); }
+    ol { margin: 16px 0 0; padding-left: 22px; }
+    li + li { margin-top: 8px; }
+    .files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .files a {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--soft);
+      text-decoration: none;
+    }
+    @media (max-width: 850px) {
+      .hero, .callout-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 480px) {
+      .metric-grid { grid-template-columns: 1fr; }
+      .brand small { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">RQ</span>
+      <span><strong>Experiment Workbench</strong><small>AGT-2380 · observational snapshot</small></span>
+    </div>
+    <button class="theme-button" id="theme" type="button">Dark theme</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="panel">
+        <p class="eyebrow">Research question</p>
+        <h1>Do sharper reissue prompts converge better?</h1>
+        <p class="lead">Existing first reissue prompts are classified by a deterministic text rule. Their later explicit pipeline attempts are compared with a right-censor-aware acceptance endpoint.</p>
+      </div>
+      <aside class="panel decision">
+        <div>
+          <p class="eyebrow">Decision</p>
+          <strong>No reliable convergence advantage is demonstrated.</strong>
+          <p>Keep the production default unchanged. Test concrete findings-first structure in the controlled arm, without adding generic length, guessed references, or repeated raw logs.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Fresh snapshot · 2026-07-26</p>
+      <h2>Measured result</h2>
+      <div class="metric-grid">
+        <div class="metric"><strong>404</strong><span>Mapped tasks</span><small>202 in each prompt group</small></div>
+        <div class="metric"><strong>−0.159</strong><span>RMST difference</span><small>Finding-first minus generic, through attempt 5</small></div>
+        <div class="metric"><strong>+2.1 pp</strong><span>Acceptance difference</span><small>Kaplan-Meier probability by attempt 5</small></div>
+        <div class="metric"><strong>−0.530…+0.194</strong><span>RMST 95% interval</span><small>Task-level, 2,000 bootstrap resamples</small></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>First prompt</th><th>Tasks</th><th>Accepted</th><th>Censored</th><th>Acceptance by 5</th><th>RMST through 5</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Generic</td><td>202</td><td>84</td><td>118</td><td>47.75%</td><td>3.752</td></tr>
+            <tr><td>Concrete finding-first</td><td>202</td><td>69</td><td>133</td><td>49.85%</td><td>3.594</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="method">RMST is the restricted mean number of unresolved attempts through the shared five-attempt horizon. Lower is better. The acceptance-probability difference has a 95% bootstrap interval from −12.6 to +18.1 percentage points. Both intervals cross zero. Among accepted cases only, finding-first took a median 1 attempt and mean 1.70, versus median 2 and mean 3.12 for generic prompts. That sensitivity excludes censored cases and does not establish a faster or more reliable effect.</p>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Evidence boundary</p>
+      <h2>What the data can support</h2>
+      <div class="callout-grid">
+        <div class="callout hard"><strong>Hard</strong>Prompt text features, explicit attempt numbers, timestamps, and recorded event counts.</div>
+        <div class="callout judged"><strong>Model-judged</strong>Council accept and orchestrator accepted events used as the convergence endpoint.</div>
+        <div class="callout confounded"><strong>Observational</strong>Task difficulty, model route, reissue cause, reviewer, and pipeline were not randomized.</div>
+      </div>
+      <p class="method">The old AGT-2322 conclusion is not an input to this result. This snapshot re-queries the current active and archived task index and applies a narrower first-prompt classifier. It recovered 438 first reissue histories and mapped 404 to explicit attempts; 34 outside the retained timestamp window or without pipeline data were excluded. One API read remained exhausted after two retries and is reported in the snapshot. Records are never reconstructed from the capped <code>previousAttempts</code> list. Route balance is visibly different: the generic group contains 110 Sol tasks and 56 Claude Opus tasks, while finding-first contains 49 Sol and 115 Claude Opus tasks. Task-type balance also differs. These are confounders, not adjustments.</p>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Recommendation</p>
+      <h2>Do not sharpen the production default yet</h2>
+      <ol>
+        <li>Keep the current production prompt and the randomized <code>finding-first-v1</code> promotion gate unchanged.</li>
+        <li>In the treatment arm, start with numbered open findings and state the observed deficiency before instructions.</li>
+        <li>For each finding, name a file, symbol, or artifact only when the evidence names it, then state the required change and one focused verification.</li>
+        <li>Keep raw logs in a separate evidence block and retain scope, permissions, routing, and terminal-sentinel guardrails unchanged.</li>
+        <li>Do not use extra prompt length, file references, or invented specificity as a proxy for sharpness. Promote only if the controlled experiment meets its predeclared effect, uncertainty, balance, and regression gates.</li>
+      </ol>
+      <div class="files">
+        <a href="evidence-snapshot.json">Evidence snapshot</a>
+        <a href="analyze.mjs">Analysis script</a>
+        <a href="../pipeline-time-economy/reissue-prompt-experiment.md">Controlled experiment</a>
+        <a href="../../system/domains/model-routing-policy.md">Model routing policy</a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const root = document.documentElement;
+    const button = document.getElementById("theme");
+    button.addEventListener("click", () => {
+      const dark = root.dataset.theme !== "dark";
+      root.dataset.theme = dark ? "dark" : "light";
+      button.textContent = dark ? "Light theme" : "Dark theme";
+    });
+  </script>
+</body>
+</html>

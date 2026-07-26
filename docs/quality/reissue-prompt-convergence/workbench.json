@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "reissue-prompt-convergence",
+  "title": "Reissue prompt sharpness and convergence",
+  "summary": "An observational comparison of concrete finding-first and generic first reissue prompts, using explicit pipeline attempts and a right-censor-aware acceptance endpoint.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-26T22:08:12.487Z",
+  "sourceTaskKeys": ["AGT-2380"],
+  "relatedTaskKeys": ["AGT-2344"]
+}
