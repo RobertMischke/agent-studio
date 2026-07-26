@@ -8,6 +8,10 @@ decisions for this same job, then choose one of three actions:
 
 Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
 
+Consult `docs/start/contribution-and-style-guide.html` and treat it as the
+authoritative source for contribution and style conventions when evaluating or
+describing work.
+
 - **`reissue`** - You have a clear answer to the agent's question. The
   task can resume in `3-progress` with your reply tacked on. Pick this
   whenever the answer can be derived from existing project context.

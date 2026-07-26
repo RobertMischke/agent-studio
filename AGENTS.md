@@ -13,6 +13,8 @@ apply only under `frontend/`.
 
 - Product overview: [README.md](README.md).
 - Future-only product direction: [ROADMAP.md](ROADMAP.md).
+- Canonical contribution and style conventions for all agents:
+  [docs/start/contribution-and-style-guide.html](docs/start/contribution-and-style-guide.html).
 - Documentation index: [docs/start/README.md](docs/start/README.md). Start there when you
   do not already know the right document.
 - Operator setup and troubleshooting: [docs/operations/setup/](./docs/operations/setup/README.md).
@@ -48,9 +50,9 @@ apply only under `frontend/`.
   immediately by default in every managed repository. Keep network work off
   the run path, retry failures with bounded backoff, and surface final failures
   as typed operator-feed events rather than treating a local commit as durable.
-- Written repo artifacts are English. Do not introduce em dashes. User-facing UI
-  strings, backend errors shown to the UI, prompts, comments, docs, commits, and
-  PR text are English.
+- Follow the canonical contribution and style guide linked above. Its language
+  policy applies to UI strings, backend errors shown to the UI, prompts,
+  comments, docs, commits, and PR text. Do not introduce em dashes.
 - When adding a document under `docs/`, add one row to
   [docs/start/README.md](docs/start/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator
