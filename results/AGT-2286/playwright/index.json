@@ -1,8 +1,12 @@
 {
-  "timestamp": "2026-07-24T10:01:04.930Z",
+  "timestamp": "2026-07-26T15:13:24.875Z",
   "specs": {
-    "unknown": {
+    "prompt-registry-observability": {
       "status": "✓",
+      "specFile": "e2e/project/prompt-registry-observability.spec.ts",
+      "tests": [
+        "prompt registry reviews shipped prompts and exposes provenance, overrides, calls, and cost"
+      ],
       "files": []
     }
   }

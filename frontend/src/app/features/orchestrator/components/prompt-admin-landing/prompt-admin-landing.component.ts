@@ -50,7 +50,7 @@ export class PromptAdminLandingComponent {
       {
         id: 'framing',
         title: 'Mode framing',
-        description: 'Small policy blocks injected into a runtime prompt for read-only or web-enabled modes.',
+        description: 'Small policy blocks injected into a runtime prompt for concept, read-only, or web-enabled modes.',
       },
     ];
     return definitions.map(definition => ({

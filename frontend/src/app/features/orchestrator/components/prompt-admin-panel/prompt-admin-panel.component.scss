@@ -124,3 +124,7 @@
   .prompts__splitter { display: none; }
   app-prompt-catalogue-nav { border-bottom: 1px solid var(--studio-border); }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .prompts * { transition-duration: 0s !important; animation-duration: 0s !important; }
+}

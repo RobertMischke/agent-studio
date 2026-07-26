@@ -32,6 +32,22 @@ const identityHeaders = {
   'X-Client-Id': 'local-default',
 };
 
+async function leaveRecoveredChangesUncommitted(page: import('@playwright/test').Page): Promise<void> {
+  const prompt = page.getByTestId('crash-recovery-prompt');
+  if (!await prompt.isVisible({ timeout: 3_000 }).catch(() => false)) return;
+
+  const dismissAll = page.getByTestId('crash-recovery-dismiss-all');
+  if (await dismissAll.isVisible().catch(() => false)) {
+    await dismissAll.click();
+  } else {
+    const dismiss = page.getByTestId('crash-recovery-dismiss').first();
+    while (await dismiss.isVisible().catch(() => false)) {
+      await dismiss.click();
+    }
+  }
+  await expect(prompt).toBeHidden();
+}
+
 test('prompt registry reviews shipped prompts and exposes provenance, overrides, calls, and cost', async ({
   page,
   devBackend,
@@ -98,11 +114,7 @@ test('prompt registry reviews shipped prompts and exposes provenance, overrides,
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     });
-    const crashRecovery = page.getByTestId('crash-recovery-prompt');
-    if (await crashRecovery.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await page.getByTestId('crash-recovery-dismiss-all').click();
-      await expect(crashRecovery).toBeHidden();
-    }
+    await leaveRecoveredChangesUncommitted(page);
     const landing = page.getByTestId('prompt-admin-landing');
     await expect(landing).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('prompt-admin-overview-table')).toContainText('Calls total / 7d');
@@ -116,10 +128,7 @@ test('prompt registry reviews shipped prompts and exposes provenance, overrides,
 
     // A delayed workspace recovery observation can appear after the page's
     // initial recovery-dialog check has already completed.
-    if (await crashRecovery.isVisible().catch(() => false)) {
-      await page.getByTestId('crash-recovery-dismiss-all').click();
-      await expect(crashRecovery).toBeHidden();
-    }
+    await leaveRecoveredChangesUncommitted(page);
 
     await page.getByTestId('prompt-admin-landing-link-review-aspect-code-quality.md').click();
     const projectOverrideRow = page.getByTestId(

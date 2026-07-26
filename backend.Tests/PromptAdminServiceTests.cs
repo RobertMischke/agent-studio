@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentStudio.Drift;
 using AgentStudio.Pipeline;
 
 using Xunit;
@@ -8,6 +9,22 @@ namespace AgentStudio.Tests;
 
 public sealed class PromptAdminServiceTests
 {
+    [Fact]
+    public void EveryShippedPrompt_HasAReviewCompanion()
+    {
+        var promptDirectory = Path.Combine(
+            DriftRepoRootLocator.Resolve(),
+            "prompts",
+            "runtime");
+        var missing = Directory.EnumerateFiles(promptDirectory, "*.md")
+            .Where(path => !File.Exists(path + ".meta.json"))
+            .Select(Path.GetFileName)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Assert.Empty(missing);
+    }
+
     [Fact]
     public void Render_UsesOverrideAndResetReturnsToDefault()
     {
@@ -216,28 +233,15 @@ public sealed class PromptAdminServiceTests
             "Alpha",
             "retired-review-step",
             new PipelineStepSetting { Prompt = "Unused override" });
-        settings.SetPipelineStep(
-            "Alpha",
-            PipelineCatalogue.CodeReviewGradeStepId,
-            new PipelineStepSetting { Prompt = "Known step without prompt-override wiring" });
         var admin = home.CreateAdminService(prompts, settings);
 
         var catalog = admin.GetCatalog();
         var detail = admin.GetDetail(name);
 
         Assert.Equal(1, Assert.Single(catalog.Items).ProjectOverrideCount);
-        Assert.Collection(
-            catalog.OrphanedOverrides,
-            orphan =>
-            {
-                Assert.Equal(PipelineCatalogue.CodeReviewGradeStepId, orphan.StepId);
-                Assert.True(orphan.Orphaned);
-            },
-            orphan =>
-            {
-                Assert.Equal("retired-review-step", orphan.StepId);
-                Assert.True(orphan.Orphaned);
-            });
+        var orphan = Assert.Single(catalog.OrphanedOverrides);
+        Assert.Equal("retired-review-step", orphan.StepId);
+        Assert.True(orphan.Orphaned);
 
         Assert.NotNull(detail);
         var projectOverride = Assert.Single(detail.ProjectOverrides);

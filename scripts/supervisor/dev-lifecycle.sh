@@ -39,8 +39,8 @@ require_dev_checkout() {
     log "Set DEV_CHECKOUT to the dev checkout path."
     exit 2
   fi
-  if [[ ! -f "${DEV_CHECKOUT}/api.sh" ]]; then
-    log "ERROR: ${DEV_CHECKOUT}/api.sh missing"
+  if [[ ! -x "${DEV_CHECKOUT}/api.sh" ]]; then
+    log "ERROR: ${DEV_CHECKOUT}/api.sh missing or not executable"
     exit 2
   fi
 }
@@ -71,7 +71,7 @@ cmd_start() {
   # backend up outside of an interactive operator session. Signal that to
   # start-dev.sh so its env-flag gate does not refuse the boot when this
   # script is in turn invoked from the Playwright dev-backend fixture.
-  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ATP_DEV_BACKEND_FROM_FIXTURE=1 bash ./api.sh start )
+  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ATP_DEV_BACKEND_FROM_FIXTURE=1 ./api.sh start )
 }
 
 cmd_stop() {
@@ -81,7 +81,7 @@ cmd_stop() {
     exit 0
   fi
   log "stopping dev backend in ${DEV_CHECKOUT}"
-  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" bash ./api.sh stop ) || true
+  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ./api.sh stop ) || true
 }
 
 print_usage() {

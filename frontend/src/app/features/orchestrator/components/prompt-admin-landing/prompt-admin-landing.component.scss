@@ -128,6 +128,7 @@
   display: grid;
   grid-template-columns: repeat(14, 3px);
   align-items: end;
+  /* stylelint-disable-next-line scale-unlimited/declaration-strict-value -- dense spark bars need a sub-scale gap */
   gap: 2px;
   height: 24px;
 }
