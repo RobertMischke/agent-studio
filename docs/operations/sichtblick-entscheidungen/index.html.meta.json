@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Sichtblick-Entscheidungen: Marketing \u0026 Website",
+  "source": {
+    "path": "docs/operations/sichtblick-entscheidungen/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "8ab3c6ec94cdde230b540020a7c002bda897a57ede2b1fdf7f0af16443b3a28f",
+      "sizeBytes": 12740,
+      "lineCount": 150,
+      "capturedAt": "2026-07-26T14:45:32.3163034Z"
+    }
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "unknown",
+    "status": "archived",
+    "analyzedAt": "2026-07-26"
+  }
+}
