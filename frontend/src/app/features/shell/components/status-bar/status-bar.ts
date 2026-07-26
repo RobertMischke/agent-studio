@@ -20,7 +20,11 @@ import {
   type VisibleIntervalHandle,
 } from '../../../../utils/visible-interval';
 import { UsageHoverPanelComponent } from '../../../tokens';
-import { RemoteHostsService } from '../../../remote-hosts';
+import {
+  deriveBoardRunningTruth,
+  freshRemoteTelemetrySlots,
+  RemoteHostsService,
+} from '../../../remote-hosts';
 
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
@@ -79,13 +83,18 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
   readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
 
-  readonly runningCount = computed(() => {
-    const status = this.jobService.runnerStatus();
-    return Object.values(status.projects).filter(p => !!p.activeJobId).length;
+  readonly runningTruth = computed(() =>
+    deriveBoardRunningTruth(this.jobService.grouped().progress));
+  readonly runningCount = computed(() => this.runningTruth().total);
+  readonly remoteTelemetrySlots = computed(() =>
+    freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
+  readonly runningSourcesDiverge = computed(() => {
+    const telemetry = this.remoteTelemetrySlots();
+    return telemetry !== null && telemetry !== this.runningTruth().remote;
   });
 
   readonly hostLoad = computed(() =>
-    summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningCount()));
+    summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
 
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();
@@ -122,23 +131,27 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   }
 
   runningTooltip(): string {
-    const n = this.runningCount();
-    const execution = n === 0
-      ? 'No tasks currently running.'
-      : `${n} ${n === 1 ? 'task is' : 'tasks are'} currently executing across all projects.`;
+    const truth = this.runningTruth();
+    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const telemetrySlots = this.remoteTelemetrySlots();
+    const comparison = telemetrySlots === null
+      ? ' Fresh remote slot telemetry is unavailable.'
+      : this.runningSourcesDiverge()
+        ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
+        : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
-    if (!load) return `${execution} Remote host load is unavailable.`;
+    if (!load) return `${execution}${comparison} Remote host load is unavailable.`;
 
     const loadDetail = `Remote host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active remote `
       + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
     if (load.correlation === 'load-without-runs') {
-      return `${execution} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `${execution} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `${execution} ${loadDetail}`;
+    return `${execution}${comparison} ${loadDetail}`;
   }
 
   autoTooltip(): string {

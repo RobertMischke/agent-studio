@@ -246,6 +246,7 @@
 }
 .telemetry__head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--studio-spacing-2); font-size: 11px; }
 .telemetry__context { color: var(--studio-fg-dim); flex: 1 1 auto; }
+.telemetry__context--stale { color: var(--studio-fg-muted); opacity: 0.62; }
 .telemetry__windows { display: flex; gap: var(--studio-spacing-1); }
 .telemetry__windows button {
   border: 1px solid var(--studio-border); border-radius: 4px; background: transparent; color: var(--studio-fg-dim);

@@ -4,9 +4,21 @@
     <span>Process and event truth; lane/claim drift is not folded into these counts.</span>
   </div>
   <div class="workloads__grid">
-    <article class="workload" data-testid="remote-host-run-pool">
+    <article class="workload"
+             [class.workload--stale]="runSlotsStale()"
+             data-testid="remote-host-run-pool">
       <span class="workload__kind">RUN slots</span>
-      <strong>{{ runSlots() }}</strong>
+      <strong>
+        {{ runSlots() }}
+        @if (runSlotsDiverge()) {
+          <span class="workload__warning"
+                data-testid="remote-host-running-divergence"
+                aria-label="Running sources disagree"
+                [appTooltip]="runSlotsTooltip()">
+            <app-studio-icon name="warn" [size]="12"></app-studio-icon>
+          </span>
+        }
+      </strong>
       <small>Daemon telemetry · coding and agent runs</small>
     </article>
     <article class="workload" data-testid="remote-host-gate-pool">

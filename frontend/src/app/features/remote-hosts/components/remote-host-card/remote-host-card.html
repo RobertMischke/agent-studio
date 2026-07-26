@@ -35,10 +35,17 @@
     <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>
 
-  <app-host-workload-summary [runSlots]="runSlotsLabel()" [gateWork]="gateWorkLabel()" />
+  <app-host-workload-summary
+    [runSlots]="runSlotsLabel()"
+    [runSlotsStale]="telemetryStale() || stale() || liveError()"
+    [runSlotsDiverge]="runSlotsDiverge()"
+    [runSlotsTooltip]="runSlotsTooltip()"
+    [gateWork]="gateWorkLabel()" />
 
   @if (stale() && !retired()) {
-    <p class="host__stale" data-testid="remote-host-stale">Stale: last seen {{ heartbeatLabel() }}. Historical metrics are hidden.</p>
+    <p class="host__stale" data-testid="remote-host-stale">
+      Stale: last seen {{ heartbeatLabel() }}. Live system metrics are hidden; the last slot sample is marked stale.
+    </p>
   }
 
   <app-capability-health [host]="h" />
@@ -85,7 +92,9 @@
     <section class="telemetry" data-testid="remote-host-telemetry" aria-label="Host performance history">
       <div class="telemetry__head">
         <strong>Performance history</strong>
-        <span class="telemetry__context" data-testid="remote-host-slots-context">{{ latestContext() }}</span>
+        <span class="telemetry__context"
+              [class.telemetry__context--stale]="telemetryStale()"
+              data-testid="remote-host-slots-context">{{ latestContext() }}</span>
         <div class="telemetry__windows" aria-label="Telemetry time window">
           @for (window of ['1h', '6h', '48h', '14d']; track window) {
             <button type="button" [attr.aria-pressed]="telemetryWindow() === window"

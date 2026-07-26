@@ -51,6 +51,7 @@
       <app-remote-host-card
         [host]="host"
         [now]="now()"
+        [boardActiveSlots]="boardSlots(host)"
         (action)="onAction($event)"
         (setup)="openSetup($event)" />
     }
@@ -62,7 +63,11 @@
       <p>Retired clients stay visible for history. Revive re-enables the identity; permanent deletion is a separate irreversible step.</p>
       <div class="rh__list">
         @for (host of retiredHosts(); track host.id) {
-          <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+          <app-remote-host-card
+            [host]="host"
+            [now]="now()"
+            [boardActiveSlots]="boardSlots(host)"
+            (action)="onAction($event)" />
         }
       </div>
     </details>

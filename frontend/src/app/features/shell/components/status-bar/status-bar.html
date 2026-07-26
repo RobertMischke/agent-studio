@@ -8,6 +8,7 @@
       [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
       [label]="runningCount() + ' running'"
       [tooltip]="runningTooltip()"
+      [warning]="runningSourcesDiverge()"
       testid="status-bar-running" />
     <app-statusbar-item
       [button]="false"

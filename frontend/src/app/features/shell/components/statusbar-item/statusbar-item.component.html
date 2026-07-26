@@ -15,6 +15,13 @@
       </span>
     }
     <span>{{ label() }}</span>
+    @if (warning()) {
+      <span class="statusbar__warning"
+            [attr.data-testid]="testid() ? testid() + '-divergence' : null"
+            aria-label="Running sources disagree">
+        <app-studio-icon name="warn" [size]="10"></app-studio-icon>
+      </span>
+    }
   </button>
 } @else {
   <span class="statusbar__item statusbar__item--ro"
@@ -30,5 +37,12 @@
       </span>
     }
     <span>{{ label() }}</span>
+    @if (warning()) {
+      <span class="statusbar__warning"
+            [attr.data-testid]="testid() ? testid() + '-divergence' : null"
+            aria-label="Running sources disagree">
+        <app-studio-icon name="warn" [size]="10"></app-studio-icon>
+      </span>
+    }
   </span>
 }

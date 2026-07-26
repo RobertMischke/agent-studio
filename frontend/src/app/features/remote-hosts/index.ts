@@ -5,6 +5,15 @@ export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wi
 export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
 export { RemoteHostsService } from './services/remote-hosts.service';
 export { seedRemoteHosts } from './services/remote-hosts.seed';
+export {
+  boardRemoteSlotsForHost,
+  deriveBoardRunningTruth,
+  freshHostTelemetry,
+  freshRemoteTelemetrySlots,
+  latestHostTelemetry,
+  RUNNING_TELEMETRY_FRESH_MS,
+} from './models/running-truth';
+export type { BoardRunningTruth } from './models/running-truth';
 export type {
   RemoteHost,
   HostRole,

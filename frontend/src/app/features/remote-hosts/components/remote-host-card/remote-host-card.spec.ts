@@ -31,6 +31,26 @@ const HOST: RemoteHost = {
   availableSlots: 19,
   activeGateCount: 2,
   gateCapacity: 4,
+  telemetry: {
+    clientId: 'agent-runner',
+    window: '1h',
+    findings: [],
+    points: [{
+      timestamp: '2026-07-10T11:59:55Z',
+      cpuPercent: 54,
+      load1: 1.2,
+      load5: 1,
+      load15: 1,
+      memoryUsedBytes: 24_000_000_000,
+      memoryTotalBytes: 64_000_000_000,
+      swapInBytesPerSecond: 0,
+      swapOutBytesPerSecond: 0,
+      cpuStealPercent: 0,
+      ioWaitPercent: 0,
+      cpuCores: 8,
+      activeSlots: 1,
+    }],
+  },
 };
 
 function mount(host: RemoteHost) {
@@ -55,7 +75,7 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelectorAll('.meter').length).toBe(3);
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
-    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active · 19 free · 20 max');
+    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active');
     expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 4');
     expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
   });
@@ -166,6 +186,28 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-stale"]')?.textContent).toContain('last seen 2d ago');
     expect(el.querySelectorAll('.meter').length).toBe(0);
     expect(el.textContent).not.toContain('54%');
+  });
+
+  it('dims stale active-slot telemetry instead of presenting it as live', () => {
+    const staleTelemetry = {
+      ...HOST.telemetry!,
+      points: HOST.telemetry!.points.map(point => ({ ...point, timestamp: '2026-07-10T11:50:00Z', activeSlots: 3 })),
+    };
+    const el: HTMLElement = mount({ ...HOST, telemetry: staleTelemetry }).nativeElement;
+    const pool = el.querySelector('[data-testid="remote-host-run-pool"]');
+    expect(pool?.textContent).toContain('3 active · stale');
+    expect(pool?.classList).toContain('workload--stale');
+    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.classList)
+      .toContain('telemetry__context--stale');
+  });
+
+  it('shows a warning icon when fresh telemetry and board leases diverge', () => {
+    const fixture = mount(HOST);
+    fixture.componentRef.setInput('boardActiveSlots', 0);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-running-divergence"]'))
+      .toBeTruthy();
   });
 
   it('renders telemetry charts, slot context, findings, and switches windows', () => {

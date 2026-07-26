@@ -118,9 +118,17 @@ curl -sS https://tasks.example.com/api/clients/agent-runner-01
 ```
 
 The host card reports daemon state (`running`, `read-only`, or `stopped`), last
-claim, active and free slots, running task count, task inflow, last contact, and
-push status. If last contact is older than five minutes, live numbers are hidden
-and the card says when the host was last seen.
+claim, active slots, task inflow, last contact, and push status. Active slots
+come from the daemon's latest telemetry sample. If that sample or the host
+heartbeat is older than five minutes, the last slot value is explicitly marked
+stale and rendered quietly instead of being presented as live.
+
+The workspace status bar defines `running` from the Board's `3-progress`
+snapshot: a local run needs a running process execution and a remote run needs
+an active fenced lease. Its tooltip shows the total as local plus remote. The
+Remote Hosts view independently shows telemetry `activeSlots`; when fresh
+telemetry and Board leases disagree, both surfaces show a warning icon and keep
+the two values visible instead of silently choosing one.
 
 ## Capability admission
 
