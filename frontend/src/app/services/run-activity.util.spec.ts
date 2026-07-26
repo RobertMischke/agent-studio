@@ -69,6 +69,72 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
       const badge = buildRunActivityBadge(makeJob({ kind: 'active', processId: 0, attempt: 0 }), NOW);
       expect(badge!.tooltip.body).not.toContain('PID');
     });
+
+    it('treats a live pre-step as active when the runner classification is stale', () => {
+      const job = makeJob(
+        { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+        {
+          execution: {
+            jobId: 'task-1',
+            taskKey: 'test::task-1',
+            processId: 0,
+            startedAt: new Date(NOW - 60_000).toISOString(),
+            status: 'failed',
+            exitCode: 1,
+            durationSeconds: 1,
+            model: 'gpt-5',
+          },
+          runner: null,
+          executionLocation: null,
+          liveStatus: {
+            attempt: 1,
+            activeStep: {
+              stepId: 'pre-worktree-create',
+              displayName: 'Create worktree',
+              kind: 'pre',
+              startedAt: new Date(NOW - 10_000).toISOString(),
+            },
+            nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+          },
+        },
+      );
+
+      expect(buildRunActivityBadge(job, NOW)).toMatchObject({
+        kind: 'active',
+        tone: 'active',
+        label: 'Run aktiv',
+      });
+      expect(deriveStalledTaskState(job, NOW)).toBeNull();
+    });
+
+    it('keeps a between-steps run active while its execution is still running', () => {
+      const job = makeJob(
+        { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+        {
+          execution: {
+            jobId: 'task-1',
+            taskKey: 'test::task-1',
+            processId: 4242,
+            startedAt: new Date(NOW - 30_000).toISOString(),
+            status: 'running',
+            exitCode: null,
+            durationSeconds: null,
+            model: 'gpt-5',
+          },
+          liveStatus: {
+            attempt: 2,
+            activeStep: null,
+            nextSteps: [{ stepId: 'post-tests', displayName: 'Tests' }],
+            latestEventAt: new Date(NOW - 1_000).toISOString(),
+          },
+        },
+      );
+
+      const badge = buildRunActivityBadge(job, NOW);
+      expect(badge).toMatchObject({ kind: 'active', tone: 'active', label: 'Run aktiv' });
+      expect(badge!.tooltip.body).toContain('4242');
+      expect(deriveStalledTaskState(job, NOW)).toBeNull();
+    });
   });
 
   describe('(a) failed + backoff', () => {
@@ -128,6 +194,26 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
     it('omits the attempt line when there is no recorded failure streak', () => {
       const badge = buildRunActivityBadge(makeJob({ kind: 'no-active-run', attempt: 0 }), NOW);
       expect(badge!.tooltip.body).not.toContain('Versuch:');
+    });
+
+    it('does not infer an active run from upcoming steps alone', () => {
+      const badge = buildRunActivityBadge(
+        makeJob(
+          { kind: 'no-active-run', attempt: 0 },
+          {
+            liveStatus: {
+              attempt: 1,
+              activeStep: null,
+              nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+              queue: null,
+              latestEventAt: new Date(NOW - 60_000).toISOString(),
+            },
+          },
+        ),
+        NOW,
+      );
+
+      expect(badge).toMatchObject({ kind: 'no-active-run', tone: 'idle', label: 'kein aktiver Run' });
     });
   });
 });

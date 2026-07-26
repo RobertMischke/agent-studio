@@ -39,8 +39,18 @@ function latestActivityMs(job: TaskInfo): number | null {
   return instants.length > 0 ? Math.max(...instants) : null;
 }
 
-function hasLiveRun(job: TaskInfo): boolean {
-  if (job.execution?.status === 'running' || job.runner != null || job.runActivity?.kind === 'active') {
+/**
+ * Current-run liveness is intentionally derived from every positive runtime
+ * projection. `runActivity` is built from the runner registry before the live
+ * pipeline overlay is attached, so it can briefly say no-active-run while a
+ * pre-step is already running. Between pipeline steps there may be no
+ * `activeStep`, but execution ownership remains authoritative.
+ */
+export function isTaskRunActive(job: TaskInfo): boolean {
+  if (job.liveStatus?.activeStep != null
+    || job.execution?.status === 'running'
+    || job.runner != null
+    || job.runActivity?.kind === 'active') {
     return true;
   }
   const location = job.executionLocation;
@@ -60,7 +70,7 @@ export function deriveStalledTaskState(
   nowMs: number = Date.now(),
   idleThresholdMs: number = STALLED_IDLE_THRESHOLD_MS,
 ): StalledTaskState | null {
-  if (job.state !== TaskState.Progress || hasLiveRun(job)) return null;
+  if (job.state !== TaskState.Progress || isTaskRunActive(job)) return null;
   if (job.runActivity?.kind === 'failed-backoff') return null;
 
   const failed = job.runActivity?.kind === 'failed-idle'
@@ -127,11 +137,19 @@ export function buildRunActivityBadge(job: TaskInfo, nowMs: number = Date.now())
     ? `<div><b>Letzter Fehler:</b> ${escapeHtml(activity.lastError)}</div>`
     : '';
 
-  switch (activity.kind) {
+  // Positive live evidence wins over a stale negative runner classification.
+  // This is most visible during pre-steps (activeStep, no CLI execution yet)
+  // and in the hand-off between pipeline steps.
+  const effectiveKind: TaskRunActivityKind = isTaskRunActive(job) ? 'active' : activity.kind;
+
+  switch (effectiveKind) {
     case 'active': {
-      const pid = typeof activity.processId === 'number' && activity.processId > 0 ? activity.processId : null;
+      const projectedPid = activity.processId
+        ?? job.execution?.processId
+        ?? job.executionLocation?.processId;
+      const pid = typeof projectedPid === 'number' && projectedPid > 0 ? projectedPid : null;
       return {
-        kind: activity.kind,
+        kind: 'active',
         label: 'Run aktiv',
         tone: 'active',
         tooltip: {

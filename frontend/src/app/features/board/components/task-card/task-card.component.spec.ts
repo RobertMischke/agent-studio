@@ -347,6 +347,53 @@ describe('TaskCardComponent (smoke)', () => {
     }
   });
 
+  it('keeps a Progress card running during a pre-step despite stale runActivity', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1',
+        taskKey: 'test::task-1',
+        processId: 0,
+        startedAt: '2026-07-26T20:00:00Z',
+        status: 'failed',
+        exitCode: 1,
+        durationSeconds: 1,
+        model: 'gpt-5',
+      },
+      runner: null,
+      executionLocation: null,
+      runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+      liveStatus: {
+        attempt: 1,
+        activeStep: {
+          stepId: 'pre-worktree-create',
+          displayName: 'Create worktree',
+          kind: 'pre',
+        },
+        nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+      },
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(fixture.componentInstance.executionBadge()).toEqual({ label: 'Running live', tone: 'running' });
+    expect(fixture.componentInstance.stalledState()).toBeNull();
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--running')).toBe(true);
+    expect(host?.classList.contains('task-card--stalled')).toBe(false);
+  });
+
   it('flags an escalated human-review card as needing attention (Failed != Done)', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
