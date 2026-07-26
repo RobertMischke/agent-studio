@@ -154,7 +154,8 @@ public sealed class TaskTransitionService
             watchPath,
             cause,
             authorityWrite,
-            expectedSourceState);
+            expectedSourceState,
+            reason);
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
         if (operatorRequeue && _operatorReviewRequeue != null)
@@ -399,7 +400,8 @@ public sealed class TaskTransitionService
     /// </summary>
     public async Task<IReadOnlyList<BatchMoveItemResult>> BatchMoveAsync(
         IEnumerable<BatchMoveItem> items,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? cause = null)
     {
         var results = new List<BatchMoveItemResult>();
         foreach (var item in items)
@@ -438,7 +440,7 @@ public sealed class TaskTransitionService
                     item.WatchPath,
                     ct,
                     item.TargetIndex,
-                    cause: TimelineActors.Human(""),
+                    cause: string.IsNullOrWhiteSpace(cause) ? TimelineActors.Human("") : cause,
                     reason: item.Reason);
             }
             catch (Exception ex)

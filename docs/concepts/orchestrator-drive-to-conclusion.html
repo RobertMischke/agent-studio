@@ -1129,6 +1129,27 @@
             Pass or ProductFailure terminals while baseline cleanup continues independently.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2345</code><br><span class="small">boot backfill overruled operator lane verdicts</span></td>
+          <td>
+            Every backend restart swept run-backed cards with no provenance verdict out of their operator-selected lanes.
+            Two deploys on 26 July each displaced about six cards, including freshly requeued
+            <span class="lane">2-ready</span> work and Human Review cards; the 25 July restart displaced more than 30.
+            The operator had to restore the intended lanes after every boot.
+          </td>
+          <td>
+            The verdictless Human Review repair consulted only the decision journal, card age, and run provenance. It did
+            not treat the latest human-authored lane transition as a verdict, did not state terminal-lane exclusions, and
+            dropped <code>MoveJobRequest.Reason</code> before writing the <code>lane_changed</code> ledger row.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a latest <code>human</code> or <code>human:&lt;client-id&gt;</code>
+            lane transition now protects the operator-selected lane. Completed and Archive are explicit boot-repair
+            terminals, operator requeues in Ready remain untouched, and every reasoned lane move, including the legacy
+            repair itself, records the reason in <code>timeline.jsonl</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

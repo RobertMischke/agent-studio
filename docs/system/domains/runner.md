@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-26
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -333,6 +333,12 @@ state.
   verdict artefacts; automatic verdicts and moves retain the current epoch and
   cannot replenish the ceiling. `OperatorReviewRequeueService` owns the epoch
   boundary, history rotation, decision-journal row, and timeline event.
+- The verdictless Human Review boot repair is subordinate to operator lane
+  decisions. If the latest `lane_changed` row is attributed to `human` or
+  `human:<client-id>`, the current lane is an operator verdict even when the
+  legacy decision journal has no provenance verdict. The repair also excludes
+  `6-completed` and `7-archive` unconditionally. Every repair move records its
+  reason on the resulting `lane_changed` row.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed

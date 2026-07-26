@@ -363,8 +363,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Pure data-repair, run on EVERY boot regardless of the Enabled flag:
         // give an old 5-human-review card with durable run provenance but no
         // orchestrator verdict a retroactive Escalate verdict + status.md stub
-        // so the board can explain it. Age and provenance keep fresh operator
-        // cards that have never run out of this legacy migration.
+        // so the board can explain it. Age, provenance, terminal-lane, and
+        // latest-operator-move guards keep accepted or explicitly placed cards
+        // out of this legacy migration.
         try { BackfillVerdictlessHumanReview(workspace!, stoppingToken); }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less human-review backfill failed"); }
@@ -979,7 +980,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// verdict record + old enough + durable run provenance", and the status
     /// stub is never written over a real summary, so re-running on later boots is
     /// a no-op. A freshly-created manual card without a run is never legacy
-    /// evidence. Public so tests can drive it.
+    /// evidence. An operator-authored latest lane transition is itself a verdict
+    /// and always wins over missing legacy provenance. Completed and archived
+    /// cards are acceptance terminals and never enter this repair. Public so
+    /// tests can drive it.
     /// </summary>
     public void BackfillVerdictlessHumanReview(string workspace, CancellationToken ct)
     {
@@ -1004,7 +1008,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         foreach (var job in jobs)
         {
             if (ct.IsCancellationRequested) return;
+            if (job.State is TaskStates.Completed or TaskStates.Archive) continue;
             if (job.State != TaskStates.HumanReview) continue;
+            if (HasLatestOperatorLaneVerdict(job)) continue;
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
             if (DateTime.UtcNow - job.CreatedAt < VerdictlessBackfillMinimumAge) continue;
             if (!HasRunProvenance(job)) continue;
@@ -1037,6 +1043,38 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (repaired > 0)
             _logger.LogInformation("ReviewDecisionOrchestrator: verdict-less human-review backfill repaired {Repaired} card(s).", repaired);
+    }
+
+    private bool HasLatestOperatorLaneVerdict(TaskInfo job)
+    {
+        if (_timeline == null) return false;
+
+        try
+        {
+            var latestLaneChange = _timeline.ReadAll(job.FolderPath)
+                .LastOrDefault(evt => string.Equals(
+                    evt.Kind,
+                    TimelineEventKinds.LaneChanged,
+                    StringComparison.Ordinal));
+            if (latestLaneChange == null) return false;
+
+            var actor = latestLaneChange.Actor?.Trim() ?? string.Empty;
+            // Actor is also authoritative for legacy rows: before AGT-2345 the
+            // Move API accepted a reason but dropped it before lane_changed was
+            // written, so requiring Details["reason"] here would re-break the
+            // operator corrections made immediately before the first fixed boot.
+            return string.Equals(actor, TimelineActors.Human(""), StringComparison.OrdinalIgnoreCase)
+                || actor.StartsWith("human:", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: operator lane-verdict read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+            return false;
+        }
     }
 
     private bool HasRunProvenance(TaskInfo job)

@@ -376,6 +376,7 @@ public static class TaskCrudEndpoints
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
             AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
@@ -390,10 +391,11 @@ public static class TaskCrudEndpoints
             // MoveJob without a cause and are recorded as system.
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: TimelineActors.Human(""), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
             AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
@@ -404,7 +406,7 @@ public static class TaskCrudEndpoints
 
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: TimelineActors.Human(""), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason));
         });
 
         // Batch move / restore. Per-item atomic: a failure on item N must
@@ -435,7 +437,7 @@ public static class TaskCrudEndpoints
                     new { error = "project-scope-denied", message = "This account is not a member of every task in the batch." },
                     statusCode: StatusCodes.Status403Forbidden);
 
-            var results = await transitions.BatchMoveAsync(req.Items, ct);
+            var results = await transitions.BatchMoveAsync(req.Items, ct, OperatorActor(ctx));
             return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
         });
 
@@ -777,6 +779,13 @@ public static class TaskCrudEndpoints
             var index = scanner.GetReferenceIndex();
             return Results.Ok(index.Dependents(info.Key, kind));
         });
+    }
+
+    private static string OperatorActor(HttpContext context)
+    {
+        var clientId = context.Items["ClientId"] as string
+            ?? context.Request.Headers["X-Client-Id"].FirstOrDefault();
+        return TimelineActors.Human(clientId ?? string.Empty);
     }
 
     internal static string? AppendDeliveryAcceptanceCriteria(
