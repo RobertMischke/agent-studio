@@ -7,9 +7,8 @@ namespace AgentRunner;
 /// verbatim. The local in-process runner adds standing model-routing and
 /// contribution guidance plus its completion protocol while it renders
 /// <c>runner-fresh-start.md</c>, so the standalone runner must add the same
-/// instructions at its own execution
-/// boundary. Keeping them here makes one-shot and daemon-claimed runs use
-/// exactly the same prompt.
+/// instructions at its own execution boundary. Keeping them here makes one-shot
+/// and daemon-claimed runs use exactly the same prompt.
 /// </para>
 /// </summary>
 public static class RemoteRunPrompt
@@ -38,7 +37,6 @@ public static class RemoteRunPrompt
             + "---" + Environment.NewLine + Environment.NewLine
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + ContributionGuideInstruction + Environment.NewLine + Environment.NewLine
-            + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;
     }
 }
