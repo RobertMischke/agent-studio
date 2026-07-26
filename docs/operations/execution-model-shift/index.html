@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ausführungsmodell: Container-Default | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834; --rescue: #b58500;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f; --rescue: #d0a02a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 78ch; } p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 88ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; white-space: nowrap; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; } li { margin: 5px 0; max-width: 78ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; } .toc a { color: var(--ink-2); text-decoration: none; } .toc a:hover { color: var(--ink-1); text-decoration: underline; } .toc li { break-inside: avoid; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2 { fill: var(--surface-3); stroke: var(--line); }
+  .s-cont { fill: var(--accent-soft); stroke: var(--develop); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .ev { font-size: 12.5px; color: var(--ink-3); } .ev code { font-size: 11.5px; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Ausführungsmodell</p>
+  <h1>Container-Default für die lokale Ausführung</h1>
+  <p class="lede">Richtungswechsel: die Coding-Agent-CLIs laufen künftig standardmäßig in einer lokalen Container-Instanz. Host-direkt und Mischbetrieb bleiben möglich — als bewusstes Opt-out in der Host-Verwaltung, nicht als Default. Dieses Dokument ist der Steuerungs-Ausgangspunkt: Ist-Stand, Zielbild, Änderungen je Projekt, getakteter Plan.</p>
+  <div class="meta">
+    <span><b>Status</b> Entscheidung getroffen (26.07.)</span>
+    <span><b>Phase</b> Zerlegung &amp; Taktung</span>
+    <span><b>Ersetzt</b> D5-Annahme „native-first" vom 25.07.</span>
+    <span><b>Bypass-Permissions</b> bleibt Konzept</span>
+  </div>
+</header>
+
+<nav>
+  <ul class="toc">
+    <li><a href="#entscheidung">1 · Die Entscheidung</a></li>
+    <li><a href="#ist">2 · Ist-Stand (belegt)</a></li>
+    <li><a href="#ziel">3 · Zielbild im Detail</a></li>
+    <li><a href="#layer">4 · Layer-Landkarte</a></li>
+    <li><a href="#projekte">5 · Änderungen je Projekt</a></li>
+    <li><a href="#plan">6 · Plan &amp; Taktung</a></li>
+    <li><a href="#offen">7 · Offene Entscheidungen</a></li>
+  </ul>
+</nav>
+
+<h2 id="entscheidung"><span class="no">1</span>Die Entscheidung</h2>
+<p>Am 25.07. war das signierte Distributable-Zielbild (D5) <b>native-first</b>: self-contained .NET-Binaries, Docker nur als Demo-/Evaluationskanal. Robert hat diese Annahme am 26.07. bewusst aktualisiert. Neues Zielbild:</p>
+<div class="box accent">
+  <h4>Beschluss (26.07.)</h4>
+  <ul>
+    <li><b>Container-Default:</b> Bei rein lokalem Betrieb ist eine lokale Docker-Instanz der bevorzugte, vorausgewählte Ausführungsweg.</li>
+    <li><b>Installer fragt:</b> Die geführte Installation fragt, was betrieben werden soll; bei „alles lokal" ist Docker der Default-Vorschlag.</li>
+    <li><b>Opt-out bleibt:</b> Wer kein Docker hat oder nicht will, führt host-direkt oder im Mischbetrieb aus — einstellbar in der Host-Verwaltung, nicht ideal, aber voll unterstützt.</li>
+    <li><b>Bypass-Permissions bleibt Konzept:</b> Die CLIs laufen weiter im Maximal-Modus (<code>danger-full-access</code> / <code>--dangerously-skip-permissions</code>). Die Isolation kommt künftig vom <b>Container</b>, nicht vom CLI-eigenen Sandbox-Prompt. Das ist die eigentliche Verbesserung: heute gibt es <em>gar keine</em> OS-Grenze um den Agenten.</li>
+  </ul>
+</div>
+<p class="dim">Das ist kein Bugfix, sondern eine Produkt-Richtung. Sie stärkt genau den Marketing-Kern „sicher / isoliert", der bisher nur durch Worktree-Grenzen belegt war. Der Preis ist die Repo-/Credential-Erreichbarkeit im Container — der in der Distributable-Analyse als „the hard part" markierte Punkt (siehe §5).</p>
+
+<h2 id="ist"><span class="no">2</span>Ist-Stand — belegt aus drei Flächen</h2>
+<p>Drei Read-only-Sonden (Code, Doku, Marketing) am 26.07.: Alle drei Flächen sind <b>untereinander konsistent</b> und beschreiben host-direkten Betrieb. Der Drift besteht nicht zwischen den Flächen, sondern zwischen allen dreien und dem neuen Zielbild.</p>
+<table>
+  <tr><th>Fläche</th><th>Was heute gilt</th><th>Beleg</th></tr>
+  <tr>
+    <td><b>Code</b></td>
+    <td>Direkter Host-Prozess-Spawn, keine Container im Ausführungspfad. Codex mit <code>--sandbox danger-full-access</code> = voller Host-Zugriff, keine Sandbox. Kein Placement-/Container-Konzept.</td>
+    <td class="ev"><code>runner/ProcessRunner.cs</code> (Process.Start), <code>BuiltInCliBehaviors.cs</code> CodexBuildStartInfo, CAR <code>ICliProcessSpawner</code>; einziges Dockerfile = unbezogener CompanionRelay</td>
+  </tr>
+  <tr>
+    <td><b>Doku / Wiki</b></td>
+    <td>Beschreibt host-direkt als Ist <em>und</em> Zielbild. „No Docker requirement anywhere", Docker nur Demo. OS-/Container-Isolation ausdrücklich „out of scope (deliberately)". „Isolation" meint Worktree/Fencing/cgroup.</td>
+    <td class="ev"><code>sandbox-and-yolo.md</code> Z.19/142, <code>target-architecture/distributable.html</code> §8.2/§8.8, <code>decision-history.md</code> D5</td>
+  </tr>
+  <tr>
+    <td><b>Marketing</b></td>
+    <td>Ehrlicher Unter-Claim: <em>weniger</em> versprochen als Zielbild. Container = Option/Consulting, nicht Default. Isolation-Beleg heute nur Worktree/Branch. Kurs „remote-first ohne Container".</td>
+    <td class="ev"><code>problem-kandidaten.md</code> (Container Rang 4), <code>entscheidungsvorlage.md</code>:194 (Frage offen), <code>revamp-2-kompakt-und-remote-first.md</code></td>
+  </tr>
+</table>
+<div class="box ok">
+  <h4>Gute Nachricht</h4>
+  <p>Kein Overclaim: nirgends wird mehr Container-Isolation behauptet, als das Produkt hat. Und das Marketing hatte die Entscheidung bereits als offene Frage vorgemerkt — es muss nur beantwortet, nicht korrigiert werden.</p>
+</div>
+
+<h2 id="ziel"><span class="no">3</span>Zielbild im Detail</h2>
+<h3>Der geführte Installer</h3>
+<p>Erstkontakt fragt nach dem Betriebsmodus. Bei „alles lokal" ist <b>Docker vorausgewählt</b>; ein Klick installiert die lokale Container-Instanz mit den nötigen Prerequisites (Docker-Check, Pull/Build des Agent-Images, Repo-Mount-Konvention, Credential-Durchreichung). Wer bewusst ohne Container will, wählt „host-direkt" — mit sichtbarem Hinweis, dass Isolation dann Operator-Sache ist.</p>
+<h3>Die Host-Verwaltung als Schaltzentrale</h3>
+<p>Der Ausführungsmodus je Host ist dort editierbar: Container / host-direkt / Misch. Der lokale Rechner erscheint als regulärer Ausführungs-Host (Typ <code>local</code>) neben den entfernten — „lokal" ist eine Ausprägung, kein Sonderfall. (Das ist der Grund für die Umbenennung von „Remote Hosts", siehe §5.)</p>
+<h3>Warum Bypass-Permissions bleibt</h3>
+<p>Heute schaltet <code>danger-full-access</code> die CLI-eigene Sandbox ab — der Agent läuft ungebremst auf dem Host. Im Zielbild bleibt der Agent im Maximal-Modus (volle Autonomie, keine Prompt-Unterbrechung), aber die <b>Container-Grenze</b> ersetzt die fehlende OS-Grenze. Isolation und Autonomie sind damit entkoppelt: maximal autonom <em>innerhalb</em> einer echten Grenze.</p>
+
+<h2 id="layer"><span class="no">4</span>Layer-Landkarte</h2>
+<p>Roberts Marketing-Frage „welche Ebenen kommen dazu und wie sehen sie aus" — hier als Landkarte. Der Container-Default fügt die unterste, neue Ebene hinzu: die <b>Isolationsschicht</b>, in der die Coding-Arbeit tatsächlich läuft.</p>
+<figure>
+  <svg viewBox="0 0 960 380" role="img" aria-label="Ebenen-Landkarte von der Management-Ebene bis zur neuen Container-Isolationsschicht">
+    <rect x="20" y="20" width="920" height="46" rx="8" class="s-node2"/>
+    <text x="40" y="42" class="s-label">Management-Ebene</text>
+    <text x="40" y="58" class="s-sub">Tasks, Pipelines, Gates, Reviews, Kapazität, Evidenz — „management layers on top of coding work"</text>
+    <rect x="20" y="80" width="920" height="46" rx="8" class="s-node2"/>
+    <text x="40" y="102" class="s-label">Orchestrierungs-Ebene</text>
+    <text x="40" y="118" class="s-sub">Task-Server (Wahrheit) · Orchestrator-Engine (Flows) · Host-Verwaltung (Kapazität, Modus je Host)</text>
+    <rect x="20" y="140" width="920" height="46" rx="8" class="s-node"/>
+    <text x="40" y="162" class="s-label">Ausführungs-Host-Ebene</text>
+    <text x="40" y="178" class="s-sub">agent-host: claim → Worktree → CLI-Slot → deliver · lokal ODER remote · Modus wählbar</text>
+    <rect x="20" y="200" width="920" height="70" rx="8" class="s-cont"/>
+    <text x="40" y="224" class="s-label">Isolationsschicht (NEU · Default: Container)</text>
+    <text x="40" y="242" class="s-sub">Lokale Docker-Instanz um jeden CLI-Run · Repo-Mount + Credential-Passthrough · OS-Grenze statt CLI-Sandbox</text>
+    <text x="40" y="258" class="s-tiny">Opt-out: host-direkt (keine OS-Grenze, heute der einzige Modus) · Misch: einige Hosts Container, andere direkt</text>
+    <rect x="20" y="284" width="920" height="46" rx="8" class="s-node"/>
+    <text x="40" y="306" class="s-label">Agenten-Ebene</text>
+    <text x="40" y="322" class="s-sub">codex / claude im Maximal-Modus (danger-full-access) — voll autonom INNERHALB der Isolationsschicht</text>
+    <path d="M 480 66 L 480 80 M 480 126 L 480 140 M 480 186 L 480 200 M 480 270 L 480 284" class="s-flow" marker-end="url(#a)"/>
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1,1 L7,4 L1,7" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/></marker></defs>
+  </svg>
+  <figcaption><b>Neu ist die Isolationsschicht.</b> Sie sitzt zwischen Host und Agent: Der Agent bleibt maximal autonom, läuft aber im Container statt direkt auf dem Host. Das ist die Ebene, die den Marketing-Claim „sicher/isoliert" belegbar macht — und zugleich ein AI-Pattern („Switching abstraction layers", eigene Karte).</figcaption>
+</figure>
+
+<h2 id="projekte"><span class="no">5</span>Änderungen je Projekt</h2>
+<p>Der Kern des Steuerungs-Dokuments: was in welchem Repo passieren muss, damit daraus Karten werden. <span class="pill queued">getaktet</span> = Karte existiert, <span class="pill new">zu schneiden</span> = noch nicht, <span class="pill open">Entscheidung offen</span>.</p>
+
+<h3>Agent Studio (Code · agent-taskboard)</h3>
+<table>
+  <tr><th>Arbeitspaket</th><th>Was</th><th>Status</th></tr>
+  <tr><td><b>Placement-Konzept</b></td><td>Neues ExecutionPlacement (container / host / mixed) je Host; heute existiert nur OrchestrationExecutionMode {Monolith, Engine}. Spawn-Pfad verzweigt danach.</td><td><span class="pill new">zu schneiden</span></td></tr>
+  <tr><td><b>Container-Spawn</b></td><td><code>ProcessRunner</code> / <code>BuiltInCliBehaviors</code> / CAR-Spawner: CLI im Container starten statt direkt. Agent-Image bauen (CLIs vorinstalliert).</td><td><span class="pill new">zu schneiden</span></td></tr>
+  <tr><td><b>Repo &amp; Credentials</b></td><td>„The hard part": Volume-Mount je Projekt-Repo + Credential-Durchreichung (Git, CLI-Tokens) in den Container. Mount-Konvention definieren.</td><td><span class="pill open">Konzept offen</span></td></tr>
+  <tr><td><b>Host-Verwaltung UI</b></td><td>Modus je Host editierbar; lokaler Host als Ausführungs-Host mit Typ <code>local</code>; Umbenennung „Remote Hosts" → Ausführungs-Hosts; Statusleiste verlinkt dorthin.</td><td><span class="pill queued">Hosts-Rename-Karte</span></td></tr>
+  <tr><td><b>cgroup-Governance</b></td><td>Ressourcen-Quotas je Rolle bleiben gültig, greifen künftig am Container statt an der systemd-Unit.</td><td><span class="pill done">AGT-2340 integriert</span></td></tr>
+</table>
+
+<h3>Coding Agent Runner (CAR · Library)</h3>
+<p>Der Spawner (<code>ICliProcessSpawner</code>) ist die zentrale Stelle: eine Container-Implementierung neben der heutigen Host-Implementierung, gewählt per Placement. Config-Home-Isolation (CODEX_HOME/CLAUDE_CONFIG_DIR) bleibt und ergänzt sich mit der Container-Grenze. <span class="pill new">zu schneiden</span></p>
+
+<h3>Docs / Wiki (agent-taskboard/docs)</h3>
+<p>Umschrift nötig — die Doku dokumentiert heute das Gegenteil: <code>sandbox-and-yolo.md</code> („out of scope" → Container ist jetzt in-scope), <code>distributable.html</code> §8.2/§8.8 (Docker vom Demo-Kanal zum lokalen Default), <code>decision-history.md</code> (Entscheidungswechsel eintragen), <code>linux-runner-host.md</code> + <code>resource-governance.md</code> (Container-Pfad ergänzen). <span class="pill new">zu schneiden</span></p>
+
+<h3>Marketing (agent-studio-marketing)</h3>
+<p><code>problem-kandidaten.md</code>: Container/Isolation von Rang 4 hochstufen; <code>entscheidungsvorlage.md</code>:194 (Frage 5) als „entschieden: Container-Default" schließen; Claim „isoliert" ist jetzt belegbar (Container statt nur Worktree) — in <code>claim-ideen.md</code> aufnehmen. Bleibt unter problem-first-Framework (MKT-14 führt). <span class="pill new">zu schneiden</span></p>
+
+<h3>Orchestrator-Website (agent-studio-for-software-website)</h3>
+<p>Die „sicher/isoliert out of the box"-Geschichte wird tragfähig: Container-Default als Beleg für das Sicherheits-Versprechen; Layer-Landkarte (§4) als Diagramm-Material. Kein Publish ohne Roberts Sichtblick. <span class="pill new">zu schneiden</span></p>
+
+<h3>Installer (D5-Linie)</h3>
+<p>AGT-2334 (geführter Installer) und AGT-2305 (One-command onboarding) bekommen den Modus-Dialog + Docker-Default-Pfad. Warten heute regelkonform auf die Release-Archive (AGT-2333/Tranche 0.4). <span class="pill queued">2334 / 2305 vorhanden</span></p>
+
+<h2 id="plan"><span class="no">6</span>Plan &amp; Taktung</h2>
+<p>Reihenfolge nach Abhängigkeit — jede Phase wird zu Karten, dieses Dokument ist der Ankerpunkt fürs Nachhalten.</p>
+<table>
+  <tr><th>Phase</th><th>Inhalt</th><th>Vorbedingung</th></tr>
+  <tr><td><b>0 · Entscheidung sichtbar</b></td><td>Dieses Workbench-Doc; Docs/Marketing-Umschrift-Karten schneiden; Entscheidungswechsel in decision-history.</td><td>—</td></tr>
+  <tr><td><b>1 · Mount-Konzept</b></td><td>Repo-/Credential-Durchreichung lösen (Konzept + Prototyp). Der kritische Pfad — hier entscheidet sich Machbarkeit.</td><td>Phase 0</td></tr>
+  <tr><td><b>2 · Placement + Spawner</b></td><td>ExecutionPlacement-Konzept, Container-Spawner in CAR, Agent-Image. Host-direkt bleibt Default bis grün.</td><td>Phase 1</td></tr>
+  <tr><td><b>3 · Host-Verwaltung</b></td><td>Modus editierbar, lokaler Host sichtbar, Umbenennung, Statusleisten-Link.</td><td>parallel zu 2</td></tr>
+  <tr><td><b>4 · Installer</b></td><td>Modus-Dialog + Docker-Default; Multi-Machine-Guide.</td><td>Phase 2 + Release-Archive</td></tr>
+  <tr><td><b>5 · Außendarstellung</b></td><td>Marketing-Rerank, Website-Story, Layer-Diagramm — nach Sichtblick.</td><td>Phase 2 belegt Machbarkeit</td></tr>
+</table>
+
+<h2 id="offen"><span class="no">7</span>Offene Entscheidungen (Robert)</h2>
+<div class="box warn">
+  <ul>
+    <li><b>Mount-Strategie:</b> Ein großer Mount des gesamten Projekt-Roots vs. selektive Repo-Mounts je Task? Beeinflusst Sicherheit und Reibung direkt.</li>
+    <li><b>Credential-Weg:</b> Token-Passthrough (einfach, aber Token im Container) vs. Credential-Proxy außerhalb des Containers (sicherer, mehr Bau)?</li>
+    <li><b>Image-Herkunft:</b> Gepflegtes Basis-Image mit vorinstallierten CLIs (schneller Start, Pull nötig) vs. Build-on-first-run (kein Pull, langsamer erster Start)?</li>
+    <li><b>Rollout:</b> Container-Default sofort für Neu-Installationen, oder erst als Opt-in bis die Reibung nachweislich gelöst ist?</li>
+  </ul>
+</div>
+<p class="dim">Sobald diese vier entschieden sind, wird Phase 1/2 zu konkreten Karten. Bis dahin dient dieses Dokument als gemeinsame Grundlage — änderbar, sobald sich das Zielbild schärft.</p>
+
+</main>
+</body>
+</html>
