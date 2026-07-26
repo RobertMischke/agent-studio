@@ -94,6 +94,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
+| Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
 | Orchestrator control-plane migration plan | [target architecture plan](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md) |
 | Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
