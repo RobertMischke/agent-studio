@@ -26,6 +26,7 @@ function jobInfo(over: Partial<Record<string, unknown>>): Record<string, unknown
   return {
     id,
     jobKey: `${FIXTURE_WATCH}::${id}`,
+    taskKey: `${FIXTURE_WATCH}::${id}`,
     title: String(over['title'] ?? id),
     state: String(over['state'] ?? '2-ready'),
     order: Number(over['order'] ?? 1),
@@ -230,6 +231,55 @@ test.describe('Kanban lane grouping and collapse', () => {
     expect(decisionLaneOrder).toEqual(['lane-5e-escalated', 'lane-5-human-review']);
 
     await page.screenshot({ path: 'test-results/kanban-board-expanded.png', fullPage: true });
+  });
+
+  test('Escalated is hidden at zero, appears live with work, and remains a drag target', async ({ page }) => {
+    let grouped = { ...fixtureGrouped(), escalated: [] as Record<string, unknown>[] };
+    await page.unroute('**/api/tasks/grouped');
+    await page.route('**/api/tasks/grouped', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(grouped),
+      });
+    });
+
+    await page.goto('/');
+    await expect(boardSurface(page)).toBeVisible({ timeout: 10_000 });
+    const escalatedLane = page.locator(
+      '[data-testid="lane-5e-escalated"], [data-testid="lane-rail-5e-escalated"]',
+    );
+    await expect(escalatedLane).toHaveCount(0);
+
+    // A hidden intervention pool must still be available as a direct drop
+    // target. Starting any card drag exposes the empty lane in its canonical
+    // first position inside Done & Decide.
+    const sourceCard = page.getByTestId('lane-2-ready').locator('app-job-card').first();
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await sourceCard.dispatchEvent('dragstart', { dataTransfer });
+    await expect(escalatedLane).toBeVisible();
+    const moveRequest = page.waitForRequest((request) =>
+      request.url().includes('/api/tasks/fx-ready-1/move'),
+    );
+    await page.getByTestId('lane-5e-escalated').dispatchEvent('drop', { dataTransfer });
+    expect((await moveRequest).postDataJSON()).toMatchObject({ targetState: '5e-escalated' });
+    await expect(page.getByTestId('lane-5e-escalated').locator('app-job-card')).toHaveCount(1);
+
+    // Reconcile the optimistic drop with the still-empty server snapshot.
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toHaveCount(0);
+
+    // The workspace refresh uses the same grouped signal updated by the
+    // SignalR fallback path. Prove both 0 -> 1 and 1 -> 0 without reloading.
+    grouped = fixtureGrouped();
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toBeVisible();
+    await expect(page.getByTestId('lane-count-5e-escalated')).toHaveText('1');
+    await page.screenshot({ path: 'test-results/kanban-escalated-intervention-lane.png', fullPage: true });
+
+    grouped = { ...fixtureGrouped(), escalated: [] };
+    await page.getByTestId('studio-sidebar-refresh').click();
+    await expect(escalatedLane).toHaveCount(0);
   });
 
   test('collapsing a lane shows a rail with count and indicators, persists across reload', async ({ page }) => {
