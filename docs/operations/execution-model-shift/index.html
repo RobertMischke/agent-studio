@@ -91,7 +91,8 @@
     <li><a href="#layer">4 · Layer-Landkarte</a></li>
     <li><a href="#projekte">5 · Änderungen je Projekt</a></li>
     <li><a href="#plan">6 · Plan &amp; Taktung</a></li>
-    <li><a href="#offen">7 · Offene Entscheidungen</a></li>
+    <li><a href="#abgleich">7 · Abgleich: Verteilte Ausführung</a></li>
+    <li><a href="#offen">8 · Offene Entscheidungen</a></li>
   </ul>
 </nav>
 
@@ -114,8 +115,8 @@
   <tr><th>Fläche</th><th>Was heute gilt</th><th>Beleg</th></tr>
   <tr>
     <td><b>Code</b></td>
-    <td>Direkter Host-Prozess-Spawn, keine Container im Ausführungspfad. Codex mit <code>--sandbox danger-full-access</code> = voller Host-Zugriff, keine Sandbox. Kein Placement-/Container-Konzept.</td>
-    <td class="ev"><code>runner/ProcessRunner.cs</code> (Process.Start), <code>BuiltInCliBehaviors.cs</code> CodexBuildStartInfo, CAR <code>ICliProcessSpawner</code>; einziges Dockerfile = unbezogener CompanionRelay</td>
+    <td>Direkter Host-Prozess-Spawn an <b>drei</b> unabhängigen Stellen, keine Container im Ausführungspfad. Codex mit <code>--sandbox danger-full-access</code> = voller Host-Zugriff, keine Sandbox. Kein Placement-/Container-Konzept.</td>
+    <td class="ev">lokal: <code>backend/Features/Cli/Execution/CliExecutionServiceBase.cs</code> + <code>BuiltInCliBehaviors.cs</code> (eigener <code>Process.Start</code>, eigener <code>WindowsHandleScrubSpawner</code>) · remote: <code>runner/ProcessRunner.cs</code> + <code>DurableAgentProcess.cs</code> · Library: CAR <code>CliRunEngine</code> mit <code>ICliProcessSpawner</code> — vom Studio <b>nicht</b> benutzt (<code>OrchestratorApi.csproj</code> zieht nur Model/Events/Adapters); einziges Dockerfile = unbezogener CompanionRelay</td>
   </tr>
   <tr>
     <td><b>Doku / Wiki</b></td>
@@ -174,14 +175,49 @@
 <table>
   <tr><th>Arbeitspaket</th><th>Was</th><th>Status</th></tr>
   <tr><td><b>Placement-Konzept</b></td><td>Neues ExecutionPlacement (container / host / mixed) je Host; heute existiert nur OrchestrationExecutionMode {Monolith, Engine}. Spawn-Pfad verzweigt danach.</td><td><span class="pill new">zu schneiden</span></td></tr>
-  <tr><td><b>Container-Spawn</b></td><td><code>ProcessRunner</code> / <code>BuiltInCliBehaviors</code> / CAR-Spawner: CLI im Container starten statt direkt. Agent-Image bauen (CLIs vorinstalliert).</td><td><span class="pill new">zu schneiden</span></td></tr>
+  <tr><td><b>CAR-Adoption (Vorleistung)</b></td><td>Beide produktiven Spawn-Stellen (<code>CliExecutionServiceBase</code>/<code>BuiltInCliBehaviors</code> lokal, <code>ProcessRunner</code>/<code>AgentCliProcess</code> remote) laufen über die CAR-Ausführungsschicht — Zielbild-Konformität und Voraussetzung dafür, dass der Container-Spawn einmal statt zweimal entsteht (§8 · E5).</td><td><span class="pill queued">AGT-2370 · 2371 · 2372 · 2373</span></td></tr>
+  <tr><td><b>Container-Spawn</b></td><td>CLI im Container starten statt direkt — in der dann gemeinsamen CAR-Ausführungsschicht, gewählt per Placement. Agent-Image bauen (CLIs vorinstalliert).</td><td><span class="pill new">zu schneiden, nach 2370/2371</span></td></tr>
   <tr><td><b>Repo &amp; Credentials</b></td><td>„The hard part": Volume-Mount je Projekt-Repo + Credential-Durchreichung (Git, CLI-Tokens) in den Container. Mount-Konvention definieren.</td><td><span class="pill open">Konzept offen</span></td></tr>
   <tr><td><b>Host-Verwaltung UI</b></td><td>Modus je Host editierbar; lokaler Host als Ausführungs-Host mit Typ <code>local</code>; Umbenennung „Remote Hosts" → Ausführungs-Hosts; Statusleiste verlinkt dorthin.</td><td><span class="pill queued">Hosts-Rename-Karte</span></td></tr>
   <tr><td><b>cgroup-Governance</b></td><td>Ressourcen-Quotas je Rolle bleiben gültig, greifen künftig am Container statt an der systemd-Unit.</td><td><span class="pill done">AGT-2340 integriert</span></td></tr>
 </table>
 
 <h3>Coding Agent Runner (CAR · Library)</h3>
-<p>Der Spawner (<code>ICliProcessSpawner</code>) ist die zentrale Stelle: eine Container-Implementierung neben der heutigen Host-Implementierung, gewählt per Placement. Config-Home-Isolation (CODEX_HOME/CLAUDE_CONFIG_DIR) bleibt und ergänzt sich mit der Container-Grenze. <span class="pill new">zu schneiden</span></p>
+<p class="dim">Die frühere Fassung dieses Absatzes war missverständlich („der Spawner ist die zentrale Stelle") und legte nahe, die Container-Arbeit fände in der Library statt. Hier die belegte Klarstellung.</p>
+
+<div class="box accent">
+  <h4>Das Zielbild ist eindeutig — der Code weicht davon ab</h4>
+  <p><code>docs/concepts/distributed-agent-studio-target-architecture.md</code> führt in §4 „CodingAgentRunner integration" als Eigentum des Deployables <b>Agent Runner</b> und schreibt in §10 wörtlich: <em>„CodingAgentRunner remains the process and CLI-protocol library used by <code>agent-runner</code>. The standalone Runner must not recreate a second unstructured Codex invocation path."</em> §13.6 verlangt zusätzlich strukturierte CAR-Events, fenced commands und typed outcomes.</p>
+  <p>Der Befund unten ist damit <b>kein offener Architekturentwurf, sondern ein Drift</b>: Der Runner-Daemon startet das CLI heute roh über <code>RUNNER_CLI_BIN</code>/<code>RUNNER_CLI_ARGS</code> — genau der Pfad, den das Zielbild ausschließt. Die Konsequenz ist getaktet: <b>AGT-2370</b> (Runner auf CAR) → <b>AGT-2371</b> (lokale Ausführungsschicht) → <b>AGT-2372</b> (Parity-Suite + Guard-Test) → <b>AGT-2373</b> (Aufräumen, ADR, Doku). <span class="pill queued">Kette angelegt 26.07.</span></p>
+</div>
+
+<div class="box ok">
+  <h4>Was sich nicht ändert</h4>
+  <ul>
+    <li><b>Die Library bleibt</b> — unverändert in ihrer Rolle: CLI-Treiber. Prozess starten, Ausgabe zu Events normalisieren, Modelle/Thinking-Level/Quota/Preise kennen, Config-Home isolieren.</li>
+    <li><b>Keine Orchestrierung wandert hinein.</b> Placement, Mount-Berechnung, Container-Lebenszyklus, Worktrees, Karten, Attempt-Records und Lanes sind Sache des Ausführungs-Hosts und des Task-Servers. CAR darf das Board nicht kennen — sonst ist sie keine wiederverwendbare Library mehr.</li>
+    <li><b>Der Ausführungs-Host behält und bekommt die Orchestrierungsarbeit:</b> er entscheidet (aus der Host-Verwaltung) den Modus, berechnet Mounts, startet/räumt den Container und liefert das Ergebnis ab. Der Treiber bekommt das Ergebnis dieser Entscheidung als Startparameter — nicht die Entscheidung selbst.</li>
+  </ul>
+</div>
+
+<p><b>Adoptionsstand — der eigentliche Punkt.</b> Das Studio nutzt von CAR heute nur <code>Model</code>, <code>Events</code> und <code>Adapters</code> (Typ-Aliase in <code>OrchestratorApi.csproj</code>), <b>nicht</b> die Ausführungs-Engine <code>CliRunEngine</code>. Gespawnt wird an zwei eigenen Stellen im Studio (lokal / Remote-Daemon); <code>ICliProcessSpawner</code> ist ein Hook in einem Codepfad, den das Produkt gar nicht durchläuft — im Studio existiert keine einzige Implementierung davon. <b>Folge: Ein Container-Spawner allein in CAR liefert dem Produkt heute nichts.</b> Er nützt den Library-Konsumenten (z. B. dem Chat-Workbench), nicht dem Ausführungspfad des Studios.</p>
+
+<table>
+  <tr><th>Frage</th><th>Antwort</th><th>Beleg / Status</th></tr>
+  <tr><td><b>Muss CAR container-fähig werden?</b></td>
+      <td><b>Ja</b> — weil das Studio die Engine adoptiert (E5, entschieden). Damit ist die CAR-Ausführungsschicht die eine Stelle, an der der Container-Spawn entsteht: einmal gebaut, für beide Ausführungswege wirksam. Genau der Grund, warum die Adoption <em>vor</em> der Container-Arbeit steht.</td>
+      <td class="ev"><span class="pill queued">AGT-2370 · 2371</span></td></tr>
+  <tr><td><b>Reicht dann der vorhandene Spawner-Hook?</b></td>
+      <td>Für den Lauf selbst ja: der Hook bekommt die fertige <code>ProcessStartInfo</code> und kann sie in einen <code>docker run</code>-Aufruf umschreiben.</td>
+      <td class="ev"><code>CliRunEngine.SpawnChildAsync</code>, <code>CliOptions.Spawner</code></td></tr>
+  <tr><td><b>Was bricht trotzdem?</b></td>
+      <td>Die <b>Vorstufen</b> sind host-gebunden: Binärauflösung über den Host-PATH, der Versions-Probe-Aufruf und die Umgebungs-/Quota-Inspektion (liest Binary und Config-Home auf dem Host). In einer Container-only-Installation existiert das CLI auf dem Host gar nicht — diese drei Pfade brauchen eine container-seitige Variante.</td>
+      <td class="ev"><code>BinaryResolver.ResolveExecutable</code>, Versions-Probe in <code>CliRunEngine</code>, <code>EnvironmentInspector</code>, <code>ClaudeOAuthUsageProbe</code></td></tr>
+  <tr><td><b>Was hilft unerwartet?</b></td>
+      <td>Die Config-Home-Isolation ist bereits die richtige Granularität für die Credential-Frage: <code>CleanContextPreparation</code> legt pro Lauf ein Temp-Verzeichnis an und kopiert nur <code>auth.json</code>/<code>config.toml</code> bzw. <code>.credentials.json</code>/<code>settings.json</code> hinein. In den Container muss also <em>dieses</em> Verzeichnis — nicht das ganze <code>~/.codex</code>. Ein fertiger, minimaler Träger für E2.</td>
+      <td class="ev"><code>CleanContextPreparation.cs</code>, <code>CleanContextSpec</code></td></tr>
+</table>
+<p class="dim">Kurz: Der Satz „der Spawner ist die zentrale Stelle" stimmt <em>architektonisch</em> (die Grenze verläuft genau dort, wo aus einer Startbeschreibung ein Prozess wird) — heute aber noch nicht <em>organisatorisch</em>: diese Stelle liegt dreimal im Code, und nur eine davon ist in CAR. Nach der Adoptions-Kette stimmt beides, und der Container-Spawn wird einmal gebaut statt zweimal. <span class="pill queued">AGT-2370 … 2373</span></p>
 
 <h3>Docs / Wiki (agent-taskboard/docs)</h3>
 <p>Umschrift nötig — die Doku dokumentiert heute das Gegenteil: <code>sandbox-and-yolo.md</code> („out of scope" → Container ist jetzt in-scope), <code>distributable.html</code> §8.2/§8.8 (Docker vom Demo-Kanal zum lokalen Default), <code>decision-history.md</code> (Entscheidungswechsel eintragen), <code>linux-runner-host.md</code> + <code>resource-governance.md</code> (Container-Pfad ergänzen). <span class="pill new">zu schneiden</span></p>
@@ -201,22 +237,166 @@
   <tr><th>Phase</th><th>Inhalt</th><th>Vorbedingung</th></tr>
   <tr><td><b>0 · Entscheidung sichtbar</b></td><td>Dieses Workbench-Doc; Docs/Marketing-Umschrift-Karten schneiden; Entscheidungswechsel in decision-history.</td><td>—</td></tr>
   <tr><td><b>1 · Mount-Konzept</b></td><td>Repo-/Credential-Durchreichung lösen (Konzept + Prototyp). Der kritische Pfad — hier entscheidet sich Machbarkeit.</td><td>Phase 0</td></tr>
-  <tr><td><b>2 · Placement + Spawner</b></td><td>ExecutionPlacement-Konzept, Container-Spawner in CAR, Agent-Image. Host-direkt bleibt Default bis grün.</td><td>Phase 1</td></tr>
+  <tr><td><b>1b · CAR-Adoption</b></td><td>Ausführungsschicht konvergiert auf CodingAgentRunner (AGT-2370 → 2371 → 2372 → 2373). Läuft parallel zum Mount-Konzept und ist Vorbedingung für Phase 2.</td><td>—, läuft</td></tr>
+  <tr><td><b>2 · Placement + Spawn</b></td><td>ExecutionPlacement-Konzept, Container-Spawn <em>einmal</em> in der CAR-Ausführungsschicht, Agent-Image. Host-direkt bleibt Default bis grün.</td><td>Phase 1 + 1b</td></tr>
   <tr><td><b>3 · Host-Verwaltung</b></td><td>Modus editierbar, lokaler Host sichtbar, Umbenennung, Statusleisten-Link.</td><td>parallel zu 2</td></tr>
   <tr><td><b>4 · Installer</b></td><td>Modus-Dialog + Docker-Default; Multi-Machine-Guide.</td><td>Phase 2 + Release-Archive</td></tr>
   <tr><td><b>5 · Außendarstellung</b></td><td>Marketing-Rerank, Website-Story, Layer-Diagramm — nach Sichtblick.</td><td>Phase 2 belegt Machbarkeit</td></tr>
 </table>
 
-<h2 id="offen"><span class="no">7</span>Offene Entscheidungen (Robert)</h2>
+<h2 id="abgleich"><span class="no">7</span>Abgleich mit „Verteilte Ausführung"</h2>
+<p>Der Container-Default ist kein separates Thema neben der Härtung der verteilten Ausführung, sondern greift in deren Kontrollmodell ein. Die Workbench <b>Verteilte Ausführung</b> (<code>docs/operations/haertung-verteilte-ausfuehrung/</code>, Stand 24.07.) beschreibt Schreibmodell, Fencing, hermetische Verifikation und Betriebsbedingung. Fünf Stellen dort berühren diese Entscheidung unmittelbar — an vieren beantwortet der Container eine dort bereits <em>offen</em> ausgewiesene Kontrolle, an einer erzeugt er eine neue Frage.</p>
+
+<table>
+  <tr><th>Stelle dort</th><th>Was dort gilt</th><th>Was der Container-Default daran ändert</th></tr>
+  <tr>
+    <td><b>§4 Schreibmodell</b><br><span class="ev">Zeile „CLI-Agenten"</span></td>
+    <td>Aktuelle Kontrolle: Worktree-Isolation + ruhige Prompt-Regel + Guard. Offene Kontrolle: Contract + Detect + Cleanup.</td>
+    <td>Der Container liefert die Ebene <em>vor</em> dem Erkennen: „Begrenzen" wird vom OS durchgesetzt statt durch Konvention gestützt. Die Erkennungs- und Cleanup-Ebenen bleiben unverändert nötig — ein Agent kann auch im Container falsch committen. <b>Abb. 9 dort bekommt eine Ebene 0.</b></td>
+  </tr>
+  <tr>
+    <td><b>§4.1</b><br><span class="ev">CLI-Schreibzugriffe außerhalb des Vertrags</span></td>
+    <td>Ausdrücklich vermerkt: „Prozess- und Credential-Isolation … noch nicht vollständig umgesetzt."</td>
+    <td>Genau diese Lücke schließen E1 und E2. Der Container-Default ist damit keine neue Baustelle, sondern die Antwort auf eine dort seit 24.07. benannte offene Kontrolle.</td>
+  </tr>
+  <tr>
+    <td><b>§2.5 / §4</b><br><span class="ev">Result-SHA-Vertrag, Zeile „Remote-Runner-Daemon"</span></td>
+    <td>„Keine Ambient-Push-Credentials"; Outbox als einziger Schreibkanal (AGT-2183); Ref-Namespace-Policy: eine Runner-Identität darf nur <code>runner/&lt;id&gt;/*</code> pushen.</td>
+    <td>Container und Outbox verstärken sich: Hat der Container gar keine Push-Credentials, wird „die Plattform besitzt die Git-Historie" <b>strukturell erzwungen statt vereinbart</b>. Umgekehrt wäre ein Token-Passthrough mit Push-Recht ein Rückschritt hinter AGT-2183 — Randbedingung für E2.</td>
+  </tr>
+  <tr>
+    <td><b>§5 Hermetische Verifikation</b><br><span class="ev">§5.1–5.3, AGT-2222/2229</span></td>
+    <td>Gates materialisieren eine exakte Subjekt-SHA im Wegwerf-Worktree auf dem Remote-Host; die SSH-Brücke ist produktiv und soll durch claimbare Remote-Schritte ersetzt werden.</td>
+    <td>Der Container ist die natürliche hermetische Hülle für genau diesen Schritt — bis hin zu Baustein 2 (Ressourcenbudgets), der laut §5 „Ausführungs-Host"-Ebene ohnehin am Container greifen soll. <b>Neue Frage:</b> läuft das Gate im selben Container-Modell wie der Agent-Run (E6)? Muss vor dem Ersatz der Brücke beantwortet sein, sonst stehen zwei Isolationsmechanismen nebeneinander.</td>
+  </tr>
+  <tr>
+    <td><b>§7 Betriebsbedingung</b></td>
+    <td>Remote-Ausführung ist nur aktiv, weil Push-Probe, verifizierter Push vor Completion, Attempt-Fencing und Remote-Gates aktiv sind. Unklare Zuordnung führt zur Human-Review.</td>
+    <td>Übersetzt in die Rollout-Regel (E4): <b>Container-Placement wird erst Default, wenn ein Container-Lauf nachweislich einen gültigen Attempt-Record und einen verifizierten Push erzeugt.</b> Bis dahin ist Container eine wählbare, aber nicht vorgewählte Ausprägung.</td>
+  </tr>
+</table>
+
+<h3>Kriterienprobe — die eigenen Maßstäbe angewandt</h3>
+<p>§5.4 dort enthält fünf Fragen, die über zusätzliche Infrastruktur entscheiden („Zusätzliche Infrastruktur setzt eine belegte Fehlerklasse oder einen messbaren Betriebsnutzen voraus"). Die Entscheidung muss sich daran messen lassen — auch dort, wo die Antwort unbequem ist.</p>
+<table>
+  <tr><th>Frage (§5.4)</th><th>Ehrliche Antwort für den Container-Default</th></tr>
+  <tr><td>Gibt es einen belegten Vorfall oder eine reproduzierbare Fehlerklasse?</td>
+      <td><b>Nein.</b> Kein dokumentierter Vorfall, in dem ein Agent außerhalb seines Worktrees Schaden am Host angerichtet hätte. Die Vorfälle vom 11./17.07. waren Zuordnungs-, Completion- und Gate-Fehler. Diese Entscheidung ist <b>produkt- und claim-getrieben, nicht vorfallgetrieben</b> — und muss sich dementsprechend über Betriebsnutzen und Außendarstellung rechtfertigen, nicht über eine belegte Fehlerklasse.</td></tr>
+  <tr><td>Entfernt der Baustein eine Ursache?</td>
+      <td><b>Ja, eine strukturelle.</b> Er trennt den Schreibbereich des Agenten hart statt per Konvention — für die in §4.1 benannte offene Kontrolle ist es die erste echte Grenze. Er entfernt keine der bereits behobenen Ursachen und ersetzt keine bestehende Kontrolle.</td></tr>
+  <tr><td>Ist der Betrieb messbar?</td>
+      <td><b>Noch nicht.</b> Nötig vor dem Default-Schalter: Startzeit je Run (Container vs. host-direkt), Fehlerrate, Ressourcenverbrauch, Anteil abgebrochener Runs. Ohne diese Messung darf E4 nicht auf „Default" gestellt werden.</td></tr>
+  <tr><td>Kann bestehende Infrastruktur den Zweck erfüllen?</td>
+      <td><b>Teilweise.</b> Worktree-Isolation deckt die Arbeitstrennung, cgroups decken Ressourcen. Beide decken <em>nicht</em> Host-Dateien außerhalb des Worktrees und fremde Credentials. Die Lücke ist damit benannt statt behauptet — und exakt so groß wie E1/E2, nicht größer.</td></tr>
+  <tr><td>Hat die Übergangslösung ein Ende?</td>
+      <td><b>Bewusst nein — und das ist einzupreisen.</b> Host-direkt bleibt dauerhaftes Opt-out, ist also keine Übergangslösung, sondern ein zweiter, dauerhaft zu pflegender Ausführungspfad. Jeder Pfad muss getestet, dokumentiert und supportet werden; diese Dauerkosten gehören in E4 und E5 zur Abwägung.</td></tr>
+</table>
 <div class="box warn">
-  <ul>
-    <li><b>Mount-Strategie:</b> Ein großer Mount des gesamten Projekt-Roots vs. selektive Repo-Mounts je Task? Beeinflusst Sicherheit und Reibung direkt.</li>
-    <li><b>Credential-Weg:</b> Token-Passthrough (einfach, aber Token im Container) vs. Credential-Proxy außerhalb des Containers (sicherer, mehr Bau)?</li>
-    <li><b>Image-Herkunft:</b> Gepflegtes Basis-Image mit vorinstallierten CLIs (schneller Start, Pull nötig) vs. Build-on-first-run (kein Pull, langsamer erster Start)?</li>
-    <li><b>Rollout:</b> Container-Default sofort für Neu-Installationen, oder erst als Opt-in bis die Reibung nachweislich gelöst ist?</li>
-  </ul>
+  <h4>Konsequenz aus der Probe</h4>
+  <p>Die Entscheidung besteht die Prüfung nicht als „Härtung gegen eine belegte Fehlerklasse", sondern nur als <b>Produktentscheidung mit Sicherheitsnutzen</b>. Das ist zulässig — verlangt aber die dort geforderte Disziplin: Messbarkeit vor dem Default (E4), keine zweite dauerhafte Steuerungsebene neben der bestehenden (E6), und ein benannter Träger je Pfad. Die Alternative — Container als Option ohne Default-Anspruch — bleibt bis Phase 2 legitim.</p>
 </div>
-<p class="dim">Sobald diese vier entschieden sind, wird Phase 1/2 zu konkreten Karten. Bis dahin dient dieses Dokument als gemeinsame Grundlage — änderbar, sobald sich das Zielbild schärft.</p>
+
+<h2 id="offen"><span class="no">8</span>Offene Entscheidungen (Robert)</h2>
+<p>Sechs Weichen. E1–E4 sind die klassischen vier — die Begleitseite <b>Container-Isolation: Grundlagen und die vier Grundsatzfragen</b> (<code>container-grundlagen/</code> in dieser Workbench) erklärt sie visuell von Grund auf; hier stehen sie in Entscheidungsform mit Konsequenz und Empfehlung. E5 und E6 sind neu und kommen aus dem Code-Befund (§5) bzw. dem Abgleich (§7) — sie waren bisher nicht sichtbar, blockieren die Taktung aber genauso.</p>
+
+<h3>E1 · Mount-Strategie — was sieht der Agent vom Dateisystem?</h3>
+<p>Der Agent arbeitet nicht im Repo-Root, sondern in einem <b>verlinkten Worktree</b> aus einem geteilten Klon (lokal <code>ass-worktrees</code>, remote <code>&lt;projektcache&gt;/worktrees/&lt;taskKey&gt;</code> aus <code>SharedRepoPath</code>). Das prägt die Frage stärker als die naive Alternative „ganzer Ordner vs. ein Repo": Ein verlinkter Worktree enthält <em>keine</em> eigene Objektdatenbank — seine <code>.git</code>-Datei zeigt auf den geteilten Klon. Wird nur der Worktree gemountet, funktioniert im Container kein einziges Git-Kommando.</p>
+<table>
+  <tr><th>Option</th><th>Was in den Container kommt</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Großer Mount</b></td><td>Ganzer Projekt-Root</td><td>Einmal eingerichtet, alles läuft. Der Container sieht aber Nachbar-Repos und alles, was sonst dort liegt — die Isolation ist dann eine Behauptung. Schwächt den Claim, den die Entscheidung tragen soll.</td></tr>
+  <tr><td><b>B · Worktree + geteilter Klon</b></td><td>Task-Worktree <em>und</em> die <code>.git</code>-Ablage des geteilten Klons, pfadgleich gemountet</td><td>Passt exakt zum heutigen Aufbau, keine Änderung an der Git-Mechanik. Preis: Der Container sieht über den geteilten Klon <b>alle Branches und die gesamte Historie des Projekts</b> — für ein einzelnes Projekt akzeptabel, projektübergreifend nicht. Pfadgleichheit (Host-Pfad = Container-Pfad) wird zur harten Konvention.</td></tr>
+  <tr><td><b>C · Container-eigener Klon</b></td><td>Nichts vom Host-Repo; der Container klont/fetcht die Basis-SHA selbst in ein Volume</td><td>Sauberste Grenze und die einzige Variante, die auch die Historie begrenzt (Shallow/Single-Branch möglich). Preis: Klonzeit und Plattenplatz je Run, und das Ergebnis muss über einen definierten Kanal zurück — was E2 und den Outbox-Gedanken aus §7 sofort mitentscheidet.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Empfehlung: B als Startpunkt, C als Zielbild</h4>
+  <p>B ist der kürzeste Weg zu einem laufenden Container-Flow, weil die Git-Mechanik unangetastet bleibt — und liefert schon den Hauptgewinn: der Agent sieht keine fremden Projekte und keine Host-Credentials mehr. C ist die Variante, die den Claim vollständig trägt, hängt aber an E2. A widerspricht dem Zweck der Entscheidung und sollte nur als dokumentierter Notausgang existieren.</p>
+</div>
+<p class="ev"><b>Blockiert:</b> den gesamten Container-Flow (Phase 1). <b>Bezug:</b> §5 „Repo &amp; Credentials", Verteilte Ausführung §4.1.</p>
+
+<h3>E2 · Credential-Weg — wie kommt der Agent an Git und Tokens, ohne sie zu besitzen?</h3>
+<p>Zwei Credential-Klassen, die getrennt zu entscheiden sind: <b>CLI-Auth</b> (Codex/Claude-Anmeldung) und <b>Git-Push-Recht</b>. Für die erste existiert bereits ein passender Träger: die Config-Home-Isolation legt pro Lauf ein Temp-Verzeichnis mit ausschließlich <code>auth.json</code>/<code>config.toml</code> bzw. <code>.credentials.json</code>/<code>settings.json</code> an (§5, CAR). Genau dieses Verzeichnis wird gemountet — nicht das Home. Für die zweite gilt die Randbedingung aus §7: „Keine Ambient-Push-Credentials" ist bereits geltende Linie.</p>
+<table>
+  <tr><th>Option</th><th>Wirkung</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Passthrough</b></td><td>Token liegt im Container</td><td>Geringer Bauaufwand. Ein kompromittierter Agent hat das Token direkt. Beim Git-Push-Recht wäre das ein Rückschritt hinter AGT-2183 — beim CLI-Auth-Token dagegen unvermeidlich, weil das CLI es braucht.</td></tr>
+  <tr><td><b>B · Proxy / Helper außerhalb</b></td><td>Token bleibt auf dem Host, der Container nutzt es über einen Vermittler</td><td>Der Agent <em>benutzt</em> die Berechtigung, ohne sie zu <em>besitzen</em>; Widerruf ohne Container-Neubau. Höherer Bauaufwand (Credential-Helper über Socket).</td></tr>
+  <tr><td><b>C · Kein Push aus dem Container</b></td><td>Der Container hat gar kein Git-Remote-Recht; committen/pushen tut die Plattform außerhalb</td><td>Deckt sich exakt mit dem Outbox-Zielbild (AGT-2183) und macht das Fencing-Prinzip strukturell wahr statt vereinbart. Verlangt, dass der Ergebnistransfer aus dem Container definiert ist — bei E1/B trivial (gemeinsamer Worktree), bei E1/C zu bauen.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Empfehlung: Getrennt entscheiden — CLI-Auth über den isolierten Config-Home (A, minimiert), Git-Push nach C</h4>
+  <p>Das CLI-Token muss in den Container, aber nur in Gestalt des ohnehin schon minimierten Per-Run-Config-Homes. Das Git-Push-Recht muss <b>nicht</b> hinein: Wenn die Plattform ohnehin der einzige legitime Schreiber der Git-Historie ist, ist der Container ohne Remote-Recht die konsequente Umsetzung — und ganz nebenbei die günstigste, weil kein Proxy gebaut werden muss. Der Proxy (B) bleibt die Antwort, falls Agenten doch selbst pushen können sollen.</p>
+</div>
+<p class="ev"><b>Blockiert:</b> Push/Pull im Container, damit den Ergebnisvertrag. <b>Bezug:</b> Verteilte Ausführung §2.5, §4 (Outbox, AGT-2183).</p>
+
+<h3>E3 · Image-Herkunft — woraus wird der Container gebaut?</h3>
+<table>
+  <tr><th>Option</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Gepflegtes Basis-Image (Pull)</b></td><td>Erststart in Sekunden — der Wow-Moment, den der D5-Meilenstein („Download + einfaches Onboarding") braucht. Preis: Image bauen, versionieren, hosten; Registry-Abhängigkeit; eine weitere Artefaktlinie in der Release-Pipeline.</td></tr>
+  <tr><td><b>B · Build-on-first-run</b></td><td>Keine Registry, kein Pull, funktioniert offline. Preis: erster Start dauert Minuten (alle CLIs werden installiert) und schlägt bei Netzproblemen genau im Erstkontakt fehl.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Empfehlung: A vorwählen, B als Fallback mitliefern</h4>
+  <p>Beides anbieten kostet wenig, weil das Dockerfile ohnehin entsteht. Zusatzfrage, die mitentschieden werden muss: <b>Versionsbindung der CLIs im Image.</b> Ein Image mit eingefrorenen CLI-Versionen macht Läufe reproduzierbar (gut für die hermetische Verifikation), verlangt aber einen Aktualisierungsrhythmus — sonst arbeiten Nutzer monatelang mit veralteten Agenten.</p>
+</div>
+<p class="ev"><b>Blockiert:</b> Onboarding-Tempo, Installer (AGT-2334/2305). <b>Bezug:</b> Release-Archive Tranche 0.4.</p>
+
+<h3>E4 · Rollout — für wen ist Container ab wann der Default?</h3>
+<p>Die Entscheidung, die den Titel dieses Dokuments trägt: „Container-Default" ist beschlossen (§1) — offen ist der <b>Zeitpunkt</b> und die <b>Bedingung</b>, ab der die Vorauswahl umgestellt wird.</p>
+<table>
+  <tr><th>Option</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Sofort Default für Neu-Installationen</b></td><td>Klare Botschaft, der Claim ist ab Tag eins belegt. Risiko: Die Mount-/Credential-Reibung trifft neue Nutzer im Erstkontakt — der teuerste Moment für einen Fehlschlag.</td></tr>
+  <tr><td><b>B · Opt-in, dann Default</b></td><td>Der Installer zeigt Container als empfohlene Option, schaltet die Vorauswahl aber erst nach belegtem Betrieb um. Kostet Zeit bis zur Claim-Einlösung, schützt aber den Erstkontakt.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Empfehlung: B mit benannter Umschaltbedingung</h4>
+  <p>„Wenn es rundläuft" ist keine Bedingung, sondern ein Gefühl. Aus §7 ergibt sich eine prüfbare Fassung: <b>Umgeschaltet wird, wenn N aufeinanderfolgende Container-Läufe einen gültigen Attempt-Record und einen verifizierten Push erzeugt haben und die Startzeit-Differenz zu host-direkt gemessen und akzeptiert ist.</b> Diese Zahl und die Schwelle sind Teil der Entscheidung — sie gehören in die Karte, nicht in eine spätere Diskussion.</p>
+</div>
+<p class="ev"><b>Blockiert:</b> nichts technisch — steuert die Reihenfolge und die Außendarstellung (§5 Marketing/Website).</p>
+
+<h3>E5 · Spawn-Pfade — Konvergenz auf CAR <span class="pill done">entschieden 26.07.</span></h3>
+<p>Der Code-Befund aus §5: Es gibt heute drei Spawn-Implementierungen (lokal im Backend, im Remote-Daemon, in CAR) — und die produktiven zwei teilen keinen gemeinsamen Ausführungskern. Der Container-Spawn müsste also zweimal gebaut werden.</p>
+<div class="box accent">
+  <h4>Entscheidung: CAR wird benutzt (Option C)</h4>
+  <p>Diese Frage war streng genommen nie offen — das Zielbild (§4/§10/§13.6 der Target-Architecture) legt CAR als Ausführungsschicht des Runner-Deployables fest. Der Ist-Zustand ist ein Drift, kein Entwurfsspielraum. Robert am 26.07.: <em>„CAR ist eine hilfreiche, sinnvolle Abstraktion — ich möchte, dass CAR genutzt wird."</em></p>
+  <p>Getaktet als Kette: <b>AGT-2370</b> Runner-Daemon auf CAR (2-ready) → <b>AGT-2371</b> lokale Ausführungsschicht → <b>AGT-2372</b> Parity-Suite + Guard-Test gegen einen zweiten Invocation-Pfad → <b>AGT-2373</b> Aufräumen, ADR, Doku. Erst nach belegter Parity (2372) wird alter Code entfernt (2373); die Adoption läuft flag-gated, weil beide Pfade produktiv sind.</p>
+</div>
+<p class="dim">Die Optionen bleiben als Begründung stehen — sie zeigen, warum die teurere Variante die richtige ist.</p>
+<table>
+  <tr><th>Option</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Beide Stellen einzeln container-fähig machen</b></td><td>Schnellster Weg zu einem laufenden lokalen Container-Flow; keine Refactoring-Vorleistung. Preis: Zwei Implementierungen driften auseinander — genau das Muster, das bereits einmal zu Verhaltensunterschieden zwischen lokal und remote geführt hat. Jede spätere Änderung (Mounts, Image-Version, Env) muss doppelt gepflegt werden.</td></tr>
+  <tr><td><b>B · Vorher auf einen Ausführungskern konvergieren</b></td><td>Ein Ort, an dem aus „was soll laufen" ein Prozess wird — Placement, Mounts und Config-Home werden einmal implementiert. Preis: Die Konvergenz ist eigene, nicht kleine Arbeit und verzögert den ersten Container-Lauf. Sie berührt den Remote-Daemon, der laut Betriebsbedingung (§7) gerade stabil läuft.</td></tr>
+  <tr><td><b>C · Konvergenz auf die CAR-Engine</b></td><td>Sonderfall von B: Das Studio adoptiert <code>CliRunEngine</code> statt der eigenen Ausführungsschicht — dann wäre der Container-Spawner tatsächlich „in CAR" die richtige Stelle, und die Library bekäme das Feature für ihre eigenen Konsumenten gleich mit. Preis: die größte Vorleistung, und die Library müsste die in §5 genannten host-gebundenen Vorstufen container-fähig machen.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Warum C und nicht A</h4>
+  <p>A wäre der schnellere Weg zum ersten Container-Lauf, führt aber dazu, dass Mounts, Image-Version, Env-Härtung und Kill-Pfad dauerhaft doppelt gepflegt werden — bei zwei Implementierungen, die schon heute unterschiedlich viel können (typisierte Events lokal, rohe Zeilen remote). C dreht das Verhältnis um: Die Container-Arbeit entsteht einmal in der Ausführungsschicht und wirkt für lokal und remote gleichzeitig. Die Library-Investition kommt zusätzlich den anderen CAR-Konsumenten zugute. Der Preis ist die Vorleistung — deshalb steht die Kette <em>vor</em> Phase 2 und nicht in einem späteren Aufräumticket.</p>
+</div>
+<p class="ev"><b>Blockiert:</b> Phase 2 (Container-Spawn). <b>Träger:</b> AGT-2370 · 2371 · 2372 · 2373. <b>Beleg:</b> Target-Architecture §4, §10, §13.6.</p>
+
+<h3>E6 · Verifikation — läuft das Gate im selben Container-Modell? <span class="pill open">neu</span></h3>
+<p>Aus dem Abgleich (§7): Die Gate-Isolation hat bereits einen eigenen Mechanismus — exakte Subjekt-SHA im Wegwerf-Worktree, heute über die SSH-Brücke, künftig über claimbare Remote-Schritte (AGT-2229). Container-Isolation und Gate-Isolation lösen benachbarte Probleme mit unterschiedlichen Mitteln.</p>
+<table>
+  <tr><th>Option</th><th>Konsequenz</th></tr>
+  <tr><td><b>A · Gate bleibt wie es ist</b></td><td>Kein Eingriff in einen gerade stabilisierten Pfad. Preis: zwei Isolationsmechanismen dauerhaft nebeneinander — der Fall, den §5.4 dort ausdrücklich als „Weiterführen oder vereinfachen"-Kriterium führt.</td></tr>
+  <tr><td><b>B · Gate läuft im selben Container-Modell</b></td><td>Ein Mechanismus, ein Image, eine Ressourcengrenze; die Reproduzierbarkeit der Tests gewinnt (feste Toolchain im Image). Preis: Das Gate braucht dann Build- und Test-Tooling im Image, was es deutlich größer macht als ein reines Agent-Image — oder ein zweites Image.</td></tr>
+  <tr><td><b>C · Getrennte Images, gemeinsames Placement</b></td><td>Agent-Image und Gate-Image getrennt, aber dieselbe Placement-Logik und dieselbe Host-Verwaltung. Kompromiss: ein Steuerungsmodell, zwei Artefakte.</td></tr>
+</table>
+<div class="box ok">
+  <h4>Empfehlung: C — und die Frage vor AGT-2229 beantworten</h4>
+  <p>Die Trennung der Images ist sachlich richtig (ein Agent braucht kein volles Build-Tooling, ein Gate keinen CLI-Agenten), die Trennung der <em>Steuerung</em> wäre der Fehler. Wichtig ist der Zeitpunkt: AGT-2229 ersetzt gerade die SSH-Brücke. Wird dort ohne Kenntnis dieser Entscheidung gebaut, entsteht der Doppelmechanismus, den man danach wieder abräumen muss. <b>E6 gehört vor den Zuschnitt von AGT-2229.</b></p>
+</div>
+<p class="ev"><b>Blockiert:</b> den Zuschnitt von AGT-2229 (Verteilte Ausführung §5, Phase 2 dort).</p>
+
+<h3>Entscheidungsmatrix</h3>
+<table>
+  <tr><th>Nr.</th><th>Entscheidung</th><th>Charakter</th><th>Empfehlung</th><th>Blockiert</th><th>Fällig</th></tr>
+  <tr><td><b>E1</b></td><td>Mount-Strategie</td><td>Sicherheit</td><td>B (Worktree + geteilter Klon), C als Zielbild</td><td>Container-Flow</td><td>vor Phase 1</td></tr>
+  <tr><td><b>E2</b></td><td>Credential-Weg</td><td>Sicherheit</td><td>CLI-Auth über isolierten Config-Home; kein Push-Recht im Container</td><td>Ergebnisvertrag</td><td>vor Phase 1</td></tr>
+  <tr><td><b>E3</b></td><td>Image-Herkunft</td><td>Erlebnis</td><td>A (Pull), B als Fallback; CLI-Versionsbindung mitentscheiden</td><td>Installer</td><td>vor Phase 2</td></tr>
+  <tr><td><b>E4</b></td><td>Rollout-Zeitpunkt</td><td>Tempo/Risiko</td><td>Opt-in → Default mit prüfbarer Umschaltbedingung</td><td>Außendarstellung</td><td>vor Phase 4/5</td></tr>
+  <tr><td><b>E5</b></td><td>Spawn-Pfad-Konvergenz</td><td>Architektur</td><td><b>entschieden:</b> Konvergenz auf CAR (AGT-2370 … 2373)</td><td>Phase 2</td><td><span class="pill done">26.07.</span></td></tr>
+  <tr><td><b>E6</b></td><td>Gate im Container</td><td>Architektur</td><td>C (getrennte Images, gemeinsames Placement)</td><td>AGT-2229</td><td>vor AGT-2229</td></tr>
+</table>
+<p class="dim">E1 und E2 sind die Sicherheitssubstanz — sie entscheiden, ob „isoliert" ein ehrlicher Claim wird. E3 und E4 sind Erlebnis und Tempo. E5 und E6 sind Architekturhygiene: Sie bestimmen nicht <em>ob</em> Container kommt, sondern ob am Ende ein Mechanismus dasteht oder drei. Sobald diese sechs beantwortet sind, wird Phase 1/2 zu konkreten Karten; bis dahin ist dieses Dokument die gemeinsame Grundlage — änderbar, sobald sich das Zielbild schärft.</p>
 
 </main>
 </body>
