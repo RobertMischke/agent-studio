@@ -33,7 +33,17 @@ export type HostHeartbeatStatus =
   | 'retired';
 
 /** Operator actions offered per host row. */
-export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete';
+export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete' | 'capacity';
+export type HostRampStrategy = 'conservative' | 'balanced' | 'aggressive';
+
+export interface RuntimeCapacitySettings {
+  hostId: string;
+  maxParallelism: number;
+  targetLoadPercent: number;
+  rampStrategy: HostRampStrategy;
+  version: number;
+  updatedAt: string;
+}
 
 /**
  * Per-CLI quota window lifted from the runner's quota probe. One row per CLI
@@ -183,6 +193,12 @@ export interface RemoteHost {
   retireRequestedAt?: string | null;
   capabilityHealth?: readonly RemoteHostCapabilityHealth[];
   hostAdmission?: RemoteHostAdmission | null;
+  /** Task Server host key and its centrally managed runtime slot policy. */
+  capacityHostId?: string | null;
+  runtimeCapacity?: RuntimeCapacitySettings | null;
+  /** Latest capacity value reported as adopted by this daemon process. */
+  effectiveMaxParallelism?: number | null;
+  runtimeCapacityAppliedAt?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

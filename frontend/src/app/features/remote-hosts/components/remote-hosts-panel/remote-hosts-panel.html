@@ -53,6 +53,7 @@
         [now]="now()"
         [boardActiveSlots]="boardSlots(host)"
         (action)="onAction($event)"
+        (capacityChange)="onCapacityChange($event)"
         (setup)="openSetup($event)" />
     }
   </div>

@@ -42,6 +42,24 @@ public static class TaskServerEndpoints
         api.MapPost("/projects", async (HttpContext context, CreateProjectRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CreateProjectAsync(request, Actor(context), ct), StatusCodes.Status201Created));
 
+        var hosts = api.MapGroup("/hosts");
+        hosts.MapGet("/{hostId}/runtime-capacity", async (
+            string hostId,
+            RuntimeCapacitySettingsService capacity,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => capacity.GetAsync(hostId, ct)));
+        hosts.MapPut("/{hostId}/runtime-capacity", async (
+            HttpContext context,
+            string hostId,
+            UpdateRuntimeCapacitySettingsRequest request,
+            RuntimeCapacitySettingsService capacity,
+            CancellationToken ct)
+            => await InvokeAsync(() => capacity.UpdateAsync(
+                hostId,
+                request,
+                Actor(context),
+                ct)));
+
         api.MapGet("/projects/{projectId}/tasks", async (string projectId, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListTasksAsync(projectId, ct)));
         api.MapGet("/projects/{projectId}/tasks/{taskIdentity}", async (string projectId, string taskIdentity, TaskServerStore store, CancellationToken ct)

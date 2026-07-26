@@ -3,6 +3,7 @@ import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind, RemoteHost } from '../../models/remote-host.model';
+import type { RuntimeCapacityChange } from '../runtime-capacity-editor/runtime-capacity-editor';
 import { boardRemoteSlotsForHost, deriveBoardRunningTruth } from '../../models/running-truth';
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
@@ -96,6 +97,15 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   completeWizard(host: ProvisionedHostDraft): void {
     this.service.addProvisionedHost(host.name, host.address);
     this.wizardOpen.set(false);
+  }
+
+  onCapacityChange(change: RuntimeCapacityChange): void {
+    this.service.setCapacity(
+      change.id,
+      change.maxParallelism,
+      change.targetLoadPercent,
+      change.rampStrategy,
+    );
   }
 
   onAction(evt: { kind: HostActionKind; id: string }): void {

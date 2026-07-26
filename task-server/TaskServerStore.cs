@@ -11,7 +11,7 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -481,6 +481,8 @@ public sealed partial class TaskServerStore
 
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
+        var bootstrapMaxParallelism = Math.Clamp(request.BootstrapMaxParallelism, 1, 256);
+        RuntimeCapacitySettingsDto? runtimeCapacity = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var existingCapabilitiesJson = Convert.ToString(
@@ -505,8 +507,13 @@ public sealed partial class TaskServerStore
                         "A registered coding or review service identity cannot remove or change its executor role.");
             }
             await ExecuteAsync(connection, """
-                INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version, capabilities_json, status, registered_at, last_seen_at)
-                VALUES ($id, $name, $host, $instance, $version, $protocol, $capabilities, 'active', $now, $now)
+                INSERT INTO runners(
+                    id, name, host_id, instance_id, runner_version, protocol_version,
+                    capabilities_json, status, registered_at, last_seen_at,
+                    effective_max_parallelism, runtime_capacity_applied_at)
+                VALUES (
+                    $id, $name, $host, $instance, $version, $protocol,
+                    $capabilities, 'active', $now, $now, $bootstrap, $now)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     host_id = excluded.host_id,
@@ -519,12 +526,45 @@ public sealed partial class TaskServerStore
                 """, ct, transaction,
                 ("$id", id), ("$name", request.Name.Trim()), ("$host", request.HostId.Trim()),
                 ("$instance", request.InstanceId.Trim()), ("$version", request.RunnerVersion),
-                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)), ("$now", now));
+                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)),
+                ("$bootstrap", bootstrapMaxParallelism), ("$now", now));
+            await ExecuteAsync(connection, """
+                INSERT INTO runtime_capacity_settings(
+                    host_id, max_parallelism, target_load_percent, ramp_strategy,
+                    version, updated_at)
+                VALUES ($host, $max, 80, 'balanced', 1, $now)
+                ON CONFLICT(host_id) DO NOTHING;
+                """, ct, transaction,
+                ("$host", request.HostId.Trim()),
+                ("$max", bootstrapMaxParallelism),
+                ("$now", now));
+            runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
+                connection,
+                transaction,
+                request.HostId.Trim(),
+                ct);
+            await ExecuteAsync(connection, """
+                UPDATE runners
+                   SET effective_max_parallelism = $effective,
+                       runtime_capacity_applied_at = $now
+                 WHERE id = $id;
+                """, ct, transaction,
+                ("$effective", runtimeCapacity!.MaxParallelism),
+                ("$now", now),
+                ("$id", id));
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
-                JsonSerializer.Serialize(new { request.HostId, request.InstanceId, request.RunnerVersion, request.ProtocolVersion }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    request.HostId,
+                    request.InstanceId,
+                    request.RunnerVersion,
+                    request.ProtocolVersion,
+                    bootstrapMaxParallelism,
+                    runtimeCapacity?.MaxParallelism,
+                }), ct);
         }, ct);
         return new RunnerDto(id, request.Name.Trim(), request.HostId.Trim(), request.InstanceId.Trim(), request.RunnerVersion,
-            request.ProtocolVersion, "active", Parse(now), Parse(now));
+            request.ProtocolVersion, "active", Parse(now), Parse(now), runtimeCapacity);
     }
 
     public async Task<ClaimResponse> ClaimAsync(ClaimRequest request, string actorId, CancellationToken ct)
@@ -544,6 +584,13 @@ public sealed partial class TaskServerStore
                 connection, transaction, request.RunnerId, request.InstanceId, ct);
             var capabilityRunner = await ReadCapabilityRunnerAsync(
                 connection, transaction, request.RunnerId, request.InstanceId, ct);
+            var runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
+                connection,
+                transaction,
+                capabilityRunner.HostId,
+                ct)
+                ?? throw new InvalidOperationException(
+                    $"Runtime capacity is missing for host '{capabilityRunner.HostId}'.");
             var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
                 connection,
                 transaction,
@@ -551,12 +598,32 @@ public sealed partial class TaskServerStore
                 capabilityRunner.HostId,
                 request.RequiredCapabilities,
                 ct);
-            await ExecuteAsync(connection, "UPDATE runners SET last_seen_at = $now WHERE id = $id;", ct, transaction,
-                ("$now", Iso(UtcNow)), ("$id", request.RunnerId));
+            var reportedMaxParallelism = request.EffectiveMaxParallelism is >= 1 and <= 256
+                ? request.EffectiveMaxParallelism
+                : null;
+            await ExecuteAsync(connection, """
+                UPDATE runners
+                   SET last_seen_at = $now,
+                       effective_max_parallelism = COALESCE($effective, effective_max_parallelism),
+                       runtime_capacity_applied_at = CASE
+                           WHEN $effective IS NOT NULL
+                            AND (effective_max_parallelism IS NULL OR effective_max_parallelism <> $effective)
+                           THEN $now
+                           ELSE runtime_capacity_applied_at
+                       END
+                 WHERE id = $id;
+                """, ct, transaction,
+                ("$now", Iso(UtcNow)),
+                ("$effective", reportedMaxParallelism),
+                ("$id", request.RunnerId));
 
             if (!capabilityAdmission.Eligible)
             {
-                response = new ClaimResponse("empty", Message: capabilityAdmission.Message);
+                response = new ClaimResponse(
+                    "empty",
+                    Message: capabilityAdmission.Message,
+                    ReconciliationActions: reconciliationActions,
+                    RuntimeCapacity: runtimeCapacity);
                 return;
             }
             if (request.AvailableSlots <= 0)
@@ -564,7 +631,23 @@ public sealed partial class TaskServerStore
                 response = new ClaimResponse(
                     "empty",
                     Message: "Runner has no available execution slot.",
-                    ReconciliationActions: reconciliationActions);
+                    ReconciliationActions: reconciliationActions,
+                    RuntimeCapacity: runtimeCapacity);
+                return;
+            }
+            var occupiedHostSlots = await CountOccupiedHostSlotsAsync(
+                connection,
+                transaction,
+                capabilityRunner.HostId,
+                ct);
+            if (occupiedHostSlots >= runtimeCapacity.MaxParallelism)
+            {
+                response = new ClaimResponse(
+                    "empty",
+                    Message:
+                        $"Host runtime capacity is full ({occupiedHostSlots}/{runtimeCapacity.MaxParallelism}).",
+                    ReconciliationActions: reconciliationActions,
+                    RuntimeCapacity: runtimeCapacity);
                 return;
             }
 
@@ -587,7 +670,8 @@ public sealed partial class TaskServerStore
                 response = new ClaimResponse(
                     "empty",
                     Message: "No admissible task is ready.",
-                    ReconciliationActions: reconciliationActions);
+                    ReconciliationActions: reconciliationActions,
+                    RuntimeCapacity: runtimeCapacity);
                 return;
             }
 
@@ -637,7 +721,8 @@ public sealed partial class TaskServerStore
                 lease,
                 ReconciliationActions: reconciliationActions,
                 RequiredCapabilities: capabilityAdmission.Required,
-                CanaryCapabilities: capabilityAdmission.Canaries);
+                CanaryCapabilities: capabilityAdmission.Canaries,
+                RuntimeCapacity: runtimeCapacity);
         }, ct);
         return response!;
     }
@@ -1764,7 +1849,17 @@ public sealed partial class TaskServerStore
                 capabilities_json TEXT NOT NULL,
                 status TEXT NOT NULL,
                 registered_at TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL
+                last_seen_at TEXT NOT NULL,
+                effective_max_parallelism INTEGER,
+                runtime_capacity_applied_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS runtime_capacity_settings(
+                host_id TEXT PRIMARY KEY,
+                max_parallelism INTEGER NOT NULL,
+                target_load_percent INTEGER NOT NULL,
+                ramp_strategy TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS runner_capabilities(
                 runner_id TEXT NOT NULL REFERENCES runners(id),
@@ -2016,6 +2111,17 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
+        await ExecuteAsync(connection, """
+            INSERT INTO runtime_capacity_settings(
+                host_id, max_parallelism, target_load_percent, ramp_strategy,
+                version, updated_at)
+            SELECT host_id, 2, 80, 'balanced', 1, $now
+              FROM runners
+             GROUP BY host_id
+            ON CONFLICT(host_id) DO NOTHING;
+            """, ct, ("$now", Iso(UtcNow)));
         await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;

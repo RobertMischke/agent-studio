@@ -6,7 +6,26 @@ public sealed record RegisterRunnerRequest(
     string InstanceId,
     string RunnerVersion,
     int ProtocolVersion,
-    IReadOnlyList<string>? Capabilities = null);
+    IReadOnlyList<string>? Capabilities = null,
+    int BootstrapMaxParallelism = 2);
+
+/// <summary>
+/// Server-owned runtime admission policy for one execution host. Projects use
+/// this shared host policy and do not create independent capacity ceilings.
+/// </summary>
+public sealed record RuntimeCapacitySettingsDto(
+    string HostId,
+    int MaxParallelism,
+    int TargetLoadPercent,
+    string RampStrategy,
+    long Version,
+    DateTime UpdatedAt);
+
+public sealed record UpdateRuntimeCapacitySettingsRequest(
+    int MaxParallelism,
+    int TargetLoadPercent,
+    string RampStrategy,
+    long ExpectedVersion);
 
 public sealed record RunnerDto(
     string RunnerId,
@@ -17,7 +36,8 @@ public sealed record RunnerDto(
     int ProtocolVersion,
     string Status,
     DateTime RegisteredAt,
-    DateTime LastSeenAt);
+    DateTime LastSeenAt,
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null);
 
 public sealed record ClaimRequest(
     string RunnerId,
@@ -25,7 +45,8 @@ public sealed record ClaimRequest(
     int RequestedTtlSeconds = 120,
     int AvailableSlots = 1,
     RunnerProcessInventory? Inventory = null,
-    IReadOnlyList<string>? RequiredCapabilities = null);
+    IReadOnlyList<string>? RequiredCapabilities = null,
+    int? EffectiveMaxParallelism = null);
 
 public sealed record ClaimResponse(
     string Status,
@@ -35,7 +56,8 @@ public sealed record ClaimResponse(
     string? Message = null,
     IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
     IReadOnlyList<string>? RequiredCapabilities = null,
-    IReadOnlyList<string>? CanaryCapabilities = null);
+    IReadOnlyList<string>? CanaryCapabilities = null,
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null);
 
 public sealed record LeaseDto(
     string LeaseId,

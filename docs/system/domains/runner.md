@@ -93,8 +93,9 @@ state.
   intervention primitives.
 - `runner/*`: the standalone `agent-host` daemon. A dependency-free console
   process that runs as either a separately registered `coding` or `review`
-  service. Coding continuously claims server-assigned projects with bounded
-  host slots (default 2), fenced leases + heartbeat, per-task linked git
+  service. Coding continuously claims server-assigned projects with centrally
+  managed bounded host slots (`RUNNER_MAX_PARALLELISM` is bootstrap/fallback
+  only), fenced leases + heartbeat, per-task linked git
   worktrees, log/artifact upload, and fenced normal completion into auto-review.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
@@ -220,6 +221,15 @@ state.
   and load include both pools and unrelated processes, so neither is inferred
   from lane membership or from CPU percentage. This keeps claim/lane drift
   visible instead of silently folding it into a slot count.
+
+- `RuntimeCapacitySettingsService` in the Task Server owns the versioned host
+  ceiling, target load, and ramp strategy. The first Runner registration seeds
+  it from the bootstrap value; later registrations and every Coding claim
+  inherit it. Admission counts active Coding RUN authority across every Runner
+  process on that host. Capacity changes take effect without a daemon restart
+  and never cancel already-running work. Projects consume the shared host
+  ceiling and do not own independent capacity settings. Review GATE work
+  remains governed by its separate pool and does not consume a RUN slot.
 
 - Linux host resource enforcement belongs to agent-host-managed systemd units,
   separately for Coding and Review. Host-level cgroups are the hard CPU and I/O
