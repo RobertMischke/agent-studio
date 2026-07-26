@@ -378,12 +378,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         Assert.NotNull(completion);
         Assert.Equal(TaskStates.Escalated, completion!.TargetState);
-        Assert.Contains("without a stated reason", completion.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reported that it could not continue", completion.Message, StringComparison.OrdinalIgnoreCase);
         var folder = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
         Assert.True(Directory.Exists(folder));
         var status = File.ReadAllText(Path.Combine(folder, "status.md"));
         Assert.Contains("agent-blocked", status);
-        Assert.Contains("without a stated reason", status, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reported that it could not continue", status, StringComparison.OrdinalIgnoreCase);
         var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, ProjectName));
         Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
         Assert.Contains("[agent-blocked]", decision.Reason);
@@ -1333,6 +1333,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]));
@@ -1531,6 +1532,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]));
@@ -1703,6 +1705,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Contract.TaskServerProtocol.Current,
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]),

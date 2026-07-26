@@ -137,6 +137,7 @@ public sealed class TaskServerClient : IDisposable
                     Contract.ReviewCapabilities.SourceBundleMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                     Contract.ReviewCapabilities.VisionReview,
+                    Contract.ReviewCapabilities.BaselineComparison,
                 }
                 : new[]
                 {

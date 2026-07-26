@@ -97,12 +97,13 @@ export class WorkspaceSettingsService {
   private readonly _draggingProjectId = signal<string | null>(null);
   private readonly _draggingFromWorkspaceId = signal<string | null>(null);
   private readonly _dragOverWorkspaceId = signal<string | null>(null);
-  private readonly _dropBusy = signal(false);
+  private readonly _movingProjectId = signal<string | null>(null);
   private readonly _dropError = signal<string | null>(null);
 
   readonly draggingProjectId = this._draggingProjectId.asReadonly();
   readonly dragOverWorkspaceId = this._dragOverWorkspaceId.asReadonly();
-  readonly dropBusy = this._dropBusy.asReadonly();
+  readonly movingProjectId = this._movingProjectId.asReadonly();
+  readonly dropBusy = computed(() => this._movingProjectId() !== null);
   readonly dropError = this._dropError.asReadonly();
 
   readonly isDragging = computed(() => this._draggingProjectId() !== null);
@@ -111,26 +112,19 @@ export class WorkspaceSettingsService {
     return this._dragOverWorkspaceId() === workspaceId;
   }
 
-  onProjectDragStart(event: DragEvent, projectId: string, sourceWorkspaceId: string): void {
-    if (!event.dataTransfer) return;
-    event.dataTransfer.effectAllowed = 'move';
-    try { event.dataTransfer.setData('text/x-studio-project-id', projectId); } catch { /* ignore */ }
+  onProjectDragStart(projectId: string, sourceWorkspaceId: string | null): void {
     this._draggingProjectId.set(projectId);
     this._draggingFromWorkspaceId.set(sourceWorkspaceId);
     this._dropError.set(null);
   }
 
-  onWorkspaceDragOver(event: DragEvent, targetWorkspaceId: string): void {
+  canDropOnWorkspace(targetWorkspaceId: string): boolean {
     const sourceWs = this._draggingFromWorkspaceId();
-    if (this._draggingProjectId() === null) return;
-    // Same-workspace drop is a no-op; mark drop-effect 'none' to give the
-    // user the standard "no" cursor instead of a misleading 'move' affordance.
-    if (sourceWs === targetWorkspaceId) {
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    return this._draggingProjectId() !== null && sourceWs !== targetWorkspaceId;
+  }
+
+  onWorkspaceDragEnter(targetWorkspaceId: string): void {
+    if (!this.canDropOnWorkspace(targetWorkspaceId)) return;
     if (this._dragOverWorkspaceId() !== targetWorkspaceId) {
       this._dragOverWorkspaceId.set(targetWorkspaceId);
     }
@@ -148,25 +142,18 @@ export class WorkspaceSettingsService {
     this._dragOverWorkspaceId.set(null);
   }
 
-  onWorkspaceDrop(event: DragEvent, targetWorkspaceId: string, targetDisplayName: string): void {
-    event.preventDefault();
-    const projectId = this._draggingProjectId();
-    const sourceWs = this._draggingFromWorkspaceId();
-    this._draggingProjectId.set(null);
-    this._draggingFromWorkspaceId.set(null);
-    this._dragOverWorkspaceId.set(null);
-    if (!projectId) return;
-    if (sourceWs === targetWorkspaceId) return;
-    this._dropBusy.set(true);
+  moveProject(projectId: string, targetWorkspaceId: string, targetDisplayName: string): void {
+    if (this._movingProjectId()) return;
+    this._movingProjectId.set(projectId);
     this._dropError.set(null);
     this.jobService.updateRegistryProject(projectId, { workspaceId: targetWorkspaceId }).subscribe({
       next: () => {
-        this._dropBusy.set(false);
+        this._movingProjectId.set(null);
         this.manager.refreshAfterDelete();
         this.notifications.success(`Moved project to "${targetDisplayName}".`);
       },
       error: (err: unknown) => {
-        this._dropBusy.set(false);
+        this._movingProjectId.set(null);
         this._dropError.set(this.errMsg(err));
         this.notifications.error(`Could not move project: ${this.errMsg(err)}`);
       },

@@ -9,6 +9,7 @@ export { BoardFiltersService, type ActiveFilterPill } from './state/board-filter
 export { LaneCollapseService } from './state/lane-collapse.service';
 export { CreateTaskFormService } from './state/create-task-form.service';
 export { BoardMutationsService } from './state/board-mutations.service';
+export { BoardDragStateService } from './state/board-drag-state.service';
 export { EpicOverviewService } from './state/epic-overview.service';
 
 // components

@@ -1,7 +1,8 @@
-import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api } from '../helpers/api';
+import { test, expect } from '../fixtures/dev-backend';
+import type { Page } from '@playwright/test';
+import { setTheme } from '../helpers/theme';
 
 /**
  * T4a evidence (--real) — the reworked project-level Pipeline page rendered
@@ -24,17 +25,61 @@ function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-let projectSlug = '';
+async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/crash-recovery/pending') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pending: [] }),
+      });
+      return;
+    }
+    if (/^\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [], source: 'pipeline-evidence' }),
+      });
+      return;
+    }
+    if (url.pathname === '/api/cli/quota' || url.pathname === '/api/cli/usage') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(url.pathname.endsWith('/quota')
+          ? { at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] }
+          : { at: new Date().toISOString(), sessions: [] }),
+      });
+      return;
+    }
+    const response = await route.fetch({
+      url: `${baseUrl}${url.pathname}${url.search}`,
+      timeout: 30_000,
+    });
+    await route.fulfill({ response });
+  });
+}
 
-test.beforeAll(async () => {
-  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-  const paths = await api<WatchPath[]>('/api/watch-paths');
-  const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
-  expect(preferred, 'needs at least one watched project').toBeTruthy();
-  projectSlug = slugFor(preferred.name);
+test.beforeEach(async ({ page, devBackend }) => {
+  await proxyBackend(page, devBackend.baseUrl);
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
 });
 
-test('pipeline page (real): reworked panel renders against the live backend', async ({ page }) => {
+test('pipeline page (real): reworked panel renders against the live backend', async ({ page, devBackend }) => {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+  expect(pathsResponse.ok, 'watch paths should load from the fixture-managed backend').toBe(true);
+  const paths = await pathsResponse.json() as WatchPath[];
+  const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
+  expect(preferred, 'needs at least one watched project').toBeTruthy();
+  const projectSlug = slugFor(preferred.name);
+
   await page.setViewportSize({ width: 1440, height: 2400 });
 
   await page.goto(`/#/projects/${projectSlug}/pipeline`);
@@ -42,10 +87,73 @@ test('pipeline page (real): reworked panel renders against the live backend', as
 
   const section = page.getByTestId('project-detail-pipeline');
   await expect(section).toBeVisible();
+  await setTheme(page, 'light');
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
 
   // The core step is always present in the real catalogue (live id: core-agent-run).
   await expect(page.getByTestId('pipeline-step-row-core-agent-run')).toBeVisible();
 
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full--real.png'), fullPage: true });
-  await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section--real.png') });
+  // One representative per visible kind locks the shared identity columns.
+  // The badge precedes the name, and badge/name/info/toggle geometry does not
+  // depend on display-name length or framework metadata in the middle lane.
+  const representativeSteps = [
+    'pre-loop-guard',
+    'core-agent-run',
+    'post-orchestrator-review',
+    'post-build-test-gate',
+    'aspect-requirement-fit',
+  ];
+  const geometry: { kindX: number; kindWidth: number; nameX: number; infoX: number; toggleX: number }[] = [];
+  for (const stepId of representativeSteps) {
+    const kind = page.getByTestId(`pipeline-step-kind-${stepId}`);
+    const name = page.getByTestId(`pipeline-step-name-${stepId}`);
+    const info = page.getByTestId(`pipeline-step-info-${stepId}`);
+    const toggle = page.getByTestId(`pipeline-step-enabled-${stepId}`);
+    await expect(kind).toBeVisible();
+    await expect(name).toBeVisible();
+    await expect(info).toBeVisible();
+    await expect(toggle).toBeVisible();
+    const [kindBox, nameBox, infoBox, toggleBox] = await Promise.all([
+      kind.boundingBox(), name.boundingBox(), info.boundingBox(), toggle.boundingBox(),
+    ]);
+    expect(kindBox).not.toBeNull();
+    expect(nameBox).not.toBeNull();
+    expect(infoBox).not.toBeNull();
+    expect(toggleBox).not.toBeNull();
+    geometry.push({
+      kindX: kindBox!.x,
+      kindWidth: kindBox!.width,
+      nameX: nameBox!.x,
+      infoX: infoBox!.x,
+      toggleX: toggleBox!.x,
+    });
+  }
+  const baseline = geometry[0];
+  for (const row of geometry) {
+    expect(Math.abs(row.kindX - baseline.kindX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row.kindWidth - baseline.kindWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row.nameX - baseline.nameX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row.infoX - baseline.infoX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row.toggleX - baseline.toggleX)).toBeLessThanOrEqual(1);
+    expect(row.kindX).toBeLessThan(row.nameX);
+  }
+
+  // All visible kind labels are three characters and process-only TOOL rows
+  // expose neither a summary token chip nor a detailed Tokens / 90d row.
+  const kindLabels = await section.locator('[data-testid^="pipeline-step-kind-"]').allTextContents();
+  expect(kindLabels.length).toBeGreaterThan(0);
+  expect(kindLabels.every(label => label.trim().length === 3)).toBe(true);
+  await expect(page.getByTestId('pipeline-step-kind-post-orchestrator-review')).toHaveText('ORC');
+  await expect(page.getByTestId('pipeline-step-kind-post-build-test-gate')).toHaveText('TOO');
+  await expect(page.getByTestId('pipeline-step-tokens-post-build-test-gate')).toHaveCount(0);
+  const toolRow = page.getByTestId('pipeline-step-row-post-build-test-gate');
+  await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await expect(toolRow.getByTestId('pipeline-step-setting-tokens-post-build-test-gate')).toHaveCount(0);
+  await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = false; });
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-full--real.png'), fullPage: true });
+  await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-light--real.png') });
+  await setTheme(page, 'dark');
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+  await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-dark--real.png') });
 });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { WikiTreeNode } from '../../../../models/project-docs.model';
 import {
+  collectDirectDocumentNames,
   collectFolderIds,
+  collectDocumentPaths,
   filterWikiTree,
   flattenWikiTree,
   nodeId,
+  planWikiSiblingReorder,
+  reorderWikiFiles,
 } from './wiki-tree';
 
 const file = (relPath: string, type: 'md' | 'html' | 'json' = 'md', title = relPath): WikiTreeNode => ({
@@ -81,5 +85,52 @@ describe('collectFolderIds', () => {
       file('top.md'),
     ];
     expect(collectFolderIds(roots).sort()).toEqual(['a', 'a/b'].sort());
+  });
+});
+
+describe('document order helpers', () => {
+  it('collects persisted document order and reorders one parent immutably', () => {
+    const roots = [
+      folder('concepts', [file('concepts/a.md'), file('concepts/b.md'), file('concepts/c.md')]),
+      file('README.md'),
+    ];
+
+    const reordered = reorderWikiFiles(roots, 'concepts', ['c.md', 'a.md']);
+
+    expect(collectDocumentPaths(reordered)).toEqual([
+      'concepts/c.md', 'concepts/a.md', 'concepts/b.md', 'README.md',
+    ]);
+    expect(collectDocumentPaths(roots)).toEqual([
+      'concepts/a.md', 'concepts/b.md', 'concepts/c.md', 'README.md',
+    ]);
+  });
+
+  it('plans same-parent file and folder reorders only', () => {
+    const roots = [
+      folder('concepts', [
+        folder('concepts/alpha', [file('concepts/alpha/a.md')]),
+        folder('concepts/beta', [file('concepts/beta/b.md')]),
+        file('concepts/a.md'),
+        file('concepts/b.md'),
+        file('concepts/c.md'),
+      ]),
+    ];
+
+    expect(collectDirectDocumentNames(roots, 'concepts')).toEqual(['a.md', 'b.md', 'c.md']);
+    expect(planWikiSiblingReorder(
+      roots, 'concepts/c.md', 'concepts/a.md', 'file',
+    )).toEqual({
+      parentRel: 'concepts',
+      orderedNames: ['c.md', 'a.md', 'b.md'],
+    });
+    expect(planWikiSiblingReorder(
+      roots, 'concepts/alpha', 'concepts/beta', 'folder',
+    )).toEqual({
+      parentRel: 'concepts',
+      orderedNames: ['beta', 'alpha'],
+    });
+    expect(planWikiSiblingReorder(
+      roots, 'concepts/a.md', 'concepts/alpha/a.md', 'file',
+    )).toBeNull();
   });
 });

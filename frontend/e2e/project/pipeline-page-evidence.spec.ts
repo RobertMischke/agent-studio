@@ -2,6 +2,7 @@ import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
 import { setTheme } from '../helpers/theme';
+import type { Page } from '@playwright/test';
 
 /**
  * T4a evidence — the reworked project-level Pipeline page.
@@ -32,13 +33,13 @@ function slugFor(name: string): string {
 const CATALOGUE = {
   pipelineId: 'default',
   steps: [
-    { id: 'pre-context-scan', displayName: 'Pre: Context scan', kind: 'tool', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'pre-context-scan', canDisable: true, defaultEnabled: true, supportsCondition: false },
+    { id: 'pre-context-scan', displayName: 'Pre: Context scan', kind: 'module', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'pre-context-scan', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'core-run', displayName: 'Core: Agent run', kind: 'core', usesModel: false, usesPrompt: false, supportsMode: false, canDisable: false, defaultEnabled: true, supportsCondition: false },
     { id: 'aspect-requirement-fit', displayName: 'Aspect: Requirement fit', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-requirement-fit', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'aspect-code-quality', displayName: 'Aspect: Code quality', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'aspect-security', displayName: 'Aspect: Security', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-security', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
-    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'tool', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
+    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
 };
 
@@ -56,14 +57,14 @@ const SETTINGS_PROJECTION = {
 function fakeCost(project: string) {
   const k = (kind: string, tokens: number, cost: number, unknown = false) =>
     ({ kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown, cells: [] });
-  const kinds = [k('core', 480000, 1.44), k('aspect', 96000, 0.31), k('tool', 21000, 0.011, true)];
+  const kinds = [k('core', 480000, 1.44), k('aspect', 96000, 0.31), k('module', 21000, 0.011, true)];
   const s = (stepId: string, kind: string, tokens: number, cost: number, unknown = false) =>
     ({ stepId, kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown });
   const steps = [
     s('core-run', 'core', 480000, 1.44),
     s('aspect-code-quality', 'aspect', 64000, 0.21),
     s('aspect-requirement-fit', 'aspect', 32000, 0.10),
-    s('pre-context-scan', 'tool', 21000, 0.011, true),
+    s('pre-context-scan', 'module', 21000, 0.011, true),
   ];
   return {
     project, days: [], windowDays: 90, kinds, steps,
@@ -75,7 +76,44 @@ function fakeCost(project: string) {
 let projectSlug = '';
 let projectName = '';
 
-test.beforeAll(async () => {
+async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/crash-recovery/pending') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pending: [] }),
+      });
+      return;
+    }
+    if (/^\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [], source: 'pipeline-evidence' }),
+      });
+      return;
+    }
+    if (url.pathname === '/api/cli/quota' || url.pathname === '/api/cli/usage') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(url.pathname.endsWith('/quota')
+          ? { at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] }
+          : { at: new Date().toISOString(), sessions: [] }),
+      });
+      return;
+    }
+    const response = await route.fetch({
+      url: `${baseUrl}${url.pathname}${url.search}`,
+      timeout: 30_000,
+    });
+    await route.fulfill({ response });
+  });
+}
+
+test.beforeEach(async ({ page, devBackend }) => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 

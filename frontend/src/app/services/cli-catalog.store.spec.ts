@@ -52,6 +52,31 @@ describe('CliCatalogStore', () => {
     expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(1);
   });
 
+  it('caches current generations first while retaining selectable older generations', () => {
+    const discovered = [
+      { ...claudeModels[0], id: 'claude-opus-4-7', label: 'Opus 4.7', isDefault: false },
+      { ...claudeModels[0], id: 'claude-opus-5', label: 'Opus 5', isDefault: true },
+      { ...claudeModels[0], id: 'claude-opus-4-8', label: 'Opus 4.8', isDefault: false },
+    ];
+    const stub: JobsStub = {
+      getCliModelCatalog: vi.fn(() => of(catalog(discovered))),
+    };
+    const store = configure(stub);
+
+    store.ensure('claude').subscribe();
+
+    expect(store.modelsFor('claude').map((item) => item.id)).toEqual([
+      'claude-opus-5',
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+    ]);
+    expect(store.modelsFor('claude').slice(1)).toEqual([
+      expect.objectContaining({ id: 'claude-opus-4-8', deprecated: true }),
+      expect.objectContaining({ id: 'claude-opus-4-7', deprecated: true }),
+    ]);
+    expect(store.modelsFor('claude').every((item) => item.available !== false)).toBe(true);
+  });
+
   it('dedupes concurrent fetches for the same CLI', () => {
     const subj = new Subject<CliModelCatalog>();
     const stub: JobsStub = {

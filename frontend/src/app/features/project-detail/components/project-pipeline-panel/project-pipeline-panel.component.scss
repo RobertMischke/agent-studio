@@ -9,8 +9,9 @@
    * row edge.
    */
   --pp-control-h: var(--studio-card-pill-height);
-  --pp-row-min: var(--pp-row-min);
-  --pp-chip-radius: var(--pp-chip-radius);
+  --pp-row-min: var(--studio-row-min-h-interactive-default);
+  --pp-chip-radius: var(--studio-card-compact-radius);
+  --pp-kind-column: 3.25rem;
 
   display: flex;
   flex-direction: column;
@@ -65,7 +66,7 @@
 .pp__group {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
+  gap: var(--studio-spacing-2);
 }
 
 .pp__group > summary,
@@ -79,10 +80,12 @@
 }
 
 .pp__group-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--studio-spacing-2);
-  min-height: var(--pp-control-h);
+  column-gap: var(--studio-spacing-2);
+  min-height: var(--studio-row-min-h-default);
+  padding-inline: var(--studio-card-compact-padding-inline);
   cursor: pointer;
   user-select: none;
 }
@@ -105,7 +108,6 @@
 
 .pp__group-caret,
 .pp__summary-caret {
-  margin-left: auto;
   color: var(--studio-fg-muted);
   font-size: var(--studio-card-meta-size);
   line-height: 1;
@@ -161,7 +163,14 @@
 
 .pp__summary {
   display: grid;
-  grid-template-columns: auto minmax(14rem, 0.95fr) minmax(0, 2.05fr) auto;
+  grid-template-columns:
+    auto
+    var(--pp-kind-column)
+    minmax(12rem, 0.9fr)
+    auto
+    minmax(0, 2.1fr)
+    auto
+    auto;
   align-items: center;
   column-gap: var(--studio-spacing-2);
   min-height: var(--pp-row-min);
@@ -203,7 +212,6 @@
 .pp__summary-main {
   display: flex;
   align-items: center;
-  gap: var(--studio-spacing-1);
   min-width: 0;
 }
 
@@ -219,7 +227,6 @@
 }
 
 .pp__kind,
-.pp__state,
 .pp__chip,
 .pp__toggle,
 .pp__locked,
@@ -236,7 +243,10 @@
 }
 
 .pp__kind {
-  padding: 0 var(--studio-card-pill-padding-x);
+  width: var(--pp-kind-column);
+  box-sizing: border-box;
+  justify-content: center;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--pipeline-step-color) 28%, transparent);
   background: color-mix(in srgb, var(--pipeline-step-color) 12%, transparent);
   color: var(--pipeline-step-color);
@@ -271,7 +281,6 @@
   overflow: hidden;
 }
 
-.pp__state,
 .pp__chip {
   max-width: 22ch;
   padding: 0 var(--studio-card-pill-padding-x);
@@ -282,25 +291,12 @@
   text-overflow: ellipsis;
 }
 
-.pp__state {
-  border-color: color-mix(in srgb, var(--pipeline-step-color) 32%, var(--studio-card-muted-border));
-  color: var(--pipeline-step-color);
-  font-weight: 600;
-}
-
-.pp__state--off {
-  border-color: var(--studio-card-muted-border);
-  color: var(--studio-fg-muted);
-  font-weight: 500;
-}
-
 .pp__chip--muted {
   color: var(--studio-fg-dim);
 }
 
-/* Per-step 90-day token sum. Tinted in the step's own colour so the cost
-   feel reads at a glance; the empty variant stays muted and consistent in
-   size so every row keeps the same rhythm. */
+/* Per-step 90-day token sum for LLM-backed rows. Tool rows omit the chip and
+   detailed setting entirely because process-only steps cannot spend tokens. */
 .pp__chip--tokens {
   border-color: color-mix(in srgb, var(--pipeline-step-color) 30%, var(--studio-card-muted-border));
   background: color-mix(in srgb, var(--pipeline-step-color) 10%, var(--studio-card-muted-bg));
@@ -454,6 +450,14 @@
 .pp__toggle-text { font-size: var(--studio-card-meta-size); }
 .pp__locked { font-style: italic; }
 
+@media (prefers-reduced-motion: reduce) {
+  .pp__group-caret,
+  .pp__summary-caret,
+  .pp__summary {
+    transition-duration: 0s;
+  }
+}
+
 .pp__select,
 .pp__input {
   width: 100%;
@@ -542,12 +546,13 @@
 
 @media (max-width: 1120px) {
   .pp__summary {
-    grid-template-columns: auto minmax(12rem, 1fr) auto;
+    grid-template-columns: auto var(--pp-kind-column) minmax(10rem, 1fr) auto auto auto;
     row-gap: var(--studio-spacing-1);
   }
 
   .pp__summary-chips {
     grid-column: 2 / -1;
+    grid-row: 2;
     justify-content: flex-start;
   }
 
@@ -558,7 +563,8 @@
 
 @media (max-width: 720px) {
   .pp__head { grid-template-columns: 1fr; row-gap: var(--studio-spacing-1); }
-  .pp__summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .pp__summary { grid-template-columns: auto var(--pp-kind-column) minmax(0, 1fr) auto auto; }
+  .pp__info { display: none; }
   .pp__summary-chips { grid-column: 1 / -1; }
   .pp__settings-row {
     grid-template-columns: 1fr;

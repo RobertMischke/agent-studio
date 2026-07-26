@@ -160,6 +160,11 @@ public static class SteerPendingKinds
     /// Unlike an unanswered steer this is intentionally not timeout-driven.
     /// </summary>
     public const string UiIterationReview = "ui-iteration-review";
+    /// <summary>
+    /// A complete concept Workbench waiting for deliberate human sight review.
+    /// This is a successful delivery gate and is never timeout-escalated.
+    /// </summary>
+    public const string ConceptSightReview = "concept-sight-review";
 }
 
 /// <summary>Shared defaults for the steer-timeout so the marker, policy, and config agree on one number.</summary>

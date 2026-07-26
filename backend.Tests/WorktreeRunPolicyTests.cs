@@ -71,6 +71,10 @@ public sealed class WorktreeRunPolicyTests
         => Assert.False(WorktreeRunPolicy.RequiresWorktree(mode, isEpicPlanningRun: false));
 
     [Fact]
+    public void RequiresWorktree_ConceptMode_True()
+        => Assert.True(WorktreeRunPolicy.RequiresWorktree(TaskModes.Concept, isEpicPlanningRun: false));
+
+    [Fact]
     public void RequiresWorktree_EpicPlanningRun_False_EvenForCodingMode()
         => Assert.False(WorktreeRunPolicy.RequiresWorktree(TaskModes.Coding, isEpicPlanningRun: true));
 

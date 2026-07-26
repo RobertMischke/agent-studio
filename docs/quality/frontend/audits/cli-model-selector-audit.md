@@ -101,7 +101,11 @@ a CLI; defaults are expressed by input values, not by filtering the list.
 
 ## Related Controls Deliberately Out Of Scope
 
-- `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:180` is the **orchestrator model** selector. It chooses the model for the orchestrator decision process, not a task-agent CLI/model pair, and the orchestrator is intentionally Claude-only.
+- `frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/`
+  hosts the **Orchestrator chat** selector through `<cac-chat>`. The execution
+  route is intentionally GPT-only: Codex is enabled, while Claude and Gemini
+  remain visible but disabled with the host-policy reason. This list does not
+  depend on CLI quota snapshots.
 - `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:378` chooses per-CLI **permission mode**, not which CLI/model should run a task.
 - Observability, quota, token, usage, and session panels filter or display CLI/model data but do not choose an execution agent.
 - Project, workspace, lane, condition, and mode `<select>` elements are unrelated to CLI/model execution choice.

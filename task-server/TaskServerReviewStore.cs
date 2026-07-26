@@ -362,6 +362,8 @@ public sealed partial class TaskServerStore
             requirements.Add(ReviewCapabilities.SourceBundleMaterialization);
         if (subject.Plan.RequiresVisualReview)
             requirements.Add(CapabilityProtocol.Vision);
+        if (subject.Plan.Commands.Any(command => command.CompareToBaseline))
+            requirements.Add(ReviewCapabilities.BaselineComparison);
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence"))
             requirements.Add(ReviewCapabilities.SemanticReview);
@@ -603,6 +605,9 @@ public sealed partial class TaskServerStore
         var commandIds = request.Plan.Commands.Select(command => command.StepId).ToHashSet(StringComparer.Ordinal);
         if (commandIds.Count != request.Plan.Commands.Count)
             throw new ArgumentException("Review command step ids must be unique.");
+        if (request.Plan.Commands.Any(command => command.CompareToBaseline)
+            && string.IsNullOrWhiteSpace(request.Plan.IntegrationRef))
+            throw new ArgumentException("A baseline-compared review plan requires an integration ref.");
         if (request.Plan.RequiresVisualReview
             && !request.Plan.RequiredAspects.Contains("visual", StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException("A visual review plan must require the visual aspect.");
@@ -680,6 +685,13 @@ public sealed partial class TaskServerStore
                 || !string.Equals(planned.FileName, command.FileName, StringComparison.Ordinal)
                 || !planned.Arguments.SequenceEqual(command.Arguments, StringComparer.Ordinal))
                 return ("ReviewInfra", "CommandPlanMismatch");
+            if (planned.CompareToBaseline
+                && command.BaselineSha is not null
+                && (!ValidDigest(command.BaselineSha, 40, 64)
+                    || command.NewFailures is null
+                    || command.PreExistingFailures is null
+                    || (command.NewFailures.Count > 0 && !command.RetryPerformed)))
+                return ("ReviewInfra", "BaselineEvidenceInvalid");
         }
         if (request.Artifacts.Any(artifact => !ValidDigest(artifact.Sha256, 64) || artifact.SizeBytes < 0))
             return ("ReviewInfra", "ArtifactEvidenceInvalid");
@@ -700,7 +712,19 @@ public sealed partial class TaskServerStore
         if (request.Verdicts.Any(verdict =>
                 verdict.Status is not ("pass" or "concerns" or "block" or "fail")))
             return ("ReviewInfra", "InvalidAspectVerdict");
-        if (request.Commands.Any(command => command.ExitCode != 0)
+        var commandFailures = request.Commands.Any(command =>
+        {
+            var planned = subject.Plan.Commands.Single(item =>
+                string.Equals(item.StepId, command.StepId, StringComparison.Ordinal));
+            if (planned.CompareToBaseline && command.NewFailures is { Count: > 0 })
+                return true;
+            if (command.ExitCode == 0) return false;
+            return !planned.CompareToBaseline
+                   || command.BaselineSha is null
+                   || command.NewFailures is null
+                   || command.NewFailures.Count > 0;
+        });
+        if (commandFailures
             || request.Verdicts.Any(verdict => verdict.Status is "concerns" or "block" or "fail"))
             return ("ProductFailure", request.FailureClassification ?? "ReviewFinding");
         if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal))
@@ -1062,6 +1086,9 @@ public sealed partial class TaskServerStore
             return false;
         if (subject.Plan.RequiresVisualReview
             && !executor.Capabilities.Contains(ReviewCapabilities.VisionReview))
+            return false;
+        if (subject.Plan.Commands.Any(command => command.CompareToBaseline)
+            && !executor.Capabilities.Contains(ReviewCapabilities.BaselineComparison))
             return false;
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence")

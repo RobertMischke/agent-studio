@@ -40,6 +40,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var environment = workspace.EnvironmentEvidence();
         Assert.Contains("sha256=", environment.Toolchain["git"], StringComparison.Ordinal);
         Assert.Contains("sha256=", environment.Toolchain["command:verify"], StringComparison.Ordinal);
+        Assert.Equal(workspace.BaselineCacheRoot, environment.Isolation["baselineResultCache"]);
         Assert.True(await workspace.CleanupAsync());
         Assert.False(Directory.Exists(workspace.AttemptRoot));
     }
@@ -142,12 +143,137 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Baseline_comparison_blocks_only_new_test_failures_and_names_them()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var command = BaselineCommand(
+            "if grep -q subject product.txt; then " +
+            "printf '  Failed Product.ExistingFailure [1 ms]\\n  Failed Product.NewFailure [1 ms]\\n'; " +
+            "else printf '  Failed Product.ExistingFailure [1 ms]\\n'; fi; exit 1");
+        var (workspace, _) = Workspace(
+            "attempt-new-failure",
+            subjectSha,
+            [command],
+            26000,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main");
+        await workspace.PrepareAsync(null!, default);
+
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("ProductFailure", evidence.Outcome);
+        var commandEvidence = Assert.Single(evidence.Commands);
+        Assert.Equal(["Product.NewFailure"], commandEvidence.NewFailures);
+        Assert.Equal(["Product.ExistingFailure"], commandEvidence.PreExistingFailures);
+        Assert.True(commandEvidence.RetryPerformed);
+        var verdict = Assert.Single(evidence.Verdicts);
+        Assert.Equal("block", verdict.Status);
+        Assert.Contains("1 new failures: Product.NewFailure", verdict.Summary, StringComparison.Ordinal);
+        Assert.Contains("1 pre-existing failures: Product.ExistingFailure", verdict.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Baseline_comparison_classifies_shared_red_tests_as_pre_existing()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var command = BaselineCommand(
+            "printf '  Failed Product.ExistingFailure [1 ms]\\n'; exit 1");
+        var (workspace, _) = Workspace(
+            "attempt-pre-existing",
+            subjectSha,
+            [command],
+            26008,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main");
+        await workspace.PrepareAsync(null!, default);
+
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("Pass", evidence.Outcome);
+        var commandEvidence = Assert.Single(evidence.Commands);
+        Assert.Empty(commandEvidence.NewFailures!);
+        Assert.Equal(["Product.ExistingFailure"], commandEvidence.PreExistingFailures);
+        Assert.False(commandEvidence.RetryPerformed);
+        var verdict = Assert.Single(evidence.Verdicts);
+        Assert.Equal("pass", verdict.Status);
+        Assert.Contains("0 new failures", verdict.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Baseline_result_is_reused_for_same_repository_sha_and_command()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var command = BaselineCommand(
+            "printf '  Failed Product.ExistingFailure [1 ms]\\n'; exit 1");
+        var first = Workspace(
+            "attempt-cache-fill",
+            subjectSha,
+            [command],
+            26016,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main").Workspace;
+        await first.PrepareAsync(null!, default);
+        var firstEvidence = await first.ExecutePlanAsync(default);
+        await first.CleanupAsync();
+
+        var second = Workspace(
+            "attempt-cache-hit",
+            subjectSha,
+            [command],
+            26024,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main").Workspace;
+        await second.PrepareAsync(null!, default);
+        var secondEvidence = await second.ExecutePlanAsync(default);
+
+        Assert.False(Assert.Single(firstEvidence.Commands).BaselineCacheHit);
+        Assert.True(Assert.Single(secondEvidence.Commands).BaselineCacheHit);
+        Assert.Single(Directory.EnumerateFiles(second.BaselineCacheRoot, "*.json", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task New_failure_gets_one_retry_and_a_disappearing_flake_does_not_block()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var command = BaselineCommand(
+            "if grep -q subject product.txt; then " +
+            "if test ! -f \"$TMPDIR/retry-seen\"; then touch \"$TMPDIR/retry-seen\"; " +
+            "printf '  Failed Product.FlakyFailure [1 ms]\\n'; exit 1; fi; fi; exit 0");
+        var (workspace, _) = Workspace(
+            "attempt-flake",
+            subjectSha,
+            [command],
+            26032,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main");
+        await workspace.PrepareAsync(null!, default);
+
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("Pass", evidence.Outcome);
+        var commandEvidence = Assert.Single(evidence.Commands);
+        Assert.True(commandEvidence.RetryPerformed);
+        Assert.Empty(commandEvidence.NewFailures!);
+        Assert.Equal(0, commandEvidence.ExitCode);
+    }
+
+    private static ReviewCommandDto BaselineCommand(string shell)
+        => new(
+            "verify-2",
+            "build-tests",
+            "/bin/sh",
+            ["-c", shell],
+            CompareToBaseline: true);
+
     private (RemoteReviewWorkspace Workspace, ReviewSubjectDto Subject) Workspace(
         string attemptId,
         string sha,
         IReadOnlyList<ReviewCommandDto> commands,
         int portBase,
-        long fence = 1)
+        long fence = 1,
+        string? resultRef = null,
+        string? integrationRef = null)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -157,12 +283,15 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             repositoryId,
             _origin,
             sha,
-            "refs/heads/main",
+            resultRef ?? "refs/heads/main",
             null,
             null,
             "coding-host",
             "policy",
-            new ReviewPlanDto(commands, commands.Select(command => command.Aspect).ToArray()),
+            new ReviewPlanDto(
+                commands,
+                commands.Select(command => command.Aspect).ToArray(),
+                IntegrationRef: integrationRef),
             DateTime.UtcNow);
         var lease = new ReviewLeaseDto(
             "lease-" + attemptId,
@@ -194,6 +323,24 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             HeartbeatSeconds = 30,
         };
         return (new RemoteReviewWorkspace(options, subject, lease, _ => { }), subject);
+    }
+
+    private async Task<(string BaselineSha, string SubjectSha)> SeedSubjectBranchAsync()
+    {
+        var baselineSha = await SeedOriginAsync();
+        var seed = Path.Combine(_root, "seed");
+        var branch = await GitAsync(seed, "branch", "--list", "task/new-failure");
+        if (branch.StdOut.Length == 0)
+        {
+            await GitAsync(seed, "checkout", "-b", "task/new-failure");
+            await File.WriteAllTextAsync(Path.Combine(seed, "product.txt"), "subject product");
+            await GitAsync(seed, "add", "product.txt");
+            await GitAsync(seed, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                "commit", "-m", "subject");
+            await GitAsync(seed, "push", "origin", "task/new-failure");
+        }
+        var subjectSha = (await GitAsync(seed, "rev-parse", "task/new-failure")).StdOut.Trim();
+        return (baselineSha, subjectSha);
     }
 
     private async Task<string> SeedOriginAsync()

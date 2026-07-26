@@ -1,16 +1,18 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind, RemoteHost } from '../../models/remote-host.model';
+import { boardRemoteSlotsForHost, deriveBoardRunningTruth } from '../../models/running-truth';
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
 
 /**
- * Remote Hosts settings page (AGT-1921).
+ * Execution Hosts settings page (AGT-1921).
  *
- * The single visible entry point into remote-host management: every execution
- * location - the operator's local machine and each remote runner - in one list
+ * The single visible entry point into execution-host management: the local
+ * machine and each remote runner in one list
  * so the whole fleet reads as one picture. Each row carries heartbeat status,
  * capabilities, live system vitals (RAM / CPU / Disk), per-CLI quota, and the
  * Re-Probe / Drain / Retire actions ({@link RemoteHostCardComponent}).
@@ -28,6 +30,7 @@ import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-
 })
 export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
+  private readonly tasks = inject(TaskService);
 
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
@@ -61,6 +64,8 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly total = computed(() => this.activeHosts().length);
   readonly onlineCount = computed(() => this.activeHosts().filter((h) => h.status === 'online').length);
   readonly remoteCount = computed(() => this.activeHosts().filter((h) => h.role === 'remote').length);
+  readonly boardRunningTruth = computed(() =>
+    deriveBoardRunningTruth(this.tasks.grouped().progress));
 
   ngOnInit(): void {
     this.service.ensureLoaded();
@@ -72,6 +77,11 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   }
 
   reload(): void { this.service.reload(); }
+
+  boardSlots(host: RemoteHost): number {
+    const truth = this.boardRunningTruth();
+    return host.role === 'local' ? truth.local : boardRemoteSlotsForHost(truth, host);
+  }
 
   openWizard(): void { this.wizardOpen.set(true); }
   closeWizard(): void { this.wizardOpen.set(false); }

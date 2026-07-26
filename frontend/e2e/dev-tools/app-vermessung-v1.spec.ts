@@ -194,9 +194,9 @@ test('App-Vermessung v1 real stable sweep', async ({ page }) => {
     }
     const rail = page.getByTestId(`workspace-settings-rail-${key}`);
     if (await rail.isVisible().catch(() => false)) {
-      await capture(page, key === 'remote-hosts' ? 'Remote hosts' : 'Settings', key);
+      await capture(page, key === 'remote-hosts' ? 'Execution Hosts' : 'Settings', key);
     } else {
-      await recordMissing(page, key === 'remote-hosts' ? 'Remote hosts' : 'Settings', key, 'Settings rail was not visible in real Stable.');
+      await recordMissing(page, key === 'remote-hosts' ? 'Execution Hosts' : 'Settings', key, 'Settings rail was not visible in real Stable.');
     }
   }
 

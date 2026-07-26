@@ -1,0 +1,72 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.copy-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  border: 1px solid var(--studio-border);
+  color: var(--studio-fg-muted);
+  background: var(--studio-bg-hover);
+  font-family: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.copy-key {
+  cursor: copy;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+button.copy-key:hover {
+  color: var(--studio-fg);
+  background: var(--studio-bg-elevated);
+  border-color: var(--studio-border-strong);
+}
+
+button.copy-key:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.copy-key--card {
+  height: 22px;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 7px;
+  color: var(--studio-fg-dim);
+  background: var(--studio-card-muted-bg);
+  border-color: var(--studio-card-muted-border);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.copy-key--detail {
+  min-height: 22px;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.copy-key--copied {
+  color: var(--studio-success);
+  background: color-mix(in srgb, var(--studio-success) 12%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-success) 42%, var(--studio-border));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.copy-key {
+    transition-duration: 0s;
+  }
+}

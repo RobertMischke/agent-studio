@@ -146,6 +146,41 @@ test.describe('Task Server settings section', () => {
     await expect(page.getByTestId('task-server-panel')).toBeVisible();
   });
 
+  test('networked management 401 returns the operator to a concrete sign-in entry', async ({ page }) => {
+    await page.unroute('**/api/auth/status');
+    await page.route('**/api/auth/status', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'networked',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: {
+          id: 'usr_owner', username: 'owner', displayName: 'Owner', role: 'owner',
+          projects: [], disabled: false, mustChangePassword: false,
+        },
+      }),
+    }));
+    await page.unroute('**/api/v1/management/status');
+    await page.route('**/api/v1/management/status', route => route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'authentication-required',
+        message: 'Sign in with an owner or operator account to manage the Task Server.',
+        loginUrl: '/api/auth/login',
+      }),
+    }));
+
+    // Change the document URL, not only the hash, so AuthService reinitializes
+    // from the networked status route installed above.
+    await page.goto('/?auth-profile=networked#/workspace/settings/task-server');
+
+    await expect(page.getByTestId('auth-gate')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  });
+
   test('renders on the light theme too (R5)', async ({ page }) => {
     await page.goto('/#/workspace/settings/task-server');
     await page.waitForLoadState('domcontentloaded');

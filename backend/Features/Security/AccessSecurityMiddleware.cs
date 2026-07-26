@@ -122,7 +122,19 @@ public sealed class AccessSecurityMiddleware
             return;
         }
 
-        if (human is null) { await Reject(context, 401, "authentication-required", "An authenticated Studio session is required."); return; }
+        if (human is null)
+        {
+            var managementRequest = path.StartsWith("/api/v1/management", StringComparison.OrdinalIgnoreCase);
+            await Reject(
+                context,
+                401,
+                "authentication-required",
+                managementRequest
+                    ? "Sign in with an owner or operator account to manage the Task Server."
+                    : "An authenticated Studio session is required.",
+                loginUrl: managementRequest ? "/api/auth/login" : null);
+            return;
+        }
         if (human.User.MustChangePassword && path is not "/api/auth/change-password" and not "/api/auth/logout" and not "/api/auth/session")
         {
             await Reject(context, 403, "password-change-required", "Change the temporary password before continuing.");
@@ -264,12 +276,20 @@ public sealed class AccessSecurityMiddleware
                || ProjectAccessAuthorization.Allows(user, Uri.UnescapeDataString(requested), _projects);
     }
 
-    private static async Task Reject(HttpContext context, int status, string code, string message)
+    private static async Task Reject(
+        HttpContext context,
+        int status,
+        string code,
+        string message,
+        string? loginUrl = null)
     {
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json";
         context.Response.Headers.CacheControl = "no-store";
-        await context.Response.WriteAsJsonAsync(new { error = code, message });
+        if (loginUrl is null)
+            await context.Response.WriteAsJsonAsync(new { error = code, message });
+        else
+            await context.Response.WriteAsJsonAsync(new { error = code, message, loginUrl });
     }
 }
 

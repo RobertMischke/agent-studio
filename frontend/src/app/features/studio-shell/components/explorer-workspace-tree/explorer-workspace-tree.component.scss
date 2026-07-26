@@ -2,6 +2,12 @@
   display: block;
 }
 
+.studio-explorer-tree__registry-hint {
+  color: var(--studio-fg-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 /* Project URL rows carry a small running/offline status dot in place of the
    count badge. Grey by default (unknown), green when the probe reaches the
    server, dim grey when it does not. */

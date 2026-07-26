@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-26
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -270,7 +270,7 @@ state.
   `3-progress`. The server persists the result on the host identity and reuses
   it for following cards without another offer roundtrip. Repository
   registration and integration-branch mutations invalidate every host's cached
-  result for that project. A failure remains visible on the Remote Hosts card
+  result for that project. A failure remains visible on the Execution Hosts card
   and project execution card.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
@@ -333,6 +333,12 @@ state.
   verdict artefacts; automatic verdicts and moves retain the current epoch and
   cannot replenish the ceiling. `OperatorReviewRequeueService` owns the epoch
   boundary, history rotation, decision-journal row, and timeline event.
+- The verdictless Human Review boot repair is subordinate to operator lane
+  decisions. If the latest `lane_changed` row is attributed to `human` or
+  `human:<client-id>`, the current lane is an operator verdict even when the
+  legacy decision journal has no provenance verdict. The repair also excludes
+  `6-completed` and `7-archive` unconditionally. Every repair move records its
+  reason on the resulting `lane_changed` row.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed
@@ -359,7 +365,9 @@ state.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this
-  mode to Claude.
+  mode to Claude. The composer therefore lists Claude and Gemini as disabled
+  host-policy choices with an explicit GPT-only reason; their presence does not
+  make them valid execution routes for this chat.
 - Every coding run is worktree-isolated - single-slot resume/reissue included,
   not just parallel slots. The shared main checkout is read-only reference + the
   integration target; on a failed worktree prepare the run is deferred, never
@@ -428,7 +436,7 @@ state.
   on its client identity. A reported `read-only` identity receives no coding
   claims. The per-project delivery preflight is stricter and applies before any
   first project claim, including Epic planning: it creates and removes a
-  temporary runner ref so server-side write policy is exercised. Remote Hosts
+  temporary runner ref so server-side write policy is exercised. Execution Hosts
   surfaces both states for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through

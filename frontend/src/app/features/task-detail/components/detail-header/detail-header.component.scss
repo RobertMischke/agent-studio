@@ -198,7 +198,7 @@
   border: 0;
 }
 
-/* AGT-2069: prominent planning/research badge in the header meta row. Unlike
+/* AGT-2069: prominent planning/research/concept badge in the header meta row. Unlike
    the quiet run-activity pill this is deliberately loud — a filled, uppercase
    badge that marks a planning-task detail at a glance ("here work is PLANNED").
    Filled saturated background + light text reads on both themes. */
@@ -225,6 +225,11 @@
   background: #0e7490;
   border-color: #155e75;
   box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
+}
+:host .detail__mode-badge--concept {
+  color: var(--studio-accent-4-strong);
+  background: color-mix(in srgb, var(--studio-accent-4-strong) 14%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent-4-strong) 36%, transparent);
 }
 
 :host .detail__title-row {

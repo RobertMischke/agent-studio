@@ -1,5 +1,7 @@
 using System.Linq;
+using System.Text.Json;
 
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace AgentStudio.Tests;
@@ -160,4 +162,89 @@ public class ReissueOpenItemsPreCheckTests
         // A follow-up that is only the heading yields no items.
         Assert.Empty(ReissueOpenItemsPreCheck.ExtractOpenItems("# Orchestrator follow-up\n", []));
     }
+
+    [Fact]
+    public void ExperimentAssignment_IsStablePerTask_AndVersioned()
+    {
+        var first = ReissuePromptExperiment.Assign(
+            "AGT-42", 2, "deterministic-gate", "evidence-gate", 2);
+        var later = ReissuePromptExperiment.Assign(
+            "AGT-42", 5, "deterministic-gate", "evidence-gate", 1);
+
+        Assert.Equal(first.Arm, later.Arm);
+        Assert.Equal(first.AssignmentHash, later.AssignmentHash);
+        Assert.Equal(ReissuePromptExperiment.ExperimentId, first.ExperimentId);
+        Assert.Contains(first.TemplateVersion, new[]
+        {
+            ReissuePromptExperiment.ControlTemplateVersion,
+            ReissuePromptExperiment.TreatmentTemplateVersion,
+        });
+        Assert.Equal(2, first.Attempt);
+        Assert.Equal(5, later.Attempt);
+    }
+
+    [Fact]
+    public void ExperimentLog_RecordsArmTemplateFamilyCauseAndRoute()
+    {
+        var folder = Path.Combine(
+            Path.GetTempPath(),
+            "reissue-prompt-experiment-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var assignment = ReissuePromptExperiment.Assign(
+                "Agent Studio/AGT-42", 2, "deterministic-gate", "evidence-gate", 2);
+
+            ReissuePromptExperimentLog.Append(
+                folder,
+                "Agent Studio",
+                "AGT-42",
+                assignment,
+                new DateTime(2026, 7, 26, 12, 0, 0, DateTimeKind.Utc),
+                "gpt-fixed",
+                "medium",
+                NullLogger.Instance);
+
+            var line = Assert.Single(File.ReadAllLines(
+                Path.Combine(folder, "logs", ReissuePromptExperimentLog.FileName)));
+            using var json = JsonDocument.Parse(line);
+            var root = json.RootElement;
+            Assert.Equal(assignment.Arm, root.GetProperty("arm").GetString());
+            Assert.Equal(assignment.TemplateVersion, root.GetProperty("templateVersion").GetString());
+            Assert.Equal("deterministic-gate", root.GetProperty("promptFamily").GetString());
+            Assert.Equal("evidence-gate", root.GetProperty("cause").GetString());
+            Assert.Equal("gpt-fixed", root.GetProperty("codingModel").GetString());
+            Assert.Equal("medium", root.GetProperty("thinkingLevel").GetString());
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TreatmentFindings_AreNumberedStructured_AndDoNotMixRawEvidence()
+    {
+        var rendered = ReissuePromptExperiment.BuildTreatmentFindings(new[]
+        {
+            "Fix the null guard in `ProjectRunner.RenderPrompt`.",
+            "Add focused coverage for the missing retry branch.",
+        }, escalate: false);
+
+        Assert.Contains("1.", rendered);
+        Assert.Contains("2.", rendered);
+        Assert.Contains("Exact deficiency:", rendered);
+        Assert.Contains("File, symbol, or artifact: `ProjectRunner.RenderPrompt`", rendered);
+        Assert.Contains("Required change:", rendered);
+        Assert.Contains("Focused verification or acceptance evidence:", rendered);
+        Assert.DoesNotContain("Full reissue context", rendered);
+    }
+
+    [Theory]
+    [InlineData("evidence-gate", "deterministic-gate")]
+    [InlineData("multi-aspect-block", "model-review-finding")]
+    [InlineData("no-completion-signal", "execution-protocol")]
+    [InlineData("legacy-unknown", "other-reissue")]
+    public void PromptFamily_IsDerivedFromTypedCause(string cause, string expected)
+        => Assert.Equal(expected, ReissuePromptExperiment.ResolvePromptFamily(cause));
 }

@@ -95,7 +95,8 @@ public class TaskStateMachine
         string? watchPath = null,
         string? cause = null,
         AttemptWriteReference? authorityWrite = null,
-        string? expectedSourceState = null)
+        string? expectedSourceState = null,
+        string? reason = null)
     {
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
@@ -159,7 +160,7 @@ public class TaskStateMachine
                 {
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
-                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite);
+                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite, reason);
                     _scanner.InvalidateCache();
                     EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, recheck.Id, recheck.State, targetState);
                 }
@@ -221,7 +222,7 @@ public class TaskStateMachine
             ClearIncompatiblePhase(targetDir, targetState);
             // T2b: write the lane-change ledger row to the *new* folder (the
             // source folder is gone after the move above).
-            RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite);
+            RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite, reason);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -685,7 +686,8 @@ public class TaskStateMachine
         string fromState,
         string toState,
         string? cause,
-        AttemptWriteReference? authorityWrite = null)
+        AttemptWriteReference? authorityWrite = null,
+        string? reason = null)
     {
         if (_timeline == null) return;
         try
@@ -696,6 +698,8 @@ public class TaskStateMachine
                 ["from"] = fromState ?? "",
                 ["to"] = toState ?? "",
             };
+            if (!string.IsNullOrWhiteSpace(reason))
+                details["reason"] = reason.Trim();
             if (authorityWrite is not null)
             {
                 details["attemptId"] = authorityWrite.AttemptId;

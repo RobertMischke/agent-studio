@@ -26,6 +26,7 @@ public sealed class TaskTransitionService
     private readonly TaskIntegrationStatusService? _integrationStatus;
     private readonly TimelineLog? _timeline;
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
+    private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -56,7 +57,8 @@ public sealed class TaskTransitionService
         AgentStudio.Bus.AgentMessageBusBridge? bus = null,
         TaskIntegrationStatusService? integrationStatus = null,
         TimelineLog? timeline = null,
-        OperatorReviewRequeueService? operatorReviewRequeue = null)
+        OperatorReviewRequeueService? operatorReviewRequeue = null,
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null)
     {
         _scanner = scanner;
         _states = states;
@@ -75,6 +77,7 @@ public sealed class TaskTransitionService
         _integrationStatus = integrationStatus;
         _timeline = timeline;
         _operatorReviewRequeue = operatorReviewRequeue;
+        _pipelineLog = pipelineLog;
     }
 
     /// <summary>
@@ -154,7 +157,8 @@ public sealed class TaskTransitionService
             watchPath,
             cause,
             authorityWrite,
-            expectedSourceState);
+            expectedSourceState,
+            reason);
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
         if (operatorRequeue && _operatorReviewRequeue != null)
@@ -243,6 +247,13 @@ public sealed class TaskTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
+            if (TaskModes.IsConcept(info.Mode)
+                && fromState == TaskStates.HumanReview
+                && targetState == TaskStates.Completed)
+            {
+                RecordConceptSightReviewCompletion(info, watchPath, cause);
+            }
+
             // ASS-1724: the ONE commit-provenance recording hook. Anchor the
             // task/<id> tip + integration head at this lane crossing so the board
             // can graph "where does this work live" historically. Best-effort and
@@ -312,6 +323,44 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private void RecordConceptSightReviewCompletion(
+        TaskInfo original,
+        string? watchPath,
+        string? cause)
+    {
+        var moved = _scanner.FindJob(original.Id, watchPath);
+        var folder = moved?.FolderPath;
+        if (string.IsNullOrWhiteSpace(folder)) return;
+
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(folder, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptSightReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Passed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "sight-review-approved",
+            VerdictSummary = "Human sight review approved the concept.",
+        });
+        if (!string.Equals(cause, "concept-sight-review-approved", StringComparison.Ordinal))
+        {
+            _pipelineLog?.RecordStep(folder, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptPromotionStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Skipped,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "no-implementation",
+                VerdictSummary = "Sight review completed without promoting implementation cards.",
+                Reason = "The operator completed the concept without promotion.",
+            });
+        }
+        _pipelineLog?.Complete(folder, now);
+        SteerPendingMarker.Clear(folder, _logger);
     }
 
     private bool CanCompleteEscalatedJob(TaskInfo info, ProjectSettings settings)
@@ -399,7 +448,8 @@ public sealed class TaskTransitionService
     /// </summary>
     public async Task<IReadOnlyList<BatchMoveItemResult>> BatchMoveAsync(
         IEnumerable<BatchMoveItem> items,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? cause = null)
     {
         var results = new List<BatchMoveItemResult>();
         foreach (var item in items)
@@ -438,7 +488,7 @@ public sealed class TaskTransitionService
                     item.WatchPath,
                     ct,
                     item.TargetIndex,
-                    cause: TimelineActors.Human(""),
+                    cause: string.IsNullOrWhiteSpace(cause) ? TimelineActors.Human("") : cause,
                     reason: item.Reason);
             }
             catch (Exception ex)

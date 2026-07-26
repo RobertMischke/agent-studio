@@ -40,7 +40,7 @@ export class RemoteHostsService {
 
   /**
    * Refresh the compact live view without replacing a longer telemetry series
-   * already loaded by the Remote Hosts page.
+   * already loaded by the Execution Hosts page.
    */
   refresh(): void {
     if (this.hosts().length === 0) {
@@ -436,7 +436,10 @@ function mergeRecentTelemetry(
   );
   const findings = new Map(
     [...existing.findings, ...recent.findings]
-      .map(finding => [`${finding.kind}:${finding.since}:${finding.until}`, finding]),
+      .map(finding => [
+        `${finding.kind}:${finding.isActive === false ? 'history' : 'active'}`,
+        finding,
+      ]),
   );
   return {
     ...existing,

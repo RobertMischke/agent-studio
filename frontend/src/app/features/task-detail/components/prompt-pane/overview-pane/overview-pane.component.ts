@@ -2,8 +2,7 @@ import {
   ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, effect, inject, input, output, signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
-import { TaskState } from '../../../../../models/task.model';
+import { TaskState, type CliType, type PromoteToCodingResponse, type TaskInfo } from '../../../../../models/task.model';
 import { CreateTaskFormService, type PendingAttachment } from '../../../../board';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
@@ -30,8 +29,7 @@ import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail
 import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { PlanningSpawnPanelComponent } from '../../planning-spawn-panel/planning-spawn-panel.component';
-import { TooltipDirective } from 'coding-agent-chat/shared';
-import type { StructuredTooltip, TooltipSeverity } from 'coding-agent-chat/shared';
+import { TooltipDirective, type StructuredTooltip, type TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
@@ -51,6 +49,7 @@ import { NotificationService } from '../../../../../services/notification.servic
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { ExecutionLocationBadgeComponent } from '../../../../../components/execution-location-badge/execution-location-badge.component';
+import { CopyableTaskKeyComponent } from '../../../../../components/copyable-task-key/copyable-task-key.component';
 import {
   buildPipelineGroups,
   groupAriaLabel,
@@ -467,7 +466,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, CopyableTaskKeyComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

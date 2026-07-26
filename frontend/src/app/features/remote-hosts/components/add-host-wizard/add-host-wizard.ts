@@ -96,7 +96,7 @@ export class AddHostWizardComponent {
       case 1: return 'Install git, curl, build-essential, .NET 10, Node 22, Claude, Codex, and Playwright Chromium. Then publish `runner/AgentRunner.csproj` to `/opt/agent-host` and link `/opt/agent-runner` to it for migration compatibility.';
       case 2: return 'Run `ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -N ""`, register the `.pub` key as a write-enabled repository deploy key, then set `RUNNER_GIT_PUSH_REMOTE` to the SSH repository URL.';
       case 3: return 'Run `claude` or `claude setup-token`, then `codex login`, directly on the host. Verify each CLI with its version command and a small non-interactive prompt.';
-      default: return 'Run `agent-host --health-check`, start `agent-host.service`, and send one ready task through the remote host. A clean external completion confirms the handoff.';
+      default: return 'Run `agent-host --health-check`, start `agent-host.service`, and send one ready task through this execution host. A clean external completion confirms the handoff.';
     }
   }
 

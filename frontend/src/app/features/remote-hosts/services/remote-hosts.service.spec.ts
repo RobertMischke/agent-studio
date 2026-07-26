@@ -21,6 +21,12 @@ describe('RemoteHostsService', () => {
     svc.ensureLoaded();
     const hosts = svc.hosts();
     expect(hosts.length).toBeGreaterThanOrEqual(2);
+    expect(hosts[0]).toMatchObject({
+      id: 'local',
+      name: 'Local machine',
+      role: 'local',
+      clientId: 'local-default',
+    });
     expect(hosts.some((h) => h.role === 'local')).toBe(true);
     expect(hosts.some((h) => h.role === 'remote')).toBe(true);
     expect(hosts.find((h) => h.id === 'agent-runner-01')).toMatchObject({
@@ -73,7 +79,7 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
-  it('uses a compact refresh window while preserving a loaded 14-day series', () => {
+  it('preserves a loaded 14-day series and replaces an updated active finding', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
     });
@@ -112,7 +118,14 @@ describe('RemoteHostsService client registry hydration', () => {
       clientId: client.id,
       window: '14d',
       points: [point(older, 2)],
-      findings: [],
+      findings: [{
+        kind: 'oversubscribed',
+        label: 'Oversubscribed',
+        since: older,
+        until: older,
+        occurrences: 1,
+        isActive: true,
+      }],
     });
     http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
@@ -122,14 +135,23 @@ describe('RemoteHostsService client registry hydration', () => {
       clientId: client.id,
       window: '1h',
       points: [point(latest, 3)],
-      findings: [],
+      findings: [{
+        kind: 'oversubscribed',
+        label: 'Oversubscribed',
+        since: older,
+        until: latest,
+        occurrences: 1,
+        isActive: true,
+      }],
     });
     http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     expect(svc.hosts().find(host => host.id === client.id)?.telemetry).toMatchObject({
       window: '14d',
       points: [{ timestamp: older }, { timestamp: latest }],
+      findings: [{ kind: 'oversubscribed', since: older, until: latest, isActive: true }],
     });
+    expect(svc.hosts().find(host => host.id === client.id)?.telemetry?.findings).toHaveLength(1);
     http.verify();
   });
 

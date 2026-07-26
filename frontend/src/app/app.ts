@@ -26,6 +26,7 @@ import {
   LaneCollapseService,
   ProjectTabsComponent,
   TypeFilterOption,
+  BoardDragStateService,
   BoardMutationsService,
   CreateTaskFormService,
   buildProjectTokenChip,
@@ -339,6 +340,7 @@ export class App implements OnInit, OnDestroy {
   readonly createJobForm = inject(CreateTaskFormService);
   /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
   private readonly boardMutations = inject(BoardMutationsService);
+  private readonly boardDrag = inject(BoardDragStateService);
   /** Re-exposed for the column template so the Archive-all button can disable
    *  itself + show a spinner while a bulk archive is in flight. */
   readonly archivingInProgress = this.boardMutations.archiving;
@@ -605,16 +607,8 @@ export class App implements OnInit, OnDestroy {
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
-    // Orchestrator prep is no longer a backlog lane — it runs in-place on
-    // 1-preparation as the optional `pre-orchestrator-prep` pipeline step
-    // (see PipelineCatalogue).
-    //
-    // Order inside the Backlog super-column (top → bottom): the most
-    // actionable lanes come first so the user reading the column from the
-    // top reaches "what should I pick up next?" without scrolling. Earlier
-    // ordering (0-backlog → 2-ready) buried the Ready lane under hundreds
-    // of backlog items.
-    //
+    // Backlog lanes put the most actionable work first; the old order buried
+    // Ready under large backlogs.
     //   1. 2-ready      "Ready"              — pick-up candidates
     //   2. 1-preparation                     — in human preparation
     //   3. 0-backlog                         — fresh inbox / triage
@@ -671,6 +665,10 @@ export class App implements OnInit, OnDestroy {
       icon: '🤖',
       jobs: grouped.autoReview,
     });
+    const escalatedJobs = grouped.escalated ?? [];
+    // Future option: metadata could apply this empty-lane policy to exception
+    // lanes such as 1-preparation. For now it is intentionally Escalated-only.
+    const showEscalated = escalatedJobs.length > 0 || this.boardDrag.active();
     return [
       {
         id: 'backlog',
@@ -687,7 +685,7 @@ export class App implements OnInit, OnDestroy {
         label: 'Done & Decide',
         lanes: [
           // Intervention comes before acceptance in the visible workflow.
-          { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
+          ...(showEscalated ? [{ state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: escalatedJobs }] : []),
           { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
           { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
           { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },

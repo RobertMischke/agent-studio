@@ -174,6 +174,46 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void VersionedReissueExperimentTemplates_PreserveControlAndSeparateTreatmentEvidence()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["title"] = "Fix the toolbar spacing",
+            ["prompt_text"] = "Original task context.",
+            ["reissue_findings"] = ReissuePromptExperiment.BuildTreatmentFindings(
+                new[] { "Fix wrapping in `toolbar.component.scss`." },
+                escalate: false),
+            ["reissue_followup"] = "RAW-REVIEW-EVIDENCE",
+            ["reissue_evidence"] = "RAW-REVIEW-EVIDENCE",
+            ["prompt_path"] = "prompt.md",
+            ["job_folder"] = "job",
+            ["working_directory"] = "work",
+            ["repository_path"] = "repo",
+            ["attachments_list"] = "(none)",
+            ["mode_framing"] = "",
+        };
+        var prompts = Prompts();
+        var control = prompts.Render(RuntimePromptService.RunnerReissueControlV1, values);
+        var treatment = prompts.Render(RuntimePromptService.RunnerReissueTreatmentV1, values);
+
+        Assert.Contains("Full reissue context", control);
+        Assert.Contains("Numbered findings to resolve", treatment);
+        Assert.Contains("1.", treatment);
+        Assert.Contains("Exact deficiency:", treatment);
+        Assert.Contains("File, symbol, or artifact:", treatment);
+        Assert.Contains("Required change:", treatment);
+        Assert.Contains("Focused verification or acceptance evidence:", treatment);
+        Assert.Contains("Evidence block", treatment);
+        Assert.True(
+            treatment.IndexOf("Focused verification or acceptance evidence:", StringComparison.Ordinal)
+            < treatment.IndexOf("RAW-REVIEW-EVIDENCE", StringComparison.Ordinal));
+        Assert.Contains("[[TASK_DONE]]", control);
+        Assert.Contains("[[TASK_DONE]]", treatment);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", control);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", treatment);
+    }
+
+    [Fact]
     public void AllRunnerTemplates_SpellOutTheOutputContract()
     {
         var prompts = Prompts();
@@ -320,10 +360,18 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
 
-            Assert.Contains("Please do not commit or push yourself", rendered);
-            Assert.Contains("that is not a problem", rendered);
-            Assert.Contains("shown and cleaned up", rendered);
-            Assert.Contains("Never push to a protected branch", rendered);
+            // Fresh/recovery/reissue use the calm wording, while the two resume
+            // templates still carry the earlier direct form. Both state the
+            // current platform-owned commit boundary without punitive language.
+            var usesCalmWording = rendered.Contains(
+                "Please do not commit or push yourself",
+                StringComparison.Ordinal);
+            var usesDirectWording = rendered.Contains(
+                "Do not run `git commit`",
+                StringComparison.Ordinal);
+            Assert.True(usesCalmWording || usesDirectWording);
+            Assert.Contains("push", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("process violation", rendered, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -637,6 +685,19 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RenderModeFraming_Concept_CarriesBoundedWorkbenchContract()
+    {
+        var framing = Prompts().RenderModeFraming("concept", allowWebAccess: false);
+
+        Assert.Contains("docs-only Workbench delivery", framing);
+        Assert.Contains("docs/operations/<topic>/", framing);
+        Assert.Contains("workbench.json", framing);
+        Assert.Contains("index.html", framing);
+        Assert.Contains("[[TASK_NEEDS_INPUT:", framing);
+        Assert.DoesNotContain("Read-only run", framing);
+    }
+
+    [Fact]
     public void RenderModeFraming_CodingWithWeb_AddsWebHintOnly()
     {
         // Decision 2: the web toggle is independent of the mode. A coding task
@@ -697,7 +758,9 @@ public class TaskRunnerPromptTests
     [Fact]
     public void ModeFramingSnippets_DoNotContainEmDashes()
     {
-        var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
+        var framing =
+            Prompts().RenderModeFraming("research", allowWebAccess: true)
+            + Prompts().RenderModeFraming("concept", allowWebAccess: false);
         Assert.DoesNotContain("—", framing);
     }
 

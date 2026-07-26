@@ -42,7 +42,15 @@ internal static class PromptUsageCatalog
         },
         ["runner-reissue-change.md"] = new[]
         {
-            new PromptUsageRef("ProjectRunner", "BuildReissuePlan", "Re-issues a task with a requested change."),
+            new PromptUsageRef("ProjectRunner", "BuildReissuePlan", "Legacy unversioned reissue prompt retained for override compatibility."),
+        },
+        ["runner-reissue-control-v1.md"] = new[]
+        {
+            new PromptUsageRef("ProjectRunner", "BuildReissuePlan", "Control arm for the finding-first reissue prompt experiment."),
+        },
+        ["runner-reissue-treatment-v1.md"] = new[]
+        {
+            new PromptUsageRef("ProjectRunner", "BuildReissuePlan", "Structured treatment arm for the finding-first reissue prompt experiment."),
         },
         ["epic-decomposition.md"] = new[]
         {

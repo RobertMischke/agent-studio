@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgentStudio.Pipeline;
 
 namespace AgentStudio.Runner;
 
@@ -100,6 +101,7 @@ public class ProjectRunner
     // of a permanent "- -". Optional so test fixtures that build the runner
     // directly keep working; production DI always supplies an instance.
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.IConceptWorkbenchPublisher? _conceptWorkbenchPublisher;
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly CliRouter _router;
@@ -430,7 +432,8 @@ public class ProjectRunner
         ILoadThrottleGate? loadThrottle = null,
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
-        CliQuotaWaitPolicyService? quotaWaitPolicy = null)
+        CliQuotaWaitPolicyService? quotaWaitPolicy = null,
+        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -473,6 +476,7 @@ public class ProjectRunner
         _pipelineLog = pipelineLog;
         _modelQualification = modelQualification;
         _integrationPushQueue = integrationPushQueue;
+        _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -2521,7 +2525,7 @@ public class ProjectRunner
                 reissueOpenItems = EvaluateReissueOpenItems(info);
                 if (reissueOpenItems.Intervenes)
                 {
-                    plan = BuildReissueChangePlan(plan, reissueOpenItems);
+                    plan = BuildReissueChangePlan(plan, reissueOpenItems, ProjectName, info.Id);
                     var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
                         ? OrchestratorMessageKind.Steer
                         : OrchestratorMessageKind.SoftIntervention;
@@ -2743,6 +2747,24 @@ public class ProjectRunner
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
             }
             processStartConfirmed = true;
+
+            if (plan.ReissuePromptAssignment is { } promptAssignment)
+            {
+                ReissuePromptExperimentLog.Append(
+                    info.FolderPath,
+                    ProjectName,
+                    info.Id,
+                    promptAssignment,
+                    execution.StartedAt,
+                    runModel,
+                    runThinkingLevel,
+                    _logger);
+                _logger.LogInformation(
+                    "reissue_prompt_experiment project={Project} job={JobId} experiment={ExperimentId} arm={Arm} template={TemplateVersion} attempt={Attempt} family={PromptFamily} cause={Cause}",
+                    ProjectName, info.Id, promptAssignment.ExperimentId, promptAssignment.Arm,
+                    promptAssignment.TemplateVersion, promptAssignment.Attempt,
+                    promptAssignment.PromptFamily, promptAssignment.Cause);
+            }
 
             // A run-start is durable only after the CLI adapter confirms a
             // process. Neither the canonical session event nor its timeline
@@ -3628,6 +3650,7 @@ public class ProjectRunner
         AgentOutcomeKind outcomeKind, RunIntent intent, string mode, TaskInfo? activeInfo)
         => activeInfo != null
            && outcomeKind == AgentOutcomeKind.NeedsInput
+           && !TaskModes.IsConcept(activeInfo.Mode)
            && (intent == RunIntent.AutoPickup || IsAutoMode(mode));
 
     /// <summary>
@@ -4476,6 +4499,7 @@ public class ProjectRunner
             var reviewFindings = GatherAspectConcernSummaries(info.FolderPath)
                 .Concat(GatherCodeReviewFindings(info.FolderPath))
                 .ToList();
+            var reissueCause = ResolveLatestReissueCause(info.FolderPath);
 
             return ReissueOpenItemsPreCheck.Evaluate(new ReissueOpenItemsPreCheck.PreCheckInput
             {
@@ -4484,6 +4508,8 @@ public class ProjectRunner
                 PriorRunCount = prior?.Attempt ?? 0,
                 FollowUpText = followUpText,
                 AspectConcernSummaries = reviewFindings,
+                ReissueCause = reissueCause,
+                PromptFamily = ReissuePromptExperiment.ResolvePromptFamily(reissueCause),
             });
         }
         catch (Exception ex)
@@ -4493,6 +4519,29 @@ public class ProjectRunner
             {
                 Action = ReissueOpenItemsPreCheck.PreCheckAction.None,
             };
+        }
+    }
+
+    private string ResolveLatestReissueCause(string jobFolderPath)
+    {
+        if (_timeline == null) return "unknown";
+        try
+        {
+            var reopen = _timeline.ReadAll(jobFolderPath)
+                .LastOrDefault(evt =>
+                    string.Equals(
+                        evt.Kind,
+                        TimelineEventKinds.QualityLoopReopened,
+                        StringComparison.Ordinal)
+                    && evt.Details?.ContainsKey("cause") == true);
+            return reopen?.Details?["cause"]?.Trim().ToLowerInvariant() is { Length: > 0 } cause
+                ? cause
+                : "unknown";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve latest reissue cause for {Folder}", jobFolderPath);
+            return "unknown";
         }
     }
 
@@ -4625,7 +4674,10 @@ public class ProjectRunner
         if (!TaskModes.IsReadOnly(info.Mode)) return;
         try
         {
-            var status = _git.GetStatus(info.Id, Entry.Path);
+            var status = _git.GetStatus(
+                info.Id,
+                Entry.Path,
+                preferRunLocation: TaskModes.IsConcept(info.Mode));
             var containment = ReadOnlyContainmentPolicy.Evaluate(
                 info.Mode, status.IsRepo, status.Files.Select(f => f.Path).ToList());
             if (!containment.IsViolation) return;
@@ -5028,15 +5080,17 @@ public class ProjectRunner
             }
 
             WorktreeCommitRange? worktreeCommitRange = null;
+            var worktreeTask = runInfo ?? _scanner.FindJob(jobId, Entry.Path);
             // ADR-0052/0057: every coding worktree run commits its edits on the
             // task branch and integrates them into the work branch BEFORE the
             // post-run review reads the result; a merge conflict is left for the
             // review to escalate. Slot count does not select this path.
             if (run.IsWorktreeRun
+                && worktreeTask != null
+                && !TaskModes.IsConcept(worktreeTask.Mode)
                 && agentGitDecision.Disposition != AgentGitMutationDisposition.Escalate)
             {
-                var wtInfo = runInfo ?? _scanner.FindJob(jobId, Entry.Path);
-                if (wtInfo != null) worktreeCommitRange = await IntegrateWorktreeRunAsync(run, wtInfo);
+                worktreeCommitRange = await IntegrateWorktreeRunAsync(run, worktreeTask);
             }
 
             // Persist last token/usage summary (best-effort)
@@ -5776,6 +5830,19 @@ public class ProjectRunner
 
             // movedToReview was computed up-front for the circuit breaker.
 
+            // Concept cards never merge their task branch. Once the core run has
+            // produced a reviewable docs-only Workbench, copy that single
+            // directory through the managed project-artifact commit/push
+            // boundary. The subsequent concept review reads the published
+            // document and routes it to the human sight-review marker.
+            if (movedToReview
+                && activeInfo != null
+                && TaskModes.IsConcept(activeInfo.Mode))
+            {
+                var movedConcept = _scanner.FindJob(jobId, Entry.Path) ?? activeInfo;
+                await PublishConceptWorkbenchAsync(movedConcept, run);
+            }
+
             // UI tasks do not enter the standard aspect-review pipeline. A
             // successful core run must first satisfy its iteration-scoped visual
             // contract, then pauses directly in Human Review with the durable
@@ -6006,6 +6073,47 @@ public class ProjectRunner
                 NotifyStatus();
             }
         }
+    }
+
+    private async Task PublishConceptWorkbenchAsync(TaskInfo info, ActiveRun run)
+    {
+        var startedAt = DateTime.UtcNow;
+        ConceptWorkbenchPublishResult result;
+        if (_conceptWorkbenchPublisher is null)
+        {
+            var review = new ConceptWorkbenchReview(
+                false, null, null, null,
+                ["Concept Workbench publisher is unavailable."]);
+            result = new ConceptWorkbenchPublishResult(false, review.Summary, review);
+        }
+        else
+        {
+            result = await _conceptWorkbenchPublisher.PublishAsync(
+                info,
+                run.WorktreePath ?? run.WorkingDirectory ?? string.Empty,
+                CancellationToken.None);
+        }
+
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.ConceptWorkbenchPlacementStepId,
+            Kind = StepKind.Tool,
+            Status = result.Success ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+            StartedAt = startedAt,
+            CompletedAt = DateTime.UtcNow,
+            Verdict = result.Success ? "workbench-published" : "workbench-invalid",
+            VerdictSummary = result.Summary,
+            Reason = result.Success ? null : result.Summary,
+        });
+        _logger.Log(
+            result.Success ? LogLevel.Information : LogLevel.Warning,
+            "concept_workbench_placement project={Project} job={JobId} success={Success} path={Path} commit={Commit} summary={Summary}",
+            ProjectName,
+            info.Id,
+            result.Success,
+            result.Review.RepoRelativeDirectory ?? "",
+            result.CommitSha ?? "",
+            result.Summary);
     }
 
     private async Task HandleUiIterationCompletionAsync(
@@ -7055,20 +7163,35 @@ public class ProjectRunner
 
     private static RunPlan BuildReissueChangePlan(
         RunPlan plan,
-        ReissueOpenItemsPreCheck.PreCheckDecision decision)
+        ReissueOpenItemsPreCheck.PreCheckDecision decision,
+        string projectName,
+        string jobId)
     {
+        var assignment = ReissuePromptExperiment.Assign(
+            $"{projectName}/{jobId}",
+            decision.PriorRunCount + 1,
+            decision.PromptFamily,
+            decision.ReissueCause,
+            decision.OpenItems.Count);
+        var treatment = assignment.Arm == ReissuePromptExperiment.TreatmentArm;
         var variables = new Dictionary<string, string?>(plan.PromptVariables)
         {
-            ["reissue_findings"] = BuildReissueFindingsBlock(decision),
+            ["reissue_findings"] = treatment
+                ? ReissuePromptExperiment.BuildTreatmentFindings(
+                    decision.OpenItems,
+                    decision.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate)
+                : BuildReissueFindingsBlock(decision),
             ["reissue_followup"] = NormalizeReissueFollowUp(decision.FollowUpText),
+            ["reissue_evidence"] = NormalizeReissueFollowUp(decision.FollowUpText),
         };
 
         return plan with
         {
-            PromptTemplate = RuntimePromptService.RunnerReissueChange,
+            PromptTemplate = ReissuePromptExperiment.PromptTemplate(assignment),
             PromptVariables = variables,
             EventKind = "reissue",
             EventReason = decision.Note ?? "auto-review reissue",
+            ReissuePromptAssignment = assignment,
         };
     }
 

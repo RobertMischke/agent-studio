@@ -283,8 +283,11 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
 - The Orchestrator uses the standard `<cac-chat>` footer model control. In
   GPT-only mode it renders every available model and reasoning level from the
   live Codex catalogue, preserves the full selection across navigation context
-  changes, and sends the effective selection with every message. Do not replace
-  it with a routing-only badge, reduced host list, or Orchestrator-only picker.
+  changes, and sends the effective selection with every message. Its CLI row
+  still lists the complete Studio CLI vocabulary; non-Codex entries are
+  disabled with the GPT-only host-policy reason so they are not mistaken for a
+  quota or installation detection failure. Do not replace it with a
+  routing-only badge, reduced host list, or Orchestrator-only picker.
 - Project Overview remains operator-first. Do not add watch paths, repository
   paths, working directories, CLI health, clean-context controls, or session
   administration back to the Overview; those facts belong to Project Settings.

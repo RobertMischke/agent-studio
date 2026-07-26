@@ -19,10 +19,12 @@ import {
   ramUsedPct,
   relativeHeartbeat,
   type HostActionKind,
+  type HostTelemetryFinding,
   type HostTelemetryPoint,
   type MeterTone,
   type RemoteHost,
 } from '../../models/remote-host.model';
+import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -59,6 +61,8 @@ interface Meter {
 })
 export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
+  /** Board-local process runs or remote leased runs attributed to this host. */
+  readonly boardActiveSlots = input(0);
   /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
@@ -75,6 +79,10 @@ export class RemoteHostCardComponent {
   readonly retired = computed(() => this.host().status === 'retired');
   readonly stale = computed(() => !this.liveLoading() && hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly telemetryWindow = signal<'1h' | '6h' | '48h' | '14d'>('6h');
+  readonly latestTelemetry = computed(() => latestHostTelemetry(this.host()));
+  readonly liveTelemetry = computed(() => freshHostTelemetry(this.host(), this.now()));
+  readonly telemetryStale = computed(() =>
+    this.latestTelemetry() !== null && this.liveTelemetry() === null);
   readonly hoveredTelemetryIndex = signal<number | null>(null);
   readonly telemetryPoints = computed(() => {
     const hours = { '1h': 1, '6h': 6, '48h': 48, '14d': 336 }[this.telemetryWindow()];
@@ -117,9 +125,25 @@ export class RemoteHostCardComponent {
     }));
   });
   readonly latestContext = computed(() => {
-    const point = this.telemetryPoints().at(-1);
-    return point ? `${point.activeSlots} RUN active · host load ${(point.load1 ?? 0).toFixed(1)} of ${point.cpuCores} cores` : '';
+    const point = this.latestTelemetry();
+    if (!point) return '';
+    const freshness = this.liveTelemetry() ? '' : ' at last sample · stale';
+    return `${point.activeSlots} RUN active${freshness} · host load ${(point.load1 ?? 0).toFixed(1)} of ${point.cpuCores} cores`;
   });
+  readonly telemetryFindings = computed(() => {
+    const byPhase = new Map<string, HostTelemetryFinding>();
+    for (const finding of this.host().telemetry?.findings ?? []) {
+      const phase = finding.isActive === false ? 'history' : 'active';
+      byPhase.set(`${finding.kind}:${phase}`, finding);
+    }
+    return [...byPhase.values()].sort((left, right) => {
+      const activity = Number(right.isActive !== false) - Number(left.isActive !== false);
+      return activity || right.until.localeCompare(left.until);
+    });
+  });
+  readonly visibleTelemetryFindings = computed(() => this.telemetryFindings().slice(0, 3));
+  readonly additionalTelemetryFindingCount = computed(() =>
+    Math.max(0, this.telemetryFindings().length - this.visibleTelemetryFindings().length));
 
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();
@@ -168,10 +192,24 @@ export class RemoteHostCardComponent {
   });
   readonly runSlotsLabel = computed(() => {
     if (this.liveLoading()) return 'Loading daemon telemetry…';
-    if (this.liveError() || this.stale()) return 'Live count unavailable';
-    const active = this.host().activeTaskCount ?? 0;
-    const free = this.host().availableSlots ?? 0;
-    return `${active} active · ${free} free · ${active + free} max`;
+    if (this.liveError()) return 'Live count unavailable';
+    const latest = this.latestTelemetry();
+    if (!latest) return 'No slot telemetry';
+    if (!this.liveTelemetry()) return `${latest.activeSlots} active · stale`;
+    return `${latest.activeSlots} active`;
+  });
+  readonly runSlotsDiverge = computed(() => {
+    const telemetry = this.liveTelemetry();
+    return telemetry !== null && telemetry.activeSlots !== this.boardActiveSlots();
+  });
+  readonly runSlotsTooltip = computed(() => {
+    const telemetry = this.liveTelemetry();
+    if (!telemetry) return 'Active-slot telemetry is stale or unavailable.';
+    if (this.runSlotsDiverge()) {
+      const boardSource = this.host().role === 'remote' ? 'live remote leases' : 'live local executions';
+      return `Sources disagree: telemetry reports ${telemetry.activeSlots} active slots; the board reports ${this.boardActiveSlots()} ${boardSource} for this host.`;
+    }
+    return `Telemetry and board leases agree on ${telemetry.activeSlots} active ${telemetry.activeSlots === 1 ? 'slot' : 'slots'}.`;
   });
   readonly gateWorkLabel = computed(() => {
     if (this.liveLoading()) return 'Loading gate events…';
@@ -242,6 +280,13 @@ export class RemoteHostCardComponent {
   }
 
   clearTelemetryHover(): void { this.hoveredTelemetryIndex.set(null); }
+
+  findingTooltip(finding: HostTelemetryFinding): string {
+    const range = `${finding.since} to ${finding.until}`;
+    return finding.isActive === false
+      ? `${finding.occurrences ?? 1} completed phase(s), ${range}`
+      : range;
+  }
 }
 
 function sparkline(points: readonly HostTelemetryPoint[], value: (point: HostTelemetryPoint) => number | null, max: number): string {

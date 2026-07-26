@@ -34,6 +34,10 @@
   border-radius: 8px;
   background: var(--studio-bg-elevated);
 }
+.workload--stale {
+  color: var(--studio-fg-muted);
+  opacity: 0.62;
+}
 .workload__kind {
   color: var(--studio-accent-3-strong);
   font-size: 10px;
@@ -44,6 +48,12 @@
   color: var(--studio-fg-strong);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+.workload__warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--severity-warn);
+  vertical-align: middle;
 }
 .workload small {
   color: var(--studio-fg-muted);

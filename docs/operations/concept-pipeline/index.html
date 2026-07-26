@@ -137,10 +137,10 @@
 <h2 id="umsetzung"><span class="no">5</span>Umsetzung &amp; erste Nutzer</h2>
 <table>
   <tr><th>Arbeitspaket</th><th>Was</th><th>Status</th></tr>
-  <tr><td><b>Task-Kind „concept"</b></td><td>Additiv zu Planning/Research: Kind, dessen Pipeline read-only ist und dessen Deliverable ein Workbench-Ordner ist.</td><td><span class="pill new">zu bauen</span></td></tr>
-  <tr><td><b>Pipeline-Schritte</b></td><td>Core-Run (read-only) → Workbench-Ablage → Konzept-Review (Vollständigkeit/Beleg) → Sichtblick-Gate → Promote.</td><td><span class="pill new">zu bauen</span></td></tr>
-  <tr><td><b>Outcome/Lane</b></td><td>„concept delivered, awaiting Sichtblick" als Erfolg; nicht als 5e-Eskalation. Sichtblick-Lane oder Marker.</td><td><span class="pill new">zu bauen</span></td></tr>
-  <tr><td><b>Promote-Flow</b></td><td>Workbench-Konzept → Umsetzungs-Karten (analog PlanningPromotion, Quelle ist das Doc statt status.md).</td><td><span class="pill new">zu bauen</span></td></tr>
+  <tr><td><b>Task kind <code>concept</code></b></td><td>Additive to Planning/Research: a docs-only mode whose deliverable is a Workbench folder.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Pipeline steps</b></td><td>Read-only core run → Workbench placement → concept completeness/evidence review → sight-review gate → promotion.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Outcome and lane</b></td><td><code>concept delivered, awaiting sight review</code> is success, including <code>NEEDS_INPUT</code>; it is not a 5e escalation.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Promotion</b></td><td>Workbench document → idempotent coding cards in Preparation, with the document as source.</td><td><span class="pill done">implemented</span></td></tr>
   <tr><td><b>Erster Nutzer</b></td><td>AGT-2355 (Deck-Icon-Exploration) als Konzept-Karte; danach die Container-Mount-Konzepte aus execution-model-shift.</td><td><span class="pill queued">wartet</span></td></tr>
 </table>
 
@@ -151,6 +151,15 @@
     <li><b>Wie viel darf der Agent selbst entscheiden?</b> Nur Alternativen vorlegen (immer Sichtblick), oder bei klaren Fällen selbst eine Empfehlung als Default setzen, die nur bei Widerspruch aufgehalten wird?</li>
     <li><b>Ein Konzept = ein Workbench, oder Sammel-Workbenches?</b> Kleine Konzepte (Icon) einzeln vs. in ein thematisches Sammel-Workbench (z.B. „Board-UX") einsortiert?</li>
   </ul>
+</div>
+<div class="box">
+  <p><b>Implementation defaults pending Robert's answers:</b></p>
+  <ul>
+    <li><b>Lane:</b> reuse <code>5-human-review</code> and distinguish concepts with a durable <code>concept-sight-review</code> marker. No new lane is introduced.</li>
+    <li><b>Agent autonomy:</b> the agent may recommend and mark a default, but human sight review remains mandatory before completion or promotion.</li>
+    <li><b>Workbench cardinality:</b> one concept card produces exactly one Workbench directory. Shared or collected Workbenches are not written automatically.</li>
+  </ul>
+  <p class="dim">These are reversible defaults, not final product decisions. Robert's answer supersedes them.</p>
 </div>
 <p class="dim">Dieses Dokument ist selbst nach der beschriebenen Konzept-Pipeline entstanden (dogfooded): read-only, Ergebnis ist dieses Workbench, Abschluss ist dein Sichtblick.</p>
 

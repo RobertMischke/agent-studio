@@ -37,7 +37,7 @@ its path and format only change together with the code that reads it.
 |---|---|
 | [`app/schemas/`](../app/schemas/README.md) | JSON schemas for wire and disk shapes (validated by the backend). |
 | `app/help/` | Short Markdown help bodies served by the app next to non-obvious UI surfaces (`GET /api/concept-docs/{topic}`). |
-| `app/config/` | Wiki configuration: the curated home (`home.json`) and the saved category order (`wiki-order.json`). |
+| `app/config/` | Wiki configuration: the curated home (`home.json`) and saved category/document order (`wiki-order.json`). |
 
 **Rule:** `app/` = Code-Vertrag — Pfad und Format nur zusammen mit Code ändern.
 A guard test (`WikiPathCentralizationGuardTests`) keeps every hardcoded `docs/`
@@ -47,6 +47,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 
 | Topic | Start here |
 |---|---|
+| Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
@@ -63,15 +64,20 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
 | Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
+| Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |
+| Project Deck visual audit and Deck-Panel v1 recommendation | [interactive Deck Audit](../concepts/visual-style-guide/deck-audit.html) · [implementation contract](../concepts/visual-style-guide/deck-panel-v1.md) |
 | Model and thinking-level indicator vocabulary | [design/model-level-indicator.md](../quality/design/model-level-indicator.md) |
 | Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](../quality/README.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](../quality/design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](../quality/design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](../quality/design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](../concepts/tree-project-indicator-alternatives.md) |
+| Visual Style Guide Workbench (current tokens and live patterns, Empty State / Mini Indicator / Runner Card comparisons, and vNext decisions) | [visual Style Guide](../concepts/visual-style-guide.html) · [Workbench folder](../concepts/visual-style-guide/README.md) · [Empty States](../concepts/visual-style-guide/empty-states.html) · [Mini Indicators](../concepts/visual-style-guide/mini-indicators.html) · [Runner Cards](../concepts/visual-style-guide/runner-cards.html) · [vNext](../concepts/visual-style-guide/vnext.md) |
+| Narrative task view (proactive PRE/POST pipeline generation, versioned cache, fixed AHP report template, measured cost model) | [interactive Workbench](../quality/design/narrative-task-view/index.html) |
 | UX doctrine | [product/design-principles.md](../quality/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](../concepts/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](../concepts/orchestrator-in-app.md) |
@@ -106,7 +112,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner / agent host daemon (Linux) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
 | Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |
-| Remote hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
+| Execution hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](../operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [common-problems/README.md](../operations/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [concepts/designated-topics/README.md](../concepts/designated-topics/README.md) |

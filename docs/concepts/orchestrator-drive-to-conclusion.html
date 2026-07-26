@@ -1107,6 +1107,49 @@
             are covered by unit fixtures, with the QS-26 conflict also covered in Playwright.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2348</code><br><span class="small">remote review baseline comparison</span></td>
+          <td>
+            Remote Review ran a successful build and then the non-MachineBound test suite for every
+            subject. About eleven known failures on the integration branch made the test command exit
+            nonzero for every card, producing 28 false ProductFailure outcomes overnight and further
+            false failures for clean deliveries.
+          </td>
+          <td>
+            The Review Executor and Task Server classified any nonzero review command as a product
+            defect. They did not compare failing-test identities with the subject's merge-base, cache
+            the shared baseline, or retry failures that were new only because of a one-run flake.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> baseline-marked test commands now block only on
+            <code>subject failures - merge-base failures</code> after one retry of new failures.
+            Reports separate and name new and pre-existing failures. Baselines are single-flight
+            cached by repository, baseline SHA, and command hash, so cards return to meaningful
+            Pass or ProductFailure terminals while baseline cleanup continues independently.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-26</td>
+          <td><code>AGT-2345</code><br><span class="small">boot backfill overruled operator lane verdicts</span></td>
+          <td>
+            Every backend restart swept run-backed cards with no provenance verdict out of their operator-selected lanes.
+            Two deploys on 26 July each displaced about six cards, including freshly requeued
+            <span class="lane">2-ready</span> work and Human Review cards; the 25 July restart displaced more than 30.
+            The operator had to restore the intended lanes after every boot.
+          </td>
+          <td>
+            The verdictless Human Review repair consulted only the decision journal, card age, and run provenance. It did
+            not treat the latest human-authored lane transition as a verdict, did not state terminal-lane exclusions, and
+            dropped <code>MoveJobRequest.Reason</code> before writing the <code>lane_changed</code> ledger row.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a latest <code>human</code> or <code>human:&lt;client-id&gt;</code>
+            lane transition now protects the operator-selected lane. Completed and Archive are explicit boot-repair
+            terminals, operator requeues in Ready remain untouched, and every reasoned lane move, including the legacy
+            repair itself, records the reason in <code>timeline.jsonl</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

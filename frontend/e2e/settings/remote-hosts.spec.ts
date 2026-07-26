@@ -4,19 +4,19 @@ import { join } from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 /**
- * Remote Hosts settings section (AGT-1921).
+ * Execution Hosts settings section (AGT-1921).
  *
- * The new "Remote hosts" section of the consolidated Workspace-settings home
+ * The "Execution Hosts" section of the consolidated Workspace-settings home
  * lists every execution location - the operator's local machine and each remote
  * runner - in one list with heartbeat status, capabilities, system vitals
  * (RAM / CPU / Disk), per-CLI quota, and the Re-Probe / Drain / Retire actions.
  *
  * Client lifecycle and activity come from the persisted Task Server API.
- *   - the rail exposes the "Remote hosts" section and the overview card;
+ *   - the rail exposes the "Execution Hosts" section and the overview card;
  *   - the section renders one card per host with vitals + quota;
  *   - the header summary count reconciles to the visible cards (R3);
  *   - Drain and graceful Retire call the API, confirm impact, and preserve retired clients;
- *   - a #/workspace/settings/remote-hosts deep-link opens the section.
+ *   - a #/workspace/settings/execution-hosts deep-link opens the section.
  */
 
 const SHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? '../results/remote-hosts';
@@ -55,7 +55,7 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/workspaces*', json([]));
 }
 
-test.describe('Remote Hosts settings section', () => {
+test.describe('Execution Hosts settings section', () => {
   test.use({ serviceWorkers: 'block' });
 
   test.beforeEach(async ({ page }) => {
@@ -71,12 +71,13 @@ test.describe('Remote Hosts settings section', () => {
     await dismissDevErrorDialog(page);
   });
 
-  test('rail + overview expose the Remote hosts section', async ({ page }) => {
+  test('rail + overview expose the Execution Hosts section', async ({ page }) => {
     await page.getByTestId('status-bar-settings').click();
     await expect(settingsHome(page)).toBeVisible();
     await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toBeVisible();
-    await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toContainText('Remote hosts');
+    await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toContainText('Execution Hosts');
     await expect(page.getByTestId('workspace-settings-card-remote-hosts')).toBeVisible();
+    await expect(page.getByTestId('workspace-settings-card-remote-hosts')).toContainText('Execution Hosts');
   });
 
   test('section lists one card per host; summary reconciles to the cards (R3)', async ({ page }) => {
@@ -90,6 +91,7 @@ test.describe('Remote Hosts settings section', () => {
     const cards = page.getByTestId('remote-host-card');
     const count = await cards.count();
     expect(count).toBeGreaterThanOrEqual(2);
+    await expect(cards.first().getByText('Local', { exact: true })).toBeVisible();
 
     // Every card shows vitals + a status badge.
     await expect(page.getByTestId('remote-host-vitals').first()).toBeVisible();
@@ -136,7 +138,7 @@ test.describe('Remote Hosts settings section', () => {
 
     await expect(remote.getByTestId('remote-host-status')).toContainText('Online');
     await expect(remote.getByTestId('remote-host-activity')).toContainText('Daemonrunning');
-    await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active · 19 free · 20 max');
+    await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active');
     await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 4');
     await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('GATE work does not consume a RUN slot');
     await expect(remote.getByTestId('remote-host-vitals')).toContainText('53%');
@@ -447,7 +449,18 @@ test.describe('Remote Hosts settings section', () => {
     await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify({
         clientId: 'agent-runner-01', window: '14d', points,
-        findings: [{ kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp, until: points.at(-1)?.timestamp }],
+        findings: [
+          { kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp,
+            until: points.at(-1)?.timestamp, occurrences: 1, isActive: true },
+          { kind: 'oversubscribed', label: 'Oversubscribed', since: points[1].timestamp,
+            until: points.at(-1)?.timestamp, occurrences: 1, isActive: true },
+          { kind: 'memory-pressure', label: 'Memory pressure', since: points[0].timestamp,
+            until: points[2].timestamp, occurrences: 3, isActive: false },
+          { kind: 'oversubscribed', label: 'Oversubscribed', since: points[0].timestamp,
+            until: points[1].timestamp, occurrences: 2, isActive: false },
+          { kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp,
+            until: points[1].timestamp, occurrences: 4, isActive: false },
+        ],
       }),
     }));
 
@@ -456,6 +469,14 @@ test.describe('Remote Hosts settings section', () => {
     await expect(remote.getByTestId('remote-host-telemetry')).toBeVisible();
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 RUN active · host load 6.4 of 12 cores');
     await expect(remote.getByTestId('remote-host-findings')).toContainText('VM throttled');
+    await expect(remote.getByTestId('remote-host-finding')).toHaveCount(3);
+    await expect(remote.getByTestId('remote-host-findings')).toContainText('3× in window');
+    await expect(remote.getByTestId('remote-host-findings-more')).toHaveText('+2 more');
+    const findingsBox = await remote.getByTestId('remote-host-findings').boundingBox();
+    const cardBox = await remote.boundingBox();
+    expect(findingsBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    expect(findingsBox!.x + findingsBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width);
     await expect(remote.locator('[data-chart]')).toHaveCount(4);
 
     const inspectedIndex = 4;
@@ -534,17 +555,78 @@ test.describe('Remote Hosts settings section', () => {
     await page.goto('/#/workspace/settings/remote-hosts');
     await setTheme(page, 'dark');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
-    await expect(remote.getByTestId('remote-host-stale')).toContainText('Historical metrics are hidden');
+    await expect(remote.getByTestId('remote-host-stale')).toContainText('last slot sample is marked stale');
     await expect(remote.getByTestId('remote-host-vitals')).toHaveCount(0);
     await expect(remote).not.toContainText('54%');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-stale-dark.png'), fullPage: false });
   });
 
-  test('deep-link opens the Remote hosts section directly', async ({ page }) => {
+  test('dims a stale active-slot sample while a fresh heartbeat remains online', async ({ page }) => {
+    const now = new Date();
+    const staleSample = new Date(now.getTime() - 10 * 60_000).toISOString();
+    await page.unroute('**/api/clients');
+    await page.unroute('**/api/clients/*/telemetry?window=14d');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01',
+        displayName: 'agent-runner-01',
+        kind: 'service',
+        registeredAt: now.toISOString(),
+        lastSeenAt: now.toISOString(),
+        runnerGitStatus: 'ready',
+        runnerDaemonState: 'running',
+        runnerActiveSlots: 3,
+        runnerAvailableSlots: 0,
+      }]),
+    }));
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        clientId: 'agent-runner-01',
+        window: '14d',
+        findings: [],
+        points: [{
+          timestamp: staleSample,
+          cpuPercent: 53,
+          load1: 4.2,
+          load5: 4,
+          load15: 3.8,
+          memoryUsedBytes: 34_000_000_000,
+          memoryTotalBytes: 64_000_000_000,
+          swapInBytesPerSecond: 0,
+          swapOutBytesPerSecond: 0,
+          cpuStealPercent: 0,
+          ioWaitPercent: 1,
+          cpuCores: 12,
+          activeSlots: 3,
+        }],
+      }),
+    }));
+
     await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const runPool = remote.getByTestId('remote-host-run-pool');
+    await expect(remote.getByTestId('remote-host-status')).toContainText('Online');
+    await expect(runPool).toContainText('3 active · stale');
+    await expect(runPool).toHaveClass(/workload--stale/);
+    await expect(remote.getByTestId('remote-host-slots-context')).toHaveClass(/telemetry__context--stale/);
+    await setTheme(page, 'dark');
+    await remote.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-slots-stale-dark--mocked.png'), fullPage: false });
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-slots-stale-light--mocked.png'), fullPage: false });
+  });
+
+  test('deep-link opens the Execution Hosts section directly', async ({ page }) => {
+    await page.goto('/#/workspace/settings/execution-hosts');
     await page.waitForLoadState('domcontentloaded');
     await expect(settingsHome(page)).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('workspace-settings-rail-remote-hosts')).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
+    await expect(page.getByTestId('remote-hosts-panel').getByRole('heading', { level: 2 }))
+      .toHaveText('Execution Hosts');
   });
 });

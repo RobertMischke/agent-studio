@@ -135,4 +135,13 @@ public sealed class SteerTimeoutPolicyTests
         Assert.False(ProjectRunner.ShouldHandleNeedsInputUnattended(
             AgentOutcomeKind.NeedsInput, RunIntent.ManualStart, "manual", task));
     }
+
+    [Fact]
+    public void ConceptNeedsInput_IsAValidSightReviewOutcome_NotAnUnattendedSteer()
+    {
+        var task = new TaskInfo { Id = "AGT-2358", Mode = TaskModes.Concept };
+
+        Assert.False(ProjectRunner.ShouldHandleNeedsInputUnattended(
+            AgentOutcomeKind.NeedsInput, RunIntent.AutoPickup, "auto-continuous", task));
+    }
 }

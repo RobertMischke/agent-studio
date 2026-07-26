@@ -83,4 +83,21 @@ describe('summarizeStatusBarHostLoad', () => {
     const stale = remoteHost(9, 12, 0, '2026-07-24T20:00:00.000Z');
     expect(summarizeStatusBarHostLoad([stale], 0, now)).toBeNull();
   });
+
+  it('includes local execution-host telemetry in the aggregate', () => {
+    const local = {
+      ...remoteHost(1.5, 4, 1),
+      id: 'local',
+      name: 'Local machine',
+      role: 'local' as const,
+      address: null,
+      clientId: 'local-default',
+    };
+
+    expect(summarizeStatusBarHostLoad([local, remoteHost(2.5, 8, 2)], 3)).toMatchObject({
+      load1: 4,
+      cpuCores: 12,
+      activeSlots: 3,
+    });
+  });
 });

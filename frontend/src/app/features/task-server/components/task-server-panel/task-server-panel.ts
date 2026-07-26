@@ -44,6 +44,7 @@ export class TaskServerPanelComponent implements OnInit, OnDestroy {
   readonly status = this.service.status;
   readonly loading = this.service.loading;
   readonly error = this.service.error;
+  readonly unavailable = this.service.unavailable;
   readonly busyAction = this.service.busyAction;
   readonly results = this.service.recentResults;
 
@@ -78,6 +79,8 @@ export class TaskServerPanelComponent implements OnInit, OnDestroy {
   }
 
   reload(): void { void this.service.reload(); }
+
+  requestSignIn(): void { this.service.requestSignIn(); }
 
   onRun(event: { kind: ManagementActionKind; confirmed: boolean }): void {
     void this.service.runAction(event.kind, event.confirmed);

@@ -59,6 +59,7 @@ internal static class RunnerCapabilityProbe
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
             list.Add(Capability(ReviewCapabilities.SourceBundleMaterialization, "review", null, "artifact"));
+            list.Add(Capability(ReviewCapabilities.BaselineComparison, "review", null, "merge-base"));
         }
         AddToolchain(list, CapabilityProtocol.DotNet, "dotnet");
         AddToolchain(list, CapabilityProtocol.Node, "node");
@@ -90,6 +91,7 @@ internal static class RunnerCapabilityProbe
             CapabilityProtocol.Disk,
             CapabilityProtocol.TaskServerConnectivity,
             ReviewCapabilities.SemanticReview,
+            ReviewCapabilities.BaselineComparison,
         }
         .Concat(options.RequiredCapabilities)
         .Distinct(StringComparer.Ordinal)

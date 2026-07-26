@@ -234,6 +234,8 @@ public sealed class HumanReviewEscalation
             TaskStates.Escalated,
             watchPath,
             ct,
+            cause: TimelineActors.System,
+            reason: reason,
             authorityWrite: authorityWrite,
             suppressProductExecution: authorityWrite is not null);
         if (outcome.Status == MoveJobStatus.Success)
@@ -258,7 +260,12 @@ public sealed class HumanReviewEscalation
         string category, string reason)
     {
         var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
-        var outcome = _states.MoveJob(jobId, TaskStates.Escalated, watchPath);
+        var outcome = _states.MoveJob(
+            jobId,
+            TaskStates.Escalated,
+            watchPath,
+            cause: TimelineActors.System,
+            reason: reason);
         if (outcome.Status == MoveJobStatus.Success)
         {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);

@@ -59,10 +59,11 @@ export type TaskKind = 'task' | 'epic';
 
 /**
  * Task execution mode. Mirrors backend `TaskModes`. `coding` is the default
- * read-write mode; `planning` and `research` are read-only (no source writes),
- * and `research` additionally permits web access by default.
+ * read-write mode; `planning` and `research` produce read-only reports;
+ * `concept` authors one docs-only Workbench; and `research` permits web access
+ * by default.
  */
-export type TaskMode = 'coding' | 'planning' | 'research';
+export type TaskMode = 'coding' | 'planning' | 'research' | 'concept';
 
 /**
  * F34 — structured cross-references between tasks, keyed by F33 stable keys
@@ -1025,6 +1026,37 @@ export interface PromoteAttachmentRef {
   source: string;
   /** Relative API URL serving the image bytes. */
   url: string;
+}
+
+export interface ConceptImplementationTask {
+  title: string;
+  promptMarkdown: string;
+}
+
+export interface ConceptSourceDocument {
+  repoRelativePath: string;
+  title: string;
+}
+
+/** Validated implementation-card proposals from a published concept Workbench. */
+export interface PromoteConceptResponse {
+  source: ConceptSourceDocument;
+  items: ConceptImplementationTask[];
+  mode: TaskMode;
+  targetState: string;
+  watchPath: string;
+  projectName: string;
+}
+
+export interface PromotedConceptTask {
+  jobId: string;
+  taskKey?: string | null;
+  title: string;
+}
+
+export interface PromoteConceptTasksResponse {
+  source: ConceptSourceDocument;
+  created: PromotedConceptTask[];
 }
 
 /**

@@ -2,6 +2,8 @@
 
 The `5e-escalated` lane is the exception lane for tasks that need a human decision. A card lands here when auto-review cannot make a safe call on its own, for example because credentials are missing, the task conflicts with product direction, or the evidence shows a real unresolved choice.
 
+The board hides this intervention lane while it is empty. It appears in its usual first position under Done & Decide as soon as the first escalated card arrives. Starting a card drag also reveals the empty lane temporarily, so it remains available as a direct drop target.
+
 ## What to do here
 
 Pick the next action deliberately:

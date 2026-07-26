@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deck Audit | Visual Style Guide Workbench</title>
+<style>
+:root {
+  color-scheme: dark;
+  --studio-bg-titlebar: #181825;
+  --studio-bg-sidebar: #181825;
+  --studio-bg-editor: #0f0f1a;
+  --studio-bg-elevated: #1e1e2e;
+  --studio-bg-hover: rgba(255, 255, 255, .04);
+  --studio-bg-selected: #252537;
+  --studio-border: rgba(255, 255, 255, .06);
+  --studio-border-strong: rgba(255, 255, 255, .12);
+  --studio-fg: #e2e8f0;
+  --studio-fg-strong: #f8fafc;
+  --studio-fg-dim: #94a3b8;
+  --studio-fg-muted: #64748b;
+  --studio-accent: #d97757;
+  --studio-on-accent: #1a1a1a;
+  --studio-shadow-color: #000000;
+  --studio-accent-strong: #ecaf95;
+  --studio-accent-2: #4ec9b0;
+  --studio-accent-3-strong: #93c5fd;
+  --studio-accent-warn-strong: #fcd34d;
+  --studio-accent-danger-strong: #fda4af;
+  --studio-card-bg: #1e1e2e;
+  --studio-card-border: rgba(255, 255, 255, .10);
+  --studio-card-muted-bg: color-mix(in srgb, #94a3b8 7%, #1e1e2e);
+  --studio-card-muted-border: color-mix(in srgb, #94a3b8 18%, transparent);
+  --studio-spacing-1: 4px;
+  --studio-spacing-2: 8px;
+  --studio-spacing-3: 12px;
+  --studio-spacing-4: 16px;
+  --studio-spacing-5: 24px;
+  --studio-spacing-6: 32px;
+  --studio-spacing-7: 48px;
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --panel-lift: 4%;
+  --panel-border-alpha: 12%;
+  --panel-radius: 10px;
+  --panel-shadow-alpha: 0%;
+  --panel-padding: 16px;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --studio-bg-titlebar: #f3f3f3;
+  --studio-bg-sidebar: #f8f8f8;
+  --studio-bg-editor: #ffffff;
+  --studio-bg-elevated: #ececec;
+  --studio-bg-hover: rgba(0, 0, 0, .05);
+  --studio-bg-selected: rgba(217, 119, 87, .15);
+  --studio-border: #d4d4d4;
+  --studio-border-strong: #b4b4b4;
+  --studio-fg: #333333;
+  --studio-fg-strong: #1a1a1a;
+  --studio-fg-dim: #555555;
+  --studio-fg-muted: #767676;
+  --studio-accent-strong: #8d5a3d;
+  --studio-accent-2: #147d69;
+  --studio-accent-3-strong: #2f6fd6;
+  --studio-accent-warn-strong: #a16207;
+  --studio-accent-danger-strong: #b91c1c;
+  --studio-card-bg: #ffffff;
+  --studio-card-border: #d4d4d4;
+  --studio-card-muted-bg: color-mix(in srgb, #888888 6%, #ffffff);
+  --studio-card-muted-border: color-mix(in srgb, #888888 24%, transparent);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
+  font: 13px/1.55 var(--font-ui);
+}
+button, input, select { font: inherit; }
+a { color: var(--studio-accent-3-strong); text-underline-offset: 3px; }
+.topbar {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  min-height: 48px;
+  padding: var(--studio-spacing-2) clamp(16px, 3vw, 40px);
+  border-bottom: 1px solid var(--studio-border);
+  background: color-mix(in srgb, var(--studio-bg-titlebar) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+.brand { display: flex; align-items: center; gap: var(--studio-spacing-2); color: var(--studio-fg-strong); font-weight: 650; }
+.brand-mark { width: 10px; height: 10px; border-radius: 3px; background: var(--studio-accent); }
+.topbar-actions { display: flex; align-items: center; gap: var(--studio-spacing-2); }
+.top-link, .theme-switch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-editor);
+}
+.top-link { padding: 0 var(--studio-spacing-3); color: var(--studio-fg-dim); text-decoration: none; }
+.theme-switch { padding: 2px; }
+.theme-switch button {
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
+main { width: 100%; padding: clamp(28px, 5vw, 64px) clamp(16px, 3vw, 40px) 96px; }
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, .7fr);
+  gap: var(--studio-spacing-7);
+  align-items: end;
+}
+.kicker, .section-no, .eyebrow {
+  color: var(--studio-accent-strong);
+  font: 650 11px/1.2 var(--font-mono);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+h1 { max-width: 14ch; margin: var(--studio-spacing-3) 0; color: var(--studio-fg-strong); font-size: clamp(38px, 6vw, 72px); line-height: .96; letter-spacing: -.045em; }
+.lede { max-width: 72ch; margin: 0; color: var(--studio-fg-dim); font-size: 15px; }
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--studio-spacing-2);
+}
+.summary div {
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border);
+  border-radius: 9px;
+  background: var(--studio-bg-sidebar);
+}
+.summary strong { display: block; color: var(--studio-fg-strong); font-size: 24px; line-height: 1; }
+.summary span { display: block; margin-top: var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
+.section { margin-top: 72px; scroll-margin-top: 64px; }
+.section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--studio-spacing-6);
+  margin-bottom: var(--studio-spacing-5);
+}
+.section-head h2 { margin: 7px 0 0; color: var(--studio-fg-strong); font-size: 24px; line-height: 1.2; }
+.section-head p { max-width: 72ch; margin: 0; color: var(--studio-fg-dim); }
+.decision {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr);
+  gap: var(--studio-spacing-4);
+  padding: var(--studio-spacing-5);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-2) 45%, var(--studio-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--studio-accent-2) 7%, var(--studio-card-bg));
+}
+.decision h3 { margin: 7px 0 var(--studio-spacing-2); color: var(--studio-fg-strong); font-size: 18px; }
+.decision p { max-width: 76ch; margin: 0; color: var(--studio-fg-dim); }
+.decision ul { margin: 0; padding-left: 18px; color: var(--studio-fg-dim); }
+.decision li + li { margin-top: var(--studio-spacing-1); }
+.configurator {
+  display: grid;
+  grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr);
+  min-height: 430px;
+  border: 1px solid var(--studio-border);
+  border-radius: 12px;
+  background: var(--studio-bg-sidebar);
+  overflow: hidden;
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-4);
+  padding: var(--studio-spacing-5);
+  border-right: 1px solid var(--studio-border);
+}
+.controls h3 { margin: 0; color: var(--studio-fg-strong); font-size: 15px; }
+.controls p { margin: -8px 0 0; color: var(--studio-fg-muted); font-size: 11px; }
+.control { display: grid; gap: 6px; }
+.control-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--studio-spacing-2); }
+.control label { color: var(--studio-fg); font-size: 12px; font-weight: 600; }
+.control output { color: var(--studio-fg-muted); font: 10px var(--font-mono); }
+.control input[type="range"] { width: 100%; accent-color: var(--studio-accent); }
+.control select {
+  min-height: 34px;
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
+}
+.preset {
+  min-height: 34px;
+  margin-top: auto;
+  border: 1px solid var(--studio-accent);
+  border-radius: 6px;
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  cursor: pointer;
+  font-weight: 650;
+}
+.preview {
+  display: grid;
+  align-content: center;
+  gap: var(--studio-spacing-4);
+  padding: clamp(24px, 5vw, 64px);
+  background:
+    linear-gradient(var(--studio-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--studio-border) 1px, transparent 1px),
+    var(--studio-bg-editor);
+  background-size: 24px 24px;
+}
+.preview-label { color: var(--studio-fg-muted); font: 10px var(--font-mono); }
+.panel-preview {
+  padding: var(--panel-padding);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) var(--panel-border-alpha), transparent);
+  border-radius: var(--panel-radius);
+  background: color-mix(in srgb, var(--studio-fg) var(--panel-lift), var(--studio-card-bg));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--studio-shadow-color) var(--panel-shadow-alpha), transparent);
+}
+.panel-preview__head { display: flex; align-items: start; justify-content: space-between; gap: var(--studio-spacing-3); }
+.panel-preview h3 { margin: 4px 0 0; color: var(--studio-fg-strong); font-size: 16px; }
+.panel-preview p { margin: var(--studio-spacing-2) 0 0; color: var(--studio-fg-dim); }
+.status {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-2) 44%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-2) 12%, transparent);
+  color: var(--studio-accent-2);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+.preview-rows { display: grid; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-4); }
+.preview-row { display: grid; grid-template-columns: 120px 1fr auto; gap: var(--studio-spacing-3); padding-top: var(--studio-spacing-2); border-top: 1px solid var(--studio-border); }
+.preview-row span { color: var(--studio-fg-muted); }
+.preview-row strong { color: var(--studio-fg); }
+.preview-row code { color: var(--studio-fg-muted); font: 10px var(--font-mono); }
+.audit-groups { display: grid; gap: var(--studio-spacing-7); }
+.audit-group h3 { margin: 0 0 var(--studio-spacing-3); color: var(--studio-fg-strong); font-size: 15px; }
+.audit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--studio-spacing-4); }
+.audit-card {
+  min-width: 0;
+  border: 1px solid var(--studio-card-border);
+  border-radius: 11px;
+  background: var(--studio-card-bg);
+  overflow: hidden;
+}
+.shot {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-sidebar);
+}
+.shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.shot-meta {
+  position: absolute;
+  right: var(--studio-spacing-2);
+  bottom: var(--studio-spacing-2);
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-bg-editor) 88%, transparent);
+  color: var(--studio-fg-dim);
+  font: 9px var(--font-mono);
+  backdrop-filter: blur(7px);
+}
+.audit-body { padding: var(--studio-spacing-4); }
+.audit-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--studio-spacing-3); }
+.audit-title h4 { margin: 0; color: var(--studio-fg-strong); font-size: 14px; }
+.audit-title code { color: var(--studio-fg-muted); font: 9px var(--font-mono); }
+.audit-body p { margin: var(--studio-spacing-2) 0 0; color: var(--studio-fg-dim); font-size: 11px; }
+.finding {
+  display: inline-flex;
+  margin-top: var(--studio-spacing-3);
+  padding: 3px 7px;
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: 999px;
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.contract-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--studio-spacing-3); }
+.contract-card {
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: var(--studio-bg-sidebar);
+}
+.contract-card h3 { margin: var(--studio-spacing-2) 0; color: var(--studio-fg-strong); font-size: 14px; }
+.contract-card p { margin: 0; color: var(--studio-fg-dim); font-size: 11px; }
+.contract-card code { color: var(--studio-accent-3-strong); font: 10px var(--font-mono); }
+.code-block {
+  margin: var(--studio-spacing-4) 0 0;
+  padding: var(--studio-spacing-4);
+  overflow: auto;
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: var(--studio-bg-sidebar);
+  color: var(--studio-fg-dim);
+  font: 11px/1.65 var(--font-mono);
+  white-space: pre;
+}
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--studio-spacing-3);
+}
+.note { padding: var(--studio-spacing-4); border-top: 1px solid var(--studio-border-strong); }
+.note strong { display: block; color: var(--studio-fg-strong); }
+.note p { margin: 5px 0 0; color: var(--studio-fg-dim); font-size: 11px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+@media (max-width: 980px) {
+  .hero, .decision, .configurator { grid-template-columns: 1fr; }
+  .controls { border-right: 0; border-bottom: 1px solid var(--studio-border); }
+  .contract-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .top-link { display: none; }
+  .summary, .notes, .contract-grid { grid-template-columns: 1fr; }
+  .section-head { display: block; }
+  .section-head p { margin-top: var(--studio-spacing-2); }
+  .audit-grid { grid-template-columns: 1fr; }
+  .preview-row { grid-template-columns: 1fr; gap: 2px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span> Visual Style Guide / Deck Audit</div>
+  <div class="topbar-actions">
+    <a class="top-link" href="../visual-style-guide.html">Back to inventory</a>
+    <div class="theme-switch" role="group" aria-label="Page theme">
+      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="true">Dark</button>
+    </div>
+  </div>
+</header>
+<main>
+  <section class="hero">
+    <div>
+      <div class="kicker">DECK-AUDIT · AGT-2337 · 2026-07-23 sharpening</div>
+      <h1>One Deck. One panel grammar.</h1>
+      <p class="lede">The Deck grew section by section. The result is capable but visually fragmented: gray boxes, one-off tints, inconsistent radii, and different header rhythms. This audit puts one screenshot beside every 23 July Deck section and defines Deck-Panel v1 as the convergence baseline for AGT-2280.</p>
+    </div>
+    <div class="summary" aria-label="Audit summary">
+      <div><strong>15</strong><span>Deck sections audited</span></div>
+      <div><strong>2</strong><span>authored themes</span></div>
+      <div><strong>1</strong><span>recommended panel contract</span></div>
+    </div>
+  </section>
+
+  <section class="section" id="decision">
+    <div class="section-head">
+      <div><div class="section-no">§1 · Recommendation</div><h2>Deck-Panel v1</h2></div>
+      <p>A quiet container that supports hierarchy without turning every content block into a gray card. The section owns its heading. Panels own bounded content. Tool surfaces can stay full bleed.</p>
+    </div>
+    <article class="decision">
+      <div>
+        <div class="eyebrow">Decision ready</div>
+        <h3>Use one tokenized outline panel, flat by default</h3>
+        <p>Deck-Panel v1 uses the card surface, the standard card border, a 10 px radius, spacing-4 inset, and no resting shadow. Muted and attention variants change the entire surface tint. They never add a colored left stripe. Full-bleed tools such as Wiki, Git View, and Prompts keep their workbench layout and apply v1 only to bounded units inside it.</p>
+      </div>
+      <ul>
+        <li>Default: calm outline, no elevation.</li>
+        <li>Muted: read-only or secondary content.</li>
+        <li>Attention: acute state only, full tint.</li>
+        <li>Full bleed: no artificial outer panel.</li>
+        <li>Both themes use semantic tokens.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="section" id="configurator">
+    <div class="section-head">
+      <div><div class="section-no">§2 · Panel style configurator</div><h2>Tune the grammar, then return to v1</h2></div>
+      <p>The controls expose the visual dimensions that currently drift between Deck sections. The v1 button restores the recommended values and makes the decision reproducible.</p>
+    </div>
+    <div class="configurator" data-testid="deck-panel-configurator">
+      <form class="controls" onsubmit="return false">
+        <h3>Panel controls</h3>
+        <p>Changes apply only to the live specimen.</p>
+        <div class="control">
+          <label for="preset">Starting point</label>
+          <select id="preset" data-testid="deck-panel-preset">
+            <option value="legacy">Legacy gray box</option>
+            <option value="quiet">Quiet outline</option>
+            <option value="v1" selected>Deck-Panel v1</option>
+            <option value="floating">Floating card</option>
+          </select>
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="lift">Surface lift</label><output for="lift" id="lift-output">4%</output></div>
+          <input id="lift" type="range" min="0" max="18" value="4" data-unit="%" data-css="--panel-lift">
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="border">Border contrast</label><output for="border" id="border-output">12%</output></div>
+          <input id="border" type="range" min="0" max="32" value="12" data-unit="%" data-css="--panel-border-alpha">
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="radius">Corner radius</label><output for="radius" id="radius-output">10px</output></div>
+          <input id="radius" type="range" min="0" max="20" value="10" data-unit="px" data-css="--panel-radius">
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="shadow">Elevation</label><output for="shadow" id="shadow-output">0%</output></div>
+          <input id="shadow" type="range" min="0" max="28" value="0" data-unit="%" data-css="--panel-shadow-alpha">
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="padding">Inset</label><output for="padding" id="padding-output">16px</output></div>
+          <input id="padding" type="range" min="8" max="32" step="4" value="16" data-unit="px" data-css="--panel-padding">
+        </div>
+        <button class="preset" type="button" id="apply-v1" data-testid="deck-panel-apply-v1">Apply Deck-Panel v1</button>
+      </form>
+      <div class="preview">
+        <span class="preview-label">LIVE SPECIMEN · SETTINGS / PROJECT BASICS</span>
+        <article class="panel-preview" data-testid="deck-panel-preview">
+          <div class="panel-preview__head">
+            <div><div class="eyebrow">Project identity</div><h3>Project basics</h3><p>Repository paths and defaults used by the Deck and the runner.</p></div>
+            <span class="status">Configured</span>
+          </div>
+          <div class="preview-rows">
+            <div class="preview-row"><span>Display name</span><strong>Agent Studio</strong><code>editable</code></div>
+            <div class="preview-row"><span>Short code</span><strong>ASS</strong><code>stable</code></div>
+            <div class="preview-row"><span>Repository</span><strong>agent-taskboard</strong><code>git</code></div>
+          </div>
+        </article>
+        <span class="preview-label" id="preview-values">lift 4 · border 12 · radius 10 · shadow 0 · inset 16</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="audit">
+    <div class="section-head">
+      <div><div class="section-no">§3 · Screenshot audit</div><h2>Every 23 July Deck section</h2></div>
+      <p>Theme switching changes every paired image to the matching real capture. The Settings / Basics entry uses the available legacy settings capture and is refreshed in both themes in this task's results evidence.</p>
+    </div>
+    <div class="audit-groups">
+      <section class="audit-group" aria-labelledby="audit-insight">
+        <h3 id="audit-insight">Insight</h3>
+        <div class="audit-grid">
+          <article class="audit-card" data-section="overview">
+            <div class="shot"><img alt="Deck Overview section" data-dark="../proposals/2026-07-11/assets/028-overview.png" data-light="../proposals/2026-07-11/assets/029-overview.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Overview</h4><code>overview</code></div><p>Dashboard tiles and summary bands compete with several local containment styles.</p><span class="finding">unify bounded summaries</span></div>
+          </article>
+          <article class="audit-card" data-section="project-urls">
+            <div class="shot"><img alt="Deck Project URLs section" data-dark="../proposals/2026-07-11/assets/032-project-urls.png" data-light="../proposals/2026-07-11/assets/033-project-urls.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Project URLs</h4><code>project-urls</code></div><p>Rows, setup guidance, and status containers need one shared panel edge and inset.</p><span class="finding">v1 default + muted</span></div>
+          </article>
+          <article class="audit-card" data-section="git-view">
+            <div class="shot"><img alt="Deck Git View section" data-dark="../proposals/2026-07-11/assets/034-git-view.png" data-light="../proposals/2026-07-11/assets/035-git-view.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Git View</h4><code>git</code></div><p>A full-bleed workbench. Keep the outer tool surface flat and apply v1 inside inspectors.</p><span class="finding">full-bleed exception</span></div>
+          </article>
+          <article class="audit-card" data-section="visual-evidence">
+            <div class="shot"><img alt="Deck Visual Evidence section" data-dark="../proposals/2026-07-11/assets/040-visual-evidence.png" data-light="../proposals/2026-07-11/assets/041-visual-evidence.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Visual Evidence</h4><code>visual-evidence</code></div><p>Evidence cards can adopt the default shell while image chrome remains purpose-specific.</p><span class="finding">v1 default</span></div>
+          </article>
+          <article class="audit-card" data-section="drift">
+            <div class="shot"><img alt="Deck Drift section" data-dark="../proposals/2026-07-11/assets/044-drift.png" data-light="../proposals/2026-07-11/assets/045-drift.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Drift</h4><code>drift</code></div><p>Historical findings stay quiet. Only a current critical state earns the attention tint.</p><span class="finding">default + acute attention</span></div>
+          </article>
+          <article class="audit-card" data-section="observability">
+            <div class="shot"><img alt="Deck Observability section" data-dark="../proposals/2026-07-11/assets/048-observability.png" data-light="../proposals/2026-07-11/assets/049-observability.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Observability</h4><code>observability</code></div><p>Dense timelines need less nested elevation and a consistent inspector boundary.</p><span class="finding">flat groups + v1 inspector</span></div>
+          </article>
+          <article class="audit-card" data-section="token-usage">
+            <div class="shot"><img alt="Deck Token Usage section" data-dark="../proposals/2026-07-11/assets/052-token-usage.png" data-light="../proposals/2026-07-11/assets/053-token-usage.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Token Usage</h4><code>token-usage</code></div><p>Metric containers should share geometry while totals continue to reconcile with visible rows.</p><span class="finding">v1 default + sum invariant</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="audit-group" aria-labelledby="audit-quality">
+        <h3 id="audit-quality">Quality</h3>
+        <div class="audit-grid">
+          <article class="audit-card" data-section="security">
+            <div class="shot"><img alt="Deck Security section" data-dark="../proposals/2026-07-11/assets/056-security.png" data-light="../proposals/2026-07-11/assets/057-security.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Security</h4><code>security</code></div><p>Baseline and findings use default panels. Current blocking findings may use attention.</p><span class="finding">default + acute attention</span></div>
+          </article>
+          <article class="audit-card" data-section="test-quality">
+            <div class="shot"><img alt="Deck Test Quality section" data-dark="../proposals/2026-07-11/assets/058-test-quality.png" data-light="../proposals/2026-07-11/assets/059-test-quality.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Test Quality</h4><code>test-quality</code></div><p>Run groups, coverage, and source views need the same header and panel cadence.</p><span class="finding">v1 default</span></div>
+          </article>
+          <article class="audit-card" data-section="audits-checks">
+            <div class="shot"><img alt="Deck Audits and Checks section" data-dark="../proposals/2026-07-11/assets/062-audits-checks.png" data-light="../proposals/2026-07-11/assets/063-audits-checks.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Audits &amp; Checks</h4><code>audits</code></div><p>Definition cards and run slots converge on one neutral shell without status stripes.</p><span class="finding">v1 default</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="audit-group" aria-labelledby="audit-context">
+        <h3 id="audit-context">Context</h3>
+        <div class="audit-grid">
+          <article class="audit-card" data-section="architecture">
+            <div class="shot"><img alt="Deck Architecture section" data-dark="../proposals/2026-07-11/assets/068-architecture.png" data-light="../proposals/2026-07-11/assets/069-architecture.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Architecture</h4><code>architecture</code></div><p>Maps remain full width. Detail and provenance blocks use the shared bounded panel.</p><span class="finding">full width + v1 details</span></div>
+          </article>
+          <article class="audit-card" data-section="wiki">
+            <div class="shot"><img alt="Deck Wiki section" data-dark="../proposals/2026-07-11/assets/072-wiki.png" data-light="../proposals/2026-07-11/assets/073-wiki.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Wiki</h4><code>wiki</code></div><p>A full-bleed reading workbench. Cards inside dashboards can adopt v1 independently.</p><span class="finding">full-bleed exception</span></div>
+          </article>
+          <article class="audit-card" data-section="agent-docs">
+            <div class="shot"><img alt="Deck Agent Docs section" data-dark="../proposals/2026-07-11/assets/074-agent-docs.png" data-light="../proposals/2026-07-11/assets/075-agent-docs.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Agent Docs</h4><code>steering</code></div><p>Tree, reader, and metadata inspector stay adjacent; bounded warnings use v1 variants.</p><span class="finding">workbench + v1 callouts</span></div>
+          </article>
+          <article class="audit-card" data-section="prompts">
+            <div class="shot"><img alt="Deck Prompts section" data-dark="../proposals/2026-07-11/assets/078-prompts.png" data-light="../proposals/2026-07-11/assets/079-prompts.png"><span class="shot-meta">real · paired</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Prompts</h4><code>prompts</code></div><p>Catalogue and editor remain full bleed. Origin and drift notices use muted or attention panels.</p><span class="finding">full-bleed exception</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="audit-group" aria-labelledby="audit-config">
+        <h3 id="audit-config">Config</h3>
+        <div class="audit-grid">
+          <article class="audit-card" data-section="settings-basics">
+            <div class="shot"><img alt="Deck Settings and Project Basics section" data-dark="../../../frontend/playwright-screenshots/project-shell-rail/11-rail-settings.png" data-light="../../../frontend/playwright-screenshots/project-shell-rail/11-rail-settings.png"><span class="shot-meta">legacy · refresh in results</span></div>
+            <div class="audit-body"><div class="audit-title"><h4>Settings / Basics</h4><code>settings</code></div><p>The clearest gray-box drift case and the live configurator specimen. Replace nested one-off cards with v1.</p><span class="finding">primary migration reference</span></div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="section" id="contract">
+    <div class="section-head">
+      <div><div class="section-no">§4 · Delivery contract</div><h2>What AGT-2280 can implement</h2></div>
+      <p>The recommendation is a small visual contract, not permission to wrap every Deck surface in another card.</p>
+    </div>
+    <div class="contract-grid">
+      <article class="contract-card"><code>default</code><h3>Bounded content</h3><p>Card background, standard border, 10 px radius, spacing-4 inset, no resting shadow.</p></article>
+      <article class="contract-card"><code>muted</code><h3>Secondary content</h3><p>Muted card background and border for read-only guidance, inherited values, and settled history.</p></article>
+      <article class="contract-card"><code>attention</code><h3>Current acute state</h3><p>Whole-surface semantic tint and strengthened border. Never a colored left stripe.</p></article>
+      <article class="contract-card"><code>full-bleed</code><h3>Tool workbench</h3><p>No artificial outer panel for Wiki, Git View, Prompts, and comparable split-pane tools.</p></article>
+    </div>
+    <pre class="code-block" aria-label="Deck Panel v1 CSS recipe">.deck-panel {
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-card-border);
+  border-radius: 10px;
+  background: var(--studio-card-bg);
+}
+
+.deck-panel--muted {
+  border-color: var(--studio-card-muted-border);
+  background: var(--studio-card-muted-bg);
+}
+
+/* Acute states tint the whole surface. No left status bar. */
+.deck-panel--attention {
+  border-color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-card-border));
+  background: color-mix(in srgb, var(--studio-error) 8%, var(--studio-card-bg));
+}</pre>
+  </section>
+
+  <section class="section" id="evidence">
+    <div class="section-head">
+      <div><div class="section-no">§5 · Evidence and boundary</div><h2>Review notes</h2></div>
+      <p>The audit is a decision surface. Production migration, component extraction, and fresh before/after captures belong to AGT-2280.</p>
+    </div>
+    <div class="notes">
+      <div class="note"><strong>Screenshot provenance</strong><p>Paired product images come from the real 2026-07-11 application survey. Fresh light and dark captures of all 15 audit cards are stored under <code>results/AGT-2337/deck-sections/</code>.</p></div>
+      <div class="note"><strong>23 July boundary</strong><p>The audit covers the 15 Deck sections visible in the design review that produced AGT-2280. Later rails inherit this contract and must add evidence when migrated.</p></div>
+      <div class="note"><strong>No competing token registry</strong><p>The configurator exposes design dimensions. The documented v1 recipe resolves to existing semantic tokens owned by the frontend design system.</p></div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const root = document.documentElement;
+  const themeButtons = [...document.querySelectorAll("[data-theme-choice]")];
+  const themedImages = [...document.querySelectorAll("img[data-light][data-dark]")];
+  const sliders = [...document.querySelectorAll('input[type="range"][data-css]')];
+  const preset = document.getElementById("preset");
+  const previewValues = document.getElementById("preview-values");
+  const presets = {
+    legacy: { lift: 10, border: 4, radius: 4, shadow: 0, padding: 20 },
+    quiet: { lift: 0, border: 10, radius: 8, shadow: 0, padding: 16 },
+    v1: { lift: 4, border: 12, radius: 10, shadow: 0, padding: 16 },
+    floating: { lift: 6, border: 8, radius: 14, shadow: 18, padding: 24 },
+  };
+
+  const updatePreviewLabel = () => {
+    const values = Object.fromEntries(sliders.map(input => [input.id, input.value]));
+    previewValues.textContent = `lift ${values.lift} · border ${values.border} · radius ${values.radius} · shadow ${values.shadow} · inset ${values.padding}`;
+  };
+
+  const setControl = (id, value) => {
+    const input = document.getElementById(id);
+    input.value = String(value);
+    const unit = input.dataset.unit || "";
+    root.style.setProperty(input.dataset.css, `${value}${unit}`);
+    document.getElementById(`${id}-output`).textContent = `${value}${unit}`;
+  };
+
+  const applyPreset = (name) => {
+    const values = presets[name] || presets.v1;
+    Object.entries(values).forEach(([id, value]) => setControl(id, value));
+    preset.value = name in presets ? name : "v1";
+    updatePreviewLabel();
+  };
+
+  const setTheme = (theme) => {
+    root.dataset.theme = theme;
+    themeButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === theme)));
+    themedImages.forEach(image => { image.src = image.dataset[theme]; });
+    const url = new URL(location.href);
+    url.searchParams.set("theme", theme);
+    history.replaceState(null, "", url);
+  };
+
+  sliders.forEach(input => input.addEventListener("input", () => {
+    setControl(input.id, input.value);
+    preset.value = "";
+    updatePreviewLabel();
+  }));
+  preset.addEventListener("change", () => applyPreset(preset.value));
+  document.getElementById("apply-v1").addEventListener("click", () => applyPreset("v1"));
+  themeButtons.forEach(button => button.addEventListener("click", () => setTheme(button.dataset.themeChoice)));
+
+  const requested = new URLSearchParams(location.search).get("theme");
+  applyPreset("v1");
+  setTheme(requested === "light" ? "light" : "dark");
+})();
+</script>
+</body>
+</html>

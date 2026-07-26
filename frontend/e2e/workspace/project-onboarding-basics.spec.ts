@@ -89,6 +89,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 async function mockBootApis(page: Page, currentProject: () => ProjectFixture): Promise<void> {
+  await page.route('**/api/auth/status', (route) => fulfillJson(route, {
+    profile: 'local',
+    bootstrapRequired: false,
+    authenticated: true,
+    user: null,
+  }));
+  await page.route('**/api/crash-recovery/pending', (route) => fulfillJson(route, { pending: [] }));
   await page.route('**/api/watch-paths**', (route) => fulfillJson(route, [{
     name: currentProject().displayName,
     path: currentProject().repositoryPath,

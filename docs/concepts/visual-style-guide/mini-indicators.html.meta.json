@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Mini-indicator Workbench",
+  "source": {
+    "path": "docs/concepts/visual-style-guide/mini-indicators.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "a1dc406d68a29b1de7fd58dca57153abbfa815294a005309cb695e1a33428839",
+      "sizeBytes": 7660,
+      "lineCount": 53,
+      "capturedAt": "2026-07-23T18:30:00.0000000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-23"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2274",
+      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    }
+  ]
+}

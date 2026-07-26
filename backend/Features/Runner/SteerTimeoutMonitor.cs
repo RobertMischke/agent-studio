@@ -142,7 +142,8 @@ public sealed class SteerTimeoutMonitor
                 // UI iteration reviews are deliberate human gates, not
                 // unanswered agent questions. Part 2 consumes this marker;
                 // the generic 120-second steer timeout must never auto-answer it.
-                if (string.Equals(marker.Kind, SteerPendingKinds.UiIterationReview, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(marker.Kind, SteerPendingKinds.UiIterationReview, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(marker.Kind, SteerPendingKinds.ConceptSightReview, StringComparison.OrdinalIgnoreCase))
                     continue;
                 candidates.Add(new Candidate(laneFolder.Slug, laneFolder.FolderPath, marker));
             }

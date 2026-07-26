@@ -31,6 +31,26 @@ const HOST: RemoteHost = {
   availableSlots: 19,
   activeGateCount: 2,
   gateCapacity: 4,
+  telemetry: {
+    clientId: 'agent-runner',
+    window: '1h',
+    findings: [],
+    points: [{
+      timestamp: '2026-07-10T11:59:55Z',
+      cpuPercent: 54,
+      load1: 1.2,
+      load5: 1,
+      load15: 1,
+      memoryUsedBytes: 24_000_000_000,
+      memoryTotalBytes: 64_000_000_000,
+      swapInBytesPerSecond: 0,
+      swapOutBytesPerSecond: 0,
+      cpuStealPercent: 0,
+      ioWaitPercent: 0,
+      cpuCores: 8,
+      activeSlots: 1,
+    }],
+  },
 };
 
 function mount(host: RemoteHost) {
@@ -55,7 +75,7 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelectorAll('.meter').length).toBe(3);
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
-    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active · 19 free · 20 max');
+    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active');
     expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 4');
     expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
   });
@@ -168,6 +188,28 @@ describe('RemoteHostCardComponent', () => {
     expect(el.textContent).not.toContain('54%');
   });
 
+  it('dims stale active-slot telemetry instead of presenting it as live', () => {
+    const staleTelemetry = {
+      ...HOST.telemetry!,
+      points: HOST.telemetry!.points.map(point => ({ ...point, timestamp: '2026-07-10T11:50:00Z', activeSlots: 3 })),
+    };
+    const el: HTMLElement = mount({ ...HOST, telemetry: staleTelemetry }).nativeElement;
+    const pool = el.querySelector('[data-testid="remote-host-run-pool"]');
+    expect(pool?.textContent).toContain('3 active · stale');
+    expect(pool?.classList).toContain('workload--stale');
+    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.classList)
+      .toContain('telemetry__context--stale');
+  });
+
+  it('shows a warning icon when fresh telemetry and board leases diverge', () => {
+    const fixture = mount(HOST);
+    fixture.componentRef.setInput('boardActiveSlots', 0);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-running-divergence"]'))
+      .toBeTruthy();
+  });
+
   it('renders telemetry charts, slot context, findings, and switches windows', () => {
     const telemetry = {
       clientId: 'agent-runner', window: '14d',
@@ -179,7 +221,14 @@ describe('RemoteHostCardComponent', () => {
           memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
           cpuStealPercent: 7, ioWaitPercent: 3, cpuCores: 12, activeSlots: 6 },
       ],
-      findings: [{ kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:30Z' }],
+      findings: [{
+        kind: 'vm-throttled' as const,
+        label: 'VM throttled',
+        since: '2026-07-10T11:58:00Z',
+        until: '2026-07-10T11:59:30Z',
+        occurrences: 1,
+        isActive: true,
+      }],
     };
     const fixture = mount({ ...HOST, telemetry });
     const el: HTMLElement = fixture.nativeElement;
@@ -189,6 +238,32 @@ describe('RemoteHostCardComponent', () => {
     (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
+  });
+
+  it('aggregates ended phases and bounds the finding row with a more counter', () => {
+    const point = {
+      timestamp: '2026-07-10T11:59:30Z', cpuPercent: 54, load1: 20, load5: 18, load15: 15,
+      memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+      cpuStealPercent: 7, ioWaitPercent: 12, cpuCores: 12, activeSlots: 6,
+    };
+    const findings = [
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T11:58:00Z', until: point.timestamp, occurrences: 1, isActive: true },
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:00Z', occurrences: 1, isActive: true },
+      { kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:57:00Z', until: point.timestamp, occurrences: 1, isActive: true },
+      { kind: 'memory-pressure' as const, label: 'Memory pressure', since: '2026-07-10T08:00:00Z', until: '2026-07-10T09:00:00Z', occurrences: 3, isActive: false },
+      { kind: 'oversubscribed' as const, label: 'Oversubscribed', since: '2026-07-10T07:00:00Z', until: '2026-07-10T08:00:00Z', occurrences: 2, isActive: false },
+      { kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T06:00:00Z', until: '2026-07-10T07:00:00Z', occurrences: 4, isActive: false },
+    ];
+
+    const el: HTMLElement = mount({
+      ...HOST,
+      telemetry: { clientId: 'agent-runner', window: '14d', points: [point], findings },
+    }).nativeElement;
+
+    expect(el.querySelectorAll('[data-testid="remote-host-finding"]').length).toBe(3);
+    expect(el.querySelectorAll('[data-finding-kind="oversubscribed"][data-finding-active="true"]').length).toBe(1);
+    expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('3× in window');
+    expect(el.querySelector('[data-testid="remote-host-findings-more"]')?.textContent).toContain('+2 more');
   });
 
   it('shows the exact synchronized telemetry point selected on the shared plot', () => {
