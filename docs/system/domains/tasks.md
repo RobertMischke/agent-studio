@@ -7,6 +7,21 @@ Use this when a change touches job folders, lane states, task metadata,
 workspace registry records, task CRUD, ordering, review evidence, run timeline,
 or commit attribution.
 
+## Execution modes
+
+- `coding` is the default source-mutating mode.
+- `planning` and `research` are report-only modes. They run without git
+  mutation steps and must finish with a clean product checkout.
+- `concept` is document-first. It uses an isolated worktree but may change only
+  one `docs/operations/<topic>/` Workbench. The published document, not
+  `status.md`, is the promotion source.
+- A delivered concept waits in `5-human-review` with a
+  `concept-sight-review` marker. This is a successful delivery state, including
+  when the agent reports `NEEDS_INPUT`; it is not an escalation.
+- Sight-review acceptance moves the concept to `6-completed`. The concept
+  promotion endpoint creates idempotent coding cards in `1-preparation` and
+  relates them to the source concept.
+
 ## Entry Points
 
 - [docs/system/contracts/filesystem.md](../contracts/filesystem.md) defines the durable

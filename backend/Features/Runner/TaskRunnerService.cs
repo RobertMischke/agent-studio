@@ -48,6 +48,7 @@ public class TaskRunnerService : BackgroundService
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
+    private readonly AgentStudio.Pipeline.IConceptWorkbenchPublisher? _conceptWorkbenchPublisher;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
@@ -142,7 +143,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
         AgentStudio.Clients.ClientIdentityStore? clients = null,
-        CliQuotaWaitPolicyService? quotaWaitPolicy = null)
+        CliQuotaWaitPolicyService? quotaWaitPolicy = null,
+        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null)
     {
         _config = config;
         _logger = logger;
@@ -177,6 +179,7 @@ public class TaskRunnerService : BackgroundService
         _pipelineLog = pipelineLog;
         _modelQualification = modelQualification;
         _integrationPushQueue = integrationPushQueue;
+        _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
@@ -353,7 +356,8 @@ public class TaskRunnerService : BackgroundService
                 quotaWaitPolicy: _quotaWaitPolicy,
                 loadThrottle: _loadThrottle,
                 modelQualification: _modelQualification,
-                integrationPushQueue: _integrationPushQueue);
+                integrationPushQueue: _integrationPushQueue,
+                conceptWorkbenchPublisher: _conceptWorkbenchPublisher);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -1257,7 +1261,8 @@ public class TaskRunnerService : BackgroundService
             orchestratorDefaults: _orchestratorDefaults,
             quotaFallback: _quotaFallback,
             quotaWaitPolicy: _quotaWaitPolicy,
-            loadThrottle: _loadThrottle);
+            loadThrottle: _loadThrottle,
+            conceptWorkbenchPublisher: _conceptWorkbenchPublisher);
         runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
         runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));

@@ -520,7 +520,7 @@
       font-weight: 600;
       letter-spacing: 0.02em;
     }
-    /* Mode badge (planning / research). Only non-coding modes render a pill so
+    /* Mode badge (planning / research / concept). Only non-coding modes render a pill so
        the board stays quiet for the default mode. AGT-2069: planning cards get
        a deliberately loud, filled badge ("here work is PLANNED") so a
        planning-task -> follow-up-card workflow is unmistakable at a glance;
@@ -551,6 +551,11 @@
       background: #0e7490;
       border-color: #155e75;
       box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
+    }
+    .task-card__mode-pill--concept {
+      color: var(--studio-accent-4-strong);
+      background: color-mix(in srgb, var(--studio-accent-4-strong) 14%, transparent);
+      border-color: color-mix(in srgb, var(--studio-accent-4-strong) 36%, transparent);
     }
     .task-card__pending-pill {
       color: var(--severity-warn);

@@ -40,9 +40,15 @@ pipeline view.
   recommendation layer for cheap pipeline work. It passes only live-discovered
   Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
   falls back to the normal runtime model when no qualified Spark model exists.
-- `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
-  pipeline definitions, step ids, default ordering, step run modes, and display
-  names.
+- `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
+  concept, and UI pipeline definitions, step ids, default ordering, step run
+  modes, and display names.
+- `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
+  `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
+  document-first concept contract. One isolated concept run may author exactly
+  one `docs/operations/<topic>/` Workbench, publishes it through the managed
+  project-artifact commit boundary, reviews document completeness and evidence,
+  waits for human sight review, then creates coding cards from the descriptor.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`,
   `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
   `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
@@ -350,7 +356,8 @@ operator changes cause the step to fail before its writer runs.
   or steer follow-up with an empty working diff still shows the real change set;
   the job's `results/` folder inventory (`ResultsInventory.Render`, file list +
   short excerpts); and a one-line card-mode framing (`ReviewCardMode.Describe`)
-  so a read-only planning/research card is not read as missing work. The
+  so a report-only planning/research card or docs-only concept card is not read
+  as missing work. The
   "deliverables missing" verdict is legitimate ONLY when the branch diff is empty
   AND `results/` has no artefacts AND no external deliverable (e.g. a `docs/`
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
@@ -470,6 +477,18 @@ operator changes cause the step to fail before its writer runs.
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
   be forced through write-oriented post steps.
+- The concept pipeline is distinct from the report-only pipeline. It runs in an
+  isolated worktree, permits a diff only inside one
+  `docs/operations/<topic>/` directory, and never merges that task branch.
+  Workbench placement publishes `workbench.json` plus `index.html` through the
+  managed project-artifact commit boundary. Concept review checks alternatives,
+  recommendation, evidence, open decisions, and implementation-card source
+  data. It deliberately does not run build, test, code aspects, or integration.
+  A complete Workbench moves to `5-human-review` with a durable
+  `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
+  successful delivery at this gate. Sight-review acceptance completes the
+  source card; `POST /api/tasks/{id}/promote-concept` additionally creates the
+  selected coding cards from the published document.
 - A `Deferred` step (e.g. `post-merge-into-develop`) is fully implemented but
   runs only on an external operator trigger, not automatically in the
   post-bracket. It is distinct from a `Stub`: a stub has no implementation and

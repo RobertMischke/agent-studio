@@ -170,6 +170,10 @@ public static class ReviewCardMode
                 "Card mode: research (read-only). This task is fact-finding and produces a written report. "
                 + "It legitimately ships NO code diff - its deliverable is the report under results/ or a docs/ commit. "
                 + "Do NOT treat an empty or tiny diff as missing work.",
+            TaskModes.Concept =>
+                "Card mode: concept (product-source-read-only). This task delivers one Workbench under "
+                + "docs/operations/<topic>/ with workbench.json and index.html. Only that docs-only diff is legitimate. "
+                + "Review completeness, alternatives, recommendation, evidence, and open decisions; do not require build/test evidence.",
             _ =>
                 "Card mode: coding. A code change set is expected; the deliverables are the committed diff plus any "
                 + "artefacts under results/. An empty branch diff with no results/ artefacts and no documented external "

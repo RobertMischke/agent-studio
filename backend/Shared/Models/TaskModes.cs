@@ -9,10 +9,14 @@ namespace AgentStudio.Shared;
 ///   concrete piece of work (promotable to a coding task).</item>
 /// <item><c>research</c> - read-only; broader fact-finding, web access on by
 ///   default; the deliverable is a report.</item>
+/// <item><c>concept</c> - product-source-read-only; authors one reviewable
+///   Workbench under <c>docs/operations/&lt;topic&gt;/</c> and waits for a
+///   human sight review before implementation cards are promoted.</item>
 /// </list>
-/// Read-only modes skip the git pre/post pipeline steps (no worktree, no commit,
-/// no merge) and are always parallel-ok. Persisted as the <c>"mode"</c> field in
-/// <c>job.json</c>; keep values stable. See
+/// Report-only modes skip worktree and git steps. Concept uses an isolated
+/// worktree but publishes only its bounded document and never merges the task
+/// branch. Persisted as the <c>"mode"</c> field in <c>job.json</c>; keep values
+/// stable. See
 /// docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public static class TaskModes
@@ -20,8 +24,9 @@ public static class TaskModes
     public const string Coding = "coding";
     public const string Planning = "planning";
     public const string Research = "research";
+    public const string Concept = "concept";
 
-    public static readonly string[] All = [Coding, Planning, Research];
+    public static readonly string[] All = [Coding, Planning, Research, Concept];
 
     /// <summary>Coerce a free-form value to a known mode; unknown / empty -> Coding.</summary>
     public static string Normalize(string? value)
@@ -31,6 +36,7 @@ public static class TaskModes
         {
             Planning => Planning,
             Research => Research,
+            Concept => Concept,
             _ => Coding,
         };
     }
@@ -39,8 +45,14 @@ public static class TaskModes
         !string.IsNullOrWhiteSpace(value) && System.Array.IndexOf(All, value!.Trim().ToLowerInvariant()) >= 0;
 
     /// <summary>
-    /// Read-only modes (planning / research) produce a report and skip the git
-    /// pre/post steps; coding mutates the tree.
+    /// Product-source-read-only modes never modify implementation files.
+    /// Planning/research produce reports; concept may write only its bounded
+    /// <c>docs/operations/&lt;topic&gt;/</c> Workbench.
     /// </summary>
-    public static bool IsReadOnly(string? value) => Normalize(value) is Planning or Research;
+    public static bool IsReadOnly(string? value) => Normalize(value) is Planning or Research or Concept;
+
+    /// <summary>Strict report-only modes that must leave no repository diff.</summary>
+    public static bool IsReportOnly(string? value) => Normalize(value) is Planning or Research;
+
+    public static bool IsConcept(string? value) => Normalize(value) == Concept;
 }

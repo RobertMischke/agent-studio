@@ -717,6 +717,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return;
 
             case ReviewSignalKind.Done:
+                if (TaskModes.IsConcept(pending.Job.Mode))
+                {
+                    await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
                 var aspects = ResolveAspectRunners();
                 if (aspects.Count == 0 ||
                     !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
@@ -727,6 +732,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return;
 
             case ReviewSignalKind.NeedsInput:
+                if (TaskModes.IsConcept(pending.Job.Mode))
+                {
+                    await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
                 if (!RateLimitOk(maxPerHour))
                 {
                     _logger.LogInformation(
@@ -1192,6 +1202,124 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict, cliBinary);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Concept-specific post-processing. A complete, published Workbench is a
+    /// successful outcome even when the core run ended in NeedsInput: the
+    /// question is precisely what the sight-review gate exists to answer.
+    /// Review is deterministic and document-focused; build/test and code aspects
+    /// never run for this pipeline.
+    /// </summary>
+    private Task ProcessConceptAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        CancellationToken ct)
+    {
+        _ = ct;
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var repositoryRoot = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RootPath
+            : entry.RepositoryPath;
+        var stored = ConceptWorkbenchStore.Read(current.FolderPath);
+        ConceptWorkbenchReview review;
+        if (stored is null)
+        {
+            review = new ConceptWorkbenchReview(
+                false, null, null, null,
+                ["Workbench placement did not publish a source document."]);
+        }
+        else if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
+        {
+            review = new ConceptWorkbenchReview(
+                false, null, stored.RepoRelativeDirectory, null,
+                ["Project repository is unavailable for concept review."]);
+        }
+        else
+        {
+            review = ConceptWorkbenchContract.ReviewDirectory(
+                repositoryRoot,
+                stored.RepoRelativeDirectory);
+        }
+
+        var settings = _projectSettings?.Get(entry.Name);
+        _pipelineLog?.EnsureRun(
+            current.FolderPath,
+            ProjectPipelineOrder.Apply(PipelineCatalogue.Concept, settings),
+            entry.Name,
+            current.Id);
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.ConceptReviewStepId,
+            Kind = StepKind.Orchestrator,
+            Status = review.IsComplete ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = review.IsComplete ? "concept-complete" : "concept-incomplete",
+            VerdictSummary = review.Summary,
+            Reason = review.IsComplete ? null : review.Summary,
+        });
+
+        if (!review.IsComplete)
+        {
+            _pipelineLog?.Complete(
+                current.FolderPath,
+                pendingStepReason: "Concept review failed: " + review.Summary);
+            var reason = HumanReviewEscalation.FormatReason(
+                HumanReviewEscalationCategories.AutoReviewEscalation,
+                "Concept review failed: " + review.Summary);
+            _chatLog.AppendSupervisor(
+                current,
+                "escalate",
+                $"Concept review found an incomplete or uncontained Workbench. {review.Summary} Promoted to {TaskStates.Escalated}.");
+            var failedMove = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            if (failedMove.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "Concept review could not move {Project}/{JobId} to Escalated: {Status} {Message}",
+                    entry.Name, current.Id, failedMove.Status, failedMove.Message);
+            }
+            return Task.CompletedTask;
+        }
+
+        SteerPendingMarker.Write(current.FolderPath, new SteerPendingRecord
+        {
+            WaitStartedAt = now,
+            Kind = SteerPendingKinds.ConceptSightReview,
+            Question = "Review the concept Workbench, then promote its implementation cards or finish with no implementation.",
+            CliType = current.CliType,
+        }, _logger);
+        _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.ConceptSightReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Running,
+            StartedAt = now,
+            Verdict = "awaiting-sight-review",
+            VerdictSummary = "Concept delivered successfully; awaiting human sight review.",
+        });
+        _chatLog.Append(
+            current,
+            OrchestratorMessageKind.Decision,
+            $"Concept delivered: `{stored!.RepoRelativeEntrypoint}`. Awaiting sight review; NeedsInput is expected and is not an escalation.");
+
+        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "Complete concept {Project}/{JobId} could not move to sight review: {Status} {Message}",
+                entry.Name, current.Id, move.Status, move.Message);
+        }
+        else
+        {
+            _statusSnapshot.RecordAccept();
+            _logger.LogInformation(
+                "concept_delivered project={Project} job={JobId} path={Path} outcome=success-awaiting-sight-review",
+                entry.Name, current.Id, stored.RepoRelativeEntrypoint);
+        }
+        return Task.CompletedTask;
     }
 
     private async Task ProcessNoOpAsync(

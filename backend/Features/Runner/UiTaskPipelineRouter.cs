@@ -14,6 +14,7 @@ public static class UiTaskPipelineRouter
         IReadOnlyCollection<string>? changedFiles = null)
     {
         if (task is null) return Pipeline.PipelineCatalogue.Standard;
+        if (TaskModes.IsConcept(task.Mode)) return Pipeline.PipelineCatalogue.Concept;
         if (TaskModes.IsReadOnly(task.Mode)) return Pipeline.PipelineCatalogue.ReadOnly;
 
         var routingStep = Pipeline.PipelineCatalogue.UiIteration.Pre.First(step =>

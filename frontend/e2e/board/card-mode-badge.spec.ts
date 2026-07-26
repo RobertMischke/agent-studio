@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Card mode badge (planning / research recognizable at a glance).
+ * Card mode badge (planning / research / concept recognizable at a glance).
  *
  * Task "Kanban-Karte: Mode-Icon": a viewer should be able to tell at a glance
- * why a project has several parallel tasks (coding vs planning vs research).
+ * why a project has several parallel tasks (coding, planning, research, concept).
  * The card reads `TaskInfo.mode` and renders a small tinted pill for the two
  * read-only modes; `coding` (the default) stays quiet so the board is not
  * noisy in the common case.
@@ -48,13 +48,14 @@ function makeTask(id: string, title: string, order: number, mode: string | undef
 // does substring matching.
 const PLANNING_TASK = makeTask('mode-A-planning', 'Mode badge planning alpha', 1, 'planning');
 const RESEARCH_TASK = makeTask('mode-B-research', 'Mode badge research bravo', 2, 'research');
-const CODING_TASK = makeTask('mode-C-coding', 'Mode badge coding charlie', 3, 'coding');
+const CONCEPT_TASK = makeTask('mode-C-concept', 'Mode badge concept charlie', 3, 'concept');
+const CODING_TASK = makeTask('mode-D-coding', 'Mode badge coding delta', 4, 'coding');
 
 const GROUPED_PAYLOAD = {
   backlog: [],
   preparation: [],
   orchestratorPrep: [],
-  ready: [PLANNING_TASK, RESEARCH_TASK, CODING_TASK],
+  ready: [PLANNING_TASK, RESEARCH_TASK, CONCEPT_TASK, CODING_TASK],
   progress: [],
   failedPickup: [],
   review: [],
@@ -76,6 +77,13 @@ async function installRoutes(page: Page) {
 
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED_PAYLOAD) }));
+
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false }),
+    }));
 
   await page.route('**/api/watch-paths**', (route) =>
     route.fulfill({
@@ -147,7 +155,7 @@ function cardByTitle(page: Page, title: string) {
   return page.locator('[data-testid="task-card"]', { hasText: title });
 }
 
-test.describe('Card mode badge (planning / research recognizable on the board)', () => {
+test.describe('Card mode badge (planning / research / concept recognizable on the board)', () => {
   test('planning card shows a planning mode pill that names the mode', async ({ page }) => {
     await gotoBoard(page);
 
@@ -172,6 +180,18 @@ test.describe('Card mode badge (planning / research recognizable on the board)',
     await expect(pill).toContainText('Research');
   });
 
+  test('concept card shows a concept mode pill', async ({ page }) => {
+    await gotoBoard(page);
+
+    const card = cardByTitle(page, CONCEPT_TASK.title);
+    await expect(card).toHaveCount(1);
+
+    const pill = card.getByTestId('task-card-mode');
+    await expect(pill).toBeVisible();
+    await expect(pill).toHaveAttribute('data-mode', 'concept');
+    await expect(pill).toContainText('Concept');
+  });
+
   test('coding card stays quiet (no mode pill for the default mode)', async ({ page }) => {
     await gotoBoard(page);
 
@@ -191,11 +211,14 @@ test.describe('Card mode badge (planning / research recognizable on the board)',
         document.querySelectorAll('vite-error-overlay').forEach((n) => n.remove());
         document.querySelectorAll('.overlay--error').forEach((n) => ((n as HTMLElement).style.display = 'none'));
       });
+      const errorDialogClose = page.getByTestId('error-dialog-close');
+      if (await errorDialogClose.count()) await errorDialogClose.first().click();
       await page.setViewportSize({ width: 1600, height: 1100 });
 
-      // Sanity re-assert in this theme: planning/research carry the pill, coding does not.
+      // Sanity re-assert in this theme: every non-coding mode carries the pill.
       await expect(cardByTitle(page, PLANNING_TASK.title).getByTestId('task-card-mode')).toHaveAttribute('data-mode', 'planning');
       await expect(cardByTitle(page, RESEARCH_TASK.title).getByTestId('task-card-mode')).toHaveAttribute('data-mode', 'research');
+      await expect(cardByTitle(page, CONCEPT_TASK.title).getByTestId('task-card-mode')).toHaveAttribute('data-mode', 'concept');
       await expect(cardByTitle(page, CODING_TASK.title).getByTestId('task-card-mode')).toHaveCount(0);
 
       const buf = await page.screenshot({ fullPage: false });

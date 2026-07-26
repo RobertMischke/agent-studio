@@ -747,6 +747,27 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.textContent).toContain('Research');
   });
 
+  it('renders a concept mode pill', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready', mode: 'concept' }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-mode"]') as HTMLElement | null;
+    expect(pill?.getAttribute('data-mode')).toBe('concept');
+    expect(pill?.className).toContain('task-card__mode-pill--concept');
+    expect(pill?.textContent).toContain('Concept');
+  });
+
   it('stays quiet for coding cards and cards with no mode set', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],

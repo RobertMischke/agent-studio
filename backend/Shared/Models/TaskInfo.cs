@@ -76,8 +76,8 @@ public record TaskInfo
     public string? EpicId { get; init; }
     /// <summary>
     /// Execution mode (orthogonal to <see cref="Kind"/>): <c>coding</c> (default,
-    /// mutates source) | <c>planning</c> | <c>research</c> (read-only, produce a
-    /// report). See <see cref="TaskModes"/>.
+    /// mutates source) | <c>planning</c> | <c>research</c> (read-only reports) |
+    /// <c>concept</c> (docs-only Workbench). See <see cref="TaskModes"/>.
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
