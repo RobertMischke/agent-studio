@@ -1381,3 +1381,59 @@ Visible context:
 **Status.** Accepted. The in-process chat-work broker is the compatibility seam
 to move into the independently hosted Task Server without changing the Runner
 pull direction or the visible execution-context contract.
+
+---
+
+## ADR-0066 - Flow definitions stay server data; the Orchestrator Engine owns API-only execution (2026-07-25)
+
+**Decision.** The Task Server owns versioned orchestration flow definitions,
+definition-snapshotted runs, stage results, leases, and fences. The separate
+`orchestrator-engine` binary executes ReviewDecision, Council, PostProcessing,
+GateDispatch, and CompletionJudge stages only through the public Task Server
+API. During migration, `Orchestration:ExecutionMode` selects exactly one loop
+owner: `Monolith` or `Engine`.
+
+**Context.** ADR-0063 separated durable authority from execution, and the
+signed-off distributable architecture requires control-plane flow execution to
+restart independently without losing in-flight work. Keeping definitions in an
+Engine env file would make operational policy deployment state. Moving run
+state into the Engine would recreate the restart orphaning and split-brain
+failures that the Task Server boundary exists to remove.
+
+**Non-goals.**
+
+- No TaskScanner, task-folder, SQLite, repository, or direct Task Server store
+  access from `orchestrator-engine`.
+- No project flow definitions, model choices, or gate policy in `engine.env`.
+  That file is bootstrap configuration only.
+- No active-active legacy and external orchestration loops during the
+  transition.
+- No lease-free settlement. A stage result requires the current Engine
+  instance, lease id, and monotonic fence, and is idempotent.
+
+**Reasoning style.** Definitions are durable control-plane data; execution is a
+replaceable consumer. Snapshot the ordered definition onto each created run so
+later edits affect future work only. Recover a stopped consumer by lease expiry
+and a higher fence, then reject stale settlement from the previous process.
+Bound concurrency per stage because reviews, councils, post-processing, gates,
+and completion decisions have different capacity costs.
+
+**Implementation pointers.** Shared contracts:
+[`contracts/TaskServer.Contracts/OrchestrationContracts.cs`](../../../../contracts/TaskServer.Contracts/OrchestrationContracts.cs).
+Server persistence and endpoints:
+[`task-server/TaskServerOrchestrationStore.cs`](../../../../task-server/TaskServerOrchestrationStore.cs)
+and
+[`task-server/TaskServerEndpoints.cs`](../../../../task-server/TaskServerEndpoints.cs).
+API-only process and bootstrap contract:
+[`orchestrator-engine/`](../../../../orchestrator-engine/).
+Legacy ownership switch:
+[`backend/Features/Runner/OrchestrationExecutionMode.cs`](../../../../backend/Features/Runner/OrchestrationExecutionMode.cs)
+and
+[`backend/Host/Program.cs`](../../../../backend/Host/Program.cs).
+Restart, boundary, stage, env, version, and handshake tests:
+[`orchestrator-engine.Tests/`](../../../../orchestrator-engine.Tests/) and
+[`task-server.Tests/ProtocolTests.cs`](../../../../task-server.Tests/ProtocolTests.cs).
+
+**Status.** Accepted. The API-only binary, durable run authority, restart
+reclaim, protocol handshake, version surface, env contract, and migration
+switch ship together.

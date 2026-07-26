@@ -44,6 +44,7 @@ contract; the concept page owns the explanation and the running knowledge log.
 | [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/system/domains/tokens.md`](../system/domains/tokens.md) |
 | [tree-project-indicator-alternatives.md](tree-project-indicator-alternatives.md) | Eight alternatives and recommendation for a project-level Explorer state indicator that shows situation instead of a total. | [`docs/quality/design/tree-indicator-exploration-2026-07.html`](../quality/design/tree-indicator-exploration-2026-07.html) |
 | [wiki-hosting-options-2026-07.html](wiki-hosting-options-2026-07.html) | Decision memo for hosting the live Wiki: weighted comparison of full networked Studio, a read-only Wiki service, and static export, with the recommended control-plane topology and follow-up cards. | [`docs/system/contracts/wiki-tree.md`](../system/contracts/wiki-tree.md), [`docs/operations/setup/networked-task-server.md`](../operations/setup/networked-task-server.md) |
+| [studio-route-restoration.md](studio-route-restoration.md) | Canonical Studio URL contract, full surface route map, hydration precedence, transient-state boundary, and verification matrix. | [`docs/system/domains/frontend.md`](../system/domains/frontend.md) |
 
 ## Designated topics (AGENTS/wiki-sync)
 

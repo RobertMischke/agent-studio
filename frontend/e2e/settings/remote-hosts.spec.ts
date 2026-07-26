@@ -44,6 +44,7 @@ async function stubBackgroundApis(page: Page) {
       runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2,
       runnerActiveGateCount: 0, runnerGateCapacity: 4 },
   ]));
+  await page.route('**/api/v1/management/remote-hosts', json([]));
   await page.route('**/api/clients/*/telemetry?window=14d', json({ clientId: 'mock', window: '14d', points: [{
     timestamp: now, cpuPercent: 7, load1: 0.1, load5: 0.1, load15: 0.1,
     memoryUsedBytes: 4_000_000_000, memoryTotalBytes: 16_000_000_000,
@@ -220,7 +221,7 @@ test.describe('Remote Hosts settings section', () => {
 
     await expect.poll(() => createBody).not.toBeNull();
     expect(createBody).toMatchObject({
-      title: 'Set up runner on agent-runner-01',
+      title: 'Set up agent host on agent-runner-01',
       agent: 'codex',
       targetState: '2-ready',
       watchPath: 'C:/projects/agent-taskboard',
@@ -252,6 +253,141 @@ test.describe('Remote Hosts settings section', () => {
     await badge.hover();
     await expect(page.getByRole('tooltip')).toContainText('permission denied');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
+  });
+
+  test('shows selective capability drain, canary context, affected claims, and recovery history without freshening stale metrics', async ({ page }) => {
+    const now = Date.now();
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01',
+        name: 'agent-runner-01',
+        hostId: 'host-berlin',
+        instanceId: 'coding-codex',
+        runnerVersion: '1.2.0',
+        protocolVersion: 2,
+        status: 'active',
+        registeredAt: new Date(now - 86_400_000).toISOString(),
+        lastSeenAt: new Date(now - 15_000).toISOString(),
+        hostAdmission: {
+          hostId: 'host-berlin',
+          admissionState: 'open',
+          automaticDrainReason: null,
+          automaticDrainAt: null,
+          operatorDrainReason: null,
+          operatorDrainAt: null,
+        },
+        capabilities: [{
+          key: 'provider-auth:codex',
+          category: 'provider-auth',
+          advertisedStatus: 'ready',
+          healthState: 'draining',
+          reason: 'ProviderUnauthorized: Codex returned 401',
+          advertisedAt: new Date(now - 30_000).toISOString(),
+          freshUntil: new Date(now + 120_000).toISOString(),
+          isFresh: true,
+          firstFailureAt: new Date(now - 90_000).toISOString(),
+          lastFailureAt: new Date(now - 30_000).toISOString(),
+          cooldownUntil: new Date(now + 90_000).toISOString(),
+          canaryClaimId: 'run_canary',
+          consecutiveFailures: 2,
+          version: 'available',
+          identity: 'codex',
+          affectedClaims: ['run:run_active', 'review:review_active'],
+          recoveryHistory: [{
+            occurredAt: new Date(now - 30_000).toISOString(),
+            fromState: 'suspect',
+            toState: 'draining',
+            reason: 'Codex returned 401',
+            claimId: 'run_active',
+          }],
+        }],
+        telemetry: {
+          observedAt: new Date(now - 10 * 60_000).toISOString(),
+          cpuPercent: 99,
+          memoryUsedBytes: 15_000_000_000,
+          memoryTotalBytes: 16_000_000_000,
+          cpuCores: 4,
+          diskFreeBytes: 1,
+          diskTotalBytes: 100,
+        },
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const card = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const capability = card.getByTestId('remote-host-capability-provider-auth:codex');
+    await expect(capability).toContainText('draining');
+    await expect(capability).toContainText('Codex returned 401');
+    await expect(capability).toContainText('run_canary');
+    await expect(capability).toContainText('run:run_active, review:review_active');
+    await capability.getByText('Recovery history · 1').click();
+    await expect(capability).toContainText('suspect → draining');
+    await expect(card.getByTestId('remote-host-vitals')).not.toContainText('99%');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-capability-drain--mocked.png'), fullPage: false });
+  });
+
+  test('labels automatic whole-host drain separately from operator-requested drain', async ({ page }) => {
+    const now = new Date().toISOString();
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2,
+        status: 'active', registeredAt: now, lastSeenAt: now,
+        hostAdmission: {
+          hostId: 'host-berlin', admissionState: 'automatic-draining',
+          automaticDrainReason: 'host:disk: DiskFull', automaticDrainAt: now,
+          operatorDrainReason: 'planned maintenance', operatorDrainAt: now,
+        },
+        capabilities: [],
+        telemetry: null,
+      }]),
+    }));
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const admission = page.getByTestId('remote-host-card')
+      .filter({ hasText: 'agent-runner-01' })
+      .getByTestId('remote-host-admission');
+    await expect(admission).toContainText('Automatic whole-host drain');
+    await expect(admission).toContainText('host:disk');
+    await expect(admission).not.toContainText('Operator-requested');
+    const operatorAdmission = page.getByTestId('remote-host-card')
+      .filter({ hasText: 'agent-runner-01' })
+      .getByTestId('remote-host-operator-admission');
+    await expect(operatorAdmission).toContainText('Operator-requested host drain');
+    await expect(operatorAdmission).toContainText('planned maintenance');
+    await expect(operatorAdmission).not.toContainText('Automatic');
+  });
+
+  test('shows a failed project delivery preflight and its claim refusal reason', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: '2026-07-22T10:00:00Z', lastSeenAt: new Date().toISOString(),
+        runnerGitStatus: 'ready',
+        runnerProjectPreflights: [{
+          projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
+          repositoryUrl: 'https://github.com/example/payments.git',
+          fetchUrl: 'https://github.com/example/payments.git',
+          pushUrl: 'https://github.com/example/payments.git', status: 'failed',
+          detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
+        }],
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const failure = remote.getByTestId('remote-host-project-preflight-failures');
+    await expect(failure).toContainText('Payments');
+    await expect(failure).toContainText('permission denied');
+    await remote.screenshot({ path: join(SHOT_DIR, 'remote-host-project-preflight-failed--mocked.png') });
   });
 
   test('shows persisted performance history, slot context, and a throttling finding', async ({ page }) => {

@@ -105,6 +105,64 @@ export interface GitProjectInventory {
   error: string | null;
 }
 
+export type IntegrationQueueState = 'merged' | 'waiting' | 'conflict' | 'skipped';
+
+export interface IntegrationQueueItem {
+  taskId: string;
+  taskKey: string;
+  title: string;
+  lane: string;
+  stateSince: string;
+  status: IntegrationQueueState;
+  mergeSha: string | null;
+  reason: string | null;
+}
+
+export interface PublisherMergeItem {
+  taskKey: string;
+  title: string | null;
+  sha: string;
+  shortSha: string;
+  integratedAt: string;
+  publisher: string;
+  subject: string;
+}
+
+export interface PromotionTaskItem {
+  taskKey: string;
+  title: string | null;
+  sha: string;
+  shortSha: string;
+  subject: string;
+}
+
+export interface PromotionDiffView {
+  fromRef: string;
+  toRef: string;
+  fromSha: string | null;
+  toSha: string | null;
+  tasks: PromotionTaskItem[];
+  files: GitFileChange[];
+  filesChanged: number;
+  added: number;
+  removed: number;
+}
+
+/** Remote-ref-derived merge queue, publisher history, and release delta. */
+export interface ProjectIntegrationView {
+  project: string;
+  isRepo: boolean;
+  integrationRef: string;
+  releaseRef: string;
+  integrationHeadSha: string | null;
+  releaseHeadSha: string | null;
+  capturedAt: string;
+  queue: IntegrationQueueItem[];
+  publisherMerges: PublisherMergeItem[];
+  promotion: PromotionDiffView;
+  error: string | null;
+}
+
 /**
  * Git-Management cleanup (AGT-2009). Mirrors backend `GitCleanupService` models.
  * The plan is a read-only dry-run preview; execution acts on an operator-confirmed

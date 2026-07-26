@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentStudio.Persistence;
 
 namespace AgentStudio.Tasks;
 
@@ -9,12 +10,15 @@ namespace AgentStudio.Tasks;
 /// rewrite a single field in a job's <c>task.json</c> while preserving the
 /// original key order; centralising that read-modify-write avoids each
 /// service growing its own near-identical copy and drifting on details
-/// like indent, encoding, or legacy-field handling.
+/// like indent, encoding, or legacy-field handling. Rewrites replace the file
+/// atomically so the watcher/scanner never observes the truncate window of a
+/// direct <c>File.WriteAllText</c>.
 /// </summary>
 internal static class TaskJsonFile
 {
     internal static readonly JsonSerializerOptions ReadOpts = new() { PropertyNameCaseInsensitive = true };
     private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
+    private static readonly IAtomicJsonFileWriter FileWriter = new AtomicJsonFileWriter();
 
     /// <summary>
     /// Reads <c>task.json</c>, replaces or adds a single top-level field, writes
@@ -64,7 +68,7 @@ internal static class TaskJsonFile
         }
         if (!inserted) updated[fieldName] = value;
 
-        File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+        Write(jobJsonPath, updated);
     }
 
     /// <summary>
@@ -91,7 +95,7 @@ internal static class TaskJsonFile
                 updated[kv.Key] = kv.Value;
             }
 
-            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+            Write(jobJsonPath, updated);
         }
         catch (Exception ex)
         {
@@ -124,11 +128,14 @@ internal static class TaskJsonFile
             }
             if (!updated.ContainsKey("order")) updated["order"] = order;
 
-            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+            Write(jobJsonPath, updated);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update order in task.json at {Dir}", jobDir);
         }
     }
+
+    private static void Write(string path, Dictionary<string, object> value) =>
+        FileWriter.Write(path, JsonSerializer.Serialize(value, WriteOpts));
 }

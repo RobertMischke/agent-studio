@@ -59,6 +59,9 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   readonly defaultCapPct = signal(95);
   readonly caps = signal<Record<string, Record<string, number>>>({});
   readonly report = signal<QuotaReport | null>(null);
+  readonly waitEnabled = signal(false);
+  readonly waitThresholdMinutes = signal(30);
+  readonly waitSaving = signal(false);
 
   readonly rows = computed<CapRow[]>(() => {
     const r = this.report();
@@ -124,7 +127,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   reload() {
     this.loading.set(true);
     this.errorMsg.set(null);
-    let pending = 2;
+    let pending = 3;
     const finish = () => {
       pending--;
       if (pending === 0) {
@@ -150,6 +153,35 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
       error: err => {
         this.errorMsg.set(this.errorMessage(err, 'Failed to load quota'));
         finish();
+      }
+    });
+    this.quotaApi.getQuotaWaitPolicy().subscribe({
+      next: policy => {
+        this.waitEnabled.set(policy.enabled);
+        this.waitThresholdMinutes.set(policy.thresholdMinutes);
+        finish();
+      },
+      error: err => {
+        this.errorMsg.set(this.errorMessage(err, 'Failed to load quota wait policy'));
+        finish();
+      }
+    });
+  }
+
+  saveWaitPolicy(enabled = this.waitEnabled(), threshold = this.waitThresholdMinutes()) {
+    const minutes = Math.max(1, Math.min(240, Math.round(Number(threshold) || 30)));
+    this.waitEnabled.set(enabled);
+    this.waitThresholdMinutes.set(minutes);
+    this.waitSaving.set(true);
+    this.quotaApi.setQuotaWaitPolicy(enabled, minutes).subscribe({
+      next: policy => {
+        this.waitEnabled.set(policy.enabled);
+        this.waitThresholdMinutes.set(policy.thresholdMinutes);
+        this.waitSaving.set(false);
+      },
+      error: err => {
+        this.errorMsg.set(this.errorMessage(err, 'Failed to save quota wait policy'));
+        this.waitSaving.set(false);
       }
     });
   }

@@ -92,6 +92,41 @@
     }
   </section>
 
+  <section class="cli-admin__section" data-testid="quota-wait-policy">
+    <header class="cli-admin__section-head">
+      <h3>Quota reset wait</h3>
+      <span class="cli-admin__hint">before model switch and throttling</span>
+    </header>
+    <div class="quota-wait-policy">
+      <label class="quota-wait-policy__toggle">
+        <input type="checkbox"
+               data-testid="quota-wait-enabled"
+               [ngModel]="waitEnabled()"
+               (ngModelChange)="saveWaitPolicy($event, waitThresholdMinutes())"
+               [disabled]="waitSaving()" />
+        <span>
+          <strong>Wait at quota limit when the reset is nearby</strong>
+          <small>Keep the requested model when its confirmed reset is inside the threshold.</small>
+        </span>
+      </label>
+      <label class="quota-wait-policy__threshold">
+        <span>Nearby means less than</span>
+        <input type="number"
+               min="1"
+               max="240"
+               step="1"
+               data-testid="quota-wait-threshold"
+               [ngModel]="waitThresholdMinutes()"
+               (ngModelChange)="waitThresholdMinutes.set($event)"
+               (change)="saveWaitPolicy(waitEnabled(), waitThresholdMinutes())"
+               [disabled]="waitSaving() || !waitEnabled()"
+               aria-label="Quota reset wait threshold in minutes" />
+        <span>minutes</span>
+        @if (waitSaving()) { <span class="quota-wait-policy__saving">saving…</span> }
+      </label>
+    </div>
+  </section>
+
   <section class="cli-admin__section" data-testid="cli-admin-contracts">
     <header class="cli-admin__section-head">
       <h3>Completion contracts</h3>
@@ -114,4 +149,3 @@
     own pages now: <strong>CLI sessions</strong> and <strong>CLI paths</strong>.
   </p>
 </div>
-

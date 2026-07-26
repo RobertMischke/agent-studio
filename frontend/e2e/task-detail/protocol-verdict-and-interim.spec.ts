@@ -1,13 +1,9 @@
-import { test, expect, Page } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { api, BACKEND } from '../helpers/api';
 import { createJob, listJobs } from '../helpers/jobs';
 
 interface WatchPathEntry { path: string; name: string }
-
-interface JobDetail {
-  info: { id: string; watchPath: string };
-  statusMarkdown: string | null;
-}
 
 function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdown: string | null) {
   return {
@@ -41,8 +37,9 @@ async function installCompletedJobMocks(
   page: Page,
   target: { id: string; watchPath: string },
   statusMarkdown: string,
+  detailOverride?: object,
 ): Promise<void> {
-  const detailBody = JSON.stringify(buildCompletedJobDetail(target.id, target.watchPath, statusMarkdown));
+  const detailBody = JSON.stringify(detailOverride ?? buildCompletedJobDetail(target.id, target.watchPath, statusMarkdown));
 
   await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
@@ -69,9 +66,9 @@ async function installCompletedJobMocks(
  * Verifies the two protocol-pane additions for the
  * `protokollsummery-verbesserung` task:
  *
- *   1. A 3-state verdict chip (🟢 OK / 🔴 Problem / 🟡 Unclear) renders at the
- *      very top of the protocol pane body, above hygiene strip and tabs. The
- *      kind is derived deterministically from the existing signals.
+ *   1. One authoritative outcome banner renders at the very top of the
+ *      protocol pane body. The status is derived deterministically from all
+ *      current run signals and is reused by the Result and Pipeline surfaces.
  *
  *   2. The interim-status backend endpoint exists and surfaces the precondition
  *      failure (missing cli-output.log) verbatim - no silent 500.
@@ -81,6 +78,8 @@ async function installCompletedJobMocks(
  * lock the cheap branches so the UX wiring does not silently regress.
  */
 test.describe('Protocol pane - verdict chip + interim status', () => {
+  test.use({ serviceWorkers: 'block' });
+
   test('verdict chip renders for any reachable job', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
 
@@ -93,7 +92,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     );
 
     // The banner root carries `role="status"`; scope to it so the newer
-    // sub-element testids (protocol-verdict-detail / -duration / -superseded)
+    // sub-element testids (protocol-verdict-detail / -duration / -signals)
     // do not turn this into a multi-match locator.
     const chip = page.locator('[data-testid^="protocol-verdict-"][role="status"]');
     await expect(chip).toBeVisible({ timeout: 15_000 });
@@ -135,7 +134,10 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
       `/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`,
     );
 
-    const chip = page.getByTestId('protocol-verdict-ok');
+    // The fixture is in Human Review, so the lane's needs-decision signal
+    // legitimately outranks Result: Success. This test owns duration placement,
+    // not outcome classification; select the one authoritative banner by role.
+    const chip = page.getByTestId('protocol-run-outcome').getByRole('status');
     await expect(chip).toBeVisible({ timeout: 15_000 });
 
     const duration = page.getByTestId('protocol-verdict-duration');
@@ -157,6 +159,85 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     await page.screenshot({
       path: 'test-results/protocol-verdict-duration-chip.png',
       fullPage: false,
+    });
+  });
+
+  test('watchdog failure is the only primary outcome across Result and Pipeline', async ({ page, devBackend }, testInfo) => {
+    test.setTimeout(60_000);
+    void devBackend;
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    await page.route('**/api/auth/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          profile: 'networked', bootstrapRequired: false, authenticated: true,
+          user: {
+            id: 'usr_owner', username: 'owner', displayName: 'Owner', role: 'owner',
+            projects: [], disabled: false, mustChangePassword: false,
+          },
+        }),
+      });
+    });
+    const target = { id: 'QS-26-outcome-conflict', watchPath: '/e2e/outcome-conflict' };
+    const detail = buildCompletedJobDetail(target.id, target.watchPath, '# Status\n- Result: Partial');
+    Object.assign(detail.info, {
+      outcomeIssue: {
+        kind: 'watchdog-timeout', label: 'Watchdog timeout', severity: 'High',
+        summary: 'The run will finalize as failed.', lastSeenAt: '2026-07-22T10:02:00Z',
+      },
+      orchestratorVerdict: 'accept',
+    });
+    await installCompletedJobMocks(page, target, detail.statusMarkdown!, detail);
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/pipeline?**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          pipeline: {
+            id: 'standard', displayName: 'Standard', version: 1, pre: [], core: [],
+            post: [{ id: 'post-orchestrator-decision', displayName: 'Final verdict', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false }],
+          },
+          execution: {
+            pipelineId: 'standard', pipelineVersion: 1, jobId: target.id, project: 'fixture',
+            startedAt: '2026-07-22T10:00:00Z', completedAt: '2026-07-22T10:02:00Z',
+            steps: [{ stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept' }],
+          },
+          cost: null, config: {}, resultFiles: {}, onDemand: null,
+        }),
+      });
+    });
+
+    await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
+
+    const banner = page.getByTestId('protocol-run-outcome');
+    await expect(banner.first()).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toHaveCount(1);
+    const primary = banner.getByRole('status');
+    await expect(primary).toHaveAttribute('role', 'status');
+    await expect(primary).toHaveAttribute('data-status', 'failed');
+    await expect(primary).toContainText('Watchdog timeout');
+    await expect(page.getByTestId('result-case-badge')).toHaveAttribute('data-outcome', 'failed');
+    await expect(page.getByTestId('result-case-badge')).toContainText('Watchdog timeout');
+    await expect(page.getByTestId('overview-failure-reason')).toHaveCount(0);
+    await expect(page.getByTestId('protocol-outcome-issue-chip')).toHaveCount(0);
+    const decisionPhase = page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]');
+    if (await decisionPhase.getAttribute('aria-expanded') === 'false') {
+      await decisionPhase.evaluate((element: HTMLButtonElement) => element.click());
+    }
+    const pipelineVerdict = page.getByTestId('overview-pipeline-step-decision');
+    await expect(pipelineVerdict).toHaveAttribute('data-verdict', 'failed');
+    await expect(pipelineVerdict).toContainText('Watchdog timeout');
+
+    await page.getByTestId('protocol-verdict-signals-toggle')
+      .evaluate((element: HTMLButtonElement) => element.click());
+    const why = page.getByTestId('protocol-verdict-signals-list');
+    await expect(why).toContainText('Review accepted');
+    await expect(why).toContainText('Partial');
+
+    await testInfo.attach('authoritative-run-outcome', {
+      body: await page.screenshot({ fullPage: false }),
+      contentType: 'image/png',
     });
   });
 

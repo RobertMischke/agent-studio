@@ -1,0 +1,530 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using Xunit;
+
+namespace AgentStudio.Tests;
+
+/// <summary>
+/// AGT-2308 regression coverage for the production incident where remote-runner
+/// deliveries were accepted into Completed but the acceptance merge looked only
+/// for <c>task/&lt;slug&gt;</c>. Remote deliveries are fenced by
+/// <c>logs/review-subject.json</c> and live on
+/// <c>runner/&lt;runner&gt;/&lt;task-key&gt;</c>; that exact ref + SHA is the
+/// acceptance source of truth.
+/// </summary>
+public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
+{
+    private const string Project = "Fixture";
+    private const string Slug = "remote-delivery";
+    private const string TaskKey = "AGT-2227";
+    private const string DeliveryRef = "runner/agent-runner-01/AGT-2227";
+
+    private readonly string _tempDir;
+    private readonly string _watchPath;
+    private readonly string _repo;
+    private readonly string _origin;
+
+    public AcceptanceIntegrationRoundTripTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), "accept-integration-" + Guid.NewGuid().ToString("N"));
+        _watchPath = Path.Combine(_tempDir, "project-store");
+        _repo = Path.Combine(_tempDir, "repo");
+        _origin = Path.Combine(_tempDir, "origin.git");
+        Directory.CreateDirectory(_tempDir);
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+
+        RunGit(_tempDir, "init", "--bare", "-q", "--initial-branch=main", _origin);
+        RunGit(_tempDir, "init", "-q", "-b", "main", _repo);
+        RunGit(_repo, "config", "user.email", "test@example.com");
+        RunGit(_repo, "config", "user.name", "test");
+        File.WriteAllText(Path.Combine(_repo, "shared.txt"), "base\n");
+        RunGit(_repo, "add", "-A");
+        RunGit(_repo, "commit", "-q", "-m", "seed");
+        RunGit(_repo, "remote", "add", "origin", _origin);
+        RunGit(_repo, "push", "-q", "-u", "origin", "main");
+        RunGit(_repo, "checkout", "-q", "-b", "develop");
+        RunGit(_repo, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repo, "checkout", "-q", "main");
+        RunGit(_repo, "branch", "-D", "develop");
+    }
+
+    [Fact]
+    public async Task AcceptRemoteDelivery_MergesFencedResult_AndClearsPendingTag()
+    {
+        Assert.Equal(
+            IntegrationStatuses.PendingTag,
+            TaskMutationService.NormalizeTagId("integration:pending"));
+
+        var deliverySha = PublishDelivery("delivery.txt", "remote work\n");
+        var deps = Build(deliverySha);
+
+        var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.Equal(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "main").Code);
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Equal(TaskStates.Completed, completed!.State);
+        Assert.DoesNotContain(
+            completed.Tags,
+            IntegrationStatuses.IsPendingTag);
+
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Equal("merged", mergeStep.Verdict);
+    }
+
+    [Fact]
+    public async Task AcceptRemoteDelivery_UsesConfiguredPullRequestStrategy_AndStaysVisiblePending()
+    {
+        var deliverySha = PublishDelivery("pull-request.txt", "review handoff\n");
+        var deps = Build(deliverySha, IntegrationStrategies.PullRequest);
+
+        var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Contains(completed!.Tags, IntegrationStatuses.IsPendingTag);
+
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Skipped, mergeStep!.Status);
+        Assert.Equal("pushed-for-review", mergeStep.Verdict);
+
+        var integration = deps.Integration.BuildLookup([completed])[completed.TaskKey];
+        Assert.Equal(IntegrationStatuses.Pending, integration.Status);
+    }
+
+    [Fact]
+    public async Task AcceptRemoteDelivery_WithConflict_LeavesVisibleConflictAndRecoveryHint()
+    {
+        var deliverySha = PublishDelivery("shared.txt", "delivery version\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        File.WriteAllText(Path.Combine(_repo, "shared.txt"), "develop version\n");
+        RunGit(_repo, "add", "shared.txt");
+        RunGit(_repo, "commit", "-q", "-m", "develop edits shared");
+        var developBefore = Git(_repo, "rev-parse", "develop").Out.Trim();
+        var deps = Build(deliverySha);
+
+        var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.Equal(developBefore, Git(_repo, "rev-parse", "develop").Out.Trim());
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Contains(
+            completed!.Tags,
+            IntegrationStatuses.IsPendingTag);
+
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Failed, mergeStep!.Status);
+        Assert.Equal("conflict", mergeStep.Verdict);
+        Assert.Contains("shared.txt", mergeStep.VerdictSummary);
+
+        var integration = deps.Integration.BuildLookup([completed])[completed.TaskKey];
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
+        Assert.Contains("rebase", integration.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("develop", integration.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ConflictRecoveryAction_QueuesFocusedSteerRoundOnExistingDelivery()
+    {
+        var deliverySha = PublishDelivery("shared.txt", "delivery version\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        File.WriteAllText(Path.Combine(_repo, "shared.txt"), "develop version\n");
+        RunGit(_repo, "add", "shared.txt");
+        RunGit(_repo, "commit", "-q", "-m", "develop edits shared");
+        var deps = Build(deliverySha);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _tempDir,
+                        ["WatchPaths:0:Name"] = Project,
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _repo,
+                        ["WatchPaths:0:RepositoryPath"] = _repo,
+                    });
+                });
+                builder.ConfigureTestServices(services => services.RemoveAll<IHostedService>());
+            });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var response = await client.PostAsync(
+            $"/api/tasks/{Slug}/integration/rebase?watchPath={Uri.EscapeDataString(_watchPath)}",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("queued", body.RootElement.GetProperty("status").GetString());
+        Assert.Equal(ContinueModes.Steer, body.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(DeliveryRef, body.RootElement.GetProperty("deliveryRef").GetString());
+        Assert.Equal("develop", body.RootElement.GetProperty("integrationBranch").GetString());
+
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, Slug);
+        Assert.True(Directory.Exists(readyFolder));
+        var intent = JsonSerializer.Deserialize<PendingIntent>(
+            File.ReadAllText(Path.Combine(readyFolder, "pending-intent.json")),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(intent);
+        Assert.Equal(ContinueModes.Steer, intent!.Mode);
+        Assert.Equal("integration-conflict", intent.SavedReason);
+        Assert.Contains(DeliveryRef, intent.Prompt, StringComparison.Ordinal);
+        Assert.Contains("rebase", intent.Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            TimelineEventKinds.IntegrationRecoveryQueued,
+            File.ReadAllText(TaskPaths.TimelineLog(readyFolder)));
+    }
+
+    [Fact]
+    public async Task IntegrationTagMutation_NeverExposesTruncatedTaskJsonToConcurrentReader()
+    {
+        var folder = Path.Combine(_tempDir, "atomic-task-json");
+        var path = Path.Combine(folder, "task.json");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(path, """{"id":"remote-delivery","tags":[]}""");
+
+        var failures = new ConcurrentQueue<Exception>();
+        using var started = new ManualResetEventSlim();
+        var reading = true;
+        var reader = Task.Run(() =>
+        {
+            started.Set();
+            while (Volatile.Read(ref reading))
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(File.ReadAllText(path));
+                    Assert.Equal(Slug, document.RootElement.GetProperty("id").GetString());
+                }
+                catch (Exception ex)
+                {
+                    failures.Enqueue(ex);
+                }
+            }
+        });
+        started.Wait();
+
+        var tags = Enumerable.Range(0, 2_000).Select(i => $"integration:test-{i:D4}").ToArray();
+        for (var i = 0; i < 100; i++)
+        {
+            TaskJsonFile.UpdateField(
+                folder,
+                "tags",
+                i % 2 == 0 ? tags : new[] { IntegrationStatuses.PendingTag },
+                NullLogger.Instance);
+        }
+
+        Volatile.Write(ref reading, false);
+        await reader;
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public async Task IntegrationPushQueue_DroppedByRestart_IsRecoveredFromDurablePipelineFacts()
+    {
+        var deliverySha = PublishDelivery("restart.txt", "survives restart\n");
+        var deps = Build(deliverySha);
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+
+        var localDevelop = Git(_repo, "rev-parse", "develop").Out.Trim();
+        var remoteBefore = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        Assert.NotEqual(localDevelop, remoteBefore);
+
+        // Archiving must not erase the durable recovery fact. Production's
+        // ScanAllJobs snapshot deliberately omits 7-archive, so the backstop
+        // must use the archive-inclusive scanner.
+        var archived = deps.States.MoveJob(Slug, TaskStates.Archive, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, archived.Status);
+
+        // Simulate a fresh backend process: the in-memory IntegrationPushQueue
+        // is gone, but pipeline-execution.json still proves merge=Passed and
+        // push=Pending. The startup backstop must re-drive the push.
+        var backstop = new IntegrationPushBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Pipeline,
+            deps.Merge,
+            deps.Configuration,
+            NullLogger<IntegrationPushBackstopHostedService>.Instance);
+        var recovered = await backstop.RunOnceAsync();
+
+        Assert.Equal(1, recovered);
+        var remoteAfter = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        Assert.Equal(localDevelop, remoteAfter);
+    }
+
+    [Fact]
+    public void AcceptanceMerge_InterruptedByRestart_IsRecoveredFromCompletedLane()
+    {
+        var deliverySha = PublishDelivery("accept-restart.txt", "durable lane move\n");
+        var deps = Build(deliverySha);
+
+        // Simulate a process that durably moved the lane but stopped before
+        // TaskTransitionService could run its post-move merge side effect.
+        var moved = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+
+        var backstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Pipeline,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
+        var recovered = backstop.RunOnce();
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.DoesNotContain(
+            completed!.Tags,
+            IntegrationStatuses.IsPendingTag);
+    }
+
+    [Fact]
+    public async Task AcceptanceMerge_LandedBeforeRestart_RecoversMissingRecordAndPush()
+    {
+        var deliverySha = PublishDelivery("merge-record-restart.txt", "local merge survived\n");
+        var deps = Build(deliverySha);
+
+        // Simulate the narrower crash window: the lane move and local git merge
+        // landed, but the process stopped before MergeIntoDevelopRunner recorded
+        // the durable merge step or enqueued the integration push.
+        var moved = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        var localDevelop = Git(_repo, "rev-parse", "develop").Out.Trim();
+        var remoteBefore = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        Assert.NotEqual(localDevelop, remoteBefore);
+        var pendingMerge = deps.Pipeline.Read(Path.Combine(_watchPath, TaskStates.Completed, Slug))?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(pendingMerge);
+        Assert.Equal(PipelineStepStatus.Pending, pendingMerge!.Status);
+
+        var mergeBackstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Pipeline,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
+        var recoveredMerges = mergeBackstop.RunOnce();
+
+        Assert.Equal(1, recoveredMerges);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        var mergeStep = deps.Pipeline.Read(completed!.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Equal("already-merged", mergeStep.Verdict);
+
+        var pushBackstop = new IntegrationPushBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Pipeline,
+            deps.Merge,
+            deps.Configuration,
+            NullLogger<IntegrationPushBackstopHostedService>.Instance);
+        var recoveredPushes = await pushBackstop.RunOnceAsync();
+
+        Assert.Equal(1, recoveredPushes);
+        var remoteAfter = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        Assert.Equal(localDevelop, remoteAfter);
+        Assert.DoesNotContain(
+            deps.Scanner.FindJob(Slug, _watchPath)!.Tags,
+            IntegrationStatuses.IsPendingTag);
+    }
+
+    private string PublishDelivery(string relativePath, string content)
+    {
+        RunGit(_repo, "checkout", "-q", "-b", DeliveryRef, "origin/develop");
+        File.WriteAllText(Path.Combine(_repo, relativePath), content);
+        RunGit(_repo, "add", "-A");
+        RunGit(_repo, "commit", "-q", "-m", $"feat({TaskKey}): remote delivery");
+        var sha = Git(_repo, "rev-parse", "HEAD").Out.Trim();
+        RunGit(_repo, "push", "-q", "origin", $"{DeliveryRef}:{DeliveryRef}");
+        RunGit(_repo, "checkout", "-q", "main");
+        RunGit(_repo, "branch", "-D", DeliveryRef);
+        RunGit(_repo, "update-ref", "-d", $"refs/remotes/origin/{DeliveryRef}");
+        return sha;
+    }
+
+    private Deps Build(
+        string deliverySha,
+        string integrationStrategy = IntegrationStrategies.DirectMerge)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = Project,
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _repo,
+                ["WatchPaths:0:RepositoryPath"] = _repo,
+                ["TaskRepository"] = _tempDir,
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(
+            scanner,
+            new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        settings.SetIntegrationBranch(Project, "develop");
+        settings.SetIntegrationStrategy(Project, integrationStrategy);
+        settings.SetAutoPushStrategy(Project, AutoPushStrategies.Never);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var pipeline = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
+        var merge = new MergeIntoDevelopRunner(
+            git, pipeline, NullLogger<MergeIntoDevelopRunner>.Instance, projectSettings: settings);
+        var integration = new TaskIntegrationStatusService(
+            git, settings, pipeline, NullLogger<TaskIntegrationStatusService>.Instance);
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+
+        var jobFolder = Path.Combine(_watchPath, TaskStates.HumanReview, Slug);
+        Directory.CreateDirectory(jobFolder);
+        var job = new
+        {
+            id = Slug,
+            key = TaskKey,
+            title = "Remote delivery",
+            state = TaskStates.HumanReview,
+            order = 1,
+            agent = "codex",
+            cliType = "codex",
+            mode = TaskModes.Coding,
+            projectName = Project,
+            codeActivityDetected = true,
+            tags = new[] { IntegrationStatuses.PendingTag },
+            commit = Commit(deliverySha),
+            commits = new[] { Commit(deliverySha) },
+        };
+        File.WriteAllText(
+            Path.Combine(jobFolder, "task.json"),
+            JsonSerializer.Serialize(job, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = TaskKey,
+            Project = Project,
+            Repository = _origin,
+            ResultSha = deliverySha,
+            ResultRef = DeliveryRef,
+            AttemptChainId = "fixture-attempt",
+            Executor = "agent-runner-01",
+            LeaseId = "fixture-attempt",
+            FencingToken = 1,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+        pipeline.Begin(jobFolder, PipelineCatalogue.Standard, Project, Slug);
+        Assert.NotNull(scanner.FindJob(Slug, _watchPath));
+
+        var transitions = new TaskTransitionService(
+            scanner,
+            states,
+            mutations,
+            git,
+            settings,
+            NullLogger<TaskTransitionService>.Instance,
+            mergeRunner: merge,
+            integrationStatus: integration,
+            timeline: timeline);
+        return new Deps(scanner, states, mutations, transitions, pipeline, integration, settings, merge, config);
+    }
+
+    private static object Commit(string sha) => new
+    {
+        sha,
+        shortSha = sha[..8],
+        message = "remote delivery",
+        filesChanged = 1,
+        files = Array.Empty<object>(),
+        at = DateTimeOffset.UtcNow,
+        attribution = "automatic",
+        confidence = 1,
+    };
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
+
+    private static void RunGit(string cwd, params string[] args)
+    {
+        var result = Git(cwd, args);
+        Assert.True(result.Code == 0, $"git {string.Join(' ', args)} failed: {result.Err}");
+    }
+
+    private static (string Out, string Err, int Code) Git(string cwd, params string[] args)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = cwd,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        foreach (var arg in args) process.StartInfo.ArgumentList.Add(arg);
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (stdout, stderr, process.ExitCode);
+    }
+
+    private sealed record Deps(
+        TaskScannerService Scanner,
+        TaskStateMachine States,
+        TaskMutationService Mutations,
+        TaskTransitionService Transitions,
+        PipelineExecutionLog Pipeline,
+        TaskIntegrationStatusService Integration,
+        ProjectSettingsService Settings,
+        MergeIntoDevelopRunner Merge,
+        IConfiguration Configuration);
+}

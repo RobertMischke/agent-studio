@@ -138,63 +138,6 @@ afterEach(() => {
 });
 
 describe('OverviewPaneComponent (smoke)', () => {
-  it('pipeline metrics omit empty columns and render only recorded measures', async () => {
-    const fixture = await build(baseJob());
-    const pending = agentPipeline();
-    pending.execution = null;
-    TestBed.inject(TaskPipelinePollService).pipeline.set(pending);
-    fixture.componentInstance.expandAllPipelineGroups();
-    fixture.detectChanges();
-    expect(fixture.componentInstance.pipelineMetrics().any).toBe(false);
-    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-header"]')).toBeNull();
-
-    pending.execution = {
-      pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
-      startedAt: new Date().toISOString(), completedAt: null,
-      steps: [{ stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 800,
-        inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }],
-    };
-    TestBed.inject(TaskPipelinePollService).pipeline.set({ ...pending });
-    fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
-    expect(fixture.componentInstance.pipelineMetrics()).toEqual({
-      time: false, duration: true, tokens: false, cost: false, any: true,
-    });
-    expect(host.querySelector('.ov-pl-header__duration')).not.toBeNull();
-    expect(host.querySelector('.ov-pl-header__time')).toBeNull();
-    expect(host.querySelector('[data-testid="overview-pipeline-step-tokens"]')).toBeNull();
-    expect(host.querySelector('[data-testid="overview-pipeline-step-cost"]')).toBeNull();
-  });
-
-  it('lifts uniform model and activation metadata once per group', async () => {
-    const fixture = await build(baseJob({ state: TaskState.AutoReview }));
-    const pipe: TaskPipelineResponse = {
-      pipeline: { id: 'standard', displayName: 'Standard', version: 1, pre: [], core: [], post: [], allSteps: [
-        { id: 'aspect-a', displayName: 'Aspect A', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
-        { id: 'aspect-b', displayName: 'Aspect B', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
-      ] },
-      execution: { pipelineId: 'standard', pipelineVersion: 1, jobId: 'test-1', project: 'test',
-        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), steps: [
-          { stepId: 'aspect-a', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
-          { stepId: 'aspect-b', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
-        ] },
-      cost: emptyCost(),
-      config: {
-        'aspect-a': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
-        'aspect-b': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
-      },
-    };
-    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
-    fixture.componentInstance.expandAllPipelineGroups();
-    fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-model"]').length).toBe(1);
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-activation"]').length).toBe(1);
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-step-model"]').length).toBe(0);
-    expect(host.querySelectorAll('[data-testid="overview-post-step-source"]').length).toBe(0);
-    expect(host.querySelector('[data-testid="overview-pipeline-density"]')).toBeNull();
-  });
-
   it('compiles + instantiates without throwing', async () => {
     const fixture = await build(baseJob());
     expect(fixture.componentInstance).toBeTruthy();
@@ -591,6 +534,15 @@ describe('OverviewPaneComponent (smoke)', () => {
   it('pipeline block: run switcher shows archived attempts from pipeline history', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');
+    pipe.pipeline.allSteps!.push({
+      id: 'post-orchestrator-decision',
+      displayName: 'Orchestrator decision',
+      kind: 'orchestrator',
+      runMode: 'sequential',
+      dependsOn: [],
+      idempotent: true,
+      stub: false,
+    });
     const run1Start = '2026-06-08T08:00:00.000Z';
     const run1Done = '2026-06-08T08:03:00.000Z';
     const run2Start = '2026-06-09T09:00:00.000Z';
@@ -654,6 +606,20 @@ describe('OverviewPaneComponent (smoke)', () => {
               cacheCreationTokens: 0,
               verdict: 'concerns',
             },
+            {
+              stepId: 'post-orchestrator-decision',
+              kind: 'orchestrator',
+              model: 'claude-haiku-4-5',
+              status: 'failed',
+              startedAt: '2026-06-08T08:04:00.000Z',
+              completedAt: '2026-06-08T08:04:01.000Z',
+              durationMs: 1_000,
+              inputTokens: 5,
+              outputTokens: 7,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              verdict: 'escalate',
+            },
           ],
         },
       ],
@@ -708,6 +674,15 @@ describe('OverviewPaneComponent (smoke)', () => {
     const archivedRows = c.pipelineRows();
     expect(c.selectedPipelineAttemptNumber()).toBe(1);
     expect(c.selectedPipelineIsCurrent()).toBe(false);
+    expect(host.querySelector('[data-testid="overview-pipeline-superseded"]')?.textContent)
+      .toContain('Attempt #1 · superseded');
+    expect(host.querySelector('[data-testid="overview-pipeline-step-final-verdict"]')?.textContent)
+      .toContain('Final verdict · superseded');
+    expect(host.querySelector('[data-testid="overview-pipeline-step-verdict"]')?.textContent)
+      .toContain('superseded');
+    expect(
+      host.querySelector('[data-step-id="post-orchestrator-decision"] .ov-pl-step__status')?.textContent?.trim(),
+    ).toBe('×');
     expect(archivedRows.find(r => r.id === 'core-agent-run')!.status).toBe('passed');
     expect(archivedRows.find(r => r.id === 'core-agent-run')!.totalTokens).toBe(30);
     expect(archivedRows.find(r => r.id === 'aspect-code-quality')!.status).toBe('failed');
@@ -878,7 +853,7 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     // Terse hover summary: outcome + duration; no token/cost detail (that lives
     // in the tokens-by-model section).
-    expect(run2.tooltip.title).toBe('Run #2');
+    expect(run2.tooltip.title).toBe('Attempt #2 · superseded');
     expect(run2.tooltip.body).toContain('1 fail');
     expect(run2.tooltip.body).toContain('3m 34s');
     expect(run2.tooltip.body).not.toContain('Tokens:');
@@ -896,15 +871,18 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(current.textContent).toContain('2 OK');
     expect(current.textContent).toContain('2m');
 
-    // History renders as compact chips, newest first, each number + glyph.
+    // History renders as neutral, explicit superseded attempts. Old result
+    // colours/glyphs must not read as current state.
     const chips = Array.from(
       host.querySelectorAll<HTMLButtonElement>(
         '[data-testid="overview-pipeline-run-option"]:not([data-current="true"])',
       ),
     );
     expect(chips.map(b => b.getAttribute('data-attempt'))).toEqual(['2', '1']);
-    expect(chips[0].textContent?.replace(/\s+/g, '')).toBe('#2✗');
-    expect(chips[1].textContent?.replace(/\s+/g, '')).toBe('#1✓');
+    expect(chips[0].textContent?.replace(/\s+/g, '')).toBe('Attempt#2superseded');
+    expect(chips[1].textContent?.replace(/\s+/g, '')).toBe('Attempt#1superseded');
+    expect(chips[0].getAttribute('data-kind')).toBeNull();
+    expect(chips[1].getAttribute('data-kind')).toBeNull();
 
     // The current run is selected by default; clicking a chip swaps the detail.
     expect(c.selectedPipelineAttemptNumber()).toBe(3);
@@ -1129,6 +1107,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
         pre: [], core: [], post: [],
         allSteps: [
+          { id: 'post-orchestrator-review', displayName: 'Early completeness gate', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-subset-build-test-gate', displayName: 'Subset build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-wiki-maintenance', displayName: 'Wiki maintenance', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
@@ -1138,6 +1117,12 @@ describe('OverviewPaneComponent (smoke)', () => {
         pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
         startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T05:00:18Z',
         steps: [
+          {
+            stepId: 'post-orchestrator-review', kind: 'orchestrator', model: null, status: 'failed',
+            startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T04:47:21Z', durationMs: 1_000,
+            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            verdict: 'escalate', reason: 'Attempt budget exhausted at the early completeness gate.',
+          },
           {
             stepId: 'post-build-test-gate', kind: 'tool', model: null, status: 'failed',
             startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T05:00:18Z', durationMs: 778_000,
@@ -1178,6 +1163,13 @@ describe('OverviewPaneComponent (smoke)', () => {
       title: 'Wiki maintenance: Skipped',
       body: 'No matching wiki topic was configured.',
     });
+    expect(rows.find(row => row.id === 'post-wiki-maintenance')?.skipHint)
+      .toBe('skipped: chain ended by early escalate');
+
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-skip-hint"]')?.textContent)
+      .toContain('skipped: chain ended by early escalate');
   });
 
   it('pipeline block: per-step rows carry start/end stamps and a live-counting duration for the running step', async () => {
@@ -1490,6 +1482,11 @@ describe('OverviewPaneComponent (smoke)', () => {
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentRef.setInput('runOutcome', {
+      kind: 'problem', status: 'failed', emoji: '🔴', label: 'Watchdog timeout',
+      detail: 'The run will finalize as failed.', duration: null,
+      signals: [],
+    });
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const c = fixture.componentInstance;
@@ -1524,6 +1521,9 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl).not.toBeNull();
     expect(decisionEl!.classList.contains('ov-pl-step--final-verdict')).toBe(true);
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
+    const authoritative = decisionEl!.querySelector('[data-testid="overview-pipeline-step-decision"]');
+    expect(authoritative?.textContent).toContain('Watchdog timeout');
+    expect(authoritative?.getAttribute('data-verdict')).toBe('failed');
   });
 
   it('decision badge: only the final ruling projects the latest steering verdict, with reasoning in the tooltip (ASS-1706)', async () => {

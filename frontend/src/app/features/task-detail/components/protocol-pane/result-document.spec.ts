@@ -12,11 +12,12 @@ import {
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
     kind: 'ok',
+    status: 'succeeded',
+    signals: [],
     emoji: '🟢',
     label: 'Success',
     detail: 'Last run completed successfully.',
     duration: null,
-    superseded: null,
     ...overrides,
   };
 }

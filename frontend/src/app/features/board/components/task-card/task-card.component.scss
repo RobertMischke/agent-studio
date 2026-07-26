@@ -761,33 +761,6 @@
       border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
       font-weight: 500;
     }
-    /* Human-decision pill (Done & Decide column). The attention variant
-       reuses the failure accent (--studio-accent-6) shared with the failed
-       execution pill and high-severity issue pill, so "this needs a human"
-       reads in the same red vocabulary across the board. Accepted cards stay
-       quiet so the board does not repeat "Reviewed" as another chip. */
-    .task-card__human-review-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--studio-spacing-1);
-      min-height: var(--studio-card-pill-height);
-      padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 7px;
-      font-size: var(--studio-card-meta-size);
-      font-weight: 650;
-      letter-spacing: 0.02em;
-      border: 1px solid transparent;
-      cursor: help;
-    }
-    .task-card__human-review-glyph {
-      font-size: 11px;
-      line-height: 1;
-    }
-    .task-card__human-review-pill--attention {
-      color: var(--studio-accent-6-strong);
-      background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
-    }
     /* Quality-grade pill (ASS-1657). The automatic code-review step grades
        every pipelined task A/B/C/D; the grade reads loud and colour-coded so
        the operator gets the quality verdict at a glance. A/B share the calm

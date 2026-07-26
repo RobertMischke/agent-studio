@@ -2,7 +2,7 @@
 # Managed Linux hosts use remote-runner-onboard.sh, which renders host-derived
 # CPUQuota, CPUWeight, IOWeight, and optional MemoryMax into the main unit.
 [Unit]
-Description=Agent Studio remote runner daemon
+Description=Agent Studio agent host daemon
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -17,7 +17,7 @@ EnvironmentFile=/etc/agent-runner/runner.env
 # Keep the host-owned Mode-A Studio stack available for headless UI and
 # screenshot tasks. A missing script is non-fatal for non-UI hosts.
 ExecStartPre=-/home/agent-runner/bin/stack-start.sh
-ExecStart=/opt/agent-runner/agent-runner --poll
+ExecStart=/opt/agent-host/agent-host --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
@@ -25,7 +25,7 @@ KillSignal=SIGTERM
 # Stop only the daemon main PID. Detached job workers stay alive and are
 # positively verified + reattached by the replacement daemon.
 KillMode=process
-SyslogIdentifier=agent-runner
+SyslogIdentifier=agent-host
 StandardOutput=journal
 StandardError=journal
 
@@ -36,3 +36,4 @@ ReadWritePaths=/var/lib/agent-runner /home/agent-runner
 
 [Install]
 WantedBy=multi-user.target
+Alias=agent-runner.service

@@ -1,0 +1,124 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { StudioTab } from '../studio-shell.types';
+import {
+  parseStudioRoute,
+  replaceStudioRoute,
+  replaceStudioRouteQuery,
+  replaceTaskViewRoute,
+  studioRouteForTab,
+} from './studio-route';
+
+describe('Studio route contract', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    history.replaceState(null, '', '/');
+  });
+
+  it('parses every state-bearing primary surface', () => {
+    expect(parseStudioRoute('#/board&filters=type%3Abug')).toEqual({
+      kind: 'board',
+      projectSlug: null,
+    });
+    expect(parseStudioRoute('#/projects/agent-studio/board')).toEqual({
+      kind: 'board',
+      projectSlug: 'agent-studio',
+    });
+    expect(parseStudioRoute('#/projects/agent-studio')).toEqual({
+      kind: 'hub',
+      projectSlug: 'agent-studio',
+      section: 'overview',
+      page: null,
+      folder: null,
+    });
+    expect(parseStudioRoute('#/projects/agent-studio/wiki?page=concepts%2Frouting.md')).toEqual({
+      kind: 'hub',
+      projectSlug: 'agent-studio',
+      section: 'wiki',
+      page: 'concepts/routing.md',
+      folder: null,
+    });
+    expect(parseStudioRoute('#/projects/agent-studio/workbenches/route-lab')).toEqual({
+      kind: 'workbench',
+      projectSlug: 'agent-studio',
+      workbenchId: 'route-lab',
+    });
+    expect(parseStudioRoute('#/tasks/AGT-2291?view=timeline%3Aactivity')).toEqual({
+      kind: 'task',
+      reference: 'AGT-2291',
+      tab: 'timeline',
+      inspector: 'activity',
+    });
+    expect(parseStudioRoute('#/projects/agent-studio/epics')).toEqual({
+      kind: 'epics',
+      projectSlug: 'agent-studio',
+    });
+    expect(parseStudioRoute('#/epics')).toEqual({
+      kind: 'epics',
+      projectSlug: null,
+    });
+    expect(parseStudioRoute('#/epics/AGT-2200')).toEqual({
+      kind: 'epic',
+      reference: 'AGT-2200',
+    });
+    expect(parseStudioRoute('#/workspace/settings/task-server')).toEqual({
+      kind: 'workspace-settings',
+      section: 'task-server',
+      detail: null,
+    });
+    expect(parseStudioRoute('#/workspace/settings/tokens/codex')).toEqual({
+      kind: 'workspace-settings',
+      section: 'tokens',
+      detail: 'codex',
+    });
+  });
+
+  it('builds one hash-path pattern for tabs', () => {
+    const cases: [StudioTab, string | null, string][] = [
+      [{ kind: 'board', projectName: '__all__' }, null, '/board'],
+      [{ kind: 'board', projectName: 'Agent Studio' }, null, '/projects/agent-studio/board'],
+      [{ kind: 'hub', projectName: 'Agent Studio', section: 'wiki' }, null, '/projects/agent-studio/wiki'],
+      [
+        { kind: 'workbench', projectName: 'Agent Studio', workbenchId: 'route lab' },
+        null,
+        '/projects/agent-studio/workbenches/route%20lab',
+      ],
+      [{ kind: 'task', taskKey: 'private::task' }, 'AGT-2291', '/tasks/AGT-2291'],
+      [{ kind: 'epics', projectName: null }, null, '/epics'],
+      [{ kind: 'epics', projectName: 'Agent Studio' }, null, '/projects/agent-studio/epics'],
+      [{ kind: 'epic', epicKey: 'private::epic' }, 'AGT-2200', '/epics/AGT-2200'],
+    ];
+    for (const [tab, reference, expected] of cases) {
+      expect(studioRouteForTab(tab, reference)).toBe(expected);
+    }
+  });
+
+  it('uses replaceState and preserves route-local query on the same surface', () => {
+    history.replaceState(null, '', '/#/projects/agent-studio/wiki?page=concepts%2Frouting.md&filters=x');
+    const replace = vi.spyOn(history, 'replaceState');
+
+    replaceStudioRoute('/projects/agent-studio/wiki');
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(location.hash).toContain('page=concepts%2Frouting.md');
+
+    replaceStudioRouteQuery({ page: 'README.md', folder: null });
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(location.hash).toBe('#/projects/agent-studio/wiki?page=README.md&filters=x');
+  });
+
+  it('round-trips Task detail and inspector tab state without adding history', () => {
+    history.replaceState(null, '', '/#/tasks/AGT-2291&filters=x');
+    const replace = vi.spyOn(history, 'replaceState');
+
+    replaceTaskViewRoute('code-review', 'activity');
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(location.hash).toBe('#/tasks/AGT-2291?view=code-review%3Aactivity&filters=x');
+    expect(parseStudioRoute(location.hash)).toEqual({
+      kind: 'task',
+      reference: 'AGT-2291',
+      tab: 'code-review',
+      inspector: 'activity',
+    });
+  });
+});

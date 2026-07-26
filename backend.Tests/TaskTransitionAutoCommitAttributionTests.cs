@@ -180,12 +180,11 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
     }
 
     [Fact]
-    public async Task MoveProgressToAutoReview_NoSessionEvents_LegacyBehaviorAutoCommits()
+    public async Task MoveProgressToAutoReview_NoSessionEvents_RequiresExplicitPathScope()
     {
-        // Legacy job folders that pre-date session-events still need the
-        // auto-commit to fire. The guard only kicks in when we have a first-
-        // activity timestamp to compare mtimes against; without one we defer
-        // to AutoCommitAsync's own clean-tree short-circuit.
+        // A legacy/direct-develop path has no trustworthy task window. The
+        // platform must leave the interactive edit dirty instead of widening
+        // to add-all and attributing it to this task.
         WriteJob(TaskStates.Progress, "legacy-task");
         var dirty = Path.Combine(_repoRoot, "legacy-change.txt");
         File.WriteAllText(dirty, "legacy edit\n");
@@ -195,7 +194,9 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         var moved = ReadJob(TaskStates.AutoReview, "legacy-task");
-        Assert.NotNull(moved?.Commit);
+        Assert.Null(moved?.Commit);
+        Assert.Contains(deps.Git.GetStatus("legacy-task", _watchPath).Files,
+            f => f.Path == "legacy-change.txt");
     }
 
     [Fact]

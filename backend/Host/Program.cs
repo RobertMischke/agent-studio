@@ -19,6 +19,9 @@ Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddTaskServerPlaneProxy(builder.Configuration);
+var orchestrationExecutionMode = OrchestrationExecutionModeParser.Parse(
+    builder.Configuration["Orchestration:ExecutionMode"]);
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -460,6 +463,7 @@ builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
 builder.Services.AddSingleton<AgentStudio.Persistence.IJsonlAppender, AgentStudio.Persistence.JsonlAppender>();
+builder.Services.AddSingleton<AgentStudio.Diagnostics.RunnerEventJournal>();
 builder.Services.AddSingleton<AgentStudio.Runtime.ProductRuntimeEventStore>();
 builder.Services.AddSingleton<AgentStudio.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<AgentStudio.State.SupervisorInterventionStore>();
@@ -491,6 +495,7 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineHealthSensor>(sp =>
     sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
+builder.Services.AddSingleton<AgentStudio.Tasks.TaskLiveStatusProjection>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
@@ -547,19 +552,16 @@ builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>(
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewDecisionOrchestrator>());
-builder.Services.AddHostedService<AutoReviewPostProcessingWorker>();
-// One-shot boot scan that re-drives any 4-auto-review card whose post-processing
-// enqueue was lost when the backend last restarted (the queue is a volatile
-// in-memory channel). Runs after the scanner has warmed; only touches
-// 4-auto-review and is fully idempotent (the worker self-gates per card).
-builder.Services.AddHostedService<AgentStudio.Runner.AutoReviewPostProcessingRecoveryService>();
+// Transitional single-owner boundary. Engine mode deliberately registers none
+// of the legacy review/council/post-processing hosted loops.
+builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.
 builder.Services.AddSingleton<IntakeRunner>();
 builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
+builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<GitCleanupService>();
@@ -580,6 +582,11 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // as the completed-job workspace push above.
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
+// The channel is intentionally in-memory. Durable pipeline facts recover both
+// a lane-move/process crash before the merge and a successful merge whose queued
+// origin push was dropped by restart.
+builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the
@@ -626,6 +633,7 @@ builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
+builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());

@@ -250,3 +250,24 @@
   color: var(--studio-danger, var(--studio-fg-strong));
   font-size: 0.78rem;
 }
+.ps-settings__quota-wait-controls {
+  display: grid;
+  gap: var(--studio-spacing-3);
+}
+.ps-settings__number-field {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  color: var(--studio-fg-dim);
+  font-size: 0.8rem;
+}
+.ps-settings__number-field input {
+  width: 76px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+}
+.ps-settings__number-field input:disabled { opacity: 0.6; cursor: not-allowed; }

@@ -3,6 +3,7 @@ import { TaskService } from '../../../services/task.service';
 import { formatRelativeTime } from '../../../services/format.util';
 import { NowTickService } from '../../../services/now-tick.service';
 import type { OrchestratorContextDigest } from '../models/orchestrator.model';
+import { orchestratorContextErrorMessage } from '../components/orchestrator-side-sheet/orchestrator-context-key.util';
 
 /** Per-sheet state for the context-keyed ORCH-1 application digest. */
 @Injectable()
@@ -79,7 +80,7 @@ export class OrchestratorContextDigestService {
       },
       error: err => {
         if (this.contextKey() !== contextKey || this.requestVersion !== requestVersion) return;
-        this.error.set(err?.error?.error || err?.message || 'Failed to refresh orchestrator context');
+        this.error.set(orchestratorContextErrorMessage(err, 'Failed to refresh orchestrator context'));
         this.loading.set(false);
         this.refreshing.set(false);
       },

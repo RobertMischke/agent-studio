@@ -454,6 +454,51 @@ Required scenarios:
     show the same cards without duplication; cross-project initiative and
     dependency links resolve.
 
+### Release proof
+
+AGT-2196 supplies the release-blocking cross-process proof in
+[`task-server.Tests/TopologyTests.cs`](../../task-server.Tests/TopologyTests.cs).
+The harness launches the built Task Server, Studio BFF, and Agent Runner
+assemblies as sibling OS processes with isolated ports, data roots, Runner
+workspaces, and configuration. It uses a real local Git remote and a bounded
+fixture agent process. The fixture is a deterministic CLI participant, not a
+second task store or scheduler.
+
+The CI gate runs four real-process scenarios:
+
+1. The client-off golden path starts a task through Studio, stops and restarts
+   the BFF three times, completes while detached into the deployed backend's
+   auto-review handoff, then reconnects from a fresh BFF and replays the
+   canonical task history.
+2. The brief transport path interrupts only Runner-to-server connectivity,
+   keeps a second task unclaimed, retains bounded output, then reconnects and
+   proves typed event replay is idempotent.
+3. The outage path holds Task Server unavailable beyond the Runner renewal
+   safety boundary, observes cancellation, restarts authority into
+   `process-unknown`, rejects a contender, kills the old Runner, records
+   positive no-overlap proof, and admits one higher-fence replacement.
+4. The network path runs Task Server over real HTTPS with separate Studio and
+   Runner bearer credentials, proves anonymous history and event reads fail,
+   and proves authenticated Runner ingestion plus Studio cursor replay.
+
+Canonical replay is
+`GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history?after={cursor}`.
+It returns stable task and run identities, server-sequenced typed events,
+artifact metadata, task/run audit rows, and the last returned cursor. The
+Runner maps plain stdout to `agent.message`, structured tool or command frames
+to `tool.trace`, and Runner-owned diagnostics to bounded trace event kinds.
+Task Server adds typed completion and post-processing evidence while the
+deployed backend remains the review and reissue authority. Runner
+disconnect/reconnect, Task Server unavailable, `process-unknown`, Runner
+unavailable, and no-overlap events keep the failure classes distinct in replay.
+Idempotency keys remain unique per run and payload.
+
+The executable operator command and release decision rule are in the
+[stable release contract](../operations/stable-release-contract.md#three-component-topology-gate).
+Protocol fixtures remain the supported mixed-version source of truth. The same
+CI step runs them and rejects an unsupported protocol with HTTP 426 before
+registration or claim.
+
 ## 12. Delivery map
 
 This table is the human-readable synchronization point. Every new task created

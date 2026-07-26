@@ -333,4 +333,80 @@ public class PipelineExecutionRestartTests : IDisposable
         Assert.Single(reread.PreviousAttempts);
         Assert.Equal(1, reread.PreviousAttempts[0].Attempt);
     }
+
+    [Fact]
+    public void NewAttempt_FencesLateStepVerdictAndCompletionFromSupersededAttempt()
+    {
+        var firstStarted = new DateTime(2026, 7, 24, 18, 0, 0, DateTimeKind.Utc);
+        var first = _log.Begin(
+            _jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1", nowUtc: firstStarted);
+
+        using var oldAttempt = _log.EnterAttempt(_jobFolder, first.Attempt);
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Running,
+            StartedAt = firstStarted.AddMinutes(1),
+        });
+
+        var second = _log.Begin(
+            _jobFolder,
+            PipelineCatalogue.Standard,
+            project: "demo",
+            jobId: "job-1",
+            nowUtc: firstStarted.AddMinutes(2));
+
+        // The old async flow finishes after the rerun has already opened. Its
+        // red verdict and completion stamp must not leak into attempt 2.
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = firstStarted.AddMinutes(1),
+            CompletedAt = firstStarted.AddMinutes(3),
+            Verdict = "escalate",
+        });
+        _log.Complete(_jobFolder, nowUtc: firstStarted.AddMinutes(3));
+
+        var current = _log.Read(_jobFolder);
+        Assert.NotNull(current);
+        Assert.Equal(second.Attempt, current!.Attempt);
+        Assert.Null(current.CompletedAt);
+        var decision = current.Steps.Single(step => step.StepId == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.Equal(PipelineStepStatus.Pending, decision.Status);
+        Assert.Null(decision.Verdict);
+        Assert.Equal(second.Attempt, decision.Attempt);
+    }
+
+    [Fact]
+    public void NewAttempt_RejectsLegacyUnscopedStepThatStartedBeforeEpoch()
+    {
+        var firstStarted = new DateTime(2026, 7, 24, 18, 0, 0, DateTimeKind.Utc);
+        _log.Begin(
+            _jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1", nowUtc: firstStarted);
+        var second = _log.Begin(
+            _jobFolder,
+            PipelineCatalogue.Standard,
+            project: "demo",
+            jobId: "job-1",
+            nowUtc: firstStarted.AddMinutes(2));
+
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = firstStarted.AddMinutes(1),
+            CompletedAt = firstStarted.AddMinutes(3),
+            Verdict = "escalate",
+        });
+
+        var decision = _log.Read(_jobFolder)!.Steps.Single(
+            step => step.StepId == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.Equal(second.Attempt, decision.Attempt);
+        Assert.Equal(PipelineStepStatus.Pending, decision.Status);
+        Assert.Null(decision.Verdict);
+    }
 }

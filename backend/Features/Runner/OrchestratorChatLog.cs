@@ -242,10 +242,16 @@ public enum OrchestratorMessageKind
     /// </summary>
     WorktreeContainment,
     /// <summary>
-    /// A worker CLI advanced git history during its own run, bypassing the
-    /// platform-owned commit/push boundary.
+    /// The runner verified genuine git damage during the worker window, such
+    /// as a protected-branch push or a rewrite of pre-existing history.
     /// </summary>
     AgentGitViolation,
+    /// <summary>
+    /// Informational finding: the worker advanced HEAD before the platform
+    /// commit. Post-processing either folded it back automatically or left a
+    /// visible cleanup hint while allowing the pipeline to continue.
+    /// </summary>
+    WorkerHeadAdvanced,
     /// <summary>
     /// A parallel worktree branch could not be integrated into the configured
     /// work branch and needs manual merge/conflict resolution.
@@ -297,6 +303,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
+        OrchestratorMessageKind.WorkerHeadAdvanced => "worker-head-advanced",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
         OrchestratorMessageKind.IntegrationError  => "integration-error",
         OrchestratorMessageKind.TaskBranchUnpushed => "task-branch-unpushed",
@@ -327,6 +334,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
+        OrchestratorMessageKind.WorkerHeadAdvanced => "worker-head-advanced",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
         OrchestratorMessageKind.IntegrationError  => "integration-error",
         OrchestratorMessageKind.TaskBranchUnpushed => "task-branch-unpushed",

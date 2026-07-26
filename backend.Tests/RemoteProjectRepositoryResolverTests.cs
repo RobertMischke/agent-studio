@@ -8,7 +8,7 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
         Path.GetTempPath(), "remote-project-repo-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Agt_repository_path_derives_materializable_identity_origin_and_default_branch()
+    public void Registry_url_is_authoritative_while_repository_path_supplies_default_branch()
     {
         var git = Path.Combine(_root, ".git");
         Directory.CreateDirectory(Path.Combine(git, "refs", "remotes", "origin"));
@@ -29,17 +29,47 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
             DisplayName = "Agent Taskboard",
             StorageLocation = Path.Combine(_root, "tasks"),
             RepositoryPath = _root,
+            Urls =
+            [
+                new ProjectUrlRecord
+                {
+                    Id = "repo",
+                    Label = "Repository",
+                    Url = "https://github.com/agent-orc/quality-studio.git",
+                },
+            ],
         }, "develop");
 
         Assert.NotNull(result);
         Assert.Equal("PROJ-007", result!.ProjectId);
         Assert.Equal(
             AgentStudio.TaskServer.Contracts.RepositoryIdentityContract.FromUrl(
-                "git@github.com:agent-orc/quality-studio.git"),
+                "https://github.com/agent-orc/quality-studio.git"),
             result.RepositoryId);
-        Assert.Equal("git@github.com:agent-orc/quality-studio.git", result.RepositoryUrl);
+        Assert.Equal("https://github.com/agent-orc/quality-studio.git", result.RepositoryUrl);
         Assert.Equal("main", result.DefaultBranch);
-        Assert.Equal("repository-path", result.Source);
+        Assert.Equal("registry-url", result.Source);
+    }
+
+    [Fact]
+    public void Repository_path_origin_is_not_used_when_registry_url_is_missing()
+    {
+        var git = Path.Combine(_root, ".git");
+        Directory.CreateDirectory(git);
+        File.WriteAllText(Path.Combine(git, "config"), """
+            [remote "origin"]
+                url = git@github.com-agentstudio:agent-orc/agent-studio.git
+            """);
+
+        var result = RemoteProjectRepositoryResolver.Resolve(new ProjectRecord
+        {
+            Id = "PROJ-016",
+            DisplayName = "Quality Studio",
+            StorageLocation = Path.Combine(_root, "tasks"),
+            RepositoryPath = _root,
+        }, "main");
+
+        Assert.Null(result);
     }
 
     [Fact]

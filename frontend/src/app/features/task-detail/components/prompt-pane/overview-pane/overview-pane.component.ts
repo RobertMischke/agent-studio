@@ -24,10 +24,7 @@ import type {
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { DialogComponent } from '../../../../../components/dialog/dialog.component';
-import {
-  StudioIconComponent,
-  type StudioIconName,
-} from '../../../../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
 import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
@@ -40,7 +37,6 @@ import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-ru
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
-import { OverviewFailureComponent } from '../overview-failure/overview-failure.component';
 import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
@@ -59,10 +55,6 @@ import {
   buildPipelineGroups,
   groupAriaLabel,
   groupToneLabel,
-  pipelineMetricVisibility,
-  uniformGroupActivation,
-  uniformGroupModel,
-  type PipelineGroupActivationSummary,
   type PipelineGroupVm,
 } from './pipeline-groups.util';
 import {
@@ -71,8 +63,22 @@ import {
   buildPipelineTotalCostTooltip,
   buildPipelineTotalTokenTooltip,
   formatPipelineCost,
-  formatPipelineTokens,
 } from './pipeline-cost-tooltip.util';
+import {
+  formatDuration,
+  formatTokens,
+  historicalStepStatusIcon,
+  laneLabel,
+  runStatusIcon,
+  stepKindIcon,
+  stepKindLabel,
+  stepStatusIcon,
+  stepStatusLabel,
+} from './overview-pane-formatters';
+import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
+import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
+import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
+
 interface PipelineRowVm {
   id: string;
   label: string;
@@ -81,28 +87,69 @@ interface PipelineRowVm {
   phaseLabel: string;
   phaseDescription: string;
   startsPhase: boolean;
+  /**
+   * 'parallel' for the read-only aspect reviews that run concurrently in the
+   * orchestrator pool; 'sequential' for the core run and the single final
+   * verdict. Drives the "Parallel" badge so the two phases read as distinct.
+   */
   runMode: StepRunMode;
+  /** True only for `post-orchestrator-decision`. */
   isFinalVerdict: boolean;
+  /** Historical rows are read-only evidence and never use live state colour. */
+  historical: boolean;
   enabled: boolean;
   canDisable: boolean;
   hasExecution: boolean;
   config: PipelineStepConfig | null;
+  /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
+  /** Small causal note for the designed skip cascade after an early escalate. */
+  skipHint: string | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
+  /**
+   * Whether {@link model} is the pre-run resolved effective model (no run has
+   * recorded one yet) vs the model an actual execution used. Drives a subtler
+   * "will run on" presentation before the run.
+   */
   modelIsResolved: boolean;
+  /** Tooltip explaining where {@link model} comes from (the resolution chain). */
   modelTooltip: StructuredTooltip | null;
+  /**
+   * Whether this row exposes an inline per-step agent selector. The Overview
+   * rows now only display the resolved model; per-step model changes live in
+   * project/global configuration instead of individual aspect rows.
+   */
   modelEditable: boolean;
+  /**
+   * The raw per-step model override stored for this step (`''` = inherit), as
+   * opposed to {@link model} which is the resolved effective model. Bound to
+   * the inline selector so it reflects the persisted knob, not the inherited
+   * value.
+   */
   modelOverride: string;
   thinkingLevelOverride: string | null;
   verdict: string | null;
+  /**
+   * Structured tooltip for the verdict pill, built from the per-aspect
+   * concern summary. Null unless the step flagged a concern, so a pass
+   * verdict never grows a misleading tooltip.
+   */
   concernTooltip: StructuredTooltip | null;
+  /**
+   * Always-present "what does this step do" tooltip shown on hovering the
+   * step name. Keyed by step id with a per-kind fallback so a future
+   * catalogue step still explains itself rather than rendering bare.
+   */
   explanation: StructuredTooltip;
+  /** Recorded wall-clock duration of the step in ms; 0 when not yet run. */
   durationMs: number;
+  /** ISO start stamp from the execution record; null until the step starts. */
   startedAt: string | null;
+  /** ISO end stamp; null while running or before the step is reached. */
   completedAt: string | null;
   tokenUsageSource: string | null;
   inputTokens: number;
@@ -115,33 +162,10 @@ interface PipelineRowVm {
   cacheReadCostUsd: number;
   cacheCreationCostUsd: number;
   costUsd: number;
+  /** False -> the model is not in the price table, render cost as n/a. */
   costKnown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
-}
-
-interface PipelineDisplayGroupVm extends PipelineGroupVm<PipelineRowVm> {
-  uniformModel: string | null;
-  uniformActivation: PipelineGroupActivationSummary | null;
-}
-
-/**
- * Compact decision badge for the single final orchestrator ruling row. Carries
- * the steering verdict (Accept / Re-issue / Escalate) as an inline pill and the
- * full reasoning in a tooltip, so the DECISION phase reads as one terse badge
- * instead of an expanded steering block repeated on every orchestrator row
- * (ASS-1706).
- */
-interface DecisionBadgeVm {
-  verdict: SteeringInfo['verdict'];
-  /** Human label (e.g. "Re-issue"); uppercased to ACCEPT / REISSUE / ESCALATE via CSS. */
-  label: string;
-  /** Central severity tone driving the pill colour. */
-  tone: SteeringInfo['tone'];
-  /** Tooltip accent matched to the tone. */
-  severity: TooltipSeverity;
-  /** Reasoning surfaced on hover / focus instead of inline. */
-  tooltip: StructuredTooltip;
 }
 
 type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
@@ -443,31 +467,33 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
 export class OverviewPaneComponent {
+  readonly stepKindLabel = stepKindLabel;
+  readonly stepKindIcon = stepKindIcon;
+  readonly stepStatusIcon = stepStatusIcon;
+  readonly historicalStepStatusIcon = historicalStepStatusIcon;
+  readonly stepStatusLabel = stepStatusLabel;
+  readonly laneLabel = laneLabel;
+  readonly formatTokens = formatTokens;
+  readonly formatDuration = formatDuration;
+  readonly runStatusIcon = runStatusIcon;
+
   readonly job = input.required<TaskInfo>();
   /** Raw task prompt markdown (`promptMarkdown`), surfaced via the Prompt
    *  popover next to the title. Empty/absent hides the trigger. */
   readonly promptMarkdown = input<string | null | undefined>('');
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
-  /** Optimistic CLI + model values from the parent task-detail. The badge
-   *  uses these (when set) so it re-renders synchronously after the picker
-   *  fires `agentConfigCommit`, ahead of the parent's detail re-fetch.
-   *  Falls back to `job().cliType` / `job().model` when the parent has not
-   *  populated the override yet. Matches the chat-composer wiring at the
-   *  protocol-pane, see ADR-0046. */
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
   readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
+  readonly runOutcome = input<ProtocolVerdict | null>(null);
 
-  /** Atomic CLI + model commit from the unified <app-cli-model-selector>
-   *  picker. The parent task-detail handler issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
-  /** Re-emitted from the embedded References section after a successful write. */
   readonly referencesChanged = output<void>();
   /** Fired after a successful title PUT so the parent can re-fetch the
    *  detail and let the optimistic override drop back to the canonical
@@ -805,7 +831,14 @@ export class OverviewPaneComponent {
   /** Recorded run count, from the run-timeline. 0 before the first run. */
   readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
 
-  /** Ordered catalogue joined with execution, cost, and project config. */
+  /**
+   * Per-step pipeline rows for the Overview pipeline block. Joins the
+   * static catalogue (ordered pre+core+post, gives label/kind) with the
+   * recorded execution (status/model/verdict/tokens), the derived cost,
+   * and the per-project config (enabled flag + model override). Steps the
+   * project disabled still render — as a struck-through "disabled" row —
+   * so the operator can see what was switched off, not just what ran.
+   */
   readonly pipelineRows = computed<PipelineRowVm[]>(() => {
     const res = this.pipelinePoll.pipeline();
     if (res == null) return [];
@@ -816,6 +849,10 @@ export class OverviewPaneComponent {
     const selectedExecution = this.selectedPipelineExecution();
     const isCurrentRun = this.selectedPipelineIsCurrent();
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
+    const chainEndedByEarlyEscalate = (selectedExecution?.steps ?? []).some(step =>
+      step.stepId !== FINAL_VERDICT_STEP_ID
+      && step.kind === 'orchestrator'
+      && step.verdict?.toLowerCase() === 'escalate');
     const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
     const cardPlan = new Set((res.onDemand?.plannedStepIds ?? []).map(id => id.toLowerCase()));
     const latestOnDemand = new Map<string, NonNullable<TaskPipelineResponse['onDemand']>['attempts'][number]>(isCurrentRun
@@ -870,12 +907,16 @@ export class OverviewPaneComponent {
         startsPhase: false,
         runMode: step.runMode,
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
+        historical: !isCurrentRun,
         enabled,
         canDisable: cfg?.canDisable ?? false,
         hasExecution: e != null || onDemand != null,
         config: cfg ?? null,
         status,
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
+        skipHint: status === 'skipped' && chainEndedByEarlyEscalate
+          ? 'skipped: chain ended by early escalate'
+          : null,
         model,
         thinkingLevel,
         cliType,
@@ -926,7 +967,6 @@ export class OverviewPaneComponent {
       startsPhase: index === 0 || row.phaseKey !== rows[index - 1].phaseKey,
     }));
   });
-  readonly pipelineMetrics = computed(() => pipelineMetricVisibility(this.visiblePipelineRows()));
 
   toggleDisabledPipelineSteps(): void {
     this.hideDisabledPipelineSteps.update(value => !value);
@@ -936,16 +976,26 @@ export class OverviewPaneComponent {
     this.pipelinePoll.refresh();
   }
 
-  /** Contiguous phase groups with aggregate state and compact shared metadata. */
-  readonly pipelineGroups = computed<PipelineDisplayGroupVm[]>(() =>
-    buildPipelineGroups(this.visiblePipelineRows()).map(group => ({
-      ...group,
-      uniformModel: uniformGroupModel(group.rows),
-      uniformActivation: uniformGroupActivation(group.rows),
-    })),
+  /**
+   * The complete configured pipeline folded into collapsible sections — one per
+   * contiguous run of the same phase (PRE STEPS, CORE AGENT WORK, ASPECT, TOOL,
+   * DECISION, DRIFT, and the repeated TOOL/DECISION runs in the post-bracket).
+   * Each carries the aggregate tone + honest counters ({@link PipelineGroupVm})
+   * the header shows whether expanded or collapsed. Derivation lives in the
+   * dependency-free `pipeline-groups.util` so the grouping/tone/collapse rules
+   * are unit-tested in isolation from this 1800-line host.
+   */
+  readonly pipelineGroups = computed<PipelineGroupVm<PipelineRowVm>[]>(() =>
+    buildPipelineGroups(this.visiblePipelineRows()),
   );
 
-  /** Explicit choices override derived attention-open, quiet-collapsed state. */
+  /**
+   * Explicit per-section collapse choices, keyed by group key
+   * (`${phaseKey}#${occurrence}`). Absent -> the section follows its derived
+   * {@link PipelineGroupVm.defaultCollapsed} (attention sections open, quiet
+   * finished / not-yet-reached sections collapse), so the strip reacts to the
+   * run as it progresses until the operator overrides a section by hand.
+   */
   private readonly groupCollapseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   /** Effective collapse state: an explicit operator choice wins over the default. */
@@ -974,6 +1024,11 @@ export class OverviewPaneComponent {
     });
   }
 
+  /**
+   * Section-tone label + header accessible name are pure derivations kept in
+   * `pipeline-groups.util` (unit-tested there); bound here so the template can
+   * call them directly.
+   */
   readonly groupToneLabel = groupToneLabel;
   readonly groupAriaLabel = groupAriaLabel;
 
@@ -1144,16 +1199,12 @@ export class OverviewPaneComponent {
     return null;
   });
 
-  /**
-   * Compact decision badge for the single FINAL orchestrator ruling row
-   * (`isFinalVerdict`). Projects the latest steering trace into a terse
-   * Accept / Re-issue / Escalate pill whose tooltip carries the full reasoning,
-   * so the DECISION phase no longer repeats an expanded steering block on every
-   * orchestrator row (ASS-1706). Null for non-final rows or before any steering
-   * event, in which case the row falls back to its generic verdict pill.
-   */
+  private readonly authoritativeDecisionBadge = computed(() => outcomeDecisionBadge(this.runOutcome()));
+
   decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
     if (!row.isFinalVerdict) return null;
+    const authoritative = this.authoritativeDecisionBadge();
+    if (authoritative) return authoritative;
     const info = this.latestSteeringInfo();
     if (info == null) return null;
     return {
@@ -1539,7 +1590,7 @@ export class OverviewPaneComponent {
     if (durationMs > 0) parts.push(this.formatStepDuration(durationMs));
     if (startedAt) parts.push(this.formatRelativeTime(startedAt));
     return {
-      title: `Run #${attempt}${current ? ' · Current' : ''}`,
+      title: current ? `Attempt #${attempt} · Current` : `Attempt #${attempt} · superseded`,
       body: parts.join(' · '),
     };
   }
@@ -1634,74 +1685,9 @@ export class OverviewPaneComponent {
     return { title: row.label, body: lines.join('\n') };
   }
 
-  stepKindLabel(kind: StepKind): string {
-    switch (kind) {
-      case 'module':       return 'Pre steps';
-      case 'core':         return 'Core agent work';
-      case 'aspect':       return 'Aspect';
-      case 'orchestrator': return 'Decision';
-      case 'tool':         return 'Tool';
-      case 'drift':        return 'Drift';
-      default:             return kind;
-    }
-  }
-
-  stepKindIcon(kind: StepKind): StudioIconName {
-    switch (kind) {
-      case 'module':       return 'sliders';
-      case 'core':         return 'bot';
-      case 'aspect':       return 'eye';
-      case 'orchestrator': return 'branch';
-      case 'tool':         return 'cli';
-      case 'drift':        return 'diff';
-      default:             return 'dot';
-    }
-  }
-
-  stepStatusIcon(status: PipelineRowVm['status']): string {
-    switch (status) {
-      case 'passed':   return '✅';
-      case 'failed':   return '❌';
-      case 'running':  return '▶️';
-      case 'skipped':  return '⏭️';
-      case 'planned':  return '🕓';
-      case 'disabled': return '🚫';
-      default:         return '·';
-    }
-  }
-
-  stepStatusLabel(status: PipelineRowVm['status']): string {
-    switch (status) {
-      case 'passed':   return 'Passed';
-      case 'failed':   return 'Failed';
-      case 'running':  return 'Running';
-      case 'skipped':  return 'Skipped';
-      case 'planned':  return 'Planned';
-      case 'disabled': return 'Disabled';
-      default:         return 'Pending';
-    }
-  }
-
   /** USD formatting: sub-cent costs need more than 2 dp to be non-zero. */
   formatCost(usd: number): string {
     return formatPipelineCost(usd);
-  }
-
-  laneLabel(state: string): string {
-    switch (state) {
-      case TaskState.Backlog:          return 'Backlog';
-      case TaskState.Preparation:      return 'In Preparation';
-      case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
-      case '1b-needs-human-review':  return 'Needs Human Review';
-      case TaskState.Ready:            return 'Ready';
-      case TaskState.Progress:         return 'In Progress';
-      case TaskState.AutoReview:       return 'Post Processing';
-      case TaskState.HumanReview:      return 'Review';
-      case TaskState.Escalated:        return 'Escalated';
-      case TaskState.Completed:        return 'Delivered';
-      case TaskState.Archive:          return 'Archive';
-      default:                       return state ?? '';
-    }
   }
 
   formatRelativeTime(iso: string): string {
@@ -1728,20 +1714,6 @@ export class OverviewPaneComponent {
     return d.toLocaleString();
   }
 
-  formatTokens(n: number): string {
-    return formatPipelineTokens(n);
-  }
-
-  formatDuration(seconds: number): string {
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    const min = Math.floor(seconds / 60);
-    const sec = Math.round(seconds % 60);
-    if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
-    const hrs = Math.floor(min / 60);
-    const remMin = min % 60;
-    return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`;
-  }
-
   /**
    * Per-step duration for the pipeline rows. Sub-second steps (most
    * deterministic Tool steps) show in ms; longer steps fall through to the
@@ -1751,16 +1723,6 @@ export class OverviewPaneComponent {
     if (ms <= 0) return '—';
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return this.formatDuration(ms / 1000);
-  }
-
-  runStatusIcon(status: string): string {
-    switch (status) {
-      case 'completed': return '✅';
-      case 'failed':    return '❌';
-      case 'cancelled': return '⚠️';
-      case 'running':   return '▶️';
-      default:          return '❓';
-    }
   }
 
   runTooltip(run: RunRecord): string {

@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { CapabilityHealthComponent } from '../capability-health/capability-health';
 import {
   clampPct,
   diskUsedPct,
@@ -42,7 +43,7 @@ interface Meter {
 @Component({
   selector: 'app-remote-host-card',
   standalone: true,
-  imports: [DatePipe, AppTooltipDirective],
+  imports: [DatePipe, AppTooltipDirective, CapabilityHealthComponent],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
   host: { '[attr.data-tone]': 'tone()', '[attr.data-host]': 'host().id' },
@@ -171,6 +172,9 @@ export class RemoteHostCardComponent {
     const capacity = this.host().gateCapacity ?? 0;
     return capacity > 0 ? `${active} running · pool ${capacity}` : `${active} running`;
   });
+  readonly failedProjectPreflights = computed(() =>
+    (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
+  );
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

@@ -1,4 +1,4 @@
-# Pipeline Time Economy — brief
+# Pipeline Time Economy - brief
 
 A whole-pipeline time and cost analysis, complementary to the
 [token-economy-task-data](../token-economy-task-data/) workbench (AGT-2293).
@@ -28,7 +28,7 @@ fewer/shorter coding re-runs.
 - **Coverage caveats:** `previousAttempts` is capped at 10 on disk, so attempt
   and retry-time figures are a conservative floor for very heavy tasks (the live
   API shows up to 22 attempts). A missing token/duration field is a coverage
-  gap, not a zero — except the test gate, a deterministic non-LLM step whose
+  gap, not a zero - except the test gate, a deterministic non-LLM step whose
   zero token count is a true zero.
 
 ## Method
@@ -41,5 +41,5 @@ Aggregation of `steps[].durationMs` and token fields in
 
 ## Related
 
-- [token-economy-task-data](../token-economy-task-data/) — AGT-2293, field validity
+- [token-economy-task-data](../token-economy-task-data/) - AGT-2293, field validity
 - Sibling proposal: [async-validation-staging-lane](../../operations/async-validation-staging-lane/)

@@ -54,7 +54,7 @@ public static class TerminalRunOutcomeClassifier
                 "Failed",
                 ShouldMoveToReview: false,
                 ShouldShowFailureToast: true,
-                Reason: agentOutcome.Reason ?? "worker agent advanced git HEAD before the platform commit step");
+                Reason: agentOutcome.Reason ?? "worker changed a protected branch or rewrote pre-existing history");
         }
 
         if (agentOutcome.IssueKind == RunIssueKind.EmptyFastExit)

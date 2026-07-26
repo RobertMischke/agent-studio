@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NEVER, Subject, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
@@ -33,7 +33,7 @@ function workspace(name: string, id: string) {
 
 describe('ProjectOverviewUrlsComponent', () => {
   it('keeps an unknown URL quiet and offers Start only after it is known offline', async () => {
-    let status: ProjectUrlStatus = 'unknown';
+    const status = signal<ProjectUrlStatus>('unknown');
     const startProjectUrl = vi.fn(() => NEVER);
     await TestBed.configureTestingModule({
       imports: [ProjectOverviewUrlsComponent],
@@ -41,7 +41,7 @@ describe('ProjectOverviewUrlsComponent', () => {
         provideZonelessChangeDetection(),
         { provide: TaskService, useValue: { getRegistryWorkspaces: () => of(workspace('Demo', 'PROJ-1')), startProjectUrl } },
         { provide: ProjectLookupService, useValue: { setWorkspaces: vi.fn() } },
-        { provide: ProjectUrlProbeService, useValue: { statusFor: () => status, refresh: vi.fn() } },
+        { provide: ProjectUrlProbeService, useValue: { statusFor: () => status(), refresh: vi.fn() } },
       ],
     }).compileComponents();
 
@@ -53,7 +53,7 @@ describe('ProjectOverviewUrlsComponent', () => {
     expect(host.querySelector('[data-testid="project-overview-url-status-preview"]')?.textContent).toContain('unknown');
     expect(host.querySelector('[data-testid="project-overview-url-start-preview"]')).toBeNull();
 
-    status = 'offline';
+    status.set('offline');
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
     const start = host.querySelector<HTMLButtonElement>('[data-testid="project-overview-url-start-preview"]');

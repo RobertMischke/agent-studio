@@ -75,6 +75,9 @@ public class ProjectRunner
     private static readonly Regex NegatedGitMutationRegex = new(
         @"\b(?:did not|didn't|do not|don't|without|not going to|never)\b.{0,60}\b(?:git\s+)?(?:commit|push|committed|pushed)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex GitPushCommandOrClaimRegex = new(
+        @"(?:^|[`""'\s>$:])git\s+(?:-C\s+\S+\s+)?push\b|\b(?:i(?:'ve| have)?|changes?\s+(?:were|are)?|work\s+(?:was|is)?)\s*pushed\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private sealed record CoreAgentUsage(
         string? Model,
@@ -130,6 +133,7 @@ public class ProjectRunner
     private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
@@ -148,7 +152,7 @@ public class ProjectRunner
     // "Intelligente Abbruch-Bewertung" (ADR-0032): the LLM abort-review step.
     // Optional + default-OFF per project. When null (every existing
     // construction site / test fixture) or disabled, OnCliFinishedAsync keeps
-    // its byte-identical fixed terminal route to human review. When wired AND
+    // its byte-identical fixed terminal route to typed escalation. When wired AND
     // enabled, a non-clean run end consults the step before escalating.
     private readonly PostAbortReviewStepService? _postAbortReview;
     // Reads Claude session transcripts (~/.claude/projects) to reconstruct
@@ -163,7 +167,7 @@ public class ProjectRunner
     // Per-job count of automatic completion-loop re-triggers already spent on
     // transient (watchdog) aborts. The breaker: budget remaining =
     // CompletionRetriggerDecider.DefaultBudget - used. Cleared when the job
-    // leaves the run loop (moved to review, or escalated to human review).
+    // leaves the run loop (moved to acceptance review, or escalated for intervention).
     // Loop id completion.retrigger-transient-abort-per-job.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _completionRetriggerUsed = new();
     private string _mode = "manual";
@@ -354,6 +358,12 @@ public class ProjectRunner
     private bool IsInRapidCrashBackoff(string jobId)
         => _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) && until > DateTime.UtcNow;
 
+    private static string? ResolveConfiguredRemoteRunnerId(ProjectSettings settings)
+    {
+        var location = ProjectExecutionPolicy.ResolveExecutionLocation(settings);
+        return location == ExecutionLocations.Local ? null : location;
+    }
+
     // Continuous decision review: while a job sits in 3-progress, we scan
     // its live output buffer every tick for an unresolved interruptive
     // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
@@ -419,7 +429,8 @@ public class ProjectRunner
         CliQuotaFallbackService? quotaFallback = null,
         ILoadThrottleGate? loadThrottle = null,
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
-        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
+        CliQuotaWaitPolicyService? quotaWaitPolicy = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -441,6 +452,7 @@ public class ProjectRunner
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _quotaWaitPolicy = quotaWaitPolicy;
         _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
@@ -757,7 +769,32 @@ public class ProjectRunner
             _quotaFallback, _quotaCaps,
             c => string.IsNullOrWhiteSpace(c) ? null : _quotaService.GetCachedFor(c!),
             DateTime.UtcNow,
-            _activeRuns.Count);
+            _activeRuns.Count,
+            _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName)));
+
+    private void RecordNearbyQuotaWait(TaskInfo info, QuotaAdmissionPlan plan)
+    {
+        if (!plan.NearbyResetWait || plan.NextResetAt is not { } resetAt) return;
+        var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+        var existing = QuotaWaitMarker.TryRead(info.FolderPath, _logger);
+        QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+        {
+            CliType = plan.CliType,
+            StartedAt = existing?.StartedAt ?? DateTime.UtcNow,
+            ResetAt = resetAt,
+            ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+            Reason = plan.Reason,
+        }, _logger);
+    }
+
+    private void ClearQuotaWait(TaskInfo info)
+        => QuotaWaitMarker.Clear(info.FolderPath, _logger);
+
+    private async Task RefreshQuotaAfterResetAsync(TaskInfo info, string cliType)
+    {
+        try { await _quotaService.RefreshAsync(cliType); }
+        finally { ClearQuotaWait(info); }
+    }
 
     /// <summary>
     /// Emit the pre-launch load-steering decision (AGT-2055 req 3 + 7). Always a
@@ -967,16 +1004,14 @@ public class ProjectRunner
         // refill a slot and move the flip point further into the future.
         if (!DeferredModePickupPolicy.AllowsAutoPickup(_pendingMode)) return;
 
-        // The project record is the single pickup-ownership truth. When it is
-        // assigned to a remote runner and is remote-capable, this in-process
-        // runner must not race it. Explicit user starts remain available.
+        // Placement decides who may claim; the live mode gate above decides
+        // whether pickup is automatic. Explicit user starts remain available.
         var pickupSettings = _projectSettings.Get(ProjectName);
-        if (pickupSettings.RemoteExecutionEnabled
-            && !string.IsNullOrWhiteSpace(pickupSettings.ExecutionRunner))
+        if (!ProjectExecutionPolicy.IsLocalExecution(pickupSettings))
         {
             _logger.LogDebug(
                 "remote-pickup-owned project={Project} runner={Runner}; local auto-pickup skipped",
-                ProjectName, pickupSettings.ExecutionRunner);
+                ProjectName, ProjectExecutionPolicy.ResolveExecutionLocation(pickupSettings));
             return;
         }
 
@@ -1068,9 +1103,21 @@ public class ProjectRunner
             // next reset (the scheduler re-ticks and wakes on its own). The
             // switch/throttle/wait decision is emitted (de-duplicated per job) so
             // the load-steering is never silent.
+            if (candidate.Info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
+            {
+                _ = RefreshQuotaAfterResetAsync(candidate.Info, dueWait.CliType);
+                _lastPickReason = $"quota-reset-refresh: {candidate.Info.Id}: reset reached; refreshing {dueWait.CliType}";
+                _logger.LogInformation(
+                    "[taskboard] quota reset reached for {Job} on {Project}; refreshing {Cli} before the next admission decision",
+                    candidate.Info.Id, ProjectName, dueWait.CliType);
+                continue;
+            }
+
             var qplan = PlanQuotaAdmission(candidate.Info);
             if (qplan.Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle)
             {
+                if (qplan.NearbyResetWait) RecordNearbyQuotaWait(candidate.Info, qplan);
+                else ClearQuotaWait(candidate.Info);
                 EmitQuotaAdmissionDecision(candidate.Info, qplan);
                 _lastPickReason = $"quota-defer: {candidate.Info.Id}: {qplan.Reason}";
                 _logger.LogInformation(
@@ -1227,7 +1274,8 @@ public class ProjectRunner
             //    the agent itself does not commit, so without this the branch tip
             //    stays at develop and Integrate would merge nothing.
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
-                $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
+                $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}",
+                run.JobId, info.Runner?.RunnerId, run.Branch);
             if (commit.Success)
             {
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
@@ -1763,7 +1811,8 @@ public class ProjectRunner
             }
 
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
-                $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]");
+                $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]",
+                run.JobId, info.Runner?.RunnerId, run.Branch);
             if (commit.Success)
                 _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
                     run.JobId, commit.Sha ?? "<unknown>");
@@ -1953,7 +2002,7 @@ public class ProjectRunner
 
     /// <summary>
     /// Terminal worktree cleanup: when a task leaves the run loop (accepted into
-    /// review or escalated to human review) tear down its task/&lt;id&gt; worktree
+    /// acceptance review or escalated for operator intervention) tear down its task/&lt;id&gt; worktree
     /// + branch - but only if the branch is already folded into the work branch,
     /// so unresolved conflict work is never dropped (the gate lives in
     /// <see cref="WorktreeTaskLifecycle.TeardownIfIntegrated"/>). Deferred here,
@@ -2013,6 +2062,37 @@ public class ProjectRunner
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
             admissionInfo = info;
 
+            // Part 2 will submit human feedback through the ordinary Continue
+            // path. Refuse that continuation once the durable review contract
+            // says the configured cap is reached; a finish action does not call
+            // the runner and remains available to the review UI.
+            var pendingUiReview = SteerPendingMarker.TryRead(info.FolderPath, _logger);
+            if (UiIterationGate.IsFeedbackContinuation(intent, info.PendingIntent is not null)
+                && string.Equals(pendingUiReview?.Kind, SteerPendingKinds.UiIterationReview, StringComparison.OrdinalIgnoreCase)
+                && UiIterationGate.MustEscalateFeedbackContinuation(pendingUiReview?.UiIterationReview))
+            {
+                var ui = pendingUiReview!.UiIterationReview!;
+                var reason = $"UI iteration cap {ui.MaxIterations} was reached without a finish decision; additional feedback iterations are not allowed.";
+                var escalation = await _humanReviewEscalation.EscalateAsync(
+                    jobId, info.WatchPath, ProjectName,
+                    HumanReviewEscalationCategories.UiIterationCap, reason, ct);
+                if (escalation.Status == MoveJobStatus.Success && !string.IsNullOrWhiteSpace(escalation.NewFolderPath))
+                    SteerPendingMarker.Clear(escalation.NewFolderPath!, _logger);
+                _logger.LogWarning(
+                    "ui_pipeline_cap project={Project} job={JobId} iteration={Iteration}/{MaxIterations} action=escalate status={Status}",
+                    ProjectName, jobId, ui.Iteration, ui.MaxIterations, escalation.Status);
+                return RunOutcome.Reject(new RunRejection(
+                    RunRejectReason.UiIterationCapReached, reason));
+            }
+
+            if (info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
+            {
+                await _quotaService.RefreshAsync(dueWait.CliType, ct);
+                ClearQuotaWait(info);
+                info = _scanner.FindJob(jobId, Entry.Path) ?? info;
+                admissionInfo = info;
+            }
+
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
@@ -2033,10 +2113,12 @@ public class ProjectRunner
             // every launch (a healthy primary or a pre-emptive model switch) is
             // documented with its burn-rate / projection numbers.
             var admissionPlan = PlanQuotaAdmission(info);
-            if (strictCap.Blocked && route?.IsFallback != true)
+            if (admissionPlan.Outcome == QuotaAdmissionOutcome.Wait)
             {
                 // Everything is exhausted: wait quietly with a reason + next
                 // reset, and record the decision. No spawn, no reissue burn.
+                if (admissionPlan.NearbyResetWait) RecordNearbyQuotaWait(info, admissionPlan);
+                else ClearQuotaWait(info);
                 EmitQuotaAdmissionDecision(info, admissionPlan);
                 _logger.LogInformation(
                     "[taskboard] {Intent} for job {JobId} deferred by quota admission: {Reason}",
@@ -2067,6 +2149,7 @@ public class ProjectRunner
             }
 
             var cli = route == null ? GetCliFor(info) : _router.Get(route.CliType);
+            ClearQuotaWait(info);
             var initialState = info.State;
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
             var jobFolder = info.FolderPath;
@@ -2198,6 +2281,23 @@ public class ProjectRunner
                 acquiredPickupLockFolder = jobFolder;
             }
 
+            var uiProjectSettings = _projectSettings.Get(ProjectName);
+            var isUiIterationPipeline = string.Equals(
+                UiTaskPipelineRouter.Select(info, uiProjectSettings).Id,
+                AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                StringComparison.Ordinal);
+            var reviewedUiIteration = string.Equals(
+                    pendingUiReview?.Kind,
+                    SteerPendingKinds.UiIterationReview,
+                    StringComparison.OrdinalIgnoreCase)
+                ? pendingUiReview?.UiIterationReview
+                : null;
+            var uiIteration = UiIterationGate.ResolveRunIteration(
+                info.FolderPath,
+                reviewedUiIteration);
+            if (isUiIterationPipeline)
+                UiIterationGate.PrepareIterationDirectory(info.FolderPath, uiIteration);
+
             claimedRunThisCall = _activeRuns.TryClaim(new ActiveRun
             {
                 JobId = jobId,
@@ -2206,6 +2306,13 @@ public class ProjectRunner
                 Followup = followupPrompt,
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
+                IsUiIterationPipeline = isUiIterationPipeline,
+                // The prepared directory is the durable current-iteration
+                // checkpoint. Only a Human Review feedback marker advances it;
+                // retries therefore cannot accidentally reuse prior evidence.
+                UiIteration = uiIteration,
+                UiMaxIterations = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveUiMaxIterations(
+                    uiProjectSettings),
                 PickupLockFolder = _activePickupLockFolder,
             });
             _activePickupLockFolder = null;
@@ -2447,6 +2554,15 @@ public class ProjectRunner
             }
 
             var prompt = RenderPrompt(plan, info, runWorkingDir);
+            if (_activeRuns.Get(jobId) is { IsUiIterationPipeline: true } uiRun)
+            {
+                prompt += UiIterationGate.BuildAgentInstructions(
+                    info.FolderPath, uiRun.UiIteration, uiRun.UiMaxIterations);
+                _logger.LogInformation(
+                    "pipeline_route project={Project} job={JobId} pipeline={PipelineId} iteration={Iteration}/{MaxIterations} classifier=evidence-gate-ui-heuristic",
+                    ProjectName, jobId, AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                    uiRun.UiIteration, uiRun.UiMaxIterations);
+            }
 
             if (plan.ClearStaleSessionName)
                 _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -2479,6 +2595,12 @@ public class ProjectRunner
             // wall-clock window. See docs/quality/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
+            if (_activeRuns.Get(jobId) is { } activeRunAtSpawn)
+            {
+                activeRunAtSpawn.WorkerHeadShaBefore = _git.ReadHeadShaAt(runWorkingDir);
+                activeRunAtSpawn.WorkerBranchBefore = _git.ReadCurrentBranchAt(runWorkingDir);
+                activeRunAtSpawn.ProtectedRemoteTipsBefore = CaptureProtectedRemoteTips();
+            }
 
             // Capture the exact context handed to the agent for this run so the
             // run timeline can show *what* the run was started with (prompt +
@@ -2648,7 +2770,7 @@ public class ProjectRunner
                     RunnerId = localRunnerId,
                     ClientId = localRunnerId,
                     HostDisplayName = executionHost,
-                    ConfiguredRunnerId = _projectSettings.Get(ProjectName).ExecutionRunner,
+                    ConfiguredRunnerId = ResolveConfiguredRemoteRunnerId(_projectSettings.Get(ProjectName)),
                     StartedAt = execution.StartedAt,
                     LastActivityAt = execution.StartedAt,
                     SessionId = effSessionToResume,
@@ -2979,6 +3101,70 @@ public class ProjectRunner
         };
         _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity, lastToolCommand);
 
+        // CAR 0.6 wait-on-quota lifecycle. Reuse the Run-Liveness visible
+        // substate pattern: a durable marker backs the card, while Progress
+        // receives an explicit phase instead of looking silently hung.
+        if (evt is CliRunEvent.QuotaWaitStarted quotaWaitStarted)
+        {
+            try
+            {
+                var run = _activeRuns.ByJobKey(GetJobKey, jobKey);
+                var info = run == null ? null : _scanner.FindJob(run.JobId, Entry.Path);
+                if (info != null)
+                {
+                    var cliType = run?.CliType ?? "unknown";
+                    var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+                    var reason = $"waiting for quota reset {quotaWaitStarted.ResetAt:HH:mm} UTC: {quotaWaitStarted.Reason}";
+                    QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+                    {
+                        CliType = cliType,
+                        StartedAt = quotaWaitStarted.ObservedAt,
+                        ResetAt = quotaWaitStarted.ResetAt,
+                        ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+                        Reason = reason,
+                    }, _logger);
+                    if (info.State == TaskStates.Progress)
+                        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.QuotaWaiting);
+                    _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-wait] " + reason);
+                    _timeline?.Append(
+                        info.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: reason,
+                        details: new()
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "library-quota-wait-started",
+                            ["cli"] = cliType,
+                            ["resetAt"] = quotaWaitStarted.ResetAt.ToString("o"),
+                        });
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not project quota-wait start for {TaskKey}", jobKey); }
+        }
+        else if (evt is CliRunEvent.QuotaWaitEnded)
+        {
+            try
+            {
+                var run = _activeRuns.ByJobKey(GetJobKey, jobKey);
+                var info = run == null ? null : _scanner.FindJob(run.JobId, Entry.Path);
+                if (info != null)
+                {
+                    ClearQuotaWait(info);
+                    if (info.State == TaskStates.Progress)
+                        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.ExecutionRunning);
+                    _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-wait] reset reached; restarting the same request");
+                    _timeline?.Append(
+                        info.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: "Quota reset reached; restarting the same request",
+                        details: new() { ["decision"] = "library-quota-wait-ended" });
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not project quota-wait end for {TaskKey}", jobKey); }
+        }
+
         // Surface tool-call boundaries to disk so a post-mortem of a
         // watchdog kill can answer "what was the last tool the agent
         // started, with what arguments, did the result come back?".
@@ -3284,7 +3470,7 @@ public class ProjectRunner
         var jobId = jobKey[(sep + 2)..];
         // Most likely to find an active job in 3-progress; fall through
         // the rest of the lifecycle if not.
-        foreach (var lane in new[] { TaskStates.Progress, TaskStates.FailedPickup, TaskStates.CodeNotComplete, TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Preparation, TaskStates.Ready, TaskStates.Backlog, TaskStates.Completed, TaskStates.Archive })
+        foreach (var lane in new[] { TaskStates.Progress, TaskStates.FailedPickup, TaskStates.CodeNotComplete, TaskStates.AutoReview, TaskStates.Escalated, TaskStates.HumanReview, TaskStates.Preparation, TaskStates.Ready, TaskStates.Backlog, TaskStates.Completed, TaskStates.Archive })
         {
             var candidate = System.IO.Path.Combine(watchPath, lane, jobId);
             if (System.IO.Directory.Exists(candidate)) return candidate;
@@ -4076,13 +4262,15 @@ public class ProjectRunner
 
             if (_pipelineLog != null)
             {
-                _pipelineLog.EnsureAgentRunStart(
+                var pipelineRecord = _pipelineLog.EnsureAgentRunStart(
                     info.FolderPath,
                     AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                        AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                        UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                         _projectSettings.Get(ProjectName)),
                     ProjectName,
                     info.Id);
+                using var pipelineAttempt = _pipelineLog.EnterAttempt(
+                    info.FolderPath, pipelineRecord.Attempt);
                 var finishedAt = DateTime.UtcNow;
                 _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
                 {
@@ -4170,10 +4358,11 @@ public class ProjectRunner
             var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                    UiTaskPipelineRouter.Select(info, settings),
                     settings),
                 ProjectName,
                 info.Id);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(info.FolderPath, record.Attempt);
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior
@@ -4268,7 +4457,7 @@ public class ProjectRunner
             // Complete() stamped it, as long as it already crossed core/post.
             var prior = _pipelineLog?.Read(info.FolderPath);
             var pipeline = AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                 _projectSettings.Get(ProjectName));
             var priorRunExists = prior != null
                 && (prior.IsComplete
@@ -4553,10 +4742,11 @@ public class ProjectRunner
             var record = _pipelineLog.EnsureRun(
                 folder,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
+                    UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                     _projectSettings.Get(ProjectName)),
                 ProjectName,
                 jobId);
+            using var pipelineAttempt = _pipelineLog.EnterAttempt(folder, record.Attempt);
 
             var startedAt = execution.StartedAt;
             // Accumulate this run's duration onto the total carried forward from
@@ -4800,18 +4990,54 @@ public class ProjectRunner
                 "Job {JobId} finished in project '{Project}' on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s",
                 jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
+            var cli = _router.Get(cliType);
+            var earlyOutputSnapshot = cli.GetOutput(jobKey);
+            var runInfo = _scanner.FindJob(jobId, Entry.Path);
+            var runGitRoot = run.IsWorktreeRun ? run.WorktreePath! : Entry.RootPath;
+            var workerHeadAfter = _git.ReadHeadShaAt(runGitRoot);
+            var workerHeadChanged = !string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore)
+                && !string.IsNullOrWhiteSpace(workerHeadAfter)
+                && !string.Equals(run.WorkerHeadShaBefore, workerHeadAfter, StringComparison.OrdinalIgnoreCase);
+            var workerHeadLinear = workerHeadChanged
+                && _git.IsAncestor(runGitRoot, run.WorkerHeadShaBefore!, workerHeadAfter!);
+            var preExistingHistoryRewritten = PreExistingWorkerHistoryWasRewritten(runGitRoot, run);
+            var agentGitMutationClaim = DetectAgentGitMutationClaim(earlyOutputSnapshot);
+            var agentGitPushClaim = DetectAgentGitPushClaim(earlyOutputSnapshot);
+            var protectedRemoteChanged = agentGitPushClaim != null && ProtectedRemoteChanged(run);
+            var agentGitDecision = AgentGitMutationPolicy.Decide(
+                run.WorkerHeadShaBefore,
+                workerHeadAfter,
+                workerHeadLinear,
+                preExistingHistoryRewritten,
+                protectedRemoteChanged,
+                agentGitMutationClaim != null);
+            var workerCommitsDetected = workerHeadChanged && workerHeadLinear
+                ? _git.GetCommitsInRangeAtRoot(runGitRoot, run.WorkerHeadShaBefore!, workerHeadAfter!).Count
+                : 0;
+            GitWorkerCommitCleanupResult? workerGitCleanup = null;
+            if (agentGitDecision.Disposition == AgentGitMutationDisposition.Info
+                && agentGitDecision.CleanupEligible
+                && runInfo != null
+                && !TaskModes.IsReadOnly(runInfo.Mode)
+                && !IsAgentGitMutationAllowed(runInfo))
+            {
+                workerGitCleanup = _git.FoldWorkerCommitsIntoPlatformCommit(
+                    runGitRoot,
+                    run.WorkerHeadShaBefore,
+                    workerHeadAfter);
+            }
+
             WorktreeCommitRange? worktreeCommitRange = null;
             // ADR-0052/0057: every coding worktree run commits its edits on the
             // task branch and integrates them into the work branch BEFORE the
             // post-run review reads the result; a merge conflict is left for the
             // review to escalate. Slot count does not select this path.
-            if (run.IsWorktreeRun)
+            if (run.IsWorktreeRun
+                && agentGitDecision.Disposition != AgentGitMutationDisposition.Escalate)
             {
-                var wtInfo = _scanner.FindJob(jobId, Entry.Path);
+                var wtInfo = runInfo ?? _scanner.FindJob(jobId, Entry.Path);
                 if (wtInfo != null) worktreeCommitRange = await IntegrateWorktreeRunAsync(run, wtInfo);
             }
-
-            var cli = _router.Get(cliType);
 
             // Persist last token/usage summary (best-effort)
             var usage = cli.GetLastUsage(jobKey);
@@ -5043,7 +5269,7 @@ public class ProjectRunner
             // outcome analyzer needs the buffer to classify the run, and the
             // post-run policy may re-issue another run on top before we let
             // the regular review/summary pipeline proceed.
-            var liveOutputSnapshot = cli.GetOutput(jobKey);
+            var liveOutputSnapshot = earlyOutputSnapshot;
 
             // Strict-iteration progress-first pickup bookkeeping: only
             // autopickup runs feed the per-slug silent-attempt counter.
@@ -5079,6 +5305,26 @@ public class ProjectRunner
             if (activeInfo != null)
             {
                 _mutations.SetJobLastProgressAt(activeInfo.FolderPath, DateTime.UtcNow);
+            }
+
+            if (activeInfo != null
+                && agentGitDecision.Disposition == AgentGitMutationDisposition.Info
+                && !IsAgentGitMutationAllowed(activeInfo))
+            {
+                var cleanupDetail = workerGitCleanup?.Success == true
+                    ? "cleanup=platform-commit-ready; the worker commit was folded back and its file changes were preserved for the platform commit"
+                    : workerHeadChanged
+                        ? $"worker advanced HEAD - needs cleanup; pipeline continues ({workerGitCleanup?.Error ?? "automatic cleanup was not safe or not available"})"
+                        : "worker reported a commit/push, but no protected-ref or HEAD damage was verified; pipeline continues";
+                var message = $"[worker-head-advanced] INFO: {cleanupDetail}.";
+                _logger.LogInformation(
+                    "worker-head-advanced job={JobId} cli={Cli} commits={Commits} cleanup={Cleanup} claim={Claim}",
+                    jobId,
+                    cliType,
+                    workerCommitsDetected,
+                    workerGitCleanup?.Status ?? "not-attempted",
+                    agentGitMutationClaim ?? "<head-changed>");
+                _chatLog.Append(activeInfo, OrchestratorMessageKind.WorkerHeadAdvanced, message);
             }
 
             // Apply the orchestrator's post-run policy. The policy is pure;
@@ -5119,7 +5365,7 @@ public class ProjectRunner
             // by the watchdog (exitCode=-1 on Windows) - must not be hard-failed
             // and re-looped; the commit-aware classifier routes it to review as
             // an honest "committed-partial" instead. See the run-outcome contract.
-            int commitsDuringRun = 0;
+            int commitsDuringRun = workerCommitsDetected;
             try
             {
                 var beforeSha = _sessions.ReadSessionEvents(jobId, Entry.Path).LastOrDefault()?.HeadShaBefore;
@@ -5127,7 +5373,9 @@ public class ProjectRunner
                     && !string.IsNullOrWhiteSpace(headShaAfter)
                     && !string.Equals(beforeSha, headShaAfter, StringComparison.OrdinalIgnoreCase))
                 {
-                    commitsDuringRun = _git.GetCommitsInShaRange(jobId, Entry.Path, beforeSha, headShaAfter).Count;
+                    commitsDuringRun = Math.Max(
+                        commitsDuringRun,
+                        _git.GetCommitsInShaRange(jobId, Entry.Path, beforeSha, headShaAfter).Count);
                 }
             }
             catch (Exception ex)
@@ -5135,24 +5383,26 @@ public class ProjectRunner
                 _logger.LogDebug(ex, "commit-count for {JobId} failed; treating as 0", jobId);
             }
 
-            var agentGitMutationClaim = DetectAgentGitMutationClaim(liveOutputSnapshot);
             if (activeInfo != null
-                && (commitsDuringRun > 0 || agentGitMutationClaim != null)
-                && _activeRuns.Get(jobId)?.IsWorktreeRun != true
-                && !IsAgentGitMutationAllowed(activeInfo))
+                && agentGitDecision.Disposition == AgentGitMutationDisposition.Escalate)
             {
-                var message = commitsDuringRun > 0
-                    ? $"[agent-git-violation] Worker CLI advanced git HEAD during the run ({commitsDuringRun} commit(s)) before the platform-owned commit step. Worker agents must not run git commit or git push."
-                    : $"[agent-git-violation] Worker CLI output suggests it ran or claimed a git commit/push command before the platform-owned commit step: {agentGitMutationClaim}. Worker agents must not run git commit or git push.";
+                var message =
+                    $"[agent-git-violation] Genuine git damage detected: {agentGitDecision.Reason}. "
+                    + "The run is being escalated because protected remote history changed or pre-existing work was rewritten.";
                 _logger.LogWarning(
-                    "agent-git-violation job={JobId} cli={Cli} commits={Commits} claim={Claim} status={Status}",
-                    jobId, cliType, commitsDuringRun, agentGitMutationClaim ?? "<head-changed>", execution.Status);
+                    "agent-git-violation job={JobId} cli={Cli} reason={Reason} commits={Commits} claim={Claim} status={Status}",
+                    jobId,
+                    cliType,
+                    agentGitDecision.Reason,
+                    commitsDuringRun,
+                    agentGitPushClaim ?? agentGitMutationClaim ?? "<head-rewritten>",
+                    execution.Status);
                 _chatLog.Append(activeInfo, OrchestratorMessageKind.AgentGitViolation, message);
                 outcome = outcome with
                 {
                     IssueKind = RunIssueKind.AgentGitViolation,
                     Summary = message,
-                    Reason = "worker agent changed git history during its run"
+                    Reason = agentGitDecision.Reason
                 };
             }
 
@@ -5208,14 +5458,14 @@ public class ProjectRunner
             {
                 action = new OutcomeAction(
                     Kind: OutcomeActionKind.NotifyUserAndStop,
-                    MetaMessage: "The follow-up failed before first agent output. A prior completed run with a code-review grade remains the authoritative review basis; routing to human review without reissue.",
+                    MetaMessage: "The follow-up failed before first agent output. A prior completed run with a code-review grade remains the authoritative review basis; routing to Escalated without reissue.",
                     IsHeuristicFallback: false)
                 {
                     IssueKind = RunIssueKind.CliLaunchFailed,
                     MessageKind = OrchestratorMessageKind.GiveUp,
                 };
                 _logger.LogWarning(
-                    "review_basis_preserved job={JobId} failedAttempt=cli-launch-failed basis=last-successful-graded-run action=human-review",
+                    "review_basis_preserved job={JobId} failedAttempt=cli-launch-failed basis=last-successful-graded-run action=escalated",
                     jobId);
             }
 
@@ -5225,7 +5475,7 @@ public class ProjectRunner
             // UserContinue re-issue it spawns - the loop that bypassed every
             // other breaker); once the streak reaches QuarantineFailThreshold,
             // override the action to a terminal quarantine so we STOP
-            // re-issuing and park the task in 5-human-review. Progress (a new
+            // re-issuing and park the task in 5e-escalated. Progress (a new
             // commit) or reaching review resets the streak below, so a healthy
             // long-running task that keeps committing is never quarantined.
             var deliberateStop = WasDeliberatelyStopped(execution.Status);
@@ -5265,11 +5515,11 @@ public class ProjectRunner
                         Topic = "quarantined",
                         JobId = jobId,
                         Summary = $"Quarantined \"{activeInfo.Title}\" after {fails} consecutive failed runs without progress (last: {priorTopic}).",
-                        Reasoning = "Per-task circuit breaker: repeated no-progress failures (no new commit between attempts) would otherwise re-issue forever. Parking in human review to stop the loop."
+                        Reasoning = "Per-task circuit breaker: repeated no-progress failures (no new commit between attempts) would otherwise re-issue forever. Parking in Escalated to stop the loop."
                     });
                     action = new OutcomeAction(
                         Kind: OutcomeActionKind.NotifyUserAndStop,
-                        MetaMessage: $"quarantined after {fails} consecutive failed runs without progress (last issue: {priorTopic}). Re-issuing would loop; the task is parked for human review.",
+                        MetaMessage: $"quarantined after {fails} consecutive failed runs without progress (last issue: {priorTopic}). Re-issuing would loop; the task is parked in Escalated for operator intervention.",
                         IsHeuristicFallback: false)
                     {
                         IssueKind = RunIssueKind.Quarantined,
@@ -5367,12 +5617,12 @@ public class ProjectRunner
                 }
 
                 // Intelligente Abbruch-Bewertung (ADR-0032): before the fixed
-                // terminal route to human review, let the abort-review step
+                // terminal route to Escalated, let the abort-review step
                 // (default-OFF per project) judge whether the abort was
                 // legitimate. A rerun/accept verdict short-circuits the
                 // escalation; an escalate verdict, a disabled step, an
                 // unwired service, or a review failure all fall through to
-                // the existing human-review route below unchanged.
+                // the existing typed escalation route below unchanged.
                 //
                 // The step now also honours its per-project run condition: this
                 // is the abort path (Aborted = true) with the run's exit code
@@ -5388,14 +5638,14 @@ public class ProjectRunner
                 };
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && ShouldRouteIssueToHumanReview(action.IssueKind)
+                    && ShouldRouteIssueToEscalated(action.IssueKind)
                     && !preserveSuccessfulRunContext
                     // Non-retryable verdicts skip abort-review entirely: rerunning
                     // a context-overflow walks straight back into the same input
                     // window, a model-invalid into the same 400, and a quota-
                     // exhausted into the same rejection; the quarantine breaker
                     // exists precisely to STOP re-running this task. All go
-                    // directly to human review.
+                    // directly to Escalated.
                     && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
@@ -5413,13 +5663,13 @@ public class ProjectRunner
                 // completion.retrigger-transient-abort-per-job). A transient
                 // process abort (the watchdog killed the run) is a runner
                 // outcome, not an agent decision: instead of dead-ending the
-                // task in human-review, re-spawn the same job up to N times.
+                // task in Escalated, re-spawn the same job up to N times.
                 // This is the deterministic default-on fallback that runs only
                 // when the LLM abort-review step above did NOT handle the run
                 // (that step is default-OFF per project, so for most projects
                 // this is the only completion loop). Scoped to WatchdogTimeout
                 // - EnvironmentBlocker is unrecoverable and PermissionBlocked
-                // needs a human, so both still fall through to review below.
+                // needs an operator, so both still fall through to escalation below.
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId, action.IssueKind)))
@@ -5444,7 +5694,7 @@ public class ProjectRunner
                         Topic = OrchestratorLogTopics.Watchdog,
                         JobId = jobId,
                         Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{maxAttempts}).",
-                        Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating to human review; the bounded budget converges to escalation."
+                            Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating for operator intervention; the bounded budget converges to Escalated."
                     });
 
                     // Release the active-job latch so the re-issue can claim
@@ -5469,21 +5719,21 @@ public class ProjectRunner
 
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && ShouldRouteIssueToHumanReview(action.IssueKind))
+                    && ShouldRouteIssueToEscalated(action.IssueKind))
                 {
                     _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                     {
                         Kind = OrchestratorLogKinds.Intervention,
                         Topic = ToIssueTopic(action.IssueKind),
                         JobId = jobId,
-                        Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
+                        Summary = $"Routed \"{activeInfo.Title}\" to Escalated after {ToIssueTopic(action.IssueKind)}.",
                         Reasoning = action.MetaMessage
                     });
-                    // The job is leaving the run loop for human review; forget
+                    // The job is leaving the run loop for operator intervention; forget
                     // any spent completion-loop budget so a future run starts
                     // fresh (mirrors the abort-review reset).
                     _completionRetriggerUsed.TryRemove(jobId, out _);
-                    // Same for the per-task quarantine streak: once a human owns
+                    // Same for the per-task quarantine streak: once an operator owns
                     // the card, a later run should start from zero rather than
                     // inherit a near-trip count.
                     _consecutiveFailNoProgress.TryRemove(jobId, out _);
@@ -5498,7 +5748,7 @@ public class ProjectRunner
                     if (move.Status != MoveJobStatus.Success)
                     {
                         _logger.LogWarning(
-                            "Issue routing to human review failed for {JobId}: {Status} {Message}",
+                            "Issue routing to Escalated failed for {JobId}: {Status} {Message}",
                             jobId, move.Status, move.Message);
                     }
                     return;
@@ -5525,6 +5775,21 @@ public class ProjectRunner
             _stuckLoops.TryRemove(jobId, out _);
 
             // movedToReview was computed up-front for the circuit breaker.
+
+            // UI tasks do not enter the standard aspect-review pipeline. A
+            // successful core run must first satisfy its iteration-scoped visual
+            // contract, then pauses directly in Human Review with the durable
+            // marker that Part 2 consumes.
+            if (movedToReview
+                && activeInfo != null
+                && snapRun is { IsUiIterationPipeline: true })
+            {
+                await HandleUiIterationCompletionAsync(
+                    activeInfo, jobId, execution,
+                    snapRun.UiIteration, snapRun.UiMaxIterations,
+                    capturedAttempt);
+                return;
+            }
 
             // Way 3 (non-deterministic half): an epic's planning run just
             // finished successfully. Parse the authored plan and create the
@@ -5616,13 +5881,13 @@ public class ProjectRunner
                 var backstopTopic = ToIssueTopic(backstopIssueKind);
                 var backstopReason = !string.IsNullOrWhiteSpace(action?.MetaMessage)
                     ? action!.MetaMessage!
-                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to human review so it cannot strand in 3-progress.";
+                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to Escalated so it cannot strand in 3-progress.";
                 _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                 {
                     Kind = OrchestratorLogKinds.Intervention,
                     Topic = backstopTopic,
                     JobId = jobId,
-                    Summary = $"Routed \"{activeInfo.Title}\" to human review: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
+                    Summary = $"Routed \"{activeInfo.Title}\" to Escalated: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
                     Reasoning = backstopReason
                 });
                 _completionRetriggerUsed.TryRemove(jobId, out _);
@@ -5637,7 +5902,7 @@ public class ProjectRunner
                 if (backstopMove.Status != MoveJobStatus.Success)
                 {
                     _logger.LogWarning(
-                        "Drive-to-conclusion backstop human-review routing failed for {JobId}: {Status} {Message}",
+                        "Drive-to-conclusion backstop escalation routing failed for {JobId}: {Status} {Message}",
                         jobId, backstopMove.Status, backstopMove.Message);
                 }
             }
@@ -5743,6 +6008,134 @@ public class ProjectRunner
         }
     }
 
+    private async Task HandleUiIterationCompletionAsync(
+        TaskInfo info,
+        string jobId,
+        CliExecution execution,
+        int iteration,
+        int maxIterations,
+        int evidenceRetryAttempt)
+    {
+        var decision = UiIterationGate.Evaluate(info.FolderPath, iteration, maxIterations);
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiIterationArtifactStepId,
+            Kind = StepKind.Tool,
+            Status = decision.Action == UiIterationGateAction.ReadyForHumanReview
+                ? PipelineStepStatus.Passed
+                : PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = decision.Action switch
+            {
+                UiIterationGateAction.ReadyForHumanReview => "evidence-ready",
+                UiIterationGateAction.EscalateCapReached => "cap-exhausted",
+                _ => "evidence-missing",
+            },
+            Reason = decision.Findings.Count == 0 ? null : string.Join(" ", decision.Findings),
+            VerdictSummary = decision.Findings.Count == 0
+                ? $"Iteration {iteration}/{maxIterations}: {decision.ArtifactPaths.Count} visual artifact(s) and changes.md present."
+                : string.Join(" ", decision.Findings),
+        });
+
+        if (decision.Action == UiIterationGateAction.Incomplete
+            && evidenceRetryAttempt < RunOutcomePolicy.MaxAutoReissueAttempts)
+        {
+            _chatLog.Append(info, OrchestratorMessageKind.Reissue,
+                $"[ui-iteration] Iteration {iteration}/{maxIterations} is incomplete: {string.Join(" ", decision.Findings)} Reissuing once to produce the mandatory evidence.");
+            ReleaseRun(jobId);
+            NotifyStatus();
+            var retryPrompt = UiIterationGate.BuildMissingEvidenceFollowUp(decision);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt,
+                        evidenceRetryAttempt + 1, ContinueModes.Continue, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "UI iteration evidence reissue failed for {JobId}", jobId);
+                }
+            });
+            return;
+        }
+
+        if (decision.Action is UiIterationGateAction.Incomplete or UiIterationGateAction.EscalateCapReached)
+        {
+            _pipelineLog?.Complete(info.FolderPath,
+                pendingStepReason: "UI iteration could not reach its human gate.");
+            TeardownWorktreeForJob(jobId);
+            var reason = decision.Action == UiIterationGateAction.EscalateCapReached
+                ? $"UI iteration cap {maxIterations} was exhausted without a human finish decision."
+                : $"UI iteration {iteration}/{maxIterations} still lacked mandatory evidence after its bounded retry: {string.Join(" ", decision.Findings)}";
+            var escalation = await _humanReviewEscalation.EscalateAsync(
+                jobId, info.WatchPath, ProjectName,
+                HumanReviewEscalationCategories.UiIterationCap, reason,
+                CancellationToken.None);
+            _logger.LogWarning(
+                "ui_pipeline_escalated project={Project} job={JobId} iteration={Iteration}/{MaxIterations} status={Status} reason={Reason}",
+                ProjectName, jobId, iteration, maxIterations, escalation.Status, reason);
+            return;
+        }
+
+        var contract = new UiIterationReviewContract
+        {
+            Iteration = iteration,
+            MaxIterations = maxIterations,
+            CapReached = decision.CapReached,
+            ArtifactPaths = decision.ArtifactPaths,
+            ChangeDescriptionPath = decision.ChangeDescriptionPath!,
+        };
+        SteerPendingMarker.Write(info.FolderPath, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow,
+            Kind = SteerPendingKinds.UiIterationReview,
+            Question = decision.CapReached
+                ? "Final configured UI iteration. Finish this task or escalate; another feedback iteration is not allowed."
+                : "Review the visual result and choose finish or provide feedback for the next iteration.",
+            CliType = info.CliType,
+            UiIterationReview = contract,
+        }, _logger);
+        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.AwaitingReview);
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiHumanReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Running,
+            StartedAt = DateTime.UtcNow,
+            Verdict = "awaiting-human-review",
+            VerdictSummary = $"Iteration {iteration}/{maxIterations} is ready for visual review.",
+        });
+        CompletionMarker.Write(info.FolderPath, new CompletionMarker
+        {
+            TargetState = TaskStates.HumanReview,
+            ExecutionStatus = execution.Status,
+            AgentOutcome = $"ui-iteration-{iteration:D3}-awaiting-review",
+        }, _logger);
+
+        var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, Entry.Path, CancellationToken.None);
+        if (move.Status == MoveJobStatus.Success)
+        {
+            TeardownWorktreeForJob(jobId);
+            var movedFolder = move.NewFolderPath ?? info.FolderPath;
+            CompletionMarker.Clear(movedFolder, _logger);
+            _mutations.SetJobPhase(movedFolder, null);
+            _logger.LogInformation(
+                "ui_pipeline_review_pending project={Project} job={JobId} pipeline={PipelineId} iteration={Iteration}/{MaxIterations} artifacts={ArtifactCount} marker={Marker}",
+                ProjectName, jobId, AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                iteration, maxIterations, decision.ArtifactPaths.Count,
+                SteerPendingMarker.PathFor(movedFolder));
+        }
+        else
+        {
+            _logger.LogWarning(
+                "UI iteration {Iteration}/{MaxIterations} for {JobId} is evidenced but could not move to human review: {Status} {Message}",
+                iteration, maxIterations, jobId, move.Status, move.Message);
+        }
+    }
+
     /// <summary>
     /// Drops the on-disk pickup lock we acquired in <see cref="RunCliAsync"/>
     /// before stamping <c>_activeJobId</c>. Only deletes when this process
@@ -5786,26 +6179,26 @@ public class ProjectRunner
             _states, _timeline, _chatLog, _logger);
     }
 
-    private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
+    private static bool ShouldRouteIssueToEscalated(RunIssueKind issueKind)
         => issueKind is RunIssueKind.PermissionBlocked
                      or RunIssueKind.WatchdogTimeout
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
                      // Non-retryable model rejection and transient quota
-                     // exhaustion both reach human review with an honest,
+                     // exhaustion both reach Escalated with an honest,
                      // distinct reason instead of the orchestrator-inconclusive
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
                      // A failed OAuth-session refresh (AGT-2066 breaker) is
-                     // non-retryable and must reach human review with a re-auth
+                     // non-retryable and must reach Escalated with a re-auth
                      // instruction instead of stranding in 3-progress.
                      or RunIssueKind.AuthRefreshFailed
                      // A transient environmental fault that persisted after the
                      // bounded retry-with-backoff, and a CLI launch/resume failure
                      // that persisted after the fresh-start retry, both reach human
-                     // review with their own honest category (AGT-1944).
+                     // intervention with their own honest category (AGT-1944).
                      or RunIssueKind.EnvironmentalTransient
                      or RunIssueKind.CliLaunchFailed
                      or RunIssueKind.Quarantined
@@ -5813,7 +6206,7 @@ public class ProjectRunner
                      // Drive-to-conclusion: a failed run the deterministic
                      // contract could not close out (a hard CLI crash, or real
                      // text that maps to no terminal verdict) returns
-                     // NotifyUserAndStop and MUST reach human review. Without
+                     // NotifyUserAndStop and MUST reach Escalated. Without
                      // these two it stayed in 3-progress forever (the old
                      // classifier-unknown stranding: ASS-1757, AGT dashboard).
                      or RunIssueKind.InfraCrash
@@ -5897,7 +6290,7 @@ public class ProjectRunner
         _                                     => "none"
     };
 
-    /// <summary>Maps the issue that triggered a human-review route onto a
+    /// <summary>Maps the issue that triggered an Escalated route onto a
     /// <see cref="HumanReviewEscalationCategories"/> value so the decision
     /// journal records WHY the card was escalated.</summary>
     private static string ToEscalationCategory(RunIssueKind issueKind) => issueKind switch
@@ -5924,7 +6317,7 @@ public class ProjectRunner
     /// could not map it to a terminal verdict) that nonetheless left files in
     /// <c>results/</c>, this returns the distinct
     /// <see cref="HumanReviewEscalationCategories.InconclusiveWithResults"/>
-    /// category so the board routes it to human review WITH a "there is partial
+    /// category so the board routes it to Escalated WITH a "there is partial
     /// work to inspect" hint rather than the bare inconclusive park. Only an
     /// inconclusive run with an EMPTY results/ dir keeps the plain category
     /// (AGT-1944 taxonomy: inconclusive-with-results vs inconclusive-empty).
@@ -5973,6 +6366,61 @@ public class ProjectRunner
     private static bool IsAgentGitMutationAllowed(TaskInfo info)
         => info.Tags.Any(tag => string.Equals(tag, "allow-agent-git-mutation", StringComparison.OrdinalIgnoreCase));
 
+    private Dictionary<string, string?> CaptureProtectedRemoteTips()
+    {
+        var repoRoot = Entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        var settings = _projectSettings.Get(ProjectName);
+        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, settings.IntegrationBranch);
+        if (integrationBranch.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            integrationBranch = integrationBranch["origin/".Length..];
+
+        var branches = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            integrationBranch,
+            "main",
+            "master",
+        };
+
+        return branches
+            .Where(branch => !string.IsNullOrWhiteSpace(branch))
+            .ToDictionary(
+                branch => branch,
+                branch => _git.GetBranchTip(repoRoot, $"origin/{branch}"),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool ProtectedRemoteChanged(ActiveRun run)
+    {
+        if (run.ProtectedRemoteTipsBefore.Count == 0) return false;
+        var repoRoot = Entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+
+        foreach (var (branch, before) in run.ProtectedRemoteTipsBefore)
+        {
+            var after = _git.GetBranchTip(repoRoot, $"origin/{branch}");
+            if (!string.Equals(before, after, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool PreExistingWorkerHistoryWasRewritten(string repoRoot, ActiveRun run)
+    {
+        if (string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore)
+            || string.IsNullOrWhiteSpace(run.WorkerBranchBefore))
+        {
+            return false;
+        }
+
+        var branchTipAfter = _git.GetBranchTip(repoRoot, run.WorkerBranchBefore);
+        return string.IsNullOrWhiteSpace(branchTipAfter)
+            || !_git.IsAncestor(repoRoot, run.WorkerHeadShaBefore, branchTipAfter);
+    }
+
     private static string? DetectAgentGitMutationClaim(IReadOnlyList<CliOutputLine> lines)
     {
         foreach (var line in lines)
@@ -5990,12 +6438,29 @@ public class ProjectRunner
         return null;
     }
 
+    private static string? DetectAgentGitPushClaim(IReadOnlyList<CliOutputLine> lines)
+    {
+        foreach (var line in lines)
+        {
+            var text = (line.Text ?? string.Empty).Trim();
+            if (text.Length == 0) continue;
+            if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "user", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
+            if (NegatedGitMutationRegex.IsMatch(text)) continue;
+            if (!GitPushCommandOrClaimRegex.IsMatch(text)) continue;
+            return text.Length <= 180 ? text : text[..177] + "...";
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Runs the abort-review step for a non-clean run end and applies its
     /// binding action. Returns true when the step handled the run (a rerun
     /// was scheduled, or the run was accepted into review); false when the
-    /// step escalates to human review or fails - in which case the caller
-    /// falls through to the existing human-review route. Never throws: any
+    /// step requests operator intervention or fails, in which case the caller
+    /// falls through to the existing typed escalation route. Never throws: any
     /// failure inside the step fails closed to false (escalate).
     /// </summary>
     private async Task<bool> TryRunAbortReviewAsync(
@@ -6058,7 +6523,7 @@ public class ProjectRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "abort-review step crashed for {JobId}; falling back to human review", jobId);
+            _logger.LogError(ex, "abort-review step crashed for {JobId}; falling back to Escalated", jobId);
             return false;
         }
 
@@ -6149,7 +6614,7 @@ public class ProjectRunner
                     : "unparseable",
                 VerdictSummary = $"action={PostAbortReviewStepService.ActionToken(report.Action)}" +
                     (string.IsNullOrWhiteSpace(reasoning) ? string.Empty : $"; {reasoning}"),
-                Reason = parsed ? null : "CLI failure / unparseable reply; failed closed to human review",
+                Reason = parsed ? null : "CLI failure / unparseable reply; failed closed to operator escalation",
             });
         }
         catch (Exception ex)
@@ -6733,7 +7198,7 @@ public class ProjectRunner
     /// <remarks>
     /// Filters strictly on <c>State == 2-ready</c>. Jobs sitting in
     /// <c>1-preparation</c>, <c>1a-orchestrator-prep</c>,
-    /// <c>4-auto-review</c>, or
+    /// <c>4-auto-review</c>, <c>5e-escalated</c>, or
     /// <c>5-human-review</c> have no influence here - those lanes are
     /// processed by their own background services in parallel with the
     /// runner. The single-state-machine rule (ADR-0001) is preserved by
@@ -6787,7 +7252,7 @@ public class ProjectRunner
            // pickup lane (old data / stray move).
            && !IsUnpickableEpic(job)
            // Hard safety net for the human-decision-needed marker:
-           // never auto-run such a card even if the 2-ready->5-human-review
+           // never auto-run such a card even if the 2-ready->5e-escalated
            // relocation sweep failed to move it. Running it just NOOP-burns
            // a CLI and trips the breaker.
            && !TaskSlugs.IsHumanDecisionNeeded(job.Id)
@@ -7097,7 +7562,7 @@ public class ProjectRunner
     /// when a pickup attempt never started the CLI process (spawn failure).
     /// Used by the reroute classifier to tell "the CLI is unavailable"
     /// (requeue to 2-ready and pause) apart from "the CLI ran but produced
-    /// nothing" (escalate to 5-human-review).
+    /// nothing" (escalate to 5e-escalated with a typed reason).
     /// </summary>
     internal const string SpawnFailedExecutionStatus = "spawn-failed";
     internal const string WorktreeBlockedExecutionStatus = "worktree-blocked";
@@ -7159,7 +7624,7 @@ public class ProjectRunner
     /// entry so the over-budget classifier can be exercised: pass
     /// <see cref="SpawnFailedExecutionStatus"/> to drive the spawn-failure ->
     /// 2-ready + pause path, or leave it null for the task-shaped ->
-    /// 5-human-review path. History is bounded at the threshold to mirror the
+    /// 5e-escalated path. History is bounded at the threshold to mirror the
     /// real recorder.</summary>
     internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null, string? error = null)
     {
@@ -7722,8 +8187,8 @@ public class ProjectRunner
     internal static readonly string[] PostProgressLanes =
     [
         TaskStates.AutoReview,
-        TaskStates.HumanReview,
         TaskStates.Escalated,
+        TaskStates.HumanReview,
         TaskStates.Completed,
         TaskStates.Archive,
     ];

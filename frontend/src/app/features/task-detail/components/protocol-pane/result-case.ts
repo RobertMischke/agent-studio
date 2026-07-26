@@ -265,7 +265,7 @@ const CASE_KEYWORDS: { case: ResultCase; words: readonly string[] }[] = [
 function isBlockedVerdict(kind: string | null | undefined, label: string | null | undefined): boolean {
   if (kind === 'problem') return true;
   const l = (label ?? '').trim().toLowerCase();
-  return l === 'partial' || l === 'needs input' || l === 'blocked' || l === 'failed';
+  return l === 'partial' || l === 'needs input' || l === 'needs decision' || l === 'blocked' || l === 'failed';
 }
 
 /**

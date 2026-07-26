@@ -235,13 +235,28 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     public void AgentGitViolationMarker_OnInterventionLine_SurfacesHighSeverityOutcome()
     {
         SeedJob("agent-git-violation", TaskStates.HumanReview,
-            $"[09:10:00.000] [orchestrator] [intervention] [agent-git-violation] Worker CLI advanced git HEAD during the run before the platform-owned commit step.{Environment.NewLine}");
+            $"[09:10:00.000] [orchestrator] [intervention] [agent-git-violation] Genuine git damage detected: worker push changed a protected remote branch.{Environment.NewLine}");
 
         var issue = Outcome("agent-git-violation");
 
         Assert.NotNull(issue);
         Assert.Equal("agent-git-violation", issue!.Kind);
         Assert.Equal("High", issue.Severity);
+    }
+
+    [Fact]
+    public void WorkerHeadAdvancedMarker_SurfacesInfoCleanupHint()
+    {
+        SeedJob("worker-head-advanced", TaskStates.AutoReview,
+            $"[09:10:00.000] [orchestrator] [worker-head-advanced] INFO: worker advanced HEAD - needs cleanup; pipeline continues.{Environment.NewLine}");
+
+        var issue = Outcome("worker-head-advanced");
+
+        Assert.NotNull(issue);
+        Assert.Equal("worker-head-advanced", issue!.Kind);
+        Assert.Equal("Worker advanced HEAD", issue.Label);
+        Assert.Equal("Info", issue.Severity);
+        Assert.Contains("needs cleanup", issue.Summary);
     }
 
     [Fact]

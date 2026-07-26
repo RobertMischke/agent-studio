@@ -170,6 +170,20 @@ an opaque origin and cannot inherit Studio's origin or directly access its
 cookies, storage, or DOM. Network requests remain subject to normal browser and
 CORS policy; this sandbox is not a network-deny boundary.
 
+### `GET /wiki/folder/{relPath}`
+
+Returns one directory level for the folder overview table. Each page row uses
+the author date of the most recent commit that touched that file, not the
+working-copy mtime. Folder rows use the newest date among their visible
+descendant pages. The backend obtains all per-file dates through one
+`git log --name-only` walk over `docs/` and caches that index by repository
+HEAD, so rendering a folder never runs Git once per row.
+
+`updatedAtSource` is `git` for committed history. A new local page with no Git
+history falls back to its filesystem mtime and returns
+`updatedAtSource: "mtime"`; the UI marks that fallback with an asterisk and an
+explanatory tooltip.
+
 ### `GET /wiki/assets/{relPath}`
 
 Streams a referenced image or diagram asset. This is intentionally limited to

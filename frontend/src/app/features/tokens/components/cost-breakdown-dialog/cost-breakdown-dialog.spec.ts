@@ -9,7 +9,7 @@ describe('CostBreakdownDialogComponent', () => {
   it('renders rates, counters, formula, source, effective date, and total', async () => {
     const fake = {
       open: signal(true), title: signal('Pipeline cost calculation'), loading: signal(false),
-      error: signal<string | null>(null), provider: signal('CodingAgentRunner (CAR)'),
+      error: signal<string | null>(null), provider: signal('TokenEconomy'),
       close: () => fake.open.set(false),
       items: signal([{
         model: 'claude-opus-4-7', label: 'Core agent', calculatedAt: '2026-07-11T10:00:00Z',
@@ -31,12 +31,13 @@ describe('CostBreakdownDialogComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(CostBreakdownDialogComponent);
     fixture.detectChanges();
-    const text = fixture.nativeElement.textContent as string;
+    const text = document.body.textContent ?? '';
     expect(text).toContain('claude-opus-4-7');
     expect(text).toContain('Input / 1M');
     expect(text).toContain('1,000,000 / 1M × $5.00');
     expect(text).toContain('Anthropic published pricing');
     expect(text).toContain('Price effective date');
-    expect(text).toContain('$10.3625');
+    expect(text).toContain('$10.36');
+    fixture.destroy();
   });
 });

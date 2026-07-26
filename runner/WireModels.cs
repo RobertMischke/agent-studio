@@ -111,7 +111,8 @@ public sealed record RunnerClaimRequest(
     int? ActiveSlots = null,
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
-    RunnerProcessInventory? Inventory = null);
+    RunnerProcessInventory? Inventory = null,
+    RunnerProjectPreflightReport? ProjectPreflight = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,
@@ -145,6 +146,15 @@ public sealed record RunnerReconciliationAction(
     string? RunId = null,
     string? TaskKey = null);
 
+public sealed record RunnerProjectPreflightReport(
+    string ProjectId,
+    string RegistrationFingerprint,
+    bool Succeeded,
+    string Detail,
+    DateTime CheckedAt,
+    string FetchUrl,
+    string PushUrl);
+
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(
     DateTime Timestamp,
@@ -161,7 +171,7 @@ public sealed record HostTelemetrySample(
     int CpuCores,
     int ActiveSlots);
 
-public enum RunnerClaimStatus { Claimed, Empty, Invalid }
+public enum RunnerClaimStatus { Claimed, Empty, PreflightRequired, PreflightFailed, Invalid }
 
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,
@@ -176,7 +186,8 @@ public sealed record RunnerClaimResponse(
     string? TaskKind = null,
     string? RunId = null,
     string? LeaseInstanceId = null,
-    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
+    string? RegistrationFingerprint = null);
 
 public static class RemoteChatWorkKinds
 {

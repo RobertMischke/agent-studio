@@ -77,7 +77,7 @@
   <p class="kicker">Concept Workbench · Agent Studio</p>
   <h1>Async Validation &amp; the Test Staging Lane</h1>
   <p class="lede">A design proposal for a plausible-sounding intuition: tests are slow and run for every
-  card, so move validation off the critical path. The evidence says the payoff is throughput, not cost — and
+  card, so move validation off the critical path. The evidence says the payoff is throughput, not cost - and
   that reshapes what is worth building. This workbench states the design, the trade-offs, and a concrete
   decision.</p>
   <div class="meta">
@@ -106,7 +106,7 @@
 <section id="decision" class="box accent">
   <h4>Decision in one paragraph</h4>
   <p>Do not build LLM-based test selection: it spends the expensive resource (tokens) to save the cheapest
-  one (CPU). Do build a per-SHA gate cache that skips re-testing an unchanged tree — it removes most of the
+  one (CPU). Do build a per-SHA gate cache that skips re-testing an unchanged tree - it removes most of the
   redundant validation with no new architecture and pays off regardless. Treat the staging lane and
   test-integration branch as <em>measure-first</em>: they only pay off if batches are usually green, and a
   red batch forces a bisection that can erase the gain. The whole exercise buys throughput on the shared
@@ -116,15 +116,15 @@
 <h2 id="idea"><span class="no">§1</span>The idea in three building blocks</h2>
 <p>The proposal is usually stated as one thing, but it separates into three parts with very different
 cost/benefit profiles. Keeping them apart is what lets us accept one and reject another.</p>
-<h3>1a — Deterministic test scoping</h3>
+<h3>1a - Deterministic test scoping</h3>
 <p>Run only new tests and tests that touch the changed module, instead of the full suite per card. The catch
 is the word "smart": deciding relevance with a model spends tokens, the one resource worth saving. The whole
 building block survives only if the decision stays deterministic (§5).</p>
-<h3>1b — A staging lane</h3>
+<h3>1b - A staging lane</h3>
 <p>A lane that collects cards whose coding and review are finished but which are not yet integrated. They
 move on <em>batched</em>, once their combined changes pass the gate together, rather than each card forcing a
 synchronous full gate run of its own.</p>
-<h3>1c — A test-integration branch</h3>
+<h3>1c - A test-integration branch</h3>
 <p>A dedicated branch where the batched validation happens, decoupled from the coding worktree. The open
 question is what happens after green: fast-forward to <code>develop</code>, or integrate straight into
 <code>develop</code> and skip the branch entirely (§6).</p>
@@ -189,7 +189,7 @@ proposal is the same move, applied to validation instead of push.</p>
     <text x="500" y="188" text-anchor="middle" class="svg-s" fill="var(--ink-2)">the gate runs once there, and only the green state fast-forwards to develop.</text>
   </svg>
   <figcaption><b>Fig. 1: The staging-lane flow.</b> The change is structural: the test gate moves out of the
-  per-task post-step into a batch step that drains the lane — the same "off the request path" pattern as the
+  per-task post-step into a batch step that drains the lane - the same "off the request path" pattern as the
   integration-push queue, applied to validation.</figcaption>
 </figure>
 
@@ -201,7 +201,7 @@ exist at gate time:</p>
   <code>backend/Features/Pipeline/**</code> selects <code>backend.Tests</code> filtered to
   <code>Pipeline*</code>). Pure git diff plus a lookup table, zero tokens.</li>
   <li><b>New test files always run</b> (A-status in the diff).</li>
-  <li><b>Full-suite fallback</b> when the change set spans modules — often the case in a batch, which makes
+  <li><b>Full-suite fallback</b> when the change set spans modules - often the case in a batch, which makes
   scoping less critical in batch mode than for a single card.</li>
 </ul>
 <p>The pattern is not new: QS-28 ("skip-if-fresh") already skips unchanged review units deterministically via
@@ -213,25 +213,25 @@ hashes. This is the same idea applied to tests.</p>
 <table>
   <thead><tr><th>Option</th><th>Upside</th><th>Price</th></tr></thead>
   <tbody>
-    <tr><td><b>A — straight to <code>develop</code></b> (no test branch)</td><td>Simple; <code>develop</code> is always the source of truth.</td><td>The gate stays per-card, so the 84% retry lever is not pulled. Effectively the status quo.</td></tr>
-    <tr><td><b>B — batch on <code>integration/test</code></b>, then FF</td><td>One suite run per batch pulls the throughput lever; red batches keep <code>develop</code> clean.</td><td>Blame assignment on a red batch: which of N cards failed? Needs bisection or single-card fallback.</td></tr>
+    <tr><td><b>A - straight to <code>develop</code></b> (no test branch)</td><td>Simple; <code>develop</code> is always the source of truth.</td><td>The gate stays per-card, so the 84% retry lever is not pulled. Effectively the status quo.</td></tr>
+    <tr><td><b>B - batch on <code>integration/test</code></b>, then FF</td><td>One suite run per batch pulls the throughput lever; red batches keep <code>develop</code> clean.</td><td>Blame assignment on a red batch: which of N cards failed? Needs bisection or single-card fallback.</td></tr>
   </tbody>
 </table>
 </div>
 <div class="box warn">
   <h4>The number that decides option B</h4>
   <p>The bisection case can eat the gain: if a five-card batch goes red, in the worst case you need up to five
-  further individual runs to find the culprit — slower than per-card testing would have been. B's net benefit
+  further individual runs to find the culprit - slower than per-card testing would have been. B's net benefit
   hinges directly on the <b>batch green rate</b>. High green rate (cards already individually review-green) →
   B wins clearly; frequent red batches → it loses. This is the one quantity to estimate from existing data
   before committing to B.</p>
 </div>
 
 <h2 id="recommendation"><span class="no">§7</span>Recommendation and slicing</h2>
-<p><span class="rec stop">Reject</span> &nbsp;<b>LLM-based test selection.</b> Anti-economical — expensive
+<p><span class="rec stop">Reject</span> &nbsp;<b>LLM-based test selection.</b> Anti-economical - expensive
 tokens to save cheap CPU. Keep only the deterministic diff→project mapping.</p>
 <p><span class="rec go">Build</span> &nbsp;<b>Per-SHA gate cache.</b> Bind the gate result to the tested tree
-SHA; an identical SHA skips the run. Removes most of the redundant re-testing with no architectural change —
+SHA; an identical SHA skips the run. Removes most of the redundant re-testing with no architectural change -
 the largest lever for the smallest effort.</p>
 <p><span class="rec wait">Measure first</span> &nbsp;<b>Staging lane + test-integration branch.</b> Build only
 after estimating the batch green rate from existing data.</p>
@@ -245,16 +245,16 @@ after estimating the batch green rate from existing data.</p>
 
 <h2 id="open"><span class="no">§8</span>Open questions</h2>
 <ul>
-  <li><b>Batch green rate</b> — how often are N individually review-green cards test-green together? Blocker for option B.</li>
-  <li><b>Same-SHA re-test rate</b> — how often is exactly the same tree re-validated on a reissue? The ceiling on the cache's benefit; expected high given ~3.65 gate runs per task.</li>
-  <li><b>Scope-mapping upkeep</b> — who keeps the folder→test-project map current? A stale map yields falsely-green gates; consider hanging it on the <code>PipelineSteps</code> config.</li>
-  <li><b>Lock granularity</b> — does the machine-wide lock stay, or become per-<code>integration/test</code>? Finer means more real parallelism but more resource pressure.</li>
+  <li><b>Batch green rate</b> - how often are N individually review-green cards test-green together? Blocker for option B.</li>
+  <li><b>Same-SHA re-test rate</b> - how often is exactly the same tree re-validated on a reissue? The ceiling on the cache's benefit; expected high given ~3.65 gate runs per task.</li>
+  <li><b>Scope-mapping upkeep</b> - who keeps the folder→test-project map current? A stale map yields falsely-green gates; consider hanging it on the <code>PipelineSteps</code> config.</li>
+  <li><b>Lock granularity</b> - does the machine-wide lock stay, or become per-<code>integration/test</code>? Finer means more real parallelism but more resource pressure.</li>
 </ul>
 
 <section class="box">
   <h4>Closing decision <span class="rec wait" style="vertical-align:2px">decision-ready</span></h4>
-  <p>This workbench recommends spawning two feature cards now — the per-SHA gate cache and the deterministic
-  test scoping — and one research card to estimate the batch green rate, which gates whether the staging lane
+  <p>This workbench recommends spawning two feature cards now - the per-SHA gate cache and the deterministic
+  test scoping - and one research card to estimate the batch green rate, which gates whether the staging lane
   and test-integration branch are built at all. LLM-based test selection is recorded as explicitly rejected.
   No card is created until an operator confirms through the normal task mutation path.</p>
 </section>

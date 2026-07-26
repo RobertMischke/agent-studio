@@ -93,6 +93,15 @@ CLI execution tests.
   data source for the load-distribution view). A healthy primary launch stays a
   log-only normal path. The planner reuses the AGT-2040 routing map; it does not
   duplicate "which model replaces which".
+- Wait-on-quota is opt-in and bounded (CodingAgentRunner 0.6.0). The global
+  policy lives in `cli-quota-wait-policy.json`; project settings may override
+  enabled state and threshold independently. For a strictly capped primary,
+  the decision order is nearby-reset wait, fallback model switch, then
+  parallelism throttle. Unknown, suspicious, elapsed, or distant reset data
+  cannot enter the nearby wait branch. Every branch emits a
+  `quota_admission_decision`; library `QuotaWaitStarted` and `QuotaWaitEnded`
+  events additionally maintain the visible `quota-waiting` task substate and
+  durable `quota-wait.json` marker.
 - Quota-window projection keeps the first trusted start of an active window as
   a persisted anchor (AGT-2107). A newly parsed `resetAt` cannot move that start
   while the anchored reset has not yet passed. Conflicting boundaries and

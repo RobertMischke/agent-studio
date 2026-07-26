@@ -1,0 +1,18 @@
+@if (decisionDamBadge(); as dam) {
+  <span class="review-decision-badge"
+        [class]="'review-decision-badge--' + dam.tone"
+        [cacTooltip]="dam.tooltip"
+        data-testid="task-card-decision-dam">
+    <span class="review-decision-badge__glyph" aria-hidden="true">⚠</span>
+    {{ dam.label }}
+  </span>
+}
+@if (humanReviewBadge(); as review) {
+  <span class="review-decision-badge"
+        [class]="'review-decision-badge--' + review.tone"
+        [cacTooltip]="review.tooltip"
+        data-testid="task-card-human-review">
+    <span class="review-decision-badge__glyph" aria-hidden="true">⚠</span>
+    {{ review.label }}
+  </span>
+}

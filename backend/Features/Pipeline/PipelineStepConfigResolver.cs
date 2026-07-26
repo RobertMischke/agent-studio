@@ -113,7 +113,17 @@ public static class PipelineStepConfigResolver
     /// </summary>
     public static bool CanDisable(PipelineStep step)
         => step.Kind != StepKind.Core
-           && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal);
+           && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal)
+           && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)
+           && !string.Equals(step.Id, PipelineCatalogue.UiHumanReviewGateStepId, StringComparison.Ordinal);
+
+    /// <summary>Resolve and clamp the UI iteration cap from the named routing step.</summary>
+    public static int ResolveUiMaxIterations(ProjectSettings? settings)
+        => Math.Clamp(
+            Lookup(settings, PipelineCatalogue.UiPipelineRoutingStepId)?.MaxIterations
+                ?? AgentStudio.Runner.UiIterationGate.DefaultMaxIterations,
+            AgentStudio.Runner.UiIterationGate.MinimumIterations,
+            AgentStudio.Runner.UiIterationGate.MaximumIterations);
 
     /// <summary>
     /// Resolve the model for a step addressed by id, with no catalogue

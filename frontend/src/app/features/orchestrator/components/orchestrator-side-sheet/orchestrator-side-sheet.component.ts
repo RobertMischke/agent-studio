@@ -46,6 +46,12 @@ import {
   buildOrchestratorConversationEvents,
   sameOrchestratorChatTurns,
 } from './orchestrator-side-sheet.util';
+import {
+  buildNavigationContextKey,
+  orchestratorContextErrorMessage,
+  parseOrchestratorContextKey,
+  resolveEffectiveContextKey,
+} from './orchestrator-context-key.util';
 import type { PageContext } from '../../../../models/page-context.model';
 import { pageContextKey } from '../../../../models/page-context.model';
 /**
@@ -144,6 +150,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
   readonly selectedContextKey = signal<string | null>(null);
+  private readonly selectedContextNavigationKey = signal<string | null>(null);
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
@@ -166,7 +173,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   private readonly selectedSession = computed(() => {
-    const key = this.selectedContextKey();
+    const key = this.effectiveSelectionKey();
     return key ? this.contextSessions().find(session => session.contextKey === key) ?? null : null;
   });
 
@@ -195,48 +202,67 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     watchPath: string | null;
   } | null>(null);
 
+  private readonly navigationProject = computed(() =>
+    this.pinned()
+      ? (this.pinnedSnapshot()?.project ?? null)
+      : (this.pageContext()?.projectName ?? this.activeProject()));
+  private readonly navigationJobId = computed(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId());
+  private readonly navigationJobTitle = computed(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle());
+  private readonly navigationJobKey = computed(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey());
+  private readonly navigationJobState = computed(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState());
+  private readonly navigationWatchPath = computed(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath());
+  private readonly navigationContextKey = computed(() => buildNavigationContextKey(
+    this.navigationProject(),
+    this.navigationJobKey(),
+  ));
+  private readonly contextResolution = computed(() => resolveEffectiveContextKey(
+    this.navigationContextKey(),
+    this.selectedContextKey(),
+    this.selectedContextNavigationKey(),
+    this.projects(),
+    this.contextSessions(),
+  ));
+  private readonly effectiveSelectionKey = computed(() =>
+    this.contextResolution().discardedSelection ? null : this.selectedContextKey());
+  private readonly parsedContext = computed(() => parseOrchestratorContextKey(this.contextResolution().key));
+
   readonly effectiveProject = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
-      ? null
-      : this.selectedSession()
-      ? this.selectedSession()?.projectId ?? null
-      : (this.pinned()
-        ? (this.pinnedSnapshot()?.project ?? null)
-        : (this.pageContext()?.projectName ?? this.activeProject())));
+    this.parsedContext()?.projectId ?? null);
   readonly effectiveJobId = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
+    this.parsedContext()?.kind !== 'task'
       ? null
-      : this.selectedSession()?.kind === 'task'
-      ? (this.selectedTask()?.id ?? null)
-      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId())));
+      : this.effectiveSelectionKey()
+        ? (this.selectedTask()?.id ?? null)
+        : this.navigationJobId());
   readonly effectiveJobTitle = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
+    this.parsedContext()?.kind !== 'task'
       ? null
-      : this.selectedSession()?.kind === 'task'
-      ? (this.selectedTask()?.title ?? this.selectedSession()?.taskKey ?? null)
-      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle())));
+      : this.effectiveSelectionKey()
+        ? (this.selectedTask()?.title ?? this.parsedContext()?.taskKey ?? null)
+        : (this.navigationJobTitle() ?? this.parsedContext()?.taskKey ?? null));
   readonly effectiveJobKey = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
-      ? null
-      : this.selectedSession()?.kind === 'task'
-      ? (this.selectedSession()?.taskKey ?? null)
-      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey())));
+    this.parsedContext()?.kind === 'task' ? (this.parsedContext()?.taskKey ?? null) : null);
   readonly effectiveJobState = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
+    this.parsedContext()?.kind !== 'task'
       ? null
-      : this.selectedSession()?.kind === 'task'
-      ? (this.selectedTask()?.state ?? null)
-      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState())));
+      : this.effectiveSelectionKey()
+        ? (this.selectedTask()?.state ?? null)
+        : this.navigationJobState());
   readonly effectiveWatchPath = computed<string | null>(() =>
-    this.selectedContextKey() === 'global'
+    this.parsedContext()?.kind !== 'task'
       ? null
-      : this.selectedSession()?.kind === 'task'
-      ? (this.selectedTask()?.watchPath ?? null)
-      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath())));
+      : this.effectiveSelectionKey()
+        ? (this.selectedTask()?.watchPath ?? null)
+        : this.navigationWatchPath());
 
   /**
    * Navigation-derived context kind and canonical context key. A task
-   * context needs both an id and a title in scope; anything else is the
+   * context needs its canonical task key in scope; anything else is the
    * project (board) context. The key mirrors the backend registry shape
    * (`project:<PROJ>` / `task:<PROJ>/<KEY>`, see OrchestratorContextKey) and
    * the chat body reads and writes through it (see {@link readChat} and the
@@ -244,17 +270,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * longer share one history.
    */
   readonly contextKind = computed<'task' | 'project'>(() =>
-    this.effectiveJobId() && this.effectiveJobTitle() ? 'task' : 'project');
-  readonly contextKey = computed<string | null>(() => {
-    if (this.selectedContextKey()) return this.selectedContextKey();
-    const proj = (this.effectiveProject() ?? '').trim();
-    if (!proj) return null;
-    if (this.contextKind() === 'task') {
-      const key = (this.effectiveJobKey() ?? '').trim();
-      if (key) return `task:${proj}/${key}`;
-    }
-    return `project:${proj}`;
-  });
+    this.parsedContext()?.kind === 'task' ? 'task' : 'project');
+  readonly contextKey = computed<string | null>(() => this.contextResolution().key);
 
   readonly turns = signal<OrchestratorChatTurn[]>([], { equal: sameOrchestratorChatTurns });
   readonly loading = signal(false);
@@ -366,6 +383,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
+    // Session rows can outlive the navigation scope that selected them. The
+    // resolver falls back synchronously; this effect also clears stale picker
+    // state so subsequent interactions remain on the current navigation key.
+    effect(() => {
+      const discarded = this.contextResolution().discardedSelection;
+      untracked(() => {
+        if (!discarded) return;
+        this.selectedContextKey.set(null);
+        this.selectedContextNavigationKey.set(null);
+      });
+    });
+
     // MC-2: reload when the *effective context* changes — pinning freezes
     // the scope, so following the effective value (not the raw picker)
     // keeps a pinned sheet on its frozen thread while nav moves on. We track
@@ -510,16 +539,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // the operator unpins.
     if (this.pinned()) return;
     this.selectedContextKey.set(null);
+    this.selectedContextNavigationKey.set(null);
     if (proj === this.activeProject()) return;
     this.activeProject.set(proj);
   }
 
   selectChatContext(contextKey: string): void {
+    this.selectedContextNavigationKey.set(this.navigationContextKey());
     this.selectedContextKey.set(contextKey);
     const session = this.contextSessions().find(item => item.contextKey === contextKey);
-    const projectId = session?.projectId
-      ?? (contextKey.startsWith('project:') ? contextKey.slice('project:'.length) : null);
-    if (projectId) this.activeProject.set(projectId);
     const updatedAt = session?.updatedAt ?? new Date().toISOString();
     this.seenContexts.update(seen => ({ ...seen, [contextKey]: updatedAt }));
     this.persistSeenContexts();
@@ -528,6 +556,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   onNavigateToContext(contextKey: string): void {
     this.selectedContextKey.set(null);
+    this.selectedContextNavigationKey.set(null);
     this.contextMenuOpen.set(false);
     this.navigateToContext.emit(contextKey);
   }
@@ -617,21 +646,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * context*, not just the project. On a task page the sheet reads the
    * `task:<PROJ>/<KEY>` thread; on the board it reads `project:<PROJ>`, which
    * the backend resolves to the same canonical per-project log the plain
-   * project route serves. Falling back to the project read when no context
-   * key is derivable keeps the board's behaviour byte-for-byte unchanged.
+   * project route serves. Callers only reach this method after the shared
+   * resolver has produced a valid canonical key.
    */
-  private readChat(proj: string) {
-    const key = this.contextKey();
-    return key
-      ? this.jobService.getOrchestratorChatByContext(key)
-      : this.jobService.getOrchestratorChat(proj);
+  private readChat(key: string) {
+    return this.jobService.getOrchestratorChatByContext(key);
   }
 
   refresh(silent = false): void {
     const proj = this.effectiveProject();
     if (!proj) return;
+    const key = this.contextKey();
+    if (!key) {
+      this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
+      return;
+    }
     if (!silent) this.loading.set(true);
-    this.readChat(proj).subscribe({
+    this.readChat(key).subscribe({
       next: (resp) => {
         this.turns.set(resp.turns ?? []);
         this.executionContext.set(resp.executionContext ?? null);
@@ -639,7 +670,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (!silent) this.loading.set(false);
       },
       error: (err) => {
-        const message = err?.error?.error || err?.message || 'Failed to load orchestrator chat';
+        const message = orchestratorContextErrorMessage(err, 'Failed to load orchestrator chat');
         this.errorMsg.set(message);
         if (!silent) this.loading.set(false);
       }
@@ -657,6 +688,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
     const proj = this.effectiveProject();
     if (!proj) return;
+    // Snapshot once so a navigation change during attachment upload cannot
+    // split the send and its reconciliation read across two histories.
+    const contextKey = this.contextKey();
+    if (!contextKey) {
+      this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
+      return;
+    }
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
 
@@ -748,7 +786,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // MC-2: route the send to the current context thread so a task page's
     // turns accumulate in — and read back from — their own history. A
     // project/board context falls through to the per-project route.
-    const contextKey = this.contextKey();
     const sendBody = {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
@@ -757,9 +794,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       thinkingLevel: this.composerModel.effectiveSelection().thinkingLevel,
       selectionSource: this.composerModel.selectionSource(),
     };
-    const send$ = contextKey
-      ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)
-      : this.jobService.sendOrchestratorChat(proj, sendBody);
+    const send$ = this.jobService.sendOrchestratorChatByContext(contextKey, sendBody);
     send$.subscribe({
       next: (response) => {
         if (response.executionContext) this.executionContext.set(response.executionContext);
@@ -786,7 +821,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // momentarily. Once preloads resolve we drop the local turn and
         // revoke its blob URLs; the server turn takes over with the
         // cached image and the user perceives no swap.
-        this.readChat(proj).subscribe({
+        this.readChat(contextKey).subscribe({
           next: async (resp) => {
             this.turns.set(resp.turns ?? []);
             this.errorMsg.set(null);
@@ -809,7 +844,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.sending.set(false);
-        const message = err?.error?.error || err?.message || 'Failed to send';
+        const message = orchestratorContextErrorMessage(err, 'Failed to send');
         this.localTurns.update((curr) =>
           curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
         );

@@ -468,7 +468,8 @@ public sealed class WorktreeTaskLifecycle
             + "so a reissue or human review never loses the deliverable.\n\n"
             + GitService.WorktreeRunCommitTrailer(taskId);
 
-        var commit = _git.WorktreeRunCommit(taskId, worktreePath, message);
+        var commit = _git.WorktreeRunCommit(taskId, worktreePath, message,
+            taskId: taskId, expectedBranch: branch);
         if (commit.Success)
         {
             _logger.LogWarning(

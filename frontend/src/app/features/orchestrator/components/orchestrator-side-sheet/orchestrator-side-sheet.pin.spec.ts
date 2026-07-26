@@ -120,6 +120,7 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     c.activeProject.set('demo-project');
     fixture.componentRef.setInput('activeJobId', 'job-1');
     fixture.componentRef.setInput('activeJobTitle', 'Fix the header');
+    fixture.componentRef.setInput('activeJobKey', 'AGT-1916');
     c.togglePin();
 
     // Host navigates to the board of another project.

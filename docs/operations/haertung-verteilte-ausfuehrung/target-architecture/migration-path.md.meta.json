@@ -1,4 +1,28 @@
 {
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Migration path",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/migration-path.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "916df5148936a06df334156483c2c3f788057bbbe3db42e92876df5ef003e41f",
+      "sizeBytes": 998,
+      "lineCount": 10,
+      "capturedAt": "2026-07-24T21:17:41Z"
+    }
+  },
+  "classification": {
+    "owner": "distributed-execution",
+    "documentMode": "vision",
+    "temporalState": "future",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "proposal",
+    "analyzedAt": "2026-07-24"
+  },
   "relatedTasks": [
     {
       "key": "AGT-2229",

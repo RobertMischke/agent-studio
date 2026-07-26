@@ -130,7 +130,7 @@ describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
     fixture.detectChanges();
     http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
 
-    component.selectedContextKey.set('global');
+    component.selectChatContext('global');
     component.show();
     fixture.detectChanges();
     expect(component.effectiveProject()).toBeNull();
@@ -142,6 +142,41 @@ describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
     expect(component.contextDigestState.scopeLabel()).toBe('Global context');
     expect(fixture.nativeElement.querySelector('[data-testid="orchestrator-global-chat-empty"]'))
       .toBeTruthy();
+    http.verify();
+    fixture.destroy();
+  });
+
+  it('self-heals a stale selection and shares the spaced task key across digest, chat and send', async () => {
+    const fixture = await makeFixture();
+    const component = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+    fixture.componentRef.setInput('projects', ['Agent Studio']);
+    fixture.componentRef.setInput('activeJobId', 'agent-studio-task');
+    fixture.componentRef.setInput('activeJobTitle', 'Repair orchestrator context');
+    fixture.componentRef.setInput('activeJobKey', 'AGT-2149');
+    component.activeProject.set('Agent Studio');
+    fixture.detectChanges();
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+
+    component.selectedContextKey.set('task:old-project/AGT-1/invalid');
+    fixture.detectChanges();
+    expect(component.selectedContextKey()).toBeNull();
+    expect(component.contextKey()).toBe('task:Agent Studio/AGT-2149');
+
+    component.refreshCurrentContext();
+    http.expectOne('/api/orchestrator/context/task:Agent%20Studio/AGT-2149/refresh')
+      .flush(digest('task:Agent Studio/AGT-2149'));
+    http.expectOne('/api/runner/task:Agent%20Studio/AGT-2149/orchestrator-chat')
+      .flush({ project: 'Agent Studio', turns: [] });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+
+    await component.onSubmit({ text: 'Please continue', attachments: [] });
+    const send = http.expectOne('/api/runner/task:Agent%20Studio/AGT-2149/orchestrator-chat');
+    expect(send.request.method).toBe('POST');
+    send.flush({ project: 'Agent Studio', reply: { id: 'reply', role: 'orchestrator', text: 'Done' } });
+    http.expectOne('/api/runner/task:Agent%20Studio/AGT-2149/orchestrator-chat')
+      .flush({ project: 'Agent Studio', turns: [] });
+
     http.verify();
     fixture.destroy();
   });

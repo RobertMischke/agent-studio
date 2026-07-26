@@ -206,6 +206,18 @@ public sealed class RemoteReviewAuthorityTests
                 [ReviewCapabilities.CodingExecutor]),
             "test",
             default);
+
+        var capabilityReset = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.RegisterRunnerAsync(
+                "coding-only",
+                new RegisterRunnerRequest(
+                    "coding-only", "host-a", "reset-instance", "1.0.0",
+                    TaskServerProtocol.Current,
+                    []),
+                "test",
+                default));
+        Assert.Equal("runner-role-conflict", capabilityReset.Code);
+
         var roleSwap = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
             store.RegisterRunnerAsync(
                 "coding-only",
@@ -216,6 +228,21 @@ public sealed class RemoteReviewAuthorityTests
                 "test",
                 default));
         Assert.Equal("runner-role-conflict", roleSwap.Code);
+
+        await store.RegisterRunnerAsync(
+            "capability-less",
+            new RegisterRunnerRequest(
+                "capability-less", "host-a", "capability-less-instance", "1.0.0",
+                TaskServerProtocol.Current,
+                []),
+            "test",
+            default);
+        var codingClaim = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.ClaimAsync(
+                new ClaimRequest("capability-less", "capability-less-instance"),
+                "test",
+                default));
+        Assert.Equal("coding-capability-required", codingClaim.Code);
     }
 
     [Fact]

@@ -81,8 +81,47 @@ not a releasable candidate. Record its current commit as the initial rollback
 anchor, then deploy the first tagged Agent Studio release through the normal
 preflight.
 
-The current CAC `dist` must not be copied into that release. This work depends
-on the CAC versioned-release ticket publishing an immutable package plus tag,
-commit, and integrity. The task relationship must also mark AGT-2170 as
-`relatedTo`. Until the board API and CAC artifact are available, those two
-relationship/artifact steps remain explicit release blockers.
+CAC `0.3.2` is the immutable replay release consumed by Agent Studio. It is
+exact-pinned from the npm registry with package commit
+`e1183176aa55964986181b894180983793c4f055` and integrity
+`sha512-O4pH+zJdIaTNP7FcNwqSMQcX+y05C9tEkBh9AkiguvxHVTPMFWqf/fR7GpTHNgh7wgclrxD3BnkoWad3Gn7aAw==`.
+Do not copy a local CAC `dist` into a release or relax that pin to a range.
+
+A task worktree does not update Stable directly. After the integration commit
+is accepted, the release owner creates the immutable Agent Studio tag,
+generates the build manifest with the CAC identity above, deploys it through
+the normal preflight, and records the observed Agent Studio tag, commit, and
+CAC version in deployment history. The reissued integration task retains the
+original AGT-2170 relationship for audit continuity.
+
+## Three-component topology gate
+
+A release that claims the distributed Agent Studio architecture must pass the
+real-process topology gate after the normal solution build:
+
+```bash
+dotnet test runner.Tests/AgentRunner.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~AgentRunner.Tests.LogShipperCapTests|FullyQualifiedName~AgentRunner.Tests.BoundedOutputBufferTests"
+dotnet test task-server.Tests/TaskServer.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
+  --logger "console;verbosity=normal"
+```
+
+The gate is bounded and CI-runnable. It must pass all four topology scenarios:
+client-off completion and replay, brief Runner transport interruption with
+idempotent typed replay, fail-closed Task Server outage with
+positive-no-overlap recovery, and authenticated HTTPS event ingestion and
+replay. It also runs the published mixed-version fixtures and proves an
+unsupported Runner is rejected before registration or claim.
+
+Do not replace a failed scenario with a timeout-only assertion or a manual
+observation. The canonical history must contain typed lifecycle evidence for
+messages, bounded traces, artifacts, completion, failure classification, and
+recovery proof. Review and reissue remain the deployed backend's authority.
+Process-parent assertions must show that Studio and its optional BFF own neither
+Task Server nor Runner.
+
+The scenario-to-contract map and replay route are maintained in
+[Distributed Agent Studio target architecture](../concepts/distributed-agent-studio-target-architecture.md#release-proof).

@@ -40,37 +40,6 @@ export interface PipelineGroupRowLike {
   totalTokens: number;
 }
 
-/** The metric facts needed to decide whether a table column has real data. */
-export interface PipelineMetricRowLike {
-  status: string;
-  startedAt: string | null;
-  durationMs: number;
-  totalTokens: number;
-  costKnown: boolean;
-}
-
-/** Effective activation metadata that may be shared by every row in a group. */
-export interface PipelineGroupActivationSummary {
-  state: string;
-  source: string;
-  reason: string;
-}
-
-/** The row metadata needed to lift repeated activation/model chips to a group. */
-export interface PipelineGroupMetaRowLike {
-  model: string | null;
-  thinkingLevel: string | null;
-  config: { activation?: PipelineGroupActivationSummary | null } | null;
-}
-
-export interface PipelineMetricVisibility {
-  time: boolean;
-  duration: boolean;
-  tokens: boolean;
-  cost: boolean;
-  any: boolean;
-}
-
 /** One collapsible pipeline section, carrying its rows and aggregate counters. */
 export interface PipelineGroupVm<R extends PipelineGroupRowLike = PipelineGroupRowLike> {
   /** Stable key: phase + occurrence index, so repeated TOOL/DECISION runs stay distinct. */
@@ -215,44 +184,6 @@ export function pipelineComplete(rows: readonly PipelineGroupRowLike[]): boolean
 /** Only active or problematic sections start open. */
 export function groupDefaultCollapsed(group: Pick<PipelineGroupVm, 'tone'>): boolean {
   return group.tone !== 'danger' && group.tone !== 'warn' && group.tone !== 'concern';
-}
-
-/**
- * Show a metric column only when at least one currently visible row has a real
- * value. A pending pipeline therefore has no empty header or em-dash matrix.
- */
-export function pipelineMetricVisibility(
-  rows: readonly PipelineMetricRowLike[],
-): PipelineMetricVisibility {
-  const time = rows.some(row => row.startedAt != null);
-  const duration = rows.some(
-    row => row.durationMs > 0 || (row.status === 'running' && row.startedAt != null),
-  );
-  const tokens = rows.some(row => row.totalTokens > 0);
-  const cost = rows.some(row => row.totalTokens > 0 && row.costKnown);
-  return { time, duration, tokens, cost, any: time || duration || tokens || cost };
-}
-
-/** Return one model label only when a multi-row group repeats it unchanged. */
-export function uniformGroupModel(rows: readonly PipelineGroupMetaRowLike[]): string | null {
-  if (rows.length < 2) return null;
-  const labels = rows.map(row => row.model
-    ? `${row.model}${row.thinkingLevel ? ` · ${row.thinkingLevel}` : ''}`
-    : null);
-  return labels[0] != null && labels.every(label => label === labels[0]) ? labels[0] : null;
-}
-
-/** Return activation provenance only when a multi-row group repeats it unchanged. */
-export function uniformGroupActivation(
-  rows: readonly PipelineGroupMetaRowLike[],
-): PipelineGroupActivationSummary | null {
-  if (rows.length < 2) return null;
-  const values = rows.map(row => row.config?.activation ?? null);
-  const first = values[0];
-  return first != null
-    && values.every(value => value?.state === first.state && value.source === first.source)
-    ? first
-    : null;
 }
 
 /**

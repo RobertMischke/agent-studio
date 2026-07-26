@@ -42,7 +42,7 @@ public sealed class IntegrationPushWorker : BackgroundService
         }
         catch (OperationCanceledException __ex) when (stoppingToken.IsCancellationRequested)
         {
-            SilentCatch.Note(__ex, "IntegrationPushWorker: graceful shutdown; unpushed items push on the next accept.");
+            SilentCatch.Note(__ex, "IntegrationPushWorker: graceful shutdown; unpushed items are recovered by the durable backstop.");
         }
     }
 

@@ -36,9 +36,9 @@ describe('ExecutionLocationBadgeComponent', () => {
 
   for (const [state, label] of [
     ['local-running', 'Local'],
-    ['remote-running', 'Remote · agent-runner-01'],
-    ['remote-disconnected', 'Remote · agent-runner-01'],
-    ['queued-remote', 'Remote · agent-runner-01'],
+    ['remote-running', 'Host · agent-runner-01'],
+    ['remote-disconnected', 'Host · agent-runner-01'],
+    ['queued-remote', 'Host · agent-runner-01'],
     ['recovering', 'Recovering'],
   ] as const) {
     it(`renders ${state}`, () => {
@@ -63,8 +63,8 @@ describe('ExecutionLocationBadgeComponent', () => {
     fixture.componentRef.setInput('execution', execution('remote-running'));
     fixture.detectChanges();
     const tooltip = fixture.componentInstance.tooltip();
-    expect(tooltip).toContain('Actual runner: Remote · agent-runner-01');
-    expect(tooltip).toContain('Configured routing: Remote · agent-runner-01');
+    expect(tooltip).toContain('Actual host: Host · agent-runner-01');
+    expect(tooltip).toContain('Configured host: Host · agent-runner-01');
     expect(tooltip).toContain('Last heartbeat:');
     expect(tooltip).toContain('Branch: task/AGT-2158');
     expect(tooltip).toContain('Worktree: /worktrees/AGT-2158');

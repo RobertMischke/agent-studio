@@ -8,11 +8,11 @@
   <section class="setup">
     <header class="setup__header">
       <div>
-        <span class="setup__eyebrow">Remote-host process</span>
-        <h2 id="runner-setup-title">Set up runner on {{ host().name }}</h2>
+        <span class="setup__eyebrow">Agent host process</span>
+        <h2 id="runner-setup-title">Set up agent host on {{ host().name }}</h2>
         <p>Confirm how the controller reaches this host and how the host reaches the Task Server. Progress and operator login steps stay in the durable task conversation.</p>
       </div>
-      <button class="setup__close" type="button" aria-label="Close runner setup" (click)="cancelled.emit()">×</button>
+      <button class="setup__close" type="button" aria-label="Close agent host setup" (click)="cancelled.emit()">×</button>
     </header>
 
     <div class="setup__body">

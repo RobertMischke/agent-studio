@@ -506,6 +506,7 @@ public class TaskScannerService : ITaskScanner
                 ThinkingLevelExplicit = !raw.TryGetProperty("thinkingLevelExplicit", out var thinkingExplicit)
                     || thinkingExplicit.ValueKind != JsonValueKind.False,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
+                QuotaWait = QuotaWaitMarker.ToStatus(QuotaWaitMarker.TryRead(jobDir, _logger)),
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,
                 Mode = TaskModes.Normalize(raw.TryGetProperty("mode", out var md0) ? md0.GetString() : null),
@@ -1047,6 +1048,8 @@ public class TaskScannerService : ITaskScanner
 
             if (line.Contains("[agent-git-violation]", StringComparison.OrdinalIgnoreCase))
                 return BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
+            if (line.Contains("[worker-head-advanced]", StringComparison.OrdinalIgnoreCase))
+                return BuildOutcomeIssue("worker-head-advanced", "Worker advanced HEAD", "Info", line, lastSeenAt);
 
             // Never derive an outcome issue from an orchestrator decision/reissue/
             // meta line or a supervisor line. Those carry prose - e.g. an accept
@@ -1183,6 +1186,11 @@ public class TaskScannerService : ITaskScanner
         if (lower.Contains("[agent-git-violation]"))
         {
             issue = BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[worker-head-advanced]"))
+        {
+            issue = BuildOutcomeIssue("worker-head-advanced", "Worker advanced HEAD", "Info", line, lastSeenAt);
             return true;
         }
         if (lower.Contains("[integration-conflict]"))

@@ -1,7 +1,7 @@
 # Remote hosts runbook
 
 This runbook is the operator path for adding, connecting, draining, retiring,
-reviving, and permanently removing a remote runner host. The detailed Linux
+reviving, and permanently removing a remote agent host. The detailed Linux
 installation reference remains [linux-runner-host.md](setup/linux-runner-host.md).
 
 ## Add a host
@@ -10,7 +10,7 @@ Open **Workspace Settings > Remote hosts > Add host**. The wizard introduced in
 AGT-1922 asks for a stable runner name such as `agent-runner-01` and an SSH
 target such as `runner@host.example.com`.
 
-On Ubuntu, install the base tools and the runner dependencies:
+On Ubuntu, install the base tools and the agent host dependencies:
 
 ```bash
 sudo apt-get update
@@ -53,9 +53,9 @@ Host github-agent-studio
 ```
 
 ```bash
-git -C /opt/agent-runner/source remote set-url origin https://github.com/ORG/REPO.git
-git -C /opt/agent-runner/source remote set-url --push origin git@github-agent-studio:ORG/REPO.git
-git -C /opt/agent-runner/source push --dry-run origin HEAD
+git -C /opt/agent-host/source remote set-url origin https://github.com/ORG/REPO.git
+git -C /opt/agent-host/source remote set-url --push origin git@github-agent-studio:ORG/REPO.git
+git -C /opt/agent-host/source push --dry-run origin HEAD
 ```
 
 Set the same URLs for the daemon:
@@ -70,8 +70,18 @@ it receives work. **Writable: no** means the daemon is read-only and the server
 refuses new claims.
 
 AGT-2141 added per-project repository URLs and isolated shared clones. Configure
-each project repository to move from one remote project to all projects remote;
-the fallback URL above remains the startup probe repository.
+each project repository to move from one remote project to all projects remote.
+The fallback URLs above remain startup probe inputs only. Each project clone
+uses its registry URL for both fetch and push and repairs both values on every
+refresh.
+
+The first claim for each host/project pair is a preflight offer, not a lease.
+The daemon prepares the project's real shared clone, requires its fetch and push
+URLs to match the registered repository URL, fetches, then creates and removes
+a temporary runner ref. This real write exercises server-side hooks and
+permissions that a dry-run can miss. The green result is cached until that
+project registration changes. A failure keeps the card Ready and appears with
+its reason on both the host card and the project's Execution card.
 
 ## Connect the daemon
 
@@ -94,14 +104,16 @@ RUNNER_CLIENT_ID=agent-runner-01
 RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
 RUNNER_MAX_PARALLELISM=2
+# Optional repository-specific requirements:
+RUNNER_REQUIRED_CAPABILITIES=toolchain:dotnet,toolchain:node,toolchain:playwright
 ```
 
 Enable and verify the service:
 
 ```bash
-sudo systemctl enable --now agent-runner
-sudo systemctl is-active agent-runner
-sudo journalctl -u agent-runner -n 100 --no-pager
+sudo systemctl enable --now agent-host
+sudo systemctl is-active agent-host
+sudo journalctl -u agent-host -n 100 --no-pager
 curl -sS https://tasks.example.com/api/clients/agent-runner-01
 ```
 
@@ -109,6 +121,37 @@ The host card reports daemon state (`running`, `read-only`, or `stopped`), last
 claim, active and free slots, running task count, task inflow, last contact, and
 push status. If last contact is older than five minutes, live numbers are hidden
 and the card says when the host was last seen.
+
+## Capability admission
+
+Each coding and review service refreshes a versioned capability advertisement
+every minute. The Task Server treats an advertisement as fresh for three
+minutes. New claims declare their role, provider authentication, source,
+repository, disk, Task Server connectivity, and any configured toolchain
+requirements. Review claims also add the immutable subject's semantic, vision,
+Git, or source-bundle requirements.
+
+A first correlated fault marks one capability suspect. Repetition drains that
+capability and starts a bounded cooldown. When cooldown expires, exactly one
+matching claim becomes the half-open canary. An authoritative typed coding
+terminal, with an immutable handoff when required, or an authoritative
+non-infrastructure review report reopens normal capacity. Product findings
+prove that review infrastructure recovered without becoming a product pass.
+Canary failure returns to a longer cooldown. Do not lower
+`RUNNER_MAX_PARALLELISM` as a repair. Healthy capabilities and unrelated
+services on the same host continue using the configured slots.
+
+Remote Hosts shows the capability state, reason, first and last failure,
+cooldown, canary claim, affected coding and review attempts, and recovery
+history. A stale advertisement is explicitly stale. AGT-2142 telemetry appears
+as live meters only while both its sample and the host heartbeat are fresh.
+
+Automatic whole-host drain is reserved for shared foundations: disk full,
+invalid lease authority, host network isolation, repository filesystem
+corruption, or Task Server authority uncertainty. The UI labels it
+**Automatic whole-host drain**. An operator action is stored and labeled
+separately as **Operator-requested host drain**. Both block new claims, but
+neither kills an existing lease.
 
 ## Drain
 
@@ -147,7 +190,7 @@ afterward so `LastSeenAt`, daemon state, and the push probe become fresh again.
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/revive \
   -H 'X-Client-Id: local-default'
-sudo systemctl restart agent-runner
+sudo systemctl restart agent-host
 ```
 
 ## Remove permanently

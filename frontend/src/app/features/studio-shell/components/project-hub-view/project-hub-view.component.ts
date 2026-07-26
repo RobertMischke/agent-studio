@@ -13,6 +13,7 @@ import {
   ProjectWikiSectionComponent,
   ProjectUrlsPanelComponent,
   ProjectGitPanelComponent,
+  ProjectIntegrationPanelComponent,
   ProjectProposalsPanelComponent,
   ProjectGraphComponent,
   ProjectTestRunsPanelComponent,
@@ -38,6 +39,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'deployment',
   'project-urls',
   'git',
+  'integration',
   'visual-evidence',
   'security',
   'proposals',
@@ -93,6 +95,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectWikiSectionComponent,
     ProjectUrlsPanelComponent,
     ProjectGitPanelComponent,
+    ProjectIntegrationPanelComponent,
     ProjectProposalsPanelComponent,
     ProjectGraphComponent,
     ProjectTestRunsPanelComponent,
@@ -110,6 +113,8 @@ export class ProjectHubViewComponent {
   private readonly tabState = inject(StudioTabStateService);
 
   readonly projectName = input.required<string>();
+  /** Immutable registry identity used when child views serialize shareable URLs. */
+  readonly projectId = input<string | null>(null);
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
   /** Exact Project Pipeline row requested by a task-detail activation link. */

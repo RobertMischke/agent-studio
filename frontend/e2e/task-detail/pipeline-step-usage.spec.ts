@@ -234,7 +234,7 @@ async function installFixtureRoutes(page: Page) {
   await page.route(new RegExp(`/api/tasks/${id}/screenshots(\\?|$)`), route => route.fulfill(json([])));
   await page.route(new RegExp(`/api/tasks/${id}(\\?|$)`), route => route.fulfill(json(jobDetail())));
   await page.route(/\/api\/token-pricing\/calculate/, route => route.fulfill(json({
-    provider: 'CodingAgentRunner (CAR)',
+    provider: 'TokenEconomy',
     items: [{
       model: 'claude-opus-4-8', label: 'Agent execution',
       inputTokens: 88000, outputTokens: 22000, cacheReadTokens: 0, cacheWriteTokens: 0,
@@ -311,6 +311,7 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await expect(costDialog.getByTestId('cost-breakdown-formula')).toContainText('/ 1M × $5.00');
   await expect(costDialog).toContainText('Anthropic published pricing');
   await expect(costDialog).toContainText('Price effective date');
+  await expect(costDialog).toContainText('Provider: TokenEconomy');
   await saveShot(page, 'cost-breakdown-dialog-light--mocked.png');
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');

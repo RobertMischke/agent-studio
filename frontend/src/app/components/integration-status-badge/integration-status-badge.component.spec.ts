@@ -1,7 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { vi } from 'vitest';
 import type { TaskIntegrationStatus, IntegrationStatusValue } from '../../features/git';
 import { IntegrationStatusBadgeComponent } from './integration-status-badge.component';
+import { TaskService } from '../../services/task.service';
+import { NotificationService } from '../../services/notification.service';
 
 function integration(
   status: IntegrationStatusValue,
@@ -20,7 +25,11 @@ describe('IntegrationStatusBadgeComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [IntegrationStatusBadgeComponent],
-      providers: [provideZonelessChangeDetection()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
   });
 
@@ -66,6 +75,52 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(badge.dataset['kind']).toBe('conflict');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
     expect(fixture.componentInstance.tooltip()).toContain('Conflicted: a.txt');
+  });
+
+  it('queues a focused rebase steer round from a conflict card', () => {
+    const tasks = TestBed.inject(TaskService);
+    const refresh = vi.spyOn(tasks, 'refresh').mockImplementation(() => undefined);
+    const notifications = TestBed.inject(NotificationService);
+    const fixture = TestBed.createComponent(IntegrationStatusBadgeComponent);
+    fixture.componentRef.setInput(
+      'integration',
+      integration('conflict-skipped', { detail: 'Conflicted: shared.txt' }),
+    );
+    fixture.componentRef.setInput('jobId', 'task-1');
+    fixture.componentRef.setInput('watchPath', '/tmp/watch');
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-integration-recovery"]',
+    ) as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    button.click();
+    expect(fixture.componentInstance.recoveryPending()).toBe(true);
+
+    const http = TestBed.inject(HttpTestingController);
+    const request = http.expectOne((req) =>
+      req.method === 'POST'
+      && req.url === '/api/tasks/task-1/integration/rebase'
+      && req.params.get('watchPath') === '/tmp/watch',
+    );
+    expect(request.request.body).toBeNull();
+    request.flush({
+      status: 'queued',
+      mode: 'steer',
+      targetState: '2-ready',
+      position: 0,
+      deliveryRef: 'runner/agent-runner-01/AGT-2227',
+      resultSha: 'a'.repeat(40),
+      integrationBranch: 'develop',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.recoveryPending()).toBe(false);
+    expect(refresh).toHaveBeenCalledWith(true);
+    expect(notifications.notifications().at(-1)?.message).toContain(
+      'runner/agent-runner-01/AGT-2227',
+    );
+    http.verify();
   });
 
   it('renders no-branch as grey "kein Branch"', () => {

@@ -18,6 +18,8 @@ using AgentStudio.TaskServer.Contracts;
 /// </summary>
 public sealed class RemoteTaskRunner
 {
+    internal const int MaxEnvironmentPreparationAttempts = 3;
+
     private readonly RunnerOptions _options;
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
@@ -50,7 +52,7 @@ public sealed class RemoteTaskRunner
         if (health is not null)
         {
             _log($"connection lost: cannot reach the task server at {_options.ServerUrl} ({health}). " +
-                 "Verify the reverse tunnel / autossh service is up (agent-runner --health-check) before assigning tasks.");
+                 "Verify the reverse tunnel / autossh service is up (agent-host --health-check) before assigning tasks.");
             return 4;
         }
         _log("preflight ok: task server reachable");
@@ -91,10 +93,20 @@ public sealed class RemoteTaskRunner
         string? runId = null,
         string? leaseInstanceId = null)
     {
+        var isProjectClone = !string.IsNullOrWhiteSpace(projectId);
+        if (isProjectClone && string.IsNullOrWhiteSpace(repositoryUrl))
+        {
+            _log(
+                $"remote-runner-project-not-remote-capable projectId={projectId ?? "unknown"} " +
+                $"task={taskKey} reason=repository-url-not-configured");
+            await ReleaseAsync(lease, CancellationToken.None);
+            return 2;
+        }
+
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
         var workspace = new GitWorkspace(
-            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
+            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch, isProjectClone);
         var slot = _state.Create(
             taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
             projectId, repositoryUrl, defaultBranch, taskKind);
@@ -171,7 +183,6 @@ public sealed class RemoteTaskRunner
         var handedBack = false;
         var teardownAttempted = false;
         var releaseOnly = false;
-        DurableArtifactManifest? artifactManifest = null;
         try
         {
             var execution = reattach
@@ -181,7 +192,7 @@ public sealed class RemoteTaskRunner
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
             await shipper.FlushAsync(shutdown);
-            artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
+            var artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -292,8 +303,6 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     teardown,
                     workspace.RepositoryUrl,
-                    workspace.BaseSha,
-                    artifactManifest.Digest,
                     outputLines,
                     sourceMutated,
                     shutdown);
@@ -322,8 +331,6 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     WorktreeTeardownResult.NoWork,
                     workspace.RepositoryUrl,
-                    baseSha: null,
-                    artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
                     CancellationToken.None);
@@ -371,8 +378,6 @@ public sealed class RemoteTaskRunner
                             outcomeDecision,
                             teardown,
                             workspace.RepositoryUrl,
-                            workspace.BaseSha,
-                            artifactManifest?.Digest,
                             outputLines,
                             sourceMutated,
                             CancellationToken.None);
@@ -411,12 +416,16 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
+        Func<CancellationToken, Task<string>> prepare = epicPlanning
+            ? workspace.PrepareReadOnlyAsync
+            : workspace.PrepareAsync;
         string branch;
         try
         {
-            branch = epicPlanning
-                ? await workspace.PrepareReadOnlyAsync(shutdown)
-                : await workspace.PrepareAsync(shutdown);
+            branch = await RetryEnvironmentPreparationAsync(
+                prepare,
+                _log,
+                shutdown);
         }
         catch (WorktreeSalvageException)
         {
@@ -425,6 +434,12 @@ public sealed class RemoteTaskRunner
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
             throw;
+        }
+        catch (RemoteEnvironmentPreparationException ex)
+        {
+            throw new RemoteClaimPreparationException(
+                DescribePreparationFailure(ex.InnerException ?? ex),
+                ex);
         }
         catch (Exception ex)
         {
@@ -538,12 +553,34 @@ public sealed class RemoteTaskRunner
                 if (result is not null)
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
+                    var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
+                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    {
+                        var provider = RunnerCapabilityProbe.Provider(_options.CliBin);
+                        var claimId = outbox?.Authority.RunId;
+                        var diagnostic = result.StdErr
+                            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                            .LastOrDefault()
+                            ?? $"{provider} exited {result.ExitCode} with an authentication failure";
+                        await _client.ReportCapabilityFailureAsync(
+                            CapabilityProtocol.ProviderAuthentication(provider),
+                            "ProviderUnauthorized",
+                            diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
+                            $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
+                            "run",
+                            claimId,
+                            slot.Lease.FencingToken,
+                            stopRun);
+                        shipper.Add(
+                            "system",
+                            $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                    }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)
                         : ClassifyProcessResult(
                             slot.Lease,
                             workspace,
-                            new ProcessResult(result.ExitCode, result.StdOut, result.StdErr),
+                            processResult,
                             sameSessionResumeAttempts);
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
@@ -839,8 +876,6 @@ public sealed class RemoteTaskRunner
         ExecutionOutcomeDecision outcomeDecision,
         WorktreeTeardownResult teardown,
         string? repository,
-        string? baseSha,
-        string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
         CancellationToken ct)
@@ -866,10 +901,7 @@ public sealed class RemoteTaskRunner
             AttemptId: lease.AttemptId,
             AuthorityEpoch: lease.AuthorityEpoch,
             IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.ResultSha ?? "none"}",
-            OutcomeDecision: outcomeDecision,
-            BaseSha: baseSha,
-            ImmutableResultRef: teardown.ImmutableResultRef ?? teardown.Branch ?? teardown.ResultSha,
-            ArtifactManifestDigest: artifactManifestDigest), ct);
+            OutcomeDecision: outcomeDecision), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
@@ -1023,12 +1055,59 @@ public sealed class RemoteTaskRunner
             SameSessionResumeAttempts,
             FreshSalvageAttempts);
 
+    internal static async Task<T> RetryEnvironmentPreparationAsync<T>(
+        Func<CancellationToken, Task<T>> prepare,
+        Action<string> log,
+        CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
+    {
+        ArgumentNullException.ThrowIfNull(prepare);
+        ArgumentNullException.ThrowIfNull(log);
+        delay ??= Task.Delay;
+
+        Exception? last = null;
+        for (var attempt = 1; attempt <= MaxEnvironmentPreparationAttempts; attempt++)
+        {
+            try
+            {
+                return await prepare(ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not WorktreeSalvageException)
+            {
+                last = ex;
+                log(
+                    $"remote-environment-preparation-failed attempt={attempt}/{MaxEnvironmentPreparationAttempts} " +
+                    $"error={OneLine(ex.Message)}");
+                if (attempt < MaxEnvironmentPreparationAttempts)
+                    await delay(TimeSpan.FromSeconds(attempt), ct);
+            }
+        }
+
+        throw new RemoteEnvironmentPreparationException(
+            MaxEnvironmentPreparationAttempts,
+            last ?? new InvalidOperationException("Environment preparation failed without an exception."));
+    }
+
+    private static string OneLine(string value)
+        => value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+
     private static async Task SafeAwait(Task task)
     {
         try { await task; }
         catch (OperationCanceledException) { /* expected on teardown */ }
         catch { /* background loops already logged their own failures */ }
     }
+}
+
+internal sealed class RemoteEnvironmentPreparationException : Exception
+{
+    public RemoteEnvironmentPreparationException(int attempts, Exception innerException)
+        : base($"Remote environment preparation failed after {attempts} attempts.", innerException)
+    {
+        Attempts = attempts;
+    }
+
+    public int Attempts { get; }
 }
 
 internal sealed record RemoteExecutionResult(

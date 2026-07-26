@@ -8,10 +8,7 @@
             <div class="context-list__row"
                  [class.context-list__row--active]="row.contextKey === activeContextKey()"
                  [attr.data-testid]="'chat-switcher-row-' + row.contextKey">
-              <button type="button"
-                      class="context-list__name"
-                      [appTooltip]="row.explanation"
-                      (click)="select(row.contextKey)">
+              <button type="button" class="context-list__name" (click)="select(row.contextKey)">
                 <span class="context-list__presence"
                       [class.context-list__presence--live]="row.runtimeStatus === 'active'"
                       aria-hidden="true"></span>
@@ -26,7 +23,6 @@
               </button>
               <button type="button" class="context-list__navigate"
                       [attr.aria-label]="'Navigate to ' + row.label"
-                      [appTooltip]="navigationExplanation(row)"
                       [attr.data-testid]="'chat-switcher-navigate-' + row.contextKey"
                       (click)="navigate(row.contextKey, $event)">&rarr;</button>
             </div>

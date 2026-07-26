@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskIntegrationStatus } from '../../features/git';
+import { PendingButtonDirective } from '../async-feedback';
+import { NotificationService } from '../../services/notification.service';
+import { TaskService } from '../../services/task.service';
 
 /**
  * AGT-2202 — the accept-safety badge. Renders the honest, git-derived
@@ -21,13 +24,18 @@ import type { TaskIntegrationStatus } from '../../features/git';
 @Component({
   selector: 'app-integration-status-badge',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, PendingButtonDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './integration-status-badge.component.html',
   styleUrl: './integration-status-badge.component.scss',
 })
 export class IntegrationStatusBadgeComponent {
   readonly integration = input<TaskIntegrationStatus | null | undefined>(null);
+  readonly jobId = input<string | null>(null);
+  readonly watchPath = input<string | null>(null);
+  readonly recoveryPending = signal(false);
+  private readonly notifications = inject(NotificationService);
+  private readonly tasks = inject(TaskService);
 
   /** The card renders the badge only when a verdict is present. */
   readonly visible = computed(() => !!this.integration());
@@ -106,4 +114,25 @@ export class IntegrationStatusBadgeComponent {
       default: return 'No branch to integrate';
     }
   });
+
+  queueRecovery(event: Event): void {
+    event.stopPropagation();
+    const jobId = this.jobId();
+    if (!jobId || this.recoveryPending()) return;
+
+    this.recoveryPending.set(true);
+    this.tasks.queueIntegrationRecovery(jobId, this.watchPath() ?? undefined).subscribe({
+      next: (response) => {
+        this.recoveryPending.set(false);
+        this.notifications.success(
+          `Integration recovery queued: rebase ${response.deliveryRef} onto ${response.integrationBranch}.`,
+        );
+        this.tasks.refresh(true);
+      },
+      error: () => {
+        this.recoveryPending.set(false);
+        this.notifications.error('Could not queue the integration recovery round.');
+      },
+    });
+  }
 }

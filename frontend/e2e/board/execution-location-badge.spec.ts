@@ -47,6 +47,9 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
     const url = route.request().url();
     const taskDetail = new URL(url).pathname.match(/^\/api\/tasks\/([^/]+)$/);
     if (url.includes('/api/tasks/archive')) return json(route, { items: [], total: 0 });
+    if (url.includes('/api/auth/status')) return json(route, {
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    });
     if (route.request().method() === 'GET' && taskDetail && !['archive', 'grouped'].includes(taskDetail[1])) {
       const info = currentTasks().find(item => item.id === decodeURIComponent(taskDetail[1]));
       return json(route, {
@@ -84,8 +87,8 @@ test('shows each concurrent task owner and limits warnings to the stale remote r
   const badges = page.getByTestId('execution-location-badge');
   await expect(badges).toHaveCount(3);
   await expect(badges.nth(0)).toContainText('Local');
-  await expect(badges.nth(1)).toContainText('agent-runner-01');
-  await expect(badges.nth(2)).toContainText('agent-runner-02');
+  await expect(badges.nth(1)).toContainText('Host · agent-runner-01');
+  await expect(badges.nth(2)).toContainText('Host · agent-runner-02');
   await expect(page.locator('[data-execution-state="remote-running"]')).toHaveCount(2);
   await expect(page.locator('[data-execution-state="remote-disconnected"]')).toHaveCount(0);
 

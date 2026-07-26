@@ -105,8 +105,8 @@ export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
   { state: TaskState.Ready, label: 'Ready', icon: '📦' },
   { state: TaskState.Progress, label: 'In Progress', icon: '🔵' },
   { state: TaskState.AutoReview, label: 'Post Processing', icon: '🤖' },
-  { state: TaskState.HumanReview, label: 'Review', icon: '👁️' },
   { state: TaskState.Escalated, label: 'Escalated', icon: '⚠️' },
+  { state: TaskState.HumanReview, label: 'Review', icon: '👁️' },
   { state: TaskState.Completed, label: 'Delivered', icon: '🟢' },
   { state: TaskState.Archive, label: 'Archive', icon: '🗄️' },
 ];

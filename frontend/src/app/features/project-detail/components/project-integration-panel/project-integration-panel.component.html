@@ -1,0 +1,122 @@
+<section class="integration" data-testid="project-integration-panel">
+  <header class="integration__head">
+    <div>
+      <span class="integration__eyebrow">Integration</span>
+      <h2>Merge queue</h2>
+      <p>Accepted work observed from the remote git graph, independent of task acceptance and transient merge signals.</p>
+    </div>
+    <button type="button"
+            class="integration__action"
+            data-testid="integration-refresh"
+            [appPendingButton]="loading()"
+            pendingLabel="Refreshing…"
+            (click)="refresh()">
+      <span>Refresh</span>
+    </button>
+  </header>
+
+  @if (loading() && !view()) {
+    <app-loading-surface kind="list" label="Reading remote integration refs…" />
+  } @else if (!view()) {
+    <div class="integration__empty" data-testid="integration-error">{{ error() || 'No integration state is available.' }}</div>
+  } @else if (view(); as data) {
+    <div class="integration__refs">
+      <span><b>Integration truth</b> <code>{{ data.integrationRef }}</code> <code>{{ data.integrationHeadSha?.slice(0, 7) || 'missing' }}</code></span>
+      <span><b>Release truth</b> <code>{{ data.releaseRef }}</code> <code>{{ data.releaseHeadSha?.slice(0, 7) || 'missing' }}</code></span>
+      <span>Observed {{ when(data.capturedAt) }}</span>
+    </div>
+
+    @if (error()) {
+      <p class="integration__notice">{{ error() }}</p>
+    }
+
+    <section class="integration__section" aria-labelledby="integration-queue-title">
+      <div class="integration__section-head">
+        <div>
+          <h3 id="integration-queue-title">Accepted cards</h3>
+          <p>Every accepted card has one integration outcome.</p>
+        </div>
+        <div class="integration__counts" aria-label="Integration queue counts">
+          <span data-status="merged">{{ counts().merged }} merged</span>
+          <span data-status="waiting">{{ counts().waiting }} waiting</span>
+          <span data-status="conflict">{{ counts().conflict }} conflict</span>
+          <span data-status="skipped">{{ counts().skipped }} skipped</span>
+        </div>
+      </div>
+
+      <div class="integration__table" role="table" data-testid="integration-queue">
+        <div class="integration__table-head" role="row">
+          <span role="columnheader">Card</span><span role="columnheader">State since</span><span role="columnheader">Status</span><span role="columnheader">Evidence</span>
+        </div>
+        @for (item of data.queue; track item.taskId) {
+          <div class="integration__row" role="row" [attr.data-status]="item.status" data-testid="integration-queue-row">
+            <span class="integration__card" role="cell"><code>{{ item.taskKey }}</code><span>{{ item.title }}</span></span>
+            <span role="cell">{{ when(item.stateSince) }}</span>
+            <span role="cell"><span class="integration__status" [attr.data-status]="item.status">{{ statusLabel(item.status) }}</span></span>
+            <span class="integration__reason" role="cell">
+              @if (item.mergeSha) {
+                <code [title]="item.mergeSha">{{ item.mergeSha.slice(0, 7) }}</code>
+              } @else {
+                {{ item.reason || 'No evidence recorded.' }}
+              }
+            </span>
+          </div>
+        } @empty {
+          <p class="integration__empty">No accepted cards are waiting for integration.</p>
+        }
+      </div>
+    </section>
+
+    <section class="integration__section" aria-labelledby="promotion-title" data-testid="promotion-diff">
+      <div class="integration__section-head">
+        <div>
+          <h3 id="promotion-title">Promotion diff</h3>
+          <p><code>{{ data.promotion.fromRef }}</code> → <code>{{ data.promotion.toRef }}</code></p>
+        </div>
+        <div class="integration__stat">
+          <b>{{ data.promotion.tasks.length }}</b> cards
+          <b>{{ data.promotion.filesChanged }}</b> files
+          <span class="integration__add">+{{ data.promotion.added }}</span>
+          <span class="integration__del">-{{ data.promotion.removed }}</span>
+        </div>
+      </div>
+      <div class="integration__promotion-grid">
+        <div class="integration__list">
+          <h4>Change sets</h4>
+          @for (task of data.promotion.tasks; track task.taskKey) {
+            <div class="integration__compact-row" data-testid="promotion-task-row">
+              <code>{{ task.taskKey }}</code><span>{{ task.title || task.subject }}</span><code>{{ task.shortSha }}</code>
+            </div>
+          } @empty { <p class="integration__empty">No card-level change sets are pending promotion.</p> }
+        </div>
+        <div class="integration__list">
+          <h4>File stat</h4>
+          @for (file of data.promotion.files; track file.path) {
+            <div class="integration__file-row" data-testid="promotion-file-row">
+              <span class="integration__file-status">{{ file.status }}</span><code>{{ file.path }}</code>
+              <span><span class="integration__add">+{{ file.added }}</span> <span class="integration__del">-{{ file.removed }}</span></span>
+            </div>
+          } @empty { <p class="integration__empty">No file changes between the release and integration refs.</p> }
+        </div>
+      </div>
+    </section>
+
+    <section class="integration__section" aria-labelledby="publisher-title" data-testid="publisher-merges">
+      <div class="integration__section-head">
+        <div><h3 id="publisher-title">Publisher merges</h3><p>Curated commits the publisher placed on {{ data.integrationRef }}.</p></div>
+        <span class="integration__total">{{ data.publisherMerges.length }} shown</span>
+      </div>
+      <div class="integration__list integration__list--publisher">
+        @for (merge of data.publisherMerges; track merge.sha) {
+          <div class="integration__publisher-row" data-testid="publisher-merge-row">
+            <code>{{ merge.taskKey }}</code>
+            <span>{{ merge.title || merge.subject }}</span>
+            <span>{{ merge.publisher }}</span>
+            <code [title]="merge.sha">{{ merge.shortSha }}</code>
+            <span>{{ when(merge.integratedAt) }}</span>
+          </div>
+        } @empty { <p class="integration__empty">No curated publisher merges found on the integration ref.</p> }
+      </div>
+    </section>
+  }
+</section>

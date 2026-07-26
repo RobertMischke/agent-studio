@@ -70,18 +70,17 @@ describe('App epic tab navigation', () => {
     TestBed.resetTestingModule();
     localStorage.removeItem(TAB_STORAGE_KEY);
     localStorage.setItem(VSCODE_FLAG_KEY, '0');
-    await TestBed.configureTestingModule({
-      imports: [App],
+    TestBed.configureTestingModule({
       providers: [
+        App,
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
       ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(App);
+    });
     return {
-      app: fixture.componentInstance,
+      app: TestBed.inject(App),
       taskService: TestBed.inject(TaskService),
       http: TestBed.inject(HttpTestingController),
     };
@@ -129,6 +128,20 @@ describe('App epic tab navigation', () => {
     const req = http.expectOne((request) =>
       request.url.endsWith(`/api/tasks/${encodeURIComponent(jobId)}`) &&
       request.params.get('watchPath') === watchPath,
+    );
+    req.flush(payload);
+  }
+
+  function flushProjectDetail(
+    http: HttpTestingController,
+    jobId: string,
+    project: string,
+    payload: TaskDetail,
+  ): void {
+    const req = http.expectOne((request) =>
+      request.url.endsWith(`/api/tasks/${encodeURIComponent(jobId)}`) &&
+      request.params.get('project') === project &&
+      !request.params.has('watchPath'),
     );
     req.flush(payload);
   }
@@ -184,7 +197,7 @@ describe('App epic tab navigation', () => {
     app.studioTabState.open({ kind: 'task', taskKey: child.taskKey });
 
     app.onOpenEpicFromTaskAnchor(child, { jobId: epic.id, watchPath: epic.watchPath });
-    flushDetail(http, 'epic-a', 'C:/watch', detail(epic));
+    flushProjectDetail(http, 'epic-a', 'Project A', detail(epic));
 
     expect(app.studioTabState.tabs().map(t => studioTabKey(t))).toEqual([
       'board:__all__',
@@ -193,8 +206,56 @@ describe('App epic tab navigation', () => {
     expect(app.studioTabState.activeTab()).toEqual({
       kind: 'epic',
       epicKey: 'C:/watch::epic-a',
-      viewTaskKey: 'C:/watch::task-a',
     });
+  });
+
+  it('falls back to watchPath and shows the error dialog when both Epic lookups fail', async () => {
+    const { app, http } = await configure();
+    const child = task({
+      id: 'task-a',
+      taskKey: 'C:/watch::task-a',
+      epicId: 'epic-a',
+      kind: 'task',
+    });
+
+    app.onOpenEpicFromTaskAnchor(child, { jobId: 'epic-a', watchPath: 'C:/watch' });
+
+    const projectRequest = http.expectOne((request) =>
+      request.url.endsWith('/api/tasks/epic-a') &&
+      request.params.get('project') === 'Project A',
+    );
+    projectRequest.flush(null, { status: 404, statusText: 'Not Found' });
+
+    const fallbackRequest = http.expectOne((request) =>
+      request.url.endsWith('/api/tasks/epic-a') &&
+      request.params.get('watchPath') === 'C:/watch',
+    );
+    fallbackRequest.flush(null, { status: 404, statusText: 'Not Found' });
+
+    expect(app.errorDialog.activeError()?.title).toBe('Failed to open epic');
+    expect(app.errorDialog.activeError()?.source).toBe('task epic-a');
+  });
+
+  it('shows the error dialog when the parent lookup resolves to a non-Epic task', async () => {
+    const { app, http } = await configure();
+    const child = task({
+      id: 'task-a',
+      taskKey: 'C:/watch::task-a',
+      epicId: 'epic-a',
+      kind: 'task',
+    });
+    const unexpectedTask = task({
+      id: 'epic-a',
+      taskKey: 'C:/watch::epic-a',
+      kind: 'task',
+    });
+
+    app.onOpenEpicFromTaskAnchor(child, { jobId: 'epic-a', watchPath: 'C:/watch' });
+    flushProjectDetail(http, 'epic-a', 'Project A', detail(unexpectedTask));
+
+    expect(app.errorDialog.activeError()?.title).toBe('Failed to open epic');
+    expect(app.errorDialog.activeError()?.message).toContain('is not an epic');
+    expect(app.studioTabState.activeTab()?.kind).toBe('board');
   });
 
   it('swaps the epic tab in place to the sub-task without opening a second panel/tab', async () => {
@@ -264,16 +325,16 @@ describe('App studio-tab mirror (pager reuse)', () => {
     TestBed.resetTestingModule();
     localStorage.removeItem(TAB_STORAGE_KEY);
     localStorage.setItem(VSCODE_FLAG_KEY, '1');
-    await TestBed.configureTestingModule({
-      imports: [App],
+    TestBed.configureTestingModule({
       providers: [
+        App,
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
       ],
-    }).compileComponents();
-    return TestBed.createComponent(App).componentInstance;
+    });
+    return TestBed.inject(App);
   }
 
   function taskDetail(id: string): TaskDetail {

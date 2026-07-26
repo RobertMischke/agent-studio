@@ -1,29 +1,30 @@
 # Token pricing
 
-> **Status (2026-07-11):** Live. Pricing is owned by the
-> `CodingAgentRunner` package. Studio contains no model rates.
+> **Status (2026-07-21):** Live. Pricing is owned by the published
+> `TokenEconomy` package. Studio contains no model rates.
 
 ## Contract
 
 Every Studio cost calculation goes through
-`backend/Features/Runner/TokenPricing.cs`. This is a compatibility adapter over
-`CodingAgentRunner.Pricing.ModelPriceCatalog.Default` and its CAR-3 historical
-pricing API.
+`backend/Features/Runner/TokenPricing.cs`. The package-specific implementation
+in `backend/Features/Runner/TokenEconomyPriceProvider.cs` adapts
+`TokenEconomy.ModelPriceCatalog.Default` and its historical pricing API.
 
 The adapter is exposed through `ITokenPriceProvider`; the active
-`CarTokenPriceProvider` is the only CAR-specific implementation. This seam is
-the migration boundary for the published TokenEconomy package. Aggregators and
-frontend contracts must not depend on either provider package directly.
+`TokenPricing.Provider` configuration selects `TokenEconomyPriceProvider`, the
+package-specific implementation from the exactly pinned `TokenEconomy` 0.2.0
+dependency. Aggregators and frontend contracts do not depend on the provider
+package directly.
 
-Callers must supply the run or event timestamp. CAR selects the catalog entry
+Callers must supply the run or event timestamp. TokenEconomy selects the catalog entry
 whose `ValidFrom` applies at that time. Repricing old usage with today's rate is
 not allowed. Model metadata in `CliModels.cs` exposes current rates only as a
 catalog pass-through for discovery consumers; it owns no price numbers.
 
-CAR distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`. Studio maps
-only `Resolved` to a dollar value. The other states keep the token count and set
-the existing unknown-price flags so UI surfaces render `Unknown`, never a
-silent `$0.00`.
+TokenEconomy distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`.
+Studio maps only `Resolved` to a dollar value. The other states keep the token
+count and set the existing unknown-price flags so UI surfaces render `Unknown`,
+never a silent `$0.00`.
 
 ## Cost surfaces
 
@@ -66,6 +67,9 @@ must use this helper instead of composing local tooltip strings.
 
 ## Verification
 
-`backend.Tests/TokenPricingTests.cs` pins the adapter to the CAR catalog,
-including alias normalization, unknown-model behavior, no-price behavior, and
-selection by run timestamp. Aggregator tests cover the shared consumers.
+`backend.Tests/TokenPricingTests.cs` pins the provider adapter to the
+TokenEconomy catalog, including alias normalization, unknown-model behavior,
+no-price behavior, selection by run timestamp, and the configured provider
+identity. The adapter also preserves the four effective rates, source, and
+effective date returned to the shared calculation modal. Aggregator tests cover
+the shared consumers.

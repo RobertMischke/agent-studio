@@ -52,6 +52,6 @@ describe('CouncilReviewReactionComponent', () => {
     expect(root.textContent).toContain('Dark-theme colors are incorrect');
     expect(root.textContent).toContain('Fix next round');
     expect(root.querySelector<HTMLElement>('section')?.dataset['disposition']).toBe('reissue');
-    expect(root.querySelector('a')?.getAttribute('href')).toContain('task=AGT-2108');
+    expect(root.querySelector('a')?.getAttribute('href')).toContain('#/tasks/AGT-2108');
   });
 });

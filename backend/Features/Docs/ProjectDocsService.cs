@@ -2280,12 +2280,17 @@ public class ProjectDocsService
     /// each alphabetical. Pages carry a sniffed title (first H1 / frontmatter
     /// title for markdown, <c>&lt;title&gt;</c> for HTML, file name fallback)
     /// and a plain-text summary (first text paragraph, markup stripped, max 240
-    /// chars); folders carry a non-recursive child count instead. An empty
+    /// chars); folders carry a non-recursive child count instead. Page dates
+    /// come from the author date of the most recent commit for each file. The
+    /// complete per-file history index is loaded in one batch and cached by
+    /// repository HEAD; filesystem mtime is used only when a page has no git
+    /// history and is identified through <see cref="WikiFolderChild.UpdatedAtSource"/>.
+    /// Folder dates are the newest date among their descendant pages. An empty
     /// <paramref name="relPath"/> lists the wiki root. Returns null when the
     /// project is unknown, the path is unsafe (same traversal guard as the
     /// file endpoints), or the folder does not exist.
     /// </summary>
-    public WikiFolderView? GetWikiFolder(string projectName, string? relPath)
+    public WikiFolderView? GetWikiFolder(string projectName, string? relPath, GitService? git = null)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
@@ -2314,6 +2319,7 @@ public class ProjectDocsService
 
         var dir = new DirectoryInfo(full);
         var children = new List<WikiFolderChild>();
+        var gitDates = LoadWikiGitDateIndex(projectName, root, git);
 
         foreach (var sub in dir.GetDirectories())
         {
@@ -2321,6 +2327,7 @@ public class ProjectDocsService
             var subRel = Path.GetRelativePath(root, sub.FullName).Replace('\\', '/');
             if (IsWikiAppPath(subRel)) continue; // hide docs/app/ from the folder overview
             if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
+            var updated = GetFolderUpdatedAt(sub, root, gitDates);
             children.Add(new WikiFolderChild(
                 Name: sub.Name,
                 RelPath: subRel,
@@ -2328,15 +2335,17 @@ public class ProjectDocsService
                 FileType: null,
                 Title: StripOrderPrefix(sub.Name),
                 Summary: null,
-                UpdatedAt: sub.LastWriteTimeUtc,
+                UpdatedAt: updated?.At,
                 Size: null,
-                ChildCount: CountDirectFolderChildren(sub)));
+                ChildCount: CountDirectFolderChildren(sub),
+                UpdatedAtSource: updated?.Source));
         }
 
         foreach (var file in dir.GetFiles())
         {
             if (!IsWikiFolderPage(file)) continue;
             var fileRel = Path.GetRelativePath(root, file.FullName).Replace('\\', '/');
+            var updated = GetPageUpdatedAt(file, gitDates);
             children.Add(new WikiFolderChild(
                 Name: file.Name,
                 RelPath: fileRel,
@@ -2345,10 +2354,11 @@ public class ProjectDocsService
                 Title: ExtractWikiPageTitle(file.FullName, file.Extension)
                     ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name)),
                 Summary: ExtractWikiPageSummary(file.FullName, file.Extension),
-                UpdatedAt: file.LastWriteTimeUtc,
+                UpdatedAt: updated.At,
                 Size: file.Length,
                 ChildCount: null,
-                Classification: ReadPageClassification(file.FullName, fileRel)));
+                Classification: ReadPageClassification(file.FullName, fileRel),
+                UpdatedAtSource: updated.Source));
         }
 
         // Same saved category drag-order as the tree; unlisted folders keep the
@@ -2368,6 +2378,79 @@ public class ProjectDocsService
         });
 
         return new WikiFolderView(rel, dir.Name, children);
+    }
+
+    private sealed record WikiGitDateIndex(
+        string RepoRoot,
+        IReadOnlyDictionary<string, DateTime> DatesByRepoPath);
+
+    private readonly record struct WikiUpdatedAt(DateTime At, string Source);
+
+    /// <summary>
+    /// Builds the lookup used by every row in a folder response. The underlying
+    /// git service reuses the same <c>git log --name-only</c> parser as the
+    /// recent-edits feed and memoizes the complete result by HEAD, so this is
+    /// one batch spawn on a cold repository state and no per-file git work.
+    /// </summary>
+    private static WikiGitDateIndex? LoadWikiGitDateIndex(
+        string projectName, string wikiRoot, GitService? git)
+    {
+        if (git == null) return null;
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return null;
+
+        repoRoot = Path.GetFullPath(repoRoot);
+        var rootWithSep = repoRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? repoRoot
+            : repoRoot + Path.DirectorySeparatorChar;
+        if (!wikiRoot.Equals(repoRoot, StringComparison.OrdinalIgnoreCase)
+            && !wikiRoot.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiRoot).Replace('\\', '/');
+        var dates = git.GetLatestFileEditsUnderPathCached(repoRoot, docsRepoRel)
+            .ToDictionary(e => e.RepoRelPath, e => e.AuthorDateUtc, StringComparer.OrdinalIgnoreCase);
+        return new WikiGitDateIndex(repoRoot, dates);
+    }
+
+    private static WikiUpdatedAt GetPageUpdatedAt(FileInfo file, WikiGitDateIndex? gitDates)
+    {
+        if (gitDates != null)
+        {
+            var repoRel = Path.GetRelativePath(gitDates.RepoRoot, file.FullName).Replace('\\', '/');
+            if (gitDates.DatesByRepoPath.TryGetValue(repoRel, out var authorDate))
+                return new WikiUpdatedAt(authorDate, "git");
+        }
+
+        return new WikiUpdatedAt(file.LastWriteTimeUtc, "mtime");
+    }
+
+    /// <summary>
+    /// A folder has no commit date of its own. Its displayed date therefore
+    /// follows the newest navigable descendant page. If that winning page is
+    /// untracked, the folder carries the same marked mtime fallback.
+    /// </summary>
+    private static WikiUpdatedAt? GetFolderUpdatedAt(
+        DirectoryInfo folder, string wikiRoot, WikiGitDateIndex? gitDates)
+    {
+        WikiUpdatedAt? newest = null;
+        try
+        {
+            foreach (var path in folder.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                if (!IsWikiFolderPage(path)) continue;
+                var rel = Path.GetRelativePath(wikiRoot, path.FullName).Replace('\\', '/');
+                if (IsHiddenWikiPath(rel) || IsWikiAppPath(rel)) continue;
+                var updated = GetPageUpdatedAt(path, gitDates);
+                if (newest == null || updated.At > newest.Value.At)
+                    newest = updated;
+            }
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable folder while deriving wiki git date.");
+        }
+        return newest;
     }
 
     private static bool IsWikiFolderPage(FileInfo file) =>
@@ -3133,12 +3216,15 @@ public record WikiFolderChild(
     string? FileType,
     string Title,
     string? Summary,
-    DateTime UpdatedAt,
+    DateTime? UpdatedAt,
     long? Size,
     int? ChildCount,
     // Page rows only: the curated classification (sidecar first, folder-default
     // type as fallback); null for folders and unclassified pages.
-    WikiClassification? Classification = null);
+    WikiClassification? Classification = null,
+    // "git" for the last commit's author date; "mtime" only when no commit
+    // exists for the page (typically a new, untracked local file).
+    string? UpdatedAtSource = null);
 
 // ---- Wiki home (curated landing sections) ----
 

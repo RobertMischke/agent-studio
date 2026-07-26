@@ -26,4 +26,28 @@ public sealed class ArchitectureBoundaryTests
             Assert.DoesNotContain("Angular", text, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    [Fact]
+    public void Production_profile_is_a_self_contained_single_file_with_its_own_backup_timer()
+    {
+        var root = ProtocolTests.RepositoryRoot();
+        var profile = File.ReadAllText(Path.Combine(
+            root,
+            "task-server",
+            "Properties",
+            "PublishProfiles",
+            "linux-x64.pubxml"));
+        Assert.Contains("<RuntimeIdentifier>linux-x64</RuntimeIdentifier>", profile);
+        Assert.Contains("<SelfContained>true</SelfContained>", profile);
+        Assert.Contains("<PublishSingleFile>true</PublishSingleFile>", profile);
+        Assert.Contains("<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>", profile);
+
+        var timerService = File.ReadAllText(Path.Combine(
+            root,
+            "deploy",
+            "systemd",
+            "agent-task-server-backup.service"));
+        Assert.Contains("task-server backup --name timer", timerService);
+        Assert.Contains("EnvironmentFile=/etc/agent-orchestrator/server.env", timerService);
+    }
 }

@@ -61,7 +61,7 @@
   figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
   figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
   figcaption b { color: var(--ink-1); }
-  /* Evidence-class chips — the rigor device borrowed from the token-economy workbench */
+  /* Evidence-class chips - the rigor device borrowed from the token-economy workbench */
   .ec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
   .ec.hard   { background: var(--ok-soft);     color: var(--ok); }
   .ec.interp { background: var(--warn-soft);   color: var(--warn); }
@@ -78,8 +78,8 @@
   <p class="kicker">Concept Workbench · Agent Studio</p>
   <h1>Pipeline Time Economy: where time and tokens actually go</h1>
   <p class="lede">A whole-pipeline measurement over 847 tasks. It answers a simple question with an
-  uncomfortable split — most wall time is not compute, most compute is redo, and almost all tokens sit in
-  one step — and it keeps deterministic facts separate from derived interpretation throughout.</p>
+  uncomfortable split - most wall time is not compute, most compute is redo, and almost all tokens sit in
+  one step - and it keeps deterministic facts separate from derived interpretation throughout.</p>
   <div class="meta">
     <span><b>As of:</b> 2026-07-25</span>
     <span><b>Sample:</b> 847 tasks with <code>pipeline-execution.json</code>, 2,396 attempts</span>
@@ -95,7 +95,7 @@
     <li><a href="#method">§1 Method, sample, and evidence classes</a></li>
     <li><a href="#compute">§2 Where compute time goes</a></li>
     <li><a href="#wall">§3 Wall time: waiting, redo, first work</a></li>
-    <li><a href="#retry">§4 The retry tax — and what a retry is</a></li>
+    <li><a href="#retry">§4 The retry tax - and what a retry is</a></li>
     <li><a href="#causes">§5 Why tasks re-run: the cause taxonomy</a></li>
     <li><a href="#money">§6 Time is not money</a></li>
     <li><a href="#anomaly">§7 One measurement anomaly</a></li>
@@ -108,16 +108,16 @@
   <p>Of 798 hours of wall time, roughly 38% is waiting (no compute), 41% is redo (retries), and 21% is
   first-attempt work. Of the compute itself, the LLM coding step is 66.8% and carries about 98% of all
   tokens; the test gate is 16.6% and carries none. Most retries are the intended orchestrator quality loop
-  — 978 adapted reissue prompts, 78% of post-processing outcomes <code>findings-added</code> — not dumb
+  - 978 adapted reissue prompts, 78% of post-processing outcomes <code>findings-added</code> - not dumb
   repeats. Therefore: optimizing compute or test time buys <b>throughput</b>, not money. The money lever is
-  the coding step — fewer and shorter model re-runs. The absolute numbers drift; the ratios do not.</p>
+  the coding step - fewer and shorter model re-runs. The absolute numbers drift; the ratios do not.</p>
 </section>
 
 <h2 id="method"><span class="no">§1</span>Method, sample, and evidence classes</h2>
 <p>Every task Agent Studio runs records a per-step ledger in <code>pipeline-execution.json</code>: a
 <code>stepId</code>, a status, a <code>durationMs</code>, and token counters, for the current attempt plus
 an archive of <code>previousAttempts</code>. We aggregated those fields across all attempts over
-<code>projects/agent-taskboard/tasks/**</code> — 847 tasks that carried pipeline data, out of 1,314 task
+<code>projects/agent-taskboard/tasks/**</code> - 847 tasks that carried pipeline data, out of 1,314 task
 folders scanned, for 2,396 total attempts.</p>
 <p>Following the discipline of the <a href="../token-economy-task-data/">token-economy-task-data</a>
 workbench, each figure below is tagged by evidence class:</p>
@@ -127,7 +127,7 @@ workbench, each figure below is tagged by evidence class:</p>
   <tbody>
     <tr><td><span class="ec hard">Hard</span></td><td>Deterministic, directly counted facts about recorded runs.</td><td>Step durations, per-step token counters, attempt records, gate verdicts, reissue-prompt files, outcome kinds.</td></tr>
     <tr><td><span class="ec interp">Interpretation</span></td><td>Derived quantities that need an assumption.</td><td>Money cost (needs pricing), the wall-time "waiting" split (wall − step-sum), the 2000× ratio.</td></tr>
-    <tr><td><span class="ec judged">Model-judged</span></td><td>Reviewer-model outputs, no ground truth.</td><td>Aspect verdicts and grades — used here only to count re-run causes, never to rank quality.</td></tr>
+    <tr><td><span class="ec judged">Model-judged</span></td><td>Reviewer-model outputs, no ground truth.</td><td>Aspect verdicts and grades - used here only to count re-run causes, never to rank quality.</td></tr>
   </tbody>
 </table>
 </div>
@@ -136,7 +136,7 @@ workbench, each figure below is tagged by evidence class:</p>
   <ul>
     <li><b>Attempt archive is capped.</b> <code>PipelineExecutionLog</code> keeps at most 10
     <code>previousAttempts</code> on disk. Tasks with more re-runs are undercounted, so all attempt and
-    retry-time figures are a <b>conservative floor</b> — the live API shows individual tasks reaching 22
+    retry-time figures are a <b>conservative floor</b> - the live API shows individual tasks reaching 22
     attempts.</li>
     <li><b>A missing field is a gap, not a zero.</b> Absent token or duration values are coverage gaps and
     must not be read as "no tokens" or "no time." The one true zero is the <b>test gate</b>: it is a
@@ -184,7 +184,7 @@ rounding error.</p>
     <line x1="360" y1="10" x2="360" y2="264" stroke="var(--line)"/>
   </svg>
   <figcaption><b>Fig. 1: Compute time by step.</b> The coding step is roughly four times the test gate.
-  <code>post-abort-review</code> is unexpectedly large for a step that runs on so few tasks — see §7.</figcaption>
+  <code>post-abort-review</code> is unexpectedly large for a step that runs on so few tasks - see §7.</figcaption>
 </figure>
 
 <h2 id="wall"><span class="no">§3</span>Wall time: waiting, redo, first work <span class="ec interp">Interpretation</span></h2>
@@ -204,15 +204,15 @@ itself into first attempt and retry, and the picture inverts the usual intuition
     <text x="1000" y="100" text-anchor="end" class="svg-label">9,940 min first-run compute</text>
   </svg>
   <figcaption><b>Fig. 2: Anatomy of 47,895 minutes of wall time.</b> Roughly four minutes in five are either
-  idle or redo. "Waiting" is a derived figure — it aggregates cross-attempt gaps (queue, lease, human
+  idle or redo. "Waiting" is a derived figure - it aggregates cross-attempt gaps (queue, lease, human
   review, restart orphaning) and should be read as an order of magnitude, not a stopwatch.</figcaption>
 </figure>
 <p>The single largest reducible quantity is redo: if every task ran exactly once, 19,871 minutes of compute
 (66.7% of the total, a floor given the attempt cap) would not exist. That is a bigger lever than tests,
-waiting, or token trimming. But "reducible" is not "waste" — §5 shows most of it is the quality loop working
+waiting, or token trimming. But "reducible" is not "waste" - §5 shows most of it is the quality loop working
 as designed.</p>
 
-<h2 id="retry"><span class="no">§4</span>The retry tax — and what a retry is <span class="ec hard">Hard</span></h2>
+<h2 id="retry"><span class="no">§4</span>The retry tax - and what a retry is <span class="ec hard">Hard</span></h2>
 <p>Precision matters here, because "retry" is easy to conflate with an unrelated mechanism. An <b>attempt</b>
 is one full pipeline execution recorded in <code>pipeline-execution.json</code>; a <b>retry</b> is any
 attempt after the first. In the code, a new attempt opens only when the runner re-picks-up a card after a
@@ -232,7 +232,7 @@ same record. It never increments the attempt counter.</p>
 </table>
 </div>
 <p>The tax is a multiplier on the whole post-step chain. The test gate ran 1,954 times across 535 tasks that
-had one — about 3.65 runs per task — and 84% of its total time was retries. Reviewing aspects, grading, and
+had one - about 3.65 runs per task - and 84% of its total time was retries. Reviewing aspects, grading, and
 integration all re-run the same way.</p>
 
 <h2 id="causes"><span class="no">§5</span>Why tasks re-run: the cause taxonomy <span class="ec hard">Hard</span> <span class="ec judged">Model-judged</span></h2>
@@ -278,13 +278,13 @@ outcome in <code>post-processing-outcomes.jsonl</code>.</p>
   reissue prompts across 437 tasks (avg 2.24, up to 16). Together with 78% <code>findings-added</code>
   outcomes, this says the bulk of re-runs are the <em>intended</em> quality loop. The clearly-technical cause
   is smaller and separable: <b>560</b> <code>failed-post-processing</code> events, almost all test-gate
-  timeouts. The reducible waste is therefore narrower than "66% of compute" — it is redundant re-testing of
+  timeouts. The reducible waste is therefore narrower than "66% of compute" - it is redundant re-testing of
   unchanged trees plus those timeouts, not the quality iteration itself.</p>
 </div>
 
 <h2 id="money"><span class="no">§6</span>Time is not money <span class="ec hard">Hard</span> <span class="ec interp">Interpretation</span></h2>
-<p>Time and cost barely correlate here, and conflating them misdirects optimization. Tokens — the expensive
-resource — are a hard count, and they concentrate almost entirely in one step:</p>
+<p>Time and cost barely correlate here, and conflating them misdirects optimization. Tokens - the expensive
+resource - are a hard count, and they concentrate almost entirely in one step:</p>
 <div class="tablewrap">
 <table>
   <thead><tr><th>Step group</th><th class="num">Tokens (in+out)</th><th class="num">Share</th><th>Class</th></tr></thead>
@@ -297,7 +297,7 @@ resource — are a hard count, and they concentrate almost entirely in one step:
 </div>
 <p>Put a price on it and the asymmetry is stark. At a roughly blended token price the corpus is on the order
 of <b>~$8,400</b> in tokens; the 82 CPU-hours of test time are about <b>$4</b> on a throwaway cloud vCPU and
-effectively <b>$0</b> on owned hardware. Test CPU is therefore around <b>0.05%</b> of the token spend — a
+effectively <b>$0</b> on owned hardware. Test CPU is therefore around <b>0.05%</b> of the token spend - a
 ratio near <b>2000×</b>.</p>
 <div class="box">
   <p class="dim"><span class="ec interp">Interpretation</span> &nbsp;The dollar figures depend on a pricing
@@ -305,11 +305,11 @@ ratio near <b>2000×</b>.</p>
   magnitude, not a bill. What is robust is the direction and the size of the gap, not the exact numbers.</p>
 </div>
 <p>The consequence is concrete: saving test-gate or wait time buys throughput but almost no budget. Saving
-money means touching the coding step — fewer and shorter coding re-runs, which loops back to §5.</p>
+money means touching the coding step - fewer and shorter coding re-runs, which loops back to §5.</p>
 
 <h2 id="anomaly"><span class="no">§7</span>One measurement anomaly <span class="ec interp">Interpretation</span></h2>
 <div class="box warn">
-  <p><code>post-abort-review</code> reports <b>2,258 minutes over just 57 runs</b> — about 40 minutes per run —
+  <p><code>post-abort-review</code> reports <b>2,258 minutes over just 57 runs</b> - about 40 minutes per run -
   at <b>zero recorded tokens</b>. For an LLM assessment step (the "intelligent abort review", ADR-0054) that
   combination is implausible: either the duration includes waiting on a downstream rerun, or the step's
   <code>durationMs</code> attribution is wrong. This is exactly the kind of signal the coverage rules warn
@@ -324,13 +324,13 @@ reissue-prompt and outcome counts.</p>
 <p><b>Interpretation, use with the stated assumption:</b> the money comparison, the 2000× ratio, and the
 wall-time "waiting" share.</p>
 <p><b>Not supported:</b> any ranking of coding-model quality, and any absolute rate for all Agent Studio tasks
-— this sample is conditioned on having pipeline data and is not a controlled cohort. For a rigorous
+- this sample is conditioned on having pipeline data and is not a controlled cohort. For a rigorous
 model-comparison design, see the frozen-scenario plan in
 <a href="../token-economy-task-data/">token-economy-task-data</a>.</p>
 <div class="box accent">
   <h4>Where this leads</h4>
   <p>The one optimization that pays off in money is reducing coding re-runs, which means making the quality
-  loop converge faster — for example, evaluating whether sharper reissue prompts reach an accepted result in
+  loop converge faster - for example, evaluating whether sharper reissue prompts reach an accepted result in
   fewer attempts. The one that pays off in throughput is taking redundant re-testing off the serialized gate,
   which is the subject of the sibling proposal
   <a href="../../operations/async-validation-staging-lane/">Async Validation &amp; the Test Staging Lane</a>.</p>

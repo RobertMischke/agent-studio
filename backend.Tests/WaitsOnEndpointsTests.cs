@@ -175,6 +175,38 @@ public sealed class WaitsOnEndpointsTests : IDisposable
             Assert.Equal(JsonValueKind.Null, waitsOn.ValueKind);
     }
 
+    [Fact]
+    public async Task Grouped_HumanReviewCard_CarriesSortedTransitiveDecisionBacklogImpact()
+    {
+        WriteJob(_libWatch, TaskStates.HumanReview, "decision", "LIB-1");
+        WriteJob(_appWatch, TaskStates.Ready, "direct", "APP-1", dependsOn: new[] { "LIB-1" });
+        WriteJob(_appWatch, TaskStates.Ready, "branch-a", "APP-2", dependsOn: new[] { "APP-1" });
+        WriteJob(_appWatch, TaskStates.Ready, "branch-b", "APP-3", dependsOn: new[] { "APP-1" });
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+
+        using var resp = await client.GetAsync("/api/tasks/grouped");
+        resp.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+
+        var card = FindCard(doc.RootElement.GetProperty("humanReview"), "decision");
+        var impact = card.GetProperty("transitiveWaiters");
+        Assert.Equal(3, impact.GetProperty("count").GetInt32());
+        Assert.Equal(
+            new[] { "APP-1", "APP-2", "APP-3" },
+            impact.GetProperty("keys").EnumerateArray().Select(x => x.GetString()).ToArray());
+
+        using var detailResp = await client.GetAsync(
+            $"/api/tasks/decision?watchPath={Uri.EscapeDataString(_libWatch)}");
+        detailResp.EnsureSuccessStatusCode();
+        using var detailDoc = JsonDocument.Parse(await detailResp.Content.ReadAsStringAsync());
+        Assert.Equal(
+            3,
+            detailDoc.RootElement.GetProperty("info")
+                .GetProperty("transitiveWaiters").GetProperty("count").GetInt32());
+    }
+
     // ---- WRITE endpoint: PUT /references response shape ------------------
 
     [Fact]

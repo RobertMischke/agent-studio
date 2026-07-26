@@ -10,7 +10,6 @@ import {
 } from '../../../../services/format.util';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
-import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
@@ -410,15 +409,6 @@ export class DetailHeaderComponent {
 
   readonly relativeCreated = computed(() => fmtRelativeShort(this.info().createdAt, this.nowTick()));
   readonly createdAtTooltip = computed(() => fmtDateTime(this.info().createdAt));
-
-  /**
-   * ASS-1751: run-activity pill mirrored from the kanban card so the detail
-   * header explains a 3-progress task's run state at a glance — a live run, a
-   * failed run waiting out the rapid-crash backoff (with retry time), or an
-   * orphan ended by a backend restart. Null off the Progress lane. Re-evaluates
-   * with the shared tick so "retry at HH:MM" stays fresh.
-   */
-  readonly runActivityBadge = computed(() => buildRunActivityBadge(this.info(), this.nowTick()));
 
   readonly identity = computed(() => projectIdentity(this.info().projectName));
 

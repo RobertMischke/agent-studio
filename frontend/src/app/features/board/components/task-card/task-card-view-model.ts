@@ -1025,6 +1025,23 @@ export type PhaseBadgeTone =
   | 'awaiting-review';
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
+export interface QuotaWaitBadge { label: string; minutesLeft: number; tooltip: string; }
+
+/** Visible Run-Liveness-style projection of the durable quota-wait marker. */
+export function buildQuotaWaitBadge(wait: TaskInfo['quotaWait'], nowMs: number): QuotaWaitBadge | null {
+  if (!wait?.resetAt) return null;
+  const resetMs = Date.parse(wait.resetAt);
+  if (!Number.isFinite(resetMs)) return null;
+  const minutesLeft = Math.max(0, Math.ceil((resetMs - nowMs) / 60_000));
+  const resetLabel = new Date(resetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const remaining = minutesLeft > 0 ? `${minutesLeft} min remaining` : 'reset due · refreshing';
+  return {
+    label: `Waiting for quota reset ${resetLabel} · ${remaining}`,
+    minutesLeft,
+    tooltip: `${wait.reason}. The runner keeps this state visible and retries admission after refreshing ${wait.cliType} quota.`,
+  };
+}
+
 /**
  * Format a steer wait as compact total-minutes `mm:ss`. The card keeps this
  * established long-wait representation while lifecycle labels elsewhere use
@@ -1307,6 +1324,17 @@ export function formatAutoReviewWait(elapsedMs: number): string {
 const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
 export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
+
+/** Decision-backlog impact is independent of the orchestrator review verdict. */
+export function buildDecisionDamBadge(job: TaskInfo): HumanReviewBadge | null {
+  const impact = job.transitiveWaiters;
+  if (job.state !== TaskState.HumanReview || !impact || impact.count <= 0) return null;
+  return {
+    label: `Dams ${impact.count} ${impact.count === 1 ? 'card' : 'cards'}`,
+    tone: 'attention',
+    tooltip: `Transitive decision backlog (${impact.count}): ${impact.keys.join(', ')}. These cards wait directly or indirectly on this decision.`,
+  };
+}
 
 /**
  * Human-decision badge. An escalated / reissue card parked in 5-human-review

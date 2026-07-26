@@ -4,10 +4,29 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>agent-task-server</AssemblyName>
+    <AssemblyName>task-server</AssemblyName>
     <RootNamespace>AgentStudio.TaskServer</RootNamespace>
     <Version>1.0.0</Version>
   </PropertyGroup>
+
+  <Target Name="StampTaskServerBuildIdentity" BeforeTargets="GenerateAssemblyInfo">
+    <Exec
+      Command="git -C &quot;$(MSBuildProjectDirectory)&quot; rev-parse HEAD"
+      ConsoleToMSBuild="true"
+      IgnoreExitCode="true"
+      StandardOutputImportance="Low"
+      StandardErrorImportance="Low"
+      Condition="'$(SourceRevisionId)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SourceRevisionId" />
+    </Exec>
+    <PropertyGroup>
+      <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">unknown</SourceRevisionId>
+      <InformationalVersion>$(Version)+sha.$(SourceRevisionId)</InformationalVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyMetadata Include="RepositoryCommit" Value="$(SourceRevisionId)" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
@@ -18,5 +37,18 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TaskServer.Tests" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings*.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <Target
+    Name="RemoveSingleFilePublishSidecars"
+    AfterTargets="Publish"
+    Condition="'$(PublishSingleFile)' == 'true' and '$(RuntimeIdentifier)' == 'linux-x64'">
+    <Delete Files="$(PublishDir)TaskServer.Contracts.pdb" />
+    <Delete Files="$(PublishDir)libe_sqlite3.a" />
+    <Delete Files="$(PublishDir)$(AssemblyName).staticwebassets.endpoints.json" />
+  </Target>
 
 </Project>

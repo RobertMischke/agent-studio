@@ -1,7 +1,7 @@
 # Token-budget load management — spend the budget, never hit the wall
 
-**Status:** concept v1, 2026-07-10 — operator-directed after two quota walls
-in 24h (night: claude dry → 32 cards parked; noon: codex 5h window dry →
+**Status:** concept v2, 2026-07-22. Operator-directed after two quota walls
+in 24h (night: claude dry -> 32 cards parked; noon: codex 5h window dry ->
 launch-failure cascade). Related:
 [`orchestrator-in-app.md`](orchestrator-in-app.md) (transparency layer),
 [`publishing-workflows.md`](publishing-workflows.md) §9 pattern, AGT-2040
@@ -10,7 +10,7 @@ launch-failure cascade). Related:
 ## 1. The framing (operator, verbatim anchors)
 
 - "Ich habe ein **Token-Budget** und ich möchte es **effizient ausnutzen**."
-- The load algorithm must be an **algorithm, not a CLI call** — never learn
+- The load algorithm must be an **algorithm, not a CLI call**. Never learn
   about a dry quota by burning a launch (and a reissue budget) against it.
 - Two axes, deliberately separate: **Calculation** (what do tokens cost —
   the pricing library, CAR-3, shipped) and **Selection** (which model do I
@@ -27,19 +27,30 @@ Every admission decision runs through:
    5h projection steers immediate admissions; 7d projection steers
    longer-horizon choices (e.g. stop burning the weekly window on bulk
    maintenance runs).
-3. **Decision**, in order of preference:
-   a. **normal** — budget comfortable, launch with the card's model.
-   b. **switch** — projected/actual wall on primary → fallback map
-      (AGT-2040), including cross-CLI.
-   c. **downshift** — budget pressure + task looks light (taskType, scope
-      heuristics) → smaller model per the efficiency matrix (§3).
-   d. **throttle** — reduce parallel admissions so the projection clears.
-   e. **wait** — all options dry: sit quietly in ready with a visible
-      reason and the next reset time. No launch attempts, no budget burn,
-      no escalation.
+3. **Decision**, in this order:
+   a. **nearby-reset wait** - if the opt-in wait policy is enabled, the primary
+      is strictly capped, and its confirmed reset is below the resolved global
+      or project threshold, keep the requested model and wait visibly.
+   b. **normal** - when the primary is healthy, launch with the card's model.
+   c. **switch** - an actual or projected wall outside the nearby-reset branch
+      uses the fallback map (AGT-2040), including cross-CLI.
+   d. **downshift** - budget pressure plus a light task may select a smaller
+      model per the efficiency matrix in section 3.
+   e. **throttle** - if no usable model switch exists, reduce parallel
+      admissions so the projection clears, but never throttle to zero.
+   f. **exhausted wait** - if every option is dry, remain in Ready with a
+      visible reason and next reset. No launch attempt, budget burn, or
+      escalation occurs.
 4. **Event**: every non-normal decision is a logged orchestrator event
    with the numbers that drove it (burn rate, remaining budget/time,
    chosen action). Silence is forbidden.
+
+The nearby-reset branch is backed by CodingAgentRunner 0.6.0. Its
+`QuotaWaitStarted` and `QuotaWaitEnded` events project into the same durable
+substate pattern as Run-Liveness: `quota-wait.json`, lifecycle phase
+`quota-waiting`, task timeline decisions, and a live board-card countdown. The
+marker is cleared after a refreshed quota snapshot or when the library resumes
+the same request.
 
 ## 3. Token-efficiency matrix (Selection axis → runner library)
 

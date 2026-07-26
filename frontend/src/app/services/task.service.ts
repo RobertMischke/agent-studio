@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { finalize, map } from 'rxjs';
+import { catchError, finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
   CreateTaskRequest,
@@ -165,6 +165,17 @@ export interface CodeReviewRunResponse {
   grade?: string | null;
 }
 
+/** Reply from the accepted-delivery integration recovery action. */
+export interface IntegrationRecoveryResponse {
+  status: 'queued';
+  mode: 'steer';
+  targetState: string;
+  position: number;
+  deliveryRef: string;
+  resultSha: string;
+  integrationBranch: string;
+}
+
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
 // ADR-0026: 1a-orchestrator-prep joins the catalog. The 1b-needs-human-review
@@ -311,7 +322,7 @@ export class TaskService {
   });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly runnerStatus = signal<RunnerStatus>({ projects: {}, runningCount: 0 });
+  readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
 
   /**
    * F35: resolved per-lane sort strategy for every project, keyed
@@ -610,6 +621,24 @@ export class TaskService {
     );
   }
 
+  /**
+   * Resolve a task through the registry-backed project handle. The watch-path
+   * request is retained only as a compatibility fallback while callers migrate
+   * away from filesystem-addressed task lookups.
+   */
+  getDetailByProject(jobId: string, project: string, fallbackWatchPath?: string) {
+    const handle = project.trim();
+    if (!handle) return this.getDetail(jobId, fallbackWatchPath);
+
+    const request = this.http.get<TaskDetail>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
+      { params: new HttpParams().set('project', handle) },
+    );
+    return fallbackWatchPath
+      ? request.pipe(catchError(() => this.getDetail(jobId, fallbackWatchPath)))
+      : request;
+  }
+
   updateState(jobId: string, state: string, watchPath?: string) {
     return this.http.put(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/state`,
@@ -624,6 +653,19 @@ export class TaskService {
     return this.http.post(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Queue a focused steer round after an accepted remote delivery conflicted
+   * with the integration branch. The backend validates the recorded conflict
+   * and fenced delivery before moving the task back to Ready.
+   */
+  queueIntegrationRecovery(jobId: string, watchPath?: string) {
+    return this.http.post<IntegrationRecoveryResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/integration/rebase`,
+      null,
       this.withWatchPath(watchPath),
     );
   }
@@ -1838,6 +1880,8 @@ export class TaskService {
           crashRecoveryEnabled: boolean;
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
+          pickupMode: 'auto' | 'manual' | 'paused';
+          executionLocation: string;
           orchestratorModel: string | null;
           buildProfilePickupAllowed?: boolean;
           buildProfile?: { status?: string | null } | null;
@@ -1963,6 +2007,7 @@ export class TaskService {
       stepId: string;
       enabled?: boolean | null;
       economyModel?: boolean | null;
+      maxIterations?: number | null;
       mode?: string | null;
       cliType?: string | null;
       model?: string | null;

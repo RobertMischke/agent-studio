@@ -61,7 +61,7 @@ describe('ProjectCliEnvironmentSectionComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('CLI environment');
-    expect(text).toContain('1 / 4 CLIs ready');
+    expect(text).toContain('1 / 3 CLIs ready');
     expect(text).toContain('1 project session found');
     expect(text).toContain('claude 1.2.3');
     expect(text).toContain('C:/tools/claude.cmd');
@@ -132,7 +132,7 @@ describe('ProjectCliEnvironmentSectionComponent', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="project-cli-onboarding-status"]')?.textContent).toContain('Onboarding status');
-    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-cli-ready"]')?.textContent).toContain('2 / 4');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-cli-ready"]')?.textContent).toContain('2 / 3');
     expect(host.querySelector('[data-testid="project-cli-onboarding-tile-clean-context"]')?.textContent).toContain('2 / 2');
     expect(host.querySelector('[data-testid="project-cli-onboarding-tile-project-sessions"]')?.textContent).toContain('feature pass');
     expect(host.querySelector('[data-testid="project-cli-onboarding-tile-overrides"]')?.textContent).toContain('1');

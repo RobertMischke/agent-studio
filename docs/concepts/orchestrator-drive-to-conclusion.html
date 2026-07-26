@@ -738,6 +738,25 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2206</code><br><span class="small">completion gate treated <code>steer-pending.json</code> as open work</span></td>
+          <td>
+            A completed UI-pipeline implementation described its versioned <code>steer-pending.json</code> Human Review
+            contract in the final log. The completion gate extracted the same successful description from stdout and stderr as
+            two unfinished-work findings, reissued the task twice, and then escalated the exhausted gate.
+          </td>
+          <td>
+            The generic incomplete-work expression matched the standalone word <code>pending</code> inside a hyphenated JSON
+            filename. It did not distinguish a status word from an artifact identifier.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the <code>pending</code> signal now requires identifier-safe boundaries, so
+            <code>steer-pending.json</code> and similar names are diagnostic context while real prose such as
+            <em>"route wiring is still pending"</em> remains blocking. A regression fixture pins the duplicated production log
+            lines and the exhausted-budget pass decision.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-12</td>
           <td><code>AGT-2157</code><br><span class="small">review CLI configuration silently forced Claude</span></td>
           <td>
@@ -1068,6 +1087,24 @@
             only after a 120-second grace and the assigned runner's explicit inactive-task report.
             New claims close above load/core 1.5. Focused tests pin all four boundaries; the run
             terminates as fenced lease loss, never as another overlapping coding generation.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2208</code><br><span class="small">conflicting run-outcome UI<br>(observed on <code>AGT-2205</code>, <code>AGT-2206</code>, and <code>QS-26</code>)</span></td>
+          <td>
+            Remote-run task detail showed mutually exclusive primary statements at once: Unclear, Task Complete, and a
+            failed-run Activity banner on running cards; QS-26 showed watchdog failure, Accepted, and Blocked / Partial together.
+          </td>
+          <td>
+            Protocol, Activity, Result case, Pipeline decision, lane, and runner-issue surfaces each classified their own subset
+            of signals. The lane/review rule could also promote Accepted over a failed or blocked run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> task detail now computes one current-run presentation with precedence
+            <code>failed &gt; needs-decision &gt; unclear &gt; succeeded</code>. Banner, Result, and Pipeline consume the same object;
+            raw signals live under <em>Why this status?</em>. Running runs ignore stale terminal records. The three observed cases
+            are covered by unit fixtures, with the QS-26 conflict also covered in Playwright.
           </td>
         </tr>
       </tbody>

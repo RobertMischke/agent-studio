@@ -130,6 +130,22 @@ public static class SystemEndpoints
         app.MapGet("/api/git/inventory", (string project, GitService git) =>
             Results.Ok(git.GetProjectInventory(project)));
 
+        // First-class integration object: accepted-card queue, curated publisher
+        // merges on origin/develop, and the card-granular develop -> main
+        // promotion delta. This is deliberately separate from the transient
+        // per-card mergeSignal projection.
+        app.MapGet("/api/git/integration", (
+            string project,
+            HttpContext context,
+            ProjectIntegrationViewService integration,
+            ProjectRegistry projects) =>
+        {
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human
+                && !ProjectAccessAuthorization.Allows(human.User, project, projects))
+                return Results.Forbid();
+            return Results.Ok(integration.Build(project));
+        });
+
         // Changed-file list for a commit browsed in the project Git View,
         // resolved through the project's configured repository (no job context).
         app.MapGet("/api/git/project-commit/files", (string project, string sha, GitService git) =>

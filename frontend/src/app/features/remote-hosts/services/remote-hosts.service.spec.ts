@@ -114,6 +114,7 @@ describe('RemoteHostsService client registry hydration', () => {
       points: [point(older, 2)],
       findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     svc.refresh();
     http.expectOne('/api/clients').flush([client]);
@@ -123,6 +124,7 @@ describe('RemoteHostsService client registry hydration', () => {
       points: [point(latest, 3)],
       findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     expect(svc.hosts().find(host => host.id === client.id)?.telemetry).toMatchObject({
       window: '14d',
@@ -160,6 +162,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       status: 'online',
       lastHeartbeatAt: new Date(now - 30_000).toISOString(),
@@ -187,6 +190,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('degraded');
 
     svc.reload();
@@ -198,6 +202,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('offline');
 
     svc.reload();
@@ -207,6 +212,7 @@ describe('RemoteHostsService client registry hydration', () => {
       lastSeenAt: new Date(now).toISOString(), tokenBudgetMonthly: null, notes: null,
     }]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('retired');
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     http.verify();
   });
 
@@ -216,13 +222,31 @@ describe('RemoteHostsService client registry hydration', () => {
     const http = TestBed.inject(HttpTestingController);
     svc.reload();
     http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
 
     svc.drain('agent-runner-01');
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('drain');
     http.expectOne('/api/clients/agent-runner-01/drain').flush({ id: 'agent-runner-01' });
     http.expectOne('/api/clients').flush([{ id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: new Date().toISOString(), lastSeenAt: null, drainRequestedAt: new Date().toISOString() }]);
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({ clientId: 'agent-runner-01', window: '14d', points: [], findings: [] });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
+    http.verify();
+  });
+
+  it('invalidates cached project proofs before reloading a re-probed host', () => {
+    TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    svc.reprobe('agent-runner-01');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('reprobe');
+    http.expectOne('/api/clients/agent-runner-01/runner-project-preflights/invalidate').flush({ id: 'agent-runner-01' });
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
     http.verify();
   });
 });

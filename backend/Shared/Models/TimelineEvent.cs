@@ -239,6 +239,13 @@ public static class TimelineEventKinds
     /// the acceptance still lands, this only makes the state visible.
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";
+    /// <summary>
+    /// An operator invoked the accepted-delivery recovery action after a merge
+    /// conflict. The task was queued in Ready with a focused steer prompt that
+    /// resumes its fenced delivery ref and rebases it onto the current
+    /// integration branch.
+    /// </summary>
+    public const string IntegrationRecoveryQueued = "integration_recovery_queued";
 }
 
 /// <summary>

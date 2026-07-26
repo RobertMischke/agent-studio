@@ -10,22 +10,49 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class TokenPricingTests
 {
+    private readonly ITokenPriceProvider _provider = new TokenEconomyPriceProvider();
+
+    [Fact]
+    public void PublishedTokenEconomyPackage_IsConfiguredVersion()
+    {
+        var assembly = typeof(TokenEconomy.ModelPriceCatalog).Assembly;
+        var informationalVersion = assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), inherit: false)
+            .Cast<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .Single()
+            .InformationalVersion;
+
+        Assert.Equal("TokenEconomy", assembly.GetName().Name);
+        Assert.StartsWith("0.2.0", informationalVersion, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ConfiguredProvider_IsTokenEconomyAdapter()
+    {
+        Assert.IsType<TokenEconomyPriceProvider>(TokenPricing.Provider);
+    }
+
     [Fact]
     public void Estimate_KnownGpt56WithoutPriceForRunDate_IsExplicitlyUnknown()
     {
-        var c = TokenPricing.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
+        var c = _provider.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
         Assert.False(c.ModelKnown);
-        Assert.Equal(CodingAgentRunner.Pricing.PriceStatus.NoPriceForDate, c.Status);
+        Assert.Equal(TokenEconomy.PriceStatus.NoPriceForDate, c.Status);
         Assert.Equal(0m, c.Total);
+        Assert.Null(c.PriceBasis);
     }
     [Fact]
     public void Estimate_OpusPrices_MatchAnthropicListed()
     {
         // Opus 4.7: $5/M input, $25/M output. 1M input + 200K output =
         // $5 + $5 = $10.
-        var c = TokenPricing.Estimate("claude-opus-4-7",
+        var at = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+        var c = _provider.Estimate("claude-opus-4-7",
             inputTokens: 1_000_000, outputTokens: 200_000,
-            cacheReadTokens: 0, cacheCreationTokens: 0);
+            cacheReadTokens: 0, cacheCreationTokens: 0, recordedAt: at);
+        var expectedPrice = TokenPricing.Catalog["claude-opus-4-7"].History
+            .Where(price => price.ValidFrom <= at)
+            .MaxBy(price => price.ValidFrom)!;
         Assert.True(c.ModelKnown);
         Assert.Equal(5.00m,  c.InputUsd);
         Assert.Equal(5.00m,  c.OutputUsd);
@@ -35,7 +62,8 @@ public class TokenPricingTests
         Assert.Equal(25m, c.PriceBasis.OutputPerMillion);
         Assert.Equal(0.5m, c.PriceBasis.CacheReadPerMillion);
         Assert.Equal(6.25m, c.PriceBasis.CacheWritePerMillion);
-        Assert.False(string.IsNullOrWhiteSpace(c.PriceBasis.Source));
+        Assert.Equal(expectedPrice.Source, c.PriceBasis.Source);
+        Assert.Equal(expectedPrice.ValidFrom, c.PriceBasis.ValidFrom);
     }
 
     [Fact]
@@ -77,20 +105,23 @@ public class TokenPricingTests
     }
 
     [Fact]
-    public void Estimate_Gpt5CodexWithoutCarPrice_IsExplicitlyUnknown()
+    public void Estimate_Gpt5CodexWithoutPublishedPrice_IsExplicitlyUnknown()
     {
-        var c = TokenPricing.Estimate("gpt-5-codex", 1_000_000, 100_000, 1_000_000, 1_000_000);
+        var c = _provider.Estimate("gpt-5-codex", 1_000_000, 100_000, 1_000_000, 1_000_000);
         Assert.False(c.ModelKnown);
-        Assert.Equal(CodingAgentRunner.Pricing.PriceStatus.NoPriceForDate, c.Status);
+        Assert.Equal(TokenEconomy.PriceStatus.NoPriceForDate, c.Status);
         Assert.Equal(0m, c.Total);
+        Assert.Null(c.PriceBasis);
     }
 
     [Fact]
     public void Estimate_UnknownModel_ReturnsZeroAndModelKnownFalse()
     {
-        var c = TokenPricing.Estimate("gpt-5.unknown", 1_000_000, 100_000, 0, 0);
+        var c = _provider.Estimate("gpt-5.unknown", 1_000_000, 100_000, 0, 0);
         Assert.False(c.ModelKnown);
+        Assert.Equal(TokenEconomy.PriceStatus.UnknownModel, c.Status);
         Assert.Equal(0m, c.Total);
+        Assert.Null(c.PriceBasis);
     }
 
     [Fact]
@@ -110,7 +141,7 @@ public class TokenPricingTests
     }
 
     [Fact]
-    public void ModelMetadataPricing_IsPassThroughFromCarCatalog()
+    public void ModelMetadataPricing_IsPassThroughFromTokenEconomyCatalog()
     {
         foreach (var entry in ModelMetadataRegistry.All.Where(m => m.InputPricePerMillion is not null))
         {
@@ -123,13 +154,17 @@ public class TokenPricingTests
     public void Estimate_UsesPriceValidAtRecordedRunTime()
     {
         var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(p => p.ValidFrom);
-        var before = TokenPricing.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition.AddTicks(-1));
-        var after = TokenPricing.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition);
+        var before = _provider.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition.AddTicks(-1));
+        var after = _provider.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition);
 
         Assert.True(before.ModelKnown);
         Assert.True(after.ModelKnown);
+        Assert.Equal(TokenEconomy.PriceStatus.Resolved, before.Status);
+        Assert.Equal(TokenEconomy.PriceStatus.Resolved, after.Status);
         Assert.NotEqual(before.Total, after.Total);
         Assert.NotEqual(before.PriceBasis!.ValidFrom, after.PriceBasis!.ValidFrom);
+        Assert.False(string.IsNullOrWhiteSpace(before.PriceBasis.Source));
+        Assert.False(string.IsNullOrWhiteSpace(after.PriceBasis.Source));
     }
 
     [Fact]

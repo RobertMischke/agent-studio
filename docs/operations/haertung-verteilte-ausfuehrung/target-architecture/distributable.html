@@ -269,7 +269,12 @@ version directories, no editing of shipped files — the contract is what makes 
   </tr>
   <tr>
     <td><code>engine.env</code></td>
-    <td><code>SERVER_URL</code> (loopback) · <code>CLIENT_ID</code>/credential · pipeline concurrency caps</td>
+    <td><code>SERVER_URL</code> (loopback) · <code>CLIENT_ID</code> ·
+      <code>CLIENT_CREDENTIAL</code> (required off-loopback) ·
+      <code>REVIEW_CONCURRENCY</code> · <code>COUNCIL_CONCURRENCY</code> ·
+      <code>POST_PROCESSING_CONCURRENCY</code> · <code>GATE_DISPATCH_CONCURRENCY</code> ·
+      <code>COMPLETION_JUDGE_CONCURRENCY</code> · <code>POLL_SECONDS</code> ·
+      <code>LEASE_SECONDS</code></td>
     <td><code style="color:var(--engine)">orchestrator-engine</code></td>
   </tr>
   <tr>
@@ -334,6 +339,14 @@ as the <em>evaluation channel</em> (§6) and possibly the local installer (§8.8
 </table>
 <p>So: the Engine <em>executes</em> flows, it does not own their definitions — those are server data
 and therefore editable through the normal API (see §8.7).</p>
+<p><b>Implemented 25.07.:</b> <code>orchestrator-engine</code> ships the five bounded
+API polling loops above. The Task Server persists versioned flow definitions,
+definition-snapshotted runs, stage results, leases, and monotonic fences under
+<code>/api/v1/orchestration/*</code>. An Engine process restart leaves the run on
+the server; lease expiry makes it claimable with a higher fence. During the
+transition, <code>Orchestration:ExecutionMode</code> is exactly
+<code>Monolith</code> or <code>Engine</code>, and Engine mode does not register
+the legacy review/post-processing hosted loops.</p>
 
 <h3>8.4 Versioning</h3>
 <p>Every binary answers <code>--version</code> (release + git SHA). The control-plane archive

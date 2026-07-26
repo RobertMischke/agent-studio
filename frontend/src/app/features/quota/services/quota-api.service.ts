@@ -11,6 +11,19 @@ export interface CliModelRouteProfile {
   fallbackThinkingLevel: string | null;
 }
 
+export interface CliQuotaWaitPolicy {
+  enabled: boolean;
+  thresholdMinutes: number;
+}
+
+export interface ProjectCliQuotaWaitPolicy extends CliQuotaWaitPolicy {
+  source: 'project' | 'global';
+  projectEnabled: boolean | null;
+  projectThresholdMinutes: number | null;
+  globalEnabled: boolean;
+  globalThresholdMinutes: number;
+}
+
 /**
  * Cycle 10d API client for the per-CLI quota / rate-limit endpoints.
  * Lifted out of the TaskService god-service per ADR-0034 so the per-feature
@@ -73,6 +86,30 @@ export class QuotaApiService {
       defaultCapPct: number;
       caps: Record<string, Record<string, number>>;
     }>(`${this.baseUrl}/cli/quota/caps`, { cliType, windowLabel, capPct });
+  }
+
+  getQuotaWaitPolicy() {
+    return this.http.get<CliQuotaWaitPolicy>(`${this.baseUrl}/cli/quota/wait-policy`);
+  }
+
+  setQuotaWaitPolicy(enabled: boolean, thresholdMinutes: number) {
+    return this.http.put<CliQuotaWaitPolicy>(`${this.baseUrl}/cli/quota/wait-policy`, {
+      enabled,
+      thresholdMinutes,
+    });
+  }
+
+  getProjectQuotaWaitPolicy(projectName: string) {
+    return this.http.get<ProjectCliQuotaWaitPolicy>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/quota-wait-policy`,
+    );
+  }
+
+  setProjectQuotaWaitPolicy(projectName: string, enabled: boolean | null, thresholdMinutes: number | null) {
+    return this.http.put<ProjectCliQuotaWaitPolicy>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/quota-wait-policy`,
+      { enabled, thresholdMinutes },
+    );
   }
 
   getModelRoutes() {

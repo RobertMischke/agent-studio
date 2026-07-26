@@ -382,6 +382,30 @@ public class CompletionGateTests
     }
 
     [Fact]
+    public void ExtractFindings_SteerPendingArtifactInSuccessfulLog_IsNotReported()
+    {
+        // AGT-2206 operator-sweep regression: the UI iteration close-out named
+        // its completed handoff artifact `steer-pending.json`. The generic
+        // incomplete-work vocabulary read the filename segment as the status
+        // word "pending", then reissued and eventually escalated the completed
+        // run. Preserve standalone pending prose while ignoring identifiers.
+        var status = "Result: Success\n## Open Items\nNone.";
+        var log = string.Join('\n',
+            "[13:51:13.274] [stderr] - Review pause in `5-human-review` with versioned `steer-pending.json`; an additional iteration at the cap escalates to `5e-escalated`.",
+            "[13:51:13.419] [stdout] - Review pause in `5-human-review` with versioned `steer-pending.json`; an additional iteration at the cap escalates to `5e-escalated`.",
+            "[13:51:13.450] [system] ui_pipeline_review_pending project=agent-taskboard job=AGT-2206 pipeline=ui-iteration-task-pipeline iteration=2/4 artifacts=1 marker=/tasks/AGT-2206/steer-pending.json",
+            "[13:51:13.500] [stdout] [[TASK_DONE]]",
+            "[13:51:13.600] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=492.0s");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+        var decision = CompletionGate.Evaluate(
+            status, log, priorReissues: 2, maxReissues: 2);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
+    [Fact]
     public void ExtractFindings_RealPendingProse_StillReported()
     {
         // Guard the guard: a genuine status sentence using "pending" as a status

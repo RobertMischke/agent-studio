@@ -25,7 +25,7 @@ This page covers two things:
 ```
 [Windows studio]                         [Linux runner host: agent-runner]
   Task Server  127.0.0.1:5031  ◄───SSH reverse tunnel───  127.0.0.1:15031
-                                                             agent-runner --server http://127.0.0.1:15031
+                                                             agent-host --server http://127.0.0.1:15031
 ```
 
 - The Task Server runs on the studio (stable, `127.0.0.1:5031`). It is **not**
@@ -137,13 +137,13 @@ option you choose.
 The runner treats a dropped tunnel as an **expected, recoverable** state, not a
 crash. Two mechanisms make that clean:
 
-- **Readiness probe.** `agent-runner --health-check` hits the Task Server's
+- **Readiness probe.** `agent-host --health-check` hits the Task Server's
   open `/healthz` and exits `0` when reachable, `4` when not, printing a
   tunnel-pointing reason. It touches no task, needs no task key, and is safe to
   run on a schedule:
 
   ```bash
-  agent-runner --health-check --server http://127.0.0.1:15031
+  agent-host --health-check --server http://127.0.0.1:15031
   # health-check ok: task server reachable at http://127.0.0.1:15031      -> exit 0
   # health-check failed: cannot reach the task server ... tunnel ... down  -> exit 4
   ```
@@ -151,10 +151,10 @@ crash. Two mechanisms make that clean:
   Gate work on it before handing the runner a task, e.g.:
 
   ```bash
-  agent-runner --health-check && agent-runner "$TASK_KEY"
+  agent-host --health-check && agent-host "$TASK_KEY"
   ```
 
-- **Run preflight.** A normal `agent-runner <TASK-KEY>` probes `/healthz`
+- **Run preflight.** A normal `agent-host <TASK-KEY>` probes `/healthz`
   **before** it registers, acquires the lease, or spawns the CLI. If the tunnel
   is down it logs one line -
   `connection lost: cannot reach the task server at <url> ...` - and exits `4`
@@ -177,8 +177,8 @@ headroom; a genuine takeover surfaces as `lease lost` (exit `3`). See
 
 1. Bring the tunnel service up (Option A or B).
 2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` returns `ok`, and
-   `agent-runner --health-check --server http://127.0.0.1:15031` exits `0`.
+   `agent-host --health-check --server http://127.0.0.1:15031` exits `0`.
 3. Kill the tunnel (stop the service / end the scheduled task). The same
    `--health-check` now exits `4` with a "tunnel down" reason within ~10 s, and
-   a `agent-runner <TASK-KEY>` run refuses at preflight instead of attempting a
+   an `agent-host <TASK-KEY>` run refuses at preflight instead of attempting a
    lease. Restart the service; the next probe returns to `0`.

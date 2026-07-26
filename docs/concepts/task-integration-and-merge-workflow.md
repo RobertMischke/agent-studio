@@ -42,9 +42,62 @@ Driven by `TaskTransitionService.MoveAsync` (`backend/Features/Tasks/TaskTransit
 The merge into `develop` is operator-triggered, not automatic, in sequential mode.
 
 - Trigger: a task moving `5-human-review -> 6-completed` (operator accepts a done-green task). `TaskTransitionService.MoveAsync` fires `TriggerMergeIntoDevelop` when `targetState == Completed`, `!isReadOnly`, and a merge runner is wired (lines ~223-227).
-- Execution: `MergeIntoDevelopRunner.Run` (`backend/Features/Pipeline/MergeIntoDevelopRunner.cs`) performs a scoped `git merge --no-ff` of `task/<id>` into `IntegrationBranch` via `GitService.MergeBranchIntoIntegration`, and records the outcome into the job's `pipeline-execution.json` (pending -> passed/failed/skipped).
+- Execution: `MergeIntoDevelopRunner.Run` (`backend/Features/Pipeline/MergeIntoDevelopRunner.cs`) selects the accepted delivery from the run contract. A local run uses `task/<id>`. A remote run uses the fenced `ResultRef` and `ResultSha` from `logs/review-subject.json`, fetches that exact `runner/<runner>/<task-key>` ref plus the configured integration branch from origin, verifies that the delivery tip still equals the reviewed SHA, fast-forwards or creates the local integration branch from its origin ref, and merges the immutable SHA. A divergent local integration branch is reported instead of silently falling back to another target. The outcome is recorded into the job's `pipeline-execution.json` (pending -> passed/failed/skipped).
 - It runs AFTER the lane move has already landed and never throws, so it cannot undo the transition.
-- Outcomes: `Merged` / `AlreadyMerged` -> Passed; `NoTaskBranch` -> Skipped (in pure-sequential mode there is usually no `task/<id>` branch, so this step often records Skipped even though the work already landed via the direct commit); `Conflict` -> Failed (merge aborted, working tree left clean, conflicted files listed); error -> Failed.
+- Outcomes: `Merged` / `AlreadyMerged` -> Passed; `NoTaskBranch` -> Skipped; `PushedForReview` -> Skipped when the project explicitly uses the pull-request strategy; `Conflict` -> Failed (merge aborted, working tree left clean, conflicted files and the recovery action are listed); error -> Failed.
+- Restart recovery: `AcceptedIntegrationBackstopHostedService` scans Completed and already archived remote deliveries whose durable acceptance has no successful integration and safely re-runs the idempotent merge. It also distinguishes a curated manual rebase from the narrower crash window where the exact fenced delivery SHA already landed locally but the process died before recording the merge and queueing its push; in that window it records `already-merged` and restores the push fact. It does not retry a recorded conflict or a pull-request handoff.
+- Conflict recovery: a conflict card renders **Rebase & retry** next to its red
+  integration badge. The action calls
+  `POST /api/tasks/{id}/integration/rebase`, appends a focused steer prompt,
+  moves the card to the top of Ready, and lets the assigned remote runner
+  resume its existing delivery ref, rebase it onto the current integration
+  branch, resolve conflicts, and return a new fenced result for acceptance.
+- Push durability: `IntegrationPushQueue` remains in memory to keep network work off the request path. `IntegrationPushBackstopHostedService` re-drives any passed merge with a non-terminal push step after restart, so queue loss cannot leave the integration branch local-only.
+
+### Incident: 2026-07-24 bulk acceptance
+
+The operator accepted 35 remote-runner cards. The acceptance hook did fire:
+each sampled card recorded `post-merge-into-develop` immediately after the lane
+move. Every sampled step returned `no-branch`, however, because the merge runner
+constructed `task/<slug>` while the remote runner had published the reviewed
+delivery as `runner/agent-runner-01/<task-key>`. Since no local merge succeeded,
+`IntegrationPushQueue` correctly received no item. Its separate defect was that
+an item already enqueued after a successful merge existed only in the process
+channel and had no restart backstop. The warning and `integrationpending` tag
+made the failure visible, but cleanup compared it with the invalid
+pre-normalization spelling `integration:pending`. `SetJobTags` had already
+stripped the colon to satisfy the tag-id grammar, so manually integrated cards
+continued to display the stale marker. The restart sweeps also originally used
+the live-board-only scanner despite claiming archive support, which excluded a
+card after it moved to `7-archive`.
+
+A push that reached the worker was not swallowed: its pipeline push step was
+recorded as failed and the managed-repository bus failure was emitted. The
+silent durability gap was an item lost with the in-memory channel before the
+worker could process it.
+
+The correction makes `review-subject.json` the remote acceptance source of
+truth, adds archive-inclusive merge and push restart backstops, closes both
+restart windows (before the merge and after the local merge but before its
+durable record), compares the actual persisted pending tag on both the normal
+and recovered success paths, and gives conflicts a typed recovery action.
+
+A read-only `git merge-tree` replay used all eleven reported delivery refs as
+incident fixtures. Against the incident head `dfa806689`, all eleven reproduced
+conflicts. Against the later `origin/develop` head, AGT-2227, AGT-2234,
+AGT-2238, AGT-2240, AGT-2253, AGT-2259, AGT-2261, AGT-2263, AGT-2265, and
+AGT-2273 still reproduced conflicts, while AGT-2294 was already an ancestor.
+The replay did not mutate `develop`; conflict resolution proceeds through the
+steer recovery action above.
+
+The subsequent operator reconciliation landed AGT-2238, AGT-2240, AGT-2253,
+AGT-2259, AGT-2261, AGT-2263, AGT-2265, and AGT-2294 in `origin/develop`.
+AGT-2227, AGT-2234, and AGT-2273 remain the live pending cases. After this fix
+is deployed, the accepted-integration backstop replays their fenced delivery
+refs, records the concrete conflict files, and enables the card action for the
+focused rebase round. This sequencing is intentional: a pending legacy
+`no-branch` record is not rewritten or moved through a task-store filesystem
+shortcut.
 
 ## The automatic integration at run end (parallel path)
 
@@ -54,7 +107,7 @@ For `MaxParallelism >= 2`, integration happens automatically at run finalization
 - Sequence: commit agent edits onto `task/<id>` (`WorktreeRunCommit`) -> push `task/<id>` to origin for portability -> acquire the per-project merge serialization (local `_integrateLock` semaphore + a cross-runner integration lease) -> `WorktreeTaskLifecycle.Integrate`.
 - `Integrate` (direct-merge): rebase the worktree onto the `IntegrationBranch` tip, then `git merge --ff-only` into the integration branch checked out in the main checkout. Result history is linear with rewritten SHAs.
 - Conflicts: a rebase conflict returns `IntegrationOutcome.Conflict`; the conflicted state can be preserved and escalated to a managed conflict-resolution agent (`CompleteIntegrationAfterResolution`). Unresolved work is left in place.
-- `IntegrationStrategy == pull-request`: `Integrate` returns `IntegrationOutcome.PushedForReview` without merging. This path is not fully wired by the caller today; treat `pull-request` as unimplemented.
+- `IntegrationStrategy == pull-request`: `Integrate` returns `IntegrationOutcome.PushedForReview` without merging. Operator acceptance also honors this strategy and records the delivery as awaiting a pull request instead of reporting a successful merge.
 
 ## Worktree cleanup policy
 
@@ -87,7 +140,7 @@ Defined in `backend/Shared/Models/ProjectSettings.cs`. Read live on each transit
 | --- | --- | --- |
 | `MaxParallelism` | `int`, `1` | Concurrency slots; clamped to `>= 1`. `1` = sequential (no worktree). `> 1` = worktree-isolated parallel. Today this also selects the entire integration path (see sharp edges). |
 | `IntegrationBranch` | `string`, `develop` | Target branch that `task/<id>` branches fork from and merge into. Used by both the parallel run-end integration and the deferred merge. In pure-sequential mode the value is largely unused. |
-| `IntegrationStrategy` | `string`, `direct-merge` | `direct-merge` (rebase + FF) or `pull-request`. Consulted only when `MaxParallelism > 1`. `pull-request` returns `PushedForReview` and is not fully wired; treat as unimplemented. |
+| `IntegrationStrategy` | `string`, `direct-merge` | `direct-merge` or `pull-request`. Both run-end integration and operator acceptance consult it. Acceptance records `pull-request` deliveries as awaiting review instead of claiming that they merged. |
 | `AutoCommit` | `bool`, `true` | When true, auto-commit dirty changes on `3-progress -> 4-auto-review` (sequential). Read-only modes skip it. |
 | `AutoPushStrategy` | `string`, `always-immediate` | `never` / `on-completed` / `always-immediate` - when committed work is queued for push to origin. |
 

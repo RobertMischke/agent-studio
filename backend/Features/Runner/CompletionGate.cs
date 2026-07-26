@@ -91,7 +91,7 @@ public static class CompletionGate
             unfinished |
             not\s+finished |
             not\s+complete |
-            pending |
+            (?<![\w-])pending(?![\w-])(?!\.[\w-]) |
             file-state\s+mismatch |
             route[-\s]?wiring\s+pending |
             apply_patch\b.{0,80}\b(?:failed|mismatch|reject(?:ed)?) |

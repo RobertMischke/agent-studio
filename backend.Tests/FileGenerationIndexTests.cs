@@ -88,4 +88,15 @@ public sealed class FileGenerationIndexTests : IDisposable
         Assert.Equal(1, entry.RunIndex);
         Assert.True(File.Exists(Path.Combine(_jobFolder, FileGenerationIndex.RelativePath)));
     }
+
+    [Fact]
+    public void CurrentRunIndex_ReturnsCurrentPipelineAttempt()
+    {
+        var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
+        pipelineLog.Begin(_jobFolder, PipelineCatalogue.Standard, "demo", "job-1");
+        pipelineLog.Begin(_jobFolder, PipelineCatalogue.Standard, "demo", "job-1");
+        var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance, pipelineLog);
+
+        Assert.Equal(2, index.CurrentRunIndex(_jobFolder));
+    }
 }

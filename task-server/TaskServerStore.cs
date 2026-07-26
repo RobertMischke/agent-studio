@@ -34,13 +34,21 @@ public sealed partial class TaskServerStore
 
     public string DataDirectory => _options.ResolveDataDirectory();
     public string DatabasePath => Path.Combine(DataDirectory, "task-server.db");
-    public string BackupDirectory => Path.Combine(DataDirectory, "backups");
+    public string BackupDirectory => _options.ResolveBackupDirectory();
     public bool AuthorityReady { get; private set; }
     public string ServerId => _serverId;
     public TaskServerMode Mode => _mode;
     private DateTime UtcNow => _clock.GetUtcNow().UtcDateTime;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        => await InitializeCoreAsync(quarantineActiveAuthority: true, cancellationToken);
+
+    public async Task InitializeForBackupAsync(CancellationToken cancellationToken = default)
+        => await InitializeCoreAsync(quarantineActiveAuthority: false, cancellationToken);
+
+    private async Task InitializeCoreAsync(
+        bool quarantineActiveAuthority,
+        CancellationToken cancellationToken)
     {
         AuthorityReady = false;
         Directory.CreateDirectory(DataDirectory);
@@ -60,20 +68,65 @@ public sealed partial class TaskServerStore
                 : TaskServerMode.Maintenance;
             await RefreshOutboxSummaryAsync(connection, cancellationToken);
 
-            // A server restart cannot infer that an old runner process stopped.
-            // Preserve its fence and fail the attempt closed until an explicit,
-            // audited recovery releases it.
-            await ExecuteAsync(connection, """
-                UPDATE leases
-                   SET status = 'process-unknown'
-                 WHERE status = 'active';
-                UPDATE runs
-                   SET status = 'process-unknown'
-                 WHERE status = 'running';
-                UPDATE review_attempts
-                   SET status = 'process-unknown'
-                 WHERE status = 'leased';
-                """, cancellationToken);
+            if (quarantineActiveAuthority)
+            {
+                // A server restart cannot infer that an old runner process stopped.
+                // Preserve its fence and fail the attempt closed until an explicit,
+                // audited recovery releases it. Offline backup deliberately skips
+                // both the lifecycle evidence and the authority transition.
+                var restartMarker = Guid.NewGuid().ToString("N");
+                await ExecuteAsync(connection, """
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    SELECT 'evt_unavailable_' || id || '_' || $marker,
+                           id,
+                           task_id,
+                           $unavailableKind,
+                           $payload,
+                           'task-server-unavailable:' || id || ':' || $marker,
+                           fence,
+                           $now
+                      FROM runs
+                     WHERE status = 'running';
+                    INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                    SELECT 'evt_restart_' || id || '_' || $marker,
+                           id,
+                           task_id,
+                           $kind,
+                           $payload,
+                           'task-server-restart:' || id || ':' || $marker,
+                           fence,
+                           $now
+                      FROM runs
+                     WHERE status = 'running';
+                    """, cancellationToken,
+                    ("$marker", restartMarker),
+                    ("$unavailableKind", LifecycleEventKinds.TaskServerUnavailable),
+                    ("$kind", LifecycleEventKinds.ProcessUnknown),
+                    ("$payload", JsonSerializer.Serialize(new
+                    {
+                        failure = "task-server-unavailable",
+                        authority = "fail-closed",
+                        replacementAdmission = "positive-no-overlap-evidence-required",
+                    })),
+                    ("$now", Iso(UtcNow)));
+                await ExecuteAsync(connection, """
+                    UPDATE leases
+                       SET status = 'process-unknown'
+                     WHERE status = 'active';
+                    UPDATE runs
+                       SET status = 'process-unknown'
+                     WHERE status = 'running';
+                    UPDATE review_attempts
+                       SET status = 'process-unknown'
+                     WHERE status = 'leased';
+                    UPDATE orchestration_runs
+                       SET status = 'pending'
+                     WHERE status = 'leased';
+                    UPDATE orchestration_leases
+                       SET status = 'server-restarted'
+                     WHERE status = 'active';
+                    """, cancellationToken);
+            }
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
             if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
@@ -89,7 +142,7 @@ public sealed partial class TaskServerStore
 
     public TaskServerStatusDto Status()
     {
-        var version = typeof(TaskServerStore).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+        var version = TaskServerBuildIdentity.Current.DisplayVersion;
         return new TaskServerStatusDto(
             _serverId,
             version,
@@ -103,8 +156,8 @@ public sealed partial class TaskServerStore
                 TaskServerProtocol.MaximumSupported,
                 version,
                 _serverId,
-                ["studio", "runner", "review-runner", "management"],
-                ["coding-plane", "review-plane"]),
+                ["studio", "runner", "review-runner", TaskServerProtocol.EngineClientKind, "management"],
+                ["coding-plane", "review-plane", "orchestration-plane", "management-plane"]),
             _startedAt,
             _outboxBacklog,
             _oldestUnacknowledgedSequence,
@@ -213,6 +266,102 @@ public sealed partial class TaskServerStore
             """, ("$project", projectId), ("$identity", taskIdentity));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadTask(reader) : null;
+    }
+
+    public async Task<TaskHistoryDto?> GetTaskHistoryAsync(
+        string projectId,
+        string taskIdentity,
+        long after,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        TaskDto? task;
+        await using (var taskCommand = Command(connection, """
+            SELECT id, project_id, task_key, title, state, version, created_at, updated_at, body
+              FROM tasks
+             WHERE project_id = $project AND (id = $identity OR task_key = upper($identity));
+            """, ("$project", projectId), ("$identity", taskIdentity)))
+        await using (var taskReader = await taskCommand.ExecuteReaderAsync(ct))
+            task = await taskReader.ReadAsync(ct) ? ReadTask(taskReader) : null;
+        if (task is null) return null;
+
+        var runs = new List<RunDto>();
+        await using (var runCommand = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at,
+                   result_sha, repository_id
+              FROM runs WHERE task_id = $task ORDER BY created_at, id;
+            """, ("$task", task.TaskId)))
+        await using (var runReader = await runCommand.ExecuteReaderAsync(ct))
+        {
+            while (await runReader.ReadAsync(ct))
+            {
+                runs.Add(new RunDto(
+                    runReader.GetString(0),
+                    runReader.GetString(1),
+                    runReader.GetString(2),
+                    runReader.IsDBNull(3) ? null : runReader.GetString(3),
+                    runReader.IsDBNull(4) ? null : runReader.GetInt64(4),
+                    Parse(runReader.GetString(5)),
+                    runReader.IsDBNull(6) ? null : Parse(runReader.GetString(6)),
+                    runReader.IsDBNull(7) ? null : Parse(runReader.GetString(7)),
+                    runReader.IsDBNull(8) ? null : runReader.GetString(8),
+                    runReader.IsDBNull(9) ? null : runReader.GetString(9)));
+            }
+        }
+
+        var events = new List<EventDto>();
+        await using (var eventCommand = Command(connection, """
+            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at, sequence
+              FROM events
+             WHERE task_id = $task AND cursor > $after
+             ORDER BY cursor
+             LIMIT 1000;
+            """, ("$task", task.TaskId), ("$after", after)))
+        await using (var eventReader = await eventCommand.ExecuteReaderAsync(ct))
+            while (await eventReader.ReadAsync(ct)) events.Add(ReadEvent(eventReader));
+
+        var artifacts = new List<ArtifactDto>();
+        await using (var artifactCommand = Command(connection, """
+            SELECT a.id, a.run_id, a.name, a.media_type, a.sha256, a.size_bytes,
+                   a.idempotency_key, a.fence, a.created_at, a.sequence
+              FROM artifacts a
+              JOIN runs r ON r.id = a.run_id
+             WHERE r.task_id = $task
+             ORDER BY a.created_at, a.id;
+            """, ("$task", task.TaskId)))
+        await using (var artifactReader = await artifactCommand.ExecuteReaderAsync(ct))
+            while (await artifactReader.ReadAsync(ct)) artifacts.Add(ReadArtifact(artifactReader));
+
+        var audit = new List<AuditRecordDto>();
+        await using (var auditCommand = Command(connection, """
+            SELECT sequence, occurred_at, actor_id, action, target_type, target_id, detail_json
+              FROM audit
+             WHERE target_id = $task
+                OR target_id IN (SELECT id FROM runs WHERE task_id = $task)
+             ORDER BY sequence;
+            """, ("$task", task.TaskId)))
+        await using (var auditReader = await auditCommand.ExecuteReaderAsync(ct))
+        {
+            while (await auditReader.ReadAsync(ct))
+            {
+                audit.Add(new AuditRecordDto(
+                    auditReader.GetInt64(0),
+                    Parse(auditReader.GetString(1)),
+                    auditReader.GetString(2),
+                    auditReader.GetString(3),
+                    auditReader.GetString(4),
+                    auditReader.GetString(5),
+                    auditReader.GetString(6)));
+            }
+        }
+
+        return new TaskHistoryDto(
+            task,
+            runs,
+            events,
+            artifacts,
+            audit,
+            events.Count == 0 ? after : events[^1].Cursor);
     }
 
     public async Task<IReadOnlyList<TaskDto>> ListTasksAsync(string projectId, CancellationToken ct)
@@ -346,15 +495,14 @@ public sealed partial class TaskServerStore
             {
                 var existingCapabilities =
                     JsonSerializer.Deserialize<string[]>(existingCapabilitiesJson) ?? [];
-                var changesExecutorRole =
-                    existingCapabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
-                    && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
-                    || existingCapabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
-                    && capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal);
+                var existingExecutorRole = ExecutorRole(existingCapabilities);
+                var requestedExecutorRole = ExecutorRole(capabilities);
+                var changesExecutorRole = existingExecutorRole is not null
+                    && !string.Equals(existingExecutorRole, requestedExecutorRole, StringComparison.Ordinal);
                 if (changesExecutorRole)
                     throw new TaskServerConflictException(
                         "runner-role-conflict",
-                        "A registered coding or review service identity cannot be reused for the other executor role.");
+                        "A registered coding or review service identity cannot remove or change its executor role.");
             }
             await ExecuteAsync(connection, """
                 INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version, capabilities_json, status, registered_at, last_seen_at)
@@ -394,9 +542,23 @@ public sealed partial class TaskServerStore
                 request.Inventory, actorId, ct);
             var reconciliationActions = await ReadPendingReconciliationActionsAsync(
                 connection, transaction, request.RunnerId, request.InstanceId, ct);
+            var capabilityRunner = await ReadCapabilityRunnerAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
+            var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                capabilityRunner.HostId,
+                request.RequiredCapabilities,
+                ct);
             await ExecuteAsync(connection, "UPDATE runners SET last_seen_at = $now WHERE id = $id;", ct, transaction,
                 ("$now", Iso(UtcNow)), ("$id", request.RunnerId));
 
+            if (!capabilityAdmission.Eligible)
+            {
+                response = new ClaimResponse("empty", Message: capabilityAdmission.Message);
+                return;
+            }
             if (request.AvailableSlots <= 0)
             {
                 response = new ClaimResponse(
@@ -442,14 +604,27 @@ public sealed partial class TaskServerStore
             var now = UtcNow;
             var expires = now.AddSeconds(NormalizeTtl(request.RequestedTtlSeconds));
             await ExecuteAsync(connection, """
-                INSERT INTO runs(id, task_id, status, runner_id, fence, created_at, started_at)
-                VALUES ($run, $task, 'running', $runner, $fence, $now, $now);
+                INSERT INTO runs(
+                    id, task_id, status, runner_id, fence, created_at, started_at,
+                    required_capabilities_json, canary_capabilities_json)
+                VALUES (
+                    $run, $task, 'running', $runner, $fence, $now, $now,
+                    $requiredCapabilities, $canaryCapabilities);
                 INSERT INTO leases(task_id, lease_id, run_id, runner_id, instance_id, fence, acquired_at, expires_at, status)
                 VALUES ($task, $lease, $run, $runner, $instance, $fence, $now, $expires, 'active');
                 UPDATE tasks SET state = '3-progress', version = version + 1, updated_at = $now WHERE id = $task;
                 """, ct, transaction,
                 ("$run", runId), ("$task", task.TaskId), ("$runner", request.RunnerId), ("$instance", request.InstanceId),
-                ("$fence", fence), ("$lease", leaseId), ("$now", Iso(now)), ("$expires", Iso(expires)));
+                ("$fence", fence), ("$lease", leaseId), ("$now", Iso(now)), ("$expires", Iso(expires)),
+                ("$requiredCapabilities", JsonSerializer.Serialize(capabilityAdmission.Required)),
+                ("$canaryCapabilities", JsonSerializer.Serialize(capabilityAdmission.Canaries)));
+            await ReserveCanariesAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                capabilityAdmission.Canaries,
+                runId,
+                ct);
             await AuditAsync(connection, transaction, actorId, "run.claimed", "run", runId,
                 JsonSerializer.Serialize(new { task.TaskId, request.RunnerId, request.InstanceId, fence }), ct);
 
@@ -460,7 +635,9 @@ public sealed partial class TaskServerStore
                 run,
                 task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now },
                 lease,
-                ReconciliationActions: reconciliationActions);
+                ReconciliationActions: reconciliationActions,
+                RequiredCapabilities: capabilityAdmission.Required,
+                CanaryCapabilities: capabilityAdmission.Canaries);
         }, ct);
         return response!;
     }
@@ -831,6 +1008,43 @@ public sealed partial class TaskServerStore
                 ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
                 ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
                 ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
+            await ResolveCanarySuccessAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                runId,
+                RequiresResultEnvelope(request.Outcome)
+                    ? "coding canary completed with an immutable result handoff"
+                    : "coding canary reached an authoritative typed terminal without a capability failure",
+                ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.RunCompleted,
+                new
+                {
+                    request.Outcome,
+                    request.Summary,
+                    authority = "task-server",
+                    nextState = "4-auto-review",
+                },
+                ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.PostProcessingCompleted,
+                new
+                {
+                    artifacts = "canonical-store",
+                    reviewAuthority = "deployed-backend",
+                },
+                ct);
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {
@@ -861,6 +1075,9 @@ public sealed partial class TaskServerStore
     public async Task<EventDto> IngestEventAsync(string runId, EventIngestRequest request, string actorId, CancellationToken ct)
     {
         RequireWritable();
+        if (Encoding.UTF8.GetByteCount(request.PayloadJson) > _options.MaximumEventPayloadBytes)
+            throw new ArgumentException(
+                $"Event payload exceeds the {_options.MaximumEventPayloadBytes}-byte limit.");
         EventDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
@@ -1185,6 +1402,36 @@ public sealed partial class TaskServerStore
                 UPDATE runs SET status = 'interrupted', finished_at = $now WHERE id = $run;
                 UPDATE tasks SET state = $state, version = version + 1, updated_at = $now WHERE id = $task;
                 """, ct, transaction, ("$run", runId), ("$now", Iso(UtcNow)), ("$state", targetState), ("$task", lease.TaskId));
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.RunnerUnavailable,
+                new
+                {
+                    runnerId = lease.RunnerId,
+                    instanceId = lease.InstanceId,
+                    request.ContainmentProof,
+                    observation = "The previous Runner generation is positively unavailable.",
+                },
+                ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.NoOverlapProven,
+                new
+                {
+                    request.ContainmentProof,
+                    request.Resolution,
+                    targetState,
+                    previousState = "process-unknown",
+                },
+                ct);
             await AuditAsync(connection, transaction, actorId, "attempt.unknown.resolved", "run", runId,
                 JsonSerializer.Serialize(new { request.ContainmentProof, request.Resolution, lease.Fence }), ct);
             resolved = lease with { Status = "fenced" };
@@ -1519,6 +1766,50 @@ public sealed partial class TaskServerStore
                 registered_at TEXT NOT NULL,
                 last_seen_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS runner_capabilities(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                capability_key TEXT NOT NULL,
+                category TEXT NOT NULL,
+                schema_version INTEGER NOT NULL,
+                advertised_status TEXT NOT NULL,
+                health_state TEXT NOT NULL,
+                reason TEXT,
+                version TEXT,
+                identity_value TEXT,
+                detail TEXT,
+                advertised_at TEXT NOT NULL,
+                fresh_until TEXT NOT NULL,
+                generation INTEGER NOT NULL,
+                first_failure_at TEXT,
+                last_failure_at TEXT,
+                cooldown_until TEXT,
+                canary_claim_id TEXT,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                recovery_history_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(runner_id, capability_key)
+            );
+            CREATE TABLE IF NOT EXISTS capability_failure_deliveries(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                idempotency_key TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                PRIMARY KEY(runner_id, idempotency_key)
+            );
+            CREATE TABLE IF NOT EXISTS host_admission(
+                host_id TEXT PRIMARY KEY,
+                automatic_drain_reason TEXT,
+                automatic_drain_at TEXT,
+                operator_drain_reason TEXT,
+                operator_drain_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runner_telemetry_latest(
+                runner_id TEXT PRIMARY KEY REFERENCES runners(id),
+                payload_json TEXT NOT NULL,
+                observed_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS runs(
                 id TEXT PRIMARY KEY,
                 task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -1623,6 +1914,52 @@ public sealed partial class TaskServerStore
                 received_at TEXT NOT NULL,
                 PRIMARY KEY(run_id, sequence)
             );
+            CREATE TABLE IF NOT EXISTS flow_definitions(
+                project_id TEXT PRIMARY KEY REFERENCES projects(id),
+                version INTEGER NOT NULL,
+                stages_json TEXT NOT NULL,
+                max_reissue_attempts INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_runs(
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                task_id TEXT NOT NULL REFERENCES tasks(id),
+                definition_version INTEGER NOT NULL,
+                stages_json TEXT NOT NULL,
+                max_reissue_attempts INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                current_stage TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                reissue_attempts INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_fence_counters(
+                run_id TEXT PRIMARY KEY REFERENCES orchestration_runs(id),
+                last_fence INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_leases(
+                run_id TEXT PRIMARY KEY REFERENCES orchestration_runs(id),
+                lease_id TEXT NOT NULL UNIQUE,
+                engine_id TEXT NOT NULL,
+                instance_id TEXT NOT NULL,
+                fence INTEGER NOT NULL,
+                acquired_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestration_stage_results(
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL REFERENCES orchestration_runs(id),
+                stage TEXT NOT NULL,
+                action TEXT NOT NULL,
+                output_json TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                completed_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS audit(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                 occurred_at TEXT NOT NULL,
@@ -1669,14 +2006,23 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_outbox_receipts_run ON outbox_receipts(run_id, sequence);
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
             CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
+            CREATE INDEX IF NOT EXISTS ix_runner_capabilities_state ON runner_capabilities(runner_id, health_state, fresh_until);
+            CREATE INDEX IF NOT EXISTS ix_orchestration_runs_status_stage
+                ON orchestration_runs(status, current_stage, updated_at);
+            CREATE INDEX IF NOT EXISTS ix_orchestration_stage_results_run
+                ON orchestration_stage_results(run_id, sequence);
             """, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;
             """, ct, ("$version", CurrentSchemaVersion), ("$now", Iso(UtcNow)));
         await ApplyReviewMigrationAsync(connection, ct);
+        await EnsureColumnAsync(connection, "review_attempts", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "review_attempts", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
     }
 
@@ -2119,11 +2465,19 @@ public sealed partial class TaskServerStore
         if (!string.Equals(reader.GetString(2), "active", StringComparison.Ordinal))
             throw new TaskServerConflictException("runner-not-active", "Runner is not active.");
         var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(3)) ?? [];
-        if (capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+        if (!capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            || capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
             throw new TaskServerConflictException(
                 "coding-capability-required",
-                "A separately registered Remote Review Executor cannot claim coding work.");
+                "Runner did not advertise the separately registered coding executor capability.");
     }
+
+    private static string? ExecutorRole(IReadOnlyCollection<string> capabilities)
+        => capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            ? ReviewCapabilities.CodingExecutor
+            : capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                ? ReviewCapabilities.ReviewExecutor
+                : null;
 
     private static async Task<(string Prefix, long Next)> ReadProjectCounterAsync(
         SqliteConnection connection, SqliteTransaction transaction, string projectId, CancellationToken ct)
@@ -2284,6 +2638,29 @@ public sealed partial class TaskServerStore
             """, ct, transaction,
             ("$at", Iso(UtcNow)), ("$actor", string.IsNullOrWhiteSpace(actorId) ? "anonymous-local" : actorId),
             ("$action", action), ("$type", targetType), ("$target", targetId), ("$detail", detailJson));
+
+    private async Task AppendLifecycleEventAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        string taskId,
+        long fence,
+        string kind,
+        object payload,
+        CancellationToken ct)
+        => await ExecuteAsync(connection, """
+            INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+            VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred)
+            ON CONFLICT(idempotency_key) DO NOTHING;
+            """, ct, transaction,
+            ("$event", $"evt_{Guid.NewGuid():N}"),
+            ("$run", runId),
+            ("$task", taskId),
+            ("$kind", kind),
+            ("$payload", JsonSerializer.Serialize(payload)),
+            ("$key", $"task-server:{runId}:{kind}"),
+            ("$fence", fence),
+            ("$occurred", Iso(UtcNow)));
 
     private static SqliteCommand Command(SqliteConnection connection, string sql, params (string Name, object? Value)[] parameters)
         => Command(connection, sql, null, parameters);

@@ -112,12 +112,10 @@ public enum RunIssueKind
     /// </summary>
     Quarantined,
     /// <summary>
-    /// The worker CLI advanced repository HEAD during its own run, which means
-    /// it ran <c>git commit</c> or an equivalent history-mutating operation
-    /// before the platform-owned transition could stamp the job. Synthetic -
-    /// set by the runner around the CLI subprocess window, not by
-    /// <see cref="AgentOutcomeAnalyzer"/> - so autonomous agent commits are
-    /// surfaced as process violations instead of clean completions.
+    /// The runner verified genuine git damage during the worker window: a
+    /// protected remote branch changed with worker push evidence, or HEAD no
+    /// longer descends from the run-start commit. A normal linear worker commit
+    /// is an informational cleanup finding and does not use this issue kind.
     /// </summary>
     AgentGitViolation,
     /// <summary>

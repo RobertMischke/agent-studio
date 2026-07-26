@@ -22,6 +22,7 @@ import {
 } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
+import { DecisionBacklogHintComponent } from '../decision-backlog-hint/decision-backlog-hint.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -40,7 +41,13 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 @Component({
   selector: 'app-task-column, app-job-column',
   standalone: true,
-  imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent, PostProcessingSummaryComponent],
+  imports: [
+    TaskCardComponent,
+    DecisionBacklogHintComponent,
+    TooltipDirective,
+    InfoButtonComponent,
+    PostProcessingSummaryComponent,
+  ],
   // Signal inputs let OnPush skip unchanged lanes during board polling.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-column.html',
