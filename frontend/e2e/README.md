@@ -425,6 +425,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
 | `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |
+| `project-wiki-file-order.spec.ts` | document drag order stays in place, survives reload, and fits the fixed table in both themes |
 | `project-wiki-interactive-html.spec.ts` | AGT-2083 exploration runs scripts while parent access stays blocked |
 | `project-wiki-section.spec.ts` | Project detail - Knowledge section |
 | `proposals-hub.spec.ts` | Project Hub proposals render in both themes |

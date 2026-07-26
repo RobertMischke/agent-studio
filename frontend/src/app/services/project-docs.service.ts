@@ -255,6 +255,14 @@ export class ProjectDocsService {
     );
   }
 
+  /** Persist the display order of documents under one wiki folder. */
+  setWikiFileOrder(projectName: string, parentRelPath: string, orderedNames: string[]) {
+    return this.http.put<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/file-order`,
+      { parentRelPath, orderedNames }
+    );
+  }
+
   /** Delete a wiki node (file or folder) via git rm + commit. */
   deleteWikiNode(projectName: string, relPath: string) {
     return this.http.delete<{ relPath: string; sha: string }>(
