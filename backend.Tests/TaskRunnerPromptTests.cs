@@ -174,6 +174,46 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void VersionedReissueExperimentTemplates_PreserveControlAndSeparateTreatmentEvidence()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["title"] = "Fix the toolbar spacing",
+            ["prompt_text"] = "Original task context.",
+            ["reissue_findings"] = ReissuePromptExperiment.BuildTreatmentFindings(
+                new[] { "Fix wrapping in `toolbar.component.scss`." },
+                escalate: false),
+            ["reissue_followup"] = "RAW-REVIEW-EVIDENCE",
+            ["reissue_evidence"] = "RAW-REVIEW-EVIDENCE",
+            ["prompt_path"] = "prompt.md",
+            ["job_folder"] = "job",
+            ["working_directory"] = "work",
+            ["repository_path"] = "repo",
+            ["attachments_list"] = "(none)",
+            ["mode_framing"] = "",
+        };
+        var prompts = Prompts();
+        var control = prompts.Render(RuntimePromptService.RunnerReissueControlV1, values);
+        var treatment = prompts.Render(RuntimePromptService.RunnerReissueTreatmentV1, values);
+
+        Assert.Contains("Full reissue context", control);
+        Assert.Contains("Numbered findings to resolve", treatment);
+        Assert.Contains("1.", treatment);
+        Assert.Contains("Exact deficiency:", treatment);
+        Assert.Contains("File, symbol, or artifact:", treatment);
+        Assert.Contains("Required change:", treatment);
+        Assert.Contains("Focused verification or acceptance evidence:", treatment);
+        Assert.Contains("Evidence block", treatment);
+        Assert.True(
+            treatment.IndexOf("Focused verification or acceptance evidence:", StringComparison.Ordinal)
+            < treatment.IndexOf("RAW-REVIEW-EVIDENCE", StringComparison.Ordinal));
+        Assert.Contains("[[TASK_DONE]]", control);
+        Assert.Contains("[[TASK_DONE]]", treatment);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", control);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", treatment);
+    }
+
+    [Fact]
     public void AllRunnerTemplates_SpellOutTheOutputContract()
     {
         var prompts = Prompts();

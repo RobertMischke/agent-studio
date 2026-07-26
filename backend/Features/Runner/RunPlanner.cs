@@ -43,7 +43,15 @@ public sealed record RunPlan(
     bool WriteCutMarker,
     string? CutMarkerReason,
     string? PersistSessionName,
-    bool ClearStaleSessionName);
+    bool ClearStaleSessionName)
+{
+    /// <summary>
+    /// Non-null only when this invocation was assigned to the bounded reissue
+    /// prompt experiment. This metadata does not participate in model routing,
+    /// review, gate, or pipeline selection.
+    /// </summary>
+    public ReissuePromptAssignment? ReissuePromptAssignment { get; init; }
+}
 
 /// <summary>
 /// Pure decision library for runner invocations - no I/O, no field access,
@@ -88,6 +96,7 @@ public static class RunPlanner
             WriteCutMarker = true,
             CutMarkerReason = reason,
             PersistSessionName = null,
+            ReissuePromptAssignment = null,
         };
 
     /// <summary>

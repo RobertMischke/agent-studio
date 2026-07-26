@@ -2521,7 +2521,7 @@ public class ProjectRunner
                 reissueOpenItems = EvaluateReissueOpenItems(info);
                 if (reissueOpenItems.Intervenes)
                 {
-                    plan = BuildReissueChangePlan(plan, reissueOpenItems);
+                    plan = BuildReissueChangePlan(plan, reissueOpenItems, ProjectName, info.Id);
                     var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
                         ? OrchestratorMessageKind.Steer
                         : OrchestratorMessageKind.SoftIntervention;
@@ -2743,6 +2743,24 @@ public class ProjectRunner
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
             }
             processStartConfirmed = true;
+
+            if (plan.ReissuePromptAssignment is { } promptAssignment)
+            {
+                ReissuePromptExperimentLog.Append(
+                    info.FolderPath,
+                    ProjectName,
+                    info.Id,
+                    promptAssignment,
+                    execution.StartedAt,
+                    runModel,
+                    runThinkingLevel,
+                    _logger);
+                _logger.LogInformation(
+                    "reissue_prompt_experiment project={Project} job={JobId} experiment={ExperimentId} arm={Arm} template={TemplateVersion} attempt={Attempt} family={PromptFamily} cause={Cause}",
+                    ProjectName, info.Id, promptAssignment.ExperimentId, promptAssignment.Arm,
+                    promptAssignment.TemplateVersion, promptAssignment.Attempt,
+                    promptAssignment.PromptFamily, promptAssignment.Cause);
+            }
 
             // A run-start is durable only after the CLI adapter confirms a
             // process. Neither the canonical session event nor its timeline
@@ -4476,6 +4494,7 @@ public class ProjectRunner
             var reviewFindings = GatherAspectConcernSummaries(info.FolderPath)
                 .Concat(GatherCodeReviewFindings(info.FolderPath))
                 .ToList();
+            var reissueCause = ResolveLatestReissueCause(info.FolderPath);
 
             return ReissueOpenItemsPreCheck.Evaluate(new ReissueOpenItemsPreCheck.PreCheckInput
             {
@@ -4484,6 +4503,8 @@ public class ProjectRunner
                 PriorRunCount = prior?.Attempt ?? 0,
                 FollowUpText = followUpText,
                 AspectConcernSummaries = reviewFindings,
+                ReissueCause = reissueCause,
+                PromptFamily = ReissuePromptExperiment.ResolvePromptFamily(reissueCause),
             });
         }
         catch (Exception ex)
@@ -4493,6 +4514,29 @@ public class ProjectRunner
             {
                 Action = ReissueOpenItemsPreCheck.PreCheckAction.None,
             };
+        }
+    }
+
+    private string ResolveLatestReissueCause(string jobFolderPath)
+    {
+        if (_timeline == null) return "unknown";
+        try
+        {
+            var reopen = _timeline.ReadAll(jobFolderPath)
+                .LastOrDefault(evt =>
+                    string.Equals(
+                        evt.Kind,
+                        TimelineEventKinds.QualityLoopReopened,
+                        StringComparison.Ordinal)
+                    && evt.Details?.ContainsKey("cause") == true);
+            return reopen?.Details?["cause"]?.Trim().ToLowerInvariant() is { Length: > 0 } cause
+                ? cause
+                : "unknown";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve latest reissue cause for {Folder}", jobFolderPath);
+            return "unknown";
         }
     }
 
@@ -7055,20 +7099,35 @@ public class ProjectRunner
 
     private static RunPlan BuildReissueChangePlan(
         RunPlan plan,
-        ReissueOpenItemsPreCheck.PreCheckDecision decision)
+        ReissueOpenItemsPreCheck.PreCheckDecision decision,
+        string projectName,
+        string jobId)
     {
+        var assignment = ReissuePromptExperiment.Assign(
+            $"{projectName}/{jobId}",
+            decision.PriorRunCount + 1,
+            decision.PromptFamily,
+            decision.ReissueCause,
+            decision.OpenItems.Count);
+        var treatment = assignment.Arm == ReissuePromptExperiment.TreatmentArm;
         var variables = new Dictionary<string, string?>(plan.PromptVariables)
         {
-            ["reissue_findings"] = BuildReissueFindingsBlock(decision),
+            ["reissue_findings"] = treatment
+                ? ReissuePromptExperiment.BuildTreatmentFindings(
+                    decision.OpenItems,
+                    decision.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate)
+                : BuildReissueFindingsBlock(decision),
             ["reissue_followup"] = NormalizeReissueFollowUp(decision.FollowUpText),
+            ["reissue_evidence"] = NormalizeReissueFollowUp(decision.FollowUpText),
         };
 
         return plan with
         {
-            PromptTemplate = RuntimePromptService.RunnerReissueChange,
+            PromptTemplate = ReissuePromptExperiment.PromptTemplate(assignment),
             PromptVariables = variables,
             EventKind = "reissue",
             EventReason = decision.Note ?? "auto-review reissue",
+            ReissuePromptAssignment = assignment,
         };
     }
 

@@ -144,6 +144,14 @@ pipeline view.
 - `backend/Services/Runner/ReviewDecisionOrchestrator.cs`: post-core review and
   final orchestrator decision recording. `RunCodeReviewGradePostStepAsync` wires
   the automatic quality-grade step (see below) after the aspect fan-out.
+- `backend/Features/Runner/ReissuePromptExperiment.cs` and
+  `scripts/reissue-prompt-experiment-analysis.mjs`: versioned, reproducible
+  task-level control/treatment assignment for eligible finding-bearing
+  reissues, hard assignment telemetry, and the right-censor-aware experimental
+  report. The treatment changes prompt organization only and never selects a
+  coding model, reviewer, rubric, pipeline, or gate. The predeclared contract
+  and promotion threshold live in
+  [Finding-first reissue prompt experiment](../../quality/pipeline-time-economy/reissue-prompt-experiment.md).
 - `backend/Services/Review/CodeReviewStepService.cs`: the shared code-review
   engine. `CodeReviewMode.Verdict` is the legacy user-triggered pass/concerns/block
   review; `CodeReviewMode.Grade` is the automatic pipeline pass that assigns an
@@ -245,6 +253,14 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+- Eligible mapped reissues participate in `finding-first-v1` at the task level.
+  The stable hash assignment keeps all attempts for one task in the same arm.
+  Both versioned arms receive the identical open-finding payload and preserve
+  scope and terminal-sentinel guardrails. Assignment and attempt events are hard
+  telemetry; Grade A and orchestrator acceptance remain model-judged evidence;
+  arm effects are experimental comparisons. Production-default promotion is
+  forbidden until the predeclared benefit and deterministic-gate safeguards
+  pass.
 - Board cards and task detail share one live-status projection. The active step
   comes from the newest root `PipelineExecutionRecord`; `PreviousAttempts` is
   never eligible for a current-work or inactivity signal. CLI/model labels come
