@@ -617,6 +617,10 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<WikiContentCache>();
+// Warms the central wiki cache off the startup path and logs the periodic
+// hit/miss/fill rollup. See WikiCacheWarmupService for why this must not block
+// StartAsync.
+builder.Services.AddHostedService<WikiCacheWarmupService>();
 // Lexical wiki search (BM25 in-memory index, lazily rebuilt on a docs
 // fingerprint change) with the fail-open semantic query-expansion layer.
 builder.Services.AddSingleton<WikiSearchService>();
@@ -990,21 +994,18 @@ taskScanner.SetStatsMetadataCache(jobStatsMetadataCache);
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
 watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 
-// Central wiki read model: bind the process-wide cache, rebuild it eagerly on
-// debounced docs/ watcher events, and preload every registered project before
-// the HTTP listener starts. All wiki endpoints then read an already-published
-// snapshot instead of validating it with a per-request filesystem walk.
+// Central wiki read model: bind the process-wide cache and rebuild it eagerly
+// on debounced docs/ watcher events. All wiki endpoints then read an
+// already-published snapshot instead of validating it with a per-request
+// filesystem walk. The binding has to happen here, before the host starts, so
+// that WikiCacheWarmupService (registered above) fills the same instance the
+// endpoints read. The warmup itself runs in the background - preloading a
+// multi-hundred-file docs/ tree synchronously would delay the HTTP listener.
 var wikiContentCache = app.Services.GetRequiredService<WikiContentCache>();
 var projectDocs = app.Services.GetRequiredService<ProjectDocsService>();
 projectDocs.SetWikiContentCache(wikiContentCache);
 watcher.OnWikiChanged += (projectName, _) =>
     wikiContentCache.Invalidate(projectName, WikiContentCache.InvalidationSource.Watcher);
-Parallel.ForEach(
-    taskScanner.GetWatchPaths()
-        .Select(entry => entry.Name)
-        .Where(name => !string.IsNullOrWhiteSpace(name))
-        .Distinct(StringComparer.OrdinalIgnoreCase),
-    projectName => wikiContentCache.Preload(projectName));
 
 // TaskAccess layer (ADR-0024): force a synchronous first index read so
 // boot-time disk problems surface here rather than on the first HTTP

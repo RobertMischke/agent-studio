@@ -61,6 +61,7 @@ public class WikiSearchService
     private readonly IConfiguration _configuration;
     private readonly AgentStudio.Prompts.RuntimePromptService _prompts;
     private readonly ILogger<WikiSearchService> _logger;
+    private readonly WikiContentCache? _wikiContentCache;
 
     // projectName -> built index. The fingerprint inside decides staleness.
     private readonly ConcurrentDictionary<string, WikiSearchIndex> _indexes =
@@ -72,7 +73,8 @@ public class WikiSearchService
         CliOneShotRegistry oneShots,
         IConfiguration configuration,
         AgentStudio.Prompts.RuntimePromptService prompts,
-        ILogger<WikiSearchService> logger)
+        ILogger<WikiSearchService> logger,
+        WikiContentCache? wikiContentCache = null)
     {
         _scanner = scanner;
         _registry = registry;
@@ -80,6 +82,7 @@ public class WikiSearchService
         _configuration = configuration;
         _prompts = prompts;
         _logger = logger;
+        _wikiContentCache = wikiContentCache;
     }
 
     /// <summary>
@@ -325,8 +328,20 @@ public class WikiSearchService
 
     private WikiSearchIndex GetOrBuildIndex(string projectName, string wikiDir)
     {
+        // Staleness gate via the central wiki cache (AGT-2382). Its docs/
+        // signature is the same path+mtime+size hash this service used to
+        // compute for itself, over a superset of the indexed files - so it can
+        // only ever over-invalidate, never miss a change. Reusing it turns a
+        // warm search from a full docs/ walk into a dictionary lookup and
+        // removes the last parallel staleness probe in the docs area.
+        var centralFingerprint = _wikiContentCache?.GetDocsSignature(projectName);
+        if (centralFingerprint != null
+            && _indexes.TryGetValue(projectName, out var warm)
+            && warm.Fingerprint == centralFingerprint)
+            return warm;
+
         var pages = EnumeratePages(wikiDir);
-        var fingerprint = ComputeFingerprint(pages);
+        var fingerprint = centralFingerprint ?? ComputeFingerprint(pages);
         if (_indexes.TryGetValue(projectName, out var cached) && cached.Fingerprint == fingerprint)
             return cached;
 

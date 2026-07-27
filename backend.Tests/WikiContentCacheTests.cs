@@ -113,6 +113,106 @@ public sealed class WikiContentCacheTests : IDisposable
         Assert.Equal(2, _cache.Fills);
     }
 
+    // ---- Warmup: fills off the startup path, and warmup is not a read miss ----
+
+    [Fact]
+    public void Warmup_FillsEveryWatchedProject_AndIsNotCountedAsAReadMiss()
+    {
+        var warmup = new WikiCacheWarmupService(
+            _cache,
+            _scanner,
+            NullLogger<WikiCacheWarmupService>.Instance);
+
+        warmup.WarmAllProjects(CancellationToken.None);
+
+        var afterWarmup = _cache.GetStats();
+        Assert.Equal(1, afterWarmup.Preloads);
+        Assert.Equal(1, afterWarmup.Fills);
+        // The whole point of preloading: no reader ever paid for the cold fill.
+        Assert.Equal(0, afterWarmup.Misses);
+
+        Assert.NotNull(_docs.GetWikiTreeResult(ProjectName));
+
+        var afterRead = _cache.GetStats();
+        Assert.Equal(1, afterRead.Hits);
+        Assert.Equal(0, afterRead.Misses);
+        Assert.Equal(1, afterRead.Fills);
+    }
+
+    [Fact]
+    public async Task Warmup_StartAsync_ReturnsWhileTheFillIsStillRunning()
+    {
+        // A blocking build function stands in for a large docs/ tree. If the
+        // warmup ran on the startup path, StartAsync could not complete until
+        // the gate is released.
+        using var gate = new ManualResetEventSlim(false);
+        using var fillStarted = new ManualResetEventSlim(false);
+        var slowCache = new WikiContentCache(
+            _ =>
+            {
+                fillStarted.Set();
+                gate.Wait();
+                return null;
+            },
+            NullLogger<WikiContentCache>.Instance);
+        var warmup = new WikiCacheWarmupService(
+            slowCache,
+            _scanner,
+            NullLogger<WikiCacheWarmupService>.Instance);
+
+        await warmup.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(fillStarted.Wait(TimeSpan.FromSeconds(5)), "warmup never started filling");
+        // Startup already returned while the fill is demonstrably still in flight.
+        Assert.False(gate.IsSet);
+
+        gate.Set();
+        await warmup.StopAsync(CancellationToken.None);
+    }
+
+    // ---- Single point of usage: search shares the one snapshot ----
+
+    [Fact]
+    public async Task Search_GatesOnTheCentralSnapshot_AndSeesTheEagerRefill()
+    {
+        var search = new WikiSearchService(
+            _scanner,
+            new ProjectRegistry(_config, NullLogger<ProjectRegistry>.Instance),
+            new CliOneShotRegistry([]),
+            _config,
+            new AgentStudio.Prompts.RuntimePromptService(
+                _config,
+                NullLogger<AgentStudio.Prompts.RuntimePromptService>.Instance),
+            NullLogger<WikiSearchService>.Instance,
+            _cache);
+
+        Assert.True(_cache.Preload(ProjectName));
+        var hitsBeforeSearch = _cache.GetStats().Hits;
+
+        var first = await search.SearchAsync(ProjectName, "Initial", semantic: false, limit: 10);
+        Assert.NotNull(first);
+        Assert.Contains(first!.Results, r => r.RelPath == "guide/start.md");
+        // The staleness probe read the central snapshot instead of walking docs/.
+        Assert.True(
+            _cache.GetStats().Hits > hitsBeforeSearch,
+            "search did not read through the central wiki cache");
+        Assert.Equal(1, _cache.GetStats().Fills);
+
+        var write = _docs.WriteWikiFile(
+            ProjectName,
+            "guide/start.md",
+            "# Start\n\nZeppelin summary.\n");
+        Assert.True(write.Success);
+        // The mutation already rebuilt the snapshot eagerly.
+        Assert.Equal(2, _cache.GetStats().Fills);
+
+        var second = await search.SearchAsync(ProjectName, "Zeppelin", semantic: false, limit: 10);
+        Assert.NotNull(second);
+        Assert.Contains(second!.Results, r => r.RelPath == "guide/start.md");
+        // Serving the new content cost no additional fill.
+        Assert.Equal(2, _cache.GetStats().Fills);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }

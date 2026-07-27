@@ -25,9 +25,12 @@ public sealed class WikiContentCache
     }
 
     public long Hits;
+    public long Misses;
     public long Fills;
+    public long Preloads;
     public long WatcherInvalidations;
     public long MutationInvalidations;
+    private long _fillMsTotal;
 
     public WikiContentCache(ProjectDocsService docs, ILogger<WikiContentCache> logger)
         : this(docs.BuildWikiContentSnapshotRaw, logger, docs.ResolveWikiCacheKey)
@@ -56,12 +59,47 @@ public sealed class WikiContentCache
                 return slot.Snapshot;
             }
 
+            Interlocked.Increment(ref Misses);
             return FillLocked(projectName, slot, "cold");
         }
     }
 
-    /// <summary>Fills a project during startup or project registration.</summary>
-    public bool Preload(string projectName) => GetSnapshot(projectName) != null;
+    /// <summary>
+    /// The docs/ staleness signature of the published snapshot (path + mtime +
+    /// size over the whole tree). Consumers that keep a derived projection of
+    /// their own - the BM25 search index, for example - gate on this instead of
+    /// walking docs/ a second time to decide whether their projection is stale.
+    /// </summary>
+    internal string? GetDocsSignature(string projectName) => GetSnapshot(projectName)?.Signature;
+
+    /// <summary>
+    /// Fills a project during startup warmup or project registration. Warmup
+    /// fills are counted separately from read misses, so a non-zero
+    /// <see cref="Misses"/> in steady state means a reader really did arrive
+    /// before the cache was warm.
+    /// </summary>
+    public bool Preload(string projectName)
+    {
+        projectName = _normalizeProjectKey(projectName);
+        var slot = _slots.GetOrAdd(projectName, _ => new CacheSlot());
+        lock (slot.Gate)
+        {
+            if (slot.Snapshot != null) return true;
+            Interlocked.Increment(ref Preloads);
+            return FillLocked(projectName, slot, "preload") != null;
+        }
+    }
+
+    /// <summary>Counter readout for the periodic telemetry rollup.</summary>
+    public WikiContentCacheStats GetStats() => new(
+        Interlocked.Read(ref Hits),
+        Interlocked.Read(ref Misses),
+        Interlocked.Read(ref Fills),
+        Interlocked.Read(ref Preloads),
+        Interlocked.Read(ref WatcherInvalidations),
+        Interlocked.Read(ref MutationInvalidations),
+        Interlocked.Read(ref _fillMsTotal),
+        _slots.Count);
 
     /// <summary>
     /// Rebuilds immediately and publishes only after the complete replacement
@@ -97,13 +135,17 @@ public sealed class WikiContentCache
             var snapshot = _build(projectName);
             slot.Snapshot = snapshot;
             Interlocked.Increment(ref Fills);
+            Interlocked.Add(ref _fillMsTotal, started.ElapsedMilliseconds);
             _logger?.LogInformation(
-                "wiki-cache-fill project={Project} reason={Reason} elapsedMs={ElapsedMs} files={Files} folders={Folders}",
+                "wiki-cache-fill project={Project} reason={Reason} elapsedMs={ElapsedMs} files={Files} folders={Folders} hits={Hits} misses={Misses} fills={Fills}",
                 projectName,
                 reason,
                 started.ElapsedMilliseconds,
                 snapshot?.Files.Count ?? 0,
-                snapshot?.Folders.Count ?? 0);
+                snapshot?.Folders.Count ?? 0,
+                Interlocked.Read(ref Hits),
+                Interlocked.Read(ref Misses),
+                Interlocked.Read(ref Fills));
             return snapshot;
         }
         catch (Exception ex)
@@ -119,6 +161,22 @@ public sealed class WikiContentCache
         Mutation,
     }
 }
+
+/// <summary>
+/// Counter snapshot of the central wiki cache. Read by the warmup service's
+/// periodic rollup log; the ratio that matters is Hits vs Misses (a warm
+/// process should approach zero misses) and Fills vs invalidations (how often
+/// docs/ churn forces a rebuild).
+/// </summary>
+public sealed record WikiContentCacheStats(
+    long Hits,
+    long Misses,
+    long Fills,
+    long Preloads,
+    long WatcherInvalidations,
+    long MutationInvalidations,
+    long FillMsTotal,
+    int Projects);
 
 internal sealed record WikiContentSnapshot(
     string ProjectName,
