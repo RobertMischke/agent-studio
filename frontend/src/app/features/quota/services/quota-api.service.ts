@@ -32,6 +32,24 @@ export interface ProjectCliQuotaWaitPolicy extends CliQuotaWaitPolicy {
  * Wraps `/api/cli/quota` (cached + force-refresh) and the per-CLI
  * usage caps endpoints under `/api/cli/quota/caps`.
  */
+/** Policy-derived route suggestion for one task (band -> model x thinking-level). */
+export interface ModelRoutingRecommendation {
+  model: string;
+  thinkingLevel: string | null;
+  tier: string;
+  taskType: string;
+  economyDowngraded: boolean;
+  policyVersion: string;
+  policyWikiPath: string;
+}
+
+/** The active routing policy shown in the CLI-models panel. */
+export interface ModelRoutingPolicyView {
+  economyMode: boolean;
+  policyVersion: string;
+  rows: { tier: string; model: string; thinkingLevel: string | null }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class QuotaApiService {
   private readonly http = inject(HttpClient);
@@ -121,6 +139,25 @@ export class QuotaApiService {
   setModelRoute(profile: CliModelRouteProfile) {
     return this.http.put<CliModelRouteProfile>(
       `${this.baseUrl}/cli/quota/model-routes`, profile,
+    );
+  }
+
+  getModelRoutingRecommendation(taskType: string, cliType: string) {
+    return this.http.get<ModelRoutingRecommendation>(
+      `${this.baseUrl}/cli/model-routing/recommendation`,
+      { params: { taskType, cliType } },
+    );
+  }
+
+  getModelRoutingPolicy() {
+    return this.http.get<ModelRoutingPolicyView>(
+      `${this.baseUrl}/cli/model-routing/policy`,
+    );
+  }
+
+  setModelRoutingEconomyMode(enabled: boolean) {
+    return this.http.put<{ economyMode: boolean }>(
+      `${this.baseUrl}/cli/model-routing/economy-mode`, { enabled },
     );
   }
 }
