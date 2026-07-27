@@ -1925,23 +1925,25 @@
 .pwiki__doc-frame { display: contents; }
 .pwiki__maximize {
   position: absolute;
-  top: 10px;
-  right: 14px;
-  z-index: 4;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 7px;
-  border: 1px solid var(--studio-border, rgba(120, 120, 120, 0.3));
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--studio-border, rgba(120, 120, 120, 0.35));
   background: var(--pwiki-paper-bg, Canvas);
   color: var(--studio-fg, inherit);
-  font-size: 15px;
-  line-height: 1;
+  font: 600 13px/1 system-ui, sans-serif;
   cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
+  opacity: 0.92;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.15s ease, box-shadow 0.15s ease;
 }
-.pwiki__maximize:hover { opacity: 1; }
+.pwiki__maximize:hover { opacity: 1; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.26); }
 .pwiki__doc-frame--max {
   display: block;
   position: fixed;
