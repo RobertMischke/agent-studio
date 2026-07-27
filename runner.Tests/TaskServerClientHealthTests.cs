@@ -127,6 +127,92 @@ public class TaskServerClientHealthTests
         Assert.Empty(handler.Requests);
     }
 
+    [Fact]
+    public async Task Durable_registration_adopts_the_server_owned_host_capacity()
+    {
+        var now = DateTime.UtcNow.ToString("O");
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent($$"""
+                {
+                  "runnerId":"runner-v1",
+                  "name":"Runner v1",
+                  "hostId":"host-a",
+                  "instanceId":"host-a:1",
+                  "runnerVersion":"1.0.0",
+                  "protocolVersion":3,
+                  "status":"active",
+                  "registeredAt":"{{now}}",
+                  "lastSeenAt":"{{now}}",
+                  "runtimeCapacity":{
+                    "hostId":"host-a",
+                    "maxParallelism":7,
+                    "targetLoadPercent":80,
+                    "rampStrategy":"balanced",
+                    "version":1,
+                    "updatedAt":"{{now}}"
+                  }
+                }
+                """),
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1") };
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--poll", "--server", "http://127.0.0.1", "--runner-id", "runner-v1", "--max-parallelism", "2"]);
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true,
+            options: options);
+
+        await client.RegisterAsync("Runner v1", "service", CancellationToken.None);
+
+        Assert.Equal(7, client.HostMaxParallelism);
+        Assert.Equal(HttpMethod.Put, Assert.Single(handler.Requests).Method);
+    }
+
+    [Fact]
+    public async Task Durable_empty_claim_refreshes_capacity_without_restarting_the_daemon()
+    {
+        var now = DateTime.UtcNow.ToString("O");
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent($$"""
+                {
+                  "status":"empty",
+                  "message":"No task available.",
+                  "runtimeCapacity":{
+                    "hostId":"host-a",
+                    "maxParallelism":5,
+                    "targetLoadPercent":85,
+                    "rampStrategy":"conservative",
+                    "version":2,
+                    "updatedAt":"{{now}}"
+                  }
+                }
+                """),
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1") };
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--poll", "--server", "http://127.0.0.1", "--runner-id", "runner-v1", "--max-parallelism", "2"]);
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true,
+            options: options);
+
+        var claim = await client.ClaimAsync(
+            new RunnerClaimRequest(
+                "runner-v1",
+                "Runner v1",
+                "host-a",
+                1,
+                "remote"),
+            CancellationToken.None);
+
+        Assert.Equal(RunnerClaimStatus.Empty, claim.Status);
+        Assert.Equal(5, client.HostMaxParallelism);
+    }
+
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<(HttpMethod Method, string PathAndQuery, string? ClientId)> Requests { get; } = [];

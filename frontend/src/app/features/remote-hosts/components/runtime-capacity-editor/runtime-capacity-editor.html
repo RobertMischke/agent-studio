@@ -1,0 +1,67 @@
+@let h = host();
+@if (h.runtimeCapacity; as capacity) {
+  <section class="capacity" data-testid="remote-host-capacity" aria-label="Host runtime capacity">
+    <div class="capacity__copy">
+      <strong>Runtime capacity</strong>
+      <span data-testid="remote-host-slots">
+        {{ activeSlots() }} active /
+        {{ freeSlots() }} free /
+        {{ capacity.maxParallelism }} total
+      </span>
+      <span>
+        Central ceiling {{ capacity.maxParallelism }} slots. Daemon adopted
+        {{ h.effectiveMaxParallelism ?? 'not reported' }}.
+        @if (h.runtimeCapacityAppliedAt) {
+          Applied {{ h.runtimeCapacityAppliedAt | date:'short' }}.
+        }
+      </span>
+      <span>
+        Target load {{ capacity.targetLoadPercent }}% · {{ capacity.rampStrategy }} ramp.
+      </span>
+      @if (awaitingAdoption()) {
+        <span class="capacity__pending" data-testid="remote-host-capacity-awaiting-adoption">
+          Waiting for the daemon to adopt the new ceiling. Running work continues.
+        </span>
+      }
+    </div>
+    <div class="capacity__form">
+      <label>
+        Slot ceiling
+        <input type="number" min="1" max="256" step="1"
+               data-testid="remote-host-capacity-input"
+               [value]="capacityDraft() ?? capacity.maxParallelism"
+               [disabled]="!!h.busyAction"
+               (input)="updateCapacityDraft($event)" />
+      </label>
+      <label>
+        Target load
+        <input type="number" min="50" max="95" step="1"
+               data-testid="remote-host-target-load-input"
+               [value]="targetLoadDraft() ?? capacity.targetLoadPercent"
+               [disabled]="!!h.busyAction"
+               (input)="updateTargetLoadDraft($event)" />
+      </label>
+      <label>
+        Ramp
+        <select data-testid="remote-host-ramp-select"
+                [disabled]="!!h.busyAction"
+                (change)="updateRampDraft($event)">
+          @for (strategy of ['conservative', 'balanced', 'aggressive']; track strategy) {
+            <option [value]="strategy"
+                    [selected]="strategy === (rampDraft() ?? capacity.rampStrategy)">
+              {{ strategy }}
+            </option>
+          }
+        </select>
+      </label>
+      <button class="capacity__save" type="button"
+              data-testid="remote-host-capacity-save"
+              [appPendingButton]="h.busyAction === 'capacity'"
+              pendingLabel="Saving capacity…"
+              [disabled]="!!h.busyAction"
+              (click)="save()">
+        Apply
+      </button>
+    </div>
+  </section>
+}

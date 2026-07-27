@@ -318,6 +318,79 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('hydrates and updates the Task Server runtime capacity by host id and version', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const capacity = {
+      hostId: 'host-a',
+      maxParallelism: 4,
+      targetLoadPercent: 80,
+      rampStrategy: 'balanced' as const,
+      version: 1,
+      updatedAt: now,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'host-a',
+      instanceId: 'host-a:1',
+      runnerVersion: '1.0.0',
+      protocolVersion: 3,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'host-a',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [],
+      telemetry: null,
+      runtimeCapacity: capacity,
+      effectiveMaxParallelism: 4,
+      runtimeCapacityAppliedAt: now,
+    }]);
+
+    svc.setCapacity('agent-runner-01', 6, 85, 'aggressive');
+    const request = http.expectOne('/api/v1/hosts/host-a/runtime-capacity');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'aggressive',
+      expectedVersion: 1,
+    });
+    request.flush({
+      ...capacity,
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'aggressive',
+      version: 2,
+    });
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 6,
+        targetLoadPercent: 85,
+        rampStrategy: 'aggressive',
+        version: 2,
+      },
+      effectiveMaxParallelism: 4,
+      busyAction: null,
+    });
+    http.verify();
+  });
+
   it('invalidates cached project proofs before reloading a re-probed host', () => {
     TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
     const svc = TestBed.inject(RemoteHostsService);

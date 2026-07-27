@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
 import { RemoteHostCardComponent } from './remote-host-card';
 import type { RemoteHost } from '../../models/remote-host.model';
 
@@ -237,7 +238,10 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('VM throttled');
     (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
+    const telemetryHistory = fixture.debugElement
+      .query(By.directive(HostTelemetryHistoryComponent))
+      .componentInstance as HostTelemetryHistoryComponent;
+    expect(telemetryHistory.window()).toBe('1h');
   });
 
   it('aggregates ended phases and bounds the finding row with a more counter', () => {
@@ -278,8 +282,11 @@ describe('RemoteHostCardComponent', () => {
     const fixture = mount({ ...HOST, telemetry: { clientId: 'agent-runner', window: '14d', points, findings: [] } });
     const plots = fixture.nativeElement.querySelector('[data-testid="remote-host-telemetry-plots"]') as HTMLElement;
     plots.getBoundingClientRect = () => ({ left: 100, width: 200 } as DOMRect);
+    const telemetryHistory = fixture.debugElement
+      .query(By.directive(HostTelemetryHistoryComponent))
+      .componentInstance as HostTelemetryHistoryComponent;
 
-    fixture.componentInstance.showTelemetryPoint({ currentTarget: plots, clientX: 290 } as unknown as PointerEvent);
+    telemetryHistory.showPoint({ currentTarget: plots, clientX: 290 } as unknown as PointerEvent);
     fixture.detectChanges();
 
     const tooltip = fixture.nativeElement.querySelector('[data-testid="remote-host-telemetry-tooltip"]') as HTMLElement;
@@ -290,9 +297,9 @@ describe('RemoteHostCardComponent', () => {
     expect(tooltip.querySelector('[data-metric="slots"]')?.textContent).toContain('6 slots');
     expect(fixture.nativeElement.querySelectorAll('.telemetry__point').length).toBe(4);
 
-    fixture.componentInstance.hideTelemetryPoint({ pointerType: 'touch' } as PointerEvent);
-    expect(fixture.componentInstance.hoveredTelemetryIndex()).toBe(1);
-    fixture.componentInstance.hideTelemetryPoint({ pointerType: 'mouse' } as PointerEvent);
-    expect(fixture.componentInstance.hoveredTelemetryIndex()).toBeNull();
+    telemetryHistory.hidePoint({ pointerType: 'touch' } as PointerEvent);
+    expect(telemetryHistory.hoveredIndex()).toBe(1);
+    telemetryHistory.hidePoint({ pointerType: 'mouse' } as PointerEvent);
+    expect(telemetryHistory.hoveredIndex()).toBeNull();
   });
 });

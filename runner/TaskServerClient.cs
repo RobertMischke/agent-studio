@@ -30,6 +30,7 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
     private readonly bool _usesServiceCredential;
+    private int? _centralHostMaxParallelism;
 
     public TaskServerClient(RunnerOptions options)
     {
@@ -76,9 +77,11 @@ public sealed class TaskServerClient : IDisposable
         string runnerId,
         string? configuredClientId = null,
         string? authToken = null,
-        bool usesDurableTaskServer = false)
+        bool usesDurableTaskServer = false,
+        RunnerOptions? options = null)
     {
         _http = http;
+        _options = options;
         _configuredClientId = configuredClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)
@@ -155,14 +158,16 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
-                capabilities);
+                capabilities,
+                BootstrapMaxParallelism: options.HostMaxParallelism);
             try
             {
-                _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
+                var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
                     HttpMethod.Put,
                     $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
                     request,
                     ct);
+                AdoptRuntimeCapacity(registered?.RuntimeCapacity);
                 SetClientId(runnerId);
                 return runnerId;
             }
@@ -245,6 +250,10 @@ public sealed class TaskServerClient : IDisposable
 
     public bool UsesDurableTaskServer => _useV1;
     internal string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+    internal int HostMaxParallelism => Math.Clamp(
+        _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
+        1,
+        256);
 
     internal RunOutboxAuthority OutboxAuthority(string taskKey)
     {
@@ -326,8 +335,10 @@ public sealed class TaskServerClient : IDisposable
                 req.RequestedTtlSeconds ?? 120,
                 req.AvailableSlots,
                 ToContract(req.Inventory),
-                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options)),
+                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options),
+                req.EffectiveMaxParallelism ?? HostMaxParallelism),
             ct);
+        AdoptRuntimeCapacity(claim?.RuntimeCapacity);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
             || claim.Task is null || claim.Run is null || claim.Lease is null)
             return new RunnerClaimResponse(
@@ -359,6 +370,12 @@ public sealed class TaskServerClient : IDisposable
             RunId: claim.Run.RunId,
             LeaseInstanceId: RunnerInstanceId,
             ReconciliationActions: FromContract(claim.ReconciliationActions));
+    }
+
+    private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
+    {
+        if (capacity?.MaxParallelism is >= 1 and <= 256)
+            _centralHostMaxParallelism = capacity.MaxParallelism;
     }
 
     /// <summary>
@@ -394,7 +411,7 @@ public sealed class TaskServerClient : IDisposable
                                : RunnerCapabilityProbe.ReviewRequirements(_options)),
                    },
                    ct)
-               ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
+                ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
     }
 
     public async Task<Contract.ReviewLeaseDto> RenewReviewLeaseAsync(

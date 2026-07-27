@@ -35,6 +35,12 @@
     <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>
 
+  @if (h.role === 'remote' && !retired() && h.runtimeCapacity) {
+    <app-runtime-capacity-editor
+      [host]="h"
+      (capacityChange)="capacityChange.emit($event)" />
+  }
+
   <app-host-workload-summary
     [runSlots]="runSlotsLabel()"
     [runSlotsStale]="telemetryStale() || stale() || liveError()"
@@ -89,105 +95,7 @@
   }
 
   @if (!stale() && h.telemetry && h.telemetry.points.length) {
-    <section class="telemetry" data-testid="remote-host-telemetry" aria-label="Host performance history">
-      <div class="telemetry__head">
-        <strong>Performance history</strong>
-        <span class="telemetry__context"
-              [class.telemetry__context--stale]="telemetryStale()"
-              data-testid="remote-host-slots-context">{{ latestContext() }}</span>
-        <div class="telemetry__windows" aria-label="Telemetry time window">
-          @for (window of ['1h', '6h', '48h', '14d']; track window) {
-            <button type="button" [attr.aria-pressed]="telemetryWindow() === window"
-                    [attr.data-testid]="'remote-host-window-' + window"
-                    (click)="selectTelemetryWindow($any(window))">{{ window }}</button>
-          }
-        </div>
-      </div>
-      @if (telemetryFindings().length) {
-        <div class="telemetry__findings" data-testid="remote-host-findings">
-          @for (finding of visibleTelemetryFindings(); track finding.kind + ':' + (finding.isActive === false ? 'history' : 'active')) {
-            <span class="host__badge telemetry__finding"
-                  [attr.data-tone]="finding.isActive === false ? null : 'warn'"
-                  [attr.data-finding-kind]="finding.kind"
-                  [attr.data-finding-active]="finding.isActive !== false"
-                  data-testid="remote-host-finding"
-                  [appTooltip]="findingTooltip(finding)">
-              @if (finding.isActive === false) {
-                <span class="telemetry__finding-label">
-                  {{ finding.label }} · {{ finding.occurrences ?? 1 }}× in window
-                </span>
-              } @else {
-                <span class="telemetry__finding-label">
-                  {{ finding.label }} · since {{ finding.since | date:'short' }}
-                </span>
-              }
-            </span>
-          }
-          @if (additionalTelemetryFindingCount()) {
-            <span class="host__badge telemetry__finding telemetry__finding--more"
-                  data-testid="remote-host-findings-more"
-                  [attr.aria-label]="additionalTelemetryFindingCount() + ' additional findings'">
-              +{{ additionalTelemetryFindingCount() }} more
-            </span>
-          }
-        </div>
-      }
-      <div class="telemetry__charts">
-        <div class="telemetry__labels" aria-hidden="true">
-          @for (row of chartRows(); track row.key) {
-            <span>{{ row.label }}</span>
-          }
-        </div>
-        <div class="telemetry__plots"
-             data-testid="remote-host-telemetry-plots"
-             tabindex="0"
-             role="group"
-             aria-label="Performance history. Hover, tap, or use arrow keys to inspect exact values."
-             (pointerdown)="showTelemetryPoint($event)"
-             (pointermove)="showTelemetryPoint($event)"
-             (pointerleave)="hideTelemetryPoint($event)"
-             (focus)="focusTelemetry()"
-             (blur)="clearTelemetryHover()"
-             (keydown)="moveTelemetryHover($event)">
-          @for (row of chartRows(); track row.key) {
-            <svg [attr.data-chart]="row.key"
-                 viewBox="0 0 100 30"
-                 preserveAspectRatio="none"
-                 role="img"
-                 [attr.aria-label]="row.label + ' history'">
-              <polyline [attr.points]="row.path"></polyline>
-              @if (row.hoverY !== null) {
-                <circle class="telemetry__point"
-                        [attr.cx]="hoveredTelemetry()?.position"
-                        [attr.cy]="row.hoverY"
-                        r="1.8"></circle>
-              }
-            </svg>
-          }
-          @if (hoveredTelemetry(); as hovered) {
-            <span class="telemetry__crosshair"
-                  aria-hidden="true"
-                  [style.left.%]="hovered.position"></span>
-            <div class="telemetry__tooltip"
-                 [class.telemetry__tooltip--start]="hovered.position < 20"
-                 [class.telemetry__tooltip--end]="hovered.position > 80"
-                 [style.left.%]="hovered.position"
-                 [attr.data-point-index]="hovered.index"
-                 [attr.data-point-timestamp]="hovered.point.timestamp"
-                 data-testid="remote-host-telemetry-tooltip"
-                 role="tooltip">
-              <time [attr.datetime]="hovered.point.timestamp">{{ hovered.point.timestamp | date:'medium' }}</time>
-              <div class="telemetry__tooltip-values">
-                @for (detail of hovered.values; track detail.key) {
-                  <span>{{ detail.label }}</span>
-                  <strong [attr.data-metric]="detail.key">{{ detail.value }}</strong>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-    </section>
+    <app-host-telemetry-history [host]="h" [now]="now()" />
   }
 
   @if (h.cliQuotas.length) {

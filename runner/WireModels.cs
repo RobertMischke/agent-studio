@@ -112,7 +112,8 @@ public sealed record RunnerClaimRequest(
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
     RunnerProcessInventory? Inventory = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    int? EffectiveMaxParallelism = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,

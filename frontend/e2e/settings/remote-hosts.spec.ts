@@ -147,6 +147,83 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-live-first-mount--mocked.png'), fullPage: false });
   });
 
+  test('shows and centrally updates the host runtime capacity', async ({ page }) => {
+    const now = new Date().toISOString();
+    let capacityBody: Record<string, unknown> | null = null;
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01',
+        name: 'agent-runner-01',
+        hostId: 'runner-host-a',
+        instanceId: 'runner-host-a:1',
+        runnerVersion: '1.0.0',
+        protocolVersion: 3,
+        status: 'active',
+        registeredAt: now,
+        lastSeenAt: now,
+        hostAdmission: {
+          hostId: 'runner-host-a',
+          admissionState: 'open',
+          automaticDrainReason: null,
+          automaticDrainAt: null,
+          operatorDrainReason: null,
+          operatorDrainAt: null,
+        },
+        capabilities: [],
+        telemetry: null,
+        runtimeCapacity: {
+          hostId: 'runner-host-a',
+          maxParallelism: 4,
+          targetLoadPercent: 80,
+          rampStrategy: 'balanced',
+          version: 1,
+          updatedAt: now,
+        },
+        effectiveMaxParallelism: 4,
+        runtimeCapacityAppliedAt: now,
+      }]),
+    }));
+    await page.route('**/api/v1/hosts/runner-host-a/runtime-capacity', async route => {
+      capacityBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          hostId: 'runner-host-a',
+          maxParallelism: 6,
+          targetLoadPercent: 85,
+          rampStrategy: 'aggressive',
+          version: 2,
+          updatedAt: now,
+        }),
+      });
+    });
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-slots')).toContainText('0 active / 4 free / 4 total');
+    await remote.getByTestId('remote-host-capacity-input').fill('6');
+    await remote.getByTestId('remote-host-target-load-input').fill('85');
+    await remote.getByTestId('remote-host-ramp-select').selectOption('aggressive');
+    await remote.getByTestId('remote-host-capacity-save').click();
+
+    await expect.poll(() => capacityBody).toEqual({
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'aggressive',
+      expectedVersion: 1,
+    });
+    await expect(remote.getByTestId('remote-host-slots')).toContainText('0 active / 6 free / 6 total');
+    await expect(remote.getByTestId('remote-host-capacity-awaiting-adoption')).toBeVisible();
+    await setTheme(page, 'dark');
+    await remote.screenshot({ path: join(SHOT_DIR, 'runtime-capacity-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await remote.screenshot({ path: join(SHOT_DIR, 'runtime-capacity-light--mocked.png') });
+  });
+
   test('Drain and graceful Retire require confirmation and keep a revivable retired client', async ({ page }) => {
     let kind = 'service';
     let draining = false;

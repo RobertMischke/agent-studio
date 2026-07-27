@@ -36,6 +36,7 @@ builder.Services
     });
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<TaskServerStore>();
+builder.Services.AddSingleton<RuntimeCapacitySettingsService>();
 builder.Services.AddSingleton<LegacyMigrationService>();
 builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
 

@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import type { ClientSummary } from '../../../models/task.model';
 import type {
   HostActionKind,
+  HostRampStrategy,
   HostTelemetrySeries,
   RemoteHost,
   RemoteHostAdmission,
@@ -214,6 +215,12 @@ export class RemoteHostsService {
               gitPushCheckedAt:
                 gitWorkflowPush?.advertisedAt ?? gitPush?.advertisedAt ?? current.gitPushCheckedAt,
               hostAdmission: snapshot.hostAdmission,
+              capacityHostId: snapshot.hostId,
+              runtimeCapacity: snapshot.runtimeCapacity ?? current.runtimeCapacity ?? null,
+              effectiveMaxParallelism:
+                snapshot.effectiveMaxParallelism ?? current.effectiveMaxParallelism ?? null,
+              runtimeCapacityAppliedAt:
+                snapshot.runtimeCapacityAppliedAt ?? current.runtimeCapacityAppliedAt ?? null,
               stats,
             };
             if (index >= 0) projected[index] = next;
@@ -319,6 +326,47 @@ export class RemoteHostsService {
     this.postAction(id, 'revive', `/api/clients/${encodeURIComponent(this.clientId(id))}/revive`);
   }
 
+  setCapacity(
+    id: string,
+    maxParallelism: number,
+    targetLoadPercent: number,
+    rampStrategy: HostRampStrategy,
+  ): void {
+    const current = this.hosts().find(host => host.id === id);
+    const capacity = current?.runtimeCapacity;
+    const hostId = current?.capacityHostId;
+    if (!current || !capacity || !hostId || current.busyAction || !this.http) return;
+
+    this.patch(id, host => ({ ...host, busyAction: 'capacity' }));
+    this.http.put<NonNullable<RemoteHost['runtimeCapacity']>>(
+      `/api/v1/hosts/${encodeURIComponent(hostId)}/runtime-capacity`,
+      {
+        maxParallelism,
+        targetLoadPercent,
+        rampStrategy,
+        expectedVersion: capacity.version,
+      },
+    ).subscribe({
+      next: updated => {
+        this.hosts.update(hosts => hosts.map(host =>
+          host.capacityHostId === hostId
+            ? {
+                ...host,
+                runtimeCapacity: updated,
+                busyAction: host.id === id ? null : host.busyAction,
+              }
+            : host));
+        this.log('capacity-saved', {
+          hostId,
+          maxParallelism,
+          targetLoadPercent,
+          rampStrategy,
+        });
+      },
+      error: error => this.actionFailed(id, error),
+    });
+  }
+
   permanentlyDelete(id: string): void {
     const host = this.hosts().find(item => item.id === id);
     if (!host || !this.http) return;
@@ -389,6 +437,9 @@ interface TaskServerRunnerCapabilitySnapshot {
   hostAdmission: RemoteHostAdmission;
   capabilities: RemoteHostCapabilityHealth[];
   telemetry?: TaskServerTelemetrySnapshot | null;
+  runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
+  effectiveMaxParallelism?: number | null;
+  runtimeCapacityAppliedAt?: string | null;
 }
 
 function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {

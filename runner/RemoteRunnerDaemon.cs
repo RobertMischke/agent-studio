@@ -82,7 +82,9 @@ public sealed class RemoteRunnerDaemon
             "runner registration",
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
             shutdown);
-        _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
+        _log(
+            $"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; " +
+            $"slots={_client.HostMaxParallelism}");
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
         await handoffRecovery.RecoverAllAsync(shutdown);
 
@@ -274,7 +276,7 @@ public sealed class RemoteRunnerDaemon
                     consecutiveFaults = 0;
                     continue;
                 }
-                if (active.Count >= _options.HostMaxParallelism)
+                if (active.Count >= _client.HostMaxParallelism)
                 {
                     inventorySnapshot = inventory.Snapshot();
                     activeTaskKeys = inventorySnapshot.Processes
@@ -291,7 +293,7 @@ public sealed class RemoteRunnerDaemon
                             Inventory: inventorySnapshot), shutdown);
                     AcknowledgeInventory(inventory, inventorySnapshot, response);
                 }
-                while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
+                while (active.Count < _client.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
                     var chatClaim = await _client.ClaimProjectChatWorkAsync(
                         new RemoteChatWorkClaimRequest(
@@ -303,7 +305,7 @@ public sealed class RemoteRunnerDaemon
                         claimedAny = true;
                         _log(
                             $"claimed project chat {chatClaim.Work.ProjectName}/{chatClaim.Work.Kind} " +
-                            $"into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                            $"into slot {active.Count + 1}/{_client.HostMaxParallelism}");
                         active.Add(new ActiveSlot(
                             null,
                             new RemoteProjectChatRunner(_options, _client, _log)
@@ -320,7 +322,7 @@ public sealed class RemoteRunnerDaemon
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         TakeTelemetry(),
-                        AvailableSlots: _options.HostMaxParallelism - active.Count,
+                        AvailableSlots: _client.HostMaxParallelism - active.Count,
                         ActiveSlots: active.Count,
                         IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}",
                         ActiveTaskKeys: activeTaskKeys,
@@ -364,7 +366,7 @@ public sealed class RemoteRunnerDaemon
                     }
 
                     claimedAny = true;
-                    _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                    _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_client.HostMaxParallelism}");
                     active.Add(new ActiveSlot(
                         claim.TaskKey,
                         taskRunner.RunClaimedAsync(

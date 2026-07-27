@@ -103,6 +103,7 @@ RUNNER_NAME=agent-runner-01
 RUNNER_CLIENT_ID=agent-runner-01
 RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
+# Seeds a newly registered host and remains the fallback for an older server.
 RUNNER_MAX_PARALLELISM=2
 # Optional repository-specific requirements:
 RUNNER_REQUIRED_CAPABILITIES=toolchain:dotnet,toolchain:node,toolchain:playwright
@@ -122,6 +123,19 @@ claim, active slots, task inflow, last contact, and push status. Active slots
 come from the daemon's latest telemetry sample. If that sample or the host
 heartbeat is older than five minutes, the last slot value is explicitly marked
 stale and rendered quietly instead of being presented as live.
+
+The same card shows the server-owned **Runtime capacity** policy. Change the
+slot ceiling, target load, or ramp strategy there and choose **Apply**. The
+Task Server versions the update, enforces the ceiling across Coding RUN leases
+on the host, and returns it on the next claim poll. The Coding daemon adopts it
+without a restart. Existing work continues when the ceiling is lowered; only
+new admission stops. The card distinguishes the central ceiling from the last
+value reported as adopted by the daemon. Review GATE work remains a separate
+pool and does not consume a RUN slot.
+
+`RUNNER_MAX_PARALLELISM` is no longer the live operator control for a versioned
+Task Server. It seeds the first registration and remains a compatibility
+fallback. Subsequent file changes do not replace the central policy.
 
 The workspace status bar defines `running` from the Board's `3-progress`
 snapshot: a local run needs a running process execution and a remote run needs
@@ -146,7 +160,7 @@ terminal, with an immutable handoff when required, or an authoritative
 non-infrastructure review report reopens normal capacity. Product findings
 prove that review infrastructure recovered without becoming a product pass.
 Canary failure returns to a longer cooldown. Do not lower
-`RUNNER_MAX_PARALLELISM` as a repair. Healthy capabilities and unrelated
+the central runtime capacity as a repair. Healthy capabilities and unrelated
 services on the same host continue using the configured slots.
 
 Execution Hosts shows the capability state, reason, first and last failure,
