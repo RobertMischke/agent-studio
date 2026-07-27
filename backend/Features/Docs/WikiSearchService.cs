@@ -334,7 +334,13 @@ public class WikiSearchService
         // only ever over-invalidate, never miss a change. Reusing it turns a
         // warm search from a full docs/ walk into a dictionary lookup and
         // removes the last parallel staleness probe in the docs area.
-        var centralFingerprint = _wikiContentCache?.GetDocsSignature(projectName);
+        //
+        // The gate only applies when the snapshot projects the very directory
+        // this search reads. It returns null otherwise (a project with a
+        // configured wikiSourceBranch publishes the branch worktree, not the
+        // checkout searched here, and a placeholder signature describes no tree
+        // at all), and the local enumeration below then decides staleness.
+        var centralFingerprint = _wikiContentCache?.GetDocsSignature(projectName, wikiDir);
         if (centralFingerprint != null
             && _indexes.TryGetValue(projectName, out var warm)
             && warm.Fingerprint == centralFingerprint)

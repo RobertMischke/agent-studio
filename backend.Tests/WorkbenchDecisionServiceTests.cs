@@ -141,6 +141,103 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         Assert.DoesNotContain("\"decision\"", File.ReadAllText(Descriptor("routing-policy")));
     }
 
+    [Fact]
+    public void Confirm_RefusesAnArchiveDecisionThatCarriesSpawnedTaskKeys()
+    {
+        WriteSchemaTwo("routing-policy");
+        var (catalogue, decisions) = Services();
+        var before = File.ReadAllText(Descriptor("routing-policy"));
+
+        var result = decisions.Confirm("Project", "routing-policy", new ConfirmWorkbenchDecisionRequest
+        {
+            OperationId = "workbench-ui-archive-keys",
+            Outcome = "archive",
+            Actor = "Robert",
+            ExpectedFingerprint = catalogue.Read("Project", "routing-policy")!.Fingerprint,
+            ArchiveReason = "The experiment disproved the direction.",
+            SpawnedTaskKeys = ["AGT-2400"],
+            Confirmed = true,
+        });
+
+        // The read side refuses a settled archive receipt with spawned keys, so
+        // writing one would leave the Workbench permanently unreadable.
+        Assert.False(result.Success);
+        Assert.Equal("validation", result.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(Descriptor("routing-policy")));
+        Assert.True(catalogue.List("Project", includeHistory: true)!.Items.Single().Valid);
+    }
+
+    [Fact]
+    public void Confirm_AnswersARetryOfALegacyDescriptorFromTheStoredReceipt()
+    {
+        WriteSchemaOne("legacy-experiment");
+        var (catalogue, decisions) = Services();
+        ConfirmWorkbenchDecisionRequest Request(string operationId) => new()
+        {
+            OperationId = operationId,
+            Outcome = "archive",
+            Actor = "Robert",
+            ExpectedFingerprint = catalogue.Read("Project", "legacy-experiment")!.Fingerprint,
+            ArchiveReason = "The experiment disproved the direction.",
+            Confirmed = true,
+        };
+
+        Assert.True(decisions.Confirm("Project", "legacy-experiment", Request("workbench-ui-archive-1")).Success);
+
+        // The same idempotency key must replay the settled result, not 409.
+        var retry = decisions.Confirm("Project", "legacy-experiment", Request("workbench-ui-archive-1"));
+        Assert.True(retry.Success);
+        Assert.True(retry.Idempotent);
+        Assert.Equal("archive", retry.Outcome);
+        Assert.Equal("archived", retry.DecisionStage);
+
+        // A different key on a settled Workbench is still a conflict.
+        var other = decisions.Confirm("Project", "legacy-experiment", Request("workbench-ui-archive-2"));
+        Assert.False(other.Success);
+        Assert.Equal("already-settled", other.ErrorCode);
+    }
+
+    [Fact]
+    public void Confirm_SerializesTwoConcurrentConfirmationsOfTheSameWorkbench()
+    {
+        WriteSchemaTwo("routing-policy");
+        var (catalogue, decisions) = Services();
+        var fingerprint = catalogue.Read("Project", "routing-policy")!.Fingerprint;
+        ConfirmWorkbenchDecisionRequest Request(string operationId) => new()
+        {
+            OperationId = operationId,
+            Outcome = "archive",
+            Actor = "Robert",
+            ExpectedFingerprint = fingerprint,
+            ArchiveReason = "The experiment disproved the direction.",
+            Confirmed = true,
+        };
+
+        var results = new WorkbenchDecisionResult[2];
+        using var start = new Barrier(2);
+        var threads = new[] { "workbench-ui-race-a", "workbench-ui-race-b" }
+            .Select((operationId, index) => new Thread(() =>
+            {
+                start.SignalAndWait();
+                results[index] = decisions.Confirm("Project", "routing-policy", Request(operationId));
+            }))
+            .ToArray();
+        foreach (var thread in threads) thread.Start();
+        foreach (var thread in threads)
+            Assert.True(thread.Join(TimeSpan.FromSeconds(30)), "a confirmation never finished");
+
+        // Both were taken on the same fingerprint: unserialized, both would pass
+        // the check and the second would overwrite the first decision.
+        var winner = Assert.Single(results, result => result.Success);
+        var refused = Assert.Single(results, result => !result.Success);
+        Assert.Equal("already-settled", refused.ErrorCode);
+
+        var item = Assert.Single(catalogue.List("Project", includeHistory: true)!.Items);
+        Assert.True(item.Valid, item.Error);
+        Assert.Equal("archived", item.Status);
+        Assert.Equal(winner.OperationId, item.Decision!.OperationId);
+    }
+
     private static PrepareWorkbenchDecisionRequest FeaturePrepare(string? fingerprint) => new()
     {
         OperationId = "workbench-ui-prepare-2",

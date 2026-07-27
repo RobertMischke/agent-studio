@@ -18,17 +18,22 @@ public class WikiSearchServiceTests : IDisposable
 
     private readonly string _tempDir;
     private readonly string _docsDir;
+    private readonly string _branchDir;
 
     public WikiSearchServiceTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), "wiki-search-tests-" + Guid.NewGuid().ToString("N"));
+        var id = Guid.NewGuid().ToString("N");
+        _tempDir = Path.Combine(Path.GetTempPath(), "wiki-search-tests-" + id);
         _docsDir = Path.Combine(_tempDir, "docs");
+        _branchDir = Path.Combine(Path.GetTempPath(), "wiki-search-branch-" + id);
         Directory.CreateDirectory(_docsDir);
     }
 
     public void Dispose()
     {
         try { Directory.Delete(_tempDir, recursive: true); }
+        catch { /* best-effort */ }
+        try { Directory.Delete(_branchDir, recursive: true); }
         catch { /* best-effort */ }
     }
 
@@ -130,6 +135,46 @@ public class WikiSearchServiceTests : IDisposable
 
         Assert.Single((await search.SearchAsync(ProjectName, "omega", semantic: false, limit: 20))!.Results);
         Assert.Empty((await search.SearchAsync(ProjectName, "alpha", semantic: false, limit: 20))!.Results);
+    }
+
+    [Fact]
+    public async Task Search_IgnoresACentralSignatureThatDescribesADifferentWikiDirectory()
+    {
+        // A project with a configured wikiSourceBranch publishes a snapshot of
+        // the branch worktree, not of the checkout this search reads. Gating on
+        // that snapshot's docs/ signature would hide every checkout edit.
+        Directory.CreateDirectory(Path.Combine(_branchDir, "docs"));
+        File.WriteAllText(Path.Combine(_branchDir, "docs", "branch.md"), "# Branch\n\nUnveraendert.\n");
+        var cache = BuildCacheFor(_branchDir);
+        Assert.True(cache.Preload(ProjectName));
+
+        var page = WritePage("changing.md", "# Seite\n\nalpha inhalt.\n");
+        var search = BuildSearchService(cache);
+
+        Assert.Single((await search.SearchAsync(ProjectName, "alpha", semantic: false, limit: 20))!.Results);
+
+        File.WriteAllText(page, "# Seite\n\nomega inhalt jetzt deutlich anders.\n");
+
+        Assert.Single((await search.SearchAsync(ProjectName, "omega", semantic: false, limit: 20))!.Results);
+        Assert.Empty((await search.SearchAsync(ProjectName, "alpha", semantic: false, limit: 20))!.Results);
+    }
+
+    [Fact]
+    public async Task Search_IgnoresAPlaceholderCentralSignature()
+    {
+        // Filled before docs/ existed, the snapshot carries the "empty"
+        // placeholder instead of a tree hash. A constant gate never opens again.
+        Directory.Delete(_docsDir, recursive: true);
+        var cache = BuildCacheFor(_tempDir);
+        Assert.True(cache.Preload(ProjectName));
+        var search = BuildSearchService(cache);
+
+        Assert.Empty((await search.SearchAsync(ProjectName, "alpha", semantic: false, limit: 20))!.Results);
+
+        // Written without invalidating the cache: the snapshot stays "empty".
+        WritePage("late.md", "# Seite\n\nalpha inhalt.\n");
+
+        Assert.Single((await search.SearchAsync(ProjectName, "alpha", semantic: false, limit: 20))!.Results);
     }
 
     // ---- Semantic layer ----
@@ -235,9 +280,12 @@ public class WikiSearchServiceTests : IDisposable
         return full;
     }
 
-    private WikiSearchService BuildSearchService(params ICliOneShot[] oneShots)
+    private WikiSearchService BuildSearchService(params ICliOneShot[] oneShots) =>
+        BuildSearchService((WikiContentCache?)null, oneShots);
+
+    private WikiSearchService BuildSearchService(WikiContentCache? cache, params ICliOneShot[] oneShots)
     {
-        var config = BuildConfig();
+        var config = BuildConfig(_tempDir);
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return new WikiSearchService(
@@ -246,15 +294,34 @@ public class WikiSearchServiceTests : IDisposable
             new CliOneShotRegistry(oneShots),
             config,
             new AgentStudio.Prompts.RuntimePromptService(config, NullLogger<AgentStudio.Prompts.RuntimePromptService>.Instance),
-            NullLogger<WikiSearchService>.Instance);
+            NullLogger<WikiSearchService>.Instance,
+            cache);
     }
 
-    private IConfiguration BuildConfig() => new ConfigurationBuilder()
+    /// <summary>
+    /// A central wiki cache whose published snapshot projects
+    /// <paramref name="root"/>/docs - which is the checkout only when the
+    /// caller passes the search root.
+    /// </summary>
+    private WikiContentCache BuildCacheFor(string root)
+    {
+        var config = BuildConfig(root);
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var docs = new ProjectDocsService(
+            new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            NullLogger<ProjectDocsService>.Instance);
+        var cache = new WikiContentCache(docs, NullLogger<WikiContentCache>.Instance);
+        docs.SetWikiContentCache(cache);
+        return cache;
+    }
+
+    private static IConfiguration BuildConfig(string root) => new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["WatchPaths:0:Name"] = ProjectName,
-            ["WatchPaths:0:RootPath"] = _tempDir,
-            ["WatchPaths:0:Path"] = Path.Combine(_tempDir, ".orchestrator", "jobs"),
+            ["WatchPaths:0:RootPath"] = root,
+            ["WatchPaths:0:Path"] = Path.Combine(root, ".orchestrator", "jobs"),
         })
         .Build();
 }

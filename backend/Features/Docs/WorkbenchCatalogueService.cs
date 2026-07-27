@@ -212,7 +212,9 @@ public sealed class WorkbenchCatalogueService
             {
                 using var json = JsonDocument.Parse(File.ReadAllText(descriptorPath));
                 var obj = json.RootElement;
-                if (RequiredInt(obj, "schemaVersion") != 2
+                // Both schemas store the receipt under the same key, so both
+                // can own an operationId (AGT-2375).
+                if (RequiredInt(obj, "schemaVersion") is not (1 or 2)
                     || !obj.TryGetProperty("decision", out var decision)
                     || decision.ValueKind != JsonValueKind.Object
                     || OptionalString(decision, "operationId") != operationId)
@@ -229,7 +231,11 @@ public sealed class WorkbenchCatalogueService
 
     /// <summary>
     /// Generic Wiki classification must not stand in for the reasoned,
-    /// explicitly confirmed Workbench archive decision.
+    /// explicitly confirmed Workbench archive decision. Both descriptor schemas
+    /// own their folder: the sidecar archive bug is a property of the
+    /// <c>workbench.json</c> descriptor, not of its version, and schema v1 still
+    /// carries the large majority of the repository's Workbenches - gating on
+    /// v2 alone would have left every one of them exposed (AGT-2375).
     /// </summary>
     public bool OwnsCanonicalPath(string projectName, string relPath)
     {
@@ -242,8 +248,11 @@ public sealed class WorkbenchCatalogueService
             try
             {
                 using var json = JsonDocument.Parse(File.ReadAllText(descriptorPath));
-                if (RequiredInt(json.RootElement, "schemaVersion") != 2
-                    || RequiredString(json.RootElement, "pageKind") != "workbench")
+                var schema = RequiredInt(json.RootElement, "schemaVersion");
+                if (schema is not (1 or 2)) continue;
+                // pageKind is a schema v2 field; a v1 descriptor is a Workbench
+                // by the presence of workbench.json alone.
+                if (schema >= 2 && RequiredString(json.RootElement, "pageKind") != "workbench")
                     continue;
                 var folder = Path.GetRelativePath(root, Path.GetDirectoryName(descriptorPath)!)
                     .Replace('\\', '/').TrimEnd('/');
@@ -313,7 +322,9 @@ public sealed class WorkbenchCatalogueService
                     throw new InvalidDataException("pageKind must be workbench.");
                 if (schema >= 2 && (obj.TryGetProperty("status", out _) || obj.TryGetProperty("updatedAt", out _)))
                     throw new InvalidDataException("schemaVersion 2 must not store legacy status or updatedAt fields.");
-                var decision = schema >= 2 ? ReadDecision(obj, lifecycleState!) : null;
+                // Both schemas store the receipt; only v2 couples it to
+                // lifecycleState (null below = the reduced v1 projection).
+                var decision = ReadDecision(obj, lifecycleState);
                 var status = schema >= 2
                     ? StatusFromDecision(lifecycleState!, decision)
                     : RequiredString(obj, "status");
@@ -501,7 +512,16 @@ public sealed class WorkbenchCatalogueService
             ? value.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray()
             : [];
 
-    private static WorkbenchDecisionProjection? ReadDecision(JsonElement obj, string lifecycleState)
+    /// <summary>
+    /// Projects a stored decision receipt. <paramref name="lifecycleState"/> is
+    /// null for schema v1 descriptors, which have no lifecycle field: the
+    /// receipt is then validated on its own terms and simply carries its
+    /// provenance (above all the <c>operationId</c> the decision service needs
+    /// to answer a retry idempotently). Everything else - shape, outcome,
+    /// settled-state invariants - is the same contract for both schemas, so a
+    /// receipt accepted on write is never rejected on the next read.
+    /// </summary>
+    private static WorkbenchDecisionProjection? ReadDecision(JsonElement obj, string? lifecycleState)
     {
         if (!obj.TryGetProperty("decision", out var value) || value.ValueKind == JsonValueKind.Null)
         {
@@ -587,7 +607,7 @@ public sealed class WorkbenchCatalogueService
             if (outcome == "archive" && spawned.Length != 0)
                 throw new InvalidDataException("Archive decisions cannot carry spawned task receipts.");
             var expectedLifecycle = outcome == "archive" ? "done" : "decided";
-            if (lifecycleState != expectedLifecycle)
+            if (lifecycleState != null && lifecycleState != expectedLifecycle)
                 throw new InvalidDataException($"Succeeded {outcome} decision requires lifecycleState '{expectedLifecycle}'.");
         }
         else if (lifecycleState is "decided" or "done")

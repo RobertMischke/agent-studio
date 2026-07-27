@@ -69,8 +69,41 @@ public sealed class WikiContentCache
     /// size over the whole tree). Consumers that keep a derived projection of
     /// their own - the BM25 search index, for example - gate on this instead of
     /// walking docs/ a second time to decide whether their projection is stale.
+    ///
+    /// <para>Null means "no usable gate, decide for yourself". That happens in
+    /// two cases, both of which must reindex rather than trust a signature.
+    /// First, <paramref name="wikiDir"/> - the directory the caller actually
+    /// reads - is not the directory this snapshot projects: a project with a
+    /// configured <c>wikiSourceBranch</c> publishes a snapshot of the branch
+    /// worktree, so its signature says nothing about the checkout and would
+    /// hide every real edit there. Second, the signature is one of the
+    /// placeholders a fill stores when it could not enumerate a tree
+    /// (<c>unavailable</c>) or found none (<c>empty</c>); those are constants,
+    /// and a constant gate never opens again.</para>
     /// </summary>
-    internal string? GetDocsSignature(string projectName) => GetSnapshot(projectName)?.Signature;
+    internal string? GetDocsSignature(string projectName, string wikiDir)
+    {
+        var snapshot = GetSnapshot(projectName);
+        if (snapshot == null) return null;
+        if (snapshot.Signature is "unavailable" or "empty") return null;
+        return SameDirectory(snapshot.WikiDir, wikiDir) ? snapshot.Signature : null;
+    }
+
+    private static bool SameDirectory(string left, string right)
+    {
+        try
+        {
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            SilentCatch.Note(ex, "Wiki cache could not compare the snapshot and caller wiki directories.");
+            return false;
+        }
+    }
 
     /// <summary>
     /// Fills a project during startup warmup or project registration. Warmup
