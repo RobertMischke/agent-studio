@@ -418,6 +418,12 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var service = NewService(() => now);
         var (_, legacy) = CompletedRunWithReview(service, "sha-a");
 
+        // A fresh envelope-less subject is inside the terminalization grace (the
+        // completion ingest may still be in flight); only one that stayed
+        // envelope-less past it is evidence of a pre-plane completion.
+        Assert.Empty(service.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
+        now = now.AddMinutes(16);
+
         var first = Assert.Single(
             service.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
         var terminalAt = first.TerminalAt;

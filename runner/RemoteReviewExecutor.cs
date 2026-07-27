@@ -53,7 +53,12 @@ public sealed class RemoteReviewExecutor
                 var failedCapability = CapabilityFor(exception.Classification);
                 if (failedCapability is not null)
                 {
-                    await _client.ReportCapabilityFailureAsync(
+                    // Diagnosis only: a rejected or unmounted capability route must
+                    // never swallow the fenced ReviewReportRequest below, which is
+                    // the report the Task Server actually settles this attempt on.
+                    await CapabilityFailureReporter.TryReportAsync(
+                        _client,
+                        _log,
                         failedCapability,
                         exception.Classification,
                         exception.Message.Length <= 500 ? exception.Message : exception.Message[..500],

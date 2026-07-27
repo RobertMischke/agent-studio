@@ -65,6 +65,13 @@ public enum MergeIntoIntegrationOutcome
     PushedForReview,
     /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
     Conflict,
+    /// <summary>
+    /// The merge itself succeeded but the pre-develop build gate found the MERGE
+    /// RESULT red, so the integration branch was rolled back to its exact
+    /// pre-merge tip and nothing was pushed. The delivery is not integrated and
+    /// needs a steer round - never silently "delivered".
+    /// </summary>
+    GateFailed,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
     Error,
 }
@@ -2324,8 +2331,20 @@ public class GitService
     /// <c>failed</c>, plus <c>no-remote</c> (no <c>origin</c> configured -
     /// a local-only project, treated as a benign skip, not a failure) and
     /// <c>missing-branch</c> (the integration branch does not exist locally).
+    /// <para>
+    /// <paramref name="approvedSha"/> pins the exact object that is pushed. The
+    /// caller passes the merge result its gate approved, so a merge that landed
+    /// on the branch after the approval can never ride along to origin; the
+    /// branch tip is only used when no approval SHA is known (the durable restart
+    /// backstop). An approved SHA that is missing or not contained in the local
+    /// branch is a fail-closed <c>missing-sha</c> / <c>sha-not-on-branch</c>.
+    /// </para>
     /// </summary>
-    public Task<GitPushResult> PushIntegrationBranchAsync(string repoRoot, string branch, CancellationToken ct = default)
+    public Task<GitPushResult> PushIntegrationBranchAsync(
+        string repoRoot,
+        string branch,
+        CancellationToken ct = default,
+        string? approvedSha = null)
     {
         if (ct.IsCancellationRequested)
             return Task.FromResult(new GitPushResult(false, string.Empty, "cancelled", "Push cancelled."));
@@ -2341,6 +2360,37 @@ public class GitService
         if (headCode != 0)
             return Task.FromResult(new GitPushResult(false, string.Empty, "missing-branch", headErr.Trim()));
         var sha = headRaw.Trim();
+
+        // The pushed object is the exact SHA the gate approved, not whatever the
+        // branch points at when this deferred push finally runs: the gate window
+        // is minutes long, and a later, not-yet-gated merge can have moved the tip
+        // on in the meantime. Pushing the tip would carry that ungated merge
+        // result to origin under the approval of a different card.
+        if (!string.IsNullOrWhiteSpace(approvedSha))
+        {
+            var candidate = approvedSha!.Trim();
+            if (!IsLikelyShaOrRef(candidate))
+                return Task.FromResult(new GitPushResult(false, string.Empty, "invalid-sha", $"Invalid approved SHA '{candidate}'."));
+            var (approvedRaw, approvedErr, approvedCode) =
+                RunGitArgs(repoRoot, "rev-parse", "--verify", $"{candidate}^{{commit}}");
+            if (approvedCode != 0)
+                return Task.FromResult(new GitPushResult(false, string.Empty, "missing-sha", approvedErr.Trim()));
+            var approved = approvedRaw.Trim();
+            // Fail closed rather than push an object the branch does not contain:
+            // that would advance origin/<branch> to something the local branch
+            // never carried (e.g. after a gate rollback).
+            var (_, _, containedCode) =
+                RunGitArgs(repoRoot, "merge-base", "--is-ancestor", approved, $"refs/heads/{branch}");
+            if (containedCode != 0)
+            {
+                return Task.FromResult(new GitPushResult(
+                    false,
+                    approved,
+                    "sha-not-on-branch",
+                    $"The approved merge result {approved} is not contained in local {branch}; refusing to push it."));
+            }
+            sha = approved;
+        }
 
         // A project without an origin remote is a local-only checkout; there is
         // nothing to push. Treat as a benign skip so the step is not flagged as
@@ -2364,9 +2414,10 @@ public class GitService
             _logger.LogInformation("Integration-branch push did not find origin/{Branch} before pushing: {Error}", branch, remoteErr.Trim());
         }
 
-        // Non-force push of the branch ref. A non-fast-forward (diverged remote)
-        // is reported, never overwritten.
-        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"refs/heads/{branch}:refs/heads/{branch}");
+        // Non-force push of the exact object resolved above (the gate-approved
+        // merge result, or the branch tip when no approval SHA was handed in). A
+        // non-fast-forward (diverged remote) is reported, never overwritten.
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"{sha}:refs/heads/{branch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
 
@@ -3037,7 +3088,38 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
-        return MergeRefIntoIntegration(repoRoot, taskBranch, integrationBranch);
+        return MergeRefIntoIntegration(
+            repoRoot, taskBranch, integrationBranch, SynchronizeRefForIntegration(repoRoot, integrationBranch));
+    }
+
+    /// <summary>
+    /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and returns the
+    /// remote-tracking ref the merge should fast-forward onto first, or null when
+    /// there is nothing to synchronize against (no origin, branch not on origin,
+    /// origin unreachable).
+    ///
+    /// <para>The local task-branch merge used to skip this entirely - only the
+    /// remote-delivery path synchronized - so a locally diverged integration
+    /// branch silently absorbed delivery after delivery on a stale tip, and every
+    /// later merge attempt reported success while origin never saw the work. The
+    /// synchronization is now symmetric; genuine divergence is surfaced by
+    /// <see cref="MergeRefIntoIntegration"/> as an explicit error instead.</para>
+    /// </summary>
+    private string? SynchronizeRefForIntegration(string repoRoot, string integrationBranch)
+    {
+        if (!HasRemote(repoRoot, "origin")) return null;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        var fetchTarget = $"+refs/heads/{integrationBranch}:{remoteIntegrationRef}";
+        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        if (fetchCode == 0) return remoteIntegrationRef;
+
+        // Branch not on origin yet, or origin is unreachable: merge locally as
+        // before rather than blocking the delivery on infrastructure.
+        _logger.LogInformation(
+            "Merge-into-develop: could not fetch origin/{Integration} at {Path}; merging without an origin sync: {Error}",
+            integrationBranch, repoRoot, fetchError.Trim());
+        return null;
     }
 
     /// <summary>
@@ -3158,9 +3240,12 @@ public class GitService
                 repoRoot, "merge", "--ff-only", synchronizeFromRemoteRef);
             if (syncCode != 0)
             {
+                _logger.LogWarning(
+                    "Merge-into-develop: integration branch {Integration} at {Path} diverged from origin; refusing to merge onto a stale tip: {Error}",
+                    integrationBranch, repoRoot, syncError.Trim());
                 return MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
-                    error: $"Local integration branch '{integrationBranch}' diverged from origin; refusing to merge into a stale target: {syncError.Trim()}");
+                    error: $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries. ({syncError.Trim()})");
             }
         }
 

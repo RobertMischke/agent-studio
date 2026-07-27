@@ -45,6 +45,16 @@ public sealed class RunnerOptions
     public string? AuthToken { get; init; }
 
     /// <summary>
+    /// Explicit opt-in (<c>RUNNER_ALLOW_INSECURE_HTTP=1|true</c>) that allows a
+    /// plain <c>http://</c> Task Server URL outside loopback. It exists for
+    /// container networks where the Task Server is reachable only under its
+    /// service name and never leaves the network (e.g.
+    /// <c>http://orchestrator-api:5031</c> in docker compose). Off by default:
+    /// without it every non-loopback URL must be HTTPS.
+    /// </summary>
+    public bool AllowInsecureHttp { get; init; }
+
+    /// <summary>
     /// Optional SHA-256 pin for a private or rehearsal Task Server certificate.
     /// Public deployments should normally rely on the operating-system trust
     /// store; the pin keeps CI and private-CA topologies explicit and fail closed.
@@ -153,6 +163,11 @@ public sealed class RunnerOptions
 
     public static int EnvInt(string name, int fallback)
         => int.TryParse(Env(name), out var v) && v > 0 ? v : fallback;
+
+    /// <summary>Boolean opt-in flag as operators write it in a unit file or compose env.</summary>
+    private static bool OptIn(string value)
+        => value.Trim() is { Length: > 0 } flag
+           && (flag == "1" || string.Equals(flag, "true", StringComparison.OrdinalIgnoreCase));
 
     public static double EnvDouble(string name, double fallback)
         => double.TryParse(
@@ -265,12 +280,22 @@ public sealed class RunnerOptions
                 ? maxLoadValue
                 : EnvDouble("RUNNER_CLAIM_MAX_LOAD_PER_CORE", 1.5),
             LoadGateSustainedSeconds = EnvInt("RUNNER_LOAD_GATE_SUSTAINED_SECONDS", 120),
+            AllowInsecureHttp = OptIn(Val("allow-insecure-http", "RUNNER_ALLOW_INSECURE_HTTP")),
             HealthCheckOnly = healthCheck,
         };
 
         var serverUri = new Uri(options.ServerUrl, UriKind.Absolute);
-        if (serverUri.Scheme != Uri.UriSchemeHttps && !serverUri.IsLoopback)
-            throw new ArgumentException("RUNNER_SERVER_URL must use HTTPS unless it is a loopback address.");
+        // Plain HTTP outside loopback stays refused unless the operator opted in
+        // explicitly. The opt-in covers exactly one legitimate topology: a private
+        // container network where the Task Server is addressed by service name and
+        // never published outside it.
+        var insecureHttpPermitted = options.AllowInsecureHttp
+                                    && serverUri.Scheme == Uri.UriSchemeHttp;
+        if (serverUri.Scheme != Uri.UriSchemeHttps && !serverUri.IsLoopback && !insecureHttpPermitted)
+            throw new ArgumentException(
+                "RUNNER_SERVER_URL must use HTTPS unless it is a loopback address. "
+                + "Set RUNNER_ALLOW_INSECURE_HTTP=1 to opt in to plain HTTP on a trusted private "
+                + "network (for example a container network such as http://orchestrator-api:5031).");
         if (!serverUri.IsLoopback && string.IsNullOrWhiteSpace(options.AuthToken))
             throw new ArgumentException("RUNNER_AUTH_TOKEN is required for a non-loopback Task Server.");
         if (options.Role is not ("coding" or "review"))

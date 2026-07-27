@@ -123,6 +123,16 @@ public static class VerifyCommandPlanner
     }
 
     /// <summary>
+    /// True when <paramref name="profile"/> declares at least one real build
+    /// command, i.e. the profile itself is the source of a build check and no
+    /// auto-discovery guesswork is involved. Convention instead of a settings
+    /// switch: the pre-develop build gate runs exactly for those projects.
+    /// </summary>
+    public static bool HasProfileBuildCommands(BuildProfile? profile)
+        => (profile?.BuildCmds ?? Array.Empty<string>())
+            .Any(command => !string.IsNullOrWhiteSpace(command));
+
+    /// <summary>
     /// The explicit override: the profile's build commands then its test commands,
     /// verbatim, in declared order. Empty when the profile declares neither (a
     /// profile with only install/lockfile metadata falls through to discovery).

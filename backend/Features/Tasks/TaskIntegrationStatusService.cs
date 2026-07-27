@@ -340,6 +340,11 @@ public sealed class TaskIntegrationStatusService
                        + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job.ProjectName)}', "
                        + "resolve the conflicts, and deliver the updated branch.";
             }
+            // The pre-develop build gate found the merge result red and rolled the
+            // integration branch back: the work is genuinely not in develop, so the
+            // card must read as not-integrated with the gate's reason attached.
+            if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
+                return step.Reason ?? "The build gate blocked the merge into develop; not merged.";
             if (step.Status == PipelineStepStatus.Failed
                 && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
                 return step.Reason ?? "Merge into develop failed; not merged.";

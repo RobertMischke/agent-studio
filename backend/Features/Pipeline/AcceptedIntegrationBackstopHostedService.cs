@@ -76,8 +76,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 continue;
             }
 
+            // A conflict, a deliberate PR hand-off, and a red build gate are all
+            // decided states that need a human / a steer round. Replaying them
+            // every sweep would only re-merge, re-build and roll back again.
             if (string.Equals(lastMerge?.Verdict, "conflict", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(lastMerge?.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase))
+                || string.Equals(lastMerge?.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(lastMerge?.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

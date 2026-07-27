@@ -1,0 +1,19 @@
+.git
+# Never let runner identity/tokens enter any build context or layer.
+runner.env
+**/runner.env
+runner.token
+**/runner.token
+# Machine-local configuration must never override the container's env-based config.
+**/appsettings.Local.json
+**/appsettings.Development.json
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+results
+artifacts
+docs/quality
+**/*.log
+**/cli-output.log

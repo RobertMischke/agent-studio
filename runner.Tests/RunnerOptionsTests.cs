@@ -180,6 +180,38 @@ public class RunnerOptionsTests
     }
 
     [Fact]
+    public void Insecure_http_needs_an_explicit_opt_in_outside_loopback()
+    {
+        using var token = new TemporaryTokenFile();
+        // A container-network Task Server is addressed by service name over plain
+        // HTTP and never published outside that network. Without the opt-in this
+        // stays refused; the error names the way out.
+        var refused = Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
+            "--server", "http://orchestrator-api:5031", "--auth-token-file", token.Path]));
+        Assert.Contains("RUNNER_ALLOW_INSECURE_HTTP", refused.Message, StringComparison.Ordinal);
+
+        using var environment = new EnvironmentVariableScope(("RUNNER_ALLOW_INSECURE_HTTP", "1"));
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--server", "http://orchestrator-api:5031", "--auth-token-file", token.Path]);
+
+        Assert.True(options.AllowInsecureHttp);
+        Assert.Equal("http://orchestrator-api:5031", options.ServerUrl);
+    }
+
+    [Fact]
+    public void Insecure_http_opt_in_stays_off_by_default_and_never_admits_another_scheme()
+    {
+        using var token = new TemporaryTokenFile();
+        var (secure, _, _, _) = RunnerOptions.Parse([
+            "--server", "https://tasks.example.com", "--auth-token-file", token.Path]);
+        Assert.False(secure.AllowInsecureHttp);
+
+        using var environment = new EnvironmentVariableScope(("RUNNER_ALLOW_INSECURE_HTTP", "true"));
+        Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
+            "--server", "ftp://tasks.example.com", "--auth-token-file", token.Path]));
+    }
+
+    [Fact]
     public void Command_line_secret_is_rejected_to_keep_it_out_of_process_diagnostics()
         => Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
             "--server", "https://tasks.example.com", "--auth-token", "rnr.test.secret-value-long-enough"]));

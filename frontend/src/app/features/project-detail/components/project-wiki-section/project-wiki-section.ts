@@ -9,6 +9,7 @@ import {
   input,
   output,
   signal,
+  HostListener,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -228,6 +229,13 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   readonly openedRel = signal<string | null>(null);
   readonly openedType = signal<WikiNodeType>('md');
+  /** Distraction-free reading mode: the document fills the viewport, chrome hidden. */
+  readonly maximized = signal(false);
+
+  @HostListener('document:keydown.escape')
+  exitReadingMode(): void {
+    if (this.maximized()) this.maximized.set(false);
+  }
   readonly openedContent = signal<string>('');
   readonly loadingDoc = signal(false);
   readonly viewerTab = signal<WikiViewerTab>('doc');

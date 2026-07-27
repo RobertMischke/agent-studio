@@ -125,3 +125,6 @@ frontend/.frontend-dev.log
 # product source. Keep them out of broad platform-owned snapshot commits.
 /.tmp-*.mjs
 /tmp-*.mjs
+
+# Container-stack runner identity/tokens (installer writes it from the template)
+/runner.env

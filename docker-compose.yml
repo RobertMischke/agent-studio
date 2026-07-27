@@ -1,0 +1,115 @@
+# Agent Studio - container-default stack.
+#
+# Default (no profile):    orchestrator API + frontend  -> a working Studio.
+# --profile runner:        adds coding/review agent-hosts (needs runner.env
+#                          with identity, auth token, and git remotes; the
+#                          coding CLIs run INSIDE these containers - the
+#                          container is the isolation boundary).
+# --profile distributed:   target-architecture preview (task-server, engine,
+#                          studio-bff) - not required for a working install.
+#
+# Fresh installs: use deploy/installer/install.sh (container-default).
+name: agent-studio
+
+services:
+  orchestrator-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STUDIO_API_PORT:-5031}:5031"
+    volumes:
+      - workspace:/data/workspace
+      - projects:/data/projects
+    environment:
+      TaskRepository: /data/workspace
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - orchestrator-api
+    ports:
+      - "${STUDIO_UI_PORT:-4011}:80"
+
+  agent-host-coding:
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    profiles: ["runner"]
+    restart: unless-stopped
+    depends_on:
+      - orchestrator-api
+    env_file:
+      - path: ./runner.env
+        required: true
+    environment:
+      RUNNER_SERVER_URL: http://orchestrator-api:5031
+      RUNNER_ROLE: coding
+      # Compose-internal network: plain HTTP is an explicit, contained opt-in.
+      RUNNER_ALLOW_INSECURE_HTTP: "1"
+      RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
+    volumes:
+      - runner-coding:/var/lib/agent-host
+      - ./runner.token:/run/secrets/runner.token:ro
+
+  agent-host-review:
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    profiles: ["runner"]
+    restart: unless-stopped
+    depends_on:
+      - orchestrator-api
+    env_file:
+      - path: ./runner.env
+        required: true
+    environment:
+      RUNNER_SERVER_URL: http://orchestrator-api:5031
+      RUNNER_ROLE: review
+      RUNNER_ALLOW_INSECURE_HTTP: "1"
+      RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
+    volumes:
+      - runner-review:/var/lib/agent-host
+      - ./runner.token:/run/secrets/runner.token:ro
+
+  task-server:
+    build:
+      context: .
+      dockerfile: task-server/Dockerfile
+    profiles: ["distributed"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STUDIO_TASKSERVER_PORT:-5071}:5071"
+    volumes:
+      - orchestrator-data:/var/lib/agent-orchestrator
+
+  orchestrator-engine:
+    build:
+      context: .
+      dockerfile: orchestrator-engine/Dockerfile
+    profiles: ["distributed"]
+    restart: unless-stopped
+    depends_on:
+      - task-server
+
+  studio-bff:
+    build:
+      context: .
+      dockerfile: studio-bff/Dockerfile
+    profiles: ["distributed"]
+    restart: unless-stopped
+    depends_on:
+      - task-server
+    ports:
+      - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
+
+volumes:
+  workspace:
+  projects:
+  runner-coding:
+  runner-review:
+  orchestrator-data:
