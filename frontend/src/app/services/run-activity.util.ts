@@ -59,6 +59,29 @@ export function isTaskRunActive(job: TaskInfo): boolean {
 }
 
 /**
+ * Instants that mark a *state transition of the task itself*, used to decide
+ * which of two representations of one task saw the world later.
+ *
+ * Deliberately narrower than `latestActivityMs`: the runtime heartbeat fields
+ * (`executionLocation.lastHeartbeat` / `.lastActivityAt`) are run liveness, not
+ * lane provenance. A run keeps heartbeating while it is still attached to the
+ * lane it was picked up in, so its heartbeat can be newer than a lane move it
+ * knows nothing about — comparing it would reintroduce exactly the regression
+ * this ordering exists to prevent.
+ */
+function stateStampMs(job: TaskInfo): number | null {
+  const instants = [
+    job.enteredLaneAt,
+    job.phaseEnteredAt,
+    job.lastActivity,
+    job.createdAt,
+  ]
+    .map((value) => value ? Date.parse(value) : Number.NaN)
+    .filter(Number.isFinite);
+  return instants.length > 0 ? Math.max(...instants) : null;
+}
+
+/**
  * AGT-2378 — pick the freshest `TaskInfo` for a run-liveness derivation.
  *
  * A task tab / side panel renders a `TaskDetail` that was fetched once when the
@@ -70,6 +93,17 @@ export function isTaskRunActive(job: TaskInfo): boolean {
  * remote run, where no local CLI output poll can paper over it, that shows up as
  * a permanent "kein aktiver Run" next to a card that is demonstrably running.
  *
+ * The board entry is not unconditionally newer, though. A mutation performed in
+ * the detail (a lane move, say) updates the snapshot immediately, while the
+ * board push that carries the same change can be seconds behind — letting the
+ * live entry win there would visibly jump the display back to the pre-mutation
+ * lane. So the live entry only overrides the snapshot when it is demonstrably at
+ * least as fresh:
+ *   (a) same lane — the two can only disagree about run liveness, and there the
+ *       live overlay is by construction the more current one;
+ *   (b) different lane — the newer state stamp wins, and a tie or a missing
+ *       stamp on either side keeps the snapshot (conservative: never step back).
+ *
  * Falls back to the snapshot when the task is not in the live list (filtered
  * away, archived, or a cross-project detail opened from search).
  */
@@ -77,7 +111,13 @@ export function freshestRunInfo(snapshot: TaskInfo, liveJobs: readonly TaskInfo[
   const live = snapshot.taskKey
     ? liveJobs.find(job => job.taskKey === snapshot.taskKey)
     : liveJobs.find(job => job.id === snapshot.id);
-  return live ?? snapshot;
+  if (!live) return snapshot;
+  if (live.state === snapshot.state) return live;
+
+  const liveMs = stateStampMs(live);
+  const snapshotMs = stateStampMs(snapshot);
+  if (liveMs === null || snapshotMs === null) return snapshot;
+  return liveMs > snapshotMs ? live : snapshot;
 }
 
 /**

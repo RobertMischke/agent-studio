@@ -261,7 +261,9 @@ export class App implements OnInit, OnDestroy {
   // studio shell hides <app-detail-header>, so the open task's run state is
   // surfaced here (the kanban side-panel keeps its own header pill).
   // AGT-2378: read through to the live board entry — the detail snapshot is
-  // frozen at open time and would pin the pill on "kein aktiver Run".
+  // frozen at open time and would pin the pill on "kein aktiver Run". The live
+  // entry only wins when it is at least as fresh, so a mutation just applied to
+  // the open task does not flicker back — see `freshestRunInfo`.
   readonly studioRunActivityBadge = computed(() => {
     const detail = this.selectedJob();
     if (!detail) return null;

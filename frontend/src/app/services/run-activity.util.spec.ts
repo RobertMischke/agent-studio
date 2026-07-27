@@ -306,6 +306,81 @@ describe('freshestRunInfo', () => {
     expect(freshestRunInfo(snapshot, [])).toBe(snapshot);
     expect(freshestRunInfo(snapshot, [makeJob(null, { taskKey: 'test::other' })])).toBe(snapshot);
   });
+
+  /**
+   * The live entry may only override the snapshot when it is demonstrably at
+   * least as fresh. A mutation applied in the detail (lane move) lands in the
+   * snapshot instantly, while the board push carrying the same change can be
+   * seconds behind — an unconditional live-wins rule makes the display jump
+   * back to the pre-move lane.
+   */
+  describe('does not let a lagging board push undo a detail mutation', () => {
+    it('keeps the snapshot when the just-moved lane is newer than the live entry', () => {
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        state: TaskState.HumanReview,
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, {
+        state: TaskState.Progress,
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+        // Still heartbeating against the lane it was picked up in: newer than the
+        // move, but no evidence at all about where the task now lives.
+        executionLocation: {
+          state: 'local-running',
+          executionKind: 'local',
+          connectionState: 'connected',
+          leaseState: 'active',
+          trustReason: 'process',
+          lastHeartbeat: new Date(NOW).toISOString(),
+          lastActivityAt: new Date(NOW).toISOString(),
+        },
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+
+    it('takes the live entry when its state stamp is newer than the snapshot', () => {
+      const snapshot = makeJob({ kind: 'active', processId: 42, attempt: 0 }, {
+        state: TaskState.Progress,
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        state: TaskState.HumanReview,
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(live);
+    });
+
+    it('still prefers the live entry inside the same lane, whatever the stamps say', () => {
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, {
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(live);
+      expect(buildRunActivityBadge(freshestRunInfo(snapshot, [live]), NOW))
+        .toMatchObject({ kind: 'active', label: 'Run aktiv' });
+    });
+
+    it('keeps the snapshot when neither side carries a usable timestamp', () => {
+      const blank = { enteredLaneAt: null, phaseEnteredAt: null, lastActivity: '', createdAt: '' };
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, { ...blank, state: TaskState.HumanReview });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, { ...blank, state: TaskState.Progress });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+
+    it('keeps the snapshot on an equally fresh live entry in a different lane', () => {
+      const enteredLaneAt = new Date(NOW - 1_000).toISOString();
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, { state: TaskState.HumanReview, enteredLaneAt });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, { state: TaskState.Progress, enteredLaneAt });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+  });
 });
 
 /**

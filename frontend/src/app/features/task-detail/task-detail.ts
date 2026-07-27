@@ -290,7 +290,9 @@ export class TaskDetailComponent implements OnDestroy {
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
   /** AGT-2378: `detail()` is fetched once on open, so its runtime overlay ages
-   *  out; read run liveness through the live board entry instead. */
+   *  out; read run liveness through the live board entry instead. The board
+   *  entry only wins when it is at least as fresh, so a lane move applied here
+   *  is not undone by a board push that predates it — see `freshestRunInfo`. */
   readonly liveRunInfo = computed(() =>
     freshestRunInfo(this.detail().info, this.jobService.jobs()));
   /** Includes pipeline pre-steps, between-step ownership, and remote runs (the
