@@ -60,7 +60,7 @@ public static class V1ReviewPlaneEndpoints
             }
         });
 
-        api.MapPut("/runners/{runnerId}/capabilities", (
+        api.MapMethods("/runners/{runnerId}/capabilities", new[] { "POST", "PUT" }, (
             HttpContext context,
             string runnerId,
             Contract.CapabilityAdvertisementRequest request,
