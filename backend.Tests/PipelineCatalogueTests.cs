@@ -15,6 +15,18 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class PipelineCatalogueTests
 {
+    [Theory]
+    [InlineData(PipelineCatalogue.UiHumanReviewGateStepId)]
+    [InlineData(PipelineCatalogue.ConceptPromotionStepId)]
+    [InlineData(PipelineCatalogue.PostAbortReviewStepId)]
+    public void FindStep_ResolvesEveryStepExposedByTheProjectCatalogue(string stepId)
+    {
+        var step = PipelineCatalogue.FindStep(stepId);
+
+        Assert.NotNull(step);
+        Assert.Equal(stepId, step.Id);
+    }
+
     [Fact]
     public void StandardPipeline_HasExpectedSections()
     {
