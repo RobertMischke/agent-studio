@@ -57,6 +57,7 @@ import { classifyLatestActivityOutcome } from './components/agent-outcome.util';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
+import { isTaskRunActive } from '../../services/run-activity.util';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -288,6 +289,9 @@ export class TaskDetailComponent implements OnDestroy {
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
+  /** Includes live pipeline pre-steps and between-step ownership. */
+  readonly effectiveRunActive = computed(() =>
+    this.isRunning() || isTaskRunActive(this.detail().info));
   readonly startedAt = this.cliPoll.startedAt;
   readonly elapsedTime = this.cliPoll.elapsedTime;
   readonly errorMsg = signal<string | null>(null);
@@ -708,7 +712,7 @@ export class TaskDetailComponent implements OnDestroy {
       && !!this.detail().statusMarkdown?.trim();
   });
   readonly runOutcomePresentation = computed(() => deriveProtocolVerdict({
-    isRunning: this.isRunning(),
+    isRunning: this.effectiveRunActive(),
     summaryStatus: this.detail().summaryState?.status ?? 'none',
     statusMarkdown: this.detail().statusMarkdown,
     outcomeIssue: this.detail().info.outcomeIssue,
