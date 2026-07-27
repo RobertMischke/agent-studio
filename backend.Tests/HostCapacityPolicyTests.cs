@@ -133,13 +133,20 @@ public class HostCapacityPolicyTests
     }
 
     [Fact]
-    public void ResolveCeiling_FallsBackToTheDeprecatedProjectValue()
+    public void ResolveCeiling_SeedsFromTheDaemon_AndOnlyNarrowsItWithTheProjectValue()
     {
-        // Compat path: no central target yet, so a project that opted into
-        // parallelism decides - and never lowers what the daemon already ran.
+        // Compat path: no central target yet. The daemon's own parallelism is
+        // the seed; the deprecated project value may narrow it (an operator
+        // intent to run fewer things at once) but may never raise it - a project
+        // cap of 6 on a daemon that runs 2 would hand out three times the slots
+        // the host actually has.
         Assert.Equal(
-            6,
+            2,
             HostCapacityPolicy.ResolveCeiling(hostCeiling: null, projectCompatCeiling: 6, bootstrapCeiling: 2));
+        Assert.Equal(
+            3,
+            HostCapacityPolicy.ResolveCeiling(hostCeiling: null, projectCompatCeiling: 3, bootstrapCeiling: 8));
+        // A sequential project default (1) carries no opinion at all.
         Assert.Equal(
             4,
             HostCapacityPolicy.ResolveCeiling(hostCeiling: null, projectCompatCeiling: 1, bootstrapCeiling: 4));
@@ -152,6 +159,19 @@ public class HostCapacityPolicyTests
         // ceiling here would silently throttle a fleet that never asked for one.
         Assert.Null(HostCapacityPolicy.ResolveCeiling(null, null, null));
         Assert.Null(HostCapacityPolicy.ResolveCeiling(null, projectCompatCeiling: 1, bootstrapCeiling: null));
+    }
+
+    [Fact]
+    public void ResolveCeiling_EnforcesNothing_WhenOnlyAProjectValueExists()
+    {
+        // The host declared no capacity at all (an old daemon that sends neither
+        // its bootstrap value nor an adopted one). A project setting alone must
+        // not become a server-enforced host cap: the server enforces nothing
+        // until the host or an operator declares something.
+        Assert.Null(HostCapacityPolicy.ResolveCeiling(
+            hostCeiling: null, projectCompatCeiling: 6, bootstrapCeiling: null));
+        Assert.Null(HostCapacityPolicy.ResolveCeiling(
+            hostCeiling: null, projectCompatCeiling: 6, bootstrapCeiling: 0));
     }
 
     [Fact]

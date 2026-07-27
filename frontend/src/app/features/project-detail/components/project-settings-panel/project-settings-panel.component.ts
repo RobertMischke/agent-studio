@@ -25,6 +25,7 @@ import {
   type WorkspaceOrchestratorSettings,
 } from '../../../../services/workspace-orchestrator-settings.service';
 import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/execution-assignment-card';
+import { ParallelExecutionCardComponent } from '../parallel-execution-card/parallel-execution-card';
 import { ProjectBasicsCardComponent } from '../project-basics-card/project-basics-card.component';
 import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
 
@@ -88,6 +89,7 @@ interface WorkspaceListItemLite {
     CliModelSelectorComponent,
     TooltipDirective,
     ExecutionAssignmentCardComponent,
+    ParallelExecutionCardComponent,
     ProjectBasicsCardComponent,
     ProjectUrlsPanelComponent,
   ],
@@ -104,8 +106,9 @@ export class ProjectSettingsPanelComponent implements OnInit {
   private readonly cliCatalog = inject(CliCatalogStore);
   private readonly workspaceOrchestrator = inject(WorkspaceOrchestratorSettingsService);
 
-  // Per-project max parallelism is gone (AGT-2302 / AGT-2376). Concurrency is a
-  // host ceiling now, edited on the host row under Settings -> Execution Hosts.
+  // Per-project max parallelism lives in ParallelExecutionCardComponent: it is
+  // deprecated for remote execution (host capacity is the source) but still
+  // governs local runs, so the card renders only for local projects.
   readonly projectId = signal<string | null>(null);
   readonly wikiSourceBranch = signal('');
   readonly wikiSourceSaving = signal(false);

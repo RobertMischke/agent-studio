@@ -364,6 +364,14 @@ public class ClientIdentityStore
     /// Operator write for the central host targets. Null fields keep their
     /// current value; the free-slot ledger is recomputed from the new ceiling
     /// so the UI reflects the change before the next daemon poll.
+    ///
+    /// <para>
+    /// An omitted <paramref name="maxParallelism"/> keeps whatever ceiling the
+    /// host has - including none. Falling back to a default here would let a
+    /// caller that only changes the ramp strategy invent a ceiling of 2 for a
+    /// host that never declared one, which is the silent throttle the whole
+    /// policy avoids elsewhere.
+    /// </para>
     /// </summary>
     public ClientIdentity? SetRunnerCapacity(
         string id,
@@ -377,10 +385,7 @@ public class ClientIdentityStore
             if (!_byId.TryGetValue(id, out var existing)
                 || existing.Kind == ClientIdentityKind.Retired) return null;
 
-            var ceiling = HostCapacityPolicy.ClampCeiling(
-                maxParallelism
-                ?? existing.RunnerDesiredMaxParallelism
-                ?? HostCapacityPolicy.DefaultMaxParallelism);
+            var ceiling = PositiveCeiling(maxParallelism ?? existing.RunnerDesiredMaxParallelism);
             var updated = existing with
             {
                 RunnerDesiredMaxParallelism = ceiling,
@@ -391,8 +396,9 @@ public class ClientIdentityStore
                 RunnerRampStrategy = RunnerRampStrategies.Normalize(
                     rampStrategy ?? existing.RunnerRampStrategy),
                 RunnerCapacityUpdatedAt = DateTime.UtcNow,
-                RunnerAvailableSlots = HostCapacityPolicy.FreeSlots(
-                    ceiling, existing.RunnerActiveSlots ?? 0)
+                RunnerAvailableSlots = ceiling is { } known
+                    ? HostCapacityPolicy.FreeSlots(known, existing.RunnerActiveSlots ?? 0)
+                    : existing.RunnerAvailableSlots
             };
             WriteLocked(updated);
             _byId[id] = updated;

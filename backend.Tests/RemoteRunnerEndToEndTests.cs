@@ -1275,6 +1275,94 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(RunnerRampStrategies.Aggressive, third.RampStrategy);
     }
 
+    /// <summary>
+    /// Review fix (AGT-2302 / AGT-2376): the deprecated per-project
+    /// <c>maxParallelism</c> may narrow the seeded host ceiling, never raise it.
+    /// Seeding a project cap of 6 onto a daemon that runs 2 would let the server
+    /// hand out three times the slots the host actually has. The editing route is
+    /// back because local execution still limits itself by the same value.
+    /// </summary>
+    [Fact]
+    public async Task Project_max_parallelism_narrows_the_host_seed_but_never_raises_it()
+    {
+        SeedTask(TaskStates.Ready, "AGT-SEED-A", "First", "Prompt.");
+        SeedTask(TaskStates.Ready, "AGT-SEED-B", "Second", "Prompt.");
+        SeedTask(TaskStates.Ready, "AGT-SEED-C", "Third", "Prompt.");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/seed-clamp.git");
+
+        var projectCap = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/max-parallelism", new { maxParallelism = 6 });
+        projectCap.EnsureSuccessStatusCode();
+
+        var request = new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner")
+        {
+            BootstrapMaxParallelism = 2,
+        };
+        var first = await ClaimWithSuccessfulPreflightAsync(client, request);
+        Assert.Equal(RClaimStatus.Claimed, first.Status);
+        Assert.Equal(2, first.DesiredMaxParallelism);
+
+        var second = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Claimed, second.Status);
+
+        // The project asked for 6, the daemon can run 2: the third poll is held.
+        var held = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, held.Status);
+        Assert.Equal(HostAdmissionReasons.CeilingReached, held.AdmissionReason);
+
+        var clients = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        Assert.Equal(2, Assert.Single(clients!, item => item.Id == client.ClientId)
+            .RunnerDesiredMaxParallelism);
+    }
+
+    /// <summary>
+    /// Review fix (AGT-2302 / AGT-2376): a daemon that declares no capacity of
+    /// its own is not capped from a project value alone. Without a declaration
+    /// the server enforces nothing - the fleet keeps behaving exactly as before.
+    /// </summary>
+    [Fact]
+    public async Task Host_that_declares_no_capacity_is_not_capped_by_a_project_value()
+    {
+        SeedTask(TaskStates.Ready, "AGT-NOCAP-A", "First", "Prompt.");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/no-declared-capacity.git");
+
+        var projectCap = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/max-parallelism", new { maxParallelism = 6 });
+        projectCap.EnsureSuccessStatusCode();
+
+        // Posted raw: an old daemon sends neither its bootstrap value nor an
+        // adopted one, and the runner client would otherwise fill both in.
+        var response = await http.PostAsJsonAsync("/api/runner/claim", new
+        {
+            runnerId = RunnerId,
+            runnerName = ProjectName,
+            hostname = "host",
+            pid = 1,
+            backendName = "remote-runner",
+            availableSlots = 1,
+        });
+        response.EnsureSuccessStatusCode();
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(
+            !body.RootElement.TryGetProperty("desiredMaxParallelism", out var ceiling)
+            || ceiling.ValueKind == JsonValueKind.Null,
+            "A project value alone must not become a server-enforced host ceiling.");
+
+        var clients = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        Assert.Null(Assert.Single(clients!, item => item.Id == client.ClientId)
+            .RunnerDesiredMaxParallelism);
+    }
+
     [Fact]
     public async Task Green_project_preflight_is_cached_for_the_following_card()
     {

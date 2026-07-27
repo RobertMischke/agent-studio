@@ -529,10 +529,25 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new { cli = r.CliType, mode = r.Mode, source = r.Source, supported = r.Supported });
         });
 
-        // PUT /api/projects/{projectName}/max-parallelism is gone (AGT-2302 /
-        // AGT-2376). Capacity is steered on the execution host, not per project:
-        // PUT /api/clients/{id}/runner-capacity. The stored project value stays
-        // readable as a migration seed until 2026-10-01.
+        // ADR-0052: max number of tasks the runner runs concurrently for this
+        // project. 1 (default) keeps it sequential; the value is clamped to
+        // >= 1 server-side so a 0/negative body cannot stall the runner.
+        //
+        // DEPRECATED for remote execution (AGT-2302 / AGT-2376): a host ceiling
+        // is the one source of truth there (PUT /api/clients/{id}/runner-capacity),
+        // and this value only seeds it during migration. It is NOT dead: the
+        // local ProjectRunner still limits itself by it through SlotMax() /
+        // ParallelSlotPolicy, so removing the route left a live setting with no
+        // way to change it. Remove after 2026-10-01, when the CAR rework of local
+        // execution replaces it.
+        app.MapPut("/api/projects/{projectName}/max-parallelism", (string projectName, SetMaxParallelismRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetMaxParallelism(projectName, req.MaxParallelism);
+            return Results.Ok(settings.Get(projectName));
+        });
 
         // Compatibility route for both the old composite executionRunner field
         // and the canonical pickupMode + executionLocation pair.

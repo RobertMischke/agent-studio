@@ -38,6 +38,7 @@
   @if (h.role === 'remote' && !retired()) {
     <app-runtime-capacity-editor
       [host]="h"
+      [boardActiveSlots]="boardActiveSlots()"
       [projectSlots]="projectSlots()"
       (capacityChange)="capacityChange.emit($event)" />
   }

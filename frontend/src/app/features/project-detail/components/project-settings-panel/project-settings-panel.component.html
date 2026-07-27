@@ -190,10 +190,9 @@
           <p class="ps-settings__error" data-testid="project-settings-wiki-source-error">{{ error }}</p>
         }
       </article>
-      <!-- "Parallel execution" removed (AGT-2302 / AGT-2376): how many tasks run
-           at once is a property of the execution host, not of a project. The
-           ceiling, target load, and ramp live on the host row under
-           Settings -> Execution Hosts. -->
+      <!-- Renders only for locally executing projects: remote concurrency is a
+           host ceiling (AGT-2302 / AGT-2376), local concurrency is still this. -->
+      <app-parallel-execution-card [projectName]="projectName()" />
       <article class="ps-settings__card" data-testid="project-settings-quota-wait">
         <div class="ps-settings__card-head">
           <span class="ps-settings__card-icon" aria-hidden="true">◴</span>

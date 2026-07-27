@@ -41,6 +41,7 @@ describe('RuntimeCapacityEditorComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
     fixture.componentRef.setInput('host', HOST);
+    fixture.componentRef.setInput('boardActiveSlots', 2);
     let change: RuntimeCapacityChange | null = null;
     fixture.componentInstance.capacityChange.subscribe(value => { change = value; });
     fixture.detectChanges();
@@ -74,6 +75,7 @@ describe('RuntimeCapacityEditorComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
     fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 7, availableSlots: 1 });
+    fixture.componentRef.setInput('boardActiveSlots', 7);
     fixture.detectChanges();
     const slots = () => fixture.nativeElement
       .querySelector('[data-testid="remote-host-slots"]')?.textContent;
@@ -82,8 +84,30 @@ describe('RuntimeCapacityEditorComponent', () => {
     expect(slots()).toContain('7 active / 0 free / 4 total');
 
     fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 2, availableSlots: 1 });
+    fixture.componentRef.setInput('boardActiveSlots', 2);
     fixture.detectChanges();
     expect(slots()).toContain('2 active / 2 free / 4 total');
+  });
+
+  it('counts the ledger from the same board truth as the project rows', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    // The daemon's own activeTaskCount disagrees with the board on purpose:
+    // header and rows must both follow the board, or they contradict each other.
+    fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 3 });
+    fixture.componentRef.setInput('boardActiveSlots', 2);
+    fixture.componentRef.setInput('projectSlots', [
+      { projectName: 'Agent Studio', activeSlots: 2 },
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-slots"]')?.textContent)
+      .toContain('2 active / 2 free / 4 total');
+    expect(fixture.componentInstance.attributedSlots())
+      .toBe(fixture.componentInstance.activeSlots());
   });
 
   it('says so instead of inventing a total when no ceiling is published', async () => {
@@ -99,6 +123,7 @@ describe('RuntimeCapacityEditorComponent', () => {
       availableSlots: 1,
       effectiveMaxParallelism: 8,
     });
+    fixture.componentRef.setInput('boardActiveSlots', 7);
     fixture.detectChanges();
 
     const slots = fixture.nativeElement
@@ -109,6 +134,37 @@ describe('RuntimeCapacityEditorComponent', () => {
       .toBeNull();
   });
 
+  it('offers to set a first ceiling on a host that never published one', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    fixture.componentRef.setInput('host', {
+      ...HOST,
+      runtimeCapacity: null,
+      effectiveMaxParallelism: 8,
+    });
+    let change: RuntimeCapacityChange | null = null;
+    fixture.componentInstance.capacityChange.subscribe(value => { change = value; });
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+
+    // Pre-filled from what the daemon says it runs, so the first published
+    // ceiling describes the host instead of guessing.
+    expect((element.querySelector(
+      '[data-testid="remote-host-capacity-seed-input"]') as HTMLInputElement).value).toBe('8');
+    (element.querySelector('[data-testid="remote-host-capacity-seed-save"]') as HTMLButtonElement)
+      .click();
+
+    expect(change).toEqual({
+      id: 'runner-a',
+      maxParallelism: 8,
+      targetLoadPercent: 80,
+      rampStrategy: 'balanced',
+    });
+  });
+
   it('lists which projects hold the shared ceiling', async () => {
     await TestBed.configureTestingModule({
       imports: [RuntimeCapacityEditorComponent],
@@ -116,6 +172,7 @@ describe('RuntimeCapacityEditorComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
     fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 3 });
+    fixture.componentRef.setInput('boardActiveSlots', 3);
     fixture.componentRef.setInput('projectSlots', [
       { projectName: 'Agent Studio', activeSlots: 2 },
       { projectName: 'Quality Studio', activeSlots: 1 },

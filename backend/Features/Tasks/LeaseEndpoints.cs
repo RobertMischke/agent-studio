@@ -171,22 +171,33 @@ public static class LeaseEndpoints
                 ? null
                 : accessSecurity.RecordRunnerActivity(
                     runnerPrincipal.RunnerId, activeSlots, req.AvailableSlots, claimed: false);
-            // Seeds the central ceiling on first contact only: the runner's own
-            // RUNNER_MAX_PARALLELISM, raised to the largest deprecated project
-            // maxParallelism this host is assigned to, so migrating a project
-            // cap into the host target never lowers what the host already ran.
+            // Seeds the central ceiling on first contact only, from what the
+            // daemon itself declared: RUNNER_MAX_PARALLELISM, or - for daemons
+            // too old to send it - the ceiling they report as adopted. The
+            // deprecated project maxParallelism may only narrow that value - it
+            // is an operator intent to run fewer things at once, while raising
+            // the seed above the declaration would hand out slots the host does
+            // not have. A host that declares nothing keeps a null ceiling: the
+            // server enforces nothing rather than inventing a cap out of a
+            // project setting.
             // Once a ceiling is persisted the seed is not recomputed - the
             // project scan must not run on every poll.
             // DEPRECATED COMPAT: drop the project term after 2026-10-01.
             var persistedCeiling = string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.Find(clientId)?.RunnerDesiredMaxParallelism;
+            var daemonDeclaredCeiling = req.BootstrapMaxParallelism is > 0
+                ? req.BootstrapMaxParallelism
+                : req.EffectiveMaxParallelism;
+            var projectCompatCeiling = persistedCeiling is > 0
+                ? null
+                : DeprecatedProjectCompatCeiling(settings, req.RunnerId, req.RunnerName);
             var seedCeiling = persistedCeiling is > 0
                 ? persistedCeiling
                 : HostCapacityPolicy.ResolveCeiling(
                     null,
-                    DeprecatedProjectCompatCeiling(settings, req.RunnerId, req.RunnerName),
-                    req.BootstrapMaxParallelism);
+                    projectCompatCeiling,
+                    daemonDeclaredCeiling);
             var client = string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.RecordRunnerActivity(
@@ -197,6 +208,15 @@ public static class LeaseEndpoints
                     seedMaxParallelism: seedCeiling,
                     effectiveMaxParallelism: req.EffectiveMaxParallelism,
                     effectiveMaxParallelismAppliedAt: req.EffectiveMaxParallelismAppliedAt);
+            // The migration is a one-off state change on the host identity and
+            // must be readable in the log; it used to happen silently. The guard
+            // makes it fire on the single poll that persists the seed.
+            if (persistedCeiling is not > 0 && client?.RunnerDesiredMaxParallelism is > 0)
+                logger.LogInformation(
+                    "host-capacity-seeded client={ClientId} runner={Runner} ceiling={Ceiling} " +
+                    "daemonDeclared={DaemonDeclared} projectCompat={ProjectCompat}",
+                    clientId, req.RunnerName, client.RunnerDesiredMaxParallelism,
+                    daemonDeclaredCeiling, projectCompatCeiling);
             // Null ceiling: no operator target, no daemon report, no project
             // opt-in. The server then enforces nothing - inventing a ceiling
             // would be a silent throttle on a fleet that never asked for one.
@@ -399,6 +419,16 @@ public static class LeaseEndpoints
                     CountHostLeases(liveSnapshot, leases, clientId, req.RunnerId),
                     activeSlots ?? 0);
 
+                // The ramp timestamp is read here for the same reason as the
+                // lease count: it was captured before this request queued on the
+                // gate, so a claim granted while we waited would be invisible and
+                // the conservative one-per-60s would degrade to one per waiting
+                // request. RecordRunnerActivity only advances it on a granted
+                // claim, so re-reading sees exactly the last admission.
+                var lastAdmissionAt = (string.IsNullOrWhiteSpace(clientId)
+                    ? null
+                    : clients.Find(clientId)?.RunnerLastClaimAt) ?? client?.RunnerLastClaimAt;
+
                 if (req.AvailableSlots <= 0)
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
@@ -412,7 +442,7 @@ public static class LeaseEndpoints
                         new HostAdmissionFacts(
                             hostActiveRuns,
                             now,
-                            client?.RunnerLastClaimAt,
+                            lastAdmissionAt,
                             req.Telemetry?.CpuPercent));
                 if (!admission.Admitted)
                 {

@@ -277,6 +277,31 @@ public class ClientIdentityTests : IDisposable
     }
 
     [Fact]
+    public void SetRunnerCapacity_WithoutAMaxParallelism_KeepsTheCeiling_AndNeverInventsOne()
+    {
+        var store = BuildStore(BuildConfig());
+        var undeclared = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "undeclared-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+
+        // Changing only the ramp on a host that never declared a capacity must
+        // not conjure a ceiling: the server would start enforcing a cap nobody
+        // asked for.
+        var rampOnly = store.SetRunnerCapacity(undeclared.Id, null, null, "conservative");
+        Assert.Null(rampOnly?.RunnerDesiredMaxParallelism);
+        Assert.Equal(RunnerRampStrategies.Conservative, rampOnly?.RunnerRampStrategy);
+        Assert.Equal(HostCapacityPolicy.DefaultTargetLoadPercent, rampOnly?.RunnerTargetLoadPercent);
+
+        // With a ceiling in place, an omitted value keeps it unchanged.
+        store.SetRunnerCapacity(undeclared.Id, 5, null, null);
+        var loadOnly = store.SetRunnerCapacity(undeclared.Id, null, 90, null);
+        Assert.Equal(5, loadOnly?.RunnerDesiredMaxParallelism);
+        Assert.Equal(90, loadOnly?.RunnerTargetLoadPercent);
+    }
+
+    [Fact]
     public void RetiredHost_CanBeRevived_ThenPermanentlyDeleted()
     {
         var config = BuildConfig();

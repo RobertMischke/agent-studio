@@ -331,6 +331,10 @@ export class RemoteHostsService {
    * the standalone Task Server (versioned, optimistic concurrency) or by the
    * monolith's client identity (unversioned, version 0); the write goes to
    * whichever server produced the record this row is showing.
+   *
+   * A host with no published ceiling at all is a valid starting point, not an
+   * error: the client-identity route creates the record, so the host row can
+   * offer a "set a ceiling" form instead of a dead end.
    */
   setCapacity(
     id: string,
@@ -339,11 +343,11 @@ export class RemoteHostsService {
     rampStrategy: HostRampStrategy,
   ): void {
     const current = this.hosts().find(host => host.id === id);
-    const capacity = current?.runtimeCapacity;
-    if (!current || !capacity || current.busyAction || !this.http) return;
+    if (!current || current.busyAction || !this.http) return;
+    const capacity = current.runtimeCapacity;
 
     const hostId = current.capacityHostId;
-    if (!hostId || capacity.version < 1) {
+    if (!capacity || !hostId || capacity.version < 1) {
       this.setClientCapacity(current, maxParallelism, targetLoadPercent, rampStrategy);
       return;
     }
@@ -524,8 +528,23 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
  * client-identity record; {@link RemoteHostsService.setCapacity} uses it to pick
  * the write route. The Task Server projection runs afterwards and wins when it
  * carries a record of its own.
+ *
+ * A record that already came from the Task Server (version >= 1) is never
+ * replaced here. The /api/clients poll repeats on every reload, so overwriting
+ * it would silently demote the row to version 0 and send the next save to the
+ * monolith route - losing the optimistic-concurrency check. Only the
+ * daemon-reported adoption telemetry is merged in from the client identity.
  */
 function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<RemoteHost> {
+  const taskServerOwned = (host.runtimeCapacity?.version ?? 0) >= 1;
+  if (taskServerOwned) {
+    return {
+      runtimeCapacity: host.runtimeCapacity,
+      effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
+      runtimeCapacityAppliedAt:
+        client.runnerEffectiveMaxParallelismAppliedAt ?? host.runtimeCapacityAppliedAt ?? null,
+    };
+  }
   if (client.runnerDesiredMaxParallelism === null
     || client.runnerDesiredMaxParallelism === undefined) {
     return {

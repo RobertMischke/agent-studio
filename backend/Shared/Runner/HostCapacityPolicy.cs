@@ -31,8 +31,9 @@ namespace AgentStudio.Shared;
 /// </summary>
 public static class HostCapacityPolicy
 {
-    /// <summary>Ceiling used when neither the host nor a runner reported one.</summary>
-    public const int DefaultMaxParallelism = 2;
+    // There is deliberately no default ceiling constant. "Nobody declared a
+    // capacity" is answered with null everywhere (see ResolveCeiling and
+    // ClientIdentityStore.SetRunnerCapacity), never with an invented number.
 
     /// <summary>Target CPU load used when the operator never set one.</summary>
     public const int DefaultTargetLoadPercent = 80;
@@ -52,23 +53,28 @@ public static class HostCapacityPolicy
 
     /// <summary>
     /// Resolve the ceiling that governs this claim, in precedence order: the
-    /// host target set centrally, otherwise the largest of the daemon's own
-    /// <c>RUNNER_MAX_PARALLELISM</c> and the deprecated per-project
+    /// host target set centrally, otherwise what the daemon itself reported it
+    /// can run - optionally narrowed by the deprecated per-project
     /// <c>maxParallelism</c> opt-in.
     ///
     /// <para>
-    /// Returns <c>null</c> when nothing is known. The server then does not
-    /// enforce a ceiling at all: inventing one would be a silent throttle, and
-    /// a fleet that never reported its capacity must keep behaving as before.
-    /// The host row shows "capacity not reported" for exactly this state.
+    /// Returns <c>null</c> when nothing is known, and specifically when the
+    /// daemon reported nothing: inventing a ceiling would be a silent throttle,
+    /// and a fleet that never declared its capacity must keep behaving as
+    /// before. The host row shows "capacity not reported" for exactly this
+    /// state. A project value alone is therefore never enough - the project
+    /// knob only ever narrows a capacity the host itself declared.
     /// </para>
     ///
     /// <para>
     /// DEPRECATED COMPAT PATH: <paramref name="projectCompatCeiling"/> exists
-    /// only so hosts that have never been given a central target keep the
-    /// parallelism their projects opted into. A value of 1 is the sequential
-    /// default and carries no opinion. Remove the parameter and its call site
-    /// after 2026-10-01, once every host carries a target.
+    /// only so hosts that have never been given a central target keep running
+    /// at the concurrency their projects were configured for. It can only lower
+    /// the daemon-reported ceiling, never raise it: seeding a project value of
+    /// 8 onto a daemon that runs 2 would let the server hand out four times the
+    /// slots the host actually has. A value of 1 is the sequential default and
+    /// carries no opinion. Remove the parameter and its call site after
+    /// 2026-10-01, once every host carries a target.
     /// </para>
     /// </summary>
     public static int? ResolveCeiling(
@@ -77,10 +83,11 @@ public static class HostCapacityPolicy
         int? bootstrapCeiling)
     {
         if (hostCeiling is > 0) return ClampCeiling(hostCeiling.Value);
-        var known = Math.Max(
-            projectCompatCeiling is > 1 ? projectCompatCeiling.Value : 0,
-            bootstrapCeiling is > 0 ? bootstrapCeiling.Value : 0);
-        return known > 0 ? ClampCeiling(known) : null;
+        if (bootstrapCeiling is not > 0) return null;
+        var seeded = projectCompatCeiling is > 1
+            ? Math.Min(projectCompatCeiling.Value, bootstrapCeiling.Value)
+            : bootstrapCeiling.Value;
+        return ClampCeiling(seeded);
     }
 
     /// <summary>Free slots below the ceiling. Never negative, never above the ceiling.</summary>
