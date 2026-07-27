@@ -529,17 +529,10 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new { cli = r.CliType, mode = r.Mode, source = r.Source, supported = r.Supported });
         });
 
-        // ADR-0052: max number of tasks the runner runs concurrently for this
-        // project. 1 (default) keeps it sequential; the value is clamped to
-        // >= 1 server-side so a 0/negative body cannot stall the runner.
-        app.MapPut("/api/projects/{projectName}/max-parallelism", (string projectName, SetMaxParallelismRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
-        {
-            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
-            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-
-            settings.SetMaxParallelism(projectName, req.MaxParallelism);
-            return Results.Ok(settings.Get(projectName));
-        });
+        // PUT /api/projects/{projectName}/max-parallelism is gone (AGT-2302 /
+        // AGT-2376). Capacity is steered on the execution host, not per project:
+        // PUT /api/clients/{id}/runner-capacity. The stored project value stays
+        // readable as a migration seed until 2026-10-01.
 
         // Compatibility route for both the old composite executionRunner field
         // and the canonical pickupMode + executionLocation pair.

@@ -35,9 +35,10 @@
     <div><span>Fallback probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>
 
-  @if (h.role === 'remote' && !retired() && h.runtimeCapacity) {
+  @if (h.role === 'remote' && !retired()) {
     <app-runtime-capacity-editor
       [host]="h"
+      [projectSlots]="projectSlots()"
       (capacityChange)="capacityChange.emit($event)" />
   }
 

@@ -31,6 +31,7 @@ public sealed class TaskServerClient : IDisposable
     private bool _useV1;
     private readonly bool _usesServiceCredential;
     private int? _centralHostMaxParallelism;
+    private DateTime? _centralHostMaxParallelismAppliedAt;
 
     public TaskServerClient(RunnerOptions options)
     {
@@ -324,8 +325,23 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RunnerClaimResponse> ClaimAsync(RunnerClaimRequest req, CancellationToken ct)
     {
         if (!_useV1)
-            return await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
-                   ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+        {
+            var stamped = req with
+            {
+                EffectiveMaxParallelism = req.EffectiveMaxParallelism ?? HostMaxParallelism,
+                EffectiveMaxParallelismAppliedAt =
+                    req.EffectiveMaxParallelismAppliedAt ?? _centralHostMaxParallelismAppliedAt,
+                BootstrapMaxParallelism = req.BootstrapMaxParallelism ?? _options?.HostMaxParallelism,
+            };
+            var legacy = await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>(
+                             "/api/runner/claim", stamped, ct)
+                         ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+            // The legacy claim plane carries the same central host policy as the
+            // v1 plane, so a ceiling changed in Studio takes effect on the next
+            // poll without restarting the daemon.
+            AdoptCentralMaxParallelism(legacy.DesiredMaxParallelism);
+            return legacy;
+        }
 
         var claim = await PostJsonAsync<Contract.ClaimRequest, Contract.ClaimResponse>(
             $"/api/v1/runners/{Uri.EscapeDataString(req.RunnerId)}/claims",
@@ -373,9 +389,19 @@ public sealed class TaskServerClient : IDisposable
     }
 
     private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
+        => AdoptCentralMaxParallelism(capacity?.MaxParallelism);
+
+    /// <summary>
+    /// Adopt a server-owned ceiling and remember when it took effect, so the
+    /// host row can show whether the daemon is already running the central
+    /// value or is still draining down to it.
+    /// </summary>
+    private void AdoptCentralMaxParallelism(int? maxParallelism)
     {
-        if (capacity?.MaxParallelism is >= 1 and <= 256)
-            _centralHostMaxParallelism = capacity.MaxParallelism;
+        if (maxParallelism is not (>= 1 and <= 256)) return;
+        if (_centralHostMaxParallelism == maxParallelism) return;
+        _centralHostMaxParallelism = maxParallelism;
+        _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
     }
 
     /// <summary>

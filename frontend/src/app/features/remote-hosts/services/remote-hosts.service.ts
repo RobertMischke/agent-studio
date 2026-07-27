@@ -326,6 +326,12 @@ export class RemoteHostsService {
     this.postAction(id, 'revive', `/api/clients/${encodeURIComponent(this.clientId(id))}/revive`);
   }
 
+  /**
+   * Persist the host's central capacity targets. The record is owned either by
+   * the standalone Task Server (versioned, optimistic concurrency) or by the
+   * monolith's client identity (unversioned, version 0); the write goes to
+   * whichever server produced the record this row is showing.
+   */
   setCapacity(
     id: string,
     maxParallelism: number,
@@ -334,8 +340,13 @@ export class RemoteHostsService {
   ): void {
     const current = this.hosts().find(host => host.id === id);
     const capacity = current?.runtimeCapacity;
-    const hostId = current?.capacityHostId;
-    if (!current || !capacity || !hostId || current.busyAction || !this.http) return;
+    if (!current || !capacity || current.busyAction || !this.http) return;
+
+    const hostId = current.capacityHostId;
+    if (!hostId || capacity.version < 1) {
+      this.setClientCapacity(current, maxParallelism, targetLoadPercent, rampStrategy);
+      return;
+    }
 
     this.patch(id, host => ({ ...host, busyAction: 'capacity' }));
     this.http.put<NonNullable<RemoteHost['runtimeCapacity']>>(
@@ -364,6 +375,37 @@ export class RemoteHostsService {
         });
       },
       error: error => this.actionFailed(id, error),
+    });
+  }
+
+  /** Monolith write path: capacity lives on the host's client identity. */
+  private setClientCapacity(
+    current: RemoteHost,
+    maxParallelism: number,
+    targetLoadPercent: number,
+    rampStrategy: HostRampStrategy,
+  ): void {
+    if (!this.http) return;
+    this.patch(current.id, host => ({ ...host, busyAction: 'capacity' }));
+    this.http.put<ClientSummary>(
+      `/api/clients/${encodeURIComponent(current.clientId)}/runner-capacity`,
+      { maxParallelism, targetLoadPercent, rampStrategy },
+    ).subscribe({
+      next: client => {
+        this.patch(current.id, host => ({
+          ...host,
+          ...clientCapacity(host, client),
+          availableSlots: client.runnerAvailableSlots ?? host.availableSlots,
+          busyAction: null,
+        }));
+        this.log('capacity-saved', {
+          hostId: current.clientId,
+          maxParallelism,
+          targetLoadPercent,
+          rampStrategy,
+        });
+      },
+      error: error => this.actionFailed(current.id, error),
     });
   }
 
@@ -471,6 +513,37 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
     activeGateCount: client.runnerActiveGateCount ?? 0, gateCapacity: client.runnerGateCapacity ?? 0,
+    ...clientCapacity(host, client),
+  };
+}
+
+/**
+ * The monolith keeps host capacity on the client identity. Project it into the
+ * same shape the standalone Task Server returns so the host row has one capacity
+ * concept regardless of which server answers. Version 0 marks the unversioned
+ * client-identity record; {@link RemoteHostsService.setCapacity} uses it to pick
+ * the write route. The Task Server projection runs afterwards and wins when it
+ * carries a record of its own.
+ */
+function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<RemoteHost> {
+  if (client.runnerDesiredMaxParallelism === null
+    || client.runnerDesiredMaxParallelism === undefined) {
+    return {
+      runtimeCapacity: host.runtimeCapacity ?? null,
+      effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
+    };
+  }
+  return {
+    runtimeCapacity: {
+      hostId: client.id,
+      maxParallelism: client.runnerDesiredMaxParallelism,
+      targetLoadPercent: client.runnerTargetLoadPercent ?? 80,
+      rampStrategy: client.runnerRampStrategy ?? 'balanced',
+      version: 0,
+      updatedAt: client.runnerCapacityUpdatedAt ?? client.lastSeenAt ?? '',
+    },
+    effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? null,
+    runtimeCapacityAppliedAt: client.runnerEffectiveMaxParallelismAppliedAt ?? null,
   };
 }
 

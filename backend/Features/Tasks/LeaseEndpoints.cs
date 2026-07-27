@@ -171,23 +171,65 @@ public static class LeaseEndpoints
                 ? null
                 : accessSecurity.RecordRunnerActivity(
                     runnerPrincipal.RunnerId, activeSlots, req.AvailableSlots, claimed: false);
+            // Seeds the central ceiling on first contact only: the runner's own
+            // RUNNER_MAX_PARALLELISM, raised to the largest deprecated project
+            // maxParallelism this host is assigned to, so migrating a project
+            // cap into the host target never lowers what the host already ran.
+            // Once a ceiling is persisted the seed is not recomputed - the
+            // project scan must not run on every poll.
+            // DEPRECATED COMPAT: drop the project term after 2026-10-01.
+            var persistedCeiling = string.IsNullOrWhiteSpace(clientId)
+                ? null
+                : clients.Find(clientId)?.RunnerDesiredMaxParallelism;
+            var seedCeiling = persistedCeiling is > 0
+                ? persistedCeiling
+                : HostCapacityPolicy.ResolveCeiling(
+                    null,
+                    DeprecatedProjectCompatCeiling(settings, req.RunnerId, req.RunnerName),
+                    req.BootstrapMaxParallelism);
             var client = string.IsNullOrWhiteSpace(clientId)
                 ? null
-                : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
+                : clients.RecordRunnerActivity(
+                    clientId,
+                    activeSlots,
+                    req.AvailableSlots,
+                    claimed: false,
+                    seedMaxParallelism: seedCeiling,
+                    effectiveMaxParallelism: req.EffectiveMaxParallelism,
+                    effectiveMaxParallelismAppliedAt: req.EffectiveMaxParallelismAppliedAt);
+            // Null ceiling: no operator target, no daemon report, no project
+            // opt-in. The server then enforces nothing - inventing a ceiling
+            // would be a silent throttle on a fleet that never asked for one.
+            var hostCeiling = HostCapacityPolicy.ResolveCeiling(
+                client?.RunnerDesiredMaxParallelism, null, seedCeiling);
+            var capacityTargets = hostCeiling is null ? null : new HostCapacityTargets(
+                hostCeiling.Value,
+                client?.RunnerTargetLoadPercent ?? HostCapacityPolicy.DefaultTargetLoadPercent,
+                RunnerRampStrategies.Normalize(client?.RunnerRampStrategy));
+            // Every poll answer carries the central policy, granted or not, so a
+            // daemon adopts a changed ceiling without waiting for a claim.
+            RunnerClaimResponse WithCapacity(RunnerClaimResponse response, string? admissionReason = null)
+                => response with
+                {
+                    DesiredMaxParallelism = capacityTargets?.MaxParallelism,
+                    TargetLoadPercent = capacityTargets?.TargetLoadPercent,
+                    RampStrategy = capacityTargets?.RampStrategy,
+                    AdmissionReason = admissionReason ?? response.AdmissionReason,
+                };
             if (securedRunner is not null && !accessSecurity.RunnerAcceptsClaims(securedRunner.Id))
-                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
+                return Results.Ok(WithCapacity(new RunnerClaimResponse(RunnerClaimStatus.Empty,
                     Message: securedRunner.RetiredAt is not null
                         ? "runner is retired"
                         : securedRunner.RetireRequestedAt is not null
                             ? "runner is draining and will retire after active work finishes"
-                            : "runner is draining; no new leases are admitted"));
+                            : "runner is draining; no new leases are admitted")));
             if (client?.DrainRequestedAt is not null || client?.Kind == ClientIdentityKind.Retired)
-                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
+                return Results.Ok(WithCapacity(new RunnerClaimResponse(RunnerClaimStatus.Empty,
                     Message: client.Kind == ClientIdentityKind.Retired
                         ? "runner is retired"
                         : client.RetireRequestedAt is not null
                             ? "runner is draining and will retire after active work finishes"
-                            : "runner is draining; no new leases are admitted"));
+                            : "runner is draining; no new leases are admitted")));
             await ClaimGate.WaitAsync(ct);
             try
             {
@@ -205,17 +247,17 @@ public static class LeaseEndpoints
                     {
                         if (!replay.Granted || replay.Lease is null)
                         {
-                            return Results.Ok(new RunnerClaimResponse(
+                            return Results.Ok(WithCapacity(new RunnerClaimResponse(
                                 RunnerClaimStatus.Empty,
-                                Message: replay.Message ?? replay.Outcome));
+                                Message: replay.Message ?? replay.Outcome)));
                         }
 
                         var replayedTask = FindTask(scanner, replay.Lease.TaskKey);
                         if (replayedTask is null)
                         {
-                            return Results.Ok(new RunnerClaimResponse(
+                            return Results.Ok(WithCapacity(new RunnerClaimResponse(
                                 RunnerClaimStatus.Empty,
-                                Message: "The original claim task is no longer available."));
+                                Message: "The original claim task is no longer available.")));
                         }
                         var replayedProject = projects.FindByStorageLocation(replayedTask.WatchPath)
                                               ?? projects.FindByIdOrDisplayName(replayedTask.ProjectName);
@@ -224,24 +266,39 @@ public static class LeaseEndpoints
                             settings.Get(replayedTask.ProjectName).IntegrationBranch);
                         if (replayedRepository is null)
                         {
-                            return Results.Ok(new RunnerClaimResponse(
+                            return Results.Ok(WithCapacity(new RunnerClaimResponse(
                                 RunnerClaimStatus.Empty,
-                                Message: "The original claim repository is no longer configured."));
+                                Message: "The original claim repository is no longer configured.")));
                         }
 
+                        // A replay re-serves a lease this host already holds, so
+                        // occupancy does not grow. Recording the unchanged count
+                        // keeps the ledger free of the old "active + 1" drift.
+                        var replayedActiveRuns = Math.Max(
+                            CountHostLeases(scanner.ScanAllJobs(), leases, clientId, req.RunnerId),
+                            activeSlots ?? 0);
+                        // Without a ceiling there is nothing to derive from, so the
+                        // daemon's own headroom minus the served lease stays the
+                        // compatibility answer.
+                        var replayedFreeSlots = capacityTargets is null
+                            ? Math.Max(0, req.AvailableSlots - 1)
+                            : HostCapacityPolicy.FreeSlots(capacityTargets.MaxParallelism, replayedActiveRuns);
                         if (runnerPrincipal is not null)
                             accessSecurity.RecordRunnerActivity(
                                 runnerPrincipal.RunnerId,
-                                (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
-                                Math.Max(0, req.AvailableSlots - 1),
+                                replayedActiveRuns,
+                                replayedFreeSlots,
                                 claimed: true);
                         if (!string.IsNullOrWhiteSpace(clientId))
                             clients.RecordRunnerActivity(
                                 clientId,
-                                (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
-                                Math.Max(0, req.AvailableSlots - 1),
-                                claimed: true);
-                        return Results.Ok(new RunnerClaimResponse(
+                                replayedActiveRuns,
+                                replayedFreeSlots,
+                                claimed: true,
+                                seedMaxParallelism: seedCeiling,
+                                effectiveMaxParallelism: req.EffectiveMaxParallelism,
+                                effectiveMaxParallelismAppliedAt: req.EffectiveMaxParallelismAppliedAt);
+                        return Results.Ok(WithCapacity(new RunnerClaimResponse(
                             RunnerClaimStatus.Claimed,
                             replay.Lease.TaskKey,
                             replayedTask.Id,
@@ -250,7 +307,7 @@ public static class LeaseEndpoints
                             ProjectId: replayedRepository.ProjectId,
                             RepositoryUrl: replayedRepository.RepositoryUrl,
                             DefaultBranch: replayedRepository.DefaultBranch,
-                            TaskKind: replayedTask.Kind));
+                            TaskKind: replayedTask.Kind)));
                     }
                 }
 
@@ -335,10 +392,40 @@ public static class LeaseEndpoints
                 var liveSnapshot = claimSnapshot.Live;
                 var waitsOn = claimSnapshot.References;
 
+                // Server-owned occupancy: leases this host currently holds. The
+                // daemon's own count is only a floor, so a second daemon process
+                // on the same host cannot spend the ceiling twice.
+                var hostActiveRuns = Math.Max(
+                    CountHostLeases(liveSnapshot, leases, clientId, req.RunnerId),
+                    activeSlots ?? 0);
+
                 if (req.AvailableSlots <= 0)
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
-                        Message: "runner status recorded; no free host slots"));
+                        Message: "runner status recorded; the daemon reports no free host slots")));
+
+                var admission = capacityTargets is null
+                    ? new HostAdmissionVerdict(
+                        true, HostAdmissionReasons.NoCentralCeiling, "no central host ceiling is configured")
+                    : HostCapacityPolicy.Decide(
+                        capacityTargets,
+                        new HostAdmissionFacts(
+                            hostActiveRuns,
+                            now,
+                            client?.RunnerLastClaimAt,
+                            req.Telemetry?.CpuPercent));
+                if (!admission.Admitted)
+                {
+                    logger.LogDebug(
+                        "remote-runner-capacity-hold runner={Runner} reason={Reason} detail={Detail} active={Active} ceiling={Ceiling}",
+                        req.RunnerName, admission.ReasonCode, admission.Detail,
+                        hostActiveRuns, capacityTargets?.MaxParallelism);
+                    return Results.Ok(WithCapacity(
+                        new RunnerClaimResponse(
+                            RunnerClaimStatus.Empty,
+                            Message: admission.Detail),
+                        admission.ReasonCode));
+                }
 
                 var eligible = liveSnapshot
                     .Where(t => t.State == TaskStates.Ready)
@@ -428,7 +515,7 @@ public static class LeaseEndpoints
                     && failedPreflightRepository is not null
                     && failedProjectPreflight is not null)
                 {
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: failedPreflightCandidate.ProjectName,
                         Message: $"Project delivery preflight failed: {failedProjectPreflight.Detail}",
@@ -436,20 +523,20 @@ public static class LeaseEndpoints
                         RepositoryUrl: failedPreflightRepository.RepositoryUrl,
                         DefaultBranch: failedPreflightRepository.DefaultBranch,
                         TaskKind: failedPreflightCandidate.Kind,
-                        RegistrationFingerprint: ProjectDeliveryPreflightFingerprint.Create(failedPreflightRepository)));
+                        RegistrationFingerprint: ProjectDeliveryPreflightFingerprint.Create(failedPreflightRepository))));
                 }
 
                 if (candidate is null || repository is null)
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
                         Message: nonRemoteCapableProject is not null
                             ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                            : null));
+                            : null)));
 
                 if (string.IsNullOrWhiteSpace(clientId))
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Invalid,
-                        Message: "A registered host client identity is required for project delivery preflight."));
+                        Message: "A registered host client identity is required for project delivery preflight.")));
 
                 var registrationFingerprint = ProjectDeliveryPreflightFingerprint.Create(repository);
                 if (req.ProjectPreflight is not null)
@@ -457,14 +544,14 @@ public static class LeaseEndpoints
                     if (!string.Equals(req.ProjectPreflight.ProjectId, repository.ProjectId, StringComparison.OrdinalIgnoreCase)
                         || !string.Equals(req.ProjectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
                     {
-                        return Results.Ok(new RunnerClaimResponse(
+                        return Results.Ok(WithCapacity(new RunnerClaimResponse(
                             RunnerClaimStatus.Invalid,
                             ProjectName: candidate.ProjectName,
                             Message: "The project registration changed while delivery preflight was running. Retry the claim.",
                             ProjectId: repository.ProjectId,
                             RepositoryUrl: repository.RepositoryUrl,
                             DefaultBranch: repository.DefaultBranch,
-                            RegistrationFingerprint: registrationFingerprint));
+                            RegistrationFingerprint: registrationFingerprint)));
                     }
 
                     var urlsMatch = SameRepositoryUrl(req.ProjectPreflight.FetchUrl, repository.RepositoryUrl)
@@ -498,7 +585,7 @@ public static class LeaseEndpoints
                     || !string.Equals(projectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal)
                     || !ProjectDeliveryPreflightPolicy.IsFresh(projectPreflight, DateTime.UtcNow))
                 {
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightRequired,
                         ProjectName: candidate.ProjectName,
                         Message: "A fresh project delivery preflight is required before this claim.",
@@ -506,12 +593,12 @@ public static class LeaseEndpoints
                         RepositoryUrl: repository.RepositoryUrl,
                         DefaultBranch: repository.DefaultBranch,
                         TaskKind: candidate.Kind,
-                        RegistrationFingerprint: registrationFingerprint));
+                        RegistrationFingerprint: registrationFingerprint)));
                 }
 
                 if (!string.Equals(projectPreflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Results.Ok(new RunnerClaimResponse(
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: candidate.ProjectName,
                         Message: $"Project delivery preflight failed: {projectPreflight.Detail}",
@@ -519,7 +606,7 @@ public static class LeaseEndpoints
                         RepositoryUrl: repository.RepositoryUrl,
                         DefaultBranch: repository.DefaultBranch,
                         TaskKind: candidate.Kind,
-                        RegistrationFingerprint: registrationFingerprint));
+                        RegistrationFingerprint: registrationFingerprint)));
                 }
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
@@ -538,7 +625,8 @@ public static class LeaseEndpoints
                     ClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
                 });
                 if (!acquire.Granted || acquire.Lease is null)
-                    return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome));
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome)));
 
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
@@ -557,7 +645,8 @@ public static class LeaseEndpoints
                     logger.LogWarning(
                         "remote-runner-claim-move-failed project={Project} task={TaskKey} runner={Runner} status={Status} message={Message}",
                         candidate.ProjectName, taskKey, req.RunnerName, move.Status, move.Message);
-                    return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}"));
+                    return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}")));
                 }
 
                 logger.LogInformation(
@@ -589,18 +678,27 @@ public static class LeaseEndpoints
                         TrustReason = "Captured from the fenced run lease granted by the task server.",
                     },
                 }, candidate.WatchPath);
+                // One more lease is now held by this host. Free slots follow from
+                // the central ceiling, not from the daemon's reported headroom.
+                var occupiedAfterClaim = hostActiveRuns + 1;
+                var freeAfterClaim = capacityTargets is null
+                    ? Math.Max(0, req.AvailableSlots - 1)
+                    : HostCapacityPolicy.FreeSlots(capacityTargets.MaxParallelism, occupiedAfterClaim);
                 if (runnerPrincipal is not null)
                     accessSecurity.RecordRunnerActivity(
                         runnerPrincipal.RunnerId,
-                        (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
-                        Math.Max(0, req.AvailableSlots - 1),
+                        occupiedAfterClaim,
+                        freeAfterClaim,
                         claimed: true);
                 if (!string.IsNullOrWhiteSpace(clientId))
                     clients.RecordRunnerActivity(
                         clientId,
-                        (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
-                        Math.Max(0, req.AvailableSlots - 1),
-                        claimed: true);
+                        occupiedAfterClaim,
+                        freeAfterClaim,
+                        claimed: true,
+                        seedMaxParallelism: seedCeiling,
+                        effectiveMaxParallelism: req.EffectiveMaxParallelism,
+                        effectiveMaxParallelismAppliedAt: req.EffectiveMaxParallelismAppliedAt);
                 if (runnerPrincipal is not null)
                 {
                     accessSecurity.AppendRunAudit(new RunSecurityAuditEvent(
@@ -608,7 +706,7 @@ public static class LeaseEndpoints
                         InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                         acquire.Lease.FencingToken));
                 }
-                return Results.Ok(new RunnerClaimResponse(
+                return Results.Ok(WithCapacity(new RunnerClaimResponse(
                     RunnerClaimStatus.Claimed,
                     taskKey,
                     candidate.Id,
@@ -617,7 +715,7 @@ public static class LeaseEndpoints
                     ProjectId: repository.ProjectId,
                     RepositoryUrl: repository.RepositoryUrl,
                     DefaultBranch: repository.DefaultBranch,
-                    TaskKind: candidate.Kind));
+                    TaskKind: candidate.Kind), admission.ReasonCode));
             }
             finally
             {
@@ -1222,6 +1320,59 @@ public static class LeaseEndpoints
         BackendName = string.IsNullOrWhiteSpace(req.BackendName) ? identity.BackendName : req.BackendName,
         Pid = req.Pid == 0 ? Environment.ProcessId : req.Pid,
     };
+
+    /// <summary>
+    /// Server-side occupancy of one execution host: the tasks in Progress whose
+    /// current run lease belongs to this host. This is the count host capacity
+    /// admission spends, so a daemon that under-reports (or a second daemon
+    /// process on the same machine) cannot exceed the central ceiling.
+    /// </summary>
+    private static int CountHostLeases(
+        IEnumerable<TaskInfo> snapshot,
+        RunLeaseService leases,
+        string? clientId,
+        string runnerId)
+    {
+        var count = 0;
+        foreach (var task in snapshot)
+        {
+            if (task.State != TaskStates.Progress) continue;
+            var key = task.Key ?? task.TaskKey ?? task.Id;
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            var inspection = leases.Inspect(key);
+            if (inspection.State != "active" || inspection.Lease is null) continue;
+            var lease = inspection.Lease;
+            if ((!string.IsNullOrWhiteSpace(clientId)
+                 && string.Equals(lease.ClientId, clientId, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(lease.RunnerId, runnerId, StringComparison.OrdinalIgnoreCase))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// DEPRECATED COMPATIBILITY READ (remove after 2026-10-01). Capacity now
+    /// lives on the host, but a host that has never been given a central target
+    /// must not lose the parallelism its projects were configured with. The
+    /// largest <c>maxParallelism</c> among the projects assigned to this runner
+    /// seeds the host ceiling once; after that the host target is authoritative
+    /// and this value is ignored.
+    /// </summary>
+    private static int? DeprecatedProjectCompatCeiling(
+        ProjectSettingsService settings,
+        string runnerId,
+        string runnerName)
+    {
+        var ceiling = 0;
+        foreach (var project in settings.GetAll().Values)
+        {
+            if (!ProjectExecutionPolicy.IsAssignedRemote(project, runnerId, runnerName)) continue;
+            ceiling = Math.Max(ceiling, project.MaxParallelism);
+        }
+        return ceiling > 0 ? ceiling : null;
+    }
 
     private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)
     {

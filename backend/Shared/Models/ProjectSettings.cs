@@ -180,12 +180,18 @@ public record ProjectSettings
     public IReadOnlyList<string>? PipelineStepOrder { get; init; }
 
     /// <summary>
-    /// ADR-0052: maximum number of tasks the runner may execute concurrently
-    /// for this project. Default <c>1</c> keeps the runner strictly sequential
-    /// (one active slot, behaviour byte-for-byte identical to the pre-parallel
-    /// runner). Values &gt; 1 opt the project into worktree-isolated parallel
-    /// execution; the runner clamps to <c>&gt;= 1</c>. Persisted in
-    /// <c>project-settings.json</c>.
+    /// DEPRECATED (AGT-2302 / AGT-2376, remove after 2026-10-01). Capacity is a
+    /// host fact now: the execution host carries one ceiling, one target load,
+    /// and one ramp strategy for every project it claims for
+    /// (<see cref="HostCapacityPolicy"/>, <c>PUT /api/clients/{id}/runner-capacity</c>).
+    ///
+    /// <para>
+    /// The value stays readable so existing <c>project-settings.json</c> files
+    /// keep meaning something during the migration: it seeds a host ceiling once
+    /// (see <c>LeaseEndpoints.DeprecatedProjectCompatCeiling</c>) and the legacy
+    /// in-process runner still reads it. No HTTP route and no UI control writes
+    /// it any more.
+    /// </para>
     /// </summary>
     public int MaxParallelism { get; init; } = 1;
 

@@ -481,15 +481,6 @@ public record SetBuildProfileRequest
     public int? PoolSize { get; init; }
 }
 
-/// <summary>
-/// Body for <c>PUT /api/projects/{name}/max-parallelism</c> (ADR-0052). The
-/// value is clamped to <c>&gt;= 1</c> server-side; <c>1</c> means sequential.
-/// </summary>
-public record SetMaxParallelismRequest
-{
-    public int MaxParallelism { get; init; } = 1;
-}
-
 /// <summary>Body for the server-owned remote runner assignment.</summary>
 public record SetExecutionRunnerRequest
 {

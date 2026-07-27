@@ -24,6 +24,7 @@ import {
   ramUsedPct,
   relativeHeartbeat,
   type HostActionKind,
+  type HostProjectSlots,
   type MeterTone,
   type RemoteHost,
 } from '../../models/remote-host.model';
@@ -68,6 +69,12 @@ export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
   /** Board-local process runs or remote leased runs attributed to this host. */
   readonly boardActiveSlots = input(0);
+  /**
+   * Which projects hold this host's slots. Supplied by the panel from the same
+   * board lease truth as {@link boardActiveSlots}, so the per-project rows and
+   * the active-slot total always reconcile.
+   */
+  readonly projectSlots = input<readonly HostProjectSlots[]>([]);
   /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();

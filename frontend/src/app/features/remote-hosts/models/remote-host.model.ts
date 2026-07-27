@@ -36,6 +36,18 @@ export type HostHeartbeatStatus =
 export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete' | 'capacity';
 export type HostRampStrategy = 'conservative' | 'balanced' | 'aggressive';
 
+/**
+ * The one capacity record of an execution host: a hard ceiling on concurrent
+ * runs, the CPU load the host aims to stay under, and how fast concurrency may
+ * grow. Every project the host claims for shares it - per-project
+ * `maxParallelism` is deprecated (AGT-2302 / AGT-2376).
+ *
+ * Two servers can own this record. The standalone Task Server versions it and
+ * is written through `PUT /api/v1/hosts/{hostId}/runtime-capacity`; the
+ * monolith keeps it on the host's client identity and is written through
+ * `PUT /api/clients/{clientId}/runner-capacity`. A `version` of 0 marks the
+ * unversioned client-identity record and selects the second route.
+ */
 export interface RuntimeCapacitySettings {
   hostId: string;
   maxParallelism: number;
@@ -43,6 +55,12 @@ export interface RuntimeCapacitySettings {
   rampStrategy: HostRampStrategy;
   version: number;
   updatedAt: string;
+}
+
+/** How many of a host's slots one project currently occupies. */
+export interface HostProjectSlots {
+  projectName: string;
+  activeSlots: number;
 }
 
 /**
@@ -199,6 +217,8 @@ export interface RemoteHost {
   /** Latest capacity value reported as adopted by this daemon process. */
   effectiveMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
+  /** Which projects currently occupy this host's shared slot ceiling. */
+  projectSlots?: readonly HostProjectSlots[];
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

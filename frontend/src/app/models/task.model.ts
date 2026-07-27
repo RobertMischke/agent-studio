@@ -581,6 +581,14 @@ export interface ClientSummary {
   runnerLastClaimAt?: string | null;
   runnerActiveSlots?: number | null;
   runnerAvailableSlots?: number | null;
+  /** Central host capacity targets (AGT-2302 / AGT-2376). */
+  runnerDesiredMaxParallelism?: number | null;
+  runnerTargetLoadPercent?: number | null;
+  runnerRampStrategy?: 'conservative' | 'balanced' | 'aggressive' | null;
+  runnerCapacityUpdatedAt?: string | null;
+  /** Ceiling the live daemon reports as adopted. Telemetry, not policy. */
+  runnerEffectiveMaxParallelism?: number | null;
+  runnerEffectiveMaxParallelismAppliedAt?: string | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
 }

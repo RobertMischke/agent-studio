@@ -3,11 +3,7 @@
   <section class="capacity" data-testid="remote-host-capacity" aria-label="Host runtime capacity">
     <div class="capacity__copy">
       <strong>Runtime capacity</strong>
-      <span data-testid="remote-host-slots">
-        {{ activeSlots() }} active /
-        {{ freeSlots() }} free /
-        {{ capacity.maxParallelism }} total
-      </span>
+      <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
       <span>
         Central ceiling {{ capacity.maxParallelism }} slots. Daemon adopted
         {{ h.effectiveMaxParallelism ?? 'not reported' }}.
@@ -23,6 +19,20 @@
           Waiting for the daemon to adopt the new ceiling. Running work continues.
         </span>
       }
+      <ul class="capacity__projects" data-testid="remote-host-project-slots"
+          aria-label="Projects using this host's slots">
+        @for (entry of projectSlots(); track entry.projectName) {
+          <li>
+            <span class="capacity__project-name">{{ entry.projectName }}</span>
+            <span class="capacity__project-slots">{{ entry.activeSlots }} of {{ capacity.maxParallelism }}</span>
+          </li>
+        } @empty {
+          <li class="capacity__projects-empty">No project is holding a slot on this host.</li>
+        }
+      </ul>
+      <span class="capacity__projects-note">
+        The ceiling is shared by every project on this host; projects have no cap of their own.
+      </span>
     </div>
     <div class="capacity__form">
       <label>
@@ -62,6 +72,18 @@
               (click)="save()">
         Apply
       </button>
+    </div>
+  </section>
+} @else {
+  <section class="capacity capacity--unknown" data-testid="remote-host-capacity"
+           aria-label="Host runtime capacity">
+    <div class="capacity__copy">
+      <strong>Runtime capacity</strong>
+      <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
+      <span>
+        No server has published a ceiling for this host yet. The slot total stays
+        blank rather than being guessed from daemon telemetry.
+      </span>
     </div>
   </section>
 }

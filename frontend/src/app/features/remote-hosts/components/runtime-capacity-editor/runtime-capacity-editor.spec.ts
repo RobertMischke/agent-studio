@@ -67,6 +67,69 @@ describe('RuntimeCapacityEditorComponent', () => {
     });
   });
 
+  it('keeps the ceiling as the slot total while the active count breathes', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 7, availableSlots: 1 });
+    fixture.detectChanges();
+    const slots = () => fixture.nativeElement
+      .querySelector('[data-testid="remote-host-slots"]')?.textContent;
+
+    // The daemon's own "1 free" must not turn the total into active + 1.
+    expect(slots()).toContain('7 active / 0 free / 4 total');
+
+    fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 2, availableSlots: 1 });
+    fixture.detectChanges();
+    expect(slots()).toContain('2 active / 2 free / 4 total');
+  });
+
+  it('says so instead of inventing a total when no ceiling is published', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    fixture.componentRef.setInput('host', {
+      ...HOST,
+      runtimeCapacity: null,
+      activeTaskCount: 7,
+      availableSlots: 1,
+      effectiveMaxParallelism: 8,
+    });
+    fixture.detectChanges();
+
+    const slots = fixture.nativeElement
+      .querySelector('[data-testid="remote-host-slots"]')?.textContent;
+    expect(slots).toContain('7 active / capacity not reported');
+    expect(slots).not.toContain('total');
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-capacity-input"]'))
+      .toBeNull();
+  });
+
+  it('lists which projects hold the shared ceiling', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    fixture.componentRef.setInput('host', { ...HOST, activeTaskCount: 3 });
+    fixture.componentRef.setInput('projectSlots', [
+      { projectName: 'Agent Studio', activeSlots: 2 },
+      { projectName: 'Quality Studio', activeSlots: 1 },
+    ]);
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement
+      .querySelector('[data-testid="remote-host-project-slots"]')?.textContent ?? '';
+    expect(rows).toContain('Agent Studio');
+    expect(rows).toContain('2 of 4');
+    expect(rows).toContain('Quality Studio');
+    expect(rows).toContain('1 of 4');
+  });
+
   it('marks a central change as waiting until the daemon reports adoption', async () => {
     await TestBed.configureTestingModule({
       imports: [RuntimeCapacityEditorComponent],

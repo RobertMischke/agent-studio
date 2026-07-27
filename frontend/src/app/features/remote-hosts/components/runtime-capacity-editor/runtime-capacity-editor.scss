@@ -33,6 +33,40 @@
 
 .capacity__pending { color: var(--studio-accent-warn-strong); }
 
+// Per-project consumption of the shared host ceiling. A plain two-column list:
+// the numbers must reconcile with the slot ledger above, so they align.
+.capacity__projects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: var(--studio-spacing-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capacity__projects li {
+  display: flex;
+  gap: var(--studio-spacing-2);
+  justify-content: space-between;
+  max-width: 340px;
+}
+
+.capacity__project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capacity__project-slots {
+  color: var(--studio-fg-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity__projects-empty,
+.capacity__projects-note { color: var(--studio-fg-muted); }
+
+.capacity--unknown .capacity__copy { flex: 1 1 auto; }
+
 .capacity__form {
   display: flex;
   flex: 0 0 auto;

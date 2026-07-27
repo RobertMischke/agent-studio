@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TaskState, type TaskInfo } from '../../../models/task.model';
 import type { RemoteHost } from './remote-host.model';
 import {
+  boardProjectSlotsForHost,
   boardRemoteSlotsForHost,
   deriveBoardRunningTruth,
   freshHostTelemetry,
@@ -103,6 +104,46 @@ describe('running truth', () => {
 
     expect(truth).toMatchObject({ local: 1, remote: 2, total: 3 });
     expect(boardRemoteSlotsForHost(truth, host(2, '2026-07-26T10:00:00Z'))).toBe(2);
+  });
+
+  it('breaks a host down by project and reconciles with its active-slot total', () => {
+    function leased(id: string, projectName: string, leaseId: string): TaskInfo {
+      return task(id, {
+        projectName,
+        runner: {
+          runnerId: 'runner-1',
+          runnerName: 'Runner 1',
+          hostname: 'runner-1',
+          backendName: 'task-server',
+          isRemote: true,
+          leaseId,
+          fencingToken: 1,
+          acquiredAt: '2026-07-26T10:00:00Z',
+        },
+      });
+    }
+
+    const truth = deriveBoardRunningTruth([
+      leased('a', 'Agent Studio', 'lease-a'),
+      leased('b', 'Agent Studio', 'lease-b'),
+      leased('c', 'Quality Studio', 'lease-c'),
+    ]);
+    const target = host(3, '2026-07-26T10:00:00Z');
+
+    // Busiest project first, and the rows sum to the host's active slots.
+    expect(boardProjectSlotsForHost(truth, target)).toEqual([
+      { projectName: 'Agent Studio', activeSlots: 2 },
+      { projectName: 'Quality Studio', activeSlots: 1 },
+    ]);
+    expect(boardProjectSlotsForHost(truth, target).reduce((sum, e) => sum + e.activeSlots, 0))
+      .toBe(boardRemoteSlotsForHost(truth, target));
+  });
+
+  it('reports no project rows for a host that holds no lease', () => {
+    const truth = deriveBoardRunningTruth([
+      task('local', { execution: { status: 'running' } as TaskInfo['execution'] }),
+    ]);
+    expect(boardProjectSlotsForHost(truth, host(0, '2026-07-26T10:00:00Z'))).toEqual([]);
   });
 
   it('rejects a stale telemetry sample even when the heartbeat is fresh', () => {

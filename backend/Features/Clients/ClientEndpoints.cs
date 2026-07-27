@@ -134,6 +134,66 @@ public static class ClientEndpoints
             return updated is null ? Results.NotFound(new { error = "client-not-found" }) : Results.Ok(ClientSummary.From(updated));
         });
 
+        // Central host capacity (AGT-2302 / AGT-2376). Capacity is a host fact:
+        // one ceiling, one target load, one ramp strategy per execution host,
+        // shared by every project that host claims for. Reads stay open like the
+        // rest of /api/clients; the write is a mutation and therefore already
+        // behind the X-Client-Id registration boundary.
+        clients.MapGet("/{id}/runner-capacity", (string id, ClientIdentityStore store) =>
+        {
+            var record = store.Find(id);
+            return record is null
+                ? Results.NotFound(new { error = "client-not-found" })
+                : Results.Ok(new
+                {
+                    id = record.Id,
+                    maxParallelism = record.RunnerDesiredMaxParallelism,
+                    targetLoadPercent = record.RunnerTargetLoadPercent
+                                        ?? HostCapacityPolicy.DefaultTargetLoadPercent,
+                    rampStrategy = RunnerRampStrategies.Normalize(record.RunnerRampStrategy),
+                    effectiveMaxParallelism = record.RunnerEffectiveMaxParallelism,
+                    effectiveMaxParallelismAppliedAt = record.RunnerEffectiveMaxParallelismAppliedAt,
+                    updatedAt = record.RunnerCapacityUpdatedAt,
+                });
+        });
+
+        clients.MapPut("/{id}/runner-capacity", (string id, SetRunnerCapacityRequest? request, ClientIdentityStore store) =>
+        {
+            if (request is null) return Results.BadRequest(new { error = "body-required" });
+            if (request.MaxParallelism is { } max
+                && (max < HostCapacityPolicy.MinMaxParallelism || max > HostCapacityPolicy.MaxMaxParallelism))
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid-max-parallelism",
+                    message = $"maxParallelism must be between {HostCapacityPolicy.MinMaxParallelism} and {HostCapacityPolicy.MaxMaxParallelism}",
+                });
+            }
+            if (request.TargetLoadPercent is { } load
+                && (load < HostCapacityPolicy.MinTargetLoadPercent || load > HostCapacityPolicy.MaxTargetLoadPercent))
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid-target-load-percent",
+                    message = $"targetLoadPercent must be between {HostCapacityPolicy.MinTargetLoadPercent} and {HostCapacityPolicy.MaxTargetLoadPercent}",
+                });
+            }
+            if (request.RampStrategy is not null && !RunnerRampStrategies.IsValid(request.RampStrategy))
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid-ramp-strategy",
+                    allowed = RunnerRampStrategies.All,
+                });
+            }
+
+            var updated = store.SetRunnerCapacity(
+                id, request.MaxParallelism, request.TargetLoadPercent, request.RampStrategy);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
         clients.MapPost("/{id}/runner-project-preflights/invalidate", (string id, ClientIdentityStore store) =>
         {
             var updated = store.InvalidateRunnerProjectPreflightsForHost(id);

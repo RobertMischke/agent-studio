@@ -104,9 +104,8 @@ export class ProjectSettingsPanelComponent implements OnInit {
   private readonly cliCatalog = inject(CliCatalogStore);
   private readonly workspaceOrchestrator = inject(WorkspaceOrchestratorSettingsService);
 
-  /** ADR-0052: per-project max parallel coding slots (1 = sequential). */
-  readonly maxParallelism = signal<number>(1);
-  readonly parallelOptions = [1, 2, 3, 4];
+  // Per-project max parallelism is gone (AGT-2302 / AGT-2376). Concurrency is a
+  // host ceiling now, edited on the host row under Settings -> Execution Hosts.
   readonly projectId = signal<string | null>(null);
   readonly wikiSourceBranch = signal('');
   readonly wikiSourceSaving = signal(false);
@@ -188,13 +187,6 @@ export class ProjectSettingsPanelComponent implements OnInit {
         this.caps.set(resp.caps ?? {});
       },
       error: () => { /* keep the default-cap fallback */ },
-    });
-    this.http.get<Record<string, { maxParallelism?: number }>>('/api/projects/settings').subscribe({
-      next: (all) => {
-        const n = all?.[this.projectName()]?.maxParallelism;
-        if (typeof n === 'number' && n >= 1) this.maxParallelism.set(n);
-      },
-      error: () => { /* default 1 */ },
     });
     this.loadWorkspaceOrchestratorSettings();
     this.quotaApi.getProjectQuotaWaitPolicy(this.projectName()).subscribe({
@@ -303,15 +295,6 @@ export class ProjectSettingsPanelComponent implements OnInit {
       },
       error: () => this.orchSaving.set(false),
     });
-  }
-
-  /** Persist the per-project max parallelism (ADR-0052; PUT /api/projects/{name}/max-parallelism). */
-  setMaxParallelism(n: number): void {
-    const v = Math.max(1, Math.floor(n || 1));
-    this.maxParallelism.set(v);
-    this.http
-      .put(`/api/projects/${encodeURIComponent(this.projectName())}/max-parallelism`, { maxParallelism: v })
-      .subscribe({ next: () => { /* applied live */ }, error: () => { /* surfaced on next load */ } });
   }
 
   quotaWaitOverride(): 'inherit' | 'enabled' | 'disabled' {

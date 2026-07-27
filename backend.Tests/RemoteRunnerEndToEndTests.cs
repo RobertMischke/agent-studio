@@ -1216,6 +1216,65 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             _watchPath, TaskStates.Ready, "AGT-BLOCKED-REPO")));
     }
 
+    /// <summary>
+    /// AGT-2302 / AGT-2376: capacity is a host fact. The daemon's bootstrap
+    /// value seeds the central ceiling on first contact, the ceiling then holds
+    /// further claims, the slot ledger is derived from it (never "active + 1"),
+    /// and an operator raise takes effect on the next poll.
+    /// </summary>
+    [Fact]
+    public async Task Host_ceiling_admits_up_to_its_capacity_and_holds_further_claims()
+    {
+        SeedTask(TaskStates.Ready, "AGT-CAP-A", "First", "Prompt.");
+        SeedTask(TaskStates.Ready, "AGT-CAP-B", "Second", "Prompt.");
+        SeedTask(TaskStates.Ready, "AGT-CAP-C", "Third", "Prompt.");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/writable-project.git");
+
+        // The daemon reports RUNNER_MAX_PARALLELISM=2; the server adopts it as
+        // the host's central ceiling and echoes the policy back on every poll.
+        var request = new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner")
+        {
+            BootstrapMaxParallelism = 2,
+        };
+        var first = await ClaimWithSuccessfulPreflightAsync(client, request);
+        Assert.Equal(RClaimStatus.Claimed, first.Status);
+        Assert.Equal(2, first.DesiredMaxParallelism);
+        Assert.Equal(RunnerRampStrategies.Balanced, first.RampStrategy);
+
+        var second = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Claimed, second.Status);
+        Assert.NotEqual(first.TaskKey, second.TaskKey);
+
+        // Ceiling reached: the third poll is held, and says why.
+        var held = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, held.Status);
+        Assert.Equal(HostAdmissionReasons.CeilingReached, held.AdmissionReason);
+        Assert.Contains("2/2", held.Message);
+
+        // The ledger describes a capacity, not the daemon's breathing headroom.
+        var clients = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        var host = Assert.Single(clients!, item => item.Id == client.ClientId);
+        Assert.Equal(2, host.RunnerDesiredMaxParallelism);
+        Assert.Equal(2, host.RunnerActiveSlots);
+        Assert.Equal(0, host.RunnerAvailableSlots);
+
+        // Raising the central ceiling frees a slot on the very next poll.
+        var raised = await http.PutAsJsonAsync(
+            $"/api/clients/{Uri.EscapeDataString(client.ClientId)}/runner-capacity",
+            new { maxParallelism = 3, targetLoadPercent = 85, rampStrategy = "aggressive" });
+        raised.EnsureSuccessStatusCode();
+
+        var third = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Claimed, third.Status);
+        Assert.Equal(3, third.DesiredMaxParallelism);
+        Assert.Equal(RunnerRampStrategies.Aggressive, third.RampStrategy);
+    }
+
     [Fact]
     public async Task Green_project_preflight_is_cached_for_the_following_card()
     {

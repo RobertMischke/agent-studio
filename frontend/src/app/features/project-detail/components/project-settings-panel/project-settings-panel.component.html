@@ -190,27 +190,10 @@
           <p class="ps-settings__error" data-testid="project-settings-wiki-source-error">{{ error }}</p>
         }
       </article>
-      <article class="ps-settings__card" data-testid="project-settings-parallel">
-      <div class="ps-settings__card-head">
-        <span class="ps-settings__card-icon" aria-hidden="true">⇉</span>
-        <span class="ps-settings__card-title">Parallel execution</span>
-      </div>
-      <p class="ps-settings__card-desc">
-        How many coding tasks run at once (ADR-0052). <strong>1 = sequential.</strong>
-        Above 1, the orchestrator only starts another task when it is disjoint from
-        a running one; each parallel run is isolated in its own git worktree and
-        merged back into the work branch.
-      </p>
-      <label class="ps-settings__card-value">
-        Max parallelism&nbsp;
-        <select data-testid="project-settings-max-parallelism"
-                (change)="setMaxParallelism(+$any($event.target).value)">
-          @for (n of parallelOptions; track n) {
-            <option [value]="n" [selected]="n === maxParallelism()">{{ n }}{{ n === 1 ? ' (sequential)' : '' }}</option>
-          }
-        </select>
-      </label>
-      </article>
+      <!-- "Parallel execution" removed (AGT-2302 / AGT-2376): how many tasks run
+           at once is a property of the execution host, not of a project. The
+           ceiling, target load, and ramp live on the host row under
+           Settings -> Execution Hosts. -->
       <article class="ps-settings__card" data-testid="project-settings-quota-wait">
         <div class="ps-settings__card-head">
           <span class="ps-settings__card-icon" aria-hidden="true">◴</span>

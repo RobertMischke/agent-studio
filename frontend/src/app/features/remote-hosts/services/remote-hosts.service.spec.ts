@@ -391,6 +391,75 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('hydrates and updates monolith host capacity through the client identity', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const client = {
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+      runnerActiveSlots: 2,
+      runnerAvailableSlots: 2,
+      runnerDesiredMaxParallelism: 4,
+      runnerTargetLoadPercent: 80,
+      runnerRampStrategy: 'balanced',
+      runnerEffectiveMaxParallelism: 4,
+      runnerEffectiveMaxParallelismAppliedAt: now,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    // No Task Server record: the client identity is the capacity owner, marked
+    // by version 0 so the write goes to the monolith route.
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 4,
+        targetLoadPercent: 80,
+        rampStrategy: 'balanced',
+        version: 0,
+      },
+      effectiveMaxParallelism: 4,
+    });
+
+    svc.setCapacity('agent-runner-01', 6, 85, 'conservative');
+    const request = http.expectOne('/api/clients/agent-runner-01/runner-capacity');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'conservative',
+    });
+    request.flush({
+      ...client,
+      runnerDesiredMaxParallelism: 6,
+      runnerTargetLoadPercent: 85,
+      runnerRampStrategy: 'conservative',
+      runnerAvailableSlots: 4,
+    });
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 6,
+        targetLoadPercent: 85,
+        rampStrategy: 'conservative',
+        version: 0,
+      },
+      availableSlots: 4,
+      busyAction: null,
+    });
+    http.verify();
+  });
+
   it('invalidates cached project proofs before reloading a re-probed host', () => {
     TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
     const svc = TestBed.inject(RemoteHostsService);

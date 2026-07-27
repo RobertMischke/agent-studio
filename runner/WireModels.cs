@@ -113,7 +113,12 @@ public sealed record RunnerClaimRequest(
     IReadOnlyList<string>? ActiveTaskKeys = null,
     RunnerProcessInventory? Inventory = null,
     RunnerProjectPreflightReport? ProjectPreflight = null,
-    int? EffectiveMaxParallelism = null);
+    // Ceiling this daemon currently runs with, and when it adopted it. Pure
+    // telemetry: the server owns the policy and echoes it back on every poll.
+    int? EffectiveMaxParallelism = null,
+    DateTime? EffectiveMaxParallelismAppliedAt = null,
+    // RUNNER_MAX_PARALLELISM. Seeds the central host ceiling on first contact.
+    int? BootstrapMaxParallelism = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,
@@ -188,7 +193,13 @@ public sealed record RunnerClaimResponse(
     string? RunId = null,
     string? LeaseInstanceId = null,
     IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
-    string? RegistrationFingerprint = null);
+    string? RegistrationFingerprint = null,
+    // Central host capacity, echoed on every poll whether or not work was
+    // granted. The daemon adopts these instead of its own environment values.
+    int? DesiredMaxParallelism = null,
+    int? TargetLoadPercent = null,
+    string? RampStrategy = null,
+    string? AdmissionReason = null);
 
 public static class RemoteChatWorkKinds
 {

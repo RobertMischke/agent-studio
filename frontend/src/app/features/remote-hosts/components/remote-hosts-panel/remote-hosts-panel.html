@@ -52,6 +52,7 @@
         [host]="host"
         [now]="now()"
         [boardActiveSlots]="boardSlots(host)"
+        [projectSlots]="projectSlots(host)"
         (action)="onAction($event)"
         (capacityChange)="onCapacityChange($event)"
         (setup)="openSetup($event)" />

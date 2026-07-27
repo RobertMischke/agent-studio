@@ -283,27 +283,71 @@ public class ClientIdentityStore
         }
     }
 
-    /// <summary>Project daemon polls into the identity and finish graceful retirement at zero active slots.</summary>
-    public ClientIdentity? RecordRunnerActivity(string id, int? activeSlots, int availableSlots, bool claimed)
+    /// <summary>
+    /// Project daemon polls into the identity and finish graceful retirement at
+    /// zero active slots.
+    ///
+    /// <para>
+    /// The slot ledger is derived here, once: free slots are the host ceiling
+    /// minus the active count, never the daemon's own breathing observation.
+    /// A ledger that echoed the daemon showed "active + 1" as its total and so
+    /// never described a capacity (AGT-2302).
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="seedMaxParallelism"/> only bootstraps the central
+    /// ceiling on first contact; once a value is persisted the operator owns it
+    /// and no daemon report can move it.
+    /// </para>
+    /// </summary>
+    public ClientIdentity? RecordRunnerActivity(
+        string id,
+        int? activeSlots,
+        int availableSlots,
+        bool claimed,
+        int? seedMaxParallelism = null,
+        int? effectiveMaxParallelism = null,
+        DateTime? effectiveMaxParallelismAppliedAt = null)
     {
         EnsureLoaded();
         lock (_lock)
         {
             if (!_byId.TryGetValue(id, out var existing)) return null;
+            // Telemetry is sampled less often than claim polling. A poll
+            // without a sample must preserve the last known active count;
+            // treating "not reported" as zero could complete a pending
+            // retirement while work is still running.
+            var projectedActiveSlots = activeSlots is null
+                ? existing.RunnerActiveSlots
+                : Math.Max(0, activeSlots.Value);
+            // Seeded only when the ceiling is actually known (an operator target,
+            // the daemon's RUNNER_MAX_PARALLELISM, or a migrating project opt-in).
+            // A host that reports nothing keeps a null ceiling and the ledger says
+            // "capacity not reported" rather than showing an invented total.
+            var ceiling = existing.RunnerDesiredMaxParallelism
+                ?? PositiveCeiling(seedMaxParallelism);
             var updated = existing with
             {
                 // The startup probe covers only the configured fallback remote.
                 // Project delivery is admitted by RunnerProjectPreflight, so a
                 // fallback failure does not make the daemon itself read-only.
                 RunnerDaemonState = "running",
-                // Telemetry is sampled less often than claim polling. A poll
-                // without a sample must preserve the last known active count;
-                // treating "not reported" as zero could complete a pending
-                // retirement while work is still running.
-                RunnerActiveSlots = activeSlots is null
-                    ? existing.RunnerActiveSlots
-                    : Math.Max(0, activeSlots.Value),
-                RunnerAvailableSlots = Math.Max(0, availableSlots),
+                RunnerActiveSlots = projectedActiveSlots,
+                RunnerAvailableSlots = ceiling is > 0
+                    ? HostCapacityPolicy.FreeSlots(ceiling.Value, projectedActiveSlots ?? 0)
+                    : Math.Max(0, availableSlots),
+                RunnerDesiredMaxParallelism = ceiling,
+                RunnerTargetLoadPercent = ceiling is null
+                    ? existing.RunnerTargetLoadPercent
+                    : existing.RunnerTargetLoadPercent ?? HostCapacityPolicy.DefaultTargetLoadPercent,
+                RunnerRampStrategy = ceiling is null
+                    ? existing.RunnerRampStrategy
+                    : RunnerRampStrategies.Normalize(existing.RunnerRampStrategy),
+                RunnerEffectiveMaxParallelism = PositiveCeiling(effectiveMaxParallelism)
+                    ?? existing.RunnerEffectiveMaxParallelism,
+                RunnerEffectiveMaxParallelismAppliedAt = effectiveMaxParallelism is > 0
+                    ? (effectiveMaxParallelismAppliedAt ?? DateTime.UtcNow).ToUniversalTime()
+                    : existing.RunnerEffectiveMaxParallelismAppliedAt,
                 RunnerLastClaimAt = claimed ? DateTime.UtcNow : existing.RunnerLastClaimAt,
                 Kind = existing.RetireRequestedAt is not null
                     && activeSlots is not null
@@ -315,6 +359,52 @@ public class ClientIdentityStore
             return updated;
         }
     }
+
+    /// <summary>
+    /// Operator write for the central host targets. Null fields keep their
+    /// current value; the free-slot ledger is recomputed from the new ceiling
+    /// so the UI reflects the change before the next daemon poll.
+    /// </summary>
+    public ClientIdentity? SetRunnerCapacity(
+        string id,
+        int? maxParallelism,
+        int? targetLoadPercent,
+        string? rampStrategy)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var existing)
+                || existing.Kind == ClientIdentityKind.Retired) return null;
+
+            var ceiling = HostCapacityPolicy.ClampCeiling(
+                maxParallelism
+                ?? existing.RunnerDesiredMaxParallelism
+                ?? HostCapacityPolicy.DefaultMaxParallelism);
+            var updated = existing with
+            {
+                RunnerDesiredMaxParallelism = ceiling,
+                RunnerTargetLoadPercent = HostCapacityPolicy.ClampTargetLoad(
+                    targetLoadPercent
+                    ?? existing.RunnerTargetLoadPercent
+                    ?? HostCapacityPolicy.DefaultTargetLoadPercent),
+                RunnerRampStrategy = RunnerRampStrategies.Normalize(
+                    rampStrategy ?? existing.RunnerRampStrategy),
+                RunnerCapacityUpdatedAt = DateTime.UtcNow,
+                RunnerAvailableSlots = HostCapacityPolicy.FreeSlots(
+                    ceiling, existing.RunnerActiveSlots ?? 0)
+            };
+            WriteLocked(updated);
+            _byId[id] = updated;
+            _logger.LogInformation(
+                "runner-capacity-updated client={ClientId} ceiling={Ceiling} targetLoad={TargetLoad} ramp={Ramp}",
+                id, updated.RunnerDesiredMaxParallelism, updated.RunnerTargetLoadPercent, updated.RunnerRampStrategy);
+            return updated;
+        }
+    }
+
+    private static int? PositiveCeiling(int? value)
+        => value is > 0 ? HostCapacityPolicy.ClampCeiling(value.Value) : null;
 
     /// <summary>
     /// Persist the user's preferred CLI + model for new-task creation.
