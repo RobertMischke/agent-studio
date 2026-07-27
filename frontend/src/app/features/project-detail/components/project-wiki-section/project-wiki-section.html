@@ -450,11 +450,17 @@
               } @else if (loadingDoc()) {
                 <p class="studio-empty pwiki__reader-empty">Loading document...</p>
               } @else if (openedType() === 'html') {
-                <iframe class="pwiki__html-frame"
-                        data-testid="project-wiki-html-frame"
-                        sandbox="allow-scripts"
-                        [srcdoc]="trustedHtml()"
-                        aria-label="HTML knowledge page" appTooltip="HTML knowledge page"></iframe>
+                <div class="pwiki__doc-frame" [class.pwiki__doc-frame--max]="maximized()">
+                  <button type="button" class="pwiki__maximize" data-testid="project-wiki-maximize"
+                          (click)="maximized.set(!maximized())"
+                          [appTooltip]="maximized() ? 'Lesemodus schliessen (Esc)' : 'Maximieren - nur den Inhalt lesen'"
+                          [attr.aria-label]="maximized() ? 'Close reading mode' : 'Maximize document'">{{ maximized() ? '✕' : '⤢' }}</button>
+                  <iframe class="pwiki__html-frame"
+                          data-testid="project-wiki-html-frame"
+                          sandbox="allow-scripts"
+                          [srcdoc]="trustedHtml()"
+                          aria-label="HTML knowledge page" appTooltip="HTML knowledge page"></iframe>
+                </div>
               } @else if (openedType() === 'json') {
                 <div class="pwiki__json-preview" data-testid="project-wiki-json-preview">
                   <pre>{{ displayJson() }}</pre>
