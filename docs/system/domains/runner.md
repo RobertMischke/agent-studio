@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-27
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -170,6 +170,14 @@ state.
 
 ## Invariants
 
+- A coding result is delivered only after `git ls-remote` against the repository
+  URL from the project registration resolves the published ref to the exact
+  local result commit. The configured `origin` push URL is not delivery
+  evidence. A missing or mismatched registered-repository ref retains the host
+  worktree and routes the card to the visible Escalated failure state with
+  hostname, worktree path, branch, cause, and a recovery recipe. "Completed
+  out-of-band" is reserved for a missing terminal sentinel after this exact
+  remote proof succeeds.
 - Coding and review service identities are not interchangeable. A
   `review-executor` capability cannot claim coding work, mixed capabilities are
   rejected, and a registered identity cannot switch executor roles. Review

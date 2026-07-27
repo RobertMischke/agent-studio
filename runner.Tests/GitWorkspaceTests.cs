@@ -264,6 +264,63 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Teardown_rejects_push_to_wrong_repo_and_keeps_recovery_state()
+    {
+        await SeedOriginAsync();
+        var wrongOrigin = Path.Combine(_root, "wrong-origin.git");
+        await RunGitAsync(_root, "init", "--bare", wrongOrigin);
+        var workspace = CreateProjectWorkspace(_origin);
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(workspace.RepoPath, "result.txt", "wrong destination", "valuable result");
+        var localHead = (await GitAsync(workspace.RepoPath, "rev-parse", "HEAD")).StdOut;
+        await GitAsync(workspace.SharedRepoPath, "config", "--replace-all", "remote.origin.pushurl", wrongOrigin);
+
+        var error = await Assert.ThrowsAsync<WorktreeSalvageException>(
+            () => workspace.TeardownAsync("Unknown", CancellationToken.None));
+
+        Assert.Equal(workspace.RepoPath, error.WorktreePath);
+        Assert.Equal("runner/runner-test/QS-30", error.Branch);
+        Assert.Equal(localHead, error.LocalCommitSha);
+        Assert.Contains(
+            "registered project repository",
+            error.InnerException?.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(workspace.RepoPath));
+        Assert.Equal(localHead, (await GitAsync(wrongOrigin, "rev-parse", $"refs/heads/{error.Branch}")).StdOut);
+        var expectedRepoRef = await RunGitAsync(
+            _origin, "show-ref", "--verify", "--quiet", $"refs/heads/{error.Branch}");
+        Assert.False(expectedRepoRef.Success);
+    }
+
+    [Fact]
+    public async Task Correct_push_with_missing_sentinel_builds_verified_out_of_band_completion()
+    {
+        await SeedOriginAsync();
+        var workspace = CreateProjectWorkspace(_origin);
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(workspace.RepoPath, "result.txt", "correct destination", "valuable result");
+        var localHead = (await GitAsync(workspace.RepoPath, "rev-parse", "HEAD")).StdOut;
+
+        var result = await workspace.TeardownAsync("Unknown", CancellationToken.None);
+
+        Assert.Equal(
+            new RemoteDeliveryProof(
+                _origin,
+                "refs/heads/runner/runner-test/QS-30",
+                localHead),
+            result.DeliveryProof);
+        var request = RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            new RunOutcome(RunOutcomeKind.Unknown, "terminal sentinel missing"),
+            result,
+            "runner-test");
+        Assert.NotNull(request);
+        Assert.Contains(localHead, request!.Summary);
+        Assert.Contains(
+            request.Deliverables!,
+            item => item.Path == $"refs/heads/runner/runner-test/QS-30@{localHead}");
+    }
+
+    [Fact]
     public async Task Durable_handoff_keeps_worktree_until_matching_ack_and_publishes_immutable_ref()
     {
         await SeedOriginAsync();
