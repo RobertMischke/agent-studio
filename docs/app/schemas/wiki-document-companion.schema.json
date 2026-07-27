@@ -147,6 +147,37 @@
         "sourceFingerprint": { "$ref": "#/$defs/fingerprint" }
       }
     },
+    "agentReads": {
+      "type": "object",
+      "description": "Observed agent tool-use reads of this wiki page. This is durable usage evidence only; it never drives drift, gates, or workflow state.",
+      "required": ["total", "lastReadAt", "recent"],
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lifetime number of attributed agent read tool-uses reconstructed from task logs plus continuously observed runs."
+        },
+        "lastReadAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "recent": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "Newest attributed reads first, capped at 20 entries.",
+          "items": {
+            "type": "object",
+            "required": ["at", "taskKey"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "taskKey": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
     "axes": {
       "type": "object",
       "additionalProperties": { "type": "string" }

@@ -49,6 +49,7 @@ import {
 } from '../../../../models/page-context.model';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
+import { WikiAgentReadsComponent } from './wiki-agent-reads/wiki-agent-reads.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
@@ -112,7 +113,6 @@ interface WikiPersistedState {
   contextWidth?: number;
   expandedIds?: string[];
 }
-
 interface WikiResizeState {
   panel: WikiResizablePanel;
   pointerId: number;
@@ -153,6 +153,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     TooltipDirective,
     AppTooltipDirective,
     WikiDashboardComponent,
+    WikiAgentReadsComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
     WikiMetaSectionComponent,

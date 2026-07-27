@@ -205,6 +205,28 @@ function normalizeSeverity(value) {
   return ['info', 'warn', 'error'].includes(clean) ? clean : 'info';
 }
 
+function normalizeAgentReads(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (!Number.isInteger(value.total) || value.total < 0) return null;
+  if (value.lastReadAt !== null && typeof value.lastReadAt !== 'string') return null;
+  if (!Array.isArray(value.recent)) return null;
+
+  const recent = value.recent
+    .filter(item => item
+      && typeof item === 'object'
+      && typeof item.at === 'string'
+      && typeof item.taskKey === 'string'
+      && item.taskKey.trim().length > 0)
+    .slice(0, 20)
+    .map(item => ({ at: item.at, taskKey: item.taskKey }));
+
+  return {
+    total: value.total,
+    lastReadAt: value.lastReadAt,
+    recent,
+  };
+}
+
 function buildCompanion(seed, sourceRel) {
   const sourceAbs = path.join(docsRoot, sourceRel);
   if (!existsSync(sourceAbs)) throw new Error(`Source missing: docs/${sourceRel}`);
@@ -225,7 +247,7 @@ function buildCompanion(seed, sourceRel) {
   };
   const reportRel = `${sourceRel}.report.html`;
 
-  return {
+  const companion = {
     $schema: schemaId,
     schemaVersion: 'wiki-document-companion/v1',
     title: record.title,
@@ -259,6 +281,9 @@ function buildCompanion(seed, sourceRel) {
     findings,
     nextAction: record.nextAction ?? 'Review during the next document drift pass.',
   };
+  const agentReads = normalizeAgentReads(seed.agentReads);
+  if (agentReads) companion.agentReads = agentReads;
+  return companion;
 }
 
 function legacySeeds() {

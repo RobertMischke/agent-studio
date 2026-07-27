@@ -95,6 +95,50 @@ source. A registered `workbench.json` entry page is always a Workbench. Agreed
 path families fill remaining gaps, with `doc` as the default. The tree and page
 head use the same type-to-icon mapping.
 
+## Durable agent-read evidence
+
+Each page can carry observed agent read evidence in its adjacent
+`<page>.meta.json` companion:
+
+```jsonc
+{
+  "agentReads": {
+    "total": 23,
+    "lastReadAt": "2026-07-22T10:15:00Z",
+    "recent": [
+      { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
+    ]
+  }
+}
+```
+
+`total` is the lifetime count reconstructed from durable task CLI logs plus
+continuously observed local and remote runs. `recent` is newest first and
+retains at most 20 reads. The one-time startup backfill is guarded by
+`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; companion
+updates use atomic replace writes.
+
+The persistence and initialization contract is:
+
+- startup scans the complete current and archived task inventory before CLI
+  reattachment, including every `logs/cli-output.log` line rather than the
+  bounded UI log window,
+- the marker has schema `wiki-agent-read-backfill/v1` and records completion
+  time, logs scanned, and reads applied; its presence makes later startups a
+  no-op,
+- a restart after companion writes but before marker creation is safe because
+  backfill merges a monotonic reconstructed baseline instead of adding the
+  baseline again,
+- local CLI output and fenced remote-runner log ingestion both feed the same
+  live attribution method after the log line is durable,
+- each companion update preserves unrelated metadata blocks and is published
+  with an atomic temporary-file replacement.
+
+Only actual read tool uses and recognized read-only shell commands count.
+Agent prose that merely mentions a `docs/**` path, writes, edits, `docs/app/**`
+contracts, companion files, and generated reports do not count. This evidence
+is observational only. It never affects drift, gates, or workflow state.
+
 ## Pulse drift groups and the `human-action` convention
 
 The wiki Pulse drift bar grades the **real top-level `docs/` folders**: every
@@ -165,7 +209,8 @@ an `ETag` with `Cache-Control: no-cache`. A matching `If-None-Match` returns
 
 ### `GET /wiki/tree`
 
-Returns the recursive physical docs tree.
+Returns the recursive physical docs tree. A page's compact `metadata` includes
+`agentReads` when its companion contains observed read evidence.
 
 ```jsonc
 {
@@ -224,6 +269,9 @@ working-copy mtime. Folder rows use the newest date among their visible
 descendant pages. The backend obtains all per-file dates through one
 `git log --name-only` walk over `docs/` and caches that index by repository
 HEAD, so rendering a folder never runs Git once per row.
+
+Page rows include the same optional `agentReads` projection as the tree.
+Folder rows never carry agent-read evidence.
 
 `updatedAtSource` is `git` for committed history. A new local page with no Git
 history falls back to its filesystem mtime and returns
@@ -349,7 +397,10 @@ The Wiki behaves like an app inside the app:
 - the filter is subtle and opt-in,
 - right-click on files and folders opens a text-only context menu,
 - the context rail shows file path, metadata, history, linked-doc information,
-  and drift actions.
+  drift actions, and the open page's agent-read total, last-read timestamp, and
+  recent task history,
+- folder overview tables show a narrow `Reads` column with the total and a
+  last-read tooltip,
 - an open page has the shared page-head action bar for task creation, archive,
   project chat, and shared Home curation; type-specific actions follow the
   standards.

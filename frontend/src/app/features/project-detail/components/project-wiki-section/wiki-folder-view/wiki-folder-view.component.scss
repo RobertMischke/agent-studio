@@ -132,6 +132,7 @@ button.wfolder__crumb-copy:hover { color: var(--wfolder-fg); text-decoration: no
 .wfolder__th-file { width: 16ch; }
 .wfolder__th-type { width: 3.6rem; }
 .wfolder__th-class { width: 6.5rem; }
+.wfolder__th-reads { width: 4rem; }
 .wfolder__th-when { width: 5.5rem; }
 .wfolder__th-size { width: 4.5rem; }
 .wfolder__table td {
@@ -287,12 +288,19 @@ button.wfolder__crumb-copy:hover { color: var(--wfolder-fg); text-decoration: no
   color: var(--wfolder-muted);
   font-variant-numeric: tabular-nums;
 }
+.wfolder__cell-reads {
+  white-space: nowrap;
+  text-align: right;
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
 .wfolder__cell-size {
   white-space: nowrap;
   text-align: right;
   color: var(--wfolder-muted);
   font-variant-numeric: tabular-nums;
 }
+.wfolder__th-reads,
 .wfolder__table th:last-child { text-align: right; }
 
 /* ---- narrow-panel fallback ----
@@ -300,7 +308,7 @@ button.wfolder__crumb-copy:hover { color: var(--wfolder-fg); text-decoration: no
    Titel a readable share, so the Datei column is dropped and its filename
    reappears as a second line inside the Titel cell instead (see the
    `.wfolder__file-inline` element in the template). */
-@container wfolder (max-width: 620px) {
+@container wfolder (max-width: 700px) {
   .wfolder__th-file,
   .wfolder__cell-file {
     display: none;

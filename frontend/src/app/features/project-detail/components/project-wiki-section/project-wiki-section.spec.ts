@@ -47,6 +47,14 @@ const TREE: WikiTree = {
             companionPath: 'concepts/overview.md.meta.json',
             sourceChangedSinceReview: false,
             findingsCount: 2,
+            agentReads: {
+              total: 23,
+              lastReadAt: '2026-07-22T10:15:00Z',
+              recent: [
+                { at: '2026-07-22T10:15:00Z', taskKey: 'AGT-2242' },
+                { at: '2026-07-21T09:00:00Z', taskKey: 'AGT-2200' },
+              ],
+            },
           },
           classification: {
             status: 'ueberholt',
@@ -553,6 +561,31 @@ describe('ProjectWikiSectionComponent', () => {
     expect(fixture.componentInstance.openedRel()).toBe('concepts/new-overview.md');
     // The successor is not in the tree / unclassified, so the block hides again.
     expect(el(fixture).querySelector('[data-testid="project-wiki-classification-panel"]')).toBeNull();
+    http.verify();
+  });
+
+  it('shows total, last-read time, and recent task history in the meta panel', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const panel = el(fixture).querySelector('[data-testid="project-wiki-agent-reads-panel"]');
+    expect(panel, 'agent reads panel').toBeTruthy();
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-total"]')!.textContent?.trim())
+      .toBe('23');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-last"]')!.textContent)
+      .toContain('2026');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-recent"]')!.textContent)
+      .toContain('AGT-2242');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-recent"]')!.textContent)
+      .toContain('AGT-2200');
     http.verify();
   });
 
@@ -1711,9 +1744,9 @@ describe('ProjectWikiSectionComponent', () => {
 
     const view = root.querySelector('[data-testid="wiki-folder-view"]')!;
     expect(view, 'folder overview').toBeTruthy();
-    // Column headers: Titel | Datei | Typ | Status | Geändert | Größe.
+    // Column headers: Titel | Datei | Typ | Status | Reads | Geändert | Größe.
     const headers = [...view.querySelectorAll('th')].map(th => th.textContent?.trim());
-    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Geändert', 'Größe']);
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Reads', 'Geändert', 'Größe']);
     // Folders first, then pages in payload order.
     const rowIds = [...view.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
       .map(row => row.getAttribute('data-testid'));
