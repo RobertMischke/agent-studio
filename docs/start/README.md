@@ -65,6 +65,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
 | Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Reissue prompt sharpness and convergence evidence (AGT-2380) | [interactive Workbench](../quality/reissue-prompt-convergence/index.html) · [evidence snapshot](../quality/reissue-prompt-convergence/evidence-snapshot.json) · [analysis script](../quality/reissue-prompt-convergence/analyze.mjs) |
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
