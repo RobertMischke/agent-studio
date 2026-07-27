@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Umsetzungsplan Richtung Zielbild | Konzept-Workbench</title>
+<style>
+  :root { color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8983; --line:#d8d6cf;
+    --develop:#2a78d6; --taskbr:#4a3aa7; --salvage:#eb6834; --rescue:#b58500;
+    --ok:#008300; --bad:#c93736; --warn:#9a6b00;
+    --accent-soft:#eaf1fb; --bad-soft:#fbecec; --ok-soft:#eaf4ea; --warn-soft:#f8f0dd; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2c2c2a;
+    --ink-1:#fff; --ink-2:#c3c2b7; --ink-3:#8a8983; --line:#3d3d3a;
+    --develop:#3987e5; --taskbr:#9085e9; --salvage:#e5723f; --rescue:#d0a02a;
+    --ok:#4eae4e; --bad:#e66767; --warn:#d9a63f;
+    --accent-soft:#1e2a3a; --bad-soft:#382222; --ok-soft:#1f2f1f; --warn-soft:#33301e; } }
+  *{box-sizing:border-box;} body{margin:0;padding:0 0 80px;background:var(--surface-1);color:var(--ink-1);font:16px/1.6 system-ui,"Segoe UI",sans-serif;}
+  main{max-width:1080px;margin:0 auto;padding:0 28px;}
+  header.page{border-bottom:1px solid var(--line);padding:44px 0 26px;margin-bottom:8px;}
+  .kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;}
+  h1{font-size:34px;line-height:1.2;margin:0 0 12px;} .lede{font-size:18px;color:var(--ink-2);max-width:66ch;margin:0;}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;font-size:13px;color:var(--ink-3);} .meta b{color:var(--ink-2);font-weight:600;}
+  h2{font-size:24px;margin:56px 0 6px;scroll-margin-top:20px;} h2 .no{color:var(--ink-3);font-weight:600;margin-right:10px;}
+  h3{font-size:18px;margin:30px 0 4px;} p{max-width:80ch;} p.dim{color:var(--ink-2);}
+  .box{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:18px 22px;margin:18px 0;}
+  .box.accent{background:var(--accent-soft);border-color:color-mix(in srgb,var(--develop) 30%,var(--line));}
+  .box.ok{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line));}
+  .box.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,var(--line));}
+  .box.bad{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 30%,var(--line));}
+  .box h4{margin:0 0 8px;font-size:15px;} .box p:last-child,.box ul:last-child{margin-bottom:0;}
+  figure{margin:26px 0;} figure svg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:10px;background:var(--surface-1);}
+  figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:88ch;}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;} th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);} td b{font-weight:600;}
+  code,.mono{font:12.5px/1.5 ui-monospace,Consolas,monospace;background:var(--surface-3);border-radius:4px;padding:1px 5px;}
+  ul{padding-left:22px;} li{margin:5px 0;max-width:80ch;} ol{padding-left:22px;} ol li{margin:6px 0;}
+  .toc{columns:2;gap:40px;font-size:14.5px;} .toc a{color:var(--ink-2);text-decoration:none;} .toc a:hover{color:var(--ink-1);} .toc li{break-inside:avoid;}
+  .pnum{display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;border-radius:7px;background:var(--accent-soft);color:var(--develop);font-weight:700;font-size:14px;margin-right:8px;}
+  .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:5px;padding:1px 7px;margin-left:4px;}
+  .tag.batch{background:var(--accent-soft);color:var(--develop);} .tag.task{background:var(--ok-soft);color:var(--ok);} .tag.direkt{background:var(--warn-soft);color:var(--warn);}
+  .s-label{fill:var(--ink-1);font:600 13px system-ui;} .s-sub{fill:var(--ink-2);font:11.5px system-ui;} .s-node{fill:var(--surface-2);stroke:var(--line);} .s-cont{fill:var(--accent-soft);stroke:var(--develop);} .s-flow{stroke:var(--ink-3);stroke-width:1.6;fill:none;}
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Umsetzung</p>
+  <h1>Umsetzungsplan Richtung Zielbild</h1>
+  <p class="lede">Detaillierter, kartenbasierter Plan vom heutigen Stand zum Zielbild — geordnet in vier Phasen, mit dem Container-Default-Ausführungsmodell und Roberts Leitplanken (Isolation/Worktree, Self-Push mit Git-+CLI-Tokens, gepflegte Basis-Images, Installer=Container-Default) fest verankert. Jede Phase nennt die konkreten Karten und ob sie als koordinierter Batch, Einzel-Task oder Direkt-Arbeit laufen.</p>
+  <div class="meta">
+    <span><b>Basis</b> [[zielbild-komponenten-protokolle]] + [[execution-model-shift]]</span>
+    <span><b>Stand</b> 27.07. — echte Kartenlage</span>
+    <span><b>Phase</b> Entscheidungsreif</span>
+  </div>
+</header>
+
+<nav><ul class="toc">
+  <li><a href="#lage">1 · Ausgangslage (Karten)</a></li>
+  <li><a href="#leitplanken">2 · Leitplanken (deine Entscheidungen)</a></li>
+  <li><a href="#phasen">3 · Der Plan in vier Phasen</a></li>
+  <li><a href="#p0">3.0 · Phase 0 — Pipeline heilen</a></li>
+  <li><a href="#p1">3.1 · Phase 1 — Container-Default</a></li>
+  <li><a href="#p2">3.2 · Phase 2 — Verteilte Plattform</a></li>
+  <li><a href="#p3">3.3 · Phase 3 — Tunnel ablösen &amp; Tokens</a></li>
+  <li><a href="#buendelung">4 · Bündelung (Batch vs. Task)</a></li>
+  <li><a href="#offen">5 · Offene Konzept-Punkte</a></li>
+</ul></nav>
+
+<h2 id="lage"><span class="no">1</span>Ausgangslage — die echten Karten</h2>
+<table>
+  <tr><th>Gruppe</th><th>Karten</th><th>Charakter</th></tr>
+  <tr><td><b>Heute gecodet (5e)</b></td><td>2220, 2242, 2250, 2350, 2374, 2376, 2377, 2378, 2379, 2380, 2381, 2382 (integriert) · <b>2302, 2375</b> (Build gebrochen)</td><td>Feature/Fix, build-verifiziert auf develop, nicht qualitäts-reviewt (Auto-Review kaputt)</td></tr>
+  <tr><td><b>Architektur-Epics</b></td><td>2129 (Distributed platform / Control-Plane) · 2130 (Architektur-/Qualitäts-Ebene) · 2132 (Release &amp; Deployment)</td><td>Cross-Cutting — <b>nicht</b> als unabhängige Tasks</td></tr>
+  <tr><td><b>CAR-Migration</b></td><td>2370 (Runner→CAR) · 2371 (Backend-Exec→CAR) · 2372 (Parity-Suite) · 2373 (Doppelpfade weg)</td><td>Zusammenhängende Kette — Reihenfolge zählt</td></tr>
+  <tr><td><b>Plattform/Host</b></td><td>2230 (Task-Server = zentrale Config) · 2277 (Control-Plane auf Hetzner, wartet auf 2230) · 2334 (Installer) · 2262 (SSH-Gate ablösen)</td><td>Infrastruktur</td></tr>
+  <tr><td><b>Abhängige ready</b></td><td>2278 (Hosted-Wiki-Publish, wartet 2277) · 2305 (docker compose up, wartet 2334)</td><td>Warten auf Plattform</td></tr>
+  <tr><td><b>Kleinkram</b></td><td>2200, 2262, 2280, 2301, 2307, 2355</td><td>Feature/Cleanup — Tasks</td></tr>
+</table>
+<p class="dim">Die Epics + CAR-Migration + Plattform-Karten sind genau die Arbeit, die die Nacht als „nicht in unabhängige Auto-Review-Tasks zerlegbar" entlarvt hat. Der Plan bündelt sie deshalb.</p>
+
+<h2 id="leitplanken"><span class="no">2</span>Leitplanken — deine Entscheidungen</h2>
+<div class="box accent">
+  <h4>Ausführungsmodell &amp; Isolation</h4>
+  <ul>
+    <li><b>Container-Default</b> für die lokale Ausführung; <b>bei Neuinstallation Container ab Installer</b> vorausgewählt. Host-direkt/Misch bleibt Opt-out.</li>
+    <li><b>Isolation gilt dem Coding-Agent</b> — nicht den Sourcen: <b>alle von Projekten verwendeten Sourcen dürfen gesehen werden</b>, Nachbarrepos zu sehen ist <b>gut und richtig</b>.</li>
+    <li><b>Worktree-Modell bleibt.</b> Jedes Projekt hat <b>einen Git-Checkout</b>, darin die Worktrees je Karte.</li>
+  </ul>
+</div>
+<div class="box accent">
+  <h4>Autonomie: Self-Push &amp; Tokens</h4>
+  <ul>
+    <li><b>Agenten pushen selbst</b> — wichtig und praktisch: autonom laufen, keine Daten verlieren. Sie brauchen <b>Git-Tokens + CLI-Tokens</b>.</li>
+    <li><b>CLI-Tokens brauchen evtl. regelmäßige Auffrischung</b> — das geht vermutlich <b>nur über die lokale Umgebung</b>.</li>
+    <li><b>Perspektivisch kein SSH-Tunnel mehr</b> dafür — jedenfalls nicht über Task-Server etc.; alles per <b>API-Zugriff</b>. → das Konzept muss hier erweitert werden (§5).</li>
+  </ul>
+</div>
+<div class="box accent">
+  <h4>Images (E3)</h4>
+  <p><b>Gepflegte Basis-Images pro Komponente</b> (Task-Server, agent-host, Studio …), damit ein <code>docker-compose up</code> alles Benötigte startet.</p>
+</div>
+
+<h2 id="phasen"><span class="no">3</span>Der Plan in vier Phasen</h2>
+<figure>
+<svg viewBox="0 0 1040 150" role="img" aria-label="Vier Phasen">
+  <rect class="s-cont" x="16" y="40" width="220" height="70" rx="9"/><text class="s-label" x="126" y="68" text-anchor="middle">P0 · Pipeline heilen</text><text class="s-sub" x="126" y="88" text-anchor="middle">Runner-v1 · Build-Gate · Reste</text>
+  <rect class="s-node" x="276" y="40" width="220" height="70" rx="9"/><text class="s-label" x="386" y="68" text-anchor="middle">P1 · Container-Default</text><text class="s-sub" x="386" y="88" text-anchor="middle">Images · Installer · Self-Push</text>
+  <rect class="s-node" x="536" y="40" width="220" height="70" rx="9"/><text class="s-label" x="646" y="68" text-anchor="middle">P2 · Verteilte Plattform</text><text class="s-sub" x="646" y="88" text-anchor="middle">Control-Plane · CAR · Release</text>
+  <rect class="s-node" x="796" y="40" width="220" height="70" rx="9"/><text class="s-label" x="906" y="68" text-anchor="middle">P3 · Tunnel ablösen</text><text class="s-sub" x="906" y="88" text-anchor="middle">API-only · Token-Refresh</text>
+  <path class="s-flow" d="M236 75 H274" marker-end="url(#a)"/><path class="s-flow" d="M496 75 H534" marker-end="url(#a)"/><path class="s-flow" d="M756 75 H794" marker-end="url(#a)"/>
+  <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--ink-3)"/></marker></defs>
+</svg>
+<figcaption>P0 ist die Voraussetzung für alles (ohne funktionierendes Auto-Review kein sauberer Durchsatz). P1–P3 bauen aufeinander; die Feature-/Kleinkram-Karten fließen ab P0 einfach durch die geheilte Pipeline.</figcaption>
+</figure>
+
+<h3 id="p0">Phase 0 — Pipeline heilen <span class="tag direkt">direkt/koordiniert</span></h3>
+<div class="box">
+  <ol>
+    <li><b>Runner aufs v1-Protokoll</b> — agent-host emittiert <code>ResultEnvelope</code>, ruft <code>POST</code> /capabilities, schreibt Canonical-Logs. <b>Behebt Auto-Review + alle drei Drift-Blocker.</b> Das ist inhaltlich der Kern von <b>AGT-2370</b> (Runner→CAR, Zielbild-Konformität) — als koordinierte Änderung, direkt (betrifft die Pipeline selbst).</li>
+    <li><b>Build-Gate</b> im Merge-into-develop scharf (Backend+Frontend grün, sonst kein Merge).</li>
+    <li><b>Reste als ein koordinierter Batch</b> (die „auf einmal"-Demo): <b>AGT-2302</b> (Host-Kapazität) + <b>AGT-2375</b> (Workbench-UI) + <b>Modell-Routing-Backend-Endpoints</b> — eine Branch, gemeinsam gebaut, ein Review, ein Integrate.</li>
+    <li><b>Danach:</b> die 12 schon integrierten 5e-Karten regulär durchs (jetzt funktionierende) Auto-Review nach main; kein manuelles Salvage mehr.</li>
+  </ol>
+</div>
+
+<h3 id="p1">Phase 1 — Container-Default <span class="tag batch">koordinierter Batch</span></h3>
+<p>Der execution-model-shift, jetzt mit deinen Leitplanken. Zusammenhängend, weil Spawn-Pfad + Image + Installer + Isolation ineinandergreifen.</p>
+<div class="box">
+  <ul>
+    <li><b>Container-Spawn-Pfad</b> als Default für die lokale Ausführung (CLI im Container, Isolation vom Container statt CLI-Sandbox).</li>
+    <li><b>Basis-Images pro Komponente (E3)</b> + <code>docker-compose up</code> startet Task-Server + agent-host + Studio zusammen. Verzahnt <b>AGT-2334</b> (Installer) und <b>AGT-2305</b> (docker compose up).</li>
+    <li><b>Installer = Container-Default:</b> Neuinstallation wählt Container sofort vor (AGT-2334).</li>
+    <li><b>Repo-/Worktree-Sicht im Container:</b> pro Projekt ein Checkout + Worktrees; Nachbarrepos sichtbar (bewusst). Der „the hard part" aus der Distributable-Analyse: Repo-/Credential-Erreichbarkeit im Container → gelöst über den lokalen Mount + die Tokens (§2, §3).</li>
+    <li><b>Self-Push scharf:</b> Agenten pushen selbst mit Git-Token; CLI-Token vom lokalen Environment injiziert.</li>
+  </ul>
+</div>
+<div class="box accent">
+  <h4>Verifikation im selben Container + Container-Def als agent-gepflegtes Repo-Artefakt (E6)</h4>
+  <p>Wenn der Gate (Build+Test) im Container läuft, bekommt <b>jedes Projekt sein Build-Tooling</b> — deklariert in einem <b>Dockerfile im Projekt-Repo</b> (Source of Truth, versioniert wie <code>csproj</code>/<code>package.json</code>). Das gebaute <b>Image ist ein Sidecar-Artefakt</b> (Registry/Cache, keyed by Dockerfile-Hash) — Definition im Repo, Image daneben, Rebuild nur bei Änderung. <code>FROM</code> Basis-Image (E3) + projekt-spezifisches Toolchain.</p>
+  <ul>
+    <li><b>Wer pflegt:</b> ein Agent (neue Rolle „Umgebungs-Pflege") <b>schreibt/aktualisiert das Dockerfile</b> (Toolchain verstehen = LLM-Arbeit); <code>docker build</code> selbst ist deterministisch (Pipeline-Step).</li>
+    <li><b>Workflow:</b> Onboarding → Agent erzeugt initiales Dockerfile → committet → Image gebaut+gecacht → Coding <em>und</em> Gate spawnen ins selbe Image → bei Toolchain-Änderung (z. B. Build schlägt fehl) aktualisiert ein Agent das Dockerfile → Rebuild.</li>
+    <li><b>Konsequenz:</b> <b>hermetische, reproduzierbare Verifikation</b> (Coding = Gate-Umgebung); der Container-Def wird ein First-Class-Projekt-Artefakt neben Wiki/Workbenches.</li>
+  </ul>
+</div>
+
+<h3 id="p2">Phase 2 — Verteilte Plattform <span class="tag batch">Epics als koordinierte Changes</span></h3>
+<div class="box">
+  <ul>
+    <li><b>AGT-2129 (Control-Plane):</b> Task-Server als Control-Plane + Remote-Execution — der Distributed-Platform-Epic. Reihenfolge: <b>2230</b> (Task-Server = zentrale Config: Projekte/Identitäten/Kapazität) <b>→ 2277</b> (Control-Plane auf Hetzner) <b>→ 2278</b> (Hosted-Wiki-Publish).</li>
+    <li><b>CAR-Migration (2370→2371→2372→2373):</b> Runner + Backend-Exec auf CodingAgentRunner, Parity-Suite, Doppelpfade weg. 2370 überlappt mit P0 (Runner-v1) — dort beginnen, hier abschließen.</li>
+    <li><b>AGT-2132 (Release &amp; Deployment):</b> gepaarte, versionierte Releases (Task-Server + agent-host + Studio), Protokoll-Version im Handshake. Nutzt die Tranche-0.4-Release-Pipeline.</li>
+    <li><b>AGT-2130 (Architektur-/Qualitäts-Ebene):</b> Projekt-Graph, Style-Guides, Analyse — eigener Strang, nach der Plattform.</li>
+  </ul>
+</div>
+<div class="box accent">
+  <h4>Spawn-Pfad-Konvergenz auf CAR — von deinen Entscheidungen verstärkt, nicht geändert</h4>
+  <p>Heute gibt es drei Spawn-Pfade (Backend-<code>Process.Start</code>, Remote-Runner, CAR-<code>CliRunEngine</code>). Container-Spawn, Mount/Isolation, Token-Injektion und Image-Wahl müssten sonst <b>dreimal</b> gebaut werden — und würden driften (die Nacht-Lektion). <b>Ein</b> Pfad (CAR) legt all das an eine Stelle. Deine Entscheidungen sind damit die <b>Spezifikation des konvergierten CAR-Pfads:</b> CLI im bypass-Modus in einen Container spawnen (Isolation = Container-Grenze), Projekt-Checkout + Nachbarrepos mounten (breite Sicht bewusst), Git-+CLI-Tokens injizieren, Basis-Image der Komponente (E3) nutzen. → Die CAR-Kette 2370→2371→2372→2373 bekommt dadurch schärfere Abnahmekriterien, keine geänderte Richtung.</p>
+</div>
+
+<h3 id="p3">Phase 3 — SSH-Tunnel ablösen &amp; Token-Refresh <span class="tag task">Konzept + Task</span></h3>
+<div class="box warn">
+  <p><b>AGT-2262</b> (SSH-Gate durch saubere Remote-Gate-Lösung ersetzen) ist der Einstieg. Zielbild: <b>keine Steuerung mehr über den SSH-Tunnel</b> — alles per API zwischen Studio/Task-Server und agent-host. <b>Der offene Knoten:</b> die <b>CLI-Token-Auffrischung</b> braucht die lokale Umgebung — ohne Tunnel muss der Refresh anders zum (evtl. entfernten) agent-host kommen. Konzept dazu in §5.</p>
+</div>
+
+<h2 id="buendelung"><span class="no">4</span>Bündelung — Batch vs. Task</h2>
+<table>
+  <tr><th>Als koordinierter Batch / Change</th><th>Als Einzel-Task (durch die Pipeline)</th></tr>
+  <tr>
+    <td>Runner-v1 (P0) · Reste-Batch 2302+2375+ModelRouting · Container-Default (P1) · Epics 2129/2130/2132 · CAR-Kette 2370-2373 · Plattform 2230/2277</td>
+    <td>Feature/Fix: 2220, 2242, 2250, 2350, 2377, 2378, 2380, 2381, 2382 · Kleinkram: 2280, 2301, 2307, 2355, 2200 · abhängige: 2278, 2305 (nach Plattform)</td>
+  </tr>
+</table>
+<p class="dim">Regel (aus der Nacht): <b>Bündeln nach Überlappung, nicht nach Anzahl.</b> Was dieselben Dateien/Verträge anfasst oder aufeinander aufbaut → ein koordinierter Change mit Gesamt-Build-Gate. Was wirklich isoliert ist → Einzel-Task.</p>
+
+<h2 id="offen"><span class="no">5</span>Offene Konzept-Punkte</h2>
+<div class="box">
+  <h4>Token-Refresh ohne Tunnel (der Knoten)</h4>
+  <p>Git-Token: unproblematisch (langlebig, im Container-/Host-Secret). <b>CLI-Token</b> (Claude/Codex-Auth) braucht evtl. regelmäßige Auffrischung, und die läuft heute über die lokale Umgebung + Tunnel. Wenn der Tunnel wegfällt und alles API-basiert ist, muss der Refresh-Weg neu gedacht werden — Optionen zu skizzieren: (a) ein schlanker lokaler „Token-Broker" am Host, der frische CLI-Tokens per authentifizierter API an den agent-host reicht; (b) der agent-host refresht selbst über eine hinterlegte Auth; (c) Token-Injektion beim Container-Start + periodischer Re-Injection-Job. <b>Zu entscheiden.</b></p>
+</div>
+<div class="box">
+  <h4>Weitere Entscheidungen</h4>
+  <ul>
+    <li><b>Reihenfolge P1 vs. P2:</b> Container-Default zuerst (lokale Basis sauber) oder parallel zur Control-Plane? Vorschlag: P1 zuerst, weil Images/Installer die Basis für die verteilte Ausführung sind.</li>
+    <li><b>Epic-Schnitt:</b> die drei Epics (2129/2130/2132) in Sub-Batches zerlegen — aber koordiniert, mit dependsOn-Kette + Gesamt-Build-Gate, nie „jede Tranche einzeln mergen".</li>
+  </ul>
+</div>
+
+</main>
+</body>
+</html>
