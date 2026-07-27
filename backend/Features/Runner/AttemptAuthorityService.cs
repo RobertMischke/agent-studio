@@ -17,6 +17,7 @@ public sealed class AttemptAuthorityService
     public const string UnmaterializableReviewSubjectReason = "review-subject-unmaterialisierbar";
     private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan LegacyEnvelopeTerminalizeGrace = TimeSpan.FromMinutes(15);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -650,6 +651,14 @@ public sealed class AttemptAuthorityService
             {
                 var run = FindRun(review.SourceRunAttemptId);
                 if (run?.ResultEnvelope is not null)
+                    continue;
+
+                // Grace window: the claim poll races the completion ingest, and
+                // during a runner rollout in-flight old-binary completions land
+                // without an envelope. A fresh review must not be killed by the
+                // very first poll; only reviews that stayed envelope-less past
+                // the grace are terminal evidence of a pre-plane completion.
+                if (now - review.CreatedAt < LegacyEnvelopeTerminalizeGrace)
                     continue;
 
                 if (!Terminal(review.State))

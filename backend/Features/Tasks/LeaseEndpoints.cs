@@ -752,6 +752,22 @@ public static class LeaseEndpoints
                 resultEnvelopeDigest =
                     AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
             }
+            else if (!isEpicPlanning && outcome is "done" or "noop")
+            {
+                // Without the envelope trio the review subject can never be
+                // materialised and the card will terminalize as
+                // SnapshotUnavailable after the grace window. Surface the
+                // drift loudly at ingest instead of failing silently later.
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                    "Completion for {TaskKey} (attempt {AttemptId}, runner {RunnerId}) carries no result-envelope trio "
+                    + "(BaseSha={HasBaseSha}, ImmutableResultRef={HasResultRef}, ArtifactManifestDigest={HasManifestDigest}, run-known={RunKnown}); "
+                    + "auto-review cannot materialise this subject - update the runner binary to one that emits the fields.",
+                    req.TaskKey, attemptId, req.RunnerId,
+                    !string.IsNullOrWhiteSpace(req.BaseSha),
+                    !string.IsNullOrWhiteSpace(req.ImmutableResultRef),
+                    !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest),
+                    leasedRun is not null);
+            }
             var settled = authority.SettleRun(
                 new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
                 outcome,
