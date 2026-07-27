@@ -59,6 +59,28 @@ export function isTaskRunActive(job: TaskInfo): boolean {
 }
 
 /**
+ * AGT-2378 — pick the freshest `TaskInfo` for a run-liveness derivation.
+ *
+ * A task tab / side panel renders a `TaskDetail` that was fetched once when the
+ * task was opened; nothing re-syncs that snapshot afterwards. The board list, in
+ * contrast, is kept current by the jobs hub push plus its heartbeat poll, and it
+ * carries the same runtime overlay (`runActivity`, `runner`, `execution`,
+ * `executionLocation`, `liveStatus`). Deriving liveness from the frozen snapshot
+ * therefore pins the detail on whatever the run looked like at open time — for a
+ * remote run, where no local CLI output poll can paper over it, that shows up as
+ * a permanent "kein aktiver Run" next to a card that is demonstrably running.
+ *
+ * Falls back to the snapshot when the task is not in the live list (filtered
+ * away, archived, or a cross-project detail opened from search).
+ */
+export function freshestRunInfo(snapshot: TaskInfo, liveJobs: readonly TaskInfo[]): TaskInfo {
+  const live = snapshot.taskKey
+    ? liveJobs.find(job => job.taskKey === snapshot.taskKey)
+    : liveJobs.find(job => job.id === snapshot.id);
+  return live ?? snapshot;
+}
+
+/**
  * Pure board-level derivation of an acute stranded Progress task. A failed run
  * needs attention immediately once no process owns it. A task with no recorded
  * failure gets a short grace period before it is called stalled. Scheduled

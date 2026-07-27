@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import type { TaskInfo } from '../../models/task.model';
 import { TaskState } from '../../models/task.model';
 import { NowTickService } from '../../services/now-tick.service';
+import { isTaskRunActive } from '../../services/run-activity.util';
 
 export type TaskLiveStatusVariant = 'card' | 'detail';
 type LiveTone = 'active' | 'waiting' | 'idle' | 'stalled';
@@ -92,11 +93,21 @@ export class TaskLiveStatusComponent {
       || task.state === TaskState.AutoReview
       || task.state === TaskState.Preparation;
     const stalled = activeLane && idleMs !== null && idleMs >= STALE_AFTER_MS;
-    const noActiveRun = task.runActivity?.kind === 'failed-idle'
-      || task.runActivity?.kind === 'no-active-run';
+    // AGT-2378: `runActivity` is classified from the LOCAL slot registry plus the
+    // local CLI execution record. A remote run owns the task through a fenced
+    // lease and attempt records, not a local process, so it lands on
+    // `no-active-run` / `failed-idle` while it is demonstrably running — and this
+    // strip then claims "No active run" right next to a live "Run aktiv" pill.
+    // Any positive ownership evidence therefore outranks the negative
+    // classification. The activity-based "possible hang" hint is deliberately
+    // left alone: it is about silence, not about ownership.
+    const runActive = isTaskRunActive(task);
+    const noActiveRun = !runActive
+      && (task.runActivity?.kind === 'failed-idle'
+        || task.runActivity?.kind === 'no-active-run');
 
     return {
-      tone: stalled || noActiveRun ? 'stalled' : 'idle',
+      tone: stalled || noActiveRun ? 'stalled' : runActive ? 'active' : 'idle',
       headline: stalled
         ? `No activity for ${elapsed(idleMs!)} · possible hang`
         : noActiveRun

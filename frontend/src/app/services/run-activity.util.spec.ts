@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildRunActivityBadge, deriveStalledTaskState, STALLED_IDLE_THRESHOLD_MS } from './run-activity.util';
+import {
+  buildRunActivityBadge,
+  deriveStalledTaskState,
+  freshestRunInfo,
+  isTaskRunActive,
+  STALLED_IDLE_THRESHOLD_MS,
+} from './run-activity.util';
 import { TaskState } from '../models/task.model';
 import type { TaskInfo, TaskRunActivity } from '../models/task.model';
 
@@ -273,5 +279,88 @@ describe('deriveStalledTaskState', () => {
       makeJob({ kind: 'failed-backoff', attempt: 1, backoffUntil: new Date(NOW + 60_000).toISOString() }),
       NOW,
     )).toBeNull();
+  });
+});
+
+/**
+ * AGT-2378: a task tab renders a TaskDetail fetched once on open. Only the board
+ * list keeps receiving the runtime overlay (push + heartbeat), so every
+ * run-liveness derivation in the detail has to read through to the live entry —
+ * otherwise a remote run, which has no local CLI poll to compensate, stays
+ * pinned on "kein aktiver Run" for as long as the card is open.
+ */
+describe('freshestRunInfo', () => {
+  it('prefers the live board entry for the same task key', () => {
+    const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 });
+    const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 });
+
+    expect(freshestRunInfo(snapshot, [makeJob(null, { taskKey: 'test::other' }), live]))
+      .toBe(live);
+    expect(buildRunActivityBadge(freshestRunInfo(snapshot, [live]), NOW))
+      .toMatchObject({ kind: 'active', label: 'Run aktiv' });
+  });
+
+  it('falls back to the snapshot when the task is not in the live list', () => {
+    const snapshot = makeJob({ kind: 'active', processId: 42, attempt: 0 });
+
+    expect(freshestRunInfo(snapshot, [])).toBe(snapshot);
+    expect(freshestRunInfo(snapshot, [makeJob(null, { taskKey: 'test::other' })])).toBe(snapshot);
+  });
+});
+
+/**
+ * AGT-2378: a remote run owns its task through a fenced lease and attempt
+ * records — the local slot registry and local CLI execution registry, which
+ * `runActivity` is classified from, know nothing about it.
+ */
+describe('isTaskRunActive — remote ownership', () => {
+  it('trusts a held run lease over a negative runner classification', () => {
+    const job = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+      runner: {
+        runnerId: 'agent-runner-01',
+        runnerName: 'agent-runner-01',
+        hostname: 'agent-runner-01',
+        backendName: 'stable',
+        isRemote: true,
+        leaseId: 'lease-1',
+        fencingToken: 7,
+        acquiredAt: new Date(NOW - 30_000).toISOString(),
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(true);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'active', label: 'Run aktiv' });
+    expect(deriveStalledTaskState(job, NOW)).toBeNull();
+  });
+
+  it('trusts a connected remote execution location with no local process', () => {
+    const job = makeJob({ kind: 'failed-idle', attempt: 2, lastError: 'stale failure' }, {
+      executionLocation: {
+        state: 'remote-running',
+        executionKind: 'remote',
+        hostDisplayName: 'agent-runner-01',
+        connectionState: 'connected',
+        leaseState: 'active',
+        trustReason: 'lease',
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(true);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'active', label: 'Run aktiv' });
+  });
+
+  it('stays inactive when nothing owns the task any more', () => {
+    const job = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+      executionLocation: {
+        state: 'recovering',
+        executionKind: 'none',
+        connectionState: 'recovering',
+        leaseState: 'none',
+        trustReason: 'no owner',
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(false);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'no-active-run', label: 'kein aktiver Run' });
   });
 });
