@@ -135,6 +135,21 @@ async function installRoutes(page: Page): Promise<void> {
     if (url.includes('/api/watch-paths')) {
       return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
     }
+    if (new URL(url).pathname === '/api/projects') {
+      return json(route, [{
+        id: 'PROJ-LANE',
+        displayName: PROJECT,
+        shortCode: 'LANE',
+        workspaceId: 'ws-lane',
+        color: null,
+        cliDefault: null,
+        modelDefault: null,
+        sortOrder: 0,
+        storageLocation: WATCH_PATH,
+        archived: false,
+        createdAt: '2026-06-09T08:00:00Z',
+      }]);
+    }
     if (url.includes('/api/workspaces')) {
       return json(route, [{
         id: 'ws-lane',
@@ -230,6 +245,27 @@ test('Explorer Project Board row shows subtle live lane counters', async ({ page
     path: screenshotPath,
     contentType: 'image/png',
   });
+});
+
+test('project context menu is scoped to the project row', async ({ page }) => {
+  await boot(page);
+
+  const projectRow = page.getByTestId(`studio-explorer-project-${PROJECT}`);
+  const boardRow = page.getByTestId(`studio-explorer-project-board-${PROJECT}`);
+  const menu = page.getByTestId('studio-explorer-proj-ctx-panel');
+
+  // The dev-only NG0919 dialog may overlay the shell under ng serve. A forced
+  // browser click still dispatches the real right-click event to the row.
+  await projectRow.click({ button: 'right', force: true });
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('studio-explorer-proj-ctx-item-rename')).toBeVisible();
+  await expect(page.getByTestId('studio-explorer-proj-ctx-item-delete')).toBeVisible();
+
+  await page.getByTestId('app-menu-backdrop').dispatchEvent('mousedown');
+  await expect(menu).not.toBeVisible();
+
+  await boardRow.click({ button: 'right', force: true });
+  await expect(menu).not.toBeVisible();
 });
 
 test('each lane counter explains its lane via the canonical appTooltip', async ({ page }) => {

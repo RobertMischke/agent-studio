@@ -488,6 +488,50 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(cmp.projectActions.renameDraft()).toBe('Alpha');
   });
 
+  it('opens the project menu only from the project row, not its child rows', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const projectRow = root.querySelector<HTMLElement>(
+      '[data-testid="studio-explorer-project-Alpha"]',
+    );
+    const childRow = root.querySelector<HTMLElement>(
+      '[data-testid="studio-explorer-project-board-Alpha"]',
+    );
+    expect(projectRow).not.toBeNull();
+    expect(childRow).not.toBeNull();
+
+    const projectEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 20,
+      clientY: 40,
+    });
+    projectRow!.dispatchEvent(projectEvent);
+
+    expect(projectEvent.defaultPrevented).toBe(true);
+    expect(cmp.projectActions.contextMenu()?.projectId).toBe('PROJ-Alpha');
+
+    cmp.projectActions.closeContextMenu();
+    const childEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 30,
+      clientY: 50,
+    });
+    childRow!.dispatchEvent(childEvent);
+
+    expect(childEvent.defaultPrevented).toBe(false);
+    expect(cmp.projectActions.contextMenu()).toBeNull();
+  });
+
   it('project delete menu emits stable id plus display name and short code', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
