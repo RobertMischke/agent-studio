@@ -1,17 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { RunRecord } from '../../../../../run-timeline';
-import { formatTokens } from '../../../../../../services/format.util';
+import type { CliType } from '../../../../../../models/task.model';
+import {
+  cliTypeLabel,
+  formatCompactDateTime,
+  formatDateTime,
+  formatTokens,
+  shortModelName,
+} from '../../../../../../services/format.util';
 import { formatDuration } from '../overview-pane-formatters';
 
 type RunResultTone = 'success' | 'danger' | 'warning' | 'active' | 'neutral';
 
+const KNOWN_CLIS: readonly CliType[] = ['claude', 'codex', 'gemini'];
+
 interface OverviewRunVm {
   record: RunRecord;
+  startedAt: string | null;
+  startedAtTitle: string | null;
   trigger: string;
   result: string;
   resultTone: RunResultTone;
   duration: string;
+  engine: string | null;
   tokens: string | null;
+  reason: string | null;
 }
 
 @Component({
@@ -37,11 +50,15 @@ export class OverviewRunsComponent {
       .sort((left, right) => right.index - left.index)
       .map((run) => ({
         record: run,
+        startedAt: this.startedAtLabel(run),
+        startedAtTitle: this.startedAtTitle(run),
         trigger: this.triggerLabel(run),
         result: this.resultLabel(run),
         resultTone: this.resultTone(run),
         duration: this.durationLabel(run),
+        engine: this.engineLabel(run),
         tokens: this.tokenLabel(run),
+        reason: this.reasonLabel(run),
       })),
   );
 
@@ -130,5 +147,53 @@ export class OverviewRunsComponent {
     const usage = run.tokenSummary;
     if (!usage) return null;
     return `${formatTokens(Math.max(0, usage.totalTokens))} tokens`;
+  }
+
+  /**
+   * Absolute wall-clock start, never a relative "x ago": the rows are rendered
+   * inside a polled change-detection pass, so a Date.now()-derived label would
+   * churn (and risk NG0100). Unparseable stamps are dropped rather than shown
+   * as "Invalid Date".
+   */
+  private startedAtLabel(run: RunRecord): string | null {
+    return this.hasValidStart(run) ? formatCompactDateTime(run.startedAt) : null;
+  }
+
+  private startedAtTitle(run: RunRecord): string | null {
+    return this.hasValidStart(run) ? formatDateTime(run.startedAt) : null;
+  }
+
+  private hasValidStart(run: RunRecord): boolean {
+    const raw = run.startedAt?.trim();
+    if (!raw) return false;
+    return !Number.isNaN(new Date(raw).getTime());
+  }
+
+  /**
+   * "Which agent ran this attempt" — CLI plus the model it actually reported.
+   * The model is read from the run's own execution context first and only then
+   * from its token rollup, so a run never inherits the card's current model.
+   */
+  private engineLabel(run: RunRecord): string | null {
+    const cli = run.cli?.trim() ?? '';
+    const cliLabel = (KNOWN_CLIS as readonly string[]).includes(cli)
+      ? cliTypeLabel(cli as CliType)
+      : cli;
+    const rawModel =
+      run.executionContext?.model?.trim() || run.tokenSummary?.lastModel?.trim() || '';
+    const model = rawModel ? shortModelName(rawModel) : '';
+    if (cliLabel && model) return `${cliLabel} · ${model}`;
+    return cliLabel || model || null;
+  }
+
+  /**
+   * Why the run ended the way it did (recovery cause, escalation reason). Only
+   * carried for runs that did not simply complete — a reason on a green run is
+   * noise, and the full text stays available as the row's title.
+   */
+  private reasonLabel(run: RunRecord): string | null {
+    const reason = run.reason?.trim();
+    if (!reason) return null;
+    return this.resultTone(run) === 'success' ? null : reason;
   }
 }

@@ -27,7 +27,18 @@
             [attr.data-run-index]="row.record.index"
             data-testid="overview-run-row"
           >
-            <span class="overview-runs__identity">Run #{{ row.record.index }}</span>
+            <span class="overview-runs__identity">
+              <span class="overview-runs__run-id">Run #{{ row.record.index }}</span>
+              @if (row.startedAt; as startedAt) {
+                <time
+                  class="overview-runs__started"
+                  [attr.datetime]="row.record.startedAt"
+                  [attr.title]="row.startedAtTitle"
+                  data-testid="overview-run-started"
+                  >{{ startedAt }}</time
+                >
+              }
+            </span>
 
             <span class="overview-runs__fact">
               <span class="overview-runs__label">Trigger</span>
@@ -52,10 +63,26 @@
               <span data-testid="overview-run-duration">{{ row.duration }}</span>
             </span>
 
+            @if (row.engine; as engine) {
+              <span class="overview-runs__fact overview-runs__engine">
+                <span class="overview-runs__label">Agent</span>
+                <span class="overview-runs__engine-value" data-testid="overview-run-engine">{{
+                  engine
+                }}</span>
+              </span>
+            }
+
             @if (row.tokens; as tokens) {
               <span class="overview-runs__fact overview-runs__fact--numeric overview-runs__tokens">
                 <span class="overview-runs__label">Pipeline usage</span>
                 <span data-testid="overview-run-tokens">{{ tokens }}</span>
+              </span>
+            }
+
+            @if (row.reason; as reason) {
+              <span class="overview-runs__reason" data-testid="overview-run-reason">
+                <span class="overview-runs__label">Reason</span>
+                <span class="overview-runs__reason-value">{{ reason }}</span>
               </span>
             }
           </li>

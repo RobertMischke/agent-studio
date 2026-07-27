@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RunRecord } from '../../../../../run-timeline';
+import { formatCompactDateTime } from '../../../../../../services/format.util';
 import { OverviewRunsComponent } from './overview-runs.component';
 
 describe('OverviewRunsComponent', () => {
@@ -59,6 +60,84 @@ describe('OverviewRunsComponent', () => {
     expect(all(fixture, 'overview-run-tokens')).toHaveLength(1);
     expect(testText(rows[0], 'overview-run-tokens')).toBe('1.3k tokens');
     expect(rows[1].querySelector('[data-testid="overview-run-tokens"]')).toBeNull();
+  });
+
+  it('stamps every row with its own absolute start time', () => {
+    const fixture = setup([run(1), run(2, { startedAt: '2026-07-26T11:30:00Z' })]);
+    const rows = all(fixture, 'overview-run-row');
+
+    expect(testText(rows[0], 'overview-run-started')).toBe(
+      formatCompactDateTime('2026-07-26T11:30:00Z'),
+    );
+    expect(
+      rows[0].querySelector('[data-testid="overview-run-started"]')?.getAttribute('datetime'),
+    ).toBe('2026-07-26T11:30:00Z');
+    expect(testText(rows[1], 'overview-run-started')).toBe(
+      formatCompactDateTime('2026-07-26T10:01:00Z'),
+    );
+  });
+
+  it('drops the start stamp instead of rendering an unparseable date', () => {
+    const fixture = setup([run(1, { startedAt: 'not-a-date' })]);
+
+    expect(query(fixture, 'overview-run-started')).toBeNull();
+  });
+
+  it('names the CLI and the model the run itself reported', () => {
+    const fixture = setup([
+      run(1, { cli: 'codex', executionContext: null }),
+      run(2, {
+        cli: 'claude',
+        executionContext: {
+          cli: 'claude',
+          model: 'claude-opus-4-1',
+          permissionMode: null,
+          cwd: null,
+          capturedAt: '2026-07-26T10:02:00Z',
+          source: 'init-frame',
+          sources: [],
+        },
+      }),
+      run(3, {
+        cli: 'codex',
+        executionContext: null,
+        tokenSummary: {
+          calls: 1,
+          inputTokens: 10,
+          outputTokens: 10,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          totalTokens: 20,
+          lastModel: 'gpt-5.6',
+          lastUpdate: '2026-07-26T10:03:00Z',
+          entries: [],
+        },
+      }),
+    ]);
+    const rows = all(fixture, 'overview-run-row');
+
+    expect(testText(rows[0], 'overview-run-engine')).toBe('Codex · gpt-5.6');
+    expect(testText(rows[1], 'overview-run-engine')).toBe('Claude Code · opus 4.1');
+    expect(testText(rows[2], 'overview-run-engine')).toBe('Codex');
+  });
+
+  it('omits the agent fact when the run recorded neither CLI nor model', () => {
+    const fixture = setup([run(1, { cli: null })]);
+
+    expect(query(fixture, 'overview-run-engine')).toBeNull();
+  });
+
+  it('surfaces the reason for runs that did not complete cleanly', () => {
+    const fixture = setup([
+      run(1, { status: 'completed', reason: 'resumed after restart' }),
+      run(2, { status: 'failed', reason: 'Escalated: review subject could not be materialised' }),
+    ]);
+    const rows = all(fixture, 'overview-run-row');
+
+    expect(testText(rows[0], 'overview-run-reason')).toContain(
+      'review subject could not be materialised',
+    );
+    expect(rows[1].querySelector('[data-testid="overview-run-reason"]')).toBeNull();
   });
 
   it('uses the persisted CORE duration only when timeline rows have no duration', () => {
