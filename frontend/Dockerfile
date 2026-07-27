@@ -4,6 +4,9 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
+# postinstall runs scripts/patch-coding-agent-chat-model-selector.mjs, so the
+# scripts folder must be present in the restore layer already.
+COPY frontend/scripts/ ./scripts/
 RUN npm ci
 COPY frontend/ ./
 # Angular's application builder emits dist/frontend/browser; older layouts
