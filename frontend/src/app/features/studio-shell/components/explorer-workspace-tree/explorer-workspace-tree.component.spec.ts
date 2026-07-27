@@ -532,6 +532,55 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(cmp.projectActions.contextMenu()).toBeNull();
   });
 
+  // AGT-2381: the project menu binding lives on the project's <app-tree-row>,
+  // not on the wrapping .studio-tree-project element — the wrapper also contains
+  // every destination row, so binding there leaked Rename/Delete project onto
+  // the deepest child rows too.
+  it('leaves the deepest destination rows (project URLs) to the native menu', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    const alpha = project('Alpha', 'ws-default', '/repos/Alpha');
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [{
+        ...alpha,
+        urls: [{ id: 'url-1', label: 'Preview', url: 'http://localhost:4200', sortOrder: 0, startRule: null }],
+      }]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    for (const testid of [
+      'studio-explorer-project-wiki-Alpha',
+      'studio-explorer-project-epics-Alpha',
+      'studio-explorer-project-url-Alpha-url-1',
+    ]) {
+      const child = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+      expect(child, testid).not.toBeNull();
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      child!.dispatchEvent(event);
+      expect(event.defaultPrevented, testid).toBe(false);
+      expect(cmp.projectActions.contextMenu(), testid).toBeNull();
+    }
+  });
+
+  it('leaves an unregistered project row to the native menu', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [workspace('ws-default', 'Default', 0, [])]);
+    fixture.componentRef.setInput('projectRows', [row('Ghost')]);
+    fixture.detectChanges();
+
+    const ghost = fixture.nativeElement.querySelector('[data-testid="studio-explorer-project-Ghost"]') as HTMLElement;
+    expect(ghost).not.toBeNull();
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    ghost.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(cmp.projectActions.contextMenu()).toBeNull();
+  });
+
   it('project delete menu emits stable id plus display name and short code', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
