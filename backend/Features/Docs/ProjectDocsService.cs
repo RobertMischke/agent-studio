@@ -21,6 +21,8 @@ public class ProjectDocsService
     private readonly ProjectRegistry _registry;
     private readonly GitService? _git;
     private readonly ILogger<ProjectDocsService> _logger;
+    private readonly WorkbenchCatalogueService? _workbenches;
+    private WikiContentCache _wikiContentCache;
 
     private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
@@ -74,50 +76,49 @@ public class ProjectDocsService
         [".ico"] = "image/x-icon",
     };
 
-    // ---- Wiki performance caches (AGT-2013) ----
-    //
-    // Building the wiki tree opens one file per doc-node to sniff its title and
-    // parses every companion sidecar - O(N) file reads with no memoization, so
-    // every navigation re-read the whole docs/ tree from disk. Two cache layers
-    // fix that: a per-file title memo so an unchanged doc is never re-opened, and
-    // a whole-tree memo validated by a cheap enumerate-only signature so a warm
-    // request that finds nothing changed returns the assembled tree (and its
-    // ETag) without opening a single file. Both key on the project name; the
-    // signature is what makes them self-invalidating on any docs/ change.
-
-    // path -> (mtimeTicks, size, sniffed title). Survives across tree rebuilds so
-    // a single-file edit re-reads only that one file, not all N.
+    // Building the wiki projection opens documents for titles, summaries,
+    // lifecycle fields, and Pulse metadata. WikiContentCache owns the assembled
+    // snapshot and rebuild boundary. This per-file title memo survives eager
+    // rebuilds so an unchanged page does not need another title sniff after a
+    // neighboring page changes.
     private readonly ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> _titleCache =
         new(StringComparer.OrdinalIgnoreCase);
-
-    // projectName -> (docs signature, assembled tree, ETag). A signature hit means
-    // the docs/ tree is provably unchanged, so the cached tree is served verbatim.
-    private readonly ConcurrentDictionary<string, (string Signature, string SourceKey, WikiTree Tree, string ETag)> _treeCache =
-        new(StringComparer.Ordinal);
 
     public ProjectDocsService(
         TaskScannerService scanner,
         ProjectRegistry registry,
         ILogger<ProjectDocsService> logger,
-        GitService? git = null)
+        GitService? git = null,
+        WorkbenchCatalogueService? workbenches = null)
     {
         _scanner = scanner;
         _registry = registry;
         _git = git;
         _logger = logger;
+        _workbenches = workbenches;
+        // Unit fixtures construct this service directly. Production replaces
+        // this local instance with the DI singleton during host wiring.
+        _wikiContentCache = new WikiContentCache(
+            BuildWikiContentSnapshotRaw,
+            normalizeProjectKey: ResolveWikiCacheKey);
     }
 
     /// <summary>
-    /// Drops the in-memory wiki title + tree caches. Tests that mutate a fixture
-    /// docs/ tree in place (without an mtime-visible change, or faster than the
-    /// filesystem timestamp resolution) call this to force a cold rebuild;
-    /// production relies on the docs signature to self-invalidate.
+    /// Binds the process-wide cache singleton after DI construction.
     /// </summary>
-    internal void InvalidateWikiTreeCache()
+    public void SetWikiContentCache(WikiContentCache cache)
     {
-        _titleCache.Clear();
-        _treeCache.Clear();
+        _wikiContentCache = cache;
     }
+
+    public bool PreloadWikiContent(string projectName) => _wikiContentCache.Preload(projectName);
+
+    internal void InvalidateWikiTreeCache() => _wikiContentCache.InvalidateAll();
+
+    public void InvalidateWikiContent(
+        string projectName,
+        WikiContentCache.InvalidationSource source = WikiContentCache.InvalidationSource.Mutation)
+        => _wikiContentCache.Invalidate(projectName, source);
 
     /// <summary>
     /// Repository checkout root for a project: registry record first, legacy
@@ -130,6 +131,9 @@ public class ProjectDocsService
 
     private ProjectRecord? FindProject(string projectName) =>
         _registry.FindByIdOrDisplayName(projectName) ?? _registry.FindByShortCode(projectName);
+
+    internal string ResolveWikiCacheKey(string projectName) =>
+        FindProject(projectName)?.Id ?? projectName;
 
     private WikiSourceContext? ResolveWikiSource(string projectName)
     {
@@ -277,15 +281,14 @@ public class ProjectDocsService
     /// </summary>
     public WikiOverview? GetWikiOverview(string projectName)
     {
-        var source = ResolveWikiSource(projectName);
-        if (source == null) return null;
-
-        var wikiDir = Path.Combine(source.BaseDir, WikiRel);
+        using var _t = GitProcessTelemetry.BeginRequest("wiki", _logger);
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        if (snapshot == null) return null;
         return new WikiOverview(
             ProjectName: projectName,
-            BaseDir: wikiDir,
-            Exists: Directory.Exists(wikiDir),
-            Files: ListWikiDocs(wikiDir));
+            BaseDir: snapshot.WikiDir,
+            Exists: snapshot.TreeResult.Tree.Exists,
+            Files: snapshot.Files);
     }
 
     public WikiFileContent? ReadWikiFile(string projectName, string relPath)
@@ -306,6 +309,7 @@ public class ProjectDocsService
         if (string.Equals(before, content, StringComparison.Ordinal))
             return WikiSaveResult.Ok(full, changed: false);
         File.WriteAllText(full, content);
+        InvalidateWikiContent(projectName);
         return WikiSaveResult.Ok(full, changed: true);
     }
 
@@ -365,71 +369,26 @@ public class ProjectDocsService
     /// document nodes (<c>.md</c>, <c>.html</c>, and <c>.json</c>). Siblings are
     /// sorted folders first, then files; an optional leading <c>NN-</c> numeric
     /// prefix on a name controls ordering and is stripped from the displayed
-    /// title. No git is invoked here, and a warm cache serves the whole tree
-    /// without opening a file (see <see cref="GetWikiTreeResult"/>).
+    /// title. No git is invoked here, and the preloaded central cache serves the
+    /// whole tree without opening or statting a file.
     /// </summary>
     public WikiTree? GetWikiTree(string projectName) => GetWikiTreeResult(projectName)?.Tree;
 
     /// <summary>
-    /// <see cref="GetWikiTree"/> plus the tree's ETag, and the caching that makes
-    /// both cheap. Cold, the tree is built by opening one file per doc-node to
-    /// sniff its title; that per-file title read is memoized. Warm, a cheap
-    /// enumerate-only signature over docs/ (every file's path + mtime + size, no
-    /// content reads) is compared against the last build: an unchanged signature
-    /// returns the cached tree and ETag with zero file reads, which is what keeps
-    /// the wiki entry under target. Any add / remove / rename / edit bumps the
-    /// signature and triggers a rebuild that re-reads only the changed files.
-    /// The whole call is measured under a <see cref="GitProcessTelemetry"/> scope
-    /// so the rollup shows how many files a request actually opened.
+    /// <see cref="GetWikiTree"/> plus the tree's ETag. The signature and tree are
+    /// assembled only during preload or eager invalidation. This reader is an
+    /// O(1) snapshot lookup and performs no filesystem freshness probe.
     /// </summary>
     public WikiTreeResult? GetWikiTreeResult(string projectName)
     {
-        var source = ResolveWikiSource(projectName);
-        if (source == null) return null;
-
         using var _t = GitProcessTelemetry.BeginRequest("wiki/tree", _logger);
-
-        var wikiDir = Path.Combine(source.BaseDir, WikiRel);
-        var exists = Directory.Exists(wikiDir);
-        if (!exists)
-            return new WikiTreeResult(new WikiTree(projectName, "docs", false, [], source.Info), FormatETag("wiki-tree-empty-" + (source.Info.Commit ?? source.Info.Branch)));
-
-        var fullWikiDir = Path.GetFullPath(wikiDir);
-        var signature = ComputeDocsSignature(fullWikiDir);
-        var sourceKey = string.Join('\u001f', source.Info.Mode, source.Info.Branch, source.Info.Commit ?? "unresolved");
-
-        if (signature != null
-            && _treeCache.TryGetValue(projectName, out var cached)
-            && cached.Signature == signature
-            && cached.SourceKey == sourceKey)
-        {
-            return new WikiTreeResult(cached.Tree, cached.ETag);
-        }
-
-        var root = BuildTreeNodes(
-            new DirectoryInfo(wikiDir),
-            fullWikiDir,
-            LoadWikiMetadataIndex(wikiDir),
-            _titleCache,
-            LoadWikiOrderMap(fullWikiDir, "folderOrder"),
-            LoadWikiOrderMap(fullWikiDir, "fileOrder"),
-            LoadRegisteredWorkbenchEntryPaths(fullWikiDir));
-        var tree = new WikiTree(projectName, "docs", true, root, source.Info);
-        var etag = FormatETag("wiki-tree-" + sourceKey + "-" + (signature ?? "nosig"));
-
-        if (signature != null)
-            _treeCache[projectName] = (signature, sourceKey, tree, etag);
-
-        return new WikiTreeResult(tree, etag);
+        return _wikiContentCache.GetSnapshot(projectName)?.TreeResult;
     }
 
     /// <summary>
-    /// Enumerate-only fingerprint of the docs/ tree: every file's full path,
-    /// last-write time, and size, hashed. Deliberately reads no file contents -
-    /// it is the cheap "did anything change" probe that gates the expensive
-    /// title-sniffing rebuild. A doc edit bumps its mtime; an add / remove /
-    /// rename changes the set; either way the hash changes. Returns null if the
-    /// tree can't be enumerated, which the caller treats as "always rebuild".
+    /// Fill-time fingerprint of the docs/ tree: every file's full path,
+    /// last-write time, and size, hashed. Readers consume the stored result and
+    /// never recompute it. Returns null if a fill cannot enumerate the tree.
     /// </summary>
     private static string? ComputeDocsSignature(string fullWikiDir)
     {
@@ -449,10 +408,136 @@ public class ProjectDocsService
         }
         catch (Exception __ex)
         {
-            SilentCatch.Note(__ex, "ProjectDocsService: docs signature enumeration failed; rebuilding tree uncached.");
+            SilentCatch.Note(__ex, "ProjectDocsService: docs signature enumeration failed during cache fill.");
             return null;
         }
     }
+
+    /// <summary>
+    /// Performs the only complete docs/ projection pass. The central
+    /// <see cref="WikiContentCache"/> calls this on preload and eager
+    /// invalidation; request paths never call it directly.
+    /// </summary>
+    internal WikiContentSnapshot? BuildWikiContentSnapshotRaw(string projectName)
+    {
+        var source = ResolveWikiSource(projectName);
+        if (source == null) return null;
+
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/cache-fill", _logger);
+        var wikiDir = Path.GetFullPath(Path.Combine(source.BaseDir, WikiRel));
+        var exists = Directory.Exists(wikiDir);
+        var sourceKey = string.Join('\u001f', source.Info.Mode, source.Info.Branch, source.Info.Commit ?? "unresolved");
+
+        if (!exists)
+        {
+            var emptyTree = new WikiTree(projectName, "docs", false, [], source.Info);
+            return new WikiContentSnapshot(
+                projectName,
+                source,
+                wikiDir,
+                "empty",
+                new WikiTreeResult(emptyTree, FormatETag("wiki-tree-empty-" + sourceKey)),
+                [],
+                new Dictionary<string, WikiFileEntry>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, WikiTreeMetadata>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, WikiFolderView>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+                BuildWikiHomeRaw(projectName, wikiDir) ?? new WikiHomeView([]),
+                WikiPulseLifecycle.Unavailable("No docs/ folder for this project yet."),
+                new WikiPulseInbox(false, "No docs/ folder for this project yet.", 0, []),
+                WikiPulseCritical.Unavailable("No docs/ folder for this project yet."),
+                WikiPulseWarnings.Unavailable("No docs/ folder for this project yet."),
+                _workbenches?.List(projectName, includeHistory: true));
+        }
+
+        var signature = ComputeDocsSignature(wikiDir) ?? "unavailable";
+        var metadata = LoadWikiMetadataIndex(wikiDir);
+        var folderOrder = LoadWikiOrderMap(wikiDir, "folderOrder");
+        var fileOrder = LoadWikiOrderMap(wikiDir, "fileOrder");
+        var root = BuildTreeNodes(
+            new DirectoryInfo(wikiDir),
+            wikiDir,
+            metadata,
+            _titleCache,
+            folderOrder,
+            fileOrder,
+            LoadRegisteredWorkbenchEntryPaths(wikiDir));
+        var tree = new WikiTree(projectName, "docs", true, root, source.Info);
+        var treeResult = new WikiTreeResult(
+            tree,
+            FormatETag("wiki-tree-" + sourceKey + "-" + signature));
+
+        var files = ListWikiDocs(wikiDir);
+        var filesByRelPath = files.ToDictionary(
+            file => file.RelPath,
+            file => file,
+            StringComparer.OrdinalIgnoreCase);
+
+        var folders = new Dictionary<string, WikiFolderView>(StringComparer.OrdinalIgnoreCase);
+        var folderPaths = new List<string> { string.Empty };
+        foreach (var directory in Directory.EnumerateDirectories(wikiDir, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(wikiDir, directory).Replace('\\', '/');
+            if (IsHiddenWikiPath(rel) || IsWikiAppPath(rel)) continue;
+            folderPaths.Add(rel);
+        }
+        foreach (var rel in folderPaths)
+        {
+            var folder = BuildWikiFolderRaw(projectName, rel, wikiDir);
+            if (folder != null) folders[rel] = folder;
+        }
+
+        var folderDescendants = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rel in folders.Keys)
+        {
+            var prefix = rel.Length == 0 ? string.Empty : rel + "/";
+            folderDescendants[rel] = files
+                .Where(file => WikiFolderPageExtensions.Contains(Path.GetExtension(file.RelPath))
+                    && (prefix.Length == 0 || file.RelPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                .Select(file => file.RelPath)
+                .ToList();
+        }
+
+        var taskKeys = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            try
+            {
+                var full = Path.Combine(wikiDir, file.RelPath.Replace('/', Path.DirectorySeparatorChar));
+                taskKeys[file.RelPath] = ParseWikiMetadata(File.ReadAllText(full)).TaskKey;
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "ProjectDocsService: unreadable wiki task-key during cache fill.");
+                taskKeys[file.RelPath] = null;
+            }
+        }
+
+        return new WikiContentSnapshot(
+            projectName,
+            source,
+            wikiDir,
+            signature,
+            treeResult,
+            files,
+            filesByRelPath,
+            metadata,
+            folderOrder,
+            folders,
+            folderDescendants,
+            taskKeys,
+            BuildWikiHomeRaw(projectName, wikiDir) ?? new WikiHomeView([]),
+            BuildPulseLifecycle(wikiDir, files),
+            BuildPulseInbox(files),
+            BuildPulseCritical(files, metadata),
+            BuildPulseWarnings(wikiDir, files),
+            _workbenches?.List(projectName, includeHistory: true));
+    }
+
+    public WorkbenchCatalogue? GetWikiWorkbenchCatalogue(string projectName)
+        => _wikiContentCache.GetSnapshot(projectName)?.Workbenches;
 
     /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
     // The token can carry arbitrary bytes (the tree source key joins its parts
@@ -489,41 +574,38 @@ public class ProjectDocsService
     /// </summary>
     public WikiRecentEditsResult? GetWikiRecentEditsResult(string projectName, GitService git, int limit = 12)
     {
-        var source = ResolveWikiSource(projectName);
-        if (source == null) return null;
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        if (snapshot == null) return null;
         if (limit <= 0) limit = 12;
 
         using var _t = GitProcessTelemetry.BeginRequest("wiki/recent", _logger);
 
-        var wikiDir = Path.GetFullPath(Path.Combine(source.BaseDir, WikiRel));
-        var exists = Directory.Exists(wikiDir);
-        if (!exists)
+        if (!snapshot.TreeResult.Tree.Exists)
             return new WikiRecentEditsResult(
-                new WikiRecentEdits(projectName, wikiDir, false, []), FormatETag("wiki-recent-nodir"));
+                new WikiRecentEdits(projectName, snapshot.WikiDir, false, []), FormatETag("wiki-recent-nodir"));
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
             return new WikiRecentEditsResult(
-                new WikiRecentEdits(projectName, wikiDir, true, []), FormatETag("wiki-recent-norepo"));
+                new WikiRecentEdits(projectName, snapshot.WikiDir, true, []), FormatETag("wiki-recent-norepo"));
 
-        var head = source.Info.Commit ?? git.GetHeadShaCached(repoRoot);
-        var key = string.Join('', "wiki-recent-payload", repoRoot, wikiDir, limit, head);
-        var payload = source.Info.Mode == "branch"
-            ? BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit, head)
+        var head = snapshot.Source.Info.Commit ?? git.GetHeadShaCached(repoRoot);
+        var key = string.Join('', "wiki-recent-payload", repoRoot, snapshot.Signature, limit, head);
+        var payload = snapshot.Source.Info.Mode == "branch"
+            ? BuildRecentEdits(snapshot, git, repoRoot, limit, head)
             : git.MemoizeByHead(repoRoot, key,
-                () => BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit, null));
+                () => BuildRecentEdits(snapshot, git, repoRoot, limit, null));
         var etag = FormatETag("wiki-recent-" + (head ?? "nohead") + "-" + limit);
         return new WikiRecentEditsResult(payload, etag);
     }
 
     /// <summary>
     /// Assembles the recent-edits payload from a fresh <c>git log</c> walk under
-    /// docs/ and per-row title sniffs. Split out so <see cref="MemoizeByHead"/>
-    /// only invokes it on a HEAD-miss; the loop, filtering, and title reads are
-    /// unchanged from the original inline implementation.
+    /// docs/. Page existence and titles come from the central Wiki snapshot, so
+    /// even a Git cache miss performs no docs filesystem probes.
     /// </summary>
     private WikiRecentEdits BuildRecentEdits(
-        string projectName, GitService git, string repoRoot, string wikiDir, int limit, string? atRef)
+        WikiContentSnapshot snapshot, GitService git, string repoRoot, int limit, string? atRef)
     {
         const string docsRepoRel = "docs";
         // Ask git for more distinct files than we need: some will be filtered
@@ -535,17 +617,14 @@ public class ProjectDocsService
         {
             if (!e.RepoRelPath.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)) continue;
             var docsRel = e.RepoRelPath[5..];
-            var full = Path.GetFullPath(Path.Combine(wikiDir, docsRel));
-            var ext = Path.GetExtension(full);
+            var ext = Path.GetExtension(docsRel);
             if (!WikiDocExtensions.Contains(ext)) continue;
             if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
-            if (!File.Exists(full)) continue; // a deletion in the log
+            if (!snapshot.FilesByRelPath.TryGetValue(docsRel, out var cachedFile)) continue;
 
-            var title = ExtractDocTitle(full, ext)
-                ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
             results.Add(new WikiRecentEdit(
                 RelPath: docsRel,
-                Title: title,
+                Title: cachedFile.Title,
                 Author: e.Author,
                 AuthorDateUtc: e.AuthorDateUtc,
                 Sha: e.Sha,
@@ -554,7 +633,7 @@ public class ProjectDocsService
             if (results.Count >= limit) break;
         }
 
-        return new WikiRecentEdits(projectName, wikiDir, true, results);
+        return new WikiRecentEdits(snapshot.ProjectName, snapshot.WikiDir, true, results);
     }
 
     // -------- Wiki Pulse (generated wiki landing view) --------
@@ -604,17 +683,17 @@ public class ProjectDocsService
     /// </summary>
     public WikiPulse? GetWikiPulse(string projectName, GitService git, int feedLimit = 12)
     {
-        var source = ResolveWikiSource(projectName);
-        if (source == null) return null;
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/pulse", _logger);
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        if (snapshot == null) return null;
         feedLimit = Math.Clamp(feedLimit, 1, 50);
 
-        var wikiDir = Path.GetFullPath(Path.Combine(source.BaseDir, WikiRel));
         var generatedAt = DateTime.UtcNow.ToString("o");
 
-        if (!Directory.Exists(wikiDir))
+        if (!snapshot.TreeResult.Tree.Exists)
         {
             const string reason = "No docs/ folder for this project yet.";
-            return new WikiPulse(projectName, wikiDir, false, generatedAt,
+            return new WikiPulse(projectName, snapshot.WikiDir, false, generatedAt,
                 new WikiPulseFeed(false, reason, []),
                 new WikiPulseInbox(false, reason, 0, []),
                 WikiPulseDrift.Unavailable(reason),
@@ -628,32 +707,43 @@ public class ProjectDocsService
         // so they work even when the project has no resolvable repository. The
         // critical list is the wiki-grading verdict surfaced in Pulse (AGT-2051),
         // supplementing the deterministic drift bar below.
-        var allDocs = ListWikiDocs(wikiDir);
-        var lifecycle = BuildPulseLifecycle(wikiDir, allDocs);
-        var inbox = BuildPulseInbox(allDocs);
-        var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
-        var warnings = BuildPulseWarnings(wikiDir, allDocs);
+        var allDocs = snapshot.Files;
+        var lifecycle = snapshot.Lifecycle;
+        var inbox = snapshot.Inbox;
+        var critical = snapshot.Critical;
+        var warnings = snapshot.Warnings;
         var activity = BuildPulseActivity(projectName, git);
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
         {
             const string reason = "No git repository resolved for this project.";
-            return new WikiPulse(projectName, wikiDir, true, generatedAt,
+            return new WikiPulse(projectName, snapshot.WikiDir, true, generatedAt,
                 new WikiPulseFeed(false, reason, []),
                 inbox,
                 WikiPulseDrift.Unavailable(reason),
                 critical,
                 warnings,
                 activity)
-            { Lifecycle = lifecycle };
+            {
+                Lifecycle = lifecycle,
+                Workbenches = snapshot.Workbenches,
+            };
         }
 
         const string docsRepoRel = "docs";
         // One git walk backs BOTH the feed (top N, newest first) and the drift
         // heuristic's per-page "last updated" map, so Pulse costs one docs log.
-        var rawRecent = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500,
-            atRef: source.Info.Mode == "branch" ? source.Info.Commit : null);
+        var head = snapshot.Source.Info.Commit ?? git.GetHeadShaCached(repoRoot);
+        var pulseHistoryKey = string.Join(
+            '\u001f', "wiki-pulse-history", repoRoot, snapshot.Signature, head ?? "nohead");
+        var rawRecent = snapshot.Source.Info.Mode == "branch"
+            ? git.GetRecentEditsUnderPath(
+                repoRoot, docsRepoRel, limit: 2000, commitScan: 1500, atRef: snapshot.Source.Info.Commit)
+            : git.MemoizeByHead(
+                repoRoot,
+                pulseHistoryKey,
+                () => git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500));
 
         var feedItems = new List<WikiPulseFeedItem>();
         var lastUpdateByRel = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
@@ -661,22 +751,19 @@ public class ProjectDocsService
         {
             if (!e.RepoRelPath.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)) continue;
             var docsRel = e.RepoRelPath[5..];
-            var full = Path.GetFullPath(Path.Combine(wikiDir, docsRel));
-            var ext = Path.GetExtension(full);
+            var ext = Path.GetExtension(docsRel);
             if (!WikiDocExtensions.Contains(ext)) continue;
             if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
-            if (!File.Exists(full)) continue; // a deletion in the log
+            if (!snapshot.FilesByRelPath.TryGetValue(docsRel, out var cachedFile)) continue;
 
             lastUpdateByRel[docsRel] = e.AuthorDateUtc;
 
             if (feedItems.Count < feedLimit)
             {
-                var title = ExtractDocTitle(full, ext)
-                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
                 var areaSlug = TopFolderForPath(docsRel);
                 feedItems.Add(new WikiPulseFeedItem(
                     RelPath: docsRel,
-                    Title: title,
+                    Title: cachedFile.Title,
                     Author: e.Author,
                     AuthorDateUtc: e.AuthorDateUtc,
                     Sha: e.Sha,
@@ -684,19 +771,29 @@ public class ProjectDocsService
                     Subject: e.Subject,
                     AreaSlug: areaSlug,
                     AreaTitle: areaSlug == null ? null : StripOrderPrefix(areaSlug),
-                    TaskKey: ExtractPulseTaskKey(full, ext, e.Subject)));
+                    TaskKey: snapshot.TaskKeysByRelPath.GetValueOrDefault(docsRel)
+                        ?? ExtractTaskKeyFromSubject(e.Subject)));
             }
         }
 
         var feed = new WikiPulseFeed(true, feedItems.Count == 0 ? "No recent edits in git history." : null, feedItems);
 
         var codeRoots = ResolveCodeRoots(repoRoot);
+        var codeHistoryKey = string.Join(
+            '\u001f', "wiki-pulse-code-dates", repoRoot, string.Join('\u001f', codeRoots));
+        var codeTimes = git.MemoizeByHead(
+            repoRoot,
+            codeHistoryKey,
+            () => git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500));
         var drift = BuildPulseDrift(
-            allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
-            BuildOrderIndex(LoadWikiOrderMap(wikiDir, "folderOrder"), parentRel: string.Empty));
+            allDocs, lastUpdateByRel, codeRoots, codeTimes,
+            BuildOrderIndex(snapshot.FolderOrderByParent, parentRel: string.Empty));
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity)
-        { Lifecycle = lifecycle };
+        return new WikiPulse(projectName, snapshot.WikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity)
+        {
+            Lifecycle = lifecycle,
+            Workbenches = snapshot.Workbenches,
+        };
     }
 
     private static readonly Regex MarkdownLinkRegex =
@@ -1153,17 +1250,12 @@ public class ProjectDocsService
     private static WikiPulseDrift BuildPulseDrift(
         IReadOnlyList<WikiFileEntry> docs,
         IReadOnlyDictionary<string, DateTime> lastUpdateByRel,
-        string repoRoot,
         IReadOnlyList<string> codeRoots,
-        GitService git,
+        IReadOnlyList<DateTime> codeTimes,
         IReadOnlyDictionary<string, int> rootFolderOrderIndex)
     {
         if (codeRoots.Count == 0)
             return WikiPulseDrift.Unavailable("No code roots found to grade drift against.");
-
-        // Descending author dates of recent code commits; counting how many are
-        // newer than a page's last update is the deterministic drift score.
-        var codeTimes = git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500);
 
         // Drift groups are the real top-level docs folders that hold pages.
         var folders = docs
@@ -2000,7 +2092,7 @@ public class ProjectDocsService
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         // The docs signature covers the order file, but timestamp resolution can
         // hide a same-tick rewrite - drop the memo so the next tree read rebuilds.
-        InvalidateWikiTreeCache();
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(path);
     }
 
@@ -2062,7 +2154,7 @@ public class ProjectDocsService
         var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
-        InvalidateWikiTreeCache();
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(path);
     }
 
@@ -2119,6 +2211,7 @@ public class ProjectDocsService
         var companion = new WikiCompanionStore().WriteCreationClassification(
             wikiDir, docsRel, title, seed, DefaultClassificationType(docsRel), DateTime.UtcNow);
 
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(full, new[] { companion.CompanionAbsPath });
     }
 
@@ -2141,7 +2234,7 @@ public class ProjectDocsService
             ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
         var result = companions.WriteClassificationStatus(
             wikiDir, docsRel, title, content, status, DateTime.UtcNow);
-        InvalidateWikiTreeCache();
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(result.CompanionAbsPath);
     }
 
@@ -2174,6 +2267,7 @@ public class ProjectDocsService
         Directory.CreateDirectory(full);
         var keep = Path.Combine(full, ".gitkeep");
         if (!File.Exists(keep)) File.WriteAllText(keep, "");
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(keep);
     }
 
@@ -2363,12 +2457,62 @@ public class ProjectDocsService
     /// </summary>
     public WikiFolderView? GetWikiFolder(string projectName, string? relPath, GitService? git = null)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
-
         using var _t = GitProcessTelemetry.BeginRequest("wiki/folder", _logger);
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        if (snapshot == null) return null;
+        var rel = (relPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+        if (!snapshot.Folders.TryGetValue(rel, out var cached)) return null;
+        if (git == null) return cached;
 
-        var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var gitDates = LoadWikiGitDateIndex(projectName, snapshot.WikiDir, git);
+        if (gitDates == null) return cached;
+
+        var children = cached.Children.Select(child =>
+        {
+            if (child.Kind == "page")
+            {
+                var updated = GetCachedPageUpdatedAt(snapshot, child.RelPath, gitDates);
+                return child with { UpdatedAt = updated.At, UpdatedAtSource = updated.Source };
+            }
+
+            if (!snapshot.FolderDescendantPages.TryGetValue(child.RelPath, out var descendants))
+                return child;
+            WikiUpdatedAt? newest = null;
+            foreach (var pageRel in descendants)
+            {
+                var updated = GetCachedPageUpdatedAt(snapshot, pageRel, gitDates);
+                if (newest == null || updated.At > newest.Value.At)
+                    newest = updated;
+            }
+            return child with { UpdatedAt = newest?.At, UpdatedAtSource = newest?.Source };
+        }).ToList();
+        return cached with { Children = children };
+    }
+
+    private static WikiUpdatedAt GetCachedPageUpdatedAt(
+        WikiContentSnapshot snapshot,
+        string relPath,
+        WikiGitDateIndex gitDates)
+    {
+        var full = Path.Combine(snapshot.WikiDir, relPath.Replace('/', Path.DirectorySeparatorChar));
+        var repoRel = Path.GetRelativePath(gitDates.RepoRoot, full).Replace('\\', '/');
+        if (gitDates.DatesByRepoPath.TryGetValue(repoRel, out var authorDate))
+            return new WikiUpdatedAt(authorDate, "git");
+        return snapshot.FilesByRelPath.TryGetValue(relPath, out var file)
+            ? new WikiUpdatedAt(file.UpdatedAt, "mtime")
+            : new WikiUpdatedAt(DateTime.MinValue, "mtime");
+    }
+
+    private WikiFolderView? BuildWikiFolderRaw(
+        string projectName,
+        string? relPath,
+        string? wikiRootOverride = null)
+    {
+        var baseDir = wikiRootOverride == null ? ResolveBaseDir(projectName) : null;
+        if (wikiRootOverride == null && baseDir == null) return null;
+        var root = wikiRootOverride == null
+            ? Path.GetFullPath(Path.Combine(baseDir!, WikiRel))
+            : Path.GetFullPath(wikiRootOverride);
         var rel = (relPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
 
         string full;
@@ -2390,7 +2534,7 @@ public class ProjectDocsService
 
         var dir = new DirectoryInfo(full);
         var children = new List<WikiFolderChild>();
-        var gitDates = LoadWikiGitDateIndex(projectName, root, git);
+        WikiGitDateIndex? gitDates = null;
 
         foreach (var sub in dir.GetDirectories())
         {
@@ -2711,10 +2855,16 @@ public class ProjectDocsService
     /// </summary>
     public WikiHomeView? GetWikiHome(string projectName)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/home", _logger);
+        return _wikiContentCache.GetSnapshot(projectName)?.Home;
+    }
 
-        var homePath = Path.Combine(baseDir, WikiRel, WikiHomeRel.Replace('/', Path.DirectorySeparatorChar));
+    private WikiHomeView? BuildWikiHomeRaw(string projectName, string? wikiDirOverride = null)
+    {
+        var baseDir = wikiDirOverride == null ? ResolveBaseDir(projectName) : null;
+        if (wikiDirOverride == null && baseDir == null) return null;
+        var wikiDir = wikiDirOverride ?? Path.Combine(baseDir!, WikiRel);
+        var homePath = Path.Combine(wikiDir, WikiHomeRel.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(homePath)) return new WikiHomeView([]);
 
         try
@@ -2854,6 +3004,7 @@ public class ProjectDocsService
         {
             return WikiMutationResult.Fail("Wiki home configuration could not be written.");
         }
+        InvalidateWikiContent(projectName);
         return WikiMutationResult.Ok(homePath);
     }
 

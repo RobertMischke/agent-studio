@@ -128,6 +128,8 @@ public sealed class WikiGradingService
             }
 
             handle.Finish(WikiGradingRunState.Completed, null);
+            if (handle.SnapshotGraded() > 0)
+                _docs.InvalidateWikiContent(project);
             _logger.LogInformation(
                 "Wiki grading run {RunId} for {Project} completed: {Graded} graded, {Skipped} skipped, {Failed} failed, {Critical} critical.",
                 handle.RunId, project, handle.SnapshotGraded(), handle.SnapshotSkipped(), handle.SnapshotFailed(), handle.SnapshotCritical());

@@ -186,6 +186,9 @@ public class WikiFolderViewTests : IDisposable
         Assert.Equal(0, warmRollup.Spawns); // the complete 381-page index is HEAD-cached
 
         WritePage("target-architecture/local-draft.md", "# Local draft\n");
+        docs.InvalidateWikiContent(
+            ProjectName,
+            WikiContentCache.InvalidationSource.Watcher);
         var local = docs.GetWikiFolder(ProjectName, "target-architecture", git)!
             .Children.Single(c => c.Name == "local-draft.md");
         Assert.Equal("mtime", local.UpdatedAtSource);
