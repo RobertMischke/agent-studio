@@ -214,6 +214,13 @@ state.
   distinct API, audit action, persisted field, and UI label. Capability failure
   reports must bind the active coding or review claim and fence; stale and
   duplicate deliveries fail closed or replay idempotently.
+- The monolith V1 Review compatibility mount accepts the Review service's
+  `PUT /api/v1/runners/{runner-id}/capabilities` startup and refresh requests
+  with the same advertisement and snapshot contracts as the standalone Task
+  Server. It validates the registered Review runner and instance, schema,
+  freshness, and generation before retaining the latest snapshot. The separate
+  `review-executor` identity therefore remains on the V1 Review plane after
+  registration instead of failing startup on a missing capability route.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps

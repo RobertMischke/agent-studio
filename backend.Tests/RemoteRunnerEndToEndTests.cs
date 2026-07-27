@@ -1361,6 +1361,55 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         registration.EnsureSuccessStatusCode();
     }
 
+    [Fact]
+    public async Task Monolith_v1_review_executor_accepts_capability_advertisement()
+    {
+        const string reviewRunnerId = "review-runner-capabilities";
+        const string reviewInstance = "review-capability-host:4243";
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        var advertisedAt = DateTime.UtcNow;
+
+        var response = await http.PutAsJsonAsync(
+            $"/api/v1/runners/{reviewRunnerId}/capabilities",
+            new Contract.CapabilityAdvertisementRequest(
+                reviewRunnerId,
+                reviewInstance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                advertisedAt,
+                180,
+                1,
+                [
+                    new(
+                        Contract.CapabilityProtocol.ReviewExecutor,
+                        "executor",
+                        Identity: "review"),
+                    new(
+                        Contract.ReviewCapabilities.SemanticReview,
+                        "review",
+                        Identity: "remote-review"),
+                    new(
+                        Contract.ReviewCapabilities.BaselineComparison,
+                        "review",
+                        Identity: "merge-base"),
+                ]));
+
+        response.EnsureSuccessStatusCode();
+        var snapshot =
+            await response.Content.ReadFromJsonAsync<Contract.RunnerCapabilitySnapshotDto>();
+        Assert.NotNull(snapshot);
+        Assert.Equal(reviewRunnerId, snapshot.RunnerId);
+        Assert.Equal(reviewInstance, snapshot.InstanceId);
+        Assert.Equal("open", snapshot.HostAdmission.AdmissionState);
+        Assert.Contains(
+            snapshot.Capabilities,
+            capability => capability.Key == Contract.CapabilityProtocol.ReviewExecutor
+                          && capability.HealthState == Contract.CapabilityHealthStates.Healthy
+                          && capability.IsFresh);
+    }
+
     private static Contract.ReviewReportRequest InfrastructureReport(
         Contract.ReviewClaimResponse claim,
         string runnerId,
