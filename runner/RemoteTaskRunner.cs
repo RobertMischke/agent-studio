@@ -575,7 +575,12 @@ public sealed class RemoteTaskRunner
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                             .LastOrDefault()
                             ?? $"{provider} exited {result.ExitCode} with an authentication failure";
-                        await _client.ReportCapabilityFailureAsync(
+                        // Diagnosis only: the run's own classification and fenced
+                        // completion below must survive a server that rejects or
+                        // does not mount the capability route.
+                        await CapabilityFailureReporter.TryReportAsync(
+                            _client,
+                            _log,
                             CapabilityProtocol.ProviderAuthentication(provider),
                             "ProviderUnauthorized",
                             diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],

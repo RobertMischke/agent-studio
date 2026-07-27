@@ -16,6 +16,8 @@ namespace AgentStudio.Runner;
 /// </summary>
 public static class V1ReviewPlaneEndpoints
 {
+    private const string LoggerName = "AgentStudio.Runner.V1ReviewPlaneEndpoints";
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public static void MapV1ReviewPlaneEndpoints(this WebApplication app)
@@ -88,6 +90,100 @@ public static class V1ReviewPlaneEndpoints
             }
         });
 
+        // Capability failure reports are the runner's health telemetry for the
+        // review plane. The monolith mount keeps the reference semantics that
+        // matter here - idempotent delivery, a suspect→draining threshold, and
+        // a cooldown that pauses this executor's claims - but holds the state in
+        // the registry instead of the standalone server's SQLite tables. The
+        // pause is released by the next Register or capability advertisement
+        // (the review daemon re-advertises every minute) or by cooldown expiry,
+        // so a transient failure can never strand the Review Unit.
+        api.MapPost("/runners/{runnerId}/capability-failures", (
+            HttpContext context,
+            string runnerId,
+            Contract.CapabilityFailureRequest request,
+            V1ReviewExecutorRegistry registry,
+            ILoggerFactory loggerFactory) =>
+        {
+            if (!RunnerMatches(context, runnerId))
+                return Results.Unauthorized();
+            if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
+                return Results.BadRequest(new Contract.ApiError(
+                    "runner-id-mismatch",
+                    "Route and capability runner ids differ."));
+            var logger = loggerFactory.CreateLogger(LoggerName);
+            try
+            {
+                var response = registry.ReportCapabilityFailure(runnerId, request);
+                logger.LogWarning(
+                    "v1 capability failure runner={RunnerId} capability={Capability} "
+                    + "classification={Classification} state={HealthState} cooldownUntil={CooldownUntil} "
+                    + "wholeHost={WholeHost} claim={ClaimKind}:{ClaimId} reason={Reason}",
+                    runnerId,
+                    response.CapabilityKey,
+                    request.Classification,
+                    response.HealthState,
+                    response.CooldownUntil,
+                    response.WholeHostDraining,
+                    request.ClaimKind ?? "none",
+                    request.ClaimId ?? "none",
+                    request.Reason);
+                return Results.Ok(response);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new Contract.ApiError("invalid-request", exception.Message));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new Contract.ApiError(
+                    "capability-failure-conflict",
+                    exception.Message));
+            }
+        });
+
+        // Outbox status is pure diagnosis: it tells the server how much of the
+        // runner's durable handoff is still unacknowledged. The monolith accepts
+        // and logs it (with the reference's sanity and monotonicity guards) and
+        // keeps only the latest snapshot per run in memory - the authoritative
+        // handoff itself travels through the completion and result-handoff
+        // routes, so nothing here needs to be durable.
+        api.MapPut("/runners/{runnerId}/outbox-status", (
+            HttpContext context,
+            string runnerId,
+            Contract.RunnerOutboxStatusRequest request,
+            V1ReviewExecutorRegistry registry,
+            ILoggerFactory loggerFactory) =>
+        {
+            if (!RunnerMatches(context, runnerId))
+                return Results.Unauthorized();
+            var logger = loggerFactory.CreateLogger(LoggerName);
+            try
+            {
+                var status = registry.RecordOutboxStatus(runnerId, request);
+                logger.LogInformation(
+                    "v1 runner outbox status runner={RunnerId} instance={InstanceId} run={RunId} "
+                    + "sequence={LastSequence} acknowledged={AcknowledgedSequence} backlog={Backlog} "
+                    + "handoff={HandoffState}",
+                    status.RunnerId,
+                    status.InstanceId,
+                    status.RunId,
+                    status.LastSequence,
+                    status.LastAcknowledgedSequence,
+                    status.BacklogCount,
+                    status.FinalHandoffState);
+                return Results.Ok(status);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new Contract.ApiError("invalid-request", exception.Message));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new Contract.ApiError("stale-outbox-status", exception.Message));
+            }
+        });
+
         api.MapPost("/runners/{runnerId}/review-claims", async (
             HttpContext context,
             string runnerId,
@@ -114,6 +210,15 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-baseline-comparison-required",
                     "Update this Review Executor to one that advertises baseline-comparison support."));
+            // A drained capability pauses this executor rather than feeding it
+            // attempts it just reported itself unable to materialize. The pause
+            // lifts on cooldown expiry or the next registration / capability
+            // advertisement, so no operator action is needed to resume.
+            if (registry.TryGetCapabilityPause(runnerId, out var pause))
+                return Results.Ok(new Contract.ReviewClaimResponse(
+                    "empty",
+                    Message: $"Review executor is paused until {pause.CooldownUntil:O} after a "
+                             + $"{pause.Classification} failure of {pause.CapabilityKey}: {pause.Reason}"));
 
             foreach (var legacy in authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope())
             {
@@ -754,9 +859,33 @@ public static class V1ReviewPlaneEndpoints
 
 public sealed class V1ReviewExecutorRegistry
 {
+    /// <summary>Consecutive failures that turn a suspect capability into a drained one.</summary>
+    private const int CapabilityFailureThreshold = 2;
+    private const int CapabilityBaseCooldownSeconds = 120;
+    private const int DiagnosticRetention = 256;
+
+    /// <summary>
+    /// Capabilities whose loss takes the whole host down rather than a single
+    /// capability - one report drains immediately (Task Server reference set).
+    /// </summary>
+    private static readonly HashSet<string> WholeHostCapabilities = new(StringComparer.Ordinal)
+    {
+        Contract.CapabilityProtocol.Disk,
+        Contract.CapabilityProtocol.LeaseAuthority,
+        Contract.CapabilityProtocol.HostNetwork,
+        Contract.CapabilityProtocol.RepositoryFileSystem,
+        Contract.CapabilityProtocol.TaskServerAuthority,
+    };
+
     private readonly ConcurrentDictionary<string, Registration> _registrations =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, CapabilityState> _capabilityStates =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, CapabilityFailureState>> _capabilityFailures =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CapabilityFailureDelivery> _capabilityFailureDeliveries =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, OutboxStatusEntry> _outboxStatuses =
         new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
@@ -813,6 +942,9 @@ public sealed class V1ReviewExecutorRegistry
             {
                 _capabilityStates.Remove(runnerId);
             }
+            // A registration re-declares this identity's health, so a restarted
+            // executor is never born paused by a previous instance's failures.
+            ClearCapabilityFailures(runnerId);
         }
         return new Contract.RunnerDto(
             runnerId,
@@ -899,6 +1031,11 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
+            // A fresh advertisement is the runner's own healthy-again signal and
+            // therefore lifts any capability pause it earned before this
+            // generation. The review daemon re-advertises every minute, so an
+            // executor recovers on its own without operator intervention.
+            ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(
                 runnerId,
                 registration.Name,
@@ -921,6 +1058,193 @@ public sealed class V1ReviewExecutorRegistry
         }
     }
 
+    /// <summary>
+    /// Records one capability failure against this runner and returns the
+    /// resulting health verdict. Delivery is idempotent per idempotency key; a
+    /// replayed key returns its first verdict without advancing the state
+    /// machine, and the same key bound to a different payload is a conflict.
+    /// </summary>
+    public Contract.CapabilityFailureResponse ReportCapabilityFailure(
+        string runnerId,
+        Contract.CapabilityFailureRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CapabilityKey)
+            || string.IsNullOrWhiteSpace(request.Classification)
+            || string.IsNullOrWhiteSpace(request.Reason)
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            throw new ArgumentException(
+                "Capability key, classification, reason, and idempotency key are required.");
+        }
+
+        var now = DateTime.UtcNow;
+        var occurredAt = request.OccurredAt.ToUniversalTime();
+        if (occurredAt > now.AddMinutes(2))
+            throw new ArgumentException("Capability failure time is too far in the future.");
+
+        var capabilityKey = request.CapabilityKey.Trim().ToLowerInvariant();
+        var deliveryKey = DiagnosticKey(runnerId, request.IdempotencyKey);
+        var payloadHash = HashPayload(request);
+        lock (_gate)
+        {
+            // The mount admits review identities, but the same route carries the
+            // coding runner's diagnostics. An unregistered id is still accepted
+            // and recorded - only a stale instance of a known id is rejected,
+            // because that report describes a runner that no longer exists.
+            if (_registrations.TryGetValue(runnerId, out var registration)
+                && !string.Equals(registration.InstanceId, request.InstanceId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Capability failure instance does not match the registered runner.");
+            }
+            if (_capabilityFailureDeliveries.TryGetValue(deliveryKey, out var delivered))
+            {
+                if (!string.Equals(delivered.PayloadHash, payloadHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Capability failure idempotency key is bound to another payload.");
+                return delivered.Response;
+            }
+
+            if (!_capabilityFailures.TryGetValue(runnerId, out var failures))
+            {
+                failures = new Dictionary<string, CapabilityFailureState>(StringComparer.Ordinal);
+                _capabilityFailures[runnerId] = failures;
+            }
+            failures.TryGetValue(capabilityKey, out var previous);
+            if (previous is not null && occurredAt < previous.LastFailureAt)
+                throw new InvalidOperationException(
+                    "Capability failure is older than the current failure state.");
+
+            var wholeHost = WholeHostCapabilities.Contains(capabilityKey);
+            var consecutive = (previous?.ConsecutiveFailures ?? 0) + 1;
+            var state = previous?.HealthState == Contract.CapabilityHealthStates.Draining
+                        || wholeHost
+                        || consecutive >= CapabilityFailureThreshold
+                ? Contract.CapabilityHealthStates.Draining
+                : Contract.CapabilityHealthStates.Suspect;
+            DateTime? cooldownUntil = state == Contract.CapabilityHealthStates.Draining
+                ? now.AddSeconds(
+                    CapabilityBaseCooldownSeconds * (1 << Math.Min(Math.Max(0, consecutive - 2), 4)))
+                : null;
+            failures[capabilityKey] = new CapabilityFailureState(
+                capabilityKey,
+                state,
+                request.Classification,
+                request.Reason,
+                occurredAt,
+                cooldownUntil,
+                consecutive,
+                wholeHost);
+
+            var response = new Contract.CapabilityFailureResponse(
+                "accepted",
+                capabilityKey,
+                state,
+                cooldownUntil,
+                wholeHost,
+                state == Contract.CapabilityHealthStates.Draining
+                    ? "Claims for this runner are paused until the cooldown expires or it "
+                      + "registers or advertises its capabilities again."
+                    : null);
+            _capabilityFailureDeliveries[deliveryKey] = new CapabilityFailureDelivery(
+                payloadHash, response, now);
+            TrimOldest(_capabilityFailureDeliveries, entry => entry.ReceivedAt);
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// True while a drained capability holds this runner's claims. The pause is
+    /// self-healing: it expires with the cooldown and is dropped by the next
+    /// registration or capability advertisement.
+    /// </summary>
+    public bool TryGetCapabilityPause(string runnerId, out CapabilityPause pause)
+    {
+        var now = DateTime.UtcNow;
+        lock (_gate)
+        {
+            if (_capabilityFailures.TryGetValue(runnerId, out var failures))
+            {
+                var drained = failures.Values
+                    .Where(state => state.CooldownUntil > now)
+                    .OrderByDescending(state => state.CooldownUntil)
+                    .FirstOrDefault();
+                if (drained is not null)
+                {
+                    pause = new CapabilityPause(
+                        drained.Key,
+                        drained.Classification,
+                        drained.Reason,
+                        drained.CooldownUntil!.Value,
+                        drained.WholeHost);
+                    return true;
+                }
+            }
+        }
+        pause = default!;
+        return false;
+    }
+
+    /// <summary>
+    /// Accepts one runner outbox snapshot for diagnosis. Sanity and monotonicity
+    /// are enforced as in the Task Server reference; only the latest snapshot per
+    /// run is kept, in memory, because the authoritative handoff travels through
+    /// the completion and result-handoff routes.
+    /// </summary>
+    public Contract.RunnerOutboxStatusDto RecordOutboxStatus(
+        string runnerId,
+        Contract.RunnerOutboxStatusRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.InstanceId))
+            throw new ArgumentException("Outbox status instance id is required.");
+        if (string.IsNullOrWhiteSpace(request.RunId))
+            throw new ArgumentException("Outbox status runId is required.");
+        if (request.LastAcknowledgedSequence > request.LastSequence)
+            throw new ArgumentException("Outbox acknowledgement cannot exceed its last sequence.");
+        if (request.BacklogCount < 0)
+            throw new ArgumentException("Outbox backlog cannot be negative.");
+        if ((request.BacklogCount == 0) != (request.OldestUnacknowledgedSequence is null))
+            throw new ArgumentException(
+                "Oldest unacknowledged sequence must be present exactly when backlog is non-zero.");
+
+        var status = new Contract.RunnerOutboxStatusDto(
+            runnerId,
+            request.InstanceId,
+            request.LastSequence,
+            request.LastAcknowledgedSequence,
+            request.BacklogCount,
+            request.OldestUnacknowledgedSequence,
+            request.FinalHandoffState,
+            request.RunId,
+            request.EnvelopeDigest,
+            request.ObservedAt.ToUniversalTime());
+        var key = DiagnosticKey(runnerId, request.RunId);
+        lock (_gate)
+        {
+            if (_outboxStatuses.TryGetValue(key, out var existing)
+                && request.LastSequence < existing.Status.LastSequence)
+            {
+                throw new InvalidOperationException(
+                    $"Outbox status sequence {request.LastSequence} is older than "
+                    + $"{existing.Status.LastSequence}.");
+            }
+            _outboxStatuses[key] = new OutboxStatusEntry(status, DateTime.UtcNow);
+            TrimOldest(_outboxStatuses, entry => entry.ReceivedAt);
+        }
+        return status;
+    }
+
+    /// <summary>Latest recorded outbox snapshot for one run, for diagnosis.</summary>
+    public Contract.RunnerOutboxStatusDto? GetOutboxStatus(string runnerId, string runId)
+    {
+        lock (_gate)
+        {
+            return _outboxStatuses.TryGetValue(DiagnosticKey(runnerId, runId), out var entry)
+                ? entry.Status
+                : null;
+        }
+    }
+
     public bool TryGetReviewExecutor(string runnerId, string instanceId, out ReviewExecutor executor)
     {
         if (_registrations.TryGetValue(runnerId, out var registration)
@@ -933,6 +1257,48 @@ public sealed class V1ReviewExecutorRegistry
         executor = default!;
         return false;
     }
+
+    /// <summary>Caller must hold <see cref="_gate"/>.</summary>
+    private void ClearCapabilityFailures(string runnerId)
+    {
+        _capabilityFailures.Remove(runnerId);
+        var prefix = DiagnosticKey(runnerId, string.Empty);
+        foreach (var key in _capabilityFailureDeliveries.Keys
+                     .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                     .ToList())
+        {
+            _capabilityFailureDeliveries.Remove(key);
+        }
+    }
+
+    private static void TrimOldest<TValue>(
+        Dictionary<string, TValue> entries,
+        Func<TValue, DateTime> receivedAt)
+    {
+        if (entries.Count <= DiagnosticRetention) return;
+        foreach (var key in entries
+                     .OrderBy(entry => receivedAt(entry.Value))
+                     .Take(entries.Count - DiagnosticRetention)
+                     .Select(entry => entry.Key)
+                     .ToList())
+        {
+            entries.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Composite diagnostic key. The unit separator cannot occur in a runner id,
+    /// idempotency key, or run id, so keys never collide across runners.
+    /// </summary>
+    private static string DiagnosticKey(string runnerId, string suffix)
+        => $"{runnerId}{suffix}";
+
+    private static string HashPayload(Contract.CapabilityFailureRequest request)
+        => Convert.ToHexString(SHA256.HashData(
+                JsonSerializer.SerializeToUtf8Bytes(request, PayloadJson)))
+            .ToLowerInvariant();
+
+    private static readonly JsonSerializerOptions PayloadJson = new(JsonSerializerDefaults.Web);
 
     private sealed record Registration(
         string Name,
@@ -949,6 +1315,32 @@ public sealed class V1ReviewExecutorRegistry
         long Generation,
         IReadOnlyList<Contract.CapabilityHealthDto> Capabilities,
         Contract.HostTelemetrySnapshotDto? Telemetry);
+
+    private sealed record CapabilityFailureState(
+        string Key,
+        string HealthState,
+        string Classification,
+        string Reason,
+        DateTime LastFailureAt,
+        DateTime? CooldownUntil,
+        int ConsecutiveFailures,
+        bool WholeHost);
+
+    private sealed record CapabilityFailureDelivery(
+        string PayloadHash,
+        Contract.CapabilityFailureResponse Response,
+        DateTime ReceivedAt);
+
+    private sealed record OutboxStatusEntry(
+        Contract.RunnerOutboxStatusDto Status,
+        DateTime ReceivedAt);
+
+    public sealed record CapabilityPause(
+        string CapabilityKey,
+        string Classification,
+        string Reason,
+        DateTime CooldownUntil,
+        bool WholeHost);
 
     public sealed record ReviewExecutor(string HostId, IReadOnlySet<string> Capabilities);
 }

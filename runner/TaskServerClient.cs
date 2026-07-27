@@ -76,9 +76,11 @@ public sealed class TaskServerClient : IDisposable
         string runnerId,
         string? configuredClientId = null,
         string? authToken = null,
-        bool usesDurableTaskServer = false)
+        bool usesDurableTaskServer = false,
+        RunnerOptions? options = null)
     {
         _http = http;
+        _options = options;
         _configuredClientId = configuredClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)

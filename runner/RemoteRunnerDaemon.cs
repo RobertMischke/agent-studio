@@ -156,7 +156,12 @@ public sealed class RemoteRunnerDaemon
             shutdown);
         if (!gitCapability.CanPush)
         {
-            await _client.ReportCapabilityFailureAsync(
+            // Diagnosis only: read-only admission is already decided above, so a
+            // server that rejects or does not mount the capability route must not
+            // stop the daemon from coming up and recovering its slots.
+            await CapabilityFailureReporter.TryReportAsync(
+                _client,
+                _log,
                 AgentStudio.TaskServer.Contracts.CapabilityProtocol.GitPush,
                 "GitPushUnavailable",
                 gitCapability.Detail ?? "Git push probe failed.",
