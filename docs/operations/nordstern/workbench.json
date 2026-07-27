@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "nordstern",
+  "title": "★ Nordstern — Agent Studio Zielbild & Umsetzung",
+  "summary": "Der eine Einstiegspunkt fuer das Zielbild-Komplex. Haelt den grossen Bogen (Zielbild in Kuerze, Stand jetzt, die vier Phasen als Schritte, die entschiedenen Leitplanken) und verlinkt als Landkarte in die fokussierten Tiefen-Dokumente: Umsetzungsplan (Detail-Phasen + Kartenzuordnung), Architektur & Protokolle, Ausfuehrungsmodell Container-Default, Modell-Routing-Policy, Log-Retention. Grosser Bogen hier, Detail im jeweiligen verlinkten Doc. Die Tiefen-Docs stehen auf decided und erscheinen unter History.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "updatedAt": "2026-07-27T05:00:00Z",
+  "sourceTaskKeys": ["AGT-2129", "AGT-2130", "AGT-2132", "AGT-2370"]
+}
