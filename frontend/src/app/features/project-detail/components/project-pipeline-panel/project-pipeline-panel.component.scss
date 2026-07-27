@@ -143,7 +143,7 @@
 .pp__row[data-kind='drift'] { --pipeline-step-color: var(--studio-accent-teal); }
 .pp__row[data-kind='module'] { --pipeline-step-color: var(--lane-progress); }
 
-.pp__row--off {
+.pp__row--off, .pp__row--not-applicable {
   --pipeline-step-color: var(--studio-fg-muted);
 
   background: var(--studio-card-muted-bg);

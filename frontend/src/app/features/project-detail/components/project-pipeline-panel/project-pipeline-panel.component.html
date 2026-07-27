@@ -26,12 +26,11 @@
         </summary>
         <div class="pp__rows" role="list">
           @for (step of group.rows; track step.id) {
-            <details class="pp__row"
-                     role="listitem"
-                     [class.pp__row--off]="!step.enabled"
+            <details class="pp__row" role="listitem"
+                     [class.pp__row--off]="!step.enabled" [class.pp__row--not-applicable]="!step.applicable"
                      [class.pp__row--dragging]="draggingStepId() === step.id"
                      [class.pp__row--drop-target]="dragTargetStepId() === step.id"
-                     [attr.data-enabled]="step.enabled"
+                     [attr.data-enabled]="step.enabled" [attr.data-applicable]="step.applicable"
                      [attr.data-kind]="kindKey(step.kind)"
                      [attr.data-testid]="'pipeline-step-row-' + step.id"
                      (dragover)="onStepDragOver($event, step)"
@@ -51,9 +50,10 @@
                       [attr.data-testid]="'pipeline-step-kind-' + step.id"
                       [attr.data-kind]="kindKey(step.kind)"
                       [cacTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
-                <span class="pp__summary-main">
-                  <span class="pp__name"
+                <span class="pp__summary-main"><span class="pp__name"
                         [attr.data-testid]="'pipeline-step-name-' + step.id">{{ step.displayName }}</span>
+                  @if (step.appliesTo !== 'any') { <span class="pp__kind"
+                    [attr.data-testid]="'pipeline-step-stack-' + step.id">{{ step.appliesTo }}</span> }
                 </span>
                 <button type="button"
                         class="pp__info"
@@ -63,6 +63,7 @@
                         tooltipPosition="right"
                         (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
                 <span class="pp__summary-chips">
+                  <span class="pp__state" [class.pp__state--off]="!step.enabled || !step.applicable">{{ !step.applicable ? 'not applicable' : (step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on') }}</span>
                   @if (hasTokenUsage(step)) {
                     <span class="pp__chip pp__chip--tokens"
                           [class.pp__chip--tokens-empty]="step.tokenSum === null"
@@ -106,8 +107,8 @@
                   (enabledChange)="onStepEnabledChange(step.id, $event)" />
                 <span class="pp__summary-caret" aria-hidden="true">▾</span>
               </summary>
-              <div class="pp__details">
-                <p class="pp__purpose">{{ stepPurpose(step) }}</p>
+              <div class="pp__details"><p class="pp__purpose">{{ stepPurpose(step) }}</p>
+                <app-pipeline-step-execution [projectName]="projectName()" [step]="step" />
                 <div class="pp__settings"
                      role="table"
                      [attr.aria-label]="step.displayName + ' settings'">

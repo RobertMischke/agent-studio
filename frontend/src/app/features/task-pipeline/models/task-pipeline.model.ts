@@ -242,6 +242,9 @@ export interface PipelineCatalogueStep {
   pipelineId?: string | null;
   displayName: string;
   kind: StepKind;
+  appliesTo?: 'angular' | 'dotnet' | 'node' | 'any';
+  applicable?: boolean;
+  effectiveExecution?: EffectivePipelineStepExecution;
   phase?: string | null;
   runMode?: StepRunMode | null;
   dependsOn?: string[] | null;
@@ -298,7 +301,29 @@ export type PipelineStepConditionToken =
 /** Envelope of `GET /api/projects/pipeline-catalogue`. */
 export interface PipelineCatalogue {
   pipelineId: string;
+  detectedStacks?: string[];
   steps: PipelineCatalogueStep[];
+}
+
+export interface EffectivePipelineCommand {
+  workingSubdir: string;
+  command: string;
+}
+
+export interface EffectivePipelineStepExecution {
+  executionKind: 'shell' | 'internal';
+  source: string;
+  commands: EffectivePipelineCommand[];
+}
+
+export interface PipelineStepProbeResult {
+  stepId: string;
+  status: 'passed' | 'failed' | 'skipped' | 'not-applicable' | 'unavailable';
+  applicable: boolean;
+  exitCode?: number | null;
+  durationMs: number;
+  output: string;
+  queueWaitMs: number;
 }
 
 /**

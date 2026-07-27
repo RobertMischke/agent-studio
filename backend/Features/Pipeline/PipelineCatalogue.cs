@@ -657,6 +657,7 @@ public static class PipelineCatalogue
                     Id = LintScssStepId,
                     DisplayName = "Frontend stylelint",
                     Kind = StepKind.Tool,
+                    AppliesTo = PipelineStepStacks.Angular,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,

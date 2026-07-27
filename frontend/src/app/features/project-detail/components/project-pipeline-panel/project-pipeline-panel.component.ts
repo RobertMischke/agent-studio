@@ -30,6 +30,7 @@ import {
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
+import { PipelineStepExecutionComponent } from './pipeline-step-execution/pipeline-step-execution.component';
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -45,9 +46,8 @@ import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-st
  * operable at the new location.
  */
 @Component({
-  selector: 'app-project-pipeline-panel',
-  standalone: true,
-  imports: [FormsModule, CliModelSelectorComponent, PipelineStepToggleComponent, TooltipDirective, PipelineHealthBlockComponent],
+  selector: 'app-project-pipeline-panel', standalone: true,
+  imports: [FormsModule, CliModelSelectorComponent, PipelineStepToggleComponent, TooltipDirective, PipelineHealthBlockComponent, PipelineStepExecutionComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
@@ -112,11 +112,9 @@ export class ProjectPipelinePanelComponent {
       const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
       const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
       return {
-        id: step.id,
-        displayName: step.displayName,
-        kind: step.kind,
-        runMode: step.runMode ?? '',
-        dependsOn: step.dependsOn ?? [],
+        id: step.id, displayName: step.displayName, kind: step.kind,
+        appliesTo: step.appliesTo ?? 'any', applicable: step.applicable ?? true,
+        effectiveExecution: step.effectiveExecution ?? { executionKind: 'internal', source: 'runtime', commands: [] }, runMode: step.runMode ?? '', dependsOn: step.dependsOn ?? [],
         idempotent: step.idempotent ?? false,
         stub: step.stub ?? false,
         deferred: step.deferred ?? false,
