@@ -1,0 +1,11 @@
+.git
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+results
+artifacts
+docs/quality
+**/*.log
+**/cli-output.log
