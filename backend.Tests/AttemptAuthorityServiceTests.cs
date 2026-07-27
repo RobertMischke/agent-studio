@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using Xunit;
 
@@ -493,6 +495,194 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var takeover = service.AcquireRun(
             "AGT-1", "PROJ-1", first.AttemptId, "runner-b", "host-b", 30, "run-b").RunAttempt!;
         Assert.Equal(first.LastFence + 1, takeover.LastFence);
+    }
+
+    [Fact]
+    public void Startup_migration_archives_old_terminal_history_and_keeps_current_and_nonterminal_records()
+    {
+        var now = new DateTime(2026, 7, 1, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var oldRun = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 60, "old-run-create").RunAttempt!;
+        service.SettleRun(
+            new AttemptWriteReference(
+                oldRun.AttemptId,
+                oldRun.LastFence,
+                oldRun.AuthorityEpoch,
+                "old-run-settle"),
+            "done",
+            "sha-old",
+            null);
+        var oldReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1",
+            "PROJ-1",
+            "sha-old",
+            oldRun.AttemptId,
+            "req",
+            "policy",
+            [],
+            "old-review-create")).ReviewAttempt!;
+        var oldClaim = service.ClaimReview(
+            oldReview.AttemptId,
+            "reviewer",
+            "review-host",
+            60,
+            "old-review-claim").ReviewAttempt!;
+        service.SettleReview(new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                oldClaim.AttemptId,
+                oldClaim.LastFence,
+                oldClaim.AuthorityEpoch,
+                "old-review-settle"),
+            "sha-old",
+            ReviewTerminalOutcome.InfrastructureFailure,
+            "SnapshotUnavailable"));
+
+        var currentRun = service.AcquireRun(
+            "AGT-1",
+            "PROJ-1",
+            oldRun.AttemptId,
+            "runner-b",
+            "host-b",
+            60,
+            "current-run-create").RunAttempt!;
+        service.SettleRun(
+            new AttemptWriteReference(
+                currentRun.AttemptId,
+                currentRun.LastFence,
+                currentRun.AuthorityEpoch,
+                "current-run-settle"),
+            "done",
+            "sha-current",
+            null);
+        var currentReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1",
+            "PROJ-1",
+            "sha-current",
+            currentRun.AttemptId,
+            "req",
+            "policy",
+            [],
+            "current-review-create")).ReviewAttempt!;
+        var nonterminalRun = service.AcquireRun(
+            "AGT-2",
+            "PROJ-1",
+            null,
+            "runner-c",
+            "host-c",
+            60,
+            "nonterminal-run-create").RunAttempt!;
+
+        var livePath = Path.Combine(_root, AttemptAuthorityService.RelativePath);
+        var legacyJson = JsonNode.Parse(File.ReadAllText(livePath))!.AsObject();
+        legacyJson["schemaVersion"] = 2;
+        File.WriteAllText(livePath, legacyJson.ToJsonString(new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        }));
+
+        now = now.AddDays(15);
+        var legacyLiveJson = File.ReadAllText(livePath);
+        var failingWriter = new ControllableAtomicJsonFileWriter
+        {
+            ShouldFail = (path, _) => string.Equals(
+                path,
+                livePath,
+                StringComparison.OrdinalIgnoreCase),
+        };
+        Assert.Throws<IOException>(() => NewService(() => now, failingWriter));
+        Assert.Equal(legacyLiveJson, File.ReadAllText(livePath));
+
+        var restarted = NewService(() => now);
+        var archivePath = Assert.Single(
+            Directory.GetFiles(
+                Path.GetDirectoryName(livePath)!,
+                "attempt-authority.archive-*.json"));
+        using var liveDocument = JsonDocument.Parse(File.ReadAllText(livePath));
+        using var archiveDocument = JsonDocument.Parse(File.ReadAllText(archivePath));
+
+        var liveRunIds = liveDocument.RootElement
+            .GetProperty("runAttempts")
+            .EnumerateArray()
+            .Select(record => record.GetProperty("attemptId").GetString())
+            .ToList();
+        var liveReviewIds = liveDocument.RootElement
+            .GetProperty("reviewAttempts")
+            .EnumerateArray()
+            .Select(record => record.GetProperty("attemptId").GetString())
+            .ToList();
+        var archivedRun = Assert.Single(
+            archiveDocument.RootElement.GetProperty("runAttempts").EnumerateArray());
+        var archivedReview = Assert.Single(
+            archiveDocument.RootElement.GetProperty("reviewAttempts").EnumerateArray());
+
+        Assert.DoesNotContain(oldRun.AttemptId, liveRunIds);
+        Assert.DoesNotContain(oldReview.AttemptId, liveReviewIds);
+        Assert.Contains(currentRun.AttemptId, liveRunIds);
+        Assert.Contains(nonterminalRun.AttemptId, liveRunIds);
+        Assert.Contains(currentReview.AttemptId, liveReviewIds);
+        Assert.Equal(oldRun.AttemptId, archivedRun.GetProperty("attemptId").GetString());
+        Assert.Equal(oldReview.AttemptId, archivedReview.GetProperty("attemptId").GetString());
+        Assert.Contains(
+            "settle:old-run-settle",
+            archivedRun.GetProperty("idempotencyKeys").EnumerateArray().Select(key => key.GetString()));
+        Assert.Contains(
+            "settle:old-review-settle",
+            archivedReview.GetProperty("idempotencyKeys").EnumerateArray().Select(key => key.GetString()));
+
+        var liveProjection = restarted.GetTaskProjection("AGT-1");
+        var historicalProjection = restarted.GetTaskProjection("AGT-1", includeArchived: true);
+        Assert.Single(liveProjection.RunAttempts);
+        Assert.Single(liveProjection.ReviewAttempts);
+        Assert.Equal(2, historicalProjection.RunAttempts.Count);
+        Assert.Equal(2, historicalProjection.ReviewAttempts.Count);
+        Assert.Equal(oldRun.AttemptId, restarted.GetRun(oldRun.AttemptId)!.AttemptId);
+        Assert.Equal(oldReview.AttemptId, restarted.GetReview(oldReview.AttemptId)!.AttemptId);
+
+        var liveAfterMigration = File.ReadAllText(livePath);
+        var archiveAfterMigration = File.ReadAllText(archivePath);
+        _ = NewService(() => now.AddHours(1));
+        Assert.Equal(liveAfterMigration, File.ReadAllText(livePath));
+        Assert.Equal(archiveAfterMigration, File.ReadAllText(archivePath));
+
+        var sameDayWriter = new ControllableAtomicJsonFileWriter();
+        var sameDayService = NewService(() => now.AddHours(2), sameDayWriter);
+        sameDayService.AcquireRun(
+            "AGT-3",
+            "PROJ-1",
+            null,
+            "runner-d",
+            "host-d",
+            60,
+            "same-day-run-create");
+        Assert.Equal(0, sameDayWriter.WritesFor(archivePath));
+        Assert.Equal(1, sameDayWriter.WritesFor(livePath));
+    }
+
+    [Fact]
+    public void Startup_and_live_projection_do_not_load_archives()
+    {
+        var service = NewService();
+        var run = service.AcquireRun(
+            "AGT-1",
+            "PROJ-1",
+            null,
+            "runner",
+            "host",
+            60,
+            "run-create").RunAttempt!;
+        var livePath = Path.Combine(_root, AttemptAuthorityService.RelativePath);
+        var archivePath = Path.Combine(
+            Path.GetDirectoryName(livePath)!,
+            "attempt-authority.archive-2026-07-01.json");
+        File.WriteAllText(archivePath, "{ invalid archive");
+
+        var restarted = NewService();
+        var liveProjection = restarted.GetTaskProjection("AGT-1");
+
+        Assert.Equal(run.AttemptId, liveProjection.CurrentRunAttempt!.AttemptId);
+        Assert.Throws<InvalidDataException>(
+            () => restarted.GetTaskProjection("AGT-1", includeArchived: true));
     }
 
     private (RunAttemptDto Run, ReviewAttemptDto Review) CompletedRunWithReview(AttemptAuthorityService service, string sha)

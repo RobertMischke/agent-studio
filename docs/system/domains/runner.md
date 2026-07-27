@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-28
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -133,7 +133,20 @@ state.
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
-  forget.
+  forget. Terminal attempts older than 14 days by default are compacted at most
+  once per UTC day into
+  `<TaskRepository>/.metadata/attempt-authority.archive-YYYY-MM-DD.json`.
+  `AttemptAuthority:TerminalRetentionDays` overrides that positive-day
+  retention. Current attempts, non-terminal attempts, current review retry
+  ancestry, and source runs still needed by retained reviews remain in the live
+  store. The bounded retry ancestry needed to enforce the infrastructure retry
+  budget also stays live. Schema version 3 performs the initial rotation during
+  the first start after upgrade. Normal startup, claim, fencing, and persistence
+  load only `attempt-authority.json`; explicit history reads may load the
+  archives.
+  Archived records retain their complete scoped idempotency keys for debugging,
+  but those keys leave the operational replay boundary when their attempt is
+  archived.
 - `orchestrator-engine/`: the separate API-only flow executor. Its bounded
   ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
   loops claim server-owned orchestration runs through

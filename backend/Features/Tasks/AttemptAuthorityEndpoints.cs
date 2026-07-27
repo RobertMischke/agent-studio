@@ -8,7 +8,7 @@ public static class AttemptAuthorityEndpoints
         var group = app.MapGroup("/api/attempts");
 
         group.MapGet("/tasks/{taskKey}", (string taskKey, AttemptAuthorityService authority) =>
-            Results.Ok(authority.GetTaskProjection(taskKey)));
+            Results.Ok(authority.GetTaskProjection(taskKey, includeArchived: true)));
 
         group.MapGet("/runs/{attemptId}", (string attemptId, AttemptAuthorityService authority) =>
             authority.GetRun(attemptId) is { } run ? Results.Ok(run) : Results.NotFound());

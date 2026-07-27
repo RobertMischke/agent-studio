@@ -13,8 +13,12 @@ namespace AgentStudio.Runner;
 public sealed class AttemptAuthorityService
 {
     public const string RelativePath = ".metadata/attempt-authority.json";
+    public const int DefaultTerminalRetentionDays = 14;
     public const int ReviewInfrastructureRetryBudget = 3;
     public const string UnmaterializableReviewSubjectReason = "review-subject-unmaterialisierbar";
+    private const int CurrentSchemaVersion = 3;
+    private const int ArchiveSchemaVersion = 1;
+    private const string ArchiveFilePattern = "attempt-authority.archive-*.json";
     private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan LegacyEnvelopeTerminalizeGrace = TimeSpan.FromMinutes(15);
@@ -28,6 +32,7 @@ public sealed class AttemptAuthorityService
     private readonly ILogger<AttemptAuthorityService> _logger;
     private readonly Func<DateTime> _utcNow;
     private readonly IAtomicJsonFileWriter _writer;
+    private readonly TimeSpan _terminalRetention;
     private AuthorityState _state;
 
     public AttemptAuthorityService(
@@ -42,8 +47,16 @@ public sealed class AttemptAuthorityService
         var root = configuration["TaskRepository"];
         _path = string.IsNullOrWhiteSpace(root) ? null : Path.Combine(root, RelativePath);
         _state = Load();
+        var requiresCompactionMigration = _state.SchemaVersion < CurrentSchemaVersion;
         NormalizeLoadedState();
         if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
+        var retentionDays = configuration.GetValue<int?>("AttemptAuthority:TerminalRetentionDays")
+            ?? DefaultTerminalRetentionDays;
+        if (retentionDays <= 0)
+            throw new InvalidDataException("AttemptAuthority:TerminalRetentionDays must be greater than zero.");
+        _terminalRetention = TimeSpan.FromDays(retentionDays);
+        if (requiresCompactionMigration && _path is not null)
+            PersistLocked(forceCompaction: true);
     }
 
     internal AttemptAuthorityService(ILogger<AttemptAuthorityService> logger, Func<DateTime>? utcNow = null)
@@ -830,14 +843,14 @@ public sealed class AttemptAuthorityService
 
     public RunAttemptDto? GetRun(string attemptId)
     {
-        lock (_gate) return FindRun(attemptId) is { } run ? ToDto(run) : null;
+        lock (_gate) return FindRunForHistory(attemptId) is { } run ? ToDto(run) : null;
     }
 
     public AgentStudio.TaskServer.Contracts.ResultHandoffDto? GetResultHandoff(string attemptId)
     {
         lock (_gate)
         {
-            var run = FindRun(attemptId);
+            var run = FindRunForHistory(attemptId);
             if (run?.ResultEnvelope is null || Blank(run.ResultEnvelopeDigest)) return null;
             var acknowledgedAt = run.TerminalAt ?? run.CreatedAt;
             return new AgentStudio.TaskServer.Contracts.ResultHandoffDto(
@@ -852,16 +865,29 @@ public sealed class AttemptAuthorityService
 
     public ReviewAttemptDto? GetReview(string attemptId)
     {
-        lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
+        lock (_gate) return FindReviewForHistory(attemptId) is { } review ? ToDto(review) : null;
     }
 
-    public AttemptAuthorityProjection GetTaskProjection(string taskKey)
+    public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
         lock (_gate)
         {
             var key = Normalize(taskKey);
-            var runs = _state.RunAttempts.Where(x => Same(x.TaskKey, key)).Select(ToDto).ToList();
-            var reviews = _state.ReviewAttempts.Where(x => Same(x.TaskKey, key)).Select(ToDto).ToList();
+            var archives = includeArchived ? LoadArchivesForHistory() : [];
+            var runs = _state.RunAttempts
+                .Concat(archives.SelectMany(archive => archive.RunAttempts))
+                .Where(x => Same(x.TaskKey, key))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x.CreatedAt)
+                .Select(ToDto)
+                .ToList();
+            var reviews = _state.ReviewAttempts
+                .Concat(archives.SelectMany(archive => archive.ReviewAttempts))
+                .Where(x => Same(x.TaskKey, key))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x.CreatedAt)
+                .Select(ToDto)
+                .ToList();
             var currentRun = CurrentRun(key);
             var currentReview = CurrentReview(key);
             _state.CurrentSubjectByTask.TryGetValue(key, out var subject);
@@ -1062,6 +1088,14 @@ public sealed class AttemptAuthorityService
 
     private RunAttemptRecord? FindRun(string id) => _state.RunAttempts.FirstOrDefault(x => Same(x.AttemptId, id));
     private ReviewAttemptRecord? FindReview(string id) => _state.ReviewAttempts.FirstOrDefault(x => Same(x.AttemptId, id));
+    private RunAttemptRecord? FindRunForHistory(string id)
+        => FindRun(id) ?? LoadArchivesForHistory()
+            .SelectMany(archive => archive.RunAttempts)
+            .FirstOrDefault(x => Same(x.AttemptId, id));
+    private ReviewAttemptRecord? FindReviewForHistory(string id)
+        => FindReview(id) ?? LoadArchivesForHistory()
+            .SelectMany(archive => archive.ReviewAttempts)
+            .FirstOrDefault(x => Same(x.AttemptId, id));
     private RunAttemptRecord? FindIdempotentRun(string taskKey, string key) => _state.RunAttempts.FirstOrDefault(
         x => Same(x.TaskKey, taskKey) && x.IdempotencyKeys.Contains(key));
     private ReviewAttemptRecord? FindIdempotentReview(string taskKey, string key) => _state.ReviewAttempts.FirstOrDefault(
@@ -1093,22 +1127,9 @@ public sealed class AttemptAuthorityService
             _state.CurrentSubjectByTask ?? [], StringComparer.OrdinalIgnoreCase);
         _state.RunAttempts ??= [];
         _state.ReviewAttempts ??= [];
-        foreach (var run in _state.RunAttempts)
-        {
-            run.IdempotencyKeys ??= [];
-            if (migrateUnscopedIdempotency)
-                run.IdempotencyKeys = ExpandLegacyDeliveryKeys(
-                    run.IdempotencyKeys, ["acquire", "renew", "release", "write", "evidence", "settle"]);
-            run.EvidenceDigests ??= [];
-        }
+        NormalizeRecords(_state.RunAttempts, _state.ReviewAttempts, migrateUnscopedIdempotency);
         foreach (var review in _state.ReviewAttempts)
         {
-            review.IdempotencyKeys ??= [];
-            if (migrateUnscopedIdempotency)
-                review.IdempotencyKeys = ExpandLegacyDeliveryKeys(
-                    review.IdempotencyKeys, ["create", "renew", "claim", "settle"]);
-            review.Reports ??= [];
-            review.Subject.EvidenceDigestInputs ??= [];
             if (Blank(review.CurrentClaimDeliveryKey)
                 && review.State == AttemptLifecycleState.Leased)
             {
@@ -1123,7 +1144,7 @@ public sealed class AttemptAuthorityService
                     review.CurrentClaimDeliveryKey = historicalClaims[0];
             }
         }
-        _state.SchemaVersion = 2;
+        _state.SchemaVersion = CurrentSchemaVersion;
     }
 
     private static HashSet<string> ExpandLegacyDeliveryKeys(
@@ -1132,11 +1153,12 @@ public sealed class AttemptAuthorityService
         .SelectMany(key => scopes.Select(scope => DeliveryKey(scope, key)))
         .ToHashSet(StringComparer.Ordinal);
 
-    private void PersistLocked()
+    private void PersistLocked(bool forceCompaction = false)
     {
         if (_path is null) return;
         try
         {
+            CompactTerminalAttemptsLocked(forceCompaction);
             _writer.Write(_path, JsonSerializer.Serialize(_state, JsonOptions));
         }
         catch
@@ -1148,6 +1170,175 @@ public sealed class AttemptAuthorityService
             NormalizeLoadedState();
             if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
             throw;
+        }
+    }
+
+    private void CompactTerminalAttemptsLocked(bool force)
+    {
+        var now = _utcNow();
+        if (!force && _state.LastCompactedAt?.Date >= now.Date)
+            return;
+
+        var cutoff = now.Subtract(_terminalRetention);
+        var protectedReviewIds = new HashSet<string>(
+            _state.CurrentReviewByTask.Values,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var review in _state.ReviewAttempts.Where(review => !Terminal(review.State)))
+            protectedReviewIds.Add(review.AttemptId);
+
+        var pendingReviewIds = new Stack<(string AttemptId, int Depth)>(
+            protectedReviewIds.Select(id => (id, 0)));
+        while (pendingReviewIds.TryPop(out var pending))
+        {
+            var review = FindReview(pending.AttemptId);
+            if (review is null
+                || Blank(review.SourceReviewAttemptId)
+                || pending.Depth >= ReviewInfrastructureRetryBudget)
+                continue;
+            if (protectedReviewIds.Add(review.SourceReviewAttemptId!))
+                pendingReviewIds.Push((review.SourceReviewAttemptId!, pending.Depth + 1));
+        }
+
+        var archivedReviews = _state.ReviewAttempts
+            .Where(review => EligibleForArchive(
+                review.State,
+                review.TerminalAt,
+                cutoff,
+                protectedReviewIds.Contains(review.AttemptId)))
+            .ToList();
+        var archivedReviewIds = archivedReviews
+            .Select(review => review.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var retainedReviews = _state.ReviewAttempts
+            .Where(review => !archivedReviewIds.Contains(review.AttemptId))
+            .ToList();
+        var protectedRunIds = new HashSet<string>(
+            _state.CurrentRunByTask.Values,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var review in retainedReviews)
+            protectedRunIds.Add(review.SourceRunAttemptId);
+        foreach (var subject in _state.CurrentSubjectByTask.Values)
+            protectedRunIds.Add(subject.SourceRunAttemptId);
+
+        var archivedRuns = _state.RunAttempts
+            .Where(run => EligibleForArchive(
+                run.State,
+                run.TerminalAt,
+                cutoff,
+                protectedRunIds.Contains(run.AttemptId)))
+            .ToList();
+
+        if (archivedRuns.Count > 0 || archivedReviews.Count > 0)
+        {
+            var archivePath = ArchivePath(now);
+            var archive = LoadArchive(archivePath, allowMissing: true);
+            archive.SchemaVersion = ArchiveSchemaVersion;
+            archive.ArchivedAt = now;
+            archive.RunAttempts = archive.RunAttempts
+                .Concat(archivedRuns)
+                .DistinctBy(run => run.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(run => run.CreatedAt)
+                .ToList();
+            archive.ReviewAttempts = archive.ReviewAttempts
+                .Concat(archivedReviews)
+                .DistinctBy(review => review.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(review => review.CreatedAt)
+                .ToList();
+            _writer.Write(archivePath, JsonSerializer.Serialize(archive, JsonOptions));
+
+            var archivedRunIds = archivedRuns
+                .Select(run => run.AttemptId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _state.RunAttempts.RemoveAll(run => archivedRunIds.Contains(run.AttemptId));
+            _state.ReviewAttempts.RemoveAll(review => archivedReviewIds.Contains(review.AttemptId));
+            _logger.LogInformation(
+                "attempt-authority-compacted archive={ArchivePath} runs={RunCount} reviews={ReviewCount} cutoff={Cutoff:o}",
+                archivePath,
+                archivedRuns.Count,
+                archivedReviews.Count,
+                cutoff);
+        }
+
+        _state.LastCompactedAt = now;
+    }
+
+    private static bool EligibleForArchive(
+        AttemptLifecycleState state,
+        DateTime? terminalAt,
+        DateTime cutoff,
+        bool protectedRecord)
+        => !protectedRecord
+           && Terminal(state)
+           && terminalAt is { } completedAt
+           && completedAt < cutoff;
+
+    private string ArchivePath(DateTime archivedAt)
+    {
+        var directory = Path.GetDirectoryName(_path)
+            ?? throw new InvalidOperationException("Attempt authority path has no parent directory.");
+        return Path.Combine(
+            directory,
+            $"attempt-authority.archive-{archivedAt:yyyy-MM-dd}.json");
+    }
+
+    private IReadOnlyList<AuthorityArchive> LoadArchivesForHistory()
+    {
+        if (_path is null)
+            return [];
+        var directory = Path.GetDirectoryName(_path);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            return [];
+        return Directory.EnumerateFiles(directory, ArchiveFilePattern)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => LoadArchive(path, allowMissing: false))
+            .ToList();
+    }
+
+    private AuthorityArchive LoadArchive(string path, bool allowMissing)
+    {
+        if (allowMissing && !File.Exists(path))
+            return new AuthorityArchive();
+        try
+        {
+            var archive = JsonSerializer.Deserialize<AuthorityArchive>(
+                File.ReadAllText(path),
+                JsonOptions) ?? new AuthorityArchive();
+            archive.RunAttempts ??= [];
+            archive.ReviewAttempts ??= [];
+            NormalizeRecords(archive.RunAttempts, archive.ReviewAttempts, migrateUnscopedIdempotency: false);
+            return archive;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Attempt authority archive '{path}' could not be loaded.",
+                ex);
+        }
+    }
+
+    private static void NormalizeRecords(
+        IEnumerable<RunAttemptRecord> runs,
+        IEnumerable<ReviewAttemptRecord> reviews,
+        bool migrateUnscopedIdempotency)
+    {
+        foreach (var run in runs)
+        {
+            run.IdempotencyKeys ??= [];
+            if (migrateUnscopedIdempotency)
+                run.IdempotencyKeys = ExpandLegacyDeliveryKeys(
+                    run.IdempotencyKeys, ["acquire", "renew", "release", "write", "evidence", "settle"]);
+            run.EvidenceDigests ??= [];
+        }
+        foreach (var review in reviews)
+        {
+            review.IdempotencyKeys ??= [];
+            if (migrateUnscopedIdempotency)
+                review.IdempotencyKeys = ExpandLegacyDeliveryKeys(
+                    review.IdempotencyKeys, ["create", "renew", "claim", "settle"]);
+            review.Reports ??= [];
+            review.Subject ??= new ReviewSubjectRecord();
+            review.Subject.EvidenceDigestInputs ??= [];
         }
     }
 
@@ -1209,14 +1400,23 @@ public sealed class AttemptAuthorityService
 
     private sealed class AuthorityState
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public long AuthorityEpoch { get; set; } = 1;
+        public DateTime? LastCompactedAt { get; set; }
         public Dictionary<string, long> LastFenceByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public List<RunAttemptRecord> RunAttempts { get; set; } = [];
         public List<ReviewAttemptRecord> ReviewAttempts { get; set; } = [];
         public Dictionary<string, string> CurrentRunByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> CurrentReviewByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, ReviewSubjectRecord> CurrentSubjectByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class AuthorityArchive
+    {
+        public int SchemaVersion { get; set; } = ArchiveSchemaVersion;
+        public DateTime ArchivedAt { get; set; }
+        public List<RunAttemptRecord> RunAttempts { get; set; } = [];
+        public List<ReviewAttemptRecord> ReviewAttempts { get; set; } = [];
     }
 
     private sealed class AttemptLeaseRecord
