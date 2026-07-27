@@ -18,7 +18,7 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5031:5031"
+      - "127.0.0.1:${STUDIO_API_PORT:-5031}:5031"
     volumes:
       - workspace:/data/workspace
       - projects:/data/projects
@@ -33,7 +33,7 @@ services:
     depends_on:
       - orchestrator-api
     ports:
-      - "4011:80"
+      - "${STUDIO_UI_PORT:-4011}:80"
 
   agent-host-coding:
     build:
@@ -76,7 +76,7 @@ services:
     profiles: ["distributed"]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5071:5071"
+      - "127.0.0.1:${STUDIO_TASKSERVER_PORT:-5071}:5071"
     volumes:
       - orchestrator-data:/var/lib/agent-orchestrator
 
@@ -98,7 +98,7 @@ services:
     depends_on:
       - task-server
     ports:
-      - "127.0.0.1:5072:5072"
+      - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
 
 volumes:
   workspace:
