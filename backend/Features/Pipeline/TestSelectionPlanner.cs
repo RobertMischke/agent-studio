@@ -98,6 +98,29 @@ public static class TestSelectionPlanner
         var fullTests = verifyPlan.Commands.Where(command => command.Kind == VerifyCommandKind.Test).ToList();
         var nonTests = verifyPlan.Commands.Where(command => command.Kind != VerifyCommandKind.Test).ToList();
 
+        // Build-only stage (the pre-develop merge gate): compile evidence without
+        // any test command - not the impacted selection, not the continuous
+        // baseline. The omitted inventory stays in the audit so the evidence log
+        // says plainly what was NOT run.
+        if (level == TestExecutionLevels.BuildOnly)
+        {
+            const string buildOnlyReason =
+                "build-only stage: build commands only, the test suite stays with the auto-review gate";
+            return new StagedVerifyPlan(nonTests, new TestSelectionAudit
+            {
+                Level = level,
+                Lane = lane ?? "",
+                DiffInput = diff,
+                HistoryInput = history,
+                SelectedCommands = [],
+                OmittedTestCommands = fullTests.Select(Describe).ToList(),
+                Reasons = [buildOnlyReason],
+                Selector = "build-only",
+                FullSuiteRequired = false,
+                FullSuiteRan = false,
+            });
+        }
+
         if (level == TestExecutionLevels.Full)
         {
             var fullReason = fullSuiteRequired

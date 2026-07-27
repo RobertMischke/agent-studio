@@ -882,6 +882,14 @@ public record BuildProfile
 /// <summary>Stable test levels used in settings, evidence, and gate logs.</summary>
 public static class TestExecutionLevels
 {
+    /// <summary>
+    /// Compile evidence only: the derived build / lint commands run, every test
+    /// command (including the continuous baseline) is deliberately left out.
+    /// This is the cheap stage the pre-develop merge gate uses - the full test
+    /// evidence for a card was already produced by the auto-review gate, so
+    /// re-running the suite on the merge result would only duplicate it.
+    /// </summary>
+    public const string BuildOnly = "build-only";
     public const string Continuous = "continuous";
     public const string WorkPackage = "work-package";
     public const string Full = "full";
@@ -889,6 +897,7 @@ public static class TestExecutionLevels
     public static string Normalize(string? value, string fallback = WorkPackage)
         => value?.Trim().ToLowerInvariant() switch
         {
+            BuildOnly => BuildOnly,
             Continuous => Continuous,
             WorkPackage => WorkPackage,
             Full => Full,

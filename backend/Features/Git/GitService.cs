@@ -65,6 +65,13 @@ public enum MergeIntoIntegrationOutcome
     PushedForReview,
     /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
     Conflict,
+    /// <summary>
+    /// The merge itself succeeded but the pre-develop build gate found the MERGE
+    /// RESULT red, so the integration branch was rolled back to its exact
+    /// pre-merge tip and nothing was pushed. The delivery is not integrated and
+    /// needs a steer round - never silently "delivered".
+    /// </summary>
+    GateFailed,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
     Error,
 }
@@ -3037,7 +3044,38 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
-        return MergeRefIntoIntegration(repoRoot, taskBranch, integrationBranch);
+        return MergeRefIntoIntegration(
+            repoRoot, taskBranch, integrationBranch, SynchronizeRefForIntegration(repoRoot, integrationBranch));
+    }
+
+    /// <summary>
+    /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and returns the
+    /// remote-tracking ref the merge should fast-forward onto first, or null when
+    /// there is nothing to synchronize against (no origin, branch not on origin,
+    /// origin unreachable).
+    ///
+    /// <para>The local task-branch merge used to skip this entirely - only the
+    /// remote-delivery path synchronized - so a locally diverged integration
+    /// branch silently absorbed delivery after delivery on a stale tip, and every
+    /// later merge attempt reported success while origin never saw the work. The
+    /// synchronization is now symmetric; genuine divergence is surfaced by
+    /// <see cref="MergeRefIntoIntegration"/> as an explicit error instead.</para>
+    /// </summary>
+    private string? SynchronizeRefForIntegration(string repoRoot, string integrationBranch)
+    {
+        if (!HasRemote(repoRoot, "origin")) return null;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        var fetchTarget = $"+refs/heads/{integrationBranch}:{remoteIntegrationRef}";
+        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        if (fetchCode == 0) return remoteIntegrationRef;
+
+        // Branch not on origin yet, or origin is unreachable: merge locally as
+        // before rather than blocking the delivery on infrastructure.
+        _logger.LogInformation(
+            "Merge-into-develop: could not fetch origin/{Integration} at {Path}; merging without an origin sync: {Error}",
+            integrationBranch, repoRoot, fetchError.Trim());
+        return null;
     }
 
     /// <summary>
@@ -3158,9 +3196,12 @@ public class GitService
                 repoRoot, "merge", "--ff-only", synchronizeFromRemoteRef);
             if (syncCode != 0)
             {
+                _logger.LogWarning(
+                    "Merge-into-develop: integration branch {Integration} at {Path} diverged from origin; refusing to merge onto a stale tip: {Error}",
+                    integrationBranch, repoRoot, syncError.Trim());
                 return MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
-                    error: $"Local integration branch '{integrationBranch}' diverged from origin; refusing to merge into a stale target: {syncError.Trim()}");
+                    error: $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries. ({syncError.Trim()})");
             }
         }
 
