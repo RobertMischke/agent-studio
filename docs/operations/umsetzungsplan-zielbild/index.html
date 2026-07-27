@@ -104,6 +104,15 @@
 </div>
 
 <h2 id="phasen"><span class="no">3</span>Der Plan in vier Phasen</h2>
+<div class="box accent">
+  <h4>Vollzugsstand 27.07. (Umsetzungs-Marathon)</h4>
+  <ul>
+    <li><b>P0 erledigt + deployt:</b> Envelope-Trio wiederhergestellt (Runner + Server-Härtung mit Karenz), PreDevelopBuildGate (build-only, Rollback, Push nur der freigegebenen SHA), Divergenz-Fix im lokalen Merge-Pfad, Review-Plane-Diagnoserouten (2374). Runner-Binary auf agent-runner-01 erneuert, Backend neu gestartet, <code>repositoryUrl</code> überlebt den Restart.</li>
+    <li><b>P1 erledigt:</b> Dockerfiles je Komponente, 7 Images bauen auf dem Remote-Host, Compose-Smoke grün (API+UI antworten aus Containern), Installer mit Container-Default + systemd-Opt-out; Token-Hygiene (runner.env/token nie im Build-Kontext).</li>
+    <li><b>Direkt-Wellen statt Task-Umweg:</b> 11 Karten umgesetzt/integriert (2375, 2382, 2378, 2381, 2377, 2350, 2380, 2374, 2302+2376 koordiniert, TE-20 verifiziert); 4 Orphan-WIP-Bereinigungen auf develop; main→develop-Sync-Merge. 2 adversariale Review-Wellen (42 Agenten) mit 25 gefixten Findings.</li>
+    <li><b>Nächster P2-Baustein liegt schon:</b> Host-Kapazität als eine Quelle der Wahrheit (develop). Offen: Eskalierten-Requeue-Wellen, Karten-Buchhaltung, P2-Fortsetzung (Control-Plane, CAR-Kette), P3.</li>
+  </ul>
+</div>
 <figure>
 <svg viewBox="0 0 1040 150" role="img" aria-label="Vier Phasen">
   <rect class="s-cont" x="16" y="40" width="220" height="70" rx="9"/><text class="s-label" x="126" y="68" text-anchor="middle">P0 · Pipeline heilen</text><text class="s-sub" x="126" y="88" text-anchor="middle">Runner-v1 · Build-Gate · Reste</text>
