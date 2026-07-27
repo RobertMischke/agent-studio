@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "zielbild-komponenten-protokolle",
+  "title": "Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy",
+  "summary": "Aus dem Nacht-Incident 27.07. destilliertes Architektur-Zielbild. Kern-Befund: 3 von 5 Blockern waren Protokoll-Drift Runner<->Backend (POST/PUT-Capabilities, Log-Ingest-Canonical-Felder, fehlender ResultEnvelope -> alle Reviews eskalieren), und develop ist eine kaputte Integrations-Branch (orphaned Workbench-Typen aus einem frueheren wip-Salvage, baut nicht). Beschreibt Komponenten (Task-Server, agent-host, CAR, Studio, workspace-/projekt-repos) + ihre Vertraege (v1-Plane, Log-Ingest, Attempt-Authority, Artifact-Push, Delivery). Beantwortet Roberts 4 Steuerungsfragen: Schnitt (Feature=Task ja, Architektur/Binary=koordinierte Change nein), Build (Build-Gate vor Integration fehlt), Deploy (Runner+Backend synchron+protokoll-kompatibel, gepaarte Releases). 5 offene Entscheidungen E1-E5: Runner-Update-Weg, develop reparieren vs. resetten, Build-Gate scharf, Schnitt-Politik, gepaarte Releases.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-27T02:50:00Z",
+  "sourceTaskKeys": []
+}
