@@ -83,6 +83,61 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void List_ProjectsDurableDecisionReceipt()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "settled-decision");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Settled decision</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 2,
+            "id": "settled-decision",
+            "title": "Settled decision",
+            "summary": "Durable receipt",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "decided",
+            "phase": "decision-ready",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-26T10:02:00Z",
+            "lifecycleHistory": [
+              { "state": "decided", "editedBy": "Robert", "editedAt": "2026-07-26T10:02:00Z" }
+            ],
+            "decision": {
+              "outcome": "feature-spawn",
+              "state": "succeeded",
+              "operationId": "workbench-ui-settled",
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sourceFingerprint": null,
+              "preparedAt": "2026-07-26T10:00:00Z",
+              "preparedBy": "Robert",
+              "confirmedAt": "2026-07-26T10:01:00Z",
+              "confirmedBy": "Robert",
+              "decidedAt": "2026-07-26T10:02:00Z",
+              "spawnedTaskKeys": ["AGT-2400"],
+              "taskDraft": {
+                "title": "Implement the decision",
+                "goal": "Ship the confirmed Workbench direction.",
+                "acceptanceCriteria": ["The direction is implemented and verified."],
+                "evidenceLinks": [],
+                "relatedTaskKeys": [],
+                "initialLane": "1-preparation",
+                "mode": "coding",
+                "taskType": "feature"
+              }
+            }
+          }
+          """);
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.Equal("decided", item.Status);
+        Assert.Equal("succeeded", item.DecisionStage);
+        Assert.Equal("feature-spawn", item.Decision!.Outcome);
+        Assert.Equal(new[] { "AGT-2400" }, item.Decision.SpawnedTaskKeys);
+    }
+
+    [Fact]
     public void List_SchemaTwoRejectsDuplicateLegacyStateAndMismatchedHistory()
     {
         var dir = Path.Combine(_root, "docs", "workbenches", "duplicate-state");
@@ -224,6 +279,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var clean = service.Read("Project", "provenance")!;
         Assert.Equal(head, clean.Revision);
         Assert.False(clean.WorkingTreeModified);
+        Assert.NotNull(clean.Fingerprint);
 
         File.AppendAllText(Path.Combine(_root, "docs", "workbenches", "provenance", "index.html"),
             "<p>Uncommitted bytes</p>");
@@ -231,6 +287,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
 
         Assert.Null(dirty.Revision);
         Assert.True(dirty.WorkingTreeModified);
+        Assert.NotEqual(clean.Fingerprint, dirty.Fingerprint);
         Assert.Contains("Uncommitted bytes", dirty.Html);
     }
 

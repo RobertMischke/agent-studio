@@ -22,6 +22,7 @@ const DOCUMENT: WorkbenchDocument = {
   branch: 'develop',
   revision: null,
   workingTreeModified: true,
+  fingerprint: null,
 };
 
 describe('WorkbenchViewerComponent', () => {
@@ -37,6 +38,8 @@ describe('WorkbenchViewerComponent', () => {
 
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush(DOCUMENT);
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/home').flush({ sections: [] });
     fixture.detectChanges();
 
     const srcdoc = fixture.componentInstance.srcdoc();
@@ -55,6 +58,9 @@ describe('WorkbenchViewerComponent', () => {
     expect(frame.srcdoc).toBe(srcdoc);
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
       .toContain('uncommitted');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="page-action-archive"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="page-action-extra"]')).toBeNull();
     http.verify();
   });
 });

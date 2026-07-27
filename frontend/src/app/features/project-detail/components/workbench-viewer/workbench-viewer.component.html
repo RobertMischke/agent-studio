@@ -17,9 +17,7 @@
         <app-page-action-bar
           class="workbench-viewer__actions"
           [context]="pageContext"
-          [archived]="archived()"
-          [archivePending]="archiveBusy()"
-          (archiveRequest)="archivePage()" />
+          [decisionActionsOwned]="true" />
       }
     </header>
     <div class="workbench-viewer__provenance" data-testid="workbench-viewer-provenance">
@@ -33,6 +31,10 @@
         <code>{{ doc.revision.slice(0, 8) }}</code>
       }
     </div>
+    <app-workbench-decision-panel
+      [projectName]="projectName()"
+      [document]="doc"
+      (decisionChanged)="refreshDecision()" />
     <iframe class="workbench-viewer__frame"
             #workbenchFrame
             data-testid="workbench-viewer-frame"

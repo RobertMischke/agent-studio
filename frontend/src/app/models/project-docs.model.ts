@@ -212,6 +212,84 @@ export interface WikiRevisionContent {
 }
 
 export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
+
+export interface WorkbenchTaskDraft {
+  title: string;
+  goal: string;
+  acceptanceCriteria: string[];
+  evidenceLinks: string[];
+  chosenOption: string | null;
+  relatedTaskKeys: string[];
+  targetProject: string | null;
+  initialLane: '1-preparation';
+  mode: 'coding';
+  taskType: 'feature';
+}
+
+/** The durable decision receipt stored inside `workbench.json` (schema v2). */
+export interface WorkbenchDecisionProjection {
+  outcome: 'feature-spawn' | 'archive';
+  state: 'pending' | 'failed' | 'succeeded';
+  operationId: string;
+  sourceRevision: string | null;
+  sourceFingerprint: string | null;
+  preparedAt: string;
+  preparedBy: string;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+  decidedAt: string | null;
+  reason: string | null;
+  failure: string | null;
+  spawnedTaskKeys: string[];
+}
+
+export interface WorkbenchDecisionResult {
+  success: boolean;
+  errorCode: string | null;
+  error: string | null;
+  workbenchId: string;
+  operationId: string;
+  outcome: 'feature-spawn' | 'archive' | null;
+  decisionStage: WorkbenchDecisionStage | null;
+  revision: string | null;
+  fingerprint: string | null;
+  spawnedTaskKeys: string[];
+  idempotent: boolean;
+  /**
+   * The server-validated task draft for a feature decision. The backend never
+   * creates the card itself: the client owns task creation through the existing
+   * task API and may report the resulting keys back via `spawnedTaskKeys`.
+   */
+  taskDraft?: WorkbenchTaskDraft | null;
+}
+
+export interface PrepareWorkbenchDecisionRequest {
+  operationId: string;
+  outcome: 'feature-spawn' | 'archive';
+  expectedRevision: string | null;
+  expectedFingerprint: string | null;
+  actor: string;
+  archiveReason: string | null;
+  task: WorkbenchTaskDraft | null;
+}
+
+/**
+ * Confirm carries the same decision payload as prepare: prepare only validates
+ * and fingerprints (it writes nothing), so confirm is the single durable write.
+ */
+export interface ConfirmWorkbenchDecisionRequest {
+  operationId: string;
+  outcome: 'feature-spawn' | 'archive';
+  expectedRevision: string | null;
+  expectedFingerprint: string | null;
+  actor: string;
+  archiveReason: string | null;
+  task: WorkbenchTaskDraft | null;
+  /** Keys of cards the client already created for this decision, if any. */
+  spawnedTaskKeys?: string[];
+  confirmed: true;
+}
 
 export interface WorkbenchListItem {
   id: string;
@@ -228,6 +306,8 @@ export interface WorkbenchListItem {
   lifecycleState?: WikiLifecycleState | null;
   editedBy?: string | null;
   lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
+  decision?: WorkbenchDecisionProjection | null;
+  decisionStage?: WorkbenchDecisionStage | null;
 }
 
 export interface WorkbenchCatalogue {
@@ -243,6 +323,7 @@ export interface WorkbenchDocument {
   branch: string | null;
   revision: string | null;
   workingTreeModified: boolean;
+  fingerprint: string | null;
 }
 
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
