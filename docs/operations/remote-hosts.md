@@ -65,9 +65,9 @@ RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
 ```
 
-The host card must show **Writable: yes** and the latest push-probe date before
-it receives work. **Writable: no** means the daemon is read-only and the server
-refuses new claims.
+The host card shows the fallback-repository probe separately from project
+delivery. A failed fallback probe does not classify every project as read-only
+and does not suppress claims whose own repository preflight succeeds.
 
 AGT-2141 added per-project repository URLs and isolated shared clones. Configure
 each project repository to move from one remote project to all projects remote.
@@ -75,13 +75,15 @@ The fallback URLs above remain startup probe inputs only. Each project clone
 uses its registry URL for both fetch and push and repairs both values on every
 refresh.
 
-The first claim for each host/project pair is a preflight offer, not a lease.
+The first claim for each host/project pair, and the first claim after a
+five-minute proof expiry, is a preflight offer, not a lease.
 The daemon prepares the project's real shared clone, requires its fetch and push
-URLs to match the registered repository URL, fetches, then creates and removes
-a temporary runner ref. This real write exercises server-side hooks and
-permissions that a dry-run can miss. The green result is cached until that
-project registration changes. A failure keeps the card Ready and appears with
-its reason on both the host card and the project's Execution card.
+URLs to match the registered repository URL, fetches, verifies the exact
+integration branch, then creates and removes a temporary runner ref. This real
+write exercises server-side hooks and permissions that a dry-run can miss. A
+failure or missing repository URL keeps only that project's card Ready and
+appears with its target branch and reason on both the host card and the
+project's Execution card. Other projects on the host continue independently.
 
 ## Connect the daemon
 

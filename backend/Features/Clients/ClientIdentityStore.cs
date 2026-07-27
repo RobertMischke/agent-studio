@@ -292,8 +292,10 @@ public class ClientIdentityStore
             if (!_byId.TryGetValue(id, out var existing)) return null;
             var updated = existing with
             {
-                RunnerDaemonState = string.Equals(existing.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
-                    ? "read-only" : "running",
+                // The startup probe covers only the configured fallback remote.
+                // Project delivery is admitted by RunnerProjectPreflight, so a
+                // fallback failure does not make the daemon itself read-only.
+                RunnerDaemonState = "running",
                 // Telemetry is sampled less often than claim polling. A poll
                 // without a sample must preserve the last known active count;
                 // treating "not reported" as zero could complete a pending
@@ -349,13 +351,12 @@ public class ClientIdentityStore
                 RunnerGitStatus = status,
                 RunnerGitDetail = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim(),
                 RunnerGitCheckedAt = checkedAt.ToUniversalTime(),
-                // A daemon restart with repaired credentials must be able to
-                // retry failed project proofs. Successful proofs remain cached.
-                RunnerProjectPreflights = status is "ready" or "ready-no-workflow-scope"
-                    ? existing.RunnerProjectPreflights
-                        .Where(preflight => string.Equals(preflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
-                        .ToList()
-                    : existing.RunnerProjectPreflights
+                // A daemon restart may carry repaired per-repository
+                // credentials even when the unrelated fallback probe fails.
+                // Keep successful proofs and retry every failed project.
+                RunnerProjectPreflights = existing.RunnerProjectPreflights
+                    .Where(preflight => string.Equals(preflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                    .ToList()
             };
             WriteLocked(updated);
             _byId[id] = updated;

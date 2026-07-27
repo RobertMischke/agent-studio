@@ -1082,7 +1082,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
-    public async Task Daemon_claim_is_refused_until_the_runner_reports_push_ready()
+    public async Task Fallback_remote_failure_does_not_override_a_successful_project_preflight()
     {
         SeedTask(TaskStates.Ready, TaskKey, "Push-gated pickup", "Prompt.");
 
@@ -1100,22 +1100,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
             "read-only", "push-dry-run failed (128): permission denied", DateTime.UtcNow), CancellationToken.None);
 
-        var refused = await client.ClaimAsync(new RClaim(
-            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
-
-        Assert.Equal(RClaimStatus.Empty, refused.Status);
-        Assert.Contains("read-only", refused.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
-
-        await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
-            "ready-no-workflow-scope",
-            "contents push ready; workflow scope missing",
-            DateTime.UtcNow), CancellationToken.None);
-
         var admitted = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"));
 
-        Assert.Equal(RClaimStatus.Claimed, admitted.Status);
+        Assert.True(
+            admitted.Status == RClaimStatus.Claimed,
+            $"Expected project-scoped admission, got {admitted.Status}: {admitted.Message}");
         Assert.Equal(TaskKey, admitted.JobId);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
     }
@@ -1159,6 +1149,71 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var failure = Assert.Single(host.RunnerProjectPreflights);
         Assert.Equal("failed", failure.Status);
         Assert.Contains("permission denied", failure.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Failed_project_preflight_does_not_block_another_assigned_project()
+    {
+        const string deliverableProjectName = "deliverable-project";
+        var deliverableWatchPath = Path.Combine(_workspace, "projects", deliverableProjectName);
+        foreach (var state in TaskStates.All)
+            Directory.CreateDirectory(Path.Combine(deliverableWatchPath, state));
+        SeedTask(TaskStates.Ready, "AGT-BLOCKED-REPO", "Blocked repository", "Prompt.");
+        SeedTask(
+            TaskStates.Ready,
+            "DVP-001",
+            "Deliverable repository",
+            "Prompt.",
+            watchPath: deliverableWatchPath,
+            order: 2);
+        using var factory = BuildFactory(
+            additionalProjectName: deliverableProjectName,
+            additionalWatchPath: deliverableWatchPath);
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/blocked-project.git");
+        await AssignRemoteAsync(http, deliverableProjectName);
+        var projects = await http.GetFromJsonAsync<List<ProjectSummary>>("/api/projects");
+        var deliverableProject = Assert.Single(
+            projects!,
+            project => string.Equals(project.DisplayName, deliverableProjectName, StringComparison.Ordinal));
+        await AddRepositoryUrlAsync(
+            http,
+            "https://github.com/example/deliverable-project.git",
+            deliverableProject.Id);
+
+        var request = new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner");
+        var blockedOffer = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.PreflightRequired, blockedOffer.Status);
+        var blocked = await client.ClaimAsync(request with
+        {
+            ProjectPreflight = new Runner::AgentRunner.RunnerProjectPreflightReport(
+                blockedOffer.ProjectId!, blockedOffer.RegistrationFingerprint!, false,
+                "write probe failed (128): repository-specific permission denied",
+                DateTime.UtcNow, blockedOffer.RepositoryUrl!, blockedOffer.RepositoryUrl!),
+        }, CancellationToken.None);
+        Assert.Equal(RClaimStatus.PreflightFailed, blocked.Status);
+
+        var deliverableOffer = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.PreflightRequired, deliverableOffer.Status);
+        Assert.Equal(deliverableProject.Id, deliverableOffer.ProjectId);
+
+        var admitted = await client.ClaimAsync(request with
+        {
+            ProjectPreflight = new Runner::AgentRunner.RunnerProjectPreflightReport(
+                deliverableOffer.ProjectId!, deliverableOffer.RegistrationFingerprint!, true,
+                "clone/fetch URLs match registration; target branch exists; write probe succeeded",
+                DateTime.UtcNow, deliverableOffer.RepositoryUrl!, deliverableOffer.RepositoryUrl!),
+        }, CancellationToken.None);
+
+        Assert.True(
+            admitted.Status == RClaimStatus.Claimed,
+            $"Expected second project claim, got {admitted.Status}: {admitted.Message}");
+        Assert.Equal(deliverableProject.Id, admitted.ProjectId);
+        Assert.True(Directory.Exists(Path.Combine(
+            _watchPath, TaskStates.Ready, "AGT-BLOCKED-REPO")));
     }
 
     [Fact]
@@ -1234,6 +1289,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("not remote-capable", claim.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("repository URL is not configured", claim.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        var identities = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        var host = Assert.Single(identities!, identity => identity.Id == client.ClientId);
+        var projectFailure = Assert.Single(host.RunnerProjectPreflights);
+        Assert.Equal("failed", projectFailure.Status);
+        Assert.Equal("develop", projectFailure.TargetBranch);
+        Assert.Contains("repository URL is not configured", projectFailure.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1260,14 +1322,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
     private WebApplicationFactory<Program> BuildFactory(
         IAtomicJsonFileWriter? writer = null,
-        int? remoteRequeueGraceSeconds = null) =>
+        int? remoteRequeueGraceSeconds = null,
+        string? additionalProjectName = null,
+        string? additionalWatchPath = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
                 b.UseEnvironment("Test");
                 b.ConfigureAppConfiguration((_, cfg) =>
                 {
-                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    var values = new Dictionary<string, string?>
                     {
                         ["TaskRepository"] = _workspace,
                         ["WatchPaths:0:Name"] = ProjectName,
@@ -1277,7 +1341,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
                         ["Runner:RemoteRequeue:GraceSeconds"] =
                             remoteRequeueGraceSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    });
+                    };
+                    if (!string.IsNullOrWhiteSpace(additionalProjectName)
+                        && !string.IsNullOrWhiteSpace(additionalWatchPath))
+                    {
+                        values["WatchPaths:1:Name"] = additionalProjectName;
+                        values["WatchPaths:1:Path"] = additionalWatchPath;
+                        values["WatchPaths:1:RootPath"] = additionalWatchPath;
+                        values["WatchPaths:1:RepositoryPath"] = additionalWatchPath;
+                    }
+                    cfg.AddInMemoryCollection(values);
                 });
                 if (writer is not null)
                 {
@@ -1475,18 +1548,23 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         return options;
     }
 
-    private static async Task AddRepositoryUrlAsync(HttpClient http, string repositoryUrl)
+    private static async Task AddRepositoryUrlAsync(
+        HttpClient http,
+        string repositoryUrl,
+        string projectId = "PROJ-001")
     {
         var response = await http.PostAsJsonAsync(
-            "/api/projects/PROJ-001/urls",
+            $"/api/projects/{projectId}/urls",
             new { label = "repo", url = repositoryUrl });
         response.EnsureSuccessStatusCode();
     }
 
-    private static async Task AssignRemoteAsync(HttpClient http)
+    private static async Task AssignRemoteAsync(
+        HttpClient http,
+        string projectName = ProjectName)
     {
         var assignment = await http.PutAsJsonAsync(
-            $"/api/projects/{ProjectName}/execution-runner",
+            $"/api/projects/{projectName}/execution-runner",
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
     }
@@ -1512,13 +1590,15 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
     private void SeedTask(
         string state, string key, string title, string promptBody,
-        string kind = TaskKinds.Task, string? cliType = null, string? model = null)
+        string kind = TaskKinds.Task, string? cliType = null, string? model = null,
+        string? watchPath = null,
+        int order = 1)
     {
-        var dir = Path.Combine(_watchPath, state, key);
+        var dir = Path.Combine(watchPath ?? _watchPath, state, key);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"), JsonSerializer.Serialize(new
         {
-            id = key, title, state, order = 1, agent = cliType ?? "claude", kind, cliType, model,
+            id = key, title, state, order, agent = cliType ?? "claude", kind, cliType, model,
         }));
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), "Result: pending.");

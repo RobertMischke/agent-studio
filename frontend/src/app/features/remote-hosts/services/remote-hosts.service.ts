@@ -467,7 +467,7 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     projectPreflights: client.runnerProjectPreflights ?? [],
-    daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? (client.runnerGitStatus === 'read-only' ? 'read-only' : 'running'),
+    daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? 'running',
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
     activeGateCount: client.runnerActiveGateCount ?? 0, gateCapacity: client.runnerGateCapacity ?? 0,

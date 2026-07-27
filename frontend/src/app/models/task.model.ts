@@ -592,6 +592,7 @@ export interface RunnerProjectPreflight {
   repositoryUrl: string;
   fetchUrl: string;
   pushUrl: string;
+  targetBranch?: string;
   status: 'ready' | 'failed';
   detail: string;
   checkedAt: string;

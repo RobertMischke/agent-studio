@@ -32,7 +32,7 @@
     <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
     <div><span>Daemon</span><strong>{{ daemonLabel() }}</strong></div>
     <div><span>Last claim</span><strong>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'none' }}</strong></div>
-    <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
+    <div><span>Fallback probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>
 
   @if (h.role === 'remote' && !retired() && h.runtimeCapacity) {
@@ -60,7 +60,10 @@
     <section class="host__delivery-failures" data-testid="remote-host-project-preflight-failures" aria-label="Blocked project delivery paths">
       <strong>Project delivery blocked</strong>
       @for (preflight of failedProjectPreflights(); track preflight.projectId) {
-        <p><span>{{ preflight.projectName }}</span> {{ preflight.detail }}</p>
+        <p>
+          <span>{{ preflight.projectName }}{{ preflight.targetBranch ? ' · ' + preflight.targetBranch : '' }}</span>
+          {{ preflight.detail }}
+        </p>
       }
     </section>
   }

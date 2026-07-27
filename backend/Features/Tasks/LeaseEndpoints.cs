@@ -362,25 +362,15 @@ public static class LeaseEndpoints
                 TaskInfo? failedPreflightCandidate = null;
                 RemoteProjectRepository? failedPreflightRepository = null;
                 RunnerProjectPreflight? failedProjectPreflight = null;
-                var readOnlyCodingSkipped = false;
                 string? nonRemoteCapableProject = null;
                 foreach (var task in eligible)
                 {
-                    if (client is not null
-                        && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
-                        && !TaskKinds.IsEpic(task.Kind))
-                    {
-                        readOnlyCodingSkipped = true;
-                        logger.LogWarning(
-                            "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
-                            req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
-                        continue;
-                    }
                     var registryProject = projects.FindByStorageLocation(task.WatchPath)
                                           ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                    var targetBranch = settings.Get(task.ProjectName).IntegrationBranch;
                     repository = RemoteProjectRepositoryResolver.Resolve(
                         registryProject,
-                        settings.Get(task.ProjectName).IntegrationBranch);
+                        targetBranch);
                     if (repository is not null)
                     {
                         var cached = string.IsNullOrWhiteSpace(clientId)
@@ -389,6 +379,7 @@ public static class LeaseEndpoints
                         if (cached is not null
                             && string.Equals(cached.RegistrationFingerprint,
                                 ProjectDeliveryPreflightFingerprint.Create(repository), StringComparison.Ordinal)
+                            && ProjectDeliveryPreflightPolicy.IsFresh(cached, now)
                             && !string.Equals(cached.Status, "ready", StringComparison.OrdinalIgnoreCase))
                         {
                             failedPreflightCandidate ??= task;
@@ -402,6 +393,30 @@ public static class LeaseEndpoints
                     }
 
                     nonRemoteCapableProject = task.ProjectName;
+                    if (registryProject is not null && !string.IsNullOrWhiteSpace(clientId))
+                    {
+                        var missingRepositoryDetail =
+                            "repository URL is not configured; add the project's Repository URL before remote delivery";
+                        var missingFingerprint = ProjectDeliveryPreflightFingerprint.CreateUnconfigured(
+                            registryProject.Id,
+                            targetBranch);
+                        var existingMissing = clients.FindRunnerProjectPreflight(clientId, registryProject.Id);
+                        if (existingMissing is null
+                            || !string.Equals(existingMissing.RegistrationFingerprint, missingFingerprint, StringComparison.Ordinal)
+                            || !string.Equals(existingMissing.Detail, missingRepositoryDetail, StringComparison.Ordinal))
+                        {
+                            clients.SetRunnerProjectPreflight(clientId, new RunnerProjectPreflight
+                            {
+                                ProjectId = registryProject.Id,
+                                ProjectName = task.ProjectName,
+                                RegistrationFingerprint = missingFingerprint,
+                                TargetBranch = targetBranch,
+                                Status = "failed",
+                                Detail = missingRepositoryDetail,
+                                CheckedAt = now,
+                            });
+                        }
+                    }
                     logger.LogWarning(
                         "remote-runner-project-not-remote-capable project={Project} task={TaskKey} reason=repository-url-not-configured",
                         task.ProjectName,
@@ -427,11 +442,9 @@ public static class LeaseEndpoints
                 if (candidate is null || repository is null)
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
-                        Message: readOnlyCodingSkipped
-                            ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
-                            : nonRemoteCapableProject is not null
-                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                                : null));
+                        Message: nonRemoteCapableProject is not null
+                            ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                            : null));
 
                 if (string.IsNullOrWhiteSpace(clientId))
                     return Results.Ok(new RunnerClaimResponse(
@@ -468,9 +481,12 @@ public static class LeaseEndpoints
                         RepositoryUrl = repository.RepositoryUrl,
                         FetchUrl = req.ProjectPreflight.FetchUrl?.Trim() ?? "",
                         PushUrl = req.ProjectPreflight.PushUrl?.Trim() ?? "",
+                        TargetBranch = repository.DefaultBranch,
                         Status = succeeded ? "ready" : "failed",
                         Detail = detail,
-                        CheckedAt = req.ProjectPreflight.CheckedAt.ToUniversalTime(),
+                        // Server receipt time is the cache authority. A host
+                        // clock cannot make a stale proof live indefinitely.
+                        CheckedAt = DateTime.UtcNow,
                     });
                     logger.Log(succeeded ? LogLevel.Information : LogLevel.Warning,
                         "remote-runner-project-preflight project={Project} projectId={ProjectId} runner={Runner} status={Status} detail={Detail}",
@@ -479,14 +495,13 @@ public static class LeaseEndpoints
 
                 var projectPreflight = clients.FindRunnerProjectPreflight(clientId, repository.ProjectId);
                 if (projectPreflight is null
-                    || !string.Equals(projectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal))
+                    || !string.Equals(projectPreflight.RegistrationFingerprint, registrationFingerprint, StringComparison.Ordinal)
+                    || !ProjectDeliveryPreflightPolicy.IsFresh(projectPreflight, DateTime.UtcNow))
                 {
-                    if (projectPreflight is not null)
-                        clients.InvalidateRunnerProjectPreflights(repository.ProjectId);
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightRequired,
                         ProjectName: candidate.ProjectName,
-                        Message: "Project delivery preflight is required before the first claim.",
+                        Message: "A fresh project delivery preflight is required before this claim.",
                         ProjectId: repository.ProjectId,
                         RepositoryUrl: repository.RepositoryUrl,
                         DefaultBranch: repository.DefaultBranch,

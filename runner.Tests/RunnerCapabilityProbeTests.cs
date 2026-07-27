@@ -82,6 +82,9 @@ public sealed class RunnerCapabilityProbeTests
         Assert.DoesNotContain(
             CapabilityProtocol.GitWorkflowPush,
             RunnerCapabilityProbe.CodingRequirements(options));
+        Assert.DoesNotContain(
+            CapabilityProtocol.GitPush,
+            RunnerCapabilityProbe.CodingRequirements(options));
     }
 
     [Fact]

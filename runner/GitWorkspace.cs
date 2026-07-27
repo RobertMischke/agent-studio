@@ -148,6 +148,8 @@ public sealed class GitWorkspace
 
         var projectPath = CachePathForProject(options.WorkDir, projectId);
         var sharedRepoPath = Path.Combine(projectPath, "repo");
+        string? probeRef = null;
+        var probeMayExist = false;
         Directory.CreateDirectory(projectPath);
 
         await GitMetadataGate.WaitAsync(ct);
@@ -184,19 +186,31 @@ public sealed class GitWorkspace
                 "git", ["fetch", "origin", "--prune"], sharedRepoPath, ct: ct);
             if (!fetchResult.Success) return Failed("fetch", fetchResult, fetchUrl, pushUrl);
 
-            var probeRef = $"refs/heads/runner/{SafeSegment(options.RunnerId)}/delivery-preflight-{Guid.NewGuid():N}";
+            probeRef = $"refs/heads/runner/{SafeSegment(options.RunnerId)}/delivery-preflight-{Guid.NewGuid():N}";
             var sourceRef = $"refs/remotes/origin/{defaultBranch.Trim()}";
             var source = await ProcessRunner.RunAsync(
-                "git", ["rev-parse", "--verify", sourceRef], sharedRepoPath, ct: ct);
-            if (!source.Success) return Failed($"resolve registered branch {defaultBranch.Trim()}", source, fetchUrl, pushUrl);
+                "git", ["show-ref", "--verify", "--quiet", sourceRef], sharedRepoPath, ct: ct);
+            if (!source.Success)
+                return new(
+                    false,
+                    fetchUrl,
+                    pushUrl,
+                    $"target branch '{defaultBranch.Trim()}' does not exist on the registered repository");
+            probeMayExist = true;
             var writable = await ProcessRunner.RunAsync(
                 "git", ["push", "origin", $"{sourceRef}:{probeRef}"], sharedRepoPath, ct: ct);
-            if (!writable.Success) return Failed("write probe", writable, fetchUrl, pushUrl);
+            if (!writable.Success)
+                return Failed("write probe", writable, fetchUrl, pushUrl);
 
             var cleanup = await ProcessRunner.RunAsync(
                 "git", ["push", "origin", $":{probeRef}"], sharedRepoPath, ct: ct);
+            probeMayExist = !cleanup.Success;
             return cleanup.Success
-                ? new(true, fetchUrl, pushUrl, $"clone/fetch URLs match registration; write probe created and removed {probeRef}")
+                ? new(
+                    true,
+                    fetchUrl,
+                    pushUrl,
+                    $"clone/fetch URLs match registration; target branch '{defaultBranch.Trim()}' exists; write probe created and removed {probeRef}")
                 : Failed("write probe cleanup", cleanup, fetchUrl, pushUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -205,6 +219,14 @@ public sealed class GitWorkspace
         }
         finally
         {
+            if (probeMayExist && probeRef is not null
+                && Directory.Exists(Path.Combine(sharedRepoPath, ".git")))
+            {
+                var cleanup = await ProcessRunner.RunAsync(
+                    "git", ["push", "origin", $":{probeRef}"], sharedRepoPath, ct: CancellationToken.None);
+                if (!cleanup.Success)
+                    log($"project-delivery-preflight-cleanup-failed project={projectId} ref={probeRef} error={OneLine(cleanup.StdErr)}");
+            }
             GitMetadataGate.Release();
         }
     }

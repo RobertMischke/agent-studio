@@ -73,7 +73,6 @@ internal static class RunnerCapabilityProbe
             CapabilityProtocol.CodingExecutor,
             CapabilityProtocol.ProviderAuthentication(Provider(options.CliBin)),
             CapabilityProtocol.GitFetch,
-            CapabilityProtocol.GitPush,
             CapabilityProtocol.RepositoryAccess,
             CapabilityProtocol.Disk,
             CapabilityProtocol.TaskServerConnectivity,
