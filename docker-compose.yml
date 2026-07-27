@@ -49,8 +49,12 @@ services:
     environment:
       RUNNER_SERVER_URL: http://orchestrator-api:5031
       RUNNER_ROLE: coding
+      # Compose-internal network: plain HTTP is an explicit, contained opt-in.
+      RUNNER_ALLOW_INSECURE_HTTP: "1"
+      RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-coding:/var/lib/agent-host
+      - ./runner.token:/run/secrets/runner.token:ro
 
   agent-host-review:
     build:
@@ -66,8 +70,11 @@ services:
     environment:
       RUNNER_SERVER_URL: http://orchestrator-api:5031
       RUNNER_ROLE: review
+      RUNNER_ALLOW_INSECURE_HTTP: "1"
+      RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-review:/var/lib/agent-host
+      - ./runner.token:/run/secrets/runner.token:ro
 
   task-server:
     build:

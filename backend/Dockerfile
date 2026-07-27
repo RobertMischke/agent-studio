@@ -14,6 +14,9 @@ RUN apt-get update \
  && git config --system safe.directory '*'
 WORKDIR /app
 COPY --from=build /app ./
+# Defense in depth: machine-local overrides must never reach the image even if
+# the build context leaks them past .dockerignore.
+RUN rm -f /app/appsettings.Local.json /app/appsettings.Development.json
 # Runtime prompt material read via AgentRules:CorePath (relative to content root).
 COPY agent-rules/ ./agent-rules/
 ENV ASPNETCORE_URLS=http://0.0.0.0:5031 \

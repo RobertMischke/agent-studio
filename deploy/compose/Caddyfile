@@ -3,7 +3,7 @@
 :80 {
 	encode zstd gzip
 
-	@api path /api/* /healthz /readyz
+	@api path /api/* /hubs/* /healthz /readyz
 	handle @api {
 		reverse_proxy {$STUDIO_API_UPSTREAM:orchestrator-api:5031}
 	}

@@ -46,11 +46,21 @@ cd "$REPO_ROOT"
 
 PROFILES=()
 if [[ "$WITH_RUNNER" == "1" ]]; then
+  missing=0
   if [[ ! -f runner.env ]]; then
     cp deploy/release/agent-host/runner.env.template runner.env
     echo "[installer] Wrote ./runner.env from the template."
-    echo "[installer] Fill in RUNNER_ID/RUNNER_NAME/RUNNER_AUTH_TOKEN_FILE/RUNNER_GIT_* first,"
-    echo "[installer] then re-run: $0 --with-runner"
+    echo "[installer] Fill in RUNNER_ID/RUNNER_NAME/RUNNER_GIT_* (SERVER_URL and the"
+    echo "[installer] token path are set by compose - leave RUNNER_AUTH_TOKEN_FILE alone)."
+    missing=1
+  fi
+  if [[ ! -f runner.token ]]; then
+    echo "[installer] Missing ./runner.token - put the runner's API token in it (single line):"
+    echo "[installer]   umask 177 && printf '%s' '<token>' > runner.token"
+    missing=1
+  fi
+  if [[ "$missing" == "1" ]]; then
+    echo "[installer] Then re-run: $0 --with-runner"
     exit 4
   fi
   PROFILES+=(--profile runner)
@@ -69,6 +79,7 @@ echo "[installer]   API:        http://127.0.0.1:5031/api"
 if [[ "$WITH_RUNNER" == "1" ]]; then
   echo "[installer]   Runners:    agent-host-coding + agent-host-review (docker compose ps)"
 else
-  echo "[installer]   Runners:    none yet - re-run with --with-runner once runner.env is filled in."
+  echo "[installer]   Runners:    NONE - the board runs, but no card executes until you"
+  echo "[installer]               re-run with --with-runner (runner.env + runner.token)."
 fi
 echo "[installer] Logs: docker compose logs -f"
