@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nordstern: Agent Studio — Zielbild &amp; Umsetzung</title>
+<style>
+  :root { color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8983; --line:#d8d6cf;
+    --develop:#2a78d6; --ok:#008300; --bad:#c93736; --warn:#9a6b00;
+    --accent-soft:#eaf1fb; --bad-soft:#fbecec; --ok-soft:#eaf4ea; --warn-soft:#f8f0dd; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2c2c2a;
+    --ink-1:#fff; --ink-2:#c3c2b7; --ink-3:#8a8983; --line:#3d3d3a;
+    --develop:#3987e5; --ok:#4eae4e; --bad:#e66767; --warn:#d9a63f;
+    --accent-soft:#1e2a3a; --bad-soft:#382222; --ok-soft:#1f2f1f; --warn-soft:#33301e; } }
+  *{box-sizing:border-box;} body{margin:0;padding:0 0 80px;background:var(--surface-1);color:var(--ink-1);font:16px/1.6 system-ui,"Segoe UI",sans-serif;}
+  main{max-width:960px;margin:0 auto;padding:0 28px;}
+  header.page{border-bottom:1px solid var(--line);padding:44px 0 24px;margin-bottom:8px;}
+  .kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;}
+  h1{font-size:34px;line-height:1.2;margin:0 0 12px;} .lede{font-size:18px;color:var(--ink-2);max-width:64ch;margin:0;}
+  h2{font-size:22px;margin:44px 0 8px;} p{max-width:78ch;} p.dim{color:var(--ink-2);}
+  .box{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:16px 20px;margin:16px 0;}
+  .box.accent{background:var(--accent-soft);border-color:color-mix(in srgb,var(--develop) 30%,var(--line));}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px;} th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);}
+  code{font:12.5px/1.5 ui-monospace,Consolas,monospace;background:var(--surface-3);border-radius:4px;padding:1px 5px;}
+  ul{padding-left:22px;} li{margin:5px 0;max-width:78ch;} ol{padding-left:22px;} ol li{margin:6px 0;}
+  .phase{display:flex;gap:12px;align-items:baseline;margin:10px 0;} .pnum{flex:0 0 auto;width:28px;height:28px;line-height:28px;text-align:center;border-radius:8px;background:var(--accent-soft);color:var(--develop);font-weight:700;}
+  .map{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;} @media(max-width:640px){.map{grid-template-columns:1fr;}}
+  .card{border:1px solid var(--line);border-radius:9px;padding:12px 15px;background:var(--surface-2);}
+  .card h4{margin:0 0 4px;font-size:15px;} .card .path{font:11.5px/1.4 ui-monospace,Consolas,monospace;color:var(--ink-3);} .card p{margin:6px 0 0;font-size:13.5px;color:var(--ink-2);}
+  .ok{color:var(--ok);} .bad{color:var(--bad);}
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">★ Nordstern · Einstiegspunkt</p>
+  <h1>Agent Studio — Zielbild &amp; Umsetzung</h1>
+  <p class="lede">Der eine Startpunkt. Hier steht der große Bogen — Zielbild, Stand, die Schritte — und von hier geht's in die fokussierten Tiefen-Dokumente. Großer Bogen ⟶ hier. Detail ⟶ das jeweilige verlinkte Doc.</p>
+</header>
+
+<h2>Zielbild in Kürze</h2>
+<p>Agent Studio orchestriert Coding-Agenten: Karten laufen durch <b>code → Auto-Review → Integration</b>. Das Ziel ist ein <b>verteiltes, container-isoliertes System</b>, in dem Runner und Backend über <b>ein sauberes v1-Protokoll</b> (nie driftend) sprechen, jede Ausführung im <b>Container-Default</b> läuft, Agenten <b>autonom selbst pushen</b>, und die Verifikation <b>hermetisch im selben Container</b> stattfindet.</p>
+
+<h2>Stand jetzt (27.07.)</h2>
+<table>
+  <tr><th>Erledigt</th><th>Offen</th></tr>
+  <tr>
+    <td><b class="ok">main gesund</b> (alle Fixes deployt, läuft)<br><b class="ok">develop baut</b> (repariert)<br><b class="ok">11 Karten integriert</b> (build-verifiziert)</td>
+    <td><b class="bad">Auto-Review kaputt</b> (Runner sendet keinen ResultEnvelope)<br>2 Karten (2302, 2375) + Modell-Routing-Backend<br>Container-Default, verteilte Plattform noch offen</td>
+  </tr>
+</table>
+
+<h2>Die Schritte (vier Phasen)</h2>
+<div class="phase"><span class="pnum">0</span><div><b>Pipeline heilen</b> — Runner aufs v1-Protokoll (behebt Auto-Review), Build-Gate scharf, Reste-Batch (2302 + 2375 + Modell-Routing-Backend).</div></div>
+<div class="phase"><span class="pnum">1</span><div><b>Container-Default</b> — Basis-Images pro Komponente, <code>docker-compose up</code>, Installer wählt Container vor, Self-Push mit Git-+CLI-Tokens, Isolation via Container.</div></div>
+<div class="phase"><span class="pnum">2</span><div><b>Verteilte Plattform</b> — Control-Plane (2129/2230/2277), CAR-Migration (2370–2373), gepaarte Releases (2132), Qualitäts-Ebene (2130).</div></div>
+<div class="phase"><span class="pnum">3</span><div><b>SSH-Tunnel ablösen</b> — Steuerung nur noch per API (2262); Token-Refresh-Konzept ohne Tunnel.</div></div>
+<p class="dim">Feature- und Kleinkram-Karten fließen ab Phase 0 einfach durch die geheilte Pipeline. Details + Kartenzuordnung: siehe „Umsetzungsplan" unten.</p>
+
+<h2>Leitplanken (entschieden)</h2>
+<div class="box accent">
+  <ul>
+    <li><b>Container-Default</b>, bei Neuinstallation sofort ab Installer vorausgewählt.</li>
+    <li><b>Isolation gilt dem Agent, nicht den Sourcen</b> — alle Projekt-Sourcen + Nachbarrepos dürfen gesehen werden (bewusst). Worktree-Modell bleibt; ein Git-Checkout je Projekt.</li>
+    <li><b>Agenten pushen selbst</b> (Git-+CLI-Tokens); CLI-Token-Refresh über die lokale Umgebung; perspektivisch kein SSH-Tunnel — alles per API.</li>
+    <li><b>Gepflegte Basis-Images</b> pro Komponente; die Container-Def wird ein <b>agent-gepflegtes Repo-Artefakt</b>, das Image ein Sidecar; Verifikation läuft hermetisch im selben Container.</li>
+    <li><b>Spawn-Pfade konvergieren auf CAR</b> — ein Ausführungspfad, damit Container/Mount/Token/Image nur einmal existieren (kein Drift).</li>
+  </ul>
+</div>
+
+<h2>Landkarte — die Tiefen-Dokumente</h2>
+<p class="dim">Hier geht's ins Detail. Jedes Doc bleibt fokussiert auf sein Thema; den großen Bogen hältst du hier im Nordstern.</p>
+<div class="map">
+  <div class="card"><h4>Umsetzungsplan (Detail)</h4><div class="path">operations/umsetzungsplan-zielbild/</div><p>Die vier Phasen ausführlich, mit Kartenzuordnung, Bündelung (Batch vs. Task), Spawn-Konvergenz &amp; Verifikations-Container.</p></div>
+  <div class="card"><h4>Architektur &amp; Protokolle</h4><div class="path">operations/zielbild-komponenten-protokolle/</div><p>Komponenten, das v1-Plane, die Drift-Analyse, Schnitt/Build/Deploy im Zielbild.</p></div>
+  <div class="card"><h4>Ausführungsmodell: Container-Default</h4><div class="path">operations/execution-model-shift/</div><p>Container-Spawn, Isolation, Image, Installer — die Ausführungs-Richtung im Detail.</p></div>
+  <div class="card"><h4>Modell-Routing-Policy</h4><div class="path">operations/model-routing-policy/</div><p>Wie Token Economy Modell × Reasoning je Karte entscheidet.</p></div>
+  <div class="card"><h4>Log-Retention</h4><div class="path">operations/log-retention/</div><p>Deckelung, Archiv-Sweep, Runner-Backup — Task-Logs nachhaltig.</p></div>
+</div>
+
+</main>
+</body>
+</html>
