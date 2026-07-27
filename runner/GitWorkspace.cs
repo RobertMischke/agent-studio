@@ -20,6 +20,7 @@ public sealed class GitWorkspace
     private readonly bool _isProjectClone;
     private readonly string _workBranch;
     private string? _startedHead;
+    private readonly string? _restoredBaseSha;
     private bool _startedFromSalvage;
     private SalvageReconciliationResult? _pickupReconciliation;
 
@@ -32,10 +33,12 @@ public sealed class GitWorkspace
         string? projectId = null,
         string? gitRemote = null,
         string? defaultBranch = null,
-        bool isProjectClone = false)
+        bool isProjectClone = false,
+        string? restoredBaseSha = null)
     {
         _options = options;
         _log = log;
+        _restoredBaseSha = string.IsNullOrWhiteSpace(restoredBaseSha) ? null : restoredBaseSha.Trim();
         _safeTaskKey = SafeSegment(taskKey);
         _projectId = string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim();
         _isProjectClone = isProjectClone || _projectId is not null;
@@ -52,7 +55,16 @@ public sealed class GitWorkspace
     public string SharedRepoPath => Path.Combine(ProjectCachePath, "repo");
     public string RepoPath => Path.Combine(ProjectCachePath, "worktrees", _safeTaskKey);
     public string? RepositoryUrl => _gitRemote;
-    public string? BaseSha => _startedHead;
+    /// <summary>
+    /// The commit this workspace started from - the Result-Envelope's BaseSha.
+    /// On a reattach nothing in this process ran <see cref="PrepareAsync"/>, so the
+    /// value is restored from durable slot state instead. It deliberately does not
+    /// feed <c>_startedHead</c>: that field is also the teardown's "provably
+    /// untouched checkout" marker, and a reattached run must keep inspecting the
+    /// remote for retained work rather than trusting a start marker it did not
+    /// observe itself.
+    /// </summary>
+    public string? BaseSha => _startedHead ?? _restoredBaseSha;
     public SalvageReconciliationResult? PickupReconciliation => _pickupReconciliation;
 
     public async Task<string> PrepareAsync(CancellationToken ct)

@@ -7,13 +7,22 @@ namespace AgentStudio.Pipeline;
 /// <see cref="MergeIntoDevelopRunner.PushIntegrationBranchAsync"/> needs to push
 /// the freshly merged integration branch (e.g. <c>develop</c>) to <c>origin</c>
 /// off the request path.
+/// <para>
+/// <see cref="ApprovedSha"/> is the exact commit the merge gate released. The
+/// push targets that object rather than the branch tip, so a merge that landed
+/// on the integration branch while this item waited in the queue cannot reach
+/// origin under this card's approval. Null only where no approval exists
+/// (legacy fixtures / the durable restart backstop), which keeps the historical
+/// tip semantics.
+/// </para>
 /// </summary>
 public sealed record IntegrationPushRequest(
     string Project,
     string JobId,
     string JobFolderPath,
     string? WatchPath,
-    string IntegrationBranch);
+    string IntegrationBranch,
+    string? ApprovedSha = null);
 
 /// <summary>
 /// Hand-off point that lifts the integration-branch <c>git fetch</c> +

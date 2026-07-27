@@ -44,7 +44,13 @@ internal static class CapabilityFailureReporter
                 ct);
             return true;
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        // Only a real shutdown propagates. An HttpClient timeout also surfaces as
+        // a TaskCanceledException even though nothing asked this runner to stop -
+        // filtering on the exception type alone let exactly that crash through the
+        // best-effort reporter it was built to be. The caller's token is the only
+        // authority on "we are shutting down".
+        catch (Exception exception)
+            when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             log($"capability-failure report deferred capability={capabilityKey} "
                 + $"classification={classification}: {exception.Message}");

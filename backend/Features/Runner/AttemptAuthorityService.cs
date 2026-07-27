@@ -588,6 +588,14 @@ public sealed class AttemptAuthorityService
             var candidate = _state.ReviewAttempts
                 .Where(review => IsCurrentReview(review) && !Terminal(review.State))
                 .Where(review => review.Lease is null || review.Lease.ExpiresAt <= now)
+                // A subject whose source run carries no Result-Envelope cannot be
+                // materialized by any executor. Inside the terminalization grace it
+                // is not yet evidence of a pre-plane completion either (the
+                // completion ingest may still be in flight), so it is neither killed
+                // nor handed out - it waits for its envelope or for the grace to run
+                // out. Handing it out would burn a fenced attempt on a subject the
+                // executor provably cannot check out.
+                .Where(review => !IsUnmaterializableWithinGrace(review, now))
                 .OrderBy(review => review.CreatedAt)
                 .FirstOrDefault();
             if (candidate is null)
@@ -602,6 +610,16 @@ public sealed class AttemptAuthorityService
                 instanceId);
         }
     }
+
+    /// <summary>
+    /// True while a ReviewAttempt has no materializable subject (its source run
+    /// carries no Result-Envelope) but is still young enough that the missing
+    /// envelope may simply be an in-flight completion ingest. Caller must hold
+    /// <see cref="_gate"/>.
+    /// </summary>
+    private bool IsUnmaterializableWithinGrace(ReviewAttemptRecord review, DateTime now)
+        => FindRun(review.SourceRunAttemptId)?.ResultEnvelope is null
+           && now - review.CreatedAt < LegacyEnvelopeTerminalizeGrace;
 
     /// <summary>
     /// Returns whether another infrastructure retry may be created for the
@@ -659,6 +677,15 @@ public sealed class AttemptAuthorityService
                 // very first poll; only reviews that stayed envelope-less past
                 // the grace are terminal evidence of a pre-plane completion.
                 if (now - review.CreatedAt < LegacyEnvelopeTerminalizeGrace)
+                    continue;
+
+                // Never kill a review an executor is actively holding. The live
+                // lease is running work, and terminalizing under it would clear
+                // the lease and flip the state while its fenced report is still
+                // on the way - the executor would then lose to a Superseded /
+                // fence mismatch instead of reporting its own outcome. The
+                // terminalization is picked up once the lease has expired.
+                if (review.Lease is { } lease && lease.ExpiresAt > now)
                     continue;
 
                 if (!Terminal(review.State))

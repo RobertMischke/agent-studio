@@ -57,7 +57,8 @@ public sealed class IntegrationPushWorker : BackgroundService
         try
         {
             var result = await _runner.PushIntegrationBranchAsync(
-                request.Project, request.JobId, request.JobFolderPath, request.WatchPath, request.IntegrationBranch, ct);
+                request.Project, request.JobId, request.JobFolderPath, request.WatchPath, request.IntegrationBranch, ct,
+                request.ApprovedSha);
             sw.Stop();
             if (result.Success)
             {

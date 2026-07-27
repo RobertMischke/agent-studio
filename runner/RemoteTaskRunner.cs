@@ -117,8 +117,12 @@ public sealed class RemoteTaskRunner
     public async Task<int> ReattachAsync(PersistedRunnerSlot slot, CancellationToken stopRun)
     {
         _log($"reattaching task '{slot.TaskKey}' attempt {slot.AttemptId} pid={slot.ProcessId} worktree={slot.WorktreePath}");
+        // Restore the recorded base SHA: this process never prepared the worktree,
+        // and without it the completion would be assembled with no envelope trio
+        // after every daemon restart.
         var workspace = new GitWorkspace(
-            _options, slot.TaskKey, _log, slot.ProjectId, slot.RepositoryUrl, slot.DefaultBranch);
+            _options, slot.TaskKey, _log, slot.ProjectId, slot.RepositoryUrl, slot.DefaultBranch,
+            restoredBaseSha: slot.BaseSha);
         return await RunPersistedAsync(slot, workspace, stopRun, reattach: true);
     }
 
@@ -512,6 +516,10 @@ public sealed class RemoteTaskRunner
         slot = _state.Save(slot with
         {
             WorktreePath = workspace.RepoPath,
+            // Only this process observed the prepared checkout's start commit; a
+            // replacement daemon reattaching to the detached worker reads it back
+            // from here to complete with a full Result-Envelope.
+            BaseSha = workspace.BaseSha ?? slot.BaseSha,
             Phase = "launching",
         });
         DurableAgentProcess process;

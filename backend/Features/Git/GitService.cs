@@ -2331,8 +2331,20 @@ public class GitService
     /// <c>failed</c>, plus <c>no-remote</c> (no <c>origin</c> configured -
     /// a local-only project, treated as a benign skip, not a failure) and
     /// <c>missing-branch</c> (the integration branch does not exist locally).
+    /// <para>
+    /// <paramref name="approvedSha"/> pins the exact object that is pushed. The
+    /// caller passes the merge result its gate approved, so a merge that landed
+    /// on the branch after the approval can never ride along to origin; the
+    /// branch tip is only used when no approval SHA is known (the durable restart
+    /// backstop). An approved SHA that is missing or not contained in the local
+    /// branch is a fail-closed <c>missing-sha</c> / <c>sha-not-on-branch</c>.
+    /// </para>
     /// </summary>
-    public Task<GitPushResult> PushIntegrationBranchAsync(string repoRoot, string branch, CancellationToken ct = default)
+    public Task<GitPushResult> PushIntegrationBranchAsync(
+        string repoRoot,
+        string branch,
+        CancellationToken ct = default,
+        string? approvedSha = null)
     {
         if (ct.IsCancellationRequested)
             return Task.FromResult(new GitPushResult(false, string.Empty, "cancelled", "Push cancelled."));
@@ -2348,6 +2360,37 @@ public class GitService
         if (headCode != 0)
             return Task.FromResult(new GitPushResult(false, string.Empty, "missing-branch", headErr.Trim()));
         var sha = headRaw.Trim();
+
+        // The pushed object is the exact SHA the gate approved, not whatever the
+        // branch points at when this deferred push finally runs: the gate window
+        // is minutes long, and a later, not-yet-gated merge can have moved the tip
+        // on in the meantime. Pushing the tip would carry that ungated merge
+        // result to origin under the approval of a different card.
+        if (!string.IsNullOrWhiteSpace(approvedSha))
+        {
+            var candidate = approvedSha!.Trim();
+            if (!IsLikelyShaOrRef(candidate))
+                return Task.FromResult(new GitPushResult(false, string.Empty, "invalid-sha", $"Invalid approved SHA '{candidate}'."));
+            var (approvedRaw, approvedErr, approvedCode) =
+                RunGitArgs(repoRoot, "rev-parse", "--verify", $"{candidate}^{{commit}}");
+            if (approvedCode != 0)
+                return Task.FromResult(new GitPushResult(false, string.Empty, "missing-sha", approvedErr.Trim()));
+            var approved = approvedRaw.Trim();
+            // Fail closed rather than push an object the branch does not contain:
+            // that would advance origin/<branch> to something the local branch
+            // never carried (e.g. after a gate rollback).
+            var (_, _, containedCode) =
+                RunGitArgs(repoRoot, "merge-base", "--is-ancestor", approved, $"refs/heads/{branch}");
+            if (containedCode != 0)
+            {
+                return Task.FromResult(new GitPushResult(
+                    false,
+                    approved,
+                    "sha-not-on-branch",
+                    $"The approved merge result {approved} is not contained in local {branch}; refusing to push it."));
+            }
+            sha = approved;
+        }
 
         // A project without an origin remote is a local-only checkout; there is
         // nothing to push. Treat as a benign skip so the step is not flagged as
@@ -2371,9 +2414,10 @@ public class GitService
             _logger.LogInformation("Integration-branch push did not find origin/{Branch} before pushing: {Error}", branch, remoteErr.Trim());
         }
 
-        // Non-force push of the branch ref. A non-fast-forward (diverged remote)
-        // is reported, never overwritten.
-        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"refs/heads/{branch}:refs/heads/{branch}");
+        // Non-force push of the exact object resolved above (the gate-approved
+        // merge result, or the branch tip when no approval SHA was handed in). A
+        // non-fast-forward (diverged remote) is reported, never overwritten.
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"{sha}:refs/heads/{branch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
 

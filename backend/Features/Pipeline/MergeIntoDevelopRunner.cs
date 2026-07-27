@@ -106,7 +106,15 @@ public sealed class MergeIntoDevelopRunner
         CancellationToken ct,
         string integrationStrategy = IntegrationStrategies.DirectMerge)
     {
-        await _mergeGate.WaitAsync(ct).ConfigureAwait(false);
+        // Deliberately NOT the caller's token. The serialized block below (merge +
+        // gate + rollback) is already designed to be abort-immune - it runs the
+        // gate on CancellationToken.None so a closed browser tab cannot roll back
+        // a good merge. Cancelling the *wait* would reintroduce exactly that hole
+        // from the other side: the accepted card would silently never be merged
+        // while its lane move has already landed. Queue-jumping the wait is not an
+        // option either, so the accept blocks until the queue drains; moving the
+        // whole merge onto a background worker is the follow-up, not this fix.
+        await _mergeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             return await RunSerializedAsync(
@@ -213,7 +221,17 @@ public sealed class MergeIntoDevelopRunner
             // accept transition never awaits the network round-trip.
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
-                MaybeEnqueueIntegrationPush(project, jobId, jobFolderPath, watchPath, integrationBranch);
+                // Pin the object the push may publish: the merge result this card's
+                // gate released, or - for AlreadyMerged, where this run produced no
+                // commit - the branch tip as it stands at release time. Reading it
+                // here and not in the worker is what closes the gate window: by the
+                // time the queued push runs, the tip may already carry a merge no
+                // gate has approved yet.
+                var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
+                    ? result.MergedSha
+                    : _git.GetBranchTip(repoRoot, branch);
+                MaybeEnqueueIntegrationPush(
+                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha);
             }
 
             return result;
@@ -467,7 +485,8 @@ public sealed class MergeIntoDevelopRunner
     /// throws: the merge has already landed and the push is best-effort.
     /// </summary>
     private void MaybeEnqueueIntegrationPush(
-        string project, string jobId, string jobFolderPath, string? watchPath, string integrationBranch)
+        string project, string jobId, string jobFolderPath, string? watchPath, string integrationBranch,
+        string? approvedSha)
     {
         if (_pushQueue == null) return;
         if (!IntegrationPushEnabled(project))
@@ -478,11 +497,12 @@ public sealed class MergeIntoDevelopRunner
             return;
         }
 
-        var enqueued = _pushQueue.Enqueue(new IntegrationPushRequest(project, jobId, jobFolderPath, watchPath, integrationBranch));
+        var enqueued = _pushQueue.Enqueue(new IntegrationPushRequest(
+            project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha));
         if (enqueued)
             _logger.LogInformation(
-                "merge-into-develop push enqueued for project={Project} job={JobId} branch={Branch}",
-                project, jobId, integrationBranch);
+                "merge-into-develop push enqueued for project={Project} job={JobId} branch={Branch} approved={ApprovedSha}",
+                project, jobId, integrationBranch, approvedSha ?? "branch-tip");
         else
             _logger.LogWarning(
                 "merge-into-develop push enqueue failed (queue closed) for project={Project} job={JobId}",
@@ -518,6 +538,13 @@ public sealed class MergeIntoDevelopRunner
     /// is spent the step is recorded <see cref="PipelineStepStatus.Failed"/>
     /// flagged <c>environmental</c> so a reviewer does not read an infra blip as a
     /// failed change. Never throws (except on cooperative cancellation).
+    /// <para>
+    /// <paramref name="approvedSha"/> is the merge result the gate released. It is
+    /// what gets pushed, so nothing that landed on the integration branch after
+    /// the approval rides along. Omitting it keeps the historical branch-tip push
+    /// and is reserved for callers that have no approval record (the durable
+    /// restart backstop).
+    /// </para>
     /// </summary>
     public async Task<GitPushResult> PushIntegrationBranchAsync(
         string project,
@@ -525,7 +552,8 @@ public sealed class MergeIntoDevelopRunner
         string jobFolderPath,
         string? watchPath,
         string integrationBranch,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? approvedSha = null)
     {
         await _pushGate.WaitAsync(ct);
         try
@@ -536,6 +564,7 @@ public sealed class MergeIntoDevelopRunner
                 jobFolderPath,
                 watchPath,
                 integrationBranch,
+                approvedSha,
                 ct);
         }
         finally
@@ -550,6 +579,7 @@ public sealed class MergeIntoDevelopRunner
         string jobFolderPath,
         string? watchPath,
         string integrationBranch,
+        string? approvedSha,
         CancellationToken ct)
     {
         var startedAt = DateTime.UtcNow;
@@ -568,7 +598,7 @@ public sealed class MergeIntoDevelopRunner
                 var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
                 while (true)
                 {
-                    result = await _git.PushIntegrationBranchAsync(repoRoot, branch, ct);
+                    result = await _git.PushIntegrationBranchAsync(repoRoot, branch, ct, approvedSha);
                     if (result.Success) break;
 
                     var issue = ClassifyPushFailure(result.Status);

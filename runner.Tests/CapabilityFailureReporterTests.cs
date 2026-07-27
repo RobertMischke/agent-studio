@@ -92,6 +92,35 @@ public class CapabilityFailureReporterTests
     }
 
     [Fact]
+    public async Task An_http_timeout_is_swallowed_because_nothing_asked_the_runner_to_stop()
+    {
+        // An HttpClient timeout surfaces as TaskCanceledException - an
+        // OperationCanceledException without any shutdown behind it. That is the
+        // very crash this reporter exists to absorb, so the caller's token, not
+        // the exception type, decides whether it propagates.
+        var handler = new ThrowingHandler(new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing."));
+        using var client = NewClient(handler);
+        var log = new List<string>();
+
+        var delivered = await CapabilityFailureReporter.TryReportAsync(
+            client,
+            log.Add,
+            "review:git-materialization",
+            "SnapshotUnavailable",
+            "The immutable snapshot was unavailable.",
+            "review-capability:rat_5:15:review:git-materialization",
+            "review",
+            "rat_5",
+            15,
+            CancellationToken.None);
+
+        Assert.False(delivered);
+        var logged = Assert.Single(log);
+        Assert.Contains("capability-failure report deferred", logged, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_real_shutdown_still_propagates()
     {
         var handler = new StubHandler(HttpStatusCode.NotFound, "unmounted");
@@ -125,7 +154,19 @@ public class CapabilityFailureReporterTests
             options: options);
     }
 
-    private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
+    /// <summary>Reproduces a transport-level fault (e.g. an HttpClient timeout).</summary>
+    private sealed class ThrowingHandler(Exception failure) : StubHandler(HttpStatusCode.OK, "{}")
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromException<HttpResponseMessage>(failure);
+        }
+    }
+
+    private class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
     {
         public List<string> Paths { get; } = [];
 

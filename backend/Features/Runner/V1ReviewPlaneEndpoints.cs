@@ -212,8 +212,9 @@ public static class V1ReviewPlaneEndpoints
                     "Update this Review Executor to one that advertises baseline-comparison support."));
             // A drained capability pauses this executor rather than feeding it
             // attempts it just reported itself unable to materialize. The pause
-            // lifts on cooldown expiry or the next registration / capability
-            // advertisement, so no operator action is needed to resume.
+            // lifts on cooldown expiry or on the next full registration (a
+            // restarted daemon), so no operator action is needed to resume - but a
+            // routine capability advertisement does not cut the drain short.
             if (registry.TryGetCapabilityPause(runnerId, out var pause))
                 return Results.Ok(new Contract.ReviewClaimResponse(
                     "empty",
@@ -1031,11 +1032,17 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // A fresh advertisement is the runner's own healthy-again signal and
-            // therefore lifts any capability pause it earned before this
-            // generation. The review daemon re-advertises every minute, so an
-            // executor recovers on its own without operator intervention.
-            ClearCapabilityFailures(runnerId);
+            // An advertisement refreshes the capability snapshot; it is NOT a
+            // health verdict. The review daemon re-advertises every 60 seconds, so
+            // clearing the drain here meant the cooldown never drained anything: an
+            // executor with a broken capability became claim-eligible again a
+            // minute later, over and over. A pause therefore lifts only by its own
+            // cooldown expiring or by a full re-registration
+            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
+            // instance declaring its health). While a cooldown is active the
+            // failure counters stay untouched, so the backoff keeps escalating.
+            if (!HasActiveCapabilityCooldownLocked(runnerId, now))
+                ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(
                 runnerId,
                 registration.Name,
@@ -1144,7 +1151,7 @@ public sealed class V1ReviewExecutorRegistry
                 wholeHost,
                 state == Contract.CapabilityHealthStates.Draining
                     ? "Claims for this runner are paused until the cooldown expires or it "
-                      + "registers or advertises its capabilities again."
+                      + "registers again."
                     : null);
             _capabilityFailureDeliveries[deliveryKey] = new CapabilityFailureDelivery(
                 payloadHash, response, now);
@@ -1155,8 +1162,10 @@ public sealed class V1ReviewExecutorRegistry
 
     /// <summary>
     /// True while a drained capability holds this runner's claims. The pause is
-    /// self-healing: it expires with the cooldown and is dropped by the next
-    /// registration or capability advertisement.
+    /// self-healing but not free: it lifts when the cooldown expires, or when the
+    /// runner re-registers (a restarted daemon). A capability advertisement alone
+    /// does not lift it - the daemon repeats that every minute and would otherwise
+    /// never actually be drained.
     /// </summary>
     public bool TryGetCapabilityPause(string runnerId, out CapabilityPause pause)
     {
@@ -1257,6 +1266,33 @@ public sealed class V1ReviewExecutorRegistry
         executor = default!;
         return false;
     }
+
+    /// <summary>
+    /// Test seam: backdates this runner's recorded capability failures so the
+    /// cooldown-expiry path can be exercised without waiting out the real
+    /// two-minute backoff. Never called in production.
+    /// </summary>
+    internal void AgeCapabilityFailuresForTests(string runnerId, TimeSpan age)
+    {
+        lock (_gate)
+        {
+            if (!_capabilityFailures.TryGetValue(runnerId, out var failures)) return;
+            foreach (var key in failures.Keys.ToList())
+            {
+                var state = failures[key];
+                failures[key] = state with
+                {
+                    LastFailureAt = state.LastFailureAt - age,
+                    CooldownUntil = state.CooldownUntil - age,
+                };
+            }
+        }
+    }
+
+    /// <summary>Caller must hold <see cref="_gate"/>.</summary>
+    private bool HasActiveCapabilityCooldownLocked(string runnerId, DateTime now)
+        => _capabilityFailures.TryGetValue(runnerId, out var failures)
+           && failures.Values.Any(state => state.CooldownUntil > now);
 
     /// <summary>Caller must hold <see cref="_gate"/>.</summary>
     private void ClearCapabilityFailures(string runnerId)

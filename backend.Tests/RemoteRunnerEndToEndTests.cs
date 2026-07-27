@@ -1851,6 +1851,67 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Monolith_v1_review_claim_leaves_an_envelope_less_subject_inside_the_grace_alone()
+    {
+        const string reviewRunnerId = "review-runner-grace";
+        const string reviewInstance = "review-grace-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Fresh review subject", "Build and verify.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        // No envelope yet and still inside the grace: the completion ingest may
+        // simply be in flight. The subject must neither be killed nor handed to
+        // an executor that provably cannot materialize it - it waits.
+        var fresh = SeedReviewAttempt(factory.Services, includeResultEnvelope: false);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            CancellationToken.None);
+
+        Assert.Equal("empty", claim.Status);
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var waiting = authority.GetReview(fresh.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Pending, waiting.State);
+        Assert.Null(waiting.Lease);
+        Assert.Null(waiting.TerminalAt);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, TaskKey)));
+    }
+
+    [Fact]
+    public void Monolith_v1_review_terminalization_never_kills_an_actively_leased_subject()
+    {
+        const string reviewRunnerId = "review-runner-leased";
+        const string reviewInstance = "review-leased-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Leased review subject", "Build and verify.");
+
+        using var factory = BuildFactory();
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var leased = SeedReviewAttempt(factory.Services, includeResultEnvelope: false);
+        var claimed = authority.ClaimReview(
+            leased.AttemptId,
+            reviewRunnerId,
+            "review-host",
+            300,
+            "leased-envelope-less-claim",
+            reviewInstance);
+        Assert.True(claimed.Accepted);
+        // Age past the grace: the terminalizer would now normally kill it, but a
+        // live lease means an executor is working - killing it would clear the
+        // lease under the running report.
+        authority.AgeReviewForTests(leased.AttemptId, TimeSpan.FromMinutes(16));
+
+        var terminalized = authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope();
+
+        Assert.DoesNotContain(terminalized, review => review.AttemptId == leased.AttemptId);
+        var survivor = authority.GetReview(leased.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Leased, survivor.State);
+        Assert.NotNull(survivor.Lease);
+        Assert.Null(survivor.TerminalAt);
+    }
+
+    [Fact]
     public async Task Monolith_v1_review_plane_exhausts_three_infrastructure_retries_to_escalated()
     {
         const string reviewRunnerId = "review-runner-budget";

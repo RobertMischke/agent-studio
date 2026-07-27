@@ -24,7 +24,14 @@ public sealed record PersistedRunnerSlot(
     DateTime? ProcessStartedAtUtc,
     long LastOutputSequence,
     string Phase,
-    DateTime UpdatedAtUtc);
+    DateTime UpdatedAtUtc,
+    // Commit the task worktree started from, recorded once the workspace has been
+    // prepared. It is the Result-Envelope's BaseSha and only the preparing process
+    // knows it, so a replacement daemon that reattaches to a detached worker can
+    // only complete with a full envelope trio if the value survived here. Optional
+    // for persistence compatibility: state written before this field simply loads
+    // as null and behaves exactly as it did before.
+    string? BaseSha = null);
 
 /// <summary>Atomic JSON persistence under RUNNER_STATE_DIR.</summary>
 public sealed class RunnerStateStore

@@ -382,6 +382,68 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task PushIntegrationBranch_PublishesTheApprovedMergeResult_NotALaterTip()
+    {
+        // The deferred push runs minutes after the gate released a merge result.
+        // If it published the branch TIP, a second merge that landed in that
+        // window - one no gate has approved yet - would ride to origin under this
+        // card's acceptance. The approved SHA is what gets published.
+        var (repo, remote) = SeedRepoWithOrigin("push-approved-sha");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "gated.txt"), "gated work");
+        Commit(repo, "feat: gated work");
+        var approved = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+        File.WriteAllText(Path.Combine(repo, "ungated.txt"), "not gated yet");
+        Commit(repo, "feat: work that no gate has approved");
+        var tip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+        Assert.NotEqual(approved, tip);
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "34");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var result = await runner.PushIntegrationBranchAsync(
+            "Fixture", "34", jobFolder, repo, "develop", CancellationToken.None, approved);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("pushed", result.Status);
+        Assert.Equal(approved, result.Sha);
+        Assert.Equal(approved, RemoteSha(remote, "develop"));
+        Assert.NotEqual(tip, RemoteSha(remote, "develop"));
+    }
+
+    [Fact]
+    public async Task PushIntegrationBranch_ApprovedShaOutsideTheBranch_FailsClosed()
+    {
+        // Publishing an object the integration branch does not contain would
+        // advance origin to something local develop never carried (for example
+        // after a gate rollback). Refuse instead, visibly.
+        var (repo, remote) = SeedRepoWithOrigin("push-approved-foreign");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "dev.txt"), "dev work");
+        Commit(repo, "feat: dev work");
+        RunGit(repo, "checkout -q -b side");
+        File.WriteAllText(Path.Combine(repo, "side.txt"), "side work");
+        Commit(repo, "feat: side work");
+        var foreign = RunGit(repo, "rev-parse refs/heads/side").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "35");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var result = await runner.PushIntegrationBranchAsync(
+            "Fixture", "35", jobFolder, repo, "develop", CancellationToken.None, foreign);
+
+        Assert.False(result.Success);
+        Assert.Equal("sha-not-on-branch", result.Status);
+        Assert.Equal(string.Empty, RemoteSha(remote, "develop"));
+        var step = ReadPushStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+    }
+
+    [Fact]
     public void Run_MergedAndPushEnabled_EnqueuesDevelopPush_OffTheRequestPath()
     {
         // The merge runs synchronously on the accept trigger; the origin push is
@@ -407,6 +469,37 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.True(queue.Reader.TryRead(out var queued), "a develop push must be enqueued after a successful merge");
         Assert.Equal("40", queued!.JobId);
         Assert.Equal("develop", queued.IntegrationBranch);
+        // The object the push may publish is pinned at release time, not read
+        // from the branch when the queued item finally runs.
+        Assert.Equal(outcome.MergedSha, queued.ApprovedSha);
+    }
+
+    [Fact]
+    public void Run_AlreadyMerged_EnqueuesTheTipAtReleaseTime()
+    {
+        // AlreadyMerged produces no commit of its own, so the released object is
+        // the integration tip as it stands at acceptance - still pinned here, not
+        // re-read later by the worker.
+        var repo = SeedRepo("run-already-merged");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/44");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"chore: pre-merged\" task/44");
+        var tip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var queue = new IntegrationPushQueue();
+        var jobFolder = BeginRun(log, repo, jobId: "44");
+        var runner = new MergeIntoDevelopRunner(
+            git, log, NullLogger<MergeIntoDevelopRunner>.Instance, pushQueue: queue, projectSettings: settings);
+
+        var outcome = runner.Run("Fixture", "44", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal(tip, queued!.ApprovedSha);
     }
 
     [Fact]

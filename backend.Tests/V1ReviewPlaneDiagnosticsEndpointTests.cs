@@ -86,8 +86,10 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
         Assert.Contains("paused", paused.Message!, StringComparison.Ordinal);
         Assert.Contains("toolchain:dotnet", paused.Message!, StringComparison.Ordinal);
 
-        // ... and the next capability advertisement lifts it again: that is how
-        // the Review Unit un-pauses itself without operator intervention.
+        // ... and the routine 60s capability advertisement must NOT cut that drain
+        // short: it refreshes the snapshot, it is not a health verdict. Lifting
+        // the pause here would mean the drain never drains - a broken executor
+        // would be claim-eligible again one minute later, forever.
         var advertisement = await http.PostAsJsonAsync(
             $"/api/v1/runners/{RunnerId}/capabilities",
             new Contract.CapabilityAdvertisementRequest(
@@ -99,6 +101,44 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
                 1,
                 [new Contract.AdvertisedCapabilityDto(Contract.CapabilityProtocol.DotNet, "toolchain")]));
         advertisement.EnsureSuccessStatusCode();
+
+        var stillPaused = await ClaimAsync(http);
+        Assert.Equal("empty", stillPaused.Status);
+        Assert.Contains("paused", stillPaused.Message!, StringComparison.Ordinal);
+
+        // The pause lifts by itself once the cooldown runs out.
+        factory.Services
+            .GetRequiredService<V1ReviewExecutorRegistry>()
+            .AgeCapabilityFailuresForTests(RunnerId, TimeSpan.FromMinutes(10));
+
+        var resumed = await ClaimAsync(http);
+        Assert.Equal("empty", resumed.Status);
+        Assert.DoesNotContain("paused", resumed.Message ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_re_registered_review_executor_starts_unpaused_even_inside_an_active_cooldown()
+    {
+        // The other way out of a drain: a full re-registration. That is a daemon
+        // restart re-declaring this identity's health, so a replacement instance
+        // is never born paused by its predecessor's failures.
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        await RegisterReviewExecutorAsync(http);
+
+        var now = DateTime.UtcNow;
+        foreach (var key in new[] { "cap-drain-1", "cap-drain-2" })
+        {
+            var reported = await http.PostAsJsonAsync(
+                FailurePath(RunnerId),
+                Failure("toolchain:dotnet", "ToolchainUnavailable", key, now));
+            reported.EnsureSuccessStatusCode();
+        }
+
+        var paused = await ClaimAsync(http);
+        Assert.Contains("paused", paused.Message!, StringComparison.Ordinal);
+
+        await RegisterReviewExecutorAsync(http);
 
         var resumed = await ClaimAsync(http);
         Assert.Equal("empty", resumed.Status);
