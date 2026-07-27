@@ -17,9 +17,15 @@ const packageJsonPath = require.resolve('coding-agent-chat/package.json');
 const packageRoot = dirname(packageJsonPath);
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 
-if (packageJson.version !== '0.3.1') {
+// 0.3.2 changed only the conversation/shared modules (structured runner
+// activity, AGT-2316); its composer output is byte-identical to 0.3.1, so the
+// same rewrites apply. Any other version fails loudly below - either here or
+// via the occurrence guards.
+const supportedVersions = new Set(['0.3.1', '0.3.2']);
+if (!supportedVersions.has(packageJson.version)) {
   throw new Error(
-    `The coding-agent-chat model-selector compatibility patch expects 0.3.1, found ${packageJson.version}.`,
+    `The coding-agent-chat model-selector compatibility patch expects one of `
+    + `${[...supportedVersions].join(', ')}, found ${packageJson.version}.`,
   );
 }
 
