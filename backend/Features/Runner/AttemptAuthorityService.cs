@@ -686,6 +686,22 @@ public sealed class AttemptAuthorityService
         }
     }
 
+    /// <summary>
+    /// Test seam: backdates a review's CreatedAt past the legacy-envelope
+    /// terminalization grace so the terminalize path can be exercised without
+    /// waiting out the real clock. Never called in production.
+    /// </summary>
+    internal void AgeReviewForTests(string reviewAttemptId, TimeSpan age)
+    {
+        lock (_gate)
+        {
+            var review = FindReview(reviewAttemptId)
+                ?? throw new InvalidOperationException($"Unknown review '{reviewAttemptId}'.");
+            review.CreatedAt -= age;
+            PersistLocked();
+        }
+    }
+
     public AttemptWriteResult SettleReview(SettleReviewAttemptRequest request)
     {
         lock (_gate)

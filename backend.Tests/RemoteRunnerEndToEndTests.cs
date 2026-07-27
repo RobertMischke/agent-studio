@@ -1818,6 +1818,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         var legacy = SeedReviewAttempt(factory.Services, includeResultEnvelope: false);
+        // The claim-time terminalization honours a grace window (rollout of
+        // old runner binaries); age the seeded review past it so this test
+        // exercises the terminalize path, not the grace.
+        factory.Services.GetRequiredService<AttemptAuthorityService>()
+            .AgeReviewForTests(legacy.AttemptId, TimeSpan.FromMinutes(16));
         await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
         using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
 
