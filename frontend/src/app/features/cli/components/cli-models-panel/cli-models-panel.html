@@ -4,7 +4,7 @@
       <div class="cli-models__policy-copy">
         <span class="cli-models__policy-title">Automatic task routing</span>
         <span class="cli-models__policy-detail">
-          Policy {{ routingPolicy.version }} derives the default tier from task type.
+          Policy {{ routingPolicy.policyVersion }} derives the default tier from task type.
           Correctness floors still apply.
         </span>
       </div>
@@ -14,7 +14,7 @@
                [checked]="routingPolicy.economyMode"
                [disabled]="savingEconomyMode()"
                (change)="setEconomyMode($any($event.target).checked)" />
-        <span>{{ routingPolicy.economyModeLabel }}</span>
+        <span>Economy mode {{ routingPolicy.economyMode ? 'on' : 'off' }}</span>
         <small>Lower eligible tiers by one step</small>
       </label>
     </section>
