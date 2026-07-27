@@ -652,7 +652,7 @@ public sealed class GitWorkspace
         await Git(["push", "origin", $"HEAD:refs/heads/{branch}"], RepoPath, ct);
         var published = await RemoteBranchHeadAsync(branch, ct);
         if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
+            throw new RemoteDeliveryVerificationException(
                 $"Registered project repository ref 'refs/heads/{branch}' resolved to " +
                 $"'{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
@@ -671,7 +671,7 @@ public sealed class GitWorkspace
             workingDirectory: SharedRepoPath,
             ct: ct);
         if (!result.Success)
-            throw new InvalidOperationException(
+            throw new RemoteDeliveryVerificationException(
                 $"git ls-remote against the registered project repository for {immutableRef} " +
                 $"failed ({result.ExitCode}): {result.StdErr.Trim()}");
         var published = result.StdOut.Split(
@@ -679,8 +679,9 @@ public sealed class GitWorkspace
             StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"Immutable result ref '{immutableRef}' resolved to '{published ?? "missing"}', expected '{expectedHead}'.");
+            throw new RemoteDeliveryVerificationException(
+                $"Registered project repository immutable result ref '{immutableRef}' resolved to " +
+                $"'{published ?? "missing"}', expected '{expectedHead}'.");
         }
         _log($"result-transfer-completed ref={immutableRef} sha={expectedHead} path={RepoPath}");
     }
@@ -829,6 +830,14 @@ public sealed record RemoteDeliveryProof(
     string RepositoryUrl,
     string Ref,
     string CommitSha);
+
+/// <summary>
+/// The push command may have succeeded, but the registered project repository
+/// did not expose the published ref at the expected commit. This is a terminal
+/// delivery failure, not a transient transfer acknowledgement gap.
+/// </summary>
+public sealed class RemoteDeliveryVerificationException(string message)
+    : InvalidOperationException(message);
 
 public sealed record SalvageReconciliationResult(
     string Kind,

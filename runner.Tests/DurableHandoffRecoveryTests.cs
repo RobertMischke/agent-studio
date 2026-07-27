@@ -268,6 +268,90 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             (await GitAsync(reader, "rev-parse", "FETCH_HEAD")).StdOut);
     }
 
+    [Fact]
+    public async Task Restart_escalates_push_to_wrong_repository_and_retains_worktree()
+    {
+        var registeredOrigin = await SeedOriginAsync();
+        var wrongOrigin = Path.Combine(_root, "wrong-origin.git");
+        await GitAsync(_root, "init", "--bare", wrongOrigin);
+        var options = Options(registeredOrigin);
+        var authority = new RunOutboxAuthority(
+            "run-wrong-repository",
+            "TASK-13",
+            "runner-a",
+            "old-host:45",
+            "lease-e",
+            13);
+        var workspace = new GitWorkspace(
+            options,
+            authority.TaskKey,
+            _ => { },
+            "repo-13",
+            registeredOrigin,
+            "main");
+        await workspace.PrepareAsync(default);
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace.RepoPath, "result.txt"),
+            "must remain recoverable");
+        await GitAsync(
+            workspace.SharedRepoPath,
+            "config",
+            "--replace-all",
+            "remote.origin.pushurl",
+            wrongOrigin);
+        var outbox = DurableRunOutbox.Open(
+            Path.Combine(_root, "outbox"),
+            authority);
+        outbox.Enqueue("run-context", JsonSerializer.Serialize(
+            new DurableRunContextPayload(
+                "repo-13",
+                registeredOrigin,
+                "main",
+                workspace.BaseSha!),
+            WebJson));
+        outbox.Enqueue("terminal", JsonSerializer.Serialize(
+            new DurableTerminalPayload("Done", null),
+            WebJson));
+
+        var handler = new RecordingHandler();
+        using var http = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost"),
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner-a",
+            usesDurableTaskServer: true);
+        var recovery = new DurableHandoffRecovery(options, client, _ => { });
+
+        await recovery.RecoverAllAsync(default);
+        await recovery.RecoverAllAsync(default);
+
+        var failed = DurableRunOutbox.Open(
+            Path.Combine(_root, "outbox"),
+            authority);
+        Assert.Equal(
+            "delivery-verification-failed",
+            failed.Snapshot.FinalHandoffState);
+        Assert.Empty(failed.Pending);
+        Assert.True(Directory.Exists(workspace.RepoPath));
+        Assert.Equal(0, handler.HandoffCalls);
+        Assert.Equal(1, handler.CompletionCalls);
+        Assert.Equal("Blocked", handler.LastCompletion!.Outcome);
+        Assert.Contains("host=new-host", handler.LastCompletion.Summary);
+        Assert.Contains($"worktree={workspace.RepoPath}", handler.LastCompletion.Summary);
+        Assert.Contains("branch=runner/runner-a/TASK-13", handler.LastCompletion.Summary);
+        var registeredRef = await ProcessRunner.RunAsync(
+            "git",
+            ["show-ref", "--verify", "--quiet", "refs/heads/runner/runner-a/TASK-13"],
+            workingDirectory: registeredOrigin);
+        Assert.False(registeredRef.Success);
+        Assert.True((await ProcessRunner.RunAsync(
+            "git",
+            ["show-ref", "--verify", "--quiet", "refs/heads/runner/runner-a/TASK-13"],
+            workingDirectory: wrongOrigin)).Success);
+    }
+
     private RunnerOptions Options(string? gitRemote = null) => new()
     {
         ServerUrl = "http://localhost",
@@ -338,6 +422,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
         public int ArtifactCalls { get; private set; }
         public int CodingProcessCalls { get; private set; }
         public ImmutableResultEnvelope? LastEnvelope { get; private set; }
+        public CompleteRunRequest? LastCompletion { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -370,10 +455,14 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
                 var runId = path.Split(
                     '/',
                     StringSplitOptions.RemoveEmptyEntries)[3];
+                var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+                LastCompletion = JsonSerializer.Deserialize<CompleteRunRequest>(
+                    body,
+                    WebJson)!;
                 return Json(HttpStatusCode.OK, new RunDto(
                     runId,
                     "task-9",
-                    "Done",
+                    LastCompletion.Outcome,
                     "runner-a",
                     9,
                     DateTime.UtcNow,

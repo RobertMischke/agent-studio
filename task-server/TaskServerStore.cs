@@ -942,6 +942,9 @@ public sealed partial class TaskServerStore
             }
             if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || request.Sequence is null)
                 throw new ArgumentException("Run completion idempotencyKey and monotonic sequence are required.");
+            var targetState = IsVisibleDeliveryFailure(request.Outcome)
+                ? "5e-escalated"
+                : "4-auto-review";
             await RecordOutboxSequenceAsync(
                 connection,
                 transaction,
@@ -987,7 +990,7 @@ public sealed partial class TaskServerStore
                        source_bundle_artifact_id = NULL,
                        source_bundle_sha256 = $bundleSha
                  WHERE id = $run;
-                UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
+                UPDATE tasks SET state = $targetState, version = version + 1, updated_at = $now WHERE id = $task;
                 INSERT INTO run_completions(
                     run_id, outcome, summary, envelope_digest, sequence,
                     idempotency_key, completed_at)
@@ -1003,6 +1006,7 @@ public sealed partial class TaskServerStore
                 ("$key", request.IdempotencyKey),
                 ("$now", Iso(now)),
                 ("$task", lease.TaskId),
+                ("$targetState", targetState),
                 ("$resultSha", resultHandoff?.Envelope.ResultSha),
                 ("$repositoryId", resultHandoff?.Envelope.RepositoryId),
                 ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
@@ -1029,22 +1033,25 @@ public sealed partial class TaskServerStore
                     request.Outcome,
                     request.Summary,
                     authority = "task-server",
-                    nextState = "4-auto-review",
+                    nextState = targetState,
                 },
                 ct);
-            await AppendLifecycleEventAsync(
-                connection,
-                transaction,
-                runId,
-                lease.TaskId,
-                lease.Fence,
-                LifecycleEventKinds.PostProcessingCompleted,
-                new
-                {
-                    artifacts = "canonical-store",
-                    reviewAuthority = "deployed-backend",
-                },
-                ct);
+            if (string.Equals(targetState, "4-auto-review", StringComparison.Ordinal))
+            {
+                await AppendLifecycleEventAsync(
+                    connection,
+                    transaction,
+                    runId,
+                    lease.TaskId,
+                    lease.Fence,
+                    LifecycleEventKinds.PostProcessingCompleted,
+                    new
+                    {
+                        artifacts = "canonical-store",
+                        reviewAuthority = "deployed-backend",
+                    },
+                    ct);
+            }
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {
@@ -2201,6 +2208,9 @@ public sealed partial class TaskServerStore
 
     private static bool RequiresResultEnvelope(string outcome)
         => outcome.Trim().ToLowerInvariant() is "success" or "done" or "noop" or "no-op";
+
+    private static bool IsVisibleDeliveryFailure(string outcome)
+        => string.Equals(outcome.Trim(), "blocked", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateImmutableSource(string runId, ImmutableResultEnvelope envelope)
     {

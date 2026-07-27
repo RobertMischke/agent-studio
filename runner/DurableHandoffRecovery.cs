@@ -39,16 +39,31 @@ public sealed class DurableHandoffRecovery
                 continue;
             if (DurableRunOutbox.IsActive(outbox.Authority.RunId))
                 continue;
-            if (string.Equals(
-                    outbox.Snapshot.FinalHandoffState,
-                    "completed",
-                    StringComparison.Ordinal)
+            if ((string.Equals(
+                     outbox.Snapshot.FinalHandoffState,
+                     "completed",
+                     StringComparison.Ordinal)
+                 || string.Equals(
+                     outbox.Snapshot.FinalHandoffState,
+                     "delivery-verification-failed",
+                     StringComparison.Ordinal))
                 && outbox.Pending.Count == 0)
                 continue;
 
             try
             {
                 await RecoverAsync(outbox, ct);
+            }
+            catch (WorktreeSalvageException ex)
+                when (RemoteTaskRunner.IsRegisteredRepositoryVerificationFailure(ex))
+            {
+                await RemoteTaskRunner.ReportUnsecuredDurableWorktreeAsync(
+                    _options,
+                    _client,
+                    outbox,
+                    _log,
+                    ex,
+                    CancellationToken.None);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

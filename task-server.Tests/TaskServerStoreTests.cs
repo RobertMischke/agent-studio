@@ -13,6 +13,47 @@ namespace TaskServer.Tests;
 public sealed class TaskServerStoreTests
 {
     [Fact]
+    public async Task Delivery_verification_failure_escalates_with_recovery_coordinates()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        const string recovery =
+            "worktree-blocked: host=runner-a; worktree=/srv/runner/worktrees/TS-1; " +
+            "branch=runner/runner-a/TS-1; failure=registered repository ref missing. " +
+            "Recovery recipe: publish the retained HEAD to the registered repository, then requeue.";
+
+        var completed = await store.CompleteRunAsync(
+            claim.Run!.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                "Blocked",
+                recovery,
+                IdempotencyKey: $"completion:{claim.Run.RunId}:delivery-verification-failed",
+                Sequence: 1),
+            "runner-a",
+            default);
+
+        Assert.Equal("Blocked", completed.Status);
+        var escalated = await store.GetTaskAsync(project.ProjectId, task.TaskId, default);
+        Assert.Equal("5e-escalated", escalated!.State);
+        var completedEvent = Assert.Single(
+            await store.ListEventsAsync(claim.Run.RunId, 0, default),
+            item => item.Kind == LifecycleEventKinds.RunCompleted);
+        Assert.Contains("5e-escalated", completedEvent.PayloadJson);
+        Assert.Contains(recovery, completedEvent.PayloadJson);
+    }
+
+    [Fact]
     public async Task Releasing_a_dead_runner_attempt_returns_its_progress_task_to_ready()
     {
         using var temp = new TempDirectory();

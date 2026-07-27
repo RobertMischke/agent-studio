@@ -410,8 +410,10 @@ state.
   `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>`. Cleanup then requires
   the Task Server acknowledgement for the matching canonical envelope digest.
   A process restart replays the original outbox before new claims and never
-  starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
-  worktree, and consumes no coding or completion budget.
+  starts the coding CLI. Interrupted transfer stays `transfer-recovery`, retains
+  the worktree, and consumes no coding or completion budget. A missing or
+  mismatched registered-repository ref is instead a terminal visible delivery
+  failure with explicit recovery coordinates.
 - The Task Server stores one result envelope per RunAttempt with repository ID
   and URL, base and result SHA, immutable ref or source-bundle digest,
   artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion

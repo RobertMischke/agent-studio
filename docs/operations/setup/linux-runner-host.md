@@ -694,8 +694,11 @@ records the collision ref, canonical and local SHAs, and the typed recovery
 action. Each transfer pass makes three publish attempts. Exhaustion leaves the
 worktree and both tips untouched, records `transfer-recovery`, and retries a
 transfer pass with backoff. It does not complete, move, requeue, or launch a new
-coding attempt. Do not delete that path manually. Restore origin access and let
-the outbox converge.
+coding attempt. A distinct registered-repository verification failure is
+terminal: if `ls-remote` reports the published ref missing or at another SHA
+after the push, the runner retains the worktree and routes the card to
+`5e-escalated` with the hostname, worktree path, branch, cause, and recovery
+recipe. Do not delete that path manually.
 
 ### Local-profile client attribution
 

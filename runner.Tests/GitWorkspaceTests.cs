@@ -285,6 +285,7 @@ public sealed class GitWorkspaceTests : IDisposable
             "registered project repository",
             error.InnerException?.Message,
             StringComparison.OrdinalIgnoreCase);
+        Assert.True(RemoteTaskRunner.IsRegisteredRepositoryVerificationFailure(error));
         Assert.True(Directory.Exists(workspace.RepoPath));
         Assert.Equal(localHead, (await GitAsync(wrongOrigin, "rev-parse", $"refs/heads/{error.Branch}")).StdOut);
         var expectedRepoRef = await RunGitAsync(

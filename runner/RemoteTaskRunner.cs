@@ -342,6 +342,18 @@ public sealed class RemoteTaskRunner
         {
             if (outbox is not null)
             {
+                if (IsRegisteredRepositoryVerificationFailure(ex))
+                {
+                    await ReportUnsecuredDurableWorktreeAsync(
+                        _options,
+                        _client,
+                        outbox,
+                        _log,
+                        ex,
+                        CancellationToken.None);
+                    handedBack = true;
+                    return 1;
+                }
                 outbox.RecordHandoffState("transfer-recovery");
                 await ReportOutboxSafeAsync(outbox, CancellationToken.None);
                 _log($"result transfer remains recoverable without a new coding attempt: {ex.Message}");
@@ -802,6 +814,9 @@ public sealed class RemoteTaskRunner
             }
             catch (WorktreeSalvageException ex) when (!shutdown.IsCancellationRequested)
             {
+                if (IsRegisteredRepositoryVerificationFailure(ex))
+                    throw;
+
                 var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Max(2, attempt * 5)));
                 outbox.Enqueue(
                     "transfer-recovery",
@@ -1020,6 +1035,89 @@ public sealed class RemoteTaskRunner
         {
             _log($"worktree-salvage-escalation-failed task={taskKey} path={ex.WorktreePath} error={reportEx.Message}");
         }
+    }
+
+    internal static async Task ReportUnsecuredDurableWorktreeAsync(
+        RunnerOptions options,
+        TaskServerClient client,
+        DurableRunOutbox outbox,
+        Action<string> log,
+        WorktreeSalvageException ex,
+        CancellationToken ct)
+    {
+        var gate = BuildUnsecuredWorktreeGate(options.Hostname, ex);
+        log(
+            $"worktree-delivery-verification-escalated task={outbox.Authority.TaskKey} " +
+            $"host={options.Hostname} path={ex.WorktreePath} branch={ex.Branch} " +
+            $"localSha={ex.LocalCommitSha ?? "unknown"} remoteSha={ex.RemoteCommitSha ?? "unknown"}");
+        if (!outbox.Items.Any(item =>
+                string.Equals(
+                    item.Kind,
+                    "delivery-verification-failed",
+                    StringComparison.Ordinal)))
+        {
+            outbox.Enqueue(
+                "delivery-verification-failed",
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        taskKey = outbox.Authority.TaskKey,
+                        host = options.Hostname,
+                        worktree = ex.WorktreePath,
+                        ex.Branch,
+                        ex.LocalCommitSha,
+                        ex.RemoteCommitSha,
+                        cause = ex.InnerException?.Message ?? ex.Message,
+                        recoveryRecipe = gate,
+                    },
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        }
+        if (!outbox.Items
+                .Where(item => string.Equals(item.Kind, "completion", StringComparison.Ordinal))
+                .Select(item => JsonSerializer.Deserialize<DurableCompletionPayload>(
+                    item.PayloadJson,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)))
+                .Any(payload => string.Equals(
+                    payload?.Outcome,
+                    "Blocked",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            outbox.Enqueue(
+                "completion",
+                JsonSerializer.Serialize(
+                    new DurableCompletionPayload(
+                        "Blocked",
+                        gate,
+                        ResultEnvelopeDigest: null),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        }
+        await outbox.ReplayAsync(
+            (item, token) => client.SendOutboxItemAsync(outbox.Authority, item, token),
+            ct);
+        outbox.RecordHandoffState("delivery-verification-failed");
+        try
+        {
+            await client.ReportOutboxAsync(
+                options.RunnerId,
+                client.RunnerInstanceId,
+                outbox,
+                ct);
+        }
+        catch (Exception reportException) when (reportException is not OperationCanceledException)
+        {
+            log($"delivery-verification outbox observability deferred: {reportException.Message}");
+        }
+    }
+
+    internal static bool IsRegisteredRepositoryVerificationFailure(
+        WorktreeSalvageException exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is RemoteDeliveryVerificationException)
+                return true;
+        }
+        return false;
     }
 
     internal static string BuildUnsecuredWorktreeGate(
