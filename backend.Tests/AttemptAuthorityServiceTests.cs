@@ -135,6 +135,26 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Crash_restarted_executor_reclaims_with_the_same_delivery_key_after_lease_expiry()
+    {
+        var now = new DateTime(2026, 7, 28, 0, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var first = service.ClaimReview(
+            review.AttemptId, "reviewer", "host", 30, "claim-crash").ReviewAttempt!;
+
+        // Same executor identity, same idempotency key, lease dead: this is a
+        // takeover after a daemon crash, not a replay with surviving authority.
+        // It must mint a fresh lease instead of bouncing with LeaseExpired.
+        now = now.AddSeconds(31);
+        var reclaimed = service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-crash");
+
+        Assert.Equal(AttemptWriteStatus.Accepted, reclaimed.Status);
+        Assert.True(reclaimed.ReviewAttempt!.LastFence > first.LastFence);
+        Assert.Equal("reviewer", reclaimed.ReviewAttempt.Lease!.ExecutorId);
+    }
+
+    [Fact]
     public void Review_takeover_on_same_attempt_rejects_old_claim_and_renewal_replays()
     {
         var now = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);

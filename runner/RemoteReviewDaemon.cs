@@ -60,13 +60,27 @@ public sealed class RemoteReviewDaemon
             var claimedAny = false;
             while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
             {
-                var claim = await _client.ClaimReviewAsync(
-                    new ReviewClaimRequest(
-                        _options.RunnerId,
-                        _client.RunnerInstanceId,
-                        _options.TtlSeconds,
-                        _options.HostMaxParallelism - active.Count),
-                    shutdown);
+                ReviewClaimResponse claim;
+                try
+                {
+                    claim = await _client.ClaimReviewAsync(
+                        new ReviewClaimRequest(
+                            _options.RunnerId,
+                            _client.RunnerInstanceId,
+                            _options.TtlSeconds,
+                            _options.HostMaxParallelism - active.Count),
+                        shutdown);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException
+                                                  || !shutdown.IsCancellationRequested)
+                {
+                    // A failed claim poll must never kill the daemon: the systemd
+                    // restart would abort every in-flight review on this host and
+                    // re-claim it from zero (observed as a 409 crash-loop). Absorb
+                    // like the coding daemon and retry on the next poll tick.
+                    _log($"review claim poll failed; retrying next tick: {exception.Message}");
+                    break;
+                }
                 if (!string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase))
                     break;
                 claimedAny = true;
