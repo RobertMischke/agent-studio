@@ -68,13 +68,13 @@ import {
   formatTokens,
   historicalStepStatusIcon,
   laneLabel,
-  runStatusIcon,
   stepKindIcon,
   stepKindLabel,
   stepStatusIcon,
   stepStatusLabel,
 } from './overview-pane-formatters';
 import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
+import { OverviewRunsComponent } from './overview-runs/overview-runs.component';
 import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
 import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
 
@@ -466,7 +466,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, CopyableTaskKeyComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, OverviewRunsComponent, CopyableTaskKeyComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -479,7 +479,6 @@ export class OverviewPaneComponent {
   readonly laneLabel = laneLabel;
   readonly formatTokens = formatTokens;
   readonly formatDuration = formatDuration;
-  readonly runStatusIcon = runStatusIcon;
 
   readonly job = input.required<TaskInfo>();
   /** Raw task prompt markdown (`promptMarkdown`), surfaced via the Prompt
@@ -787,27 +786,6 @@ export class OverviewPaneComponent {
     const r = this.runs();
     return r.length > 0 ? r[r.length - 1] : null;
   });
-
-  readonly recentRuns = computed(() => {
-    const r = this.runs();
-    return r.slice(-8);
-  });
-
-  /** "1 run" / "N runs" label for the consolidated Runs-section summary. */
-  readonly runCountLabel = computed<string>(() => {
-    const n = this.runCount();
-    return n === 1 ? '1 run' : `${n} runs`;
-  });
-
-  /**
-   * Render the consolidated Runs section when there is any run count, any
-   * elapsed time, or at least one run-status icon to show. Folds in the run
-   * count + total duration that used to sit in the Tokens & Performance block
-   * (they duplicated this section), so all CLI-run info has one home.
-   */
-  readonly hasRunsSection = computed<boolean>(() =>
-    this.runCount() > 0 || this.totalDuration() > 0 || this.recentRuns().length > 0,
-  );
 
   readonly totalDuration = computed(() => {
     let total = 0;
@@ -1722,17 +1700,6 @@ export class OverviewPaneComponent {
     if (ms <= 0) return '—';
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return this.formatDuration(ms / 1000);
-  }
-
-  runTooltip(run: RunRecord): string {
-    const parts: string[] = [
-      `Run #${run.index + 1} (${run.intent})`,
-      `Status: ${run.status}`,
-    ];
-    if (run.startedAt) parts.push(`Started: ${this.formatAbsoluteTime(run.startedAt)}`);
-    if (run.durationSeconds != null) parts.push(`Duration: ${this.formatDuration(run.durationSeconds)}`);
-    if (run.cli) parts.push(`CLI: ${run.cli}`);
-    return parts.join('\n');
   }
 
   cliTypeLabel(t: CliType): string {
