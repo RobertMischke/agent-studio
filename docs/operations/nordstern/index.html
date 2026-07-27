@@ -44,12 +44,21 @@
 <h2>Zielbild in Kürze</h2>
 <p>Agent Studio orchestriert Coding-Agenten: Karten laufen durch <b>code → Auto-Review → Integration</b>. Das Ziel ist ein <b>verteiltes, container-isoliertes System</b>, in dem Runner und Backend über <b>ein sauberes v1-Protokoll</b> (nie driftend) sprechen, jede Ausführung im <b>Container-Default</b> läuft, Agenten <b>autonom selbst pushen</b>, und die Verifikation <b>hermetisch im selben Container</b> stattfindet.</p>
 
-<h2>Stand jetzt (27.07.)</h2>
+<h2>Stand jetzt (27.07., nach dem Umsetzungs-Marathon)</h2>
 <table>
   <tr><th>Erledigt</th><th>Offen</th></tr>
   <tr>
-    <td><b class="ok">main gesund</b> (alle Fixes deployt, läuft)<br><b class="ok">develop baut</b> (repariert)<br><b class="ok">11 Karten integriert</b> (build-verifiziert)</td>
-    <td><b class="bad">Auto-Review kaputt</b> (Runner sendet keinen ResultEnvelope)<br>2 Karten (2302, 2375) + Modell-Routing-Backend<br>Container-Default, verteilte Plattform noch offen</td>
+    <td>
+      <b class="ok">P0 komplett + deployt:</b> Runner sendet das Envelope-Trio wieder (Revert-Loch geschlossen), Build-Gate vor jedem develop-Merge (build-only, Rollback bei rot, Push nur der freigegebenen SHA), Review-Plane-Diagnoserouten gemappt. Runner-Binary neu auf agent-runner-01, Backend neu gestartet.<br>
+      <b class="ok">P1 komplett:</b> 7 Docker-Images bauen (Remote-Host), Compose-Smoke grün, Installer mit Container-Default.<br>
+      <b class="ok">11 Karten direkt umgesetzt/integriert</b> (u.&nbsp;a. 2375, 2382, 2302+2376 koordiniert) + 4 Orphan-WIP-Bereinigungen; main→develop gemergt.<br>
+      <b class="ok">2 adversariale Review-Wellen:</b> 42 Agenten, 25 bestätigte Findings gefixt.
+    </td>
+    <td>
+      <b class="warn" style="color:var(--warn)">Auto-Review-Heilung in Live-Probe</b> (erste Karte läuft durch die Strecke)<br>
+      Eskalierten-Bestand langsam requeuen; Karten-Buchhaltung<br>
+      P2 verteilte Plattform (erster Baustein Host-Kapazität liegt auf develop), P3 Tunnel-Ablösung
+    </td>
   </tr>
 </table>
 
