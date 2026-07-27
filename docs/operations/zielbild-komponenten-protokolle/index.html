@@ -53,8 +53,8 @@
   <h1>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy</h1>
   <p class="lede">Die Nacht vom 27.07. hat empirisch gezeigt, wo das verteilte Agent-Studio-System bricht: nicht im Code der Features, sondern an den <b>Verträgen zwischen den Komponenten</b> und am <b>Integrations- und Ausliefer-Modell</b>. Dieses Dokument beschreibt die Komponenten und ihre Protokolle, den Kern-Befund (Versions-Drift), und beantwortet die vier Steuerungsfragen — wie schneiden, bauen, deployen wir, und gehören Binaries/Architektur-Arbeit überhaupt in unabhängige Tasks.</p>
   <div class="meta">
-    <span><b>Status</b> Shaping (27.07., aus Incident)</span>
-    <span><b>Phase</b> Entscheidungsreif für Sichtblick</span>
+    <span><b>Status</b> Aktualisiert 27.07. — Richtung entschieden</span>
+    <span><b>Phase</b> Umsetzung: Schritte zum Zielbild</span>
     <span><b>Evidenz</b> Nacht-Incident (siehe [[nacht-incident-2026-07-27-handoff]])</span>
   </div>
 </header>
@@ -66,8 +66,9 @@
   <li><a href="#schnitt">4 · Wie schneiden wir?</a></li>
   <li><a href="#build">5 · Wie bauen wir?</a></li>
   <li><a href="#deploy">6 · Wie deployen wir?</a></li>
-  <li><a href="#sofort">7 · Sofort-Konsequenzen</a></li>
-  <li><a href="#offen">8 · Offene Entscheidungen</a></li>
+  <li><a href="#sofort">7 · Stand jetzt</a></li>
+  <li><a href="#offen">8 · Schritte zum Zielbild</a></li>
+  <li><a href="#imziel">9 · Im Zielbild</a></li>
 </ul></nav>
 
 <h2 id="evidenz"><span class="no">1</span>Evidenz aus der Nacht — was wirklich brach</h2>
@@ -180,20 +181,40 @@
   </ul>
 </div>
 
-<h2 id="sofort"><span class="no">7</span>Sofort-Konsequenzen</h2>
-<ul>
-  <li><b>main ist gesund</b> (alle 5 Fixes committet, deployt, läuft). Nichts verloren.</li>
-  <li><b>develop muss repariert werden</b> bevor irgendetwas integriert werden kann: die orphaned Workbench-Typen (<code>WorkbenchPresentationSelection</code>, <code>WorkbenchAttachmentRequest</code>) definieren oder die referenzierenden Dateien entfernen. Alternative: develop auf main zurücksetzen und die verteilte-Plattform-Arbeit sauber neu aufsetzen.</li>
-  <li><b>Die heutigen Karten</b> (2382, 2375, 2302, 2242 u.a. — reale, kohärente Implementierungen) am besten <b>sauber neu laufen lassen</b>, sobald (a) develop baut und (b) das Review-Plane materialisiert — statt aus gestörten, kontaminierten Branches zu salvagen.</li>
-  <li><b>Runner-Update ist der Zielbild-Hebel:</b> agent-host auf das aktuelle v1-Protokoll (Envelope, POST, Canonical-Logs) bringen — das behebt die Wurzel aller drei Drift-Blocker auf einmal.</li>
-</ul>
+<h2 id="sofort"><span class="no">7</span>Stand jetzt (27.07.)</h2>
+<table>
+  <tr><th>Erledigt</th><th>Offen</th></tr>
+  <tr>
+    <td>
+      <b>main gesund</b> — alle 5 Infra-Fixes committet, deployt, läuft.<br>
+      <b>develop baut wieder</b> — 3 tote WIP-Dateien raus, Modell-Routing-Frontend vervollständigt.<br>
+      <b>11 Karten integriert</b> (jede build-verifiziert) + gepusht.
+    </td>
+    <td>
+      <b style="color:var(--bad)">Auto-Review noch kaputt</b> — Runner sendet keinen <code>ResultEnvelope</code> → jede Karte eskaliert.<br>
+      <b>2 Karten</b> (AGT-2302, 2375) brachen den Build → zurückgerollt.<br>
+      <b>Modell-Routing-Backend-Endpoints</b> fehlen (UI degradiert graceful).
+    </td>
+  </tr>
+</table>
+<p class="dim">Die 11 integrierten Karten sind <b>build-verifiziert, aber nicht qualitäts-reviewt</b> (Auto-Review ist ja kaputt) und liegen auf develop, nicht auf main. Reiner Zwischenstand — der saubere Weg ist Schritt 1.</p>
 
-<h2 id="offen"><span class="no">8</span>Offene Entscheidungen</h2>
-<div class="box"><h4><span class="dnum">E1</span>Runner-Update-Weg</h4><p>agent-host-Binary auf das neue v1-Protokoll bringen (Envelope emittieren, POST, Canonical-Log-Writes). Als eine koordinierte Änderung (Server-Vertrag ist schon da) — nicht als getrennte Tranchen. Wer/wie: gehört das in einen Task oder machst du/ich das direkt (weil es die Task-Pipeline selbst betrifft)?</p></div>
-<div class="box"><h4><span class="dnum">E2</span>develop reparieren vs. resetten</h4><p>Orphaned Typen definieren/entfernen (develop heilen, Historie behalten) — oder develop = main + verteilte-Plattform-Arbeit neu aufsetzen (sauberer Schnitt, verliert die Teil-Salvage-Historie).</p></div>
-<div class="box"><h4><span class="dnum">E3</span>Build-Gate scharf schalten</h4><p>Merge-into-develop nur bei grünem <code>develop+Karte</code>-Build (Backend+Frontend). Verhindert künftige kaputte Integrations-Branch.</p></div>
-<div class="box"><h4><span class="dnum">E4</span>Schnitt-Politik für Architektur-Arbeit</h4><p>Cross-Cutting/Binary/Protokoll-Arbeit raus aus „unabhängige Auto-Review-Tasks" → koordinierte Change mit Integrations-Reihenfolge + Gesamt-Build-Gate. Bestätigen + als Konvention festschreiben.</p></div>
-<div class="box"><h4><span class="dnum">E5</span>Gepaarte Releases</h4><p>Task-Server + agent-host + Studio als ein versioniertes Release mit Protokoll-Version im Handshake (verzahnt AGT-2333/2334). Priorisieren?</p></div>
+<h2 id="offen"><span class="no">8</span>Schritte zum Zielbild</h2>
+<p>Die Richtung ist entschieden. Der Weg dorthin, in Reihenfolge:</p>
+<div class="box accent"><h4><span class="dnum">1</span>Runner aufs v1-Protokoll — der Hebel</h4><p>agent-host emittiert <code>ResultEnvelope</code>, ruft <code>POST</code>, schreibt Canonical-Logs. Behebt alle drei Drift-Blocker auf einmal → <b>Auto-Review läuft wieder</b>. Eine koordinierte Änderung (der Server-Vertrag steht bereits), nicht getrennte Tranchen — betrifft die Pipeline selbst, also direkt, nicht als Auto-Review-Task.</p></div>
+<div class="box"><h4><span class="dnum">2</span>Build-Gate scharf schalten</h4><p>Merge-into-develop nur bei grünem <code>develop+Karte</code>-Build (Backend+Frontend). Verhindert, dass Teil-Salvages develop je wieder unbaubar machen.</p></div>
+<div class="box"><h4><span class="dnum">3</span>Reste nachziehen</h4><p>Die 2 gebrochenen Karten (2302, 2375) einzeln auflösen; Modell-Routing-Backend-Endpoints ergänzen (UI-Vollfunktion).</p></div>
+<div class="box"><h4><span class="dnum">4</span>Schnitt-Politik als Konvention</h4><p>Architektur/Binary/Protokoll-Arbeit läuft als <b>koordinierte Change</b> (eine Branch, Integrations-Reihenfolge, Gesamt-Build-Gate) — nicht als N unabhängige Auto-Review-Tasks. Festschreiben.</p></div>
+<div class="box"><h4><span class="dnum">5</span>Gepaarte Releases</h4><p>Task-Server + agent-host + Studio als ein versioniertes Release; Protokoll-Version im Handshake, inkompatible Runner werden sichtbar abgewiesen (verzahnt AGT-2333/2334).</p></div>
+
+<h2 id="imziel"><span class="no">9</span>Im Zielbild — so arbeitet es dann</h2>
+<ul>
+  <li><b>Feature/Bug:</b> Task → code → <b>Envelope-basiertes Auto-Review</b> → completed. Sauber durch die Pipeline, keine manuelle Salvage mehr.</li>
+  <li><b>Runner ↔ Backend immer kompatibel:</b> der Runner meldet seine Protokoll-Version beim Connect; ein inkompatibler wird <b>sichtbar abgewiesen</b> — kein stiller Drift.</li>
+  <li><b>develop ist immer baubar</b> (Build-Gate) — keine orphaned WIP-Reste mehr.</li>
+  <li><b>Architektur koordiniert, Features als Tasks</b> — jede Arbeitsart im passenden Flow.</li>
+  <li><b>Ein Release</b> liefert alle Komponenten protokoll-kompatibel zusammen aus.</li>
+</ul>
 
 </main>
 </body>
