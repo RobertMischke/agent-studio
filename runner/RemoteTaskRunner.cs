@@ -183,6 +183,7 @@ public sealed class RemoteTaskRunner
         var handedBack = false;
         var teardownAttempted = false;
         var releaseOnly = false;
+        DurableArtifactManifest? artifactManifest = null;
         try
         {
             var execution = reattach
@@ -192,7 +193,7 @@ public sealed class RemoteTaskRunner
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
             await shipper.FlushAsync(shutdown);
-            var artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
+            artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -275,7 +276,10 @@ public sealed class RemoteTaskRunner
             }
             else
             {
-                teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
+                teardown = await workspace.TeardownAsync(
+                    outcome.Kind.ToString(),
+                    lease.AttemptId,
+                    CancellationToken.None);
             }
             outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
             if (outbox is not null && !epicPlanning)
@@ -303,6 +307,8 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     teardown,
                     workspace.RepositoryUrl,
+                    workspace.BaseSha,
+                    artifactManifest?.Digest,
                     outputLines,
                     sourceMutated,
                     shutdown);
@@ -331,6 +337,8 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     WorktreeTeardownResult.NoWork,
                     workspace.RepositoryUrl,
+                    baseSha: null,
+                    artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
                     CancellationToken.None);
@@ -365,7 +373,10 @@ public sealed class RemoteTaskRunner
                     teardownAttempted = true;
                     var teardown = epicPlanning
                         ? WorktreeTeardownResult.NoWork
-                        : await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
+                        : await workspace.TeardownAsync(
+                            outcome.Kind.ToString(),
+                            lease.AttemptId,
+                            CancellationToken.None);
                     if (epicPlanning)
                         sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
                     if (!handedBack && !heartbeat.LeaseLost && !releaseOnly)
@@ -378,6 +389,8 @@ public sealed class RemoteTaskRunner
                             outcomeDecision,
                             teardown,
                             workspace.RepositoryUrl,
+                            workspace.BaseSha,
+                            artifactManifest?.Digest,
                             outputLines,
                             sourceMutated,
                             CancellationToken.None);
@@ -876,10 +889,14 @@ public sealed class RemoteTaskRunner
         ExecutionOutcomeDecision outcomeDecision,
         WorktreeTeardownResult teardown,
         string? repository,
+        string? baseSha,
+        string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
         CancellationToken ct)
     {
+        var (envelopeBaseSha, envelopeResultRef, envelopeManifestDigest) =
+            BuildEnvelopeCompletionFields(teardown, baseSha, artifactManifestDigest);
         var resp = await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
             taskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
             outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
@@ -901,9 +918,37 @@ public sealed class RemoteTaskRunner
             AttemptId: lease.AttemptId,
             AuthorityEpoch: lease.AuthorityEpoch,
             IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.ResultSha ?? "none"}",
-            OutcomeDecision: outcomeDecision), ct);
-        _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
+            OutcomeDecision: outcomeDecision,
+            BaseSha: envelopeBaseSha,
+            ImmutableResultRef: envelopeResultRef,
+            ArtifactManifestDigest: envelopeManifestDigest), ct);
+        _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}, result-envelope {(envelopeResultRef is null ? "absent" : "attached")}");
     }
+
+    /// <summary>
+    /// The server materialises a result envelope only from a complete trio
+    /// (BaseSha + ImmutableResultRef + ArtifactManifestDigest) and rejects
+    /// fields that fail ResultEnvelopeDigest.Validate. A partial or malformed
+    /// set must therefore degrade to the pre-envelope completion (all three
+    /// null) instead of risking the whole completion call.
+    /// </summary>
+    internal static (string? BaseSha, string? ImmutableResultRef, string? ArtifactManifestDigest)
+        BuildEnvelopeCompletionFields(
+            WorktreeTeardownResult teardown,
+            string? baseSha,
+            string? artifactManifestDigest)
+        => IsCommitSha(baseSha)
+           && IsCommitSha(teardown.ResultSha)
+           && !string.IsNullOrWhiteSpace(teardown.ImmutableResultRef)
+           && IsManifestDigest(artifactManifestDigest)
+            ? (baseSha, teardown.ImmutableResultRef, artifactManifestDigest)
+            : (null, null, null);
+
+    private static bool IsCommitSha(string? value) =>
+        value is { Length: 40 or 64 } && value.All(Uri.IsHexDigit);
+
+    private static bool IsManifestDigest(string? value) =>
+        value is { Length: 64 } && value.All(Uri.IsHexDigit);
 
     private async Task ReportUnsecuredWorktreeAsync(
         string taskKey,

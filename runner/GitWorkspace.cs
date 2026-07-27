@@ -84,7 +84,7 @@ public sealed class GitWorkspace
             // applies before anything is removed.
             if (Directory.Exists(RepoPath))
             {
-                var retained = await SecureAndRemoveAsync("Unknown", ct);
+                var retained = await SecureAndRemoveAsync("Unknown", sourceRunAttemptId: null, ct);
                 _pickupReconciliation = retained.Reconciliation;
             }
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
@@ -311,14 +311,20 @@ public sealed class GitWorkspace
         }
     }
 
-    public async Task<WorktreeTeardownResult> TeardownAsync(string outcome, CancellationToken ct)
+    public Task<WorktreeTeardownResult> TeardownAsync(string outcome, CancellationToken ct)
+        => TeardownAsync(outcome, sourceRunAttemptId: null, ct);
+
+    public async Task<WorktreeTeardownResult> TeardownAsync(
+        string outcome,
+        string? sourceRunAttemptId,
+        CancellationToken ct)
     {
         await GitMetadataGate.WaitAsync(ct);
         try
         {
             try
             {
-                var secured = await SecureAndRemoveAsync(outcome, ct);
+                var secured = await SecureAndRemoveAsync(outcome, sourceRunAttemptId, ct);
                 return secured with { Reconciliation = _pickupReconciliation ?? secured.Reconciliation };
             }
             catch (WorktreeSalvageException)
@@ -352,7 +358,8 @@ public sealed class GitWorkspace
         {
             try
             {
-                return await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: false, ct);
+                return await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: false,
+                    immutableRefRequired: true, ct);
             }
             catch (WorktreeSalvageException)
             {
@@ -469,13 +476,18 @@ public sealed class GitWorkspace
         return new WorkspaceDependencyIdentities(submodules, lfsObjects);
     }
 
-    private async Task<WorktreeTeardownResult> SecureAndRemoveAsync(string outcome, CancellationToken ct)
-        => await SecureAsync(outcome, sourceRunAttemptId: null, removeAfterSecure: true, ct);
+    private async Task<WorktreeTeardownResult> SecureAndRemoveAsync(
+        string outcome,
+        string? sourceRunAttemptId,
+        CancellationToken ct)
+        => await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: true,
+            immutableRefRequired: false, ct);
 
     private async Task<WorktreeTeardownResult> SecureAsync(
         string outcome,
         string? sourceRunAttemptId,
         bool removeAfterSecure,
+        bool immutableRefRequired,
         CancellationToken ct)
     {
         if (!Directory.Exists(RepoPath))
@@ -541,9 +553,21 @@ public sealed class GitWorkspace
         string? immutableResultRef = null;
         if (!string.IsNullOrWhiteSpace(sourceRunAttemptId))
         {
-            immutableResultRef =
+            var candidateRef =
                 $"refs/heads/agent-studio/results/{SafeSegment(sourceRunAttemptId)}/{head.ToLowerInvariant()}";
-            await PushImmutableResultAndVerifyAsync(immutableResultRef, head, ct);
+            try
+            {
+                await PushImmutableResultAndVerifyAsync(candidateRef, head, ct);
+                immutableResultRef = candidateRef;
+            }
+            catch (Exception ex) when (!immutableRefRequired && ex is not OperationCanceledException)
+            {
+                // On the legacy completion path the immutable ref is best-effort
+                // evidence: without it the completion simply carries no result
+                // envelope (pre-envelope behaviour) instead of failing a run
+                // whose salvage already succeeded.
+                _log($"immutable-result-ref-push-failed ref={candidateRef} path={RepoPath} error={OneLine(ex.Message)}; completing without result envelope");
+            }
         }
         if (removeAfterSecure)
             await RemoveSecuredWorktreeAsync(hasWork, ct);
