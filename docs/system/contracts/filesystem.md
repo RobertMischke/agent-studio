@@ -37,7 +37,24 @@ controlled migration that updates its registry record.
 
 ### Project + workspace registry (ADR-0042)
 
-In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name can change without breaking task keys derived from the id. `StorageLocation` is immutable during ordinary project editing and changes only through a controlled legacy-store migration.
+In parallel with the legacy `<projectKey>` slug layout above, projects also
+live as records in `<TaskRepository>/.metadata/projects.json` with immutable
+identifiers (`PROJ-001`, `PROJ-002`, ...) and a workspace membership in
+`<TaskRepository>/.metadata/workspaces.json`. Legacy `WatchPaths` entries are
+auto-registered only when `projects.json` did not exist at the registry's first
+load. An existing empty file is authoritative and does not trigger seeding.
+The id is monotonic and never re-used; the display name can change without
+breaking task keys derived from the id. `StorageLocation` is immutable during
+ordinary project editing and changes only through a controlled legacy-store
+migration.
+
+An existing `projects.json` that cannot be deserialized aborts startup with the
+`project-registry-load-failed` classification. The backend must not substitute
+an empty registry or persist over the invalid file. Before any registry write
+that reduces the project count, the current file is copied byte-for-byte to
+`projects.json.quarantine-<UTC timestamp>` and the
+`project-registry-shrink-quarantined` classification records both counts and
+paths.
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 

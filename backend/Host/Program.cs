@@ -759,9 +759,9 @@ app.Services.GetRequiredService<TaskStateMachine>().EnsureStateFoldersAndMigrate
             .LogInformation("Backfilled agent defaults on {Count} job(s)", backfillCount);
 }
 
-// F45a: populate workspace + project registries from configured WatchPaths.
-// Additive; does not move or rename anything on disk. Writes only to
-// <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.
+// F45a: populate a missing project registry from configured WatchPaths.
+// An existing registry is authoritative, and an invalid file aborts startup.
+// The pass does not move or rename watched project data.
 try
 {
     AgentStudio.Registry.RegistryBootstrap.Run(
@@ -769,6 +769,11 @@ try
         app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>(),
         app.Services.GetRequiredService<TaskScannerService>(),
         app.Services.GetRequiredService<ILogger<Program>>());
+}
+catch (ProjectRegistryLoadException ex)
+{
+    crashRecorder.Record("RegistryBootstrap", ex);
+    throw;
 }
 catch (Exception ex)
 {
