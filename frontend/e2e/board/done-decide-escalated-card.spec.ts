@@ -3,17 +3,16 @@ import { test, expect, type Page } from '@playwright/test';
 /**
  * "Failed-Cards sehen aus wie Done" — Option C.
  *
- * The "Done & Decide" super-column stacks the human-review lane next to
- * Completed/Archive. An escalated card (orchestratorVerdict=escalate,
- * statusMarkdown "Result: Failed") parked in 5-human-review used to render
- * identically to a finished card, hiding that a human still has to act.
+ * The "Done & Decide" super-column stacks the Escalated lane next to Review
+ * and Completed. Current lane state, not an old decision-journal verdict,
+ * decides which card gets the acute treatment.
  *
  * This spec locks the fix:
- *  - an escalated human-review card carries the `task-card--attention`
- *    treatment (red left ribbon + tint) and an explicit "Escalated" pill,
- *  - its surface + left-border are visually distinct from a Completed card
+ *  - a current 5e-escalated card carries the `task-card--attention`
+ *    treatment and an explicit "Escalated" pill,
+ *  - its surface is visually distinct from a Completed card
  *    sitting in the same super-column,
- *  - an accepted card stays quiet and does NOT get the attention treatment,
+ *  - Review cards stay quiet even when a stale escalate verdict rides along,
  *  - the differentiation survives the light theme and a narrow (mobile)
  *    viewport (acceptance criterion 3).
  *
@@ -61,13 +60,13 @@ function makeJob(overrides: JobOverride = {}) {
   };
 }
 
-const ESCALATED = makeJob({ id: 'dd-escalate', title: 'Escalated fixture card', orchestratorVerdict: 'escalate', order: 1 });
+const ESCALATED = makeJob({ id: 'dd-escalate', title: 'Escalated fixture card', state: '5e-escalated', orchestratorVerdict: 'escalate', order: 1 });
 const ACCEPTED = makeJob({ id: 'dd-accept', title: 'Accept fixture card', orchestratorVerdict: 'accept', order: 2 });
-const PLAIN_REVIEW = makeJob({ id: 'dd-plain', title: 'Plain review fixture card', orchestratorVerdict: null, order: 3 });
+const STALE_REVIEW = makeJob({ id: 'dd-stale', title: 'Stale verdict review fixture card', orchestratorVerdict: 'escalate', order: 3 });
 const COMPLETED = makeJob({ id: 'dd-done', title: 'Completed fixture card', state: '6-completed', order: 1 });
 
-const HUMAN_REVIEW = [ESCALATED, ACCEPTED, PLAIN_REVIEW];
-const ALL_JOBS = [...HUMAN_REVIEW, COMPLETED];
+const HUMAN_REVIEW = [ACCEPTED, STALE_REVIEW];
+const ALL_JOBS = [ESCALATED, ...HUMAN_REVIEW, COMPLETED];
 
 const GROUPED_PAYLOAD = {
   backlog: [],
@@ -79,6 +78,7 @@ const GROUPED_PAYLOAD = {
   review: [],
   autoReview: [],
   humanReview: HUMAN_REVIEW,
+  escalated: [ESCALATED],
   completed: [COMPLETED],
   archive: [],
 };
@@ -89,6 +89,12 @@ async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
 
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED_PAYLOAD) }));
   await page.route(/\/api\/tasks(\?|$)/, (route) =>
@@ -173,7 +179,7 @@ function resultsScreenshot(page: Page, name: string) {
 
 test.describe('Done & Decide — escalated cards do not look like Done', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`escalated human-review card is visually separated from a Completed card (${theme})`, async ({ page }, testInfo) => {
+    test(`current Escalated card is distinct while stale Review verdict stays quiet (${theme})`, async ({ page }, testInfo) => {
       await bootBoard(page);
       await setTheme(page, theme);
       await page.waitForTimeout(300);
@@ -181,6 +187,7 @@ test.describe('Done & Decide — escalated cards do not look like Done', () => {
       const escalated = cardByTitle(page, 'Escalated fixture card');
       const completed = cardByTitle(page, 'Completed fixture card');
       const accepted = cardByTitle(page, 'Accept fixture card');
+      const staleReview = cardByTitle(page, 'Stale verdict review fixture card');
       await expect(escalated).toBeVisible({ timeout: 5_000 });
       await expect(completed).toBeVisible();
 
@@ -189,29 +196,21 @@ test.describe('Done & Decide — escalated cards do not look like Done', () => {
       const pill = escalated.locator('[data-testid="task-card-human-review"]');
       await expect(pill).toBeVisible();
       await expect(pill).toHaveText(/Escalated/);
-      await expect(pill).toHaveClass(/task-card__human-review-pill--attention/);
+      await expect(pill).toHaveClass(/review-decision-badge--attention/);
 
-      // 2. Surface + left border are distinct from the Completed card. The
-      //    Completed card must NOT carry the attention class, and the
-      //    escalated card's left ribbon resolves to a different colour than
-      //    the completed card's (red failure accent vs. green).
+      // 2. Whole-card tint separates the acute state without a left ribbon.
       await expect(completed).not.toHaveClass(/task-card--attention/);
       const [escBg, doneBg] = await Promise.all([
         escalated.evaluate((el) => getComputedStyle(el).backgroundColor),
         completed.evaluate((el) => getComputedStyle(el).backgroundColor),
       ]);
       expect(escBg, `[${theme}] escalated vs completed surface`).not.toBe(doneBg);
-      const [escBorder, doneBorder] = await Promise.all([
-        escalated.evaluate((el) => getComputedStyle(el).borderLeftColor),
-        completed.evaluate((el) => getComputedStyle(el).borderLeftColor),
-      ]);
-      expect(escBorder, `[${theme}] escalated vs completed left ribbon`).not.toBe(doneBorder);
 
-      // 3. The accepted card is calm: no redundant "Reviewed" pill, no
-      //    attention treatment.
+      // 3. Accepted and stale-verdict Review cards are both calm.
       await expect(accepted).not.toHaveClass(/task-card--attention/);
-      const acceptPill = accepted.locator('[data-testid="task-card-human-review"]');
-      await expect(acceptPill).toHaveCount(0);
+      await expect(accepted.locator('[data-testid="task-card-human-review"]')).toHaveCount(0);
+      await expect(staleReview).not.toHaveClass(/task-card--attention/);
+      await expect(staleReview.locator('[data-testid="task-card-human-review"]')).toHaveCount(0);
 
       await testInfo.attach(`done-decide-${theme}.png`, {
         body: await page.screenshot({ fullPage: false }),
