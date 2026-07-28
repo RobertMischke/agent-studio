@@ -94,6 +94,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
+| OSS setup path decision and clean-host evidence | [setup path decision](../operations/haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
 | Orchestrator control-plane migration plan | [target architecture plan](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md) |
 | Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
@@ -109,6 +110,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
+| Contributor source-build setup | [operations/setup/contributor-setup.md](../operations/setup/contributor-setup.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner / agent host daemon (Linux) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
 | Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |

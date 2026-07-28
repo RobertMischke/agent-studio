@@ -29,16 +29,20 @@
   definitions and in-flight runs remain durable Task Server data, so restarting
   the Engine does not orphan work.
 
-## Running locally
+## Get started
 
 ```bash
-./api.sh
-cd frontend
-npm install
-npm start
+git clone https://github.com/agent-orc/agent-studio.git
+cd agent-studio
+docker compose up --build --wait
 ```
 
-Or ask your coding-agent CLI to do it. For anything beyond the default setup, see the [setup guide](./docs/operations/setup/getting-started.md) and [AGENTS.md](AGENTS.md).
+Open [http://localhost:4011](http://localhost:4011). Docker Compose is the one
+new-user installation path: no host .NET or Node.js install, local settings
+file, maintainer switch, or neighbouring repository is required. See the
+[setup guide](./docs/operations/setup/getting-started.md) for prerequisites,
+persistence, and troubleshooting. Source contributors use the separate
+[contributor setup](./docs/operations/setup/contributor-setup.md).
 
 ## More
 
