@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { dismissDevErrorDialog, setTheme, type Theme } from '../helpers/theme';
 
 const TASK_ID = 'timeline-density-task';
 const TASK_KEY = 'AGT-2412';
@@ -31,9 +32,9 @@ const TASK_DETAIL = {
     folderPath: `${WATCH_PATH}/3-progress/${TASK_ID}`,
     lastActivity: '2026-07-28T09:00:00Z',
     sessionName: null,
-    model: 'gpt-5.6-sol',
-    cliType: 'codex',
-    thinkingLevel: 'medium',
+    model: null,
+    cliType: null,
+    thinkingLevel: null,
     useOwnSession: null,
     lastUsage: null,
     execution: null,
@@ -149,6 +150,21 @@ const EVENTS = [
   }),
 ];
 
+const EXECUTION_SOURCES = [
+  {
+    kind: 'memory', label: 'Project instructions', path: '/tmp/timeline-density/AGENTS.md',
+    exists: true, detail: null,
+  },
+  {
+    kind: 'instruction-file', label: 'Frontend instructions',
+    path: '/tmp/timeline-density/frontend/AGENTS.md', exists: true, detail: null,
+  },
+  {
+    kind: 'global-config', label: 'Codex config', path: '/home/operator/.codex/config.toml',
+    exists: true, detail: null,
+  },
+];
+
 function event(kind: string, actor: string, summary: string, details?: Record<string, string>) {
   const index = EVENTS_LENGTH.value++;
   return {
@@ -178,11 +194,14 @@ async function stubApp(page: Page, activeEvent: () => (typeof EVENTS)[number]): 
     if (pathname === '/api/auth/status') {
       return json(route, { profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
     }
+    if (/\/api\/cli\/[^/]+\/models$/.test(pathname)) {
+      return json(route, { models: [], source: 'timeline-e2e' });
+    }
     if (pathname === '/api/watch-paths') {
       return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
     }
     if (pathname === '/api/tasks/grouped') {
-      return json(route, { ...EMPTY_GROUPED, progress: [TASK_DETAIL.info] });
+      return json(route, EMPTY_GROUPED);
     }
     if (pathname === '/api/tasks/archive') return json(route, { items: [], total: 0 });
     if (pathname === `/api/tasks/${TASK_KEY}` || pathname === `/api/tasks/${TASK_ID}`) {
@@ -199,7 +218,17 @@ async function stubApp(page: Page, activeEvent: () => (typeof EVENTS)[number]): 
       });
     }
     if (pathname === '/api/runner/status') {
-      return json(route, { projects: {}, autoMode: 'manual', activeProjects: [] });
+      return json(route, {
+        projects: {
+          [PROJECT]: {
+            projectName: PROJECT,
+            mode: 'manual',
+            activeJobId: null,
+            activeExecution: null,
+            queuedJobIds: [],
+          },
+        },
+      });
     }
     if (pathname === '/api/runner/global') return json(route, { mode: 'paused', activeProjects: [] });
     if (pathname === '/api/crash-recovery/pending') return json(route, { pending: [] });
@@ -212,21 +241,12 @@ async function stubApp(page: Page, activeEvent: () => (typeof EVENTS)[number]): 
       });
     }
     if (pathname === '/api/workspaces') {
-      return json(route, [{
-        id: 'ws-timeline', displayName: 'Workspace', sortOrder: 0, isDefault: true,
-        color: null, createdAt: '2026-01-01T00:00:00Z',
-        projects: [{
-          id: 'proj-timeline', displayName: PROJECT, shortCode: 'AGT',
-          workspaceId: 'ws-timeline', color: null, cliDefault: 'codex',
-          modelDefault: 'gpt-5.6-sol', sortOrder: 0, storageLocation: WATCH_PATH,
-          urls: [], archived: false, createdAt: '2026-01-01T00:00:00Z',
-        }],
-      }]);
+      return json(route, []);
     }
-    if (pathname === '/api/tasks' || pathname === '/api/tags' || pathname === '/api/clients'
+    if (pathname === '/api/tasks' || pathname === '/api/projects') return json(route, []);
+    if (pathname === '/api/tags' || pathname === '/api/clients'
       || pathname === '/api/clients/' || pathname === '/api/agent-rules'
-      || pathname === '/api/projects' || pathname === '/api/epics'
-      || pathname === '/api/git/summary') {
+      || pathname === '/api/epics' || pathname === '/api/git/summary') {
       return json(route, []);
     }
     if (pathname === '/api/epics/completed/count') return json(route, { count: 0 });
@@ -285,20 +305,66 @@ function evidencePath(testInfo: TestInfo, phase: string, name: string): string {
   return path.join(folder, name);
 }
 
-test('Timeline event types stay quiet, specific, and non-redundant', async ({ page }, testInfo) => {
-  test.setTimeout(600_000);
-  const phase = process.env['TIMELINE_EVIDENCE_PHASE'] === 'before' ? 'before' : 'after';
-  let selected = EVENTS[0];
-  await stubApp(page, () => selected);
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  for (let index = 0; index < EVENTS.length; index++) {
-    selected = EVENTS[index];
-    await page.goto(`/#/tasks/${TASK_KEY}?view=timeline%3Aprotocol`, { waitUntil: 'commit' });
-    await expect(page.getByTestId('prompt-tab-timeline')).toHaveAttribute('aria-selected', 'true');
+const phase = process.env['TIMELINE_EVIDENCE_PHASE'] === 'before' ? 'before' : 'after';
+const evidenceTheme: Theme = process.env['TIMELINE_EVIDENCE_THEME'] === 'dark' ? 'dark' : 'light';
+const evidenceFolder = evidenceTheme === 'dark' ? `${phase}-dark` : phase;
+const requestedKinds = (process.env['TIMELINE_EVENT_KIND'] ?? '')
+  .split(',')
+  .map(kind => kind.trim())
+  .filter(Boolean);
+const fixtures = requestedKinds.length > 0
+  ? EVENTS.filter(eventFixture => requestedKinds.includes(eventFixture.kind))
+  : EVENTS;
+
+if (fixtures.length !== (requestedKinds.length || EVENTS.length)) {
+  throw new Error(`Unknown TIMELINE_EVENT_KIND: ${requestedKinds.join(',')}`);
+}
+
+for (const eventFixture of fixtures) {
+  test(`Timeline ${eventFixture.kind} stays quiet, specific, and non-redundant`, async ({ page }, testInfo) => {
+    let selected = eventFixture;
+    if (phase === 'after' && eventFixture.kind === 'execution_context') {
+      selected = {
+        ...eventFixture,
+        details: {
+          ...eventFixture.details,
+          model: 'gpt-5.6-sol',
+          thinkingLevel: 'medium',
+          sourceItems: JSON.stringify(EXECUTION_SOURCES),
+        },
+      };
+    }
+    await stubApp(page, () => selected);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(
+      `/#/tasks/${TASK_KEY}?view=timeline%3Aprotocol`,
+      { waitUntil: 'commit' },
+    );
+    const timelineTab = page.getByTestId('prompt-tab-timeline');
+    await expect(timelineTab).toBeVisible();
+    await expect(timelineTab).toHaveAttribute('aria-selected', 'true');
     const row = page.getByTestId('timeline-event');
     await expect(row).toHaveCount(1);
+    await setTheme(page, evidenceTheme);
+    await dismissDevErrorDialog(page);
+
+    if (phase === 'after' && selected.kind === 'execution_context') {
+      await expect(row).toContainText('Modelgpt-5.6-sol');
+      await expect(row).toContainText('Thinkingmedium');
+      await expect(row).toContainText('3 sources');
+      await expect(row).toContainText('Codex config conventions');
+      const sources = row.getByTestId('timeline-event-sources');
+      await sources.evaluate(element => {
+        (element as HTMLDetailsElement).open = true;
+      });
+      await expect(sources).toHaveAttribute('open', '');
+      await expect(row).toContainText('Project instructions');
+      await expect(row).toContainText('Frontend instructions');
+      await expect(row).toContainText('Codex config');
+    }
+
     await row.screenshot({
-      path: evidencePath(testInfo, phase, `${selected.kind}.png`),
+      path: evidencePath(testInfo, evidenceFolder, `${selected.kind}.png`),
     });
 
     if (phase === 'after' && selected.kind === 'execution_context') {
@@ -310,5 +376,5 @@ test('Timeline event types stay quiet, specific, and non-redundant', async ({ pa
       await expect(row.getByTestId('timeline-event-kind')).toContainText('Run finished');
       await expect(row.getByTestId('timeline-event-summary')).toHaveCount(0);
     }
-  }
-});
+  });
+}

@@ -33,7 +33,7 @@
 
   @if (hasEvents()) {
     <ol class="tl-list" data-testid="timeline-list">
-      @for (event of displayEvents(); track $index) {
+      @for (event of displayEvents(); track eventIdentity(event)) {
         <li class="tl-item"
             [class]="'tl-item--' + rowTone(event.kind)"
             [class.tl-item--verdict]="isVerdictKind(event.kind)"

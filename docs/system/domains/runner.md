@@ -38,6 +38,10 @@ state.
   start, stop, continue, and mode surface.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
+- `backend/Features/Runner/RunTimelineEventFactory.cs`: canonical projection of
+  run execution context and terminal run facts into timeline events. Execution
+  context preserves model, thinking level, source origin, and exact source
+  members; zero MCP counts and the permanent permission mode are omitted.
 - `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
   whether a run must be worktree-isolated, the main-checkout guard condition, and
   the cwd-keyed session-resume gate (see ADR-0057). Every source-mutating run,
@@ -466,6 +470,9 @@ Run-start session events capture the execution projection so finished run
 history keeps its stable runner-id attribution with `historical: true` and renders
 quietly. The wire contract is
 [task-execution-location.schema.json](../schemas/task-execution-location.schema.json).
+Run timeline context events retain exact source members so count disclosures
+are inspectable. Terminal run events retain status and duration as structured
+details; the frontend owns their compact, non-redundant sentence projection.
 
 ## Verification
 

@@ -40,6 +40,57 @@ describe('task timeline presentation', () => {
     expect(timelineDetailEntries(completed)).toEqual([]);
   });
 
+  it('removes generated lifecycle wording already carried by the title', () => {
+    const started = event({
+      kind: TIMELINE_KIND.agentRunStarted,
+      summary: 'codex CLI start',
+      details: { cli: 'codex', model: 'gpt-5.6-sol' },
+    });
+    const slot = event({
+      kind: TIMELINE_KIND.runnerSlotAdmission,
+      summary: 'Admitted to slot 1/2: predicted scope is disjoint',
+      details: { slot: '1', maxParallelism: '2', decision: 'parallel-ok' },
+    });
+    const recovery = event({
+      kind: TIMELINE_KIND.integrationRecoveryQueued,
+      summary: 'Integration recovery queued: rebase task/AGT-2412 onto develop.',
+    });
+
+    expect(timelineEventTitle(started)).toBe('Run started');
+    expect(timelineEventSummary(started)).toBeNull();
+    expect(timelineEventTitle(slot)).toBe('Slot admitted · 1/2');
+    expect(timelineEventSummary(slot)).toBe('Predicted scope is disjoint');
+    expect(timelineDetailEntries(slot)).toEqual([
+      { key: 'decision', label: 'Decision', value: 'parallel-ok' },
+    ]);
+    expect(timelineEventSummary(recovery)).toBe('Rebase task/AGT-2412 onto develop.');
+  });
+
+  it('folds generated review, step, and decomposition summaries into their titles', () => {
+    const preStep = event({
+      kind: TIMELINE_KIND.preStepFinished,
+      summary: 'Context retrieval completed',
+      details: { step: 'context-retrieval', status: 'completed', durationMs: '1280' },
+    });
+    const review = event({
+      kind: TIMELINE_KIND.humanReviewDecided,
+      summary: 'Human review accepted the delivery',
+      details: { decision: 'accept', reviewer: 'robert@example.com' },
+    });
+    const epic = event({
+      kind: TIMELINE_KIND.epicDecomposed,
+      summary: 'Epic decomposed into 3 tasks',
+      details: { created: '3', targetState: '1-backlog' },
+    });
+
+    expect(timelineEventTitle(preStep)).toBe('Pre-step finished · Context retrieval');
+    expect(timelineEventSummary(preStep)).toBeNull();
+    expect(timelineEventTitle(review)).toBe('Human review accepted');
+    expect(timelineEventSummary(review)).toBeNull();
+    expect(timelineEventTitle(epic)).toBe('Epic decomposed · 3 tasks');
+    expect(timelineEventSummary(epic)).toBeNull();
+  });
+
   it('keeps a non-generated run-finish note that adds information', () => {
     const completed = event({
       kind: TIMELINE_KIND.agentRunFinished,
@@ -68,6 +119,24 @@ describe('task timeline presentation', () => {
 
     expect(timelineDetailEntries(started)).toEqual([
       { key: 'model', label: 'Model', value: 'gpt-5.6-sol' },
+    ]);
+  });
+
+  it('omits route CLI fields when their paired models already identify the clients', () => {
+    const fallback = event({
+      kind: TIMELINE_KIND.quotaFallbackActivated,
+      summary: 'Quota fallback activated',
+      details: {
+        primaryCli: 'codex',
+        primaryModel: 'gpt-5.6-sol',
+        fallbackCli: 'codex',
+        fallbackModel: 'gpt-5.6-terra',
+      },
+    });
+
+    expect(timelineDetailEntries(fallback)).toEqual([
+      { key: 'primaryModel', label: 'Primary Model', value: 'gpt-5.6-sol' },
+      { key: 'fallbackModel', label: 'Fallback Model', value: 'gpt-5.6-terra' },
     ]);
   });
 

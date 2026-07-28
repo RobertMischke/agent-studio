@@ -80,6 +80,31 @@ export class TaskTimelinePaneComponent {
 
   readonly hasEvents = computed(() => this.displayEvents().length > 0);
   readonly hasLoop = computed(() => this.completionLoop().hasActivity);
+  private readonly executionPresentations = computed(() => {
+    const presentations = new WeakMap<TaskTimelineEvent, {
+      facts: { label: string; value: string }[];
+      sources: TimelineSourceDisclosure | null;
+    }>();
+    for (const event of this.displayEvents()) {
+      if (event.kind !== TIMELINE_KIND.executionContext) continue;
+      const run = this.runForEvent(event);
+      const model = event.details?.['model']?.trim()
+        || run?.executionContext?.model?.trim()
+        || event.summary.match(/\bmodel\s+([^,\s]+)/i)?.[1]
+        || null;
+      const thinking = event.details?.['thinkingLevel']?.trim()
+        || run?.executionContext?.thinkingLevel?.trim()
+        || null;
+      presentations.set(event, {
+        facts: [
+          ...(model ? [{ label: 'Model', value: model }] : []),
+          ...(thinking ? [{ label: 'Thinking', value: thinking }] : []),
+        ],
+        sources: executionContextDisclosure(event, run?.executionContext?.sources ?? []),
+      });
+    }
+    return presentations;
+  });
 
   /** "N / M" attempt counter for the banner, or "N" when budget is unknown. */
   readonly attemptLabel = computed<string | null>(() => {
@@ -172,29 +197,28 @@ export class TaskTimelinePaneComponent {
     return timelineEventReason(event);
   }
 
+  eventIdentity(event: TaskTimelineEvent): string {
+    return [
+      event.ts,
+      event.kind,
+      event.actor,
+      event.runId ?? '',
+      event.payloadRef ?? '',
+      event.summary,
+    ].join(':');
+  }
+
   /** Detail rows to render under an event, minus the ones already surfaced. */
   detailEntries(event: TaskTimelineEvent) {
     return timelineDetailEntries(event);
   }
 
   executionFacts(event: TaskTimelineEvent): { label: string; value: string }[] {
-    if (event.kind !== TIMELINE_KIND.executionContext) return [];
-    const run = this.runForEvent(event);
-    const model = event.details?.['model']?.trim()
-      || run?.executionContext?.model?.trim()
-      || event.summary.match(/\bmodel\s+([^,\s]+)/i)?.[1]
-      || null;
-    const thinking = event.details?.['thinkingLevel']?.trim()
-      || run?.executionContext?.thinkingLevel?.trim()
-      || null;
-    return [
-      ...(model ? [{ label: 'Model', value: model }] : []),
-      ...(thinking ? [{ label: 'Thinking', value: thinking }] : []),
-    ];
+    return this.executionPresentations().get(event)?.facts ?? [];
   }
 
   executionSources(event: TaskTimelineEvent): TimelineSourceDisclosure | null {
-    return executionContextDisclosure(event, this.runForEvent(event)?.executionContext?.sources ?? []);
+    return this.executionPresentations().get(event)?.sources ?? null;
   }
 
   /**

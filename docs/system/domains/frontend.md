@@ -99,11 +99,14 @@ boundary, route map, and visual ownership diagram are in
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
-  Timeline and steering text is ANSI-sanitised before rendering. Code Review
-  keeps the last available grade visible with its date when it belongs to an
-  older delivery. The task-detail Docs tab presents rendered result documents
-  before prompt and raw artifacts, with per-document anchors and technical file
-  metadata disclosed from the document details menu.
+  Timeline and steering text is ANSI-sanitised before rendering. Timeline rows
+  project each fact once across title, summary, and badges, omit permanent
+  defaults and zero counts, and disclose the exact members behind source counts.
+  Execution-context rows keep model and thinking level visible without repeating
+  the implied CLI. Code Review keeps the last available grade visible with its
+  date when it belongs to an older delivery. The task-detail Docs tab presents
+  rendered result documents before prompt and raw artifacts, with per-document
+  anchors and technical file metadata disclosed from the document details menu.
   Each review row also shows its council reaction, including
   per-finding rulings and the linked follow-up round. Reviews without a reaction
   sidecar expose that audit gap explicitly.
