@@ -43,7 +43,7 @@ import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-de
 import { TaskService } from '../../../../../services/task.service';
 import type { ConversationEvent, RawLineRange } from 'coding-agent-chat/core';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import { projectConversation } from 'coding-agent-chat/core';
+import { mergeByTimestamp, projectConversation } from 'coding-agent-chat/core';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
@@ -64,6 +64,7 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
+import { projectStructuredActivityContent } from '../structured-activity-projection';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -767,12 +768,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }));
     const replay = this.runnerReplay();
     const typedLifecycle = this.runnerEvents().some(event => event.kind === 'turn.completed');
+    const structured = projectStructuredActivityContent(filtered, info.id);
     const projected = projectConversation({
       source: info.id,
-      // Guard the next-gen projection the same way the legacy path is guarded:
-      // strip raw stream-json transport frames before the library classifies
-      // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
-      lines: sanitizeProjectionLines(stripLegacyCompletionLines(filtered, typedLifecycle)),
+      // Strip transport frames before the library classifies them. See sanitizeProjectionLines.
+      lines: sanitizeProjectionLines(stripLegacyCompletionLines(structured.projectionLines, typedLifecycle)),
       task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,
@@ -786,7 +786,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     const presented = presentActivityEvents(projected, info.id, info.watchPath, {
       typedTurnCompletions: typedLifecycle,
     });
-    return mergeReplayEvents(presented, replay.timelineEvents);
+    return mergeReplayEvents(mergeByTimestamp(presented, structured.events), replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {
