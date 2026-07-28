@@ -1191,6 +1191,28 @@
             repair itself, records the reason in <code>timeline.jsonl</code>.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-28</td>
+          <td><code>AGT-2400</code><br><span class="small">foreign-CLI fallback cross-applied a model pin<br>(fixed by <code>AGT-2402</code>)</span></td>
+          <td>
+            A card pinned to <code>cliType=claude</code> and <code>model=claude-opus-5</code> was claimed by
+            codex-only <code>agent-runner-01</code>. The runner honestly kept codex, but launched it with
+            <code>-m claude-opus-5</code>. Codex received an OpenAI 400 unsupported-model response, exited 1,
+            was classified <code>CliCrash</code>, and the run escalated.
+          </td>
+          <td>
+            <code>AgentCliProcess.Resolve</code> selected the available host CLI before appending model and thinking
+            selectors, but never checked that the selected CLI still matched the provider requested by the card.
+            Provider-specific pins therefore crossed the fallback boundary.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> a foreign-CLI fallback now drops the card model and thinking
+            pins, runs with the fallback host's configured defaults, and logs
+            <code>source=card-cli-fallback(model-pins-dropped)</code> plus the existing mismatch note. The original
+            incident reached <span class="lane">5e-escalated</span>; the corrected path avoids the unsupported-model
+            crash. Claim-side CLI capability matching is tracked separately.
+          </td>
+        </tr>
       </tbody>
     </table>
 

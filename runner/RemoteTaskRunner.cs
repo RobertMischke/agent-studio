@@ -537,7 +537,7 @@ public sealed class RemoteTaskRunner
             $"thinking={invocation.ThinkingLevel ?? "<cli-default>"} " +
             $"permission={runSpec?.PermissionMode ?? "<host-config>"} " +
             $"context={runSpec?.ContextMode ?? "<host-config>"} " +
-            $"source={(invocation.SpecApplied ? "card" : "runner-options")}" +
+            $"source={invocation.Source}" +
             (invocation.Note is null ? "" : $" note={invocation.Note}");
         _log(specLine);
         shipper.Add("system", specLine);
