@@ -1005,6 +1005,28 @@
         </tr>
         <tr>
           <td>2026-07-22</td>
+          <td><code>AGT-2220</code><br><span class="small">wrong-repository push reported as out-of-band completion<br>(second occurrence after <code>AGT-2155</code>)</span></td>
+          <td>
+            Eight cards reached <span class="lane">5-human-review</span> as
+            <em>Completed out-of-band (agent-runner-01)</em> with zero commits in the registered project repository.
+            The pushes had succeeded, but into another repository. Bounded salvage reconciliation then found no expected
+            ref and converted missing delivery into a completion claim.
+          </td>
+          <td>
+            Push success and the configured <code>origin</code> were treated as delivery evidence. Reconciliation did not
+            prove that the registered project repository exposed the intended ref at the exact local result commit, and
+            the salvage-failure path reused external completion instead of a typed, recoverable failure.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every pushed result ref is now verified with
+            <code>git ls-remote</code> against the repository URL from project registration. A missing or mismatched ref
+            retains the host worktree and reaches <span class="lane">5e-escalated</span> with the cause, hostname,
+            worktree path, branch, and recovery recipe. Missing-sentinel work is called completed out-of-band only when
+            that exact registered-repository ref resolves to the expected result commit.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-22</td>
           <td><code>AGT-2208</code><br><span class="small">sentinel literal in streamed test diff</span></td>
           <td>
             A remote run that was testing sentinel handling streamed the fixture literal
