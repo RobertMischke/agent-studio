@@ -145,7 +145,9 @@ state.
   Normal startup, claim, fencing, persistence, and individual run or review
   lookups load only `attempt-authority.json`; archived records are available
   only through explicit task history reads, whose archive I/O happens without
-  holding the authority gate.
+  holding the authority gate. Rotation also performs no archive reads under
+  that gate: an interrupted same-day archive is atomically replaced from the
+  complete candidate set still present in the live file.
   Archived records retain their complete scoped idempotency keys for debugging,
   but those keys leave the operational replay boundary when their attempt is
   archived.

@@ -783,6 +783,66 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             () => restarted.GetTaskProjection("AGT-1", includeArchived: true));
     }
 
+    [Fact]
+    public void Settlement_compaction_overwrites_interrupted_daily_archive_without_loading_it()
+    {
+        var now = new DateTime(2026, 7, 28, 3, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now, terminalRetentionCount: 1);
+        var first = service.AcquireRun(
+            "AGT-1",
+            "PROJ-1",
+            null,
+            "runner-a",
+            "host-a",
+            60,
+            "first-run-create").RunAttempt!;
+        service.SettleRun(
+            new AttemptWriteReference(
+                first.AttemptId,
+                first.LastFence,
+                first.AuthorityEpoch,
+                "first-run-settle"),
+            "done",
+            "sha-first",
+            null);
+
+        now = now.AddMinutes(1);
+        var second = service.AcquireRun(
+            "AGT-1",
+            "PROJ-1",
+            first.AttemptId,
+            "runner-b",
+            "host-b",
+            60,
+            "second-run-create").RunAttempt!;
+        var livePath = Path.Combine(_root, AttemptAuthorityService.RelativePath);
+        var archivePath = Path.Combine(
+            Path.GetDirectoryName(livePath)!,
+            "attempt-authority.archive-2026-07-28.json");
+        File.WriteAllText(archivePath, "{ interrupted archive");
+
+        var settled = service.SettleRun(
+            new AttemptWriteReference(
+                second.AttemptId,
+                second.LastFence,
+                second.AuthorityEpoch,
+                "second-run-settle"),
+            "done",
+            "sha-second",
+            null);
+
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+        Assert.Null(service.GetRun(first.AttemptId));
+        Assert.Equal(second.AttemptId, service.GetRun(second.AttemptId)!.AttemptId);
+        using var archiveDocument = JsonDocument.Parse(File.ReadAllText(archivePath));
+        var archivedRun = Assert.Single(
+            archiveDocument.RootElement.GetProperty("runAttempts").EnumerateArray());
+        Assert.Equal(first.AttemptId, archivedRun.GetProperty("attemptId").GetString());
+        Assert.Contains(
+            "settle:first-run-settle",
+            archivedRun.GetProperty("idempotencyKeys").EnumerateArray().Select(key => key.GetString()));
+    }
+
     private (RunAttemptDto Run, ReviewAttemptDto Review) CompletedRunWithReview(AttemptAuthorityService service, string sha)
     {
         var run = service.AcquireRun("AGT-1", "PROJ-1", null, "runner", "host", 60, "run-create").RunAttempt!;

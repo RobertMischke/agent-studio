@@ -869,39 +869,65 @@ public sealed class AttemptAuthorityService
 
     public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
-        // Archive I/O is an explicit history operation and must never hold the
-        // authority gate needed by claim, lease, and report traffic.
-        var archives = includeArchived ? LoadArchivesForHistory() : [];
+        var key = Normalize(taskKey);
+        long authorityEpoch;
+        RunAttemptDto? currentRun;
+        ReviewAttemptDto? currentReview;
+        ReviewSubjectDto? currentSubject;
+        List<RunAttemptDto> runs;
+        List<ReviewAttemptDto> reviews;
         lock (_gate)
         {
-            var key = Normalize(taskKey);
-            var runs = _state.RunAttempts
-                .Concat(archives.SelectMany(archive => archive.RunAttempts))
+            authorityEpoch = _state.AuthorityEpoch;
+            currentRun = CurrentRun(key) is { } run ? ToDto(run) : null;
+            currentReview = CurrentReview(key) is { } review ? ToDto(review) : null;
+            currentSubject = _state.CurrentSubjectByTask.TryGetValue(key, out var subject)
+                ? ToDto(subject)
+                : null;
+            runs = _state.RunAttempts
                 .Where(x => Same(x.TaskKey, key))
-                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x.CreatedAt)
                 .Select(ToDto)
                 .ToList();
-            var reviews = _state.ReviewAttempts
-                .Concat(archives.SelectMany(archive => archive.ReviewAttempts))
+            reviews = _state.ReviewAttempts
                 .Where(x => Same(x.TaskKey, key))
-                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x.CreatedAt)
                 .Select(ToDto)
                 .ToList();
-            var currentRun = CurrentRun(key);
-            var currentReview = CurrentReview(key);
-            _state.CurrentSubjectByTask.TryGetValue(key, out var subject);
-            return new AttemptAuthorityProjection(
-                key,
-                _state.AuthorityEpoch,
-                currentRun is null ? null : ToDto(currentRun),
-                subject is null ? null : ToDto(subject),
-                currentReview is null ? null : ToDto(currentReview),
-                runs,
-                reviews,
-                runs.Count == 0 && reviews.Count == 0);
         }
+
+        // Archive I/O is an explicit history operation and must never hold the
+        // authority gate needed by claim, lease, and report traffic. Taking the
+        // live snapshot first also prevents a concurrent compaction from
+        // disappearing between an earlier archive read and the live snapshot.
+        if (includeArchived)
+        {
+            var archives = LoadArchivesForHistory();
+            runs = runs
+                .Concat(archives
+                    .SelectMany(archive => archive.RunAttempts)
+                    .Where(x => Same(x.TaskKey, key))
+                    .Select(ToDto))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            reviews = reviews
+                .Concat(archives
+                    .SelectMany(archive => archive.ReviewAttempts)
+                    .Where(x => Same(x.TaskKey, key))
+                    .Select(ToDto))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        runs = runs.OrderBy(x => x.CreatedAt).ToList();
+        reviews = reviews.OrderBy(x => x.CreatedAt).ToList();
+        return new AttemptAuthorityProjection(
+            key,
+            authorityEpoch,
+            currentRun,
+            currentSubject,
+            currentReview,
+            runs,
+            reviews,
+            runs.Count == 0 && reviews.Count == 0);
     }
 
     private AttemptWriteResult ValidateRunWriteLocked(
@@ -1259,19 +1285,22 @@ public sealed class AttemptAuthorityService
         if (archivedRuns.Count > 0 || archivedReviews.Count > 0)
         {
             var archivePath = ArchivePath(now);
-            var archive = LoadArchive(archivePath, allowMissing: true);
-            archive.SchemaVersion = ArchiveSchemaVersion;
-            archive.ArchivedAt = now;
-            archive.RunAttempts = archive.RunAttempts
-                .Concat(archivedRuns)
-                .DistinctBy(run => run.AttemptId, StringComparer.OrdinalIgnoreCase)
+            var archive = new AuthorityArchive
+            {
+                SchemaVersion = ArchiveSchemaVersion,
+                ArchivedAt = now,
+                RunAttempts = archivedRuns
                 .OrderBy(run => run.CreatedAt)
-                .ToList();
-            archive.ReviewAttempts = archive.ReviewAttempts
-                .Concat(archivedReviews)
-                .DistinctBy(review => review.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+                ReviewAttempts = archivedReviews
                 .OrderBy(review => review.CreatedAt)
-                .ToList();
+                .ToList(),
+            };
+            // A same-day file can only precede the durable live-file update
+            // when an earlier rotation was interrupted. The live file still
+            // contains the complete retry set in that case, so atomically
+            // replacing the archive is both recoverable and avoids archive
+            // reads while a lease or report mutation holds the authority gate.
             _writer.Write(archivePath, JsonSerializer.Serialize(archive, JsonOptions));
 
             var archivedRunIds = archivedRuns
@@ -1316,14 +1345,12 @@ public sealed class AttemptAuthorityService
             return [];
         return Directory.EnumerateFiles(directory, ArchiveFilePattern)
             .OrderBy(path => path, StringComparer.Ordinal)
-            .Select(path => LoadArchive(path, allowMissing: false))
+            .Select(LoadArchive)
             .ToList();
     }
 
-    private AuthorityArchive LoadArchive(string path, bool allowMissing)
+    private static AuthorityArchive LoadArchive(string path)
     {
-        if (allowMissing && !File.Exists(path))
-            return new AuthorityArchive();
         try
         {
             var archive = JsonSerializer.Deserialize<AuthorityArchive>(
