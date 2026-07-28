@@ -82,7 +82,8 @@ public sealed class MergeIntoDevelopRunner
         string jobFolderPath,
         string? watchPath,
         string integrationBranch,
-        string integrationStrategy = IntegrationStrategies.DirectMerge)
+        string integrationStrategy = IntegrationStrategies.DirectMerge,
+        string pipelineType = PipelineTypes.Task)
         => RunAsync(
             project,
             jobId,
@@ -90,7 +91,8 @@ public sealed class MergeIntoDevelopRunner
             watchPath,
             integrationBranch,
             CancellationToken.None,
-            integrationStrategy).GetAwaiter().GetResult();
+            integrationStrategy,
+            pipelineType).GetAwaiter().GetResult();
 
     /// <summary>
     /// Async merge entry point used by the task transition. A configured
@@ -104,7 +106,8 @@ public sealed class MergeIntoDevelopRunner
         string? watchPath,
         string integrationBranch,
         CancellationToken ct,
-        string integrationStrategy = IntegrationStrategies.DirectMerge)
+        string integrationStrategy = IntegrationStrategies.DirectMerge,
+        string pipelineType = PipelineTypes.Task)
     {
         // Deliberately NOT the caller's token. The serialized block below (merge +
         // gate + rollback) is already designed to be abort-immune - it runs the
@@ -119,7 +122,7 @@ public sealed class MergeIntoDevelopRunner
         {
             return await RunSerializedAsync(
                 project, jobId, jobFolderPath, watchPath,
-                integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+                integrationBranch, integrationStrategy, pipelineType, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -134,6 +137,7 @@ public sealed class MergeIntoDevelopRunner
         string? watchPath,
         string integrationBranch,
         string integrationStrategy,
+        string pipelineType,
         CancellationToken ct)
     {
         var startedAt = DateTime.UtcNow;
@@ -231,7 +235,7 @@ public sealed class MergeIntoDevelopRunner
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
                 MaybeEnqueueIntegrationPush(
-                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha);
+                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha, pipelineType);
             }
 
             return result;
@@ -486,10 +490,11 @@ public sealed class MergeIntoDevelopRunner
     /// </summary>
     private void MaybeEnqueueIntegrationPush(
         string project, string jobId, string jobFolderPath, string? watchPath, string integrationBranch,
-        string? approvedSha)
+        string? approvedSha,
+        string pipelineType)
     {
         if (_pushQueue == null) return;
-        if (!IntegrationPushEnabled(project))
+        if (!IntegrationPushEnabled(project, pipelineType))
         {
             _logger.LogInformation(
                 "merge-into-develop push disabled for project={Project} job={JobId}; leaving origin unchanged",
@@ -514,12 +519,12 @@ public sealed class MergeIntoDevelopRunner
     /// (<see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/>, default on).
     /// A missing settings service (legacy fixtures) defaults to on.
     /// </summary>
-    private bool IntegrationPushEnabled(string project)
+    private bool IntegrationPushEnabled(string project, string pipelineType)
     {
         if (_projectSettings == null) return true;
         try
         {
-            var settings = _projectSettings.Get(project);
+            var settings = PipelineTypeSettings.ForType(_projectSettings.Get(project), pipelineType);
             return PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId);
         }
         catch (Exception ex)

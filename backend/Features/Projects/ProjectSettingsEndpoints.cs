@@ -30,6 +30,7 @@ public record IntakeRunRequestBody
 /// </summary>
 public record SetPipelineStepOrderRequest
 {
+    public string PipelineType { get; init; } = PipelineTypes.Task;
     public List<string> StepIds { get; init; } = [];
 }
 
@@ -102,9 +103,15 @@ public static class ProjectSettingsEndpoints
                     // Per-step pipeline overrides (enabled / mode / model).
                     // Only the steps the operator has touched appear here;
                     // an absent step is on its built-in default.
-                    pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                    pipelineSteps = PipelineTypeSettings.ForType(kv.Value, PipelineTypes.Task)?.PipelineSteps
+                        ?? new Dictionary<string, PipelineStepSetting>(),
                     testExecution = kv.Value.TestExecution,
-                    pipelineStepOrder = kv.Value.PipelineStepOrder ?? Array.Empty<string>(),
+                    pipelineStepOrder = PipelineTypeSettings.ForType(kv.Value, PipelineTypes.Task)?.PipelineStepOrder
+                        ?? Array.Empty<string>(),
+                    pipelineStepsByType = kv.Value.PipelineStepsByType
+                        ?? new Dictionary<string, Dictionary<string, PipelineStepSetting>>(),
+                    pipelineStepOrderByType = kv.Value.PipelineStepOrderByType
+                        ?? new Dictionary<string, IReadOnlyList<string>>(),
                     // Resolved per-CLI permission mode + source for all four CLIs
                     // (project override → detected global config → YOLO default).
                     // The project-settings UI uses this to render the effective
@@ -139,8 +146,15 @@ public static class ProjectSettingsEndpoints
         // project can enable/disable, set a model on, or set a gate mode on.
         // The Settings panel reads this to render one control per step
         // without hardcoding the step list on the frontend.
-        app.MapGet("/api/projects/pipeline-catalogue", (string? projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        app.MapGet("/api/projects/pipeline-catalogue", (
+            string? projectName,
+            string? pipelineType,
+            ProjectSettingsService settings,
+            TaskScannerService scanner) =>
         {
+            if (!string.IsNullOrWhiteSpace(pipelineType) && !PipelineTypes.IsValid(pipelineType))
+                return Results.BadRequest(new { error = $"Unknown pipeline type '{pipelineType}'" });
+            var type = PipelineTypes.Normalize(pipelineType);
             ProjectSettings? projectSettings = null;
             WatchPathEntry? project = null;
             var repositoryPath = "";
@@ -148,13 +162,18 @@ public static class ProjectSettingsEndpoints
             {
                 project = scanner.GetWatchPaths().FirstOrDefault(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
                 if (project is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-                projectSettings = settings.Get(projectName.Trim());
+                projectSettings = PipelineTypeSettings.ForType(settings.Get(projectName.Trim()), type);
                 repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath) ? project.RootPath : project.RepositoryPath;
             }
             var detectedStacks = ProjectStackDetector.Detect(repositoryPath);
 
-            var pipeline = PipelineCatalogue.Standard;
-            var catalogueSteps = PipelineCatalogue.All
+            var pipeline = PipelineCatalogue.ForType(type);
+            var cataloguePipelines = type == PipelineTypes.Planning
+                ? new[] { pipeline }
+                : PipelineCatalogue.All.Where(candidate =>
+                    !string.Equals(candidate.Id, PipelineCatalogue.ReadOnlyPipelineId, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(candidate.Id, PipelineCatalogue.ConceptPipelineId, StringComparison.OrdinalIgnoreCase));
+            var catalogueSteps = cataloguePipelines
                 .SelectMany(p => p.Pre.Select(s => (Step: s, Phase: "pre", PipelineId: p.Id))
                     .Concat(p.Core.Select(s => (Step: s, Phase: "core", PipelineId: p.Id)))
                     .Concat(p.Post.Select(s => (Step: s, Phase: PhaseForPostStep(s), PipelineId: p.Id))))
@@ -218,6 +237,7 @@ public static class ProjectSettingsEndpoints
                     usesPrompt = PipelineStepModelDefaults.UsesModel(s),
                     supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
                     cliType,
+                    framework = s.Framework ?? s.AppliesTo,
                     promptTemplate = s.PromptTemplate,
                     // The loop guard is a safety net that always runs (the
                     // StuckLoopGuard circuit-breaker fires regardless of this row);
@@ -244,7 +264,7 @@ public static class ProjectSettingsEndpoints
             var abort = PipelineCatalogue.AbortReviewStep;
             steps.Add(ProjectPipelineStepDto(abort, "abort"));
 
-            return Results.Ok(new { pipelineId = pipeline.Id, detectedStacks, steps });
+            return Results.Ok(new { pipelineId = pipeline.Id, pipelineType = type, detectedStacks, steps });
         });
 
         app.MapPost("/api/projects/{projectName}/pipeline-steps/{stepId}/probe", async (
@@ -278,12 +298,15 @@ public static class ProjectSettingsEndpoints
 
             if (string.IsNullOrWhiteSpace(req.StepId))
                 return Results.BadRequest(new { error = "stepId is required" });
+            if (!PipelineTypes.IsValid(req.PipelineType))
+                return Results.BadRequest(new { error = $"Unknown pipeline type '{req.PipelineType}'" });
+            var pipelineType = PipelineTypes.Normalize(req.PipelineType);
 
             // Reject step ids the catalogue does not know so a typo fails loud
             // instead of writing dead config that never reaches a real step. The
             // abort-review step lives off the linear AllSteps list but is a valid
             // configurable target, so accept it explicitly.
-            if (!IsKnownPipelineStep(req.StepId))
+            if (!IsKnownPipelineStep(req.StepId, pipelineType))
                 return Results.BadRequest(new { error = $"Unknown pipeline step '{req.StepId}'" });
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
@@ -307,7 +330,7 @@ public static class ProjectSettingsEndpoints
                     return Results.BadRequest(new { error = $"Condition '{when}' requires a value" });
             }
 
-            var existing = settings.Get(projectName).PipelineSteps?
+            var existing = PipelineTypeSettings.ForType(settings.Get(projectName), pipelineType)?.PipelineSteps?
                 .GetValueOrDefault(req.StepId);
             var normalizedPrompt = string.IsNullOrWhiteSpace(req.Prompt)
                 ? null
@@ -337,7 +360,7 @@ public static class ProjectSettingsEndpoints
                 }
             }
 
-            settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
+            settings.SetPipelineStep(projectName, pipelineType, req.StepId, new PipelineStepSetting
             {
                 Enabled = req.Enabled,
                 EconomyModel = req.EconomyModel,
@@ -354,7 +377,11 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new
             {
                 stepId = req.StepId,
-                pipelineSteps = settings.Get(projectName).PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                pipelineType,
+                pipelineSteps = PipelineTypeSettings.ForType(settings.Get(projectName), pipelineType)?.PipelineSteps
+                    ?? new Dictionary<string, PipelineStepSetting>(),
+                pipelineStepsByType = settings.Get(projectName).PipelineStepsByType
+                    ?? new Dictionary<string, Dictionary<string, PipelineStepSetting>>(),
             });
         });
 
@@ -365,18 +392,25 @@ public static class ProjectSettingsEndpoints
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (!PipelineTypes.IsValid(req.PipelineType))
+                return Results.BadRequest(new { error = $"Unknown pipeline type '{req.PipelineType}'" });
+            var pipelineType = PipelineTypes.Normalize(req.PipelineType);
 
             var unknown = (req.StepIds ?? [])
-                .Where(id => !string.IsNullOrWhiteSpace(id) && !IsKnownPipelineStep(id))
+                .Where(id => !string.IsNullOrWhiteSpace(id) && !IsKnownPipelineStep(id, pipelineType))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (unknown.Length > 0)
                 return Results.BadRequest(new { error = $"Unknown pipeline step '{unknown[0]}'" });
 
-            settings.SetPipelineStepOrder(projectName, req.StepIds);
+            settings.SetPipelineStepOrder(projectName, pipelineType, req.StepIds);
             return Results.Ok(new
             {
-                pipelineStepOrder = settings.Get(projectName).PipelineStepOrder ?? Array.Empty<string>(),
+                pipelineType,
+                pipelineStepOrder = PipelineTypeSettings.ForType(settings.Get(projectName), pipelineType)?.PipelineStepOrder
+                    ?? Array.Empty<string>(),
+                pipelineStepOrderByType = settings.Get(projectName).PipelineStepOrderByType
+                    ?? new Dictionary<string, IReadOnlyList<string>>(),
             });
         });
 
@@ -901,10 +935,15 @@ public static class ProjectSettingsEndpoints
         });
     }
 
-    private static bool IsKnownPipelineStep(string? stepId)
+    private static bool IsKnownPipelineStep(string? stepId, string pipelineType = PipelineTypes.Task)
     {
         if (string.IsNullOrWhiteSpace(stepId)) return false;
-        return PipelineCatalogue.All.SelectMany(p => p.AllSteps)
+        var pipelines = PipelineTypes.Normalize(pipelineType) == PipelineTypes.Planning
+            ? new[] { PipelineCatalogue.ReadOnly }
+            : PipelineCatalogue.All.Where(candidate =>
+                !string.Equals(candidate.Id, PipelineCatalogue.ReadOnlyPipelineId, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(candidate.Id, PipelineCatalogue.ConceptPipelineId, StringComparison.OrdinalIgnoreCase));
+        return pipelines.SelectMany(p => p.AllSteps)
                 .Any(s => string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase))
             || string.Equals(PipelineCatalogue.AbortReviewStep.Id, stepId, StringComparison.OrdinalIgnoreCase);
     }

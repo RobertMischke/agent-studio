@@ -439,15 +439,29 @@ public static class PipelineCatalogue
     public static TaskPipeline UiIteration => UiPipeline;
 
     /// <summary>
-    /// Select the pipeline for a task's execution mode: read-only modes
-    /// (planning / research) get the git-free <see cref="ReadOnly"/> variant;
-    /// concept gets its Workbench/review/sight-review/promotion chain; everything
-    /// else gets <see cref="Standard"/>.
+    /// Select the default definition for an explicit pipeline type. Task, bug,
+    /// and feature currently share the established coding chain; planning owns
+    /// the lightweight git-free definition. Their settings remain independent
+    /// even where catalogue defaults match.
     /// </summary>
-    public static TaskPipeline ForMode(string? mode) =>
-        TaskModes.IsConcept(mode) ? ConceptPipeline
-        : TaskModes.IsReadOnly(mode) ? ReadOnlyPipeline
-        : StandardPipeline;
+    public static TaskPipeline ForType(string? pipelineType) =>
+        PipelineTypes.Normalize(pipelineType) == PipelineTypes.Planning
+            ? ReadOnlyPipeline
+            : StandardPipeline;
+
+    /// <summary>
+    /// Resolve the default pipeline from the card's structural type and mode.
+    /// Concept keeps its dedicated document-first chain.
+    /// </summary>
+    public static TaskPipeline ForTask(string? taskType, string? mode) =>
+        TaskModes.IsConcept(mode)
+            ? ConceptPipeline
+            : ForType(PipelineTypes.Resolve(taskType, mode));
+
+    public static TaskPipeline ForTask(TaskInfo task) => ForTask(task.TaskType, task.Mode);
+
+    /// <summary>Compatibility wrapper for callers that only have an execution mode.</summary>
+    public static TaskPipeline ForMode(string? mode) => ForTask(null, mode);
 
     public static TaskPipeline? Get(string id) =>
         string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline

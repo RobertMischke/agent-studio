@@ -39,7 +39,7 @@ const CATALOGUE = {
     { id: 'aspect-security', displayName: 'Aspect: Security', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-security', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
-    { id: 'post-lint-scss', displayName: 'Frontend stylelint', kind: 'tool', appliesTo: 'angular', applicable: true, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [{ workingSubdir: 'frontend', command: 'npx stylelint "src/**/*.scss"' }] }, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: true },
+    { id: 'post-lint-scss', displayName: 'Frontend stylelint', kind: 'tool', framework: 'angular', appliesTo: 'angular', applicable: true, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [{ workingSubdir: 'frontend', command: 'npx stylelint "src/**/*.scss"' }] }, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
 };
 
@@ -93,12 +93,14 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await page.route('**/api/auth/status', r => r.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   })));
-  await page.route('**/api/clients/', r => r.fulfill(json([])));
+  await page.route('**/api/clients**', r => r.fulfill(json([])));
+  await page.route('**/api/v1/management/remote-hosts', r => r.fulfill(json([])));
   await page.route('**/api/tags', r => r.fulfill(json([])));
   await page.route('**/api/orchestrator/sessions', r => r.fulfill(json({ sessions: [] })));
   await page.route('**/api/crash-recovery/pending', r => r.fulfill(json({ pending: [] })));
   await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
   await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
+  await page.route('**/api/projects', r => r.fulfill(json([])));
   await page.route('**/api/workspaces', r => r.fulfill(json([{
     id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
     createdAt: '2026-07-22T00:00:00Z',
@@ -124,6 +126,7 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   })));
   await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
   await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
+  await page.route('**/api/bus/*/messages**', r => r.fulfill(json([])));
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
@@ -162,6 +165,9 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
 
   const section = page.getByTestId('project-detail-pipeline');
   await expect(section).toBeVisible();
+  await expect(page.getByTestId('pipeline-type-select')).toHaveValue('task');
+  await expect(page.getByTestId('pipeline-type-select').locator('option'))
+    .toHaveText(['Task', 'Bug', 'Feature', 'Planning']);
   const health = page.getByTestId('pipeline-health');
   await expect(health).toHaveAttribute('data-status', 'alarm');
   await expect(page.getByTestId('pipeline-health-gate')).toContainText('Gate hanging since 150 min');
@@ -191,7 +197,7 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
 
   const stylelint = page.getByTestId('pipeline-step-row-post-lint-scss');
   await stylelint.evaluate(el => { (el as HTMLDetailsElement).open = true; });
-  await expect(page.getByTestId('pipeline-step-stack-post-lint-scss')).toHaveText('angular');
+  await expect(page.getByTestId('pipeline-step-framework-post-lint-scss')).toHaveText('angular');
   await expect(page.getByTestId('pipeline-step-commands-post-lint-scss'))
     .toContainText('cd frontend && npx stylelint "src/**/*.scss"');
   await page.getByTestId('pipeline-step-probe-post-lint-scss').click();
@@ -228,12 +234,14 @@ test('pipeline page: pure dotnet project keeps Angular stylelint visible but ina
   await page.route('**/api/auth/status', r => r.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   })));
-  await page.route('**/api/clients/', r => r.fulfill(json([])));
+  await page.route('**/api/clients**', r => r.fulfill(json([])));
+  await page.route('**/api/v1/management/remote-hosts', r => r.fulfill(json([])));
   await page.route('**/api/tags', r => r.fulfill(json([])));
   await page.route('**/api/orchestrator/sessions', r => r.fulfill(json({ sessions: [] })));
   await page.route('**/api/crash-recovery/pending', r => r.fulfill(json({ pending: [] })));
   await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
   await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
+  await page.route('**/api/projects', r => r.fulfill(json([])));
   await page.route('**/api/workspaces', r => r.fulfill(json([{
     id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
     createdAt: '2026-07-22T00:00:00Z',
@@ -259,6 +267,7 @@ test('pipeline page: pure dotnet project keeps Angular stylelint visible but ina
   })));
   await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
   await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
+  await page.route('**/api/bus/*/messages**', r => r.fulfill(json([])));
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(dotnetCatalogue)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));

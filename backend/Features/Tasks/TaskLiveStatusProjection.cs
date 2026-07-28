@@ -36,8 +36,10 @@ public sealed class TaskLiveStatusProjection(
         {
             var queue = ResolveQueue(job, runnerStatus);
             var execution = pipelineLog.Read(job.FolderPath);
-            var settings = projectSettings.Get(job.ProjectName);
-            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(job.Mode), settings);
+            var settings = PipelineTypeSettings.ForTask(projectSettings.Get(job.ProjectName), job)!;
+            var pipeline = ProjectPipelineOrder.Apply(
+                UiTaskPipelineRouter.Select(job, settings),
+                settings);
             IReadOnlyList<StepPromptEntry> prompts =
                 execution is null ? Array.Empty<StepPromptEntry>() : promptLog.ReadForJob(job.FolderPath);
             result[job.TaskKey] = Build(job, pipeline, execution, settings, prompts, queue);

@@ -24,6 +24,8 @@ export interface PipelineStep {
   dependsOn: string[];
   model?: string | null;
   cliType?: string | null;
+  /** Technology marker for stack-specific steps, e.g. Angular. */
+  framework?: string | null;
   timeoutMs?: number | null;
   idempotent: boolean;
   stub: boolean;
@@ -261,6 +263,8 @@ export interface PipelineCatalogueStep {
   usesPrompt: boolean;
   supportsMode: boolean;
   cliType?: string | null;
+  /** Technology marker for stack-specific steps, e.g. Angular. */
+  framework?: string | null;
   promptTemplate?: string | null;
   canDisable: boolean;
   /**
@@ -301,9 +305,13 @@ export type PipelineStepConditionToken =
 /** Envelope of `GET /api/projects/pipeline-catalogue`. */
 export interface PipelineCatalogue {
   pipelineId: string;
+  pipelineType?: PipelineType;
   detectedStacks?: string[];
   steps: PipelineCatalogueStep[];
 }
+
+/** Editable pipeline configuration types. */
+export type PipelineType = 'task' | 'bug' | 'feature' | 'planning';
 
 export interface EffectivePipelineCommand {
   workingSubdir: string;

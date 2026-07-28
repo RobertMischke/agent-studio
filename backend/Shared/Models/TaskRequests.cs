@@ -611,6 +611,8 @@ public record SetLaneSortStrategyRequest
 /// </summary>
 public record SetPipelineStepRequest
 {
+    /// <summary>The pipeline type whose chain is being edited.</summary>
+    public string PipelineType { get; init; } = PipelineTypes.Task;
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }

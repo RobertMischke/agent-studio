@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-28
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -133,6 +133,13 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Shared/Models/PipelineTypes.cs` and
+  `backend/Features/Pipeline/PipelineTypeSettings.cs`: resolve each card to the
+  extensible `task`, `bug`, `feature`, or `planning` settings dimension and
+  project that type's step overrides and order before runtime resolution.
+- `backend/Features/Projects/ProjectSettingsService.cs`: persists typed
+  pipeline overrides and migrates legacy flat settings into all three coding
+  types. Planning deliberately starts from its lightweight defaults.
 - `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
   the lane policy, changed files, project/component ownership, explicit impact
   rules, and Test Hub history. It produces the immutable selection audit used
@@ -216,6 +223,12 @@ pipeline view.
 
 ## Invariants
 
+- Pipeline settings are resolved from the card before enablement, ordering,
+  model, prompt, condition, gate, deferred merge, or push decisions. Generic
+  coding work, bugs, and features have independent override maps even though
+  they currently share the standard catalogue defaults. Planning and research
+  use the lightweight planning chain and never inherit migrated coding
+  overrides. Concept retains its dedicated document-first catalogue.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
