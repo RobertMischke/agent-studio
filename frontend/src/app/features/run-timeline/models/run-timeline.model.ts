@@ -143,6 +143,17 @@ export interface ReviewAttemptCycle {
   rotatedArtifacts: number;
 }
 
+/** One read-only refinement of the original task prompt. */
+export interface TaskRefinementEntry {
+  id: string;
+  at: string;
+  actor: 'operator' | 'agent' | 'system';
+  reason: string | null;
+  markdown: string;
+  source: 'prompt-history' | 'run-log' | 'orchestrator-history';
+  runIndex: number | null;
+}
+
 /** Response of `GET /api/tasks/{id}/runs/{index}/context`. `context` is null when nothing was captured for the run. */
 export interface RunContextResponse {
   runIndex: number;
@@ -159,6 +170,8 @@ export interface RunTimeline {
   hasActiveRun: boolean;
   runs: RunRecord[];
   promptEntries?: RunPromptEntry[];
+  /** Existing prompt/run/journal evidence folded into one chronological read model. */
+  refinements?: TaskRefinementEntry[];
   /** Typed runner replay. Task-level tokenSummary remains a separate aggregate. */
   runnerEvents?: RunnerRecordedEvent[];
   /** Operator-owned anti-churn epoch. Legacy tasks are epoch zero. */

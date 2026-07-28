@@ -16,10 +16,9 @@
     (hide)="hide.emit()">
     <ng-container tabs>
       <app-pane-tabs variant="header"
-                     ariaLabel="Result / Activity"
+                     ariaLabel="Task / Activity / Result"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
-                     [listModifier]="inProgress() ? 'activity-first' : null"
                      (tabChange)="onInspectorTabChange($event)" />
     </ng-container>
     <ng-container trailing>
@@ -84,7 +83,7 @@
     </ng-container>
   </app-pane-header>
   <div class="pane__body">
-    @if (protocolVerdict(); as v) {
+    @if (activeInspectorTab() !== 'task' && protocolVerdict(); as v) {
       <app-protocol-verdict-banner
         data-testid="protocol-run-outcome"
         [verdict]="v"
@@ -94,7 +93,7 @@
         [interimElapsedSeconds]="interimElapsedSeconds()"
         (requestInterim)="requestInterimSummary()" />
     }
-    @if (interimSummary(); as s) {
+    @if (activeInspectorTab() !== 'task' && interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
         <div class="interim-summary"
              [attr.data-status]="s.status"
@@ -137,7 +136,7 @@
       }
     }
     <!-- Visual evidence and code review live in the prompt pane (F38). -->
-    @if (followupCreated(); as fc) {
+    @if (activeInspectorTab() !== 'task' && followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
         <span aria-hidden="true">✓</span>
@@ -155,7 +154,13 @@
     <!-- Tabs live in the pane header; this section only switches content. -->
     <section class="inspector">
       <div class="inspector__body">
-        @if (activeInspectorTab() === 'protocol') {
+        @if (activeInspectorTab() === 'task') {
+          <app-task-inspector-tab
+            [promptMarkdown]="detail().promptMarkdown || ''"
+            [refinements]="runTimeline()?.refinements ?? []"
+            [jobId]="detail().info.id"
+            [watchPath]="detail().info.watchPath" />
+        } @else if (activeInspectorTab() === 'protocol') {
           <section class="notes-panel">
             @if (summaryStatus() === 'failed') {
               <div class="summary-error" role="alert" data-testid="protocol-summary-error">

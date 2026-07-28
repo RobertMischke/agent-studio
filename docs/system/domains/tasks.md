@@ -133,6 +133,26 @@ read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
+## Task-tab refinement projection
+
+The task-detail inspector orders its tabs as `Task | Activity | Result`.
+`Task` renders the current `prompt.md`, followed by a quiet chronological
+refinement history. `GET /api/tasks/{id}/runs` derives that history at read
+time from existing evidence:
+
+- `prompt-N.md` supplies full multiline operator refinements created through
+  Extend mode.
+- The run timeline supplies other operator follow-ups from the `[user]` rows
+  in `logs/cli-output.log`; the paired run start is the displayed time and the
+  session-event reason supplies the reason when present.
+- `orchestrator-follow-up-history/*.md` supplies system reissues, including
+  their recorded timestamp, reason or cause, and verbatim steering prompt.
+
+The projection de-duplicates an Extend prompt when the nearby run-log
+follow-up contains the same normalized text. It adds no task files and no
+write-side contract. Legacy follow-ups that exist only as `[user]` log rows
+therefore remain visible without inventing a second persistence mechanism.
+
 ## Project proposals
 
 The Project Hub proposal queue is backed by dated Markdown generations under
