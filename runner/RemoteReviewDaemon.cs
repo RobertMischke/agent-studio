@@ -19,7 +19,7 @@ public sealed class RemoteReviewDaemon
     public async Task RunAsync(CancellationToken shutdown)
     {
         await _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown);
-        var active = new List<Task<int>>();
+        var active = new List<(Task<int> Run, string AttemptId)>();
         var telemetry = new HostTelemetrySampler();
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await _client.AdvertiseCapabilitiesAsync(
@@ -32,10 +32,10 @@ public sealed class RemoteReviewDaemon
         {
             for (var index = active.Count - 1; index >= 0; index--)
             {
-                if (!active[index].IsCompleted) continue;
+                if (!active[index].Run.IsCompleted) continue;
                 try
                 {
-                    var exitCode = await active[index];
+                    var exitCode = await active[index].Run;
                     _log($"remote review slot finished exit={exitCode}");
                 }
                 catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
@@ -71,6 +71,14 @@ public sealed class RemoteReviewDaemon
                             _options.HostMaxParallelism - active.Count),
                         shutdown);
                 }
+                catch (TaskServerException fatal) when (fatal.StatusCode is 401 or 403)
+                {
+                    // Auth/registration is definitively broken - absorbing this
+                    // would spin a silent forever-loop. Exit; systemd restarts
+                    // the daemon, which re-registers with a fresh identity.
+                    _log($"review claim poll rejected with {fatal.StatusCode}; exiting for re-registration: {fatal.Message}");
+                    throw;
+                }
                 catch (Exception exception) when (exception is not OperationCanceledException
                                                   || !shutdown.IsCancellationRequested)
                 {
@@ -83,15 +91,25 @@ public sealed class RemoteReviewDaemon
                 }
                 if (!string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase))
                     break;
+                // In-flight dedup: after a lease died mid-run (renew outage), the
+                // server hands the same attempt out again with a fresh fence. This
+                // very process may still be executing it - starting a second
+                // executor would double-run the review and discard the first via
+                // StaleFence. Skip; the running slot finishes or dies first.
+                if (active.Any(slot => string.Equals(slot.AttemptId, claim.Attempt!.AttemptId, StringComparison.Ordinal)))
+                {
+                    _log($"claim returned attempt {claim.Attempt!.AttemptId} already in flight on this host; skipping duplicate execution");
+                    break;
+                }
                 claimedAny = true;
                 _log($"claimed remote review attempt={claim.Attempt!.AttemptId} subject={claim.Subject!.SubjectId} slot={active.Count + 1}/{_options.HostMaxParallelism}");
-                active.Add(new RemoteReviewExecutor(_options, _client, _log)
-                    .RunClaimedAsync(claim, shutdown));
+                active.Add((new RemoteReviewExecutor(_options, _client, _log)
+                    .RunClaimedAsync(claim, shutdown), claim.Attempt!.AttemptId));
             }
             if (!claimedAny)
                 await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
         }
         if (active.Count > 0)
-            await Task.WhenAll(active);
+            await Task.WhenAll(active.Select(slot => slot.Run));
     }
 }

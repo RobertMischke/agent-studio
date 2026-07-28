@@ -159,6 +159,14 @@ public sealed class RemoteReviewExecutor
                         AuthorityEpoch: lease.AuthorityEpoch),
                     stop);
             }
+            catch (TaskServerException dead) when (dead.StatusCode is 404 or 409)
+            {
+                // Definitive authority loss (superseded, stale fence, unknown
+                // attempt): further heartbeats are ghost traffic. Stop renewing
+                // and say so loudly - the report will surface the loss.
+                _log($"review lease authority lost attempt={attemptId} ({dead.StatusCode}); stopping heartbeat: {dead.Message}");
+                return;
+            }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 // One failed renewal (transient network, backend restart window)

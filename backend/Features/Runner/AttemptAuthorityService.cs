@@ -550,6 +550,14 @@ public sealed class AttemptAuthorityService
                 // the review daemon: claim -> run -> lease dies -> 409 -> restart).
                 if (replay.Status != AttemptWriteStatus.LeaseExpired)
                     return replay;
+                // BUT: if the dead lease was claimed with exactly this delivery
+                // key, the claiming PROCESS is still alive (a restart changes the
+                // instance id and thus the key) and its executor may still be
+                // running - minting a fresh fence here would double-execute the
+                // review and discard the first run as StaleFence. Keep answering
+                // LeaseExpired; the daemon's in-flight dedup skips the re-claim.
+                if (Same(review.CurrentClaimDeliveryKey, deliveryKey))
+                    return replay;
             }
             if (!IsCurrentReview(review) || Terminal(review.State))
                 return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));

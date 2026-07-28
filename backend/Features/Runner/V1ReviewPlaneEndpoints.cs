@@ -476,10 +476,12 @@ public static class V1ReviewPlaneEndpoints
                         // verdict, or the boot-time verdict-less backfill later
                         // escalates the freshly reviewed card as pre-funnel
                         // legacy (observed 28.07. after a backend restart).
+                        // The move relocated the card folder; the epoch sidecar
+                        // must be read from the NEW path or it stamps epoch 0.
                         escalation.RecordRemoteReviewParkVerdict(
                             task.ProjectName,
                             task.Id,
-                            task.FolderPath,
+                            moved.NewFolderPath ?? task.FolderPath,
                             request.Outcome,
                             request.Summary ?? string.Empty);
                     }

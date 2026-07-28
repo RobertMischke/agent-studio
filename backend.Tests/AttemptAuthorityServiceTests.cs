@@ -135,7 +135,7 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
-    public void Crash_restarted_executor_reclaims_with_the_same_delivery_key_after_lease_expiry()
+    public void Living_process_reclaim_of_its_own_dead_lease_keeps_answering_LeaseExpired()
     {
         var now = new DateTime(2026, 7, 28, 0, 0, 0, DateTimeKind.Utc);
         var service = NewService(() => now);
@@ -143,15 +143,22 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var first = service.ClaimReview(
             review.AttemptId, "reviewer", "host", 30, "claim-crash").ReviewAttempt!;
 
-        // Same executor identity, same idempotency key, lease dead: this is a
-        // takeover after a daemon crash, not a replay with surviving authority.
-        // It must mint a fresh lease instead of bouncing with LeaseExpired.
+        // Same delivery key = the claiming PROCESS is still alive (a restart
+        // changes the instance id and thus the key) and its executor may still
+        // be running. Minting a fresh fence here would double-execute the
+        // review and discard the first run as StaleFence, so the claim keeps
+        // bouncing with LeaseExpired; the daemon's in-flight dedup skips it.
+        // A genuine crash takeover arrives with a NEW key and is covered by
+        // Review_takeover_on_same_attempt_rejects_old_claim_and_renewal_replays.
         now = now.AddSeconds(31);
         var reclaimed = service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-crash");
 
-        Assert.Equal(AttemptWriteStatus.Accepted, reclaimed.Status);
-        Assert.True(reclaimed.ReviewAttempt!.LastFence > first.LastFence);
-        Assert.Equal("reviewer", reclaimed.ReviewAttempt.Lease!.ExecutorId);
+        Assert.Equal(AttemptWriteStatus.LeaseExpired, reclaimed.Status);
+        Assert.Equal(first.LastFence, reclaimed.ReviewAttempt!.LastFence);
+
+        var takeover = service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-after-restart");
+        Assert.Equal(AttemptWriteStatus.Accepted, takeover.Status);
+        Assert.True(takeover.ReviewAttempt!.LastFence > first.LastFence);
     }
 
     [Fact]
