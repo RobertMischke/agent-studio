@@ -6,7 +6,7 @@ AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
 The service is the durable task and orchestration authority. Agent Studio,
-OrchestratorApi, and Agent Runner are clients. The Task Server is the only
+OrchestratorApi, and Runner are clients. The Task Server is the only
 owner of its SQLite store and `/api/v1`. Internet-reachable deployments require HTTPS,
 authenticated mode, protected credentials, and the broader AGT-2193 controls
 in [networked Task Server](networked-task-server.md).
@@ -21,7 +21,7 @@ in [networked Task Server](networked-task-server.md).
 | `runner` | Separately registered coding and review services, host probes, Git worktrees, CLI and review processes, bounded execution, and durable result delivery through protocol 2 | Host worktrees, fsynced outboxes, and bounded transfer state only |
 
 The Task Server project references shared contracts and SQLite persistence. It
-does not reference Angular, the legacy Studio backend, Agent Runner, coding
+does not reference Angular, the legacy Studio backend, Runner, coding
 agent libraries, repository worktree code, or host process execution.
 
 ## Install and supervise
@@ -146,7 +146,7 @@ The canonical production bootstrap uses one service credential through
 `TaskServer:RequireAuthentication` and distinct `StudioBearerToken` and
 `RunnerBearerToken` values. Do not configure both modes. Studio BFF reads
 `TaskServer:AuthTokenFile`, `TaskServer:AuthToken`, or the compatibility
-`TaskServer:BearerToken`. Agent Runner reads its secret from
+`TaskServer:BearerToken`. Runner reads its secret from
 `RUNNER_AUTH_TOKEN_FILE` or `RUNNER_AUTH_TOKEN`. A private-CA or rehearsal
 deployment may pin the Task Server leaf certificate by SHA-256 through
 `TaskServer:TlsServerCertificateSha256` on the BFF and

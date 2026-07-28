@@ -1,6 +1,6 @@
 # Getting started
 
-This is the step-by-step path from a clean Windows machine to a running agent-orchestrator instance with one project attached and one task completed end to end. If you would rather have a coding agent do all of this for you, see the README's ["How to get started"](../../../README.md#how-to-get-started) - tell it to clone the repo and follow [AGENTS.md](../../../AGENTS.md). This page is for doing it yourself, or for checking what the agent actually did.
+This is the step-by-step path from a clean Windows machine to a running Agent Studio instance with one project attached and one task completed end to end. If you would rather have a coding agent do all of this for you, see the [README](../../../README.md) - tell it to clone the repo and follow [AGENTS.md](../../../AGENTS.md). This page is for doing it yourself, or for checking what the agent actually did.
 
 Everything below was verified against this repository's actual scripts and source on 2026-07-08. All commands are Git Bash (`sh`), not PowerShell.
 
@@ -37,7 +37,7 @@ Fix: finish the onboarding wizard once by running `claude` interactively yoursel
 ### 2.1 Clone this repo and the chat library
 
 ```sh
-git clone https://github.com/agent-orc/agent-studio.git agent-orchestrator
+git clone https://github.com/agent-orc/agent-studio.git
 ```
 
 The frontend depends on a sibling library, `coding-agent-chat`, via a relative `file:` path (`frontend/package.json`: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`). Three `../` means your checkout must sit **two folders deep under a common root**, with `coding-agent-chat` cloned as a sibling of that root. For example:
@@ -46,7 +46,7 @@ The frontend depends on a sibling library, `coding-agent-chat`, via a relative `
 C:\Projects\
 ├── coding-agent-chat\             <- build this first
 └── <any-folder>\
-    └── agent-orchestrator\        <- this repo (frontend/ is 2 levels below C:\Projects)
+    └── agent-studio\              <- this repo (frontend/ is 2 levels below C:\Projects)
 ```
 
 Build the library before you touch the frontend - `npm install` in `frontend/` will fail otherwise because `dist/coding-agent-chat` doesn't exist yet:
@@ -61,13 +61,13 @@ npm run build
 ### 2.2 Backend config
 
 ```sh
-cd agent-orchestrator/backend
+cd agent-studio/backend
 cp appsettings.Local.json.example appsettings.Local.json
 ```
 
 Edit `appsettings.Local.json` (gitignored, per-checkout) and set at least:
 
-- **`TaskRepository`** - the workspace root where job folders and the project/workspace registry live (`<TaskRepository>/projects/...`, `<TaskRepository>/.metadata/{workspaces,projects}.json`). Point it at an empty folder you own, e.g. `C:\\Projects\\agent-orchestrator-workspace`.
+- **`TaskRepository`** - the workspace root where job folders and the project/workspace registry live (`<TaskRepository>/projects/...`, `<TaskRepository>/.metadata/{workspaces,projects}.json`). Point it at an empty folder you own, e.g. `C:\\Projects\\agent-studio-workspace`.
 - **`WatchPaths`** - leave it `[]`. It's a bootstrap-only discovery list (ADR-0042); you add your first real project after boot with the in-app dialog, not by hand-editing this file (see step 3).
 - **`Environment.IsDev`** - set it to `false` (or delete the whole `Environment` block). This both turns off the orange "DEV" UI markers and matters functionally: the runner's pickup role infers from this flag when `Runner.Role` isn't set explicitly (`true` -> `test-subject`, which *disables* auto-pickup; anything else -> `orchestrator`, which runs it). You want `orchestrator` for a normal instance.
 - Delete the `Runner`, `DevTools`, and `//TaskRepository.dev-vs-stable` blocks entirely. Those exist for the maintainers' own **dev + stable** side-by-side setup (see "Reference: dev + stable" below) and aren't needed for a single instance.
@@ -75,7 +75,7 @@ Edit `appsettings.Local.json` (gitignored, per-checkout) and set at least:
 ### 2.3 Frontend install
 
 ```sh
-cd ../frontend   # agent-orchestrator/frontend
+cd ../frontend   # agent-studio/frontend
 npm install
 ```
 
@@ -84,7 +84,7 @@ npm install
 ### 2.4 Start the backend
 
 ```sh
-cd ../         # agent-orchestrator/
+cd ../         # agent-studio/
 ATP_ALLOW_DEV_BACKEND=1 ./api.sh start
 ```
 
@@ -167,7 +167,7 @@ For anything not on this short list, the full FAQ is [troubleshooting.md](./trou
 
 ## Reference: dev + stable side-by-side (optional, advanced)
 
-Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`, `update-stable.sh`) that live **one level above both checkouts**, not inside this repository. That pattern is only worth replicating if you are also developing agent-orchestrator itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
+Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`, `update-stable.sh`) that live **one level above both checkouts**, not inside this repository. That pattern is only worth replicating if you are also developing Agent Studio itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
 
 ## Reference: configuration knobs
 

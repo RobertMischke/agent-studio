@@ -1272,7 +1272,7 @@ Remaining loose ends tracked for follow-ups (not blocking this ADR): (1) `Resolv
 
 ## ADR-0063 - Task Server is the independently deployed durable control plane (2026-07-17)
 
-**Decision.** Agent Studio, Task Server, and Agent Runner are separate runtime
+**Decision.** Agent Studio, Task Server, and Runner are separate runtime
 products. Task Server is the only durable task and orchestration authority.
 Studio is a client, optionally through a stateless BFF. Runner negotiates a
 versioned API before registration or claim and owns execution only.
@@ -1353,7 +1353,7 @@ branch, and HEAD revision in the compact chat header.
 checkout and potentially a different revision than the cards it was discussing.
 Execution location is decision-relevant context, not an implementation detail.
 The distributed target also assigns repository materialization and CLI
-processes to Agent Runner, while Studio remains a client and Task Server owns
+processes to Runner, while Studio remains a client and Task Server owns
 durable authority.
 
 **Non-goals.** Studio does not open SSH sessions into Runner hosts. Chat does

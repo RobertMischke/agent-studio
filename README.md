@@ -1,4 +1,4 @@
-# agent-orchestrator
+# Agent Studio
 
 **Management layers on top of coding work.** Agents (Claude Code, Codex, GitHub Copilot, Gemini) write the code; this repository is the Studio: a task board, agent pipelines, and project wikis that assign, gate, review, and account for it.
 

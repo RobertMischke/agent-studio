@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Die drei Einheiten: Agent Studio, Task Server, Agent Runner — Konzept</title>
+<title>Die drei Einheiten: Agent Studio, Task Server, Runner — Konzept</title>
 <style>
   :root {
     color-scheme: light;
@@ -16,7 +16,7 @@
     --line: #d8d6cf;
     --accent: #2a78d6;       /* Agent Studio */
     --ok: #1a7d3a;           /* Task Server */
-    --warn-c: #b5651d;       /* Agent Runner */
+    --warn-c: #b5651d;       /* Runner */
     --bad: #c93736;
     --warn: #9a6b00;
     --accent-soft: #eaf1fb;
@@ -147,7 +147,7 @@
 
 <header class="page">
   <p class="kicker">Konzept · Agent-Studio-Wiki</p>
-  <h1>Die drei Einheiten: Agent Studio, Task Server, Agent Runner</h1>
+  <h1>Die drei Einheiten: Agent Studio, Task Server, Runner</h1>
   <p class="lede">Ein Produkt, drei unabhängig deploybare Rollen. Heute laufen zwei der drei noch in
   einem Prozess zusammen; die Trennung ist im Gange (AGT-2192, AGT-2193). Diese Seite beschreibt, was
   jede Einheit heute im Code tatsächlich besitzt, was sich gerade herauslöst — und räumt mit der
@@ -165,7 +165,7 @@
     <li><a href="#tldr">TL;DR — die drei Einheiten in fünf Sätzen</a></li>
     <li><a href="#studio">§1 Agent Studio — Bedien- und Orchestrierungsebene</a></li>
     <li><a href="#taskserver">§2 Task Server — die Control Plane</a></li>
-    <li><a href="#runner">§3 Agent Runner — die Doppelnatur</a></li>
+    <li><a href="#runner">§3 Runner — die Doppelnatur</a></li>
     <li><a href="#diagramm">§4 Diagramm: drei Einheiten, drei Kommunikationsrichtungen</a></li>
     <li><a href="#missverstaendnis">§5 Häufiges Missverständnis</a></li>
     <li><a href="#extraktion">§6 Stand der Extraktion: AGT-2192 / AGT-2193</a></li>
@@ -181,7 +181,7 @@
     <li><b>Task Server</b> ist die dauerhafte Control Plane — Task-Zustand, API, Identitäten/Auth. Heute steckt
         er noch <i>im selben Prozess</i> wie Studio; AGT-2192 löst ihn als eigenständig deploybare Einheit heraus,
         AGT-2193 liefert dafür Login, Runner-Identitäten und TLS nach.</li>
-    <li><b>Agent Runner hat eine echte Doppelnatur</b> — aber nicht als eine geteilte Programmbibliothek,
+    <li><b>Runner hat eine echte Doppelnatur</b> — aber nicht als eine geteilte Programmbibliothek,
         sondern als zwei separat implementierte Code-Pfade für dieselbe Rolle: lokal eingebettet in Studios
         Backend (<code>ProjectRunner</code>, <code>WorktreeTaskLifecycle</code>, <code>BuildTestGateRunner</code>)
         und als eigenständiger Daemon (<code>runner/</code>, Deployment <code>agent-runner-01</code>).</li>
@@ -322,8 +322,8 @@ Task-Server-URL, gegen die jeder Studio-Client und jeder Runner-Host spricht —
 Eins-Prozess-Zustands mit Tunnel/LAN-Notlösungen.</p>
 
 <!-- ============================================================ -->
-<h2 id="runner"><span class="no">§3</span>Agent Runner — die Doppelnatur</h2>
-<p>Der Agent Runner ist keine einzelne Sache, sondern eine Rolle, die zweimal gebaut ist: einmal
+<h2 id="runner"><span class="no">§3</span>Runner — die Doppelnatur</h2>
+<p>Der Runner ist keine einzelne Sache, sondern eine Rolle, die zweimal gebaut ist: einmal
 <b>eingebettet</b> in Studios Backend für lokale Ausführung, einmal als <b>eigenständiger Daemon</b> für
 pull-basierte Remote-Ausführung. Empfohlene Sprechweise, um beide Seiten sauber zu benennen:
 <b>Runner Core</b> (die Rolle/das Verhalten, library-förmig) und <b>Runner Daemon</b> (die deploybare
@@ -430,7 +430,7 @@ API-Vertrag, aber ohne Netzwerkgrenze dazwischen). Der Runner spricht den Task S
       <span class="txt">pull, nur ausgehend<br><code>/api/runner/claim</code>,<br>lease, logs, artifacts,<br>completion</span>
     </div>
     <div class="d-box runner">
-      <h5><span class="dot"></span>Agent Runner</h5>
+      <h5><span class="dot"></span>Runner</h5>
       <ul>
         <li>Runner Core (Library-Rolle)</li>
         <li>Runner Daemon<br>(<code>agent-runner-01</code>)</li>

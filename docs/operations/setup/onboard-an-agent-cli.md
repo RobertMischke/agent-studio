@@ -29,7 +29,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 **Known quirks**:
 
 - **argv-length on Windows.** A multi-KB prompt passed as `-p <prompt>` on the Windows command line silently fails (empty CLI response). Production code paths use `ICliOneShot` ([../../backend/Services/Cli/OneShot/ICliOneShot.cs](../../../backend/Services/Cli/OneShot/ICliOneShot.cs)) or stdin-piped `Process.Start` to bypass this. The drift analyser in [`CodePatternDriftAnalysisService.cs`](../../../backend/Services/Drift/CodePatternDriftAnalysisService.cs) flags new `-p <multi-KB-string>` call sites as regressions.
-- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `C:\Users\rmisc\AppData\Roaming\npm\`. The fix is to reinstall the npm package; see the orchestrator memory entry "Claude CLI repair on Windows".
+- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\`. The fix is to reinstall the npm package; see the orchestrator memory entry "Claude CLI repair on Windows".
 
 ## Codex
 

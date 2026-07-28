@@ -182,12 +182,12 @@
   <tr><td><b>cgroup-Governance</b></td><td>Ressourcen-Quotas je Rolle bleiben gültig, greifen künftig am Container statt an der systemd-Unit.</td><td><span class="pill done">AGT-2340 integriert</span></td></tr>
 </table>
 
-<h3>Coding Agent Runner (CAR · Library)</h3>
+<h3>CodingAgentRunner (CAR · Library)</h3>
 <p class="dim">Die frühere Fassung dieses Absatzes war missverständlich („der Spawner ist die zentrale Stelle") und legte nahe, die Container-Arbeit fände in der Library statt. Hier die belegte Klarstellung.</p>
 
 <div class="box accent">
   <h4>Das Zielbild ist eindeutig — der Code weicht davon ab</h4>
-  <p><code>docs/concepts/distributed-agent-studio-target-architecture.md</code> führt in §4 „CodingAgentRunner integration" als Eigentum des Deployables <b>Agent Runner</b> und schreibt in §10 wörtlich: <em>„CodingAgentRunner remains the process and CLI-protocol library used by <code>agent-runner</code>. The standalone Runner must not recreate a second unstructured Codex invocation path."</em> §13.6 verlangt zusätzlich strukturierte CAR-Events, fenced commands und typed outcomes.</p>
+  <p><code>docs/concepts/distributed-agent-studio-target-architecture.md</code> führt in §4 „CodingAgentRunner integration" als Eigentum des Deployables <b>Runner</b> und schreibt in §10 wörtlich: <em>„CodingAgentRunner remains the process and CLI-protocol library used by <code>agent-runner</code>. The standalone Runner must not recreate a second unstructured Codex invocation path."</em> §13.6 verlangt zusätzlich strukturierte CAR-Events, fenced commands und typed outcomes.</p>
   <p>Der Befund unten ist damit <b>kein offener Architekturentwurf, sondern ein Drift</b>: Der Runner-Daemon startet das CLI heute roh über <code>RUNNER_CLI_BIN</code>/<code>RUNNER_CLI_ARGS</code> — genau der Pfad, den das Zielbild ausschließt. Die Konsequenz ist getaktet: <b>AGT-2370</b> (Runner auf CAR) → <b>AGT-2371</b> (lokale Ausführungsschicht) → <b>AGT-2372</b> (Parity-Suite + Guard-Test) → <b>AGT-2373</b> (Aufräumen, ADR, Doku). <span class="pill queued">Kette angelegt 26.07.</span></p>
 </div>
 

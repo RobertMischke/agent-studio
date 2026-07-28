@@ -18,7 +18,7 @@ One large product is represented by one **Workspace** containing sibling
 Agent Studio solution workspace
 ├── Agent Studio component project     task keys AGT-*
 ├── Task Server component project      task keys TSV-*
-└── Agent Runner component project     task keys RUN-*
+└── Runner component project     task keys RUN-*
 
 All three component projects
 └── bind to the same monorepo today through separate RepositoryBindings
@@ -347,7 +347,7 @@ scope globs are confirmed during implementation against the live source tree.
 |---|---|---|---|---|
 | Agent Studio | Existing `PROJ-*`, existing `AGT-*` keys | `RB-AGT-MONO -> REPO-MONO` | `frontend/**`, Studio-facing backend composition, shared docs | Studio backlog, app release target, assigned Runner, Studio health and Wiki roots |
 | Task Server | New `PROJ-*`, `TSV-*` keys | `RB-TSV-MONO -> REPO-MONO` | task API/store, registry, server contracts, shared models needed by the server | Server backlog, Task Server deployment target, server health and docs |
-| Agent Runner | New `PROJ-*`, `RUN-*` keys | `RB-RUN-MONO -> REPO-MONO` | `runner/**`, runner protocol, lease and execution integration code | Runner backlog, daemon release target, Runner assignment and operating docs |
+| Runner | New `PROJ-*`, `RUN-*` keys | `RB-RUN-MONO -> REPO-MONO` | `runner/**`, runner protocol, lease and execution integration code | Runner backlog, daemon release target, Runner assignment and operating docs |
 
 All three bindings resolve to the same repository and may resolve to the same
 local clone on one host. Tasks stay in separate task stores and boards. A
@@ -539,7 +539,7 @@ deduplications, ambiguous rows, and task counts.
 ### Phase 2: split the Agent Studio solution backlog
 
 - Retain the existing Agent Studio project and all existing `AGT-*` tasks.
-- Create Task Server and Agent Runner as sibling component projects in the same
+- Create Task Server and Runner as sibling component projects in the same
   workspace, with new `TSV` and `RUN` key sequences.
 - Bind all three to the existing monorepo repository identity using reviewed
   code scopes.
@@ -564,7 +564,7 @@ a component model that did not yet exist.
 
 ### Phase 4: repository extraction rehearsal
 
-Clone Task Server or Agent Runner into a separate test repository, retarget its
+Clone Task Server or Runner into a separate test repository, retarget its
 existing binding through the audited API, and verify:
 
 - project id, short code, task keys, task storage, Initiative membership,
@@ -694,15 +694,15 @@ returned by the API.
 | `TSV-MODEL` | Task Server | RepositoryIdentity, RepositoryBinding, component-owned project fields, task ownership fields, JSON migrations, and compatibility readers. | none |
 | `TSV-SCOPES` | Task Server | Typed board query, workspace/project scopes, SavedView persistence, deduplication, stable-id navigation payloads. | `TSV-MODEL` |
 | `TSV-INIT` | Task Server | Initiative and milestone persistence/API plus workspace-scoped dependency rollup. | `TSV-MODEL` |
-| `RUN-BINDING` | Agent Runner | Resolve selected bindings and code scopes into run context and provenance. | `TSV-MODEL` |
-| `RUN-ADMISSION` | Agent Runner | Repository-scoped integration lease, merge queue, cleanup, push, merge status, and contention telemetry. | `TSV-MODEL`, `RUN-BINDING` |
+| `RUN-BINDING` | Runner | Resolve selected bindings and code scopes into run context and provenance. | `TSV-MODEL` |
+| `RUN-ADMISSION` | Runner | Repository-scoped integration lease, merge queue, cleanup, push, merge status, and contention telemetry. | `TSV-MODEL`, `RUN-BINDING` |
 | `AGT-BOARDS` | Agent Studio | Scope control, workspace aggregate, component board, stable-id tabs/routes, and no-duplicate rendering. | `TSV-SCOPES` |
 | `AGT-CREATE` | Agent Studio | Explicit component ownership and binding selection in task creation. | `TSV-MODEL`, `AGT-BOARDS` |
 | `AGT-INIT` | Agent Studio | Initiative rollup, milestone/dependency navigation, and SavedView UX. | `TSV-SCOPES`, `TSV-INIT`, `AGT-BOARDS` |
 | `TSV-WIKI-DELIVERY` | Task Server | Read-only Wiki delivery-projection contract and batched cross-project resolution. | `TSV-MODEL`, `TSV-INIT` |
 | `AGT-WIKI-DELIVERY` | Agent Studio | Wiki missing/open/done projection UI and task navigation. | `TSV-WIKI-DELIVERY`, `AGT-BOARDS` |
 | `TSV-MIGRATE` | Task Server | Idempotent current-registry/task migration and Agent Studio solution split tooling/report. | `TSV-MODEL`, `TSV-SCOPES`, `TSV-INIT` |
-| `RUN-EXTRACT` | Agent Runner | Separate-repository extraction rehearsal and cross-component end-to-end proof. | all cards above |
+| `RUN-EXTRACT` | Runner | Separate-repository extraction rehearsal and cross-component end-to-end proof. | all cards above |
 
 ```text
 TSV-MODEL

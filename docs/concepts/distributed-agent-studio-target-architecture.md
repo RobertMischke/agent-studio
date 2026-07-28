@@ -1,7 +1,7 @@
 # Distributed Agent Studio target architecture
 
 Status: canonical target picture, 2026-07-13. This page defines the intended
-separation of Agent Studio, the Task Server, and Agent Runner. It is a product
+separation of Agent Studio, the Task Server, and Runner. It is a product
 and architecture target, not a claim that every boundary already ships.
 
 This page is the coordinating source for the implementation tasks listed in
@@ -20,7 +20,7 @@ deployable runtime components:
 2. **Task Server** is the always-on control plane and durable system of record.
    It owns users, workspaces and project identity, tasks, orchestration
    state, leases, events, artifacts, audit, and management APIs.
-3. **Agent Runner** is the execution plane. It owns host capabilities, code
+3. **Runner** is the execution plane. It owns host capabilities, code
    checkouts, coding-agent processes, tool processes, containment, and bounded
    delivery of typed events and artifacts to the Task Server.
 
@@ -29,7 +29,7 @@ are not a fourth runtime product.
 
 The release-defining scenario is:
 
-> Start Task Server and Agent Runner as independently supervised services.
+> Start Task Server and Runner as independently supervised services.
 > Start a task from Agent Studio, close Agent Studio completely, and prove that
 > the task, its post-processing, and its durable state continue. Reopen Agent
 > Studio, or open another authorized client, and observe the same task history.
@@ -111,7 +111,7 @@ carries task authority, events, evidence metadata, and commands.
 |---|---|---|
 | **Agent Studio** | Human interaction, board and project views, task authoring, orchestration observation, admin UI, explicit operator commands, local UI preferences | Durable task state, lease authority, CLI process handles, hidden filesystem writes, long-running service liveness |
 | **Task Server** | Canonical resources and IDs, Task API, orchestration state machine, scheduling/admission, users and authorization, service identities, durable leases/fences, event and artifact ingestion, audit, backup/restore metadata, management API | Coding-agent processes, host toolchains, repository worktrees, Angular component state |
-| **Agent Runner** | Host registration, capability probes, project workspaces, CodingAgentRunner integration, process containment, execution of an admitted run plan, typed output, artifact upload, bounded local spool | Global task namespace, user passwords, arbitrary lane changes, autonomous claims, policy changes, release authority |
+| **Runner** | Host registration, capability probes, project workspaces, CodingAgentRunner integration, process containment, execution of an admitted run plan, typed output, artifact upload, bounded local spool | Global task namespace, user passwords, arbitrary lane changes, autonomous claims, policy changes, release authority |
 | **Shared contracts** | Versioned resource DTOs, event envelopes, command/result schemas, compatibility rules, deterministic policy primitives | Network hosting, persistence technology, UI projections, OS process ownership |
 
 ### Where orchestration runs
@@ -153,7 +153,7 @@ The operating system service manager or container platform owns start, stop,
 and restart. The management API owns readiness, drain, maintenance intent,
 safe-shutdown preparation, version, migration, and diagnostics.
 
-### Agent Runner lifecycle
+### Runner lifecycle
 
 - Runs as a system service with its own version and configuration.
 - Registers an explicit service identity and reports capabilities and health.
@@ -343,7 +343,7 @@ Use three explicit planning levels instead:
 | Level | Purpose | Example |
 |---|---|---|
 | **Workspace / solution** | Groups component projects that form one product, and owns their shared defaults and access policy | `Agent Studio for Software` |
-| **Component project** | Own backlog, task key, lifecycle, release/deployment target, Runner assignment, and health | `Agent Studio`, `Task Server`, `Agent Runner` |
+| **Component project** | Own backlog, task key, lifecycle, release/deployment target, Runner assignment, and health | `Agent Studio`, `Task Server`, `Runner` |
 | **Task** | One owned change in exactly one component project | `TS-24 Extract durable lease store` |
 
 A cross-component **initiative** or epic groups tasks from several component
@@ -372,7 +372,7 @@ ComponentProject
      { repositoryId, optional subpath, branch model, execution role }
 ```
 
-During extraction, Agent Studio, Task Server, and Agent Runner may share one
+During extraction, Agent Studio, Task Server, and Runner may share one
 monorepo while already having separate projects and release lifecycles. Later
 they may move to separate repositories without changing task identity or the
 workspace/component hierarchy.
@@ -458,7 +458,7 @@ Required scenarios:
 
 AGT-2196 supplies the release-blocking cross-process proof in
 [`task-server.Tests/TopologyTests.cs`](../../task-server.Tests/TopologyTests.cs).
-The harness launches the built Task Server, Studio BFF, and Agent Runner
+The harness launches the built Task Server, Studio BFF, and Runner
 assemblies as sibling OS processes with isolated ports, data roots, Runner
 workspaces, and configuration. It uses a real local Git remote and a bounded
 fixture agent process. The fixture is a deterministic CLI participant, not a
@@ -537,7 +537,7 @@ key-alias decision. Do not duplicate or renumber these tasks in the meantime.
    compatibility.
 5. **Connect Agent Studio only by API.** Remove in-process task-store and Runner
    ownership from the surface runtime.
-6. **Align Agent Runner with shared contracts.** Use CodingAgentRunner structured
+6. **Align Runner with shared contracts.** Use CodingAgentRunner structured
    events, fenced commands, typed outcomes, and bounded replay.
 7. **Pass the client-off golden path.** This is the first complete target
    milestone.

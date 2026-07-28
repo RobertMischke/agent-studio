@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Die drei Einheiten: Agent Studio, Task Server, Agent Runner",
+  "title": "Die drei Einheiten: Agent Studio, Task Server, Runner",
   "source": {
     "path": "docs/concepts/drei-einheiten-architektur.html",
     "type": "html",

@@ -17,7 +17,7 @@ Canonical project identity is the registry ID (`PROJ-NNN`); short codes and disp
 | Project ID | Short code | Project | Discovery | Components | Solutions | Workflow manifests | Technologies | Rough size |
 | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: |
 | PROJ-002 | AGT | Agent Task Processor | ready | 8 | 1 | 2 | Angular 21 (angular), ASP.NET Core (aspnet-core), C# (csharp), .NET 10 (dotnet), GitHub Actions (github-actions), npm (npm), Playwright (playwright), Roslyn (roslyn), SQLite (sqlite), TypeScript (typescript), Vitest (vitest), xUnit (xunit) | 3,451 files / 611,321 LoC |
-| PROJ-011 | CAR | Coding Agent Runner | ready | 4 | 1 | 3 | C# (csharp), .NET 10 (dotnet), GitHub Actions (github-actions), xUnit (xunit) | 175 files / 18,698 LoC |
+| PROJ-011 | CAR | Runner | ready | 4 | 1 | 3 | C# (csharp), .NET 10 (dotnet), GitHub Actions (github-actions), xUnit (xunit) | 175 files / 18,698 LoC |
 | PROJ-014 | CAC | Coding Agent Chat | ready | 5 | 1 | 3 | Angular 21 (angular), ASP.NET Core (aspnet-core), C# (csharp), .NET 10 (dotnet), GitHub Actions (github-actions), npm (npm), TypeScript (typescript), Vitest (vitest) | 218 files / 45,689 LoC |
 | PROJ-015 | TE | Token Economy | ready | 2 | 1 | 3 | C# (csharp), .NET 10 (dotnet), GitHub Actions (github-actions), xUnit (xunit) | 51 files / 4,733 LoC |
 | PROJ-012 | WEB | Agent Studio Website | ready | 1 | 0 | 1 | Angular 21 (angular), Express (express), GitHub Actions (github-actions), npm (npm), TypeScript (typescript) | 87 files / 23,399 LoC |
@@ -29,7 +29,7 @@ Each managed repository has independent provenance. A dirty state means the mani
 | Project ID | Short code | Repository | Revision | Working tree | Captured |
 | --- | --- | --- | --- | --- | --- |
 | PROJ-002 | AGT | PROJ-002 · Agent Task Processor | `36d910d3fc3fb4bc0ef9c8b91c5210f0cbf880f1` | dirty | `2026-07-13T21:53:26.359Z` |
-| PROJ-011 | CAR | PROJ-011 · Coding Agent Runner | `dcd51e957c01bc6230014d614427beb7c16189cd` | dirty | `2026-07-13T21:53:26.359Z` |
+| PROJ-011 | CAR | PROJ-011 · Runner | `dcd51e957c01bc6230014d614427beb7c16189cd` | dirty | `2026-07-13T21:53:26.359Z` |
 | PROJ-014 | CAC | PROJ-014 · Coding Agent Chat | `1f63ff349058ccfbbd9963a345b61851876bd7c2` | dirty | `2026-07-13T21:53:26.359Z` |
 | PROJ-015 | TE | PROJ-015 · Token Economy | `00fe7f16300996a2808e8a64bed4031832939690` | clean | `2026-07-13T21:53:26.359Z` |
 | PROJ-012 | WEB | PROJ-012 · Agent Studio Website | `b97325c49e7070a835ebeefc6307db5dd07f490d` | clean | `2026-07-13T21:53:26.359Z` |
@@ -53,7 +53,7 @@ Solutions: `agent-taskboard.sln`
 
 Workflows: `.github/workflows/backend-ci.yml`, `.github/workflows/frontend-lint.yml`
 
-### CAR: Coding Agent Runner
+### CAR: Runner
 
 | Component | Kind | Manifest | Technologies | Rough size |
 | --- | --- | --- | --- | ---: |

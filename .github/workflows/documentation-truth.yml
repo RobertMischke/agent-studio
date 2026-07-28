@@ -1,0 +1,35 @@
+name: Public documentation truth
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'scripts/check-public-docs.py'
+      - '.github/workflows/documentation-truth.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'scripts/check-public-docs.py'
+      - '.github/workflows/documentation-truth.yml'
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check public documentation
+        run: python3 scripts/check-public-docs.py
+      - name: Verify recorded package claims against public registries
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: python3 scripts/check-public-docs.py --verify-registry

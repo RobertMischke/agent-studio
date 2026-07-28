@@ -17,7 +17,7 @@ Cross-project audit (`agent-taskboard-workspace/.metadata/projects.json`,
 |---|---|---|
 | Coding Agent Chat (PROJ-014) | website (4202), conversation-lab (4201), workbench (5055, .NET) | top-level `package.json` scripts |
 | Agent Studio Website (PROJ-012) | preview of the current mockup variant (4184) | **only in `README.md`**, not in a script |
-| Coding Agent Runner (PROJ-011) | static `website/index.html` | none - "open the file", no process to start |
+| Runner (PROJ-011) | static `website/index.html` | none - "open the file", no process to start |
 | Agent Studio Marketing (PROJ-013), Runbook, Playwright Test, Privat, New, Lotta Dashboard | none | n/a |
 
 Takeaways that shaped the design below:
