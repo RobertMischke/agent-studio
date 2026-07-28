@@ -67,6 +67,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
+| Deck icon alternatives and recommended card-stack motif (AGT-2355) | [interactive Workbench](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options.svg) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |
