@@ -65,6 +65,15 @@ the dedicated `PUT /api/projects/{projectName}/execution-runner` contract.
 Project id, source type, storage location, creation time, and the task-key
 counter are immutable and are never accepted as update fields.
 
+The project registry is fail-closed. If an existing
+`<TaskRepository>/.metadata/projects.json` is not deserializable, startup
+terminates with `ProjectRegistryLoadException` and
+`project-registry-load-failed`; no empty replacement state is exposed or
+written. Legacy `WatchPaths` seeding is eligible only when the registry file
+was absent at its initial load. Every persisted project-count reduction first
+copies the current file to `projects.json.quarantine-<UTC timestamp>` and logs
+`project-registry-shrink-quarantined`.
+
 ## API-First Task Organization
 
 Agents must organize tasks through the application API, never by direct
