@@ -1,6 +1,8 @@
+@use '../../../../../styles/mixins' as m;
+
 .ownership {
   display: grid;
-  gap: var(--studio-spacing-5);
+  gap: var(--studio-deck-panel-gap);
   padding: var(--studio-spacing-6);
   color: var(--studio-fg);
 }
@@ -10,12 +12,13 @@
 .ownership header { display: flex; align-items: start; justify-content: space-between; gap: var(--studio-spacing-4); }
 .ownership__eyebrow { color: var(--studio-fg-muted); font-size: 12px; text-transform: uppercase; }
 .ownership__message,
-.ownership__empty,
 .ownership__card {
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  background: var(--studio-bg-elevated);
+  @include m.deck-panel;
+}
+/* Nothing stored yet — read-only guidance, so the quiet muted surface. */
+.ownership__empty {
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
 }
 .ownership__card { display: grid; gap: var(--studio-spacing-4); }
 .ownership__card-head { display: flex; justify-content: space-between; gap: var(--studio-spacing-4); }

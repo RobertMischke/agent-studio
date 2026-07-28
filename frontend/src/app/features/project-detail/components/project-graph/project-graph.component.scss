@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
   display: block;
   height: 100%;
@@ -58,13 +60,12 @@
 .project-graph__captured code { max-width: 24rem; overflow-wrap: anywhere; }
 
 .project-graph__summary {
+  /* Flush metric strip — the tiles own the inset, the panel owns the edge. */
+  @include m.deck-panel(0);
   display: grid;
   grid-template-columns: repeat(6, minmax(104px, 1fr));
   margin-bottom: var(--studio-spacing-4);
   overflow: hidden;
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  background: var(--studio-bg-sidebar);
 }
 
 .project-graph__summary div {
@@ -119,29 +120,30 @@
   color: var(--studio-fg-muted);
 }
 
+/* Both are live states: a partial discovery right now, or a failed load. */
 .project-graph__warnings,
 .project-graph__error {
+  @include m.deck-panel;
+  @include m.deck-panel-attention(var(--studio-warn));
   display: flex;
   flex-wrap: wrap;
   gap: var(--studio-spacing-2);
   margin-bottom: var(--studio-spacing-4);
-  padding: var(--studio-spacing-3);
-  border: 1px solid color-mix(in srgb, var(--studio-warn) 35%, var(--studio-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--studio-warn) 8%, var(--studio-bg-sidebar));
   color: var(--studio-fg);
 }
 
 .project-graph__warnings strong { color: var(--studio-warn); }
-.project-graph__error { color: var(--studio-error); }
+
+.project-graph__error {
+  @include m.deck-panel-attention;
+  color: var(--studio-error);
+}
 
 .project-graph__toolbar {
+  /* Segmented control: a panel that frames its buttons, so it keeps a hairline inset. */
+  @include m.deck-panel(var(--studio-spacing-1));
   display: inline-flex;
   margin-bottom: var(--studio-spacing-3);
-  padding: var(--studio-spacing-1);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg-sidebar);
 }
 
 .project-graph__toolbar button {
@@ -162,11 +164,9 @@
 
 .project-graph__canvas,
 .project-graph__table-wrap {
+  @include m.deck-panel(0);
   min-width: 0;
   overflow: auto;
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  background: var(--studio-bg-sidebar);
 }
 
 .project-graph__canvas { padding: var(--studio-spacing-4); }

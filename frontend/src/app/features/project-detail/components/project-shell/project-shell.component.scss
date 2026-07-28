@@ -181,6 +181,13 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /*
+   * Deck-Panel v1 sibling rhythm: a rail that projects more than one panel
+   * component (Test Quality, Observability) gets the same 12 px gap every
+   * section uses internally, instead of two flush-abutting surfaces.
+   * docs/concepts/visual-style-guide/deck-panel-v1.md.
+   */
+  gap: var(--studio-deck-panel-gap);
   max-width: var(--studio-panel-content-max);
 }
 
@@ -220,11 +227,15 @@
   width: 100%;
   max-width: none;
 }
+/*
+ * Deck section head. Per Deck-Panel v1 the section — not a panel — owns the
+ * page title and one short description; it sits above the panels, never
+ * inside one. Mirrors the shared `.deck-section-head` recipe.
+ */
 .proj-shell__panel-head {
   flex: 0 0 auto;
   padding-bottom: var(--studio-spacing-3);
   border-bottom: 1px solid var(--studio-border);
-  margin-bottom: var(--studio-spacing-4);
 }
 .proj-shell__panel-title {
   margin: 0 0 var(--studio-spacing-1);

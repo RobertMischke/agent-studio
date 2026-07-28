@@ -18,18 +18,24 @@
   font-size: 0.82rem;
 }
 
-// Centred dashed container for full-panel placeholder rails and section-level
+// Centred container for full-panel placeholder rails and section-level
 // "nothing here yet" states (Settings / Audits & Checks / Steering rails,
 // Observability, Product Runtime).
+//
+// Deck-Panel v1 `muted` variant: an empty state is settled, read-only
+// content, so it uses the muted panel surface instead of the old dashed
+// box with a hardcoded black tint (which was invisible in light theme).
+// docs/concepts/visual-style-guide/deck-panel-v1.md.
 .studio-empty--box {
   margin: 0;
   padding: var(--studio-spacing-6) var(--studio-spacing-5);
   text-align: center;
   font-style: normal;
   font-size: 0.88rem;
-  border: 1px dashed var(--studio-bg-elevated);
-  border-radius: 6px;
-  background: color-mix(in srgb, black 18%, transparent);
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: var(--studio-deck-panel-radius);
+  background: var(--studio-card-muted-bg);
+  box-shadow: none;
 }
 .studio-empty--box p { margin: 0 0 var(--studio-spacing-2); }
 .studio-empty--box > :last-child { margin-bottom: 0; }

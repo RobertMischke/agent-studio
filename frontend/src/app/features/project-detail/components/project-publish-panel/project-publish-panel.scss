@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 .publish { margin-bottom: var(--studio-spacing-5); }
 .publish h3 {
@@ -23,11 +25,9 @@
 .publish__badge--website { color: var(--severity-pending); background: color-mix(in srgb, var(--severity-pending) 12%, transparent); }
 .publish__badge--first { color: var(--studio-accent-warn); background: color-mix(in srgb, var(--studio-accent-warn) 14%, transparent); }
 .publish__flow {
-  margin-top: var(--studio-spacing-3);
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg-elevated);
+  @include m.deck-panel;
+
+  margin-top: var(--studio-deck-panel-gap);
 }
 .publish__head { display: flex; justify-content: space-between; gap: var(--studio-spacing-3); }
 .publish__head div { display: grid; gap: var(--studio-spacing-1); }
@@ -46,7 +46,8 @@
 }
 .publish__primary { margin-top: var(--studio-spacing-3); padding: var(--studio-spacing-2) var(--studio-spacing-4); border: 0; border-radius: 6px; color: var(--studio-bg-editor); background: var(--studio-accent); font-weight: 600; }
 .publish__quiet { border: 0; color: var(--studio-fg-muted); background: transparent; cursor: pointer; }
-.publish__notice, .publish__message, .publish__run { margin: var(--studio-spacing-3) 0 0; padding: var(--studio-spacing-3); border-radius: 6px; background: var(--studio-surface); }
+/* Nested inside .publish__flow: muted sub-surface, small radius, never a second card. */
+.publish__notice, .publish__message, .publish__run { margin: var(--studio-spacing-3) 0 0; padding: var(--studio-spacing-3); border-radius: 6px; background: var(--studio-card-muted-bg); }
 .publish__notice { color: var(--studio-accent-warn); }
 .publish__run { display: grid; gap: var(--studio-spacing-1); }
 .publish__run a { color: var(--studio-accent); }

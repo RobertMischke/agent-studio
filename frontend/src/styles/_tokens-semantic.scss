@@ -220,6 +220,14 @@
   --studio-card-attention-bg:    color-mix(in srgb, var(--studio-accent-6) 9%, var(--studio-bg-elevated));
   --studio-card-attention-border: color-mix(in srgb, var(--studio-accent-6) 62%, var(--studio-card-border));
 
+  // Deck-Panel v1 (docs/concepts/visual-style-guide/deck-panel-v1.md, AGT-2337).
+  // The single bounded-panel shape for every Project Deck section. Panels read
+  // the card surface tokens above; only radius / inset / sibling gap are owned
+  // here so the whole Deck can be re-tuned from one place.
+  --studio-deck-panel-radius:   10px;
+  --studio-deck-panel-inset:    var(--studio-spacing-4);
+  --studio-deck-panel-gap:      var(--studio-spacing-3);
+
   // Commit attribution rows on task cards. They are supporting evidence, not a
   // status signal, so the box uses the standard muted card surface.
   --studio-commit-bg:       var(--studio-card-muted-bg);

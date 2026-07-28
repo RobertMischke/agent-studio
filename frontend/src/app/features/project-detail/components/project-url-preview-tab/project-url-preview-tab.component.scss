@@ -2,16 +2,19 @@
 
 // ── AGT-2180: actionable diagnostics on the failure card ─────────────────
 .url-preview {
+  // Deck-Panel v1: a bounded panel never carries a decorative left status
+  // bar. The recommendation reads as accent-toned through a uniform border
+  // and a whole-surface tint instead.
+  // docs/concepts/visual-style-guide/deck-panel-v1.md
   &__recommendation {
     display: flex;
     flex-direction: column;
     gap: var(--studio-spacing-1);
     width: 100%;
     padding: var(--studio-spacing-3);
-    border: 1px solid var(--studio-border);
-    border-left: 3px solid var(--studio-accent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--studio-accent) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--studio-accent) 55%, var(--studio-card-border));
+    border-radius: var(--studio-deck-panel-radius);
+    background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-card-bg));
     text-align: left;
   }
 

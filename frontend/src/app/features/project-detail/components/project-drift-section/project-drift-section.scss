@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 .pdrift__icon { margin-right: 6px; }
 .pdrift__count {
@@ -5,23 +7,23 @@
   margin-left: 8px;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
   font-size: 0.72rem;
   font-weight: 600;
 }
 
+/* Live load failure with a Retry affordance -> acute now. */
 .pdrift__error {
+  @include m.deck-panel;
+  @include m.deck-panel-attention;
+
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   margin: 6px 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(243,139,168,0.40);
-  background: rgba(243,139,168,0.10);
   color: var(--severity-high);
-  border-radius: 6px;
   font-size: 0.85rem;
 }
 .pdrift__error strong { color: var(--severity-high); }
@@ -29,15 +31,13 @@
 .pdrift__map {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+  gap: var(--studio-deck-panel-gap);
   margin: 10px 0 8px;
 }
 .pdrift__marble {
+  @include m.deck-panel;
+
   text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.10);
   color: var(--studio-fg);
   cursor: pointer;
   display: flex;
@@ -45,7 +45,7 @@
   gap: 6px;
   min-height: 96px;
 }
-.pdrift__marble:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.22); }
+.pdrift__marble:hover { background: var(--studio-bg-hover); border-color: var(--studio-card-border-hover); }
 .pdrift__marble header {
   display: flex;
   justify-content: space-between;
@@ -74,14 +74,14 @@
   font-size: 0.72rem;
 }
 .pdrift__marble--high       {
-  background: rgba(250,179,135,0.06);
+  background: color-mix(in srgb, var(--studio-accent-strong) 6%, var(--studio-card-bg));
 }
 .pdrift__marble--critical   {
-  background: rgba(243,139,168,0.10);
+  background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-card-bg));
 }
+/* Selection ring only — no resting shadow on a panel. */
 .pdrift__marble--active {
-  outline: 1px solid rgba(196,181,253,0.55);
-  box-shadow: 0 0 0 2px rgba(196,181,253,0.10);
+  outline: 1px solid color-mix(in srgb, var(--severity-pending) 55%, transparent);
 }
 
 .pdrift__sev {
@@ -89,12 +89,12 @@
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 3px;
-  background: rgba(255,255,255,0.08);
+  background: var(--studio-card-muted-bg);
 }
-.pdrift__sev--info { background: rgba(148,163,184,0.18); color: var(--studio-fg-dim); }
-.pdrift__sev--warn { background: rgba(249,226,175,0.20); color: var(--severity-warn); }
-.pdrift__sev--high { background: rgba(250,179,135,0.20); color: var(--studio-accent-strong); }
-.pdrift__sev--critical { background: rgba(243,139,168,0.22); color: var(--severity-high); }
+.pdrift__sev--info { background: color-mix(in srgb, var(--studio-fg-dim) 18%, transparent); color: var(--studio-fg-dim); }
+.pdrift__sev--warn { background: color-mix(in srgb, var(--severity-warn) 20%, transparent); color: var(--severity-warn); }
+.pdrift__sev--high { background: color-mix(in srgb, var(--studio-accent-strong) 20%, transparent); color: var(--studio-accent-strong); }
+.pdrift__sev--critical { background: color-mix(in srgb, var(--severity-high) 22%, transparent); color: var(--severity-high); }
 
 .pdrift__cov { color: var(--studio-fg-muted); font-variant-numeric: tabular-nums; }
 
@@ -103,13 +103,13 @@
   border-radius: 3px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
 }
-.pdrift__status--accepted { background: rgba(166,227,161,0.15); color: var(--severity-pass); }
-.pdrift__status--tracked  { background: rgba(137,180,250,0.18); color: var(--severity-info); }
-.pdrift__status--ignored  { background: rgba(255,255,255,0.06); color: var(--studio-fg-muted); text-decoration: line-through; }
-.pdrift__status--resolved { background: rgba(148,226,213,0.15); color: var(--studio-accent-teal); }
+.pdrift__status--accepted { background: color-mix(in srgb, var(--severity-pass) 15%, transparent); color: var(--severity-pass); }
+.pdrift__status--tracked  { background: color-mix(in srgb, var(--severity-info) 18%, transparent); color: var(--severity-info); }
+.pdrift__status--ignored  { background: var(--studio-card-muted-bg); color: var(--studio-fg-muted); text-decoration: line-through; }
+.pdrift__status--resolved { background: color-mix(in srgb, var(--studio-accent-teal) 15%, transparent); color: var(--studio-accent-teal); }
 
 .pdrift__source {
   margin: 6px 0 0;
@@ -118,12 +118,11 @@
 }
 .pdrift__source code { color: var(--severity-pending); }
 
+/* Element drilldown -> bounded inspector on the uniform panel surface. */
 .pdrift__panel {
+  @include m.deck-panel;
+
   margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--studio-bg-overlay);
-  border: 1px solid rgba(196,181,253,0.30);
-  border-radius: 6px;
 }
 .pdrift__panel header {
   display: flex;
@@ -174,7 +173,7 @@
   color: var(--studio-fg);
 }
 .pdrift__panel-details code {
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 0.78rem;
@@ -196,32 +195,32 @@
 .pdrift__action-divider {
   width: 1px;
   align-self: stretch;
-  background: rgba(255,255,255,0.10);
+  background: var(--studio-card-muted-border);
   margin: 0 6px;
 }
 .pdrift__btn {
-  background: rgba(137,180,250,0.10);
+  background: color-mix(in srgb, var(--severity-info) 10%, transparent);
   color: var(--studio-fg);
-  border: 1px solid rgba(137,180,250,0.35);
+  border: 1px solid color-mix(in srgb, var(--severity-info) 35%, transparent);
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 0.80rem;
   cursor: pointer;
 }
-.pdrift__btn:hover:not([disabled]) { background: rgba(137,180,250,0.18); }
+.pdrift__btn:hover:not([disabled]) { background: color-mix(in srgb, var(--severity-info) 18%, transparent); }
 .pdrift__btn[disabled] { opacity: 0.55; cursor: progress; }
 .pdrift__btn--ghost {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(255,255,255,0.12);
+  background: var(--studio-card-muted-bg);
+  border-color: var(--studio-card-muted-border);
 }
 .pdrift__btn--status {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.12);
+  background: var(--studio-card-muted-bg);
+  border-color: var(--studio-card-muted-border);
   color: var(--studio-fg-dim);
 }
 .pdrift__btn--status.pdrift__btn--active {
-  background: rgba(196,181,253,0.18);
-  border-color: rgba(196,181,253,0.55);
+  background: color-mix(in srgb, var(--severity-pending) 18%, transparent);
+  border-color: color-mix(in srgb, var(--severity-pending) 55%, transparent);
   color: var(--studio-fg-strong);
   font-weight: 600;
 }

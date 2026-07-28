@@ -1,3 +1,5 @@
+    @use '../../../../../styles/mixins' as m;
+
     :host { display: block; }
     .pdov__icon { margin-right: 6px; }
 
@@ -10,21 +12,21 @@
       font-weight: 600;
       letter-spacing: 0.02em;
       text-transform: uppercase;
-      background: rgba(255,255,255,0.06);
+      background: var(--studio-card-muted-bg);
       color: var(--studio-fg-dim);
     }
-    .pdov__band--healthy { background: rgba(166,227,161,0.18); color: var(--severity-pass); }
-    .pdov__band--watch   { background: rgba(148,226,213,0.16); color: var(--studio-accent-teal); }
-    .pdov__band--warn    { background: rgba(249,226,175,0.20); color: var(--severity-warn); }
-    .pdov__band--critical{ background: rgba(243,139,168,0.22); color: var(--severity-high); }
-    .pdov__band--unknown { background: rgba(255,255,255,0.06); color: var(--studio-fg-muted); }
+    .pdov__band--healthy { background: color-mix(in srgb, var(--severity-pass) 18%, transparent); color: var(--severity-pass); }
+    .pdov__band--watch   { background: color-mix(in srgb, var(--studio-accent-teal) 16%, transparent); color: var(--studio-accent-teal); }
+    .pdov__band--warn    { background: color-mix(in srgb, var(--severity-warn) 20%, transparent); color: var(--severity-warn); }
+    .pdov__band--critical{ background: color-mix(in srgb, var(--severity-high) 22%, transparent); color: var(--severity-high); }
+    .pdov__band--unknown { background: var(--studio-card-muted-bg); color: var(--studio-fg-muted); }
 
     .pdov__score-pill {
       display: inline-block;
       margin-left: 6px;
       padding: 1px 8px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.06);
+      background: var(--studio-card-muted-bg);
       color: var(--studio-fg-dim);
       font-size: 0.72rem;
       font-weight: 700;
@@ -39,33 +41,34 @@
       letter-spacing: 0.04em;
     }
 
+    /* Live load failure with a Retry affordance -> acute now. */
     .pdov__error {
+      @include m.deck-panel;
+      @include m.deck-panel-attention;
+
       display: flex;
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
       margin: 6px 0;
-      padding: 8px 10px;
-      border: 1px solid rgba(243,139,168,0.40);
-      background: rgba(243,139,168,0.10);
       color: var(--severity-high);
-      border-radius: 6px;
       font-size: 0.85rem;
     }
     .pdov__error strong { color: var(--severity-high); }
 
+    /* The report currently on screen is unstructured / malformed — a live
+       data problem, so the attention surface (warn, resp. error). */
     .pdov__warn {
+      @include m.deck-panel;
+      @include m.deck-panel-attention(var(--studio-warn));
+
       margin: 8px 0 6px;
-      padding: 6px 10px;
-      border-radius: 6px;
-      background: rgba(249,226,175,0.12);
-      border: 1px solid rgba(249,226,175,0.36);
       color: var(--severity-warn);
       font-size: 0.82rem;
     }
     .pdov__warn--strong {
-      background: rgba(243,139,168,0.12);
-      border-color: rgba(243,139,168,0.40);
+      @include m.deck-panel-attention;
+
       color: var(--severity-high);
     }
     .pdov__warn code { background: var(--studio-bg-overlay); padding: 1px 4px; border-radius: 3px; }
@@ -75,34 +78,33 @@
       margin-bottom: 6px;
     }
     .pdov__btn {
-      background: rgba(137,180,250,0.10);
+      background: color-mix(in srgb, var(--severity-info) 10%, transparent);
       color: var(--studio-fg);
-      border: 1px solid rgba(137,180,250,0.35);
+      border: 1px solid color-mix(in srgb, var(--severity-info) 35%, transparent);
       border-radius: 6px;
       padding: 4px 10px;
       font-size: 0.82rem;
       cursor: pointer;
     }
-    .pdov__btn:hover:not([disabled]) { background: rgba(137,180,250,0.18); }
+    .pdov__btn:hover:not([disabled]) { background: color-mix(in srgb, var(--severity-info) 18%, transparent); }
     .pdov__btn[disabled] { opacity: 0.55; cursor: progress; }
-    .pdov__btn--ghost { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+    .pdov__btn--ghost { background: var(--studio-card-muted-bg); border-color: var(--studio-card-muted-border); }
     .pdov__btn--accent {
-      background: rgba(196,181,253,0.14);
-      border-color: rgba(196,181,253,0.45);
+      background: color-mix(in srgb, var(--severity-pending) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-pending) 45%, transparent);
       color: var(--severity-pending);
     }
-    .pdov__btn--accent:hover:not([disabled]) { background: rgba(196,181,253,0.22); }
+    .pdov__btn--accent:hover:not([disabled]) { background: color-mix(in srgb, var(--severity-pending) 22%, transparent); }
     .pdov__btn-spin { margin-left: 4px; opacity: 0.8; }
 
     .pdov__action-msg { margin: 6px 0 0; color: var(--studio-accent-teal); font-size: 0.78rem; }
     .pdov__action-error { margin: 6px 0 0; color: var(--severity-high); font-size: 0.78rem; }
 
+    /* Latest report summary card. */
     .pdov__latest {
+      @include m.deck-panel;
+
       margin: 14px 0 0;
-      padding: 12px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.10);
     }
     .pdov__latest-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
     .pdov__latest-headline { flex: 1; min-width: 0; }
@@ -113,29 +115,27 @@
     .pdov__dimensions {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 8px;
+      gap: var(--studio-deck-panel-gap);
       margin: 6px 0;
     }
     .pdov__dim {
+      @include m.deck-panel;
+
       text-align: left;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.10);
       color: var(--studio-fg);
       cursor: pointer;
       display: flex; flex-direction: column; gap: 4px;
       min-height: 92px;
     }
-    .pdov__dim:hover:not(.pdov__dim--empty) { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.22); }
+    .pdov__dim:hover:not(.pdov__dim--empty) { background: var(--studio-bg-hover); border-color: var(--studio-card-border-hover); }
     .pdov__dim header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
     .pdov__dim-label { font-weight: 600; color: var(--studio-fg-strong); font-size: 0.86rem; }
     .pdov__dim-score { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1rem; color: var(--studio-fg-dim); }
     .pdov__dim-summary { margin: 0; color: var(--studio-fg-dim); font-size: 0.76rem; line-height: 1.4; flex-grow: 1; }
     .pdov__dim-summary--muted { color: var(--studio-fg-muted); font-style: italic; }
     .pdov__dim footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; }
-    .pdov__dim--high     { background: rgba(250,179,135,0.06); }
-    .pdov__dim--critical { background: rgba(243,139,168,0.10); }
+    .pdov__dim--high     { background: color-mix(in srgb, var(--studio-accent-strong) 6%, var(--studio-card-bg)); }
+    .pdov__dim--critical { background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-card-bg)); }
     .pdov__dim--empty    { cursor: default; opacity: 0.7; }
 
     .pdov__sev {
@@ -143,12 +143,12 @@
       font-weight: 600;
       padding: 1px 6px;
       border-radius: 3px;
-      background: rgba(255,255,255,0.08);
+      background: var(--studio-card-muted-bg);
     }
-    .pdov__sev--info { background: rgba(148,163,184,0.18); color: var(--studio-fg-dim); }
-    .pdov__sev--warn { background: rgba(249,226,175,0.20); color: var(--severity-warn); }
-    .pdov__sev--high { background: rgba(250,179,135,0.20); color: var(--studio-accent-strong); }
-    .pdov__sev--critical { background: rgba(243,139,168,0.22); color: var(--severity-high); }
+    .pdov__sev--info { background: color-mix(in srgb, var(--studio-fg-dim) 18%, transparent); color: var(--studio-fg-dim); }
+    .pdov__sev--warn { background: color-mix(in srgb, var(--severity-warn) 20%, transparent); color: var(--severity-warn); }
+    .pdov__sev--high { background: color-mix(in srgb, var(--studio-accent-strong) 20%, transparent); color: var(--studio-accent-strong); }
+    .pdov__sev--critical { background: color-mix(in srgb, var(--severity-high) 22%, transparent); color: var(--severity-high); }
 
     .pdov__cov { color: var(--studio-fg-muted); font-variant-numeric: tabular-nums; }
     .pdov__status {
@@ -156,20 +156,19 @@
       border-radius: 3px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      background: rgba(255,255,255,0.06);
+      background: var(--studio-card-muted-bg);
       color: var(--studio-fg-dim);
     }
-    .pdov__status--accepted { background: rgba(166,227,161,0.15); color: var(--severity-pass); }
-    .pdov__status--tracked  { background: rgba(137,180,250,0.18); color: var(--severity-info); }
-    .pdov__status--ignored  { background: rgba(255,255,255,0.06); color: var(--studio-fg-muted); text-decoration: line-through; }
-    .pdov__status--resolved { background: rgba(148,226,213,0.15); color: var(--studio-accent-teal); }
+    .pdov__status--accepted { background: color-mix(in srgb, var(--severity-pass) 15%, transparent); color: var(--severity-pass); }
+    .pdov__status--tracked  { background: color-mix(in srgb, var(--severity-info) 18%, transparent); color: var(--severity-info); }
+    .pdov__status--ignored  { background: var(--studio-card-muted-bg); color: var(--studio-fg-muted); text-decoration: line-through; }
+    .pdov__status--resolved { background: color-mix(in srgb, var(--studio-accent-teal) 15%, transparent); color: var(--studio-accent-teal); }
 
+    /* Dimension drilldown -> bounded inspector on the uniform panel surface. */
     .pdov__panel {
-      margin-top: 12px;
-      padding: 12px;
-      background: var(--studio-bg-overlay);
-      border: 1px solid rgba(196,181,253,0.30);
-      border-radius: 6px;
+      @include m.deck-panel;
+
+      margin-top: var(--studio-deck-panel-gap);
     }
     .pdov__panel header {
       display: flex; align-items: baseline; justify-content: space-between;
@@ -201,26 +200,27 @@
     .pdov__panel-details { margin: 6px 0; }
     .pdov__panel-details summary { cursor: pointer; color: var(--studio-fg-dim); font-size: 0.80rem; user-select: none; }
     .pdov__panel-details ul { margin: 6px 0 0; padding-left: 20px; font-size: 0.82rem; color: var(--studio-fg); }
-    .pdov__panel-details code { background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.78rem; color: var(--severity-pending); }
+    .pdov__panel-details code { background: var(--studio-card-muted-bg); padding: 1px 4px; border-radius: 3px; font-size: 0.78rem; color: var(--severity-pending); }
 
     .pdov__findings { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    /* Rows inside the drilldown panel: muted sub-surface, never a second card. */
     .pdov__finding {
       padding: 8px 10px;
-      background: rgba(255,255,255,0.03);
+      background: var(--studio-card-muted-bg);
       border-radius: 4px;
     }
-    .pdov__finding--high { background: rgba(250,179,135,0.06); }
-    .pdov__finding--critical { background: rgba(243,139,168,0.10); }
+    .pdov__finding--high { background: color-mix(in srgb, var(--studio-accent-strong) 6%, var(--studio-card-muted-bg)); }
+    .pdov__finding--critical { background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-card-muted-bg)); }
     .pdov__finding header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
     .pdov__finding p { margin: 0 0 6px; color: var(--studio-fg); font-size: 0.84rem; line-height: 1.45; }
-    .pdov__finding-id code { background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.74rem; color: var(--severity-pending); }
+    .pdov__finding-id code { background: var(--studio-card-muted-bg); padding: 1px 4px; border-radius: 3px; font-size: 0.74rem; color: var(--severity-pending); }
     .pdov__finding-actions { display: flex; gap: 6px; margin-top: 6px; }
 
     .pdov__followups { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
     .pdov__followup {
       padding: 8px 10px;
       border-radius: 6px;
-      background: rgba(255,255,255,0.03);
+      background: var(--studio-card-muted-bg);
     }
     .pdov__followup header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; }
     .pdov__followup p { margin: 0 0 6px; color: var(--studio-fg); font-size: 0.84rem; line-height: 1.45; }
@@ -229,13 +229,13 @@
       font-size: 0.70rem;
       padding: 1px 6px;
       border-radius: 3px;
-      background: rgba(255,255,255,0.08);
+      background: var(--studio-card-muted-bg);
       color: var(--studio-fg-dim);
     }
-    .pdov__prio--low { background: rgba(148,163,184,0.18); color: var(--studio-fg-dim); }
-    .pdov__prio--normal { background: rgba(137,180,250,0.18); color: var(--severity-info); }
-    .pdov__prio--high { background: rgba(250,179,135,0.20); color: var(--studio-accent-strong); }
-    .pdov__prio--critical { background: rgba(243,139,168,0.22); color: var(--severity-high); }
+    .pdov__prio--low { background: color-mix(in srgb, var(--studio-fg-dim) 18%, transparent); color: var(--studio-fg-dim); }
+    .pdov__prio--normal { background: color-mix(in srgb, var(--severity-info) 18%, transparent); color: var(--severity-info); }
+    .pdov__prio--high { background: color-mix(in srgb, var(--studio-accent-strong) 20%, transparent); color: var(--studio-accent-strong); }
+    .pdov__prio--critical { background: color-mix(in srgb, var(--severity-high) 22%, transparent); color: var(--severity-high); }
     .pdov__rel { font-size: 0.72rem; color: var(--studio-fg-muted); }
     .pdov__followup-job { font-size: 0.74rem; color: var(--studio-accent-teal); margin-left: auto; }
     .pdov__followup-job code { background: var(--studio-bg-overlay); padding: 1px 4px; border-radius: 3px; }
@@ -249,11 +249,11 @@
       padding: 6px 8px;
       border-radius: 4px;
       cursor: pointer;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--studio-card-muted-bg);
+      border: 1px solid var(--studio-card-muted-border);
       font-size: 0.80rem;
     }
-    .pdov__hist-row:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.20); }
+    .pdov__hist-row:hover { background: var(--studio-bg-hover); border-color: var(--studio-card-border-hover); }
     .pdov__hist-band {
       padding: 1px 6px;
       border-radius: 3px;
@@ -262,14 +262,14 @@
       letter-spacing: 0.02em;
       text-transform: uppercase;
     }
-    .pdov__hist-band--healthy  { background: rgba(166,227,161,0.18); color: var(--severity-pass); }
-    .pdov__hist-band--watch    { background: rgba(148,226,213,0.16); color: var(--studio-accent-teal); }
-    .pdov__hist-band--warn     { background: rgba(249,226,175,0.20); color: var(--severity-warn); }
-    .pdov__hist-band--critical { background: rgba(243,139,168,0.22); color: var(--severity-high); }
-    .pdov__hist-band--unknown  { background: rgba(255,255,255,0.06); color: var(--studio-fg-muted); }
+    .pdov__hist-band--healthy  { background: color-mix(in srgb, var(--severity-pass) 18%, transparent); color: var(--severity-pass); }
+    .pdov__hist-band--watch    { background: color-mix(in srgb, var(--studio-accent-teal) 16%, transparent); color: var(--studio-accent-teal); }
+    .pdov__hist-band--warn     { background: color-mix(in srgb, var(--severity-warn) 20%, transparent); color: var(--severity-warn); }
+    .pdov__hist-band--critical { background: color-mix(in srgb, var(--severity-high) 22%, transparent); color: var(--severity-high); }
+    .pdov__hist-band--unknown  { background: var(--studio-card-muted-bg); color: var(--studio-fg-muted); }
     .pdov__hist-score { font-variant-numeric: tabular-nums; color: var(--studio-fg); min-width: 28px; text-align: right; }
     .pdov__hist-summary { color: var(--studio-fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pdov__hist-trigger { color: var(--studio-fg-muted); font-size: 0.72rem; padding: 1px 5px; background: rgba(255,255,255,0.05); border-radius: 3px; }
+    .pdov__hist-trigger { color: var(--studio-fg-muted); font-size: 0.72rem; padding: 1px 5px; background: var(--studio-card-muted-bg); border-radius: 3px; }
     .pdov__hist-parse { color: var(--severity-warn); font-size: 0.72rem; }
     .pdov__hist-ts { color: var(--studio-fg-muted); font-variant-numeric: tabular-nums; font-size: 0.72rem; }
 
@@ -281,10 +281,10 @@
       padding: 24px;
     }
     .pdov__report-card {
-      background: var(--studio-bg-elevated);
+      background: var(--studio-card-bg);
       color: var(--studio-fg);
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 10px;
+      border: 1px solid var(--studio-card-border);
+      border-radius: var(--studio-deck-panel-radius);
       padding: 14px 16px;
       width: min(840px, 100%);
       max-height: calc(100vh - 48px);
@@ -292,12 +292,12 @@
     }
     .pdov__report-card header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .pdov__report-card header h3 { margin: 0; color: var(--studio-fg-strong); font-size: 1rem; display: flex; align-items: baseline; gap: 8px; }
-    .pdov__report-card header h3 code { background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 3px; color: var(--severity-pending); font-size: 0.85rem; }
+    .pdov__report-card header h3 code { background: var(--studio-card-muted-bg); padding: 1px 6px; border-radius: 3px; color: var(--severity-pending); font-size: 0.85rem; }
     .pdov__report-md {
       max-height: 480px;
       overflow: auto;
       background: var(--studio-bg-overlay);
-      border: 1px solid rgba(255,255,255,0.10);
+      border: 1px solid var(--studio-card-muted-border);
       border-radius: 6px;
       padding: 10px 12px;
       font-size: 0.80rem;
