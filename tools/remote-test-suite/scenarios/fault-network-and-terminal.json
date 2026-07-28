@@ -1,0 +1,31 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-network-and-terminal",
+  "description": "Combines bounded Task Server blips with a lost completion sentinel and durable Result-SHA recovery.",
+  "task": {
+    "title": "Verify network and terminal recovery",
+    "body": "Apply the deterministic reference change while the isolated harness combines transport blips and sentinel loss.",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "hooks": {},
+  "faults": ["task-server-network-blips", "lost-completion-sentinel"],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "network-blips-replayed+lost-terminal-marker-recovered",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

@@ -26,5 +26,12 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
-  "hooks": {}
+  "hooks": {},
+  "faults": [],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "none",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
 }

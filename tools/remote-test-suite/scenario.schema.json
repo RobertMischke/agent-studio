@@ -67,6 +67,30 @@
         "review": { "$ref": "#/$defs/hook" },
         "integration": { "$ref": "#/$defs/hook" }
       }
+    },
+    "faults": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted", "finalLane", "incidentOutcome", "phaseSequence"],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "finalLane": { "type": "string", "minLength": 1 },
+        "incidentOutcome": { "type": "string", "minLength": 1 },
+        "phaseSequence": {
+          "type": "array",
+          "items": {
+            "enum": ["claim", "run", "gate", "review", "integration"]
+          }
+        }
+      }
     }
   },
   "$defs": {

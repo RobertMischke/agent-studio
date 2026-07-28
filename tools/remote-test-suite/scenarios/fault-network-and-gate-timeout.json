@@ -1,0 +1,31 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-network-and-gate-timeout",
+  "description": "Combines bounded Task Server blips with one infrastructure-classified gate timeout.",
+  "task": {
+    "title": "Verify network and gate recovery",
+    "body": "Apply the deterministic reference change while the isolated harness combines transport blips and a gate watchdog timeout.",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "hooks": {},
+  "faults": ["task-server-network-blips", "gate-watchdog-timeout"],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "network-blips-replayed+gate-timeout-recovered",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

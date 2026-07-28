@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -8,7 +8,8 @@ export const expectedPhases = Object.freeze(['claim', 'run', 'gate', 'review', '
 export function validateManifest(manifest) {
   const errors = [];
   rejectUnknown(manifest, [
-    '$schema', 'version', 'name', 'description', 'task', 'fixture', 'phases', 'resources', 'hooks'
+    '$schema', 'version', 'name', 'description', 'task', 'fixture', 'phases', 'resources', 'hooks',
+    'faults', 'expected'
   ], 'manifest', errors);
   if (manifest?.version !== 1) errors.push('version must be 1');
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(manifest?.name ?? '')) errors.push('name is invalid');
@@ -52,6 +53,26 @@ export function validateManifest(manifest) {
       errors.push(`hooks.${phase} must be a non-empty command`);
     }
   }
+  if (manifest?.faults !== undefined
+      && (!Array.isArray(manifest.faults)
+          || new Set(manifest.faults).size !== manifest.faults.length
+          || manifest.faults.some(value => !/^[a-z0-9][a-z0-9-]{1,63}$/.test(value)))) {
+    errors.push('faults must contain unique fault catalog ids');
+  }
+  if (manifest?.expected !== undefined) {
+    rejectUnknown(manifest.expected, [
+      'accepted', 'finalLane', 'incidentOutcome', 'phaseSequence'
+    ], 'expected', errors);
+    if (typeof manifest.expected.accepted !== 'boolean') {
+      errors.push('expected.accepted must be a boolean');
+    }
+    if (!manifest.expected.finalLane?.trim()) errors.push('expected.finalLane is required');
+    if (!manifest.expected.incidentOutcome?.trim()) errors.push('expected.incidentOutcome is required');
+    if (!Array.isArray(manifest.expected.phaseSequence)
+        || manifest.expected.phaseSequence.some(phase => !expectedPhases.includes(phase))) {
+      errors.push('expected.phaseSequence must contain supported phases');
+    }
+  }
   if (errors.length) throw new Error(`Invalid scenario manifest:\n- ${errors.join('\n- ')}`);
   return manifest;
 }
@@ -77,7 +98,14 @@ export function interpolate(value, variables) {
   });
 }
 
-export function resourcePlan({ baseRoot, scenario, runId, serverUrl, ownsServer = true }) {
+export function resourcePlan({
+  baseRoot,
+  scenario,
+  runId,
+  serverUrl,
+  ownsServer = true,
+  faults = []
+}) {
   const root = path.resolve(baseRoot, scenario, runId);
   assertScopedRoot(root, baseRoot);
   const creates = [
@@ -88,8 +116,20 @@ export function resourcePlan({ baseRoot, scenario, runId, serverUrl, ownsServer 
     `${root}/integration`,
     `${root}/outbox.jsonl`,
     `${root}/phases.jsonl`,
+    `${root}/assertions.json`,
     `API workspace/project/task scoped to ${runId}`
   ];
+  if (faults.length > 0) {
+    creates.push(
+      `${root}/.fault-injection-safety.json`,
+      `${root}/faults.jsonl`);
+  }
+  if (faults.includes('gate-watchdog-timeout')) {
+    creates.push(`${root}/gate-timeout-processes.json`);
+  }
+  if (faults.includes('worktree-target-collision')) {
+    creates.push(`${root}/coding/worktree (fixture-owned foreign Git worktree)`);
+  }
   if (ownsServer) creates.push(`${root}/task-server-data`, `isolated Task Server at ${serverUrl}`);
   return {
     root,
@@ -136,24 +176,104 @@ export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
-export async function runCommand(command, { cwd, env = {}, capture = true } = {}) {
+export class CommandTimeoutError extends Error {
+  constructor(command, timeoutMs, pid, stdout, stderr, signal) {
+    super(`${command.join(' ')} exceeded the ${timeoutMs} ms watchdog`);
+    this.name = 'CommandTimeoutError';
+    this.command = [...command];
+    this.timeoutMs = timeoutMs;
+    this.pid = pid;
+    this.stdout = stdout;
+    this.stderr = stderr;
+    this.signal = signal;
+    this.classification = 'infrastructure-timeout';
+    this.productTestFailure = false;
+  }
+}
+
+export async function runCommand(command, {
+  cwd,
+  env = {},
+  capture = true,
+  timeoutMs
+} = {}) {
   if (!Array.isArray(command) || command.length === 0) throw new Error('Command is empty.');
+  if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs < 1)) {
+    throw new Error('timeoutMs must be a positive integer.');
+  }
   return await new Promise((resolve, reject) => {
+    const ownsProcessGroup = timeoutMs !== undefined && process.platform !== 'win32';
     const child = spawn(command[0], command.slice(1), {
       cwd,
       env: { ...process.env, ...env },
-      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit'
+      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+      detached: ownsProcessGroup
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let forceKillTimer;
+    const watchdog = timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          terminateProcessTree(child, ownsProcessGroup, 'SIGTERM');
+          forceKillTimer = setTimeout(
+            () => terminateProcessTree(child, ownsProcessGroup, 'SIGKILL'),
+            250);
+          forceKillTimer.unref?.();
+        }, timeoutMs);
+    watchdog?.unref?.();
     child.stdout?.on('data', chunk => { stdout += chunk; });
     child.stderr?.on('data', chunk => { stderr += chunk; });
-    child.on('error', reject);
-    child.on('exit', code => {
-      if (code === 0) resolve({ stdout, stderr, code });
-      else reject(new Error(`${command.join(' ')} failed (${code}): ${stderr || stdout}`));
+    child.on('error', error => {
+      clearTimeout(watchdog);
+      clearTimeout(forceKillTimer);
+      reject(error);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(watchdog);
+      clearTimeout(forceKillTimer);
+      if (timedOut) {
+        reject(new CommandTimeoutError(
+          command,
+          timeoutMs,
+          child.pid,
+          stdout,
+          stderr,
+          signal));
+      } else if (code === 0) {
+        resolve({ stdout, stderr, code, signal, pid: child.pid });
+      } else {
+        const error = new Error(`${command.join(' ')} failed (${code ?? signal}): ${stderr || stdout}`);
+        error.code = code;
+        error.signal = signal;
+        error.pid = child.pid;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      }
     });
   });
+}
+
+function terminateProcessTree(child, ownsProcessGroup, signal) {
+  if (!child.pid) return;
+  try {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: true
+      }).unref();
+    } else if (ownsProcessGroup) {
+      process.kill(-child.pid, signal);
+    } else {
+      child.kill(signal);
+    }
+  } catch (error) {
+    if (error?.code !== 'ESRCH') throw error;
+  }
 }
 
 export async function readJson(file) {
@@ -170,6 +290,11 @@ export async function exists(file) {
 }
 
 export async function appendJsonl(file, value) {
-  const current = await readFile(file, 'utf8').catch(() => '');
-  await writeFile(file, `${current}${JSON.stringify(value)}\n`);
+  const handle = await open(file, 'a');
+  try {
+    await handle.writeFile(`${JSON.stringify(value)}\n`);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }

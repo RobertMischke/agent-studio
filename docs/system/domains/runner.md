@@ -154,8 +154,14 @@ state.
   v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
   review, and reviewed fixture integration with stable-seed semantic
   acceptance. Phase hooks observe claim, run, gate, review, and integration
-  without adding scheduler-only branches. It never targets stable or the
-  managed task workspace.
+  without adding scheduler-only branches. Its harness-only fault catalog covers
+  bounded Task Server disconnects, gate watchdog timeouts, occupied worktree
+  targets, and lost or interrupted terminal markers. Fault activation requires
+  a checked-in manifest, an explicit enable flag, a run/root-bound
+  acknowledgement, an unchanged safety marker, and a harness-owned isolated
+  Task Server. Fault runs assert lane, lease/fence, process, worktree, outbox,
+  Result-SHA, and incident terminals. The catalog is not referenced by
+  production binaries and never targets stable or the managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing

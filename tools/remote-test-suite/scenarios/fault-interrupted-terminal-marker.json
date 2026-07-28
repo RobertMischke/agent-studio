@@ -1,0 +1,31 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-interrupted-terminal-marker",
+  "description": "Interrupts both the terminal marker and provider completion so missing proof reaches Human Review.",
+  "task": {
+    "title": "Verify interrupted terminal marker escalation",
+    "body": "Apply the deterministic reference change, retain its immutable SHA, and refuse success when terminal proof is missing.",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "hooks": {},
+  "faults": ["interrupted-terminal-marker"],
+  "expected": {
+    "accepted": false,
+    "finalLane": "5-human-review",
+    "incidentOutcome": "protocol-inconclusive-human-terminal",
+    "phaseSequence": ["claim", "run", "gate"]
+  }
+}
