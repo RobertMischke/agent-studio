@@ -143,6 +143,13 @@ state.
   orchestration runs, stage results, leases, fences, and restart recovery.
   Expired Engine leases return the same run to `pending`; a replacement Engine
   receives a higher fence and stale settlement is rejected.
+- `tools/remote-test-suite/`: repository-owned, isolated Remote Run
+  infrastructure scenarios. The `reference-change` manifest drives the public
+  v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
+  review, and reviewed fixture integration with stable-seed semantic
+  acceptance. Phase hooks observe claim, run, gate, review, and integration
+  without adding scheduler-only branches. It never targets stable or the
+  managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
