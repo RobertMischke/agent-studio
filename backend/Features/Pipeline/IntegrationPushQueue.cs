@@ -26,21 +26,20 @@ public sealed record IntegrationPushRequest(
 
 /// <summary>
 /// Hand-off point that lifts the integration-branch <c>git fetch</c> +
-/// <c>git push</c> off the "Merge into Develop" accept trigger (AGT-1999). It is
+/// <c>git push</c> out of the accepted-integration worker (AGT-1999). It is
 /// the merge-step twin of <see cref="AgentStudio.Runner.CompletedPushQueue"/>:
-/// the merge post-step (<see cref="MergeIntoDevelopRunner"/>) performs the local
-/// merge synchronously and then drops a snapshot here - an instant, non-blocking
-/// channel write - so the accept transition never awaits the ~2-3 s network
-/// round-trip. <see cref="IntegrationPushWorker"/> drains it and performs the
-/// push (with the AGT-1944 environmental retry) on a background thread.
+/// the background merge post-step (<see cref="MergeIntoDevelopRunner"/>) drops a
+/// released SHA here after merge + gate. <see cref="IntegrationPushWorker"/>
+/// drains it and performs the push (with the AGT-1944 environmental retry) on a
+/// background thread.
 /// <see cref="IntegrationPushBackstopHostedService"/> re-drives a successful
 /// merge whose channel item was lost during shutdown from the durable pipeline
 /// step facts after restart.
 /// <para>
 /// Unbounded and single-reader by design: volume is one item per accepted task,
 /// and the reader is serialized so two pushes of the same integration branch can
-/// never race each other. A deferred push is always still correct - it pushes
-/// whatever the local integration branch points at when it runs.
+/// never race each other. A deferred push is always still correct because the
+/// request pins the exact released SHA.
 /// </para>
 /// </summary>
 public sealed class IntegrationPushQueue

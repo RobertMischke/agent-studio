@@ -579,11 +579,13 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
-// AGT-1999: the "Merge into Develop" post-step pushes the integration branch to
-// origin after a successful merge, off the accept-transition request path.
-// MergeIntoDevelopRunner enqueues here (instant); IntegrationPushWorker drains and
-// performs the git push with the AGT-1944 environmental retry. Same offload shape
-// as the completed-job workspace push above.
+// Accepted integration is a two-stage background chain. Accept stamps the
+// durable integration-pending fact and enqueues merge + gate here. The accepted
+// worker releases successful results to the existing integration-push queue.
+// Both queues are latency optimizations; the two backstops recover from durable
+// lane and pipeline facts after restart.
+builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // The channel is intentionally in-memory. Durable pipeline facts recover both

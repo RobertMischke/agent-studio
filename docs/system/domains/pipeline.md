@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-28
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -75,6 +75,11 @@ pipeline view.
   operator-triggered `post-merge-into-develop` post-step. Performs the real
   delivery merge when the operator accepts a done-green task (the
   `HumanReview -> Completed` transition wired in `TaskTransitionService`).
+  Acceptance stamps the existing `integrationpending` visibility marker and
+  enqueues `AcceptedIntegrationQueue`; `AcceptedIntegrationWorker` performs the
+  serialized merge, pre-develop build gate, rollback, and push hand-off outside
+  the HTTP request. A normal queued `pending` state is quiet. Only a failed
+  hand-off or a decided integration failure emits an accept warning.
   Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
   `ResultSha` from `logs/review-subject.json`, fetch that exact
   `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
@@ -103,9 +108,11 @@ pipeline view.
   results are single-flight cached by repository, baseline SHA, and command
   hash. Only failures still new after one subject retry block the review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
-  deliveries after a backend restart when the durable lane move landed but the
-  merge did not. It also repairs the legacy `no-branch` outcome caused by
-  looking only for `task/<slug>`.
+  and local deliveries after a backend restart when the durable lane move
+  landed but the queued merge did not complete. The accepted-integration
+  channel is only a latency optimization; the Completed lane, pending tag, and
+  pipeline step are the durability boundary. The backstop also repairs the
+  legacy remote `no-branch` outcome caused by looking only for `task/<slug>`.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
@@ -493,10 +500,14 @@ operator changes cause the step to fail before its writer runs.
   runs only on an external operator trigger, not automatically in the
   post-bracket. It is distinct from a `Stub`: a stub has no implementation and
   renders "planned", a deferred step renders "pending" until triggered. The
-  merge into develop is best-effort and runs only after the lane move has
-  already landed, so it can never block the transition; a conflict is a visible
-  `Failed` outcome (conflicted files in the verdict summary) and the working
-  tree is left clean, never silently resolved. The paired
+  merge into develop is best-effort and runs on
+  `AcceptedIntegrationWorker` only after the lane move has already landed, so
+  it can never block the transition; a conflict is a visible `Failed` outcome
+  (conflicted files in the verdict summary) and the working tree is left clean,
+  never silently resolved. Once merge/gate/rollback starts, host cancellation
+  does not interrupt that consistency boundary. `/healthz/drain` reports
+  `gate-busy` while the boundary is active so the external stable restart
+  watcher can wait for a bounded drain window. The paired
   `post-merge-into-develop-push` step (AGT-1999) pushes the integration branch to
   `origin` after a successful merge; it is offloaded off the request path and
   never force-pushes, so it too can never block the transition, and a push

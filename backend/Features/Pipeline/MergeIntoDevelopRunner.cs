@@ -11,7 +11,7 @@ namespace AgentStudio.Pipeline;
 /// until the operator accepts a done-green task via the "Merge into Develop"
 /// action (the <c>HumanReview -&gt; Completed</c> transition). That acceptance is
 /// the trigger; <see cref="AgentStudio.Tasks.TaskTransitionService"/>
-/// calls <see cref="Run"/> here.
+/// enqueues it for <see cref="AcceptedIntegrationWorker"/>.
 ///
 /// <para>
 /// It performs the real, scoped git merge <c>task/&lt;id&gt; -&gt; develop</c> via
@@ -39,6 +39,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly Func<int, TimeSpan> _environmentalBackoff;
     private readonly SemaphoreSlim _mergeGate = new(1, 1);
     private readonly SemaphoreSlim _pushGate = new(1, 1);
+    private int _mergeGateUsers;
 
     public MergeIntoDevelopRunner(
         GitService git,
@@ -93,7 +94,8 @@ public sealed class MergeIntoDevelopRunner
             integrationStrategy).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Async merge entry point used by the task transition. A configured
+    /// Async merge entry point used by the accepted-integration worker and
+    /// durable backstop. A configured
     /// <c>main</c> target is a release mutation, so it is fail-closed behind the
     /// mandatory full-suite gate and advances only to the exact tested SHA.
     /// </summary>
@@ -106,26 +108,38 @@ public sealed class MergeIntoDevelopRunner
         CancellationToken ct,
         string integrationStrategy = IntegrationStrategies.DirectMerge)
     {
-        // Deliberately NOT the caller's token. The serialized block below (merge +
-        // gate + rollback) is already designed to be abort-immune - it runs the
-        // gate on CancellationToken.None so a closed browser tab cannot roll back
-        // a good merge. Cancelling the *wait* would reintroduce exactly that hole
-        // from the other side: the accepted card would silently never be merged
-        // while its lane move has already landed. Queue-jumping the wait is not an
-        // option either, so the accept blocks until the queue drains; moving the
-        // whole merge onto a background worker is the follow-up, not this fix.
-        await _mergeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        // Count both the active operation and serialized waiters. The external
+        // stable watchdog uses this drain signal to avoid cutting the process
+        // between merge and gate/rollback. The accepted lane and pipeline facts
+        // still recover queued work that has not entered this boundary.
+        Interlocked.Increment(ref _mergeGateUsers);
         try
         {
-            return await RunSerializedAsync(
-                project, jobId, jobFolderPath, watchPath,
-                integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+            // Deliberately NOT the caller's token. Merge + gate + rollback form
+            // one consistency boundary after acceptance is already durable.
+            await _mergeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                return await RunSerializedAsync(
+                    project, jobId, jobFolderPath, watchPath,
+                    integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _mergeGate.Release();
+            }
         }
         finally
         {
-            _mergeGate.Release();
+            Interlocked.Decrement(ref _mergeGateUsers);
         }
     }
+
+    /// <summary>
+    /// True while an accepted integration is inside, or waiting to enter, the
+    /// serialized merge + build-gate + rollback consistency boundary.
+    /// </summary>
+    public bool IsMergeGateBusy => Volatile.Read(ref _mergeGateUsers) > 0;
 
     private async Task<MergeIntoIntegrationResult> RunSerializedAsync(
         string project,
@@ -323,10 +337,9 @@ public sealed class MergeIntoDevelopRunner
             },
             profile,
             _preDevelopTimeout,
-            // Deliberately NOT the caller's token: the accept transition runs on
-            // the HTTP request path, and an operator closing the tab mid-build
-            // would otherwise cancel the gate, read as red, and roll back a
-            // perfectly good merge. The gate stays bounded by its own timeout.
+            // Deliberately NOT the caller's token: once the background worker
+            // starts a merge, its gate and possible rollback must reach a
+            // consistent terminal state. The gate stays bounded by its timeout.
             CancellationToken.None).ConfigureAwait(false);
         RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", gate);
 

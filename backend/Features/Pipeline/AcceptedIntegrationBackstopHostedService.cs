@@ -2,11 +2,11 @@ namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Durable safety net for operator acceptance integration. The normal
-/// HumanReview-to-Completed transition runs the merge synchronously, but the
-/// lane move is already durable when that process window begins. A backend
-/// restart in that window, or a legacy <c>no-branch</c> result from looking for
-/// <c>task/&lt;slug&gt;</c> instead of the fenced remote delivery ref, must not
-/// leave an accepted card permanently unintegrated.
+/// HumanReview-to-Completed transition enqueues the merge after the lane move is
+/// durable. A backend restart before the volatile queue drains must not leave a
+/// local <c>task/&lt;id&gt;</c> delivery or a fenced remote delivery permanently
+/// unintegrated. Legacy remote <c>no-branch</c> outcomes are replayed against
+/// their <c>review-subject.json</c>.
 /// </summary>
 public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 {
@@ -44,7 +44,6 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         var candidates = _scanner.ScanAllJobsWithArchive()
             .Where(job => job.State is TaskStates.Completed or TaskStates.Archive)
             .Where(job => !TaskModes.IsReadOnly(job.Mode))
-            .Where(job => ReviewSubjectStore.Read(job.FolderPath) is not null)
             .Where(RequiresSweep)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
@@ -81,7 +80,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             // every sweep would only re-merge, re-build and roll back again.
             if (string.Equals(lastMerge?.Verdict, "conflict", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(lastMerge?.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(lastMerge?.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
+                || string.Equals(lastMerge?.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase)
+                // A local delivery with no task branch is a decided no-op. The
+                // legacy replay exception applies only when a fenced remote
+                // subject proves that the old lookup used the wrong ref.
+                || (string.Equals(lastMerge?.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
+                    && ReviewSubjectStore.Read(job.FolderPath) is null))
             {
                 continue;
             }
@@ -104,7 +108,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         if (integrated > 0)
         {
             _logger.LogInformation(
-                "accepted-integration-backstop integrated {Count} accepted remote delivery(s)",
+                "accepted-integration-backstop integrated {Count} accepted delivery(s)",
                 integrated);
         }
         return integrated;

@@ -43,6 +43,15 @@ Trigger conditions (both must hold on a tick):
 
 On trigger the watcher delegates to `update-stable.sh` in the parent devspace folder, which already runs the preflight (clean working tree, fast-forward only), stops stable, pulls `origin/main`, runs `npm install` if `package-lock.json` changed, and re-launches stable detached. The watcher does not call `git pull` or `git fetch` directly.
 
+Immediately before that hard restart, the watcher polls `/healthz/drain`.
+`gate-busy` means an accepted delivery is inside the serialized merge, build
+gate, and possible rollback boundary. The watcher waits for `idle` for up to
+`ATP_GATE_DRAIN_TIMEOUT_SECONDS` (default 120), polling every
+`ATP_GATE_DRAIN_POLL_SECONDS` (default 2). When the bounded window expires it
+continues with the restart and leaves recovery to the accepted-integration
+backstop. An older stable build without the route keeps the previous
+runner-idle behavior for rolling-upgrade compatibility.
+
 Each invocation that actually restarts appends one JSON line to `<workspace>/logs/stable-restarts.jsonl`:
 
 ```json
@@ -79,6 +88,11 @@ ATP_RESTART_THRESHOLD=5 ATP_WORKSPACE=/some/other/workspace \
 If the resume cannot be verified the helper exits non-zero so the watcher can log a `resume-failed-rc-N` status in `stable-restarts.jsonl` instead of pretending success.
 
 `./scripts/supervisor/test-resume-runner.sh` exercises the helper against a tiny Python stub backend that returns 503 for the first three healthz polls and only flips its mode on the third PUT. Skips with code 0 when Python 3 is not on PATH.
+
+`./scripts/supervisor/test-restart-stable-gate-drain.sh` proves that a busy
+merge gate delays the update call until it becomes idle, and that a gate which
+stays busy is released to the hard restart only after the configured bounded
+window.
 
 #### How it relates to the system-review monitor
 
