@@ -317,3 +317,15 @@ button.wfolder__crumb-copy:hover { color: var(--wfolder-fg); text-decoration: no
     display: block;
   }
 }
+
+/* Keep the primary identity plus the compact Typ, Status, and Reads evidence
+   usable in the narrow project-hub pane. The fixed-width date and size columns
+   otherwise consume the title's remaining width and fragment short labels. */
+@container wfolder (max-width: 620px) {
+  .wfolder__th-when,
+  .wfolder__cell-when,
+  .wfolder__th-size,
+  .wfolder__cell-size {
+    display: none;
+  }
+}

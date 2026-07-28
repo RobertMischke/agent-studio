@@ -19,6 +19,29 @@ async function mockWiki(page: import('@playwright/test').Page): Promise<void> {
   await page.route('**/api/watch-paths', route => route.fulfill(json([
     { name: 'demo', path: '/throwaway/tasks', rootPath: '/throwaway/repo' },
   ])));
+  await page.route('**/api/workspaces', route => route.fulfill(json([{
+    id: 'workspace-demo',
+    displayName: 'Workspace',
+    sortOrder: 0,
+    isDefault: true,
+    color: null,
+    createdAt: '2026-07-22T10:00:00Z',
+    projects: [{
+      sourceType: 'local-folder',
+      id: 'PROJ-DEMO',
+      displayName: 'demo',
+      shortCode: 'DEM',
+      workspaceId: 'workspace-demo',
+      color: null,
+      cliDefault: null,
+      modelDefault: null,
+      sortOrder: 0,
+      storageLocation: '/throwaway/tasks',
+      urls: [],
+      archived: false,
+      createdAt: '2026-07-22T10:00:00Z',
+    }],
+  }])));
   await page.route('**/api/crash-recovery/pending', route => route.fulfill(json({ pending: [] })));
   await page.route('**/api/projects/demo/wiki/tree', route => route.fulfill(json({
     projectName: 'demo',
@@ -89,6 +112,8 @@ async function mockWiki(page: import('@playwright/test').Page): Promise<void> {
   })));
   await page.route('**/api/projects/demo/wiki/grading/status**', route =>
     route.fulfill(json({ status: null })));
+  await page.route('**/api/projects/demo/wiki/home', route =>
+    route.fulfill(json({ sections: [] })));
   await page.route('**/api/cli/maintenance-model', route =>
     route.fulfill(json({ cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null })));
   await page.route('**/api/projects/demo/style-guides', route => route.fulfill(json({
@@ -115,7 +140,17 @@ test.describe('Wiki agent read evidence', () => {
       await page.getByTestId('project-wiki-folder-label-concepts').click();
       await expect(page.getByRole('columnheader', { name: 'Reads' })).toBeVisible();
       await expect(page.getByTestId(`wiki-folder-reads-${PAGE}`)).toHaveText('23');
-      await page.screenshot({ path: testInfo.outputPath(`wiki-agent-reads-folder-${theme}.png`), fullPage: true });
+      const pageTitle = page.getByTestId(`wiki-folder-title-${PAGE}`);
+      await expect(pageTitle).toHaveText('Overview');
+      const titleBox = await pageTitle.evaluate(element => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(titleBox.clientWidth).toBeGreaterThanOrEqual(titleBox.scrollWidth);
+      await page.screenshot({
+        path: testInfo.outputPath(`wiki-agent-reads-folder-${theme}--mocked.png`),
+        fullPage: true,
+      });
 
       await page.getByTestId(`wiki-folder-row-${PAGE}`).click();
       const panel = page.getByTestId('project-wiki-agent-reads-panel');
@@ -123,7 +158,10 @@ test.describe('Wiki agent read evidence', () => {
       await expect(page.getByTestId('project-wiki-agent-reads-total')).toHaveText('23');
       await expect(page.getByTestId('project-wiki-agent-reads-recent')).toContainText('AGT-2242');
       await expect(page.getByTestId('project-wiki-agent-reads-recent')).toContainText('AGT-2200');
-      await page.screenshot({ path: testInfo.outputPath(`wiki-agent-reads-meta-${theme}.png`), fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`wiki-agent-reads-meta-${theme}--mocked.png`),
+        fullPage: true,
+      });
     });
   }
 });

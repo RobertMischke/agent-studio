@@ -83,7 +83,8 @@
                   </button>
                 }
                 <app-studio-icon [name]="child.kind === 'folder' ? 'folder' : (child.fileType === 'html' ? 'code' : 'file')" [size]="13"></app-studio-icon>
-                <span class="wfolder__title-text">{{ child.title || child.name }}</span>
+                <span class="wfolder__title-text"
+                      [attr.data-testid]="'wiki-folder-title-' + child.relPath">{{ child.title || child.name }}</span>
                 @if (child.kind !== 'folder') {
                   <button class="wfolder__star" type="button"
                           [class.wfolder__star--active]="isStarred(child)"
