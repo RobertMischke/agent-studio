@@ -93,6 +93,8 @@ export interface CliContextSource {
 export interface CliExecutionContext {
   cli: string;
   model: string | null;
+  /** Effective run-scoped reasoning level selected by qualification / RunSpec. */
+  thinkingLevel?: string | null;
   permissionMode: string | null;
   cwd: string | null;
   /**

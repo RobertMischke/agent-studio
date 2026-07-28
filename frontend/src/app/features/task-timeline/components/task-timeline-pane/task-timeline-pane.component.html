@@ -44,12 +44,12 @@
           </span>
           <div class="tl-item__body">
             <div class="tl-item__head">
-              <span class="tl-item__kind" data-testid="timeline-event-kind">{{ kindLabel(event.kind) }}</span>
+              <span class="tl-item__kind" data-testid="timeline-event-kind">{{ eventTitle(event) }}</span>
               <time class="tl-item__time"
                     [cacTooltip]="formatAbsoluteTime(event.ts)">{{ formatTime(event.ts) }}</time>
             </div>
-            @if (event.summary) {
-              <p class="tl-item__summary" data-testid="timeline-event-summary">{{ event.summary }}</p>
+            @if (eventSummary(event); as summary) {
+              <p class="tl-item__summary" data-testid="timeline-event-summary">{{ summary }}</p>
             }
             @if (isSteeringEvent(event.kind)) {
               @if (steeringInfo(event); as steer) {
@@ -63,33 +63,70 @@
                                      data-testid="timeline-event-steering" />
               }
             } @else {
-              @let gapFindings = aspectFindings(event, 'gap');
-              @if (gapFindings.length > 0) {
-                <app-aspect-findings-list class="tl-item__findings"
-                                          [findings]="gapFindings"
-                                          leadLabel="Gap"
-                                          data-testid="timeline-event-gap" />
-              } @else if (event.details?.['gap']; as gap) {
-                <p class="tl-item__gap" data-testid="timeline-event-gap">
-                  <span class="tl-item__gap-label">Gap:</span> {{ gap }}
-                </p>
-              }
-              @let reasonFindings = aspectFindings(event, 'reason');
-              @if (reasonFindings.length > 0) {
-                <app-aspect-findings-list class="tl-item__findings"
-                                          [findings]="reasonFindings"
-                                          leadLabel="Reason"
-                                          data-testid="timeline-event-reason" />
-              } @else if (event.details?.['reason']; as reason) {
-                <p class="tl-item__gap" data-testid="timeline-event-reason">
-                  <span class="tl-item__gap-label">Reason:</span> {{ reason }}
-                </p>
+              @if (isExecutionContext(event.kind)) {
+                @if (executionFacts(event).length > 0) {
+                  <div class="tl-item__details tl-item__details--execution" data-testid="timeline-execution-facts">
+                    @for (fact of executionFacts(event); track fact.label) {
+                      <span class="tl-item__detail">
+                        <span class="tl-item__detail-key">{{ fact.label }}</span>
+                        <span class="tl-item__detail-val">{{ fact.value }}</span>
+                      </span>
+                    }
+                  </div>
+                }
+                @if (executionSources(event); as disclosure) {
+                  <details class="tl-sources" data-testid="timeline-event-sources">
+                    <summary class="tl-sources__summary">
+                      <span>{{ disclosure.label }}</span>
+                      @if (disclosure.origin) {
+                        <span class="tl-sources__origin">{{ disclosure.origin }}</span>
+                      }
+                    </summary>
+                    <ul class="tl-sources__list">
+                      @for (source of disclosure.sources; track source.kind + ':' + source.label + ':' + source.path) {
+                        <li class="tl-sources__item">
+                          <span class="tl-sources__name">{{ source.label }}</span>
+                          <span class="tl-sources__kind">{{ source.kind }}</span>
+                          @if (source.path) {
+                            <code class="tl-sources__path" [cacTooltip]="source.path">{{ source.path }}</code>
+                          }
+                          @if (source.detail) {
+                            <span class="tl-sources__detail">{{ source.detail }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </details>
+                }
+              } @else {
+                @let gapFindings = aspectFindings(event, 'gap');
+                @if (gapFindings.length > 0) {
+                  <app-aspect-findings-list class="tl-item__findings"
+                                            [findings]="gapFindings"
+                                            leadLabel="Gap"
+                                            data-testid="timeline-event-gap" />
+                } @else if (event.details?.['gap']; as gap) {
+                  <p class="tl-item__gap" data-testid="timeline-event-gap">
+                    <span class="tl-item__gap-label">Gap:</span> {{ gap }}
+                  </p>
+                }
+                @let reasonFindings = aspectFindings(event, 'reason');
+                @if (reasonFindings.length > 0) {
+                  <app-aspect-findings-list class="tl-item__findings"
+                                            [findings]="reasonFindings"
+                                            leadLabel="Reason"
+                                            data-testid="timeline-event-reason" />
+                } @else if (eventReason(event); as reason) {
+                  <p class="tl-item__gap" data-testid="timeline-event-reason">
+                    <span class="tl-item__gap-label">Reason:</span> {{ reason }}
+                  </p>
+                }
               }
               @if (detailEntries(event).length > 0) {
                 <div class="tl-item__details">
                   @for (d of detailEntries(event); track d.key) {
                     <span class="tl-item__detail">
-                      <span class="tl-item__detail-key">{{ d.key }}</span>
+                      <span class="tl-item__detail-key">{{ d.label }}</span>
                       <span class="tl-item__detail-val">{{ d.value }}</span>
                     </span>
                   }

@@ -21,6 +21,15 @@ import {
   type CompletionLoopVerdict,
   type TaskTimelineEvent,
 } from '../../models/task-timeline.model';
+import {
+  executionContextDisclosure,
+  timelineDetailEntries,
+  timelineEventReason,
+  timelineEventSummary,
+  timelineEventTitle,
+  timelineKindLabel,
+  type TimelineSourceDisclosure,
+} from '../task-timeline-presentation';
 
 /**
  * Timeline tab of the task-detail prompt pane (ADR-0049 / ASS-566).
@@ -100,6 +109,10 @@ export class TaskTimelinePaneComponent {
     return isSteeringKind(kind);
   }
 
+  isExecutionContext(kind: string): boolean {
+    return kind === TIMELINE_KIND.executionContext;
+  }
+
   /** Project a steering event into the shared {@link SteeringInfo} block. */
   steeringInfo(event: TaskTimelineEvent): SteeringInfo | null {
     return steeringInfoFromEvent(event);
@@ -123,6 +136,9 @@ export class TaskTimelinePaneComponent {
       case TIMELINE_KIND.qualityLoopReopened:            return 'warn';
       case TIMELINE_KIND.orchestratorEscalated:          return 'danger';
       case TIMELINE_KIND.readOnlyContainmentViolation:   return 'danger';
+      case TIMELINE_KIND.quotaFallbackActivated:         return 'warn';
+      case TIMELINE_KIND.loadThrottleDecision:           return 'warn';
+      case TIMELINE_KIND.integrationPendingWarning:      return 'warn';
       default:                                           return 'neutral';
     }
   }
@@ -141,38 +157,44 @@ export class TaskTimelinePaneComponent {
 
   /** Human label for an event kind. */
   kindLabel(kind: string): string {
-    switch (kind) {
-      case TIMELINE_KIND.promptCreated:               return 'Prompt created';
-      case TIMELINE_KIND.agentRunStarted:             return 'Run started';
-      case TIMELINE_KIND.runnerSlotAdmission:         return 'Slot admitted';
-      case TIMELINE_KIND.agentRunFinished:            return 'Run finished';
-      case TIMELINE_KIND.preStepStarted:              return 'Pre-step started';
-      case TIMELINE_KIND.preStepFinished:             return 'Pre-step finished';
-      case TIMELINE_KIND.postStepStarted:             return 'Post-step started';
-      case TIMELINE_KIND.postStepFinished:            return 'Post-step finished';
-      case TIMELINE_KIND.orchestratorEscalated:       return 'Escalated to human';
-      case TIMELINE_KIND.orchestratorSteered:         return 'Steered';
-      case TIMELINE_KIND.steerTimeoutResolved:        return 'Steer timeout resolved';
-      case TIMELINE_KIND.orchestratorVerdictAccepted: return 'Verdict: accepted';
-      case TIMELINE_KIND.qualityLoopReopened:         return 'Re-opened (go again)';
-      case TIMELINE_KIND.humanReviewDecided:          return 'Human review decided';
-      case TIMELINE_KIND.laneChanged:                 return 'Lane changed';
-      case TIMELINE_KIND.epicDecomposed:              return 'Epic decomposed';
-      case TIMELINE_KIND.mergedIn:                    return 'Merged in';
-      case TIMELINE_KIND.readOnlyContainmentViolation: return 'Containment violation';
-      case TIMELINE_KIND.externalCompletion:         return 'Completed externally';
-      default:                                        return kind;
-    }
+    return timelineKindLabel(kind);
+  }
+
+  eventTitle(event: TaskTimelineEvent): string {
+    return timelineEventTitle(event);
+  }
+
+  eventSummary(event: TaskTimelineEvent): string | null {
+    return timelineEventSummary(event);
+  }
+
+  eventReason(event: TaskTimelineEvent): string | null {
+    return timelineEventReason(event);
   }
 
   /** Detail rows to render under an event, minus the ones already surfaced. */
-  detailEntries(event: TaskTimelineEvent): { key: string; value: string }[] {
-    const d = event.details;
-    if (!d) return [];
-    const hidden = new Set(['gap', 'reason', 'findings', 'attempt', 'maxAttempts', 'followUpPrompt']);
-    return Object.entries(d)
-      .filter(([k]) => !hidden.has(k))
-      .map(([key, value]) => ({ key, value }));
+  detailEntries(event: TaskTimelineEvent) {
+    return timelineDetailEntries(event);
+  }
+
+  executionFacts(event: TaskTimelineEvent): { label: string; value: string }[] {
+    if (event.kind !== TIMELINE_KIND.executionContext) return [];
+    const run = this.runForEvent(event);
+    const model = event.details?.['model']?.trim()
+      || run?.executionContext?.model?.trim()
+      || event.summary.match(/\bmodel\s+([^,\s]+)/i)?.[1]
+      || null;
+    const thinking = event.details?.['thinkingLevel']?.trim()
+      || run?.executionContext?.thinkingLevel?.trim()
+      || null;
+    return [
+      ...(model ? [{ label: 'Model', value: model }] : []),
+      ...(thinking ? [{ label: 'Thinking', value: thinking }] : []),
+    ];
+  }
+
+  executionSources(event: TaskTimelineEvent): TimelineSourceDisclosure | null {
+    return executionContextDisclosure(event, this.runForEvent(event)?.executionContext?.sources ?? []);
   }
 
   /**
@@ -224,8 +246,6 @@ export class TaskTimelinePaneComponent {
   }
 
   private runSummaryEvent(run: RunRecord): TaskTimelineEvent {
-    const started = this.formatTime(run.startedAt);
-    const duration = run.durationSeconds != null ? ` after ${this.formatDuration(run.durationSeconds)}` : '';
     const status = this.runStatusLabel(run.status);
     const details: Record<string, string> = {
       run: `#${run.index}`,
@@ -233,6 +253,7 @@ export class TaskTimelinePaneComponent {
       status,
     };
     if (run.cli) details['cli'] = run.cli;
+    if (run.durationSeconds != null) details['durationSeconds'] = String(run.durationSeconds);
     if (run.exitCode != null) details['exitCode'] = String(run.exitCode);
     if (run.userFollowup) details['userFollowup'] = run.userFollowup;
     if (run.reason) details['reason'] = run.reason;
@@ -242,9 +263,28 @@ export class TaskTimelinePaneComponent {
       kind: TIMELINE_KIND.agentRunFinished,
       actor: 'agent',
       runId: run.capturedSessionId ?? run.inputSessionId ?? `run-${run.index}`,
-      summary: `Run #${run.index} ${status}${duration}${started ? `, started ${started}` : ''}`,
+      summary: '',
       details,
     };
+  }
+
+  private runForEvent(event: TaskTimelineEvent): RunRecord | null {
+    const candidates = this.runs().filter(run => !!run.executionContext);
+    if (candidates.length === 0) return null;
+    if (event.runId) {
+      const exact = candidates.find(run =>
+        run.inputSessionId === event.runId || run.capturedSessionId === event.runId);
+      if (exact) return exact;
+    }
+    const eventTime = new Date(event.ts).getTime();
+    if (Number.isNaN(eventTime)) return candidates.at(-1) ?? null;
+    return [...candidates].sort((left, right) =>
+      this.distanceFrom(left, eventTime) - this.distanceFrom(right, eventTime))[0] ?? null;
+  }
+
+  private distanceFrom(run: RunRecord, eventTime: number): number {
+    const runTime = new Date(run.endedAt ?? run.startedAt).getTime();
+    return Number.isNaN(runTime) ? Number.MAX_SAFE_INTEGER : Math.abs(eventTime - runTime);
   }
 
   private runStatusLabel(status: string): string {
@@ -256,14 +296,6 @@ export class TaskTimelinePaneComponent {
       case 'cancelled': return 'stopped';
       default: return status || 'unknown';
     }
-  }
-
-  private formatDuration(seconds: number): string {
-    if (seconds < 1) return '<1s';
-    if (seconds < 60) return `${seconds.toFixed(0)}s`;
-    const m = Math.floor(seconds / 60);
-    const s = Math.round(seconds % 60);
-    return s === 0 ? `${m}m` : `${m}m ${s}s`;
   }
 
   private compareIso(a: string, b: string): number {

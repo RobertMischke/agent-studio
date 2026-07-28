@@ -170,6 +170,7 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--studio-fg-strong);
+    font-variant-numeric: tabular-nums;
   }
 
   &--ok &__kind     { color: var(--lane-completed); }
@@ -214,6 +215,10 @@
     margin-top: 4px;
   }
 
+  &__details--execution {
+    margin-top: var(--studio-spacing-1);
+  }
+
   &__detail {
     display: inline-flex;
     align-items: center;
@@ -239,6 +244,71 @@
   &__steering {
     display: block;
     margin-top: 6px;
+  }
+}
+
+.tl-sources {
+  margin-top: var(--studio-spacing-1);
+  font-size: 11px;
+
+  &__summary {
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-1);
+    padding: 1px var(--studio-spacing-2);
+    border: 1px solid var(--studio-border);
+    border-radius: 999px;
+    color: var(--studio-fg);
+    background: var(--studio-bg-hover);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__summary:focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: 2px;
+  }
+
+  &__origin {
+    color: var(--studio-fg-dim);
+  }
+
+  &__list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    margin: var(--studio-spacing-2) 0 0;
+    padding: 0;
+  }
+
+  &__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--studio-spacing-1);
+    min-width: 0;
+  }
+
+  &__name {
+    color: var(--studio-fg);
+    font-weight: 600;
+  }
+
+  &__kind,
+  &__detail {
+    color: var(--studio-fg-dim);
+  }
+
+  &__path {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--studio-fg-dim);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
