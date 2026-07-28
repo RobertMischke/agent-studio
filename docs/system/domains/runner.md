@@ -49,6 +49,11 @@ state.
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
   mapping.
+- `backend/Features/Runner/RunTimeline.cs`: additive projection from durable
+  `session-events.jsonl` rows and CLI output into the per-task Runs API.
+  Confirmed local process starts and remote claims persist the resolved model
+  and thinking level on the session event, and every new `RunRecord` carries
+  those values independently of optional CLI init frames or token summaries.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
 - `backend/Features/Runner/OrchestratorChat.cs` and `OrchestratorRunner.cs`:

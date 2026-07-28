@@ -1,0 +1,201 @@
+:host {
+  display: block;
+  width: 100%;
+  container-type: inline-size;
+}
+
+.overview-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.overview-runs__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+  border-bottom: 1px solid var(--studio-border);
+  padding-bottom: var(--studio-spacing-1);
+}
+
+.overview-runs__title {
+  margin: 0;
+  color: var(--studio-fg-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overview-runs__sum-badge {
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 999px;
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-runs__duration {
+  align-self: flex-end;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-runs__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-runs__row {
+  display: grid;
+  grid-template-columns:
+    minmax(76px, 0.7fr)
+    minmax(92px, 0.95fr)
+    minmax(84px, 0.85fr)
+    minmax(72px, 0.6fr)
+    minmax(96px, 0.95fr)
+    minmax(94px, 0.8fr);
+  gap: var(--studio-spacing-2);
+  align-items: center;
+  min-width: 0;
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+
+.overview-runs__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  color: var(--studio-fg-strong);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.overview-runs__started {
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-runs__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+}
+
+.overview-runs__label {
+  color: var(--studio-fg-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.overview-runs__result {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  width: fit-content;
+  min-width: 0;
+  color: var(--studio-fg);
+  font-weight: 600;
+}
+
+.overview-runs__result-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentcolor;
+}
+
+.overview-runs__result[data-tone='success'] {
+  color: var(--severity-pass);
+}
+
+.overview-runs__result[data-tone='danger'] {
+  color: var(--severity-high);
+}
+
+.overview-runs__result[data-tone='warning'] {
+  color: var(--severity-warn);
+}
+
+.overview-runs__result[data-tone='active'] {
+  color: var(--severity-info);
+}
+
+.overview-runs__result[data-tone='neutral'] {
+  color: var(--studio-fg-muted);
+}
+
+.overview-runs__fact--numeric,
+.overview-runs__tokens {
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-runs__tokens {
+  color: var(--studio-fg-dim);
+}
+
+.overview-runs__engine-value {
+  overflow: hidden;
+  color: var(--studio-fg-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-runs__reason {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: var(--studio-spacing-2);
+  align-items: baseline;
+  min-width: 0;
+  padding-top: var(--studio-spacing-1);
+  border-top: 1px solid var(--studio-border);
+}
+
+.overview-runs__reason-value {
+  min-width: 0;
+  color: var(--studio-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 620px) {
+  .overview-runs__row {
+    grid-template-columns: minmax(72px, 0.7fr) repeat(3, minmax(76px, 1fr));
+  }
+
+  .overview-runs__engine,
+  .overview-runs__tokens {
+    grid-column: span 2;
+  }
+}
+
+@container (max-width: 420px) {
+  .overview-runs__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-runs__engine,
+  .overview-runs__tokens {
+    grid-column: span 1;
+  }
+}

@@ -785,7 +785,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     [Fact]
     public async Task Daemon_claim_only_returns_server_assigned_remote_capable_project()
     {
-        SeedTask(TaskStates.Ready, TaskKey, "Daemon pickup", "Prompt.");
+        SeedTask(
+            TaskStates.Ready,
+            TaskKey,
+            "Daemon pickup",
+            "Prompt.",
+            cliType: "codex",
+            model: "gpt-5.6-sol",
+            thinkingLevel: "xhigh");
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
@@ -835,6 +842,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains($"\"fence\":\"{claim.Lease.FencingToken}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains($"\"authorityEpoch\":\"{claim.Lease.AuthorityEpoch}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains("\"idempotencyKey\":\"lane-claim:daemon-claim-1\"", laneTimeline, StringComparison.Ordinal);
+        var sessionEvent = Assert.Single(
+            File.ReadLines(Path.Combine(
+                    _watchPath,
+                    TaskStates.Progress,
+                    TaskKey,
+                    "logs",
+                    "session-events.jsonl"))
+                .Select(line => JsonSerializer.Deserialize<SessionEvent>(line, ApiJson))
+                .OfType<SessionEvent>());
+        Assert.Equal("gpt-5.6-sol", sessionEvent.Model);
+        Assert.Equal("xhigh", sessionEvent.ThinkingLevel);
 
         var replay = await client.ClaimAsync(request, CancellationToken.None);
         Assert.Equal(RClaimStatus.Claimed, replay.Status);
@@ -1442,13 +1460,24 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
     private void SeedTask(
         string state, string key, string title, string promptBody,
-        string kind = TaskKinds.Task, string? cliType = null, string? model = null)
+        string kind = TaskKinds.Task,
+        string? cliType = null,
+        string? model = null,
+        string? thinkingLevel = null)
     {
         var dir = Path.Combine(_watchPath, state, key);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"), JsonSerializer.Serialize(new
         {
-            id = key, title, state, order = 1, agent = cliType ?? "claude", kind, cliType, model,
+            id = key,
+            title,
+            state,
+            order = 1,
+            agent = cliType ?? "claude",
+            kind,
+            cliType,
+            model,
+            thinkingLevel,
         }));
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), "Result: pending.");

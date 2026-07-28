@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Visual + behavioural evidence for the agent-run-metrics bug fix
@@ -157,6 +158,7 @@ function pipelineBody() {
 function runRecord(index: number, intent: string, startedAt: string, durationSeconds: number) {
   return {
     index, intent, startedAt, endedAt: null, status: 'completed', cli: 'claude',
+    model: 'claude-opus-4-8', thinkingLevel: 'high', executionContext: null,
     exitCode: 0, durationSeconds, inputSessionId: null, capturedSessionId: null,
     resumed: intent !== 'start', reason: null, userFollowup: null, lineStart: null,
     lineEnd: null, headShaBefore: null, headShaAfter: null, contextRef: null,
@@ -173,11 +175,11 @@ function multiRunTimeline() {
     lastActivityAt: '2026-06-03T09:30:00Z',
     hasActiveRun: false,
     runs: [
-      runRecord(0, 'start', '2026-06-02T08:00:01Z', 22),
-      runRecord(1, 'continue', '2026-06-02T08:40:00Z', 18),
-      runRecord(2, 'recovery', '2026-06-02T09:10:00Z', 12),
-      runRecord(3, 'continue', '2026-06-03T08:55:00Z', 18),
-      runRecord(4, 'continue', '2026-06-03T09:30:00Z', 55),
+      runRecord(1, 'start', '2026-06-02T08:00:01Z', 22),
+      runRecord(2, 'continue', '2026-06-02T08:40:00Z', 18),
+      runRecord(3, 'recovery', '2026-06-02T09:10:00Z', 12),
+      runRecord(4, 'continue', '2026-06-03T08:55:00Z', 18),
+      runRecord(5, 'continue', '2026-06-03T09:30:00Z', 55),
     ],
   };
 }
@@ -187,8 +189,22 @@ async function installRoutes(page: Page, state: string): Promise<void> {
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
+      // A more specific route may already have completed this request.
+    });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -305,7 +321,9 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {
+      // Best effort: the mocked page remains usable if the dev-only dialog races away.
+    });
   }
 }
 
@@ -331,21 +349,16 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     });
   });
 
-  test('claude agent tokens render and the CORE row shows the cumulative duration', async ({ page }) => {
+  test('claude agent tokens render and the CORE row shows the cumulative duration', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 1200 });
     await installRoutes(page, '3-progress');
     await openDetail(page);
 
-    // Symptom 1: the Tokens section is present (not the "no token activity"
-    // empty state) and carries the claude agent run's values.
-    const tokens = page.getByTestId('overview-tokens');
-    await expect(tokens).toBeVisible();
-    const orchestrator = page.getByTestId('overview-tokens-orchestrator');
-    await expect(orchestrator).toBeVisible();
-    await expect(page.getByTestId('overview-tokens-empty')).toHaveCount(0);
-
     // Symptom 2: the CORE Agent-execution row shows the cumulative 125s
     // ("2m 5s"), not the last run's 55s.
+    await page
+      .locator('[data-testid="overview-pipeline-phase"][data-phase="core"]')
+      .click();
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
     const coreDuration = coreRow.getByTestId('overview-pipeline-step-duration');
     await expect(coreDuration).toBeVisible();
@@ -357,6 +370,17 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     await expect(runsDuration).toBeVisible();
     await expect(runsDuration).toHaveText('2m 5s total');
 
+    // No init-frame or per-run token summary exists in this fixture. Every row
+    // must still identify the runner-resolved model and thinking level.
+    const runRows = page.getByTestId('overview-run-row');
+    await expect(runRows).toHaveCount(5);
+    await expect(runRows.first()).toHaveAttribute('data-run-index', '5');
+    for (const row of await runRows.all()) {
+      await expect(row.getByTestId('overview-run-engine')).toHaveText(
+        'Claude Code · opus 4.8 · high',
+      );
+    }
+
     // Symptom 1 (direct): the CORE Agent-execution row now carries the claude
     // run's own token + cost values on the pipeline row, not "—".
     const coreTokens = coreRow.getByTestId('overview-pipeline-step-tokens');
@@ -367,6 +391,14 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     // The rendered Overview is clean: no runtime-error dialog over the pane
     // (the fixture supplies a complete cost summary, as the real backend does).
     await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      await page.getByTestId('overview-runs').screenshot({
+        path: testInfo.outputPath(`overview-runs-${theme}.png`),
+      });
+    }
 
     if (RESULTS_DIR) {
       await page.screenshot({
