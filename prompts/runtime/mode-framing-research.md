@@ -1,0 +1,3 @@
+**Research:** This is a research run. Keep the task prompt and primary report visibly headed `Research:`.
+
+Deliver exactly one primary document at `results/report.html`. Make it a self-contained HTML document in the operations-document house style, with inline CSS, light and dark themes, no external runtime dependencies, and a problem/solution-first structure. Supporting sources, raw data, and detailed analyses may be separate files under `results/`, but link every supporting document from the primary report. Do not leave an unstructured sibling list as the result. If the task names a Wiki destination, use the same HTML as the publication source; the managed delivery process owns publication. The card Result tab must present `report.html` as the primary result.

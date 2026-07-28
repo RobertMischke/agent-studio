@@ -125,6 +125,8 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Auto-review reissue / evidence-gate analysis | [concepts/auto-review-evidence-gate-analysis.html](../concepts/auto-review-evidence-gate-analysis.html) |
 | Completion, review, runner provenance, host handoff, and Remote Runner stability | [concepts/completion-review-and-remote-runner-stability.html](../concepts/completion-review-and-remote-runner-stability.html) |
 | Planning & Research task type | [concepts/planning-research-task-type.html](../concepts/planning-research-task-type.html) |
+| Research task delivery convention (primary HTML, prompt block, lightweight pipeline) | [operations/research-deliverables/index.html](../operations/research-deliverables/index.html) |
+| AGT-2380 reissue-prompt convergence research | [research/reissue-prompt-konvergenz.html](../research/reissue-prompt-konvergenz.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](../concepts/screen-tooling-mvp-presentation-2026-07.md) |
 | MVP presentation capture runbook | [operations/setup/presentation-capture.md](../operations/setup/presentation-capture.md) |
 | MVP presentation storyboard and shot list | [product/mvp-presentation-storyboard.md](../concepts/mvp-presentation-storyboard.md) |

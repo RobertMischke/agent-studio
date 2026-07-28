@@ -68,6 +68,10 @@ internal static class PromptUsageCatalog
         {
             new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Read-only framing injected via {{mode_framing}}."),
         },
+        ["mode-framing-research.md"] = new[]
+        {
+            new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Research HTML-deliverable contract injected via {{mode_framing}}."),
+        },
         ["mode-framing-web.md"] = new[]
         {
             new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Web-access framing injected via {{mode_framing}}."),

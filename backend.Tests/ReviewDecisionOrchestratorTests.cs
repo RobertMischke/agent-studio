@@ -1424,6 +1424,34 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task ResearchDone_WithPrimaryHtml_UsesLightweightFlow_AndSkipsAspects()
+    {
+        const string slug = "research-report";
+        SeedReviewJobWithDone(slug, mode: TaskModes.Research);
+        var results = Path.Combine(_watchPath, TaskStates.AutoReview, slug, "results");
+        Directory.CreateDirectory(results);
+        File.WriteAllText(
+            Path.Combine(results, "report.html"),
+            "<!doctype html><html lang=\"en\"><title>Research report</title><body>Ready.</body></html>");
+        var aspectCalls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(_ =>
+        {
+            aspectCalls++;
+            return "[[ASPECT_VERDICT: status=pass; summary=should not run]]\n[[TASK_DONE]]";
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var moved = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(moved));
+        Assert.Equal(0, aspectCalls);
+        Assert.Empty(Directory.EnumerateFiles(moved, "aspect-*.md"));
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+        Assert.Contains("results/report.html", record.Reason);
+    }
+
+    [Fact]
     public async Task TaskDone_OneAspectConcerns_PromotesToHumanReview_AndAddsConcernsTag()
     {
         SeedReviewJobWithDone("concerns-job");
@@ -2019,15 +2047,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         string slug,
         bool includeRunnerActiveClearedMarker = false,
         IReadOnlyList<string>? initialTags = null,
-        string agent = CliTypes.Claude)
+        string agent = CliTypes.Claude,
+        string? mode = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         var tagsJson = initialTags is { Count: > 0 }
             ? ",\"tags\":[" + string.Join(",", initialTags.Select(t => $"\"{t}\"")) + "]"
             : string.Empty;
+        var modeJson = string.IsNullOrWhiteSpace(mode)
+            ? string.Empty
+            : $",\"mode\":\"{mode}\"";
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"{agent}\",\"cliType\":\"{agent}\"{tagsJson}}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"{agent}\",\"cliType\":\"{agent}\"{modeJson}{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var suffix = includeRunnerActiveClearedMarker
             ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"

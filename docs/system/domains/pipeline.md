@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-28
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -475,8 +475,13 @@ operator changes cause the step to fail before its writer runs.
   separate post-acquisition watchdog.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
-- The read-only pipeline drops git steps. Planning and research tasks must not
-  be forced through write-oriented post steps.
+- The lightweight report pipeline is selected from canonical task mode
+  `planning` or `research`. It retains deterministic preflight, one core report
+  run, primary-report validation, and human-review handoff. It excludes git,
+  build, automated tests, Stylelint, code-review aspects, code-quality grading,
+  regression radar, Wiki automation, and drift checks. Research additionally
+  requires `results/report.html`; the full deliverable and prompt contract is
+  the [Research task delivery convention](../../operations/research-deliverables/index.html).
 - The concept pipeline is distinct from the report-only pipeline. It runs in an
   isolated worktree, permits a diff only inside one
   `docs/operations/<topic>/` directory, and never merges that task branch.
@@ -577,14 +582,15 @@ operator changes cause the step to fail before its writer runs.
 - Agents/wiki-sync changes need `AgentsWikiSyncPostStepRunnerTests` (registry
   seed, tag / path matching, per-topic progress dedup, dead-pointer finding, and
   the AGENTS.md pointer verify / self-heal) plus the `PipelineCatalogueTests`
-  step-shape pin (opt-in Tool step, after wiki-learnings, before the decision,
-  kept in the read-only pipeline).
+  step-shape pin (opt-in Tool step, after wiki-learnings and before the decision
+  in the standard pipeline, omitted from the lightweight report pipeline).
 - Task-spawner changes need `TaskSpawnerPostStepTests` (relevance sentinel parse
   yes/no/unparseable, dedup-ledger budget + same-target block, best-available-model
   default, and the end-to-end runner writing the follow-up card into a target
   project's flat store with a `relatedTo` back-reference) plus the
-  `PipelineCatalogueTests` step-shape pin (opt-in Orchestrator step, after aspects,
-  before the decision, kept in the read-only pipeline).
+  `PipelineCatalogueTests` step-shape pin (opt-in Orchestrator step, after aspects
+  and before the decision in the standard pipeline, omitted from the lightweight
+  report pipeline).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.
 - Pipeline health changes need `PipelineHealthNightReplayTests`, the

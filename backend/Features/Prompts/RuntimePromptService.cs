@@ -24,6 +24,7 @@ public sealed partial class RuntimePromptService
     public const string SummaryProtocol = "summary-protocol.md";
     public const string CommitMessage = "commit-message.md";
     public const string ModeFramingReadOnly = "mode-framing-readonly.md";
+    public const string ModeFramingResearch = "mode-framing-research.md";
     public const string ModeFramingConcept = "mode-framing-concept.md";
     public const string ModeFramingWeb = "mode-framing-web.md";
     public const string ProposalFeedbackRefine = "proposal-feedback-refine.md";
@@ -65,16 +66,19 @@ public sealed partial class RuntimePromptService
     /// <summary>
     /// Composes the per-mode framing block injected into runner prompts via the
     /// <c>{{mode_framing}}</c> placeholder. Report-only modes (planning /
-    /// research) get the strict read-only block; concept gets its docs-only
-    /// Workbench contract; web access appends the web block. Coding with web off
-    /// yields an empty string. A non-empty result ends with a blank-line
-    /// separator so it slots in front of the following section cleanly.
+    /// research) get the strict read-only block; research also gets its HTML
+    /// deliverable contract; concept gets its docs-only Workbench contract; web
+    /// access appends the web block. Coding with web off yields an empty string.
+    /// A non-empty result ends with a blank-line separator so it slots in front
+    /// of the following section cleanly.
     /// </summary>
     public string RenderModeFraming(string? mode, bool allowWebAccess)
     {
         var parts = new List<string>();
         if (TaskModes.IsReportOnly(mode))
             parts.Add(Render(ModeFramingReadOnly, NoValues).Trim());
+        if (TaskModes.Normalize(mode) == TaskModes.Research)
+            parts.Add(Render(ModeFramingResearch, NoValues).Trim());
         if (TaskModes.IsConcept(mode))
             parts.Add(Render(ModeFramingConcept, NoValues).Trim());
         if (allowWebAccess)
