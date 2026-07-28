@@ -115,21 +115,27 @@ async function openBoard(page: Page): Promise<void> {
 }
 
 test.describe('transitive decision backlog dam', () => {
-  test('sorts decisions by impact and exposes every waiting key in the card tooltip', async ({ page }) => {
+  test('explains each decision impact and links every waiting card', async ({ page }) => {
     await openBoard(page);
 
-    const rows = page.getByTestId('decision-backlog').getByRole('button');
+    const rows = page.getByTestId('decision-backlog').locator('[aria-expanded]');
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toContainText('AGT-2182');
-    await expect(rows.nth(0)).toContainText('10 waiting');
-    await expect(rows.nth(1)).toContainText('AGT-2190');
-    await expect(rows.nth(1)).toContainText('3 waiting');
+    await expect(rows.nth(0)).toContainText('Deine Entscheidung zu AGT-2182 blockiert 10 wartende Karten');
+    await expect(rows.nth(1)).toContainText('Deine Entscheidung zu AGT-2190 blockiert 3 wartende Karten');
 
     const card = page.getByTestId('task-card').filter({ hasText: PRIMARY_DECISION.title });
     const badge = card.getByTestId('task-card-decision-dam');
     await expect(badge).toContainText('Dams 10 cards');
     await badge.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(WAITING_KEYS.join(', '));
+
+    await rows.nth(0).hover();
+    const waiters = page.getByTestId('decision-backlog-waiters-AGT-2182');
+    await expect(waiters.getByRole('button')).toHaveCount(10);
+    const firstWaiter = waiters.getByTestId('decision-backlog-waiter-AGT-2300');
+    await expect(firstWaiter).toContainText('AGT-2300');
+    await expect(firstWaiter).toContainText('Waiting implementation 1');
+    await expect(firstWaiter).toBeEnabled();
   });
 
   for (const theme of ['light', 'dark'] as const) {
@@ -137,7 +143,10 @@ test.describe('transitive decision backlog dam', () => {
       await openBoard(page);
       await setTheme(page, theme);
       await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
-      await expect(page.getByTestId('decision-backlog-item-AGT-2182')).toContainText('10 waiting');
+      const primaryEntry = page.getByTestId('decision-backlog-item-AGT-2182');
+      await expect(primaryEntry).toContainText('10 wartende Karten');
+      await primaryEntry.click();
+      await expect(page.getByTestId('decision-backlog-waiters-AGT-2182')).toBeVisible();
       await expect(
         page.getByTestId('task-card').filter({ hasText: PRIMARY_DECISION.title })
           .getByTestId('task-card-decision-dam'),
