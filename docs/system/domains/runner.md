@@ -127,8 +127,14 @@ state.
   Remote claim and completion lane facts carry the same attempt, fence, epoch,
   and idempotency tuple. Claim, standalone acquire, and completion are serialized
   at the Task Server mutation boundary, and canonical Remote completion suppresses
-  the generic local auto-commit, commit-attribution, drift, provenance, and
-  post-processing queue path.
+  the generic local auto-commit, drift, provenance, and post-processing queue
+  path. Remote completion owns a separate attribution contract: it fetches the
+  pushed `runner/<runner-id>/<task-key>` ref, verifies that its tip equals the
+  fenced `ResultSha`, and writes every commit in the exact
+  `merge-base..ResultSha` range to `commits[]` with `automatic` attribution.
+  The range is rejected as a whole, left empty, and logged as a warning when
+  the delivery branch belongs to another task or any commit subject explicitly
+  names a different task key.
   `AgentSession` and process-holder identity remain continuity metadata only;
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so
@@ -427,6 +433,11 @@ state.
   an exhausted or genuinely unrecoverable git failure retains the worktree and
   uses the existing `worktree-blocked` escalation with the preserved tips and
   next safe action (AGT-2177).
+- Worktree preparation records the actual repository base line as a full ref,
+  such as `refs/heads/main` or `refs/heads/develop`. Completion persists that
+  ref on the task and review subject. Integration status, review planning,
+  merge, push, recovery, and provenance consume the recorded ref instead of
+  reapplying a project-level branch assumption after the run.
 - Epic planning is the deliberate exception: its detached checkout is checked
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only

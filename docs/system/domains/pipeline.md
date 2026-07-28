@@ -364,13 +364,16 @@ operator changes cause the step to fail before its writer runs.
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
 - A fenced remote completion persists `review-subject.json` with its exact
-  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
-  SHA as their authoritative subject. The build gate's selected subject is
-  carried through the later aspect and grade steps. The grade reviews the full
+  `ResultSha`, delivery ref, and actual integration branch ref. Both
+  `post-build-test-gate` and `post-code-review-grade` use that SHA as their
+  authoritative subject. The build gate's selected subject is carried through
+  the later aspect and grade steps. The grade reviews the full
   merge-base-to-`ResultSha` task range, not only the result commit, and must not
   fall back to the canonical task-branch HEAD when the runner delivered a
-  different commit. Otherwise the pipeline would test one revision and review
-  another, or omit earlier commits from a multi-commit delivery.
+  different commit. Merge and integration projections use the recorded branch
+  ref, not the current project default. Otherwise the pipeline could test one
+  revision, review another, omit earlier commits from a multi-commit delivery,
+  or merge the reviewed result into the wrong line.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.

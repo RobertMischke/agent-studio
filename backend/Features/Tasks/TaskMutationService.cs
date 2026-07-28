@@ -289,7 +289,37 @@ public class TaskMutationService
         return WriteCommitState(folderPath, ordered);
     }
 
-    private bool WriteCommitState(string folderPath, List<TaskCommitInfo> chain)
+    /// <summary>
+    /// Replaces commit attribution from a verified remote delivery range.
+    /// Unlike the ordinary attribution path, an empty value is authoritative:
+    /// the foreign-task guard deliberately clears previously misattributed
+    /// commits rather than preserving unsafe evidence.
+    /// </summary>
+    public bool SetRemoteCommitAttributionOnFolder(
+        string folderPath,
+        IReadOnlyList<TaskCommitInfo> attributed)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        var ordered = attributed
+            .Where(commit => !string.IsNullOrWhiteSpace(commit.Sha))
+            .OrderBy(commit => commit.At)
+            .ToList();
+        return WriteCommitState(folderPath, ordered, allowEmptyReplacement: true);
+    }
+
+    public bool SetRunIntegrationBranchOnFolder(string folderPath, string integrationBranch)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        var normalized = TaskIntegrationBranch.NormalizeRef(integrationBranch);
+        if (normalized is null) return false;
+        TaskJsonFile.UpdateField(folderPath, "integrationBranch", normalized, _logger);
+        return Updated();
+    }
+
+    private bool WriteCommitState(
+        string folderPath,
+        List<TaskCommitInfo> chain,
+        bool allowEmptyReplacement = false)
     {
         try
         {
@@ -300,7 +330,7 @@ public class TaskMutationService
             // attribution result is never legitimate when commits already exist
             // (the aggregator folds the persisted chain in), so refuse and log
             // instead of silently wiping. ADR-0020 / crash-recovery hygiene.
-            if (chain.Count == 0 && ReadPersistedCommitCount(folderPath) > 0)
+            if (!allowEmptyReplacement && chain.Count == 0 && ReadPersistedCommitCount(folderPath) > 0)
             {
                 _logger.LogWarning(
                     "Refused to wipe non-empty commit chain in {Folder}: incoming attribution was empty (likely a resume-crash race). Keeping existing commits.",

@@ -230,7 +230,8 @@ public sealed record RemoteRunCompletionRequest(
     IReadOnlyList<string>? GateItems = null,
     string? BaseSha = null,
     string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    string? ArtifactManifestDigest = null,
+    string? IntegrationBranch = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

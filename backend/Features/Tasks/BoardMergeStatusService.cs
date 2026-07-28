@@ -89,43 +89,43 @@ public sealed class BoardMergeStatusService
 
         // Group the anchored cards by resolved repo root so the batched ancestor
         // sets are computed ONCE per repository, not per card.
-        var byRepo = new Dictionary<string, List<TaskInfo>>(StringComparer.OrdinalIgnoreCase);
+        var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
         foreach (var job in jobs)
         {
             if (AnchorFor(job) is null) continue;
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
             if (string.IsNullOrWhiteSpace(root)) continue;
-            if (!byRepo.TryGetValue(root!, out var list))
+            var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
+            if (!byRepo.TryGetValue(key, out var list))
             {
                 list = new List<TaskInfo>();
-                byRepo[root!] = list;
+                byRepo[key] = list;
             }
             list.Add(job);
         }
 
-        var reaches = new ConcurrentDictionary<string, RepoReachability>(StringComparer.OrdinalIgnoreCase);
+        var reaches = new ConcurrentDictionary<RepoBranchKey, RepoReachability>();
         Parallel.ForEach(
             byRepo,
             new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
             pair =>
             {
-                var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
-                var cacheKey = $"{pair.Key}\0{configuredBranch}";
+                var cacheKey = $"{pair.Key.Root}\0{pair.Key.Branch}";
                 var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
-                    pair.Key,
-                    [configuredBranch, ReleaseBranch]);
+                    pair.Key.Root,
+                    [pair.Key.Branch, ReleaseBranch]);
                 reaches[pair.Key] = _cache.GetOrCreateVersioned(
                     cacheKey,
                     refFingerprint.Value,
                     value => value.Succeeded
                         ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
                         : FailureCacheTtl,
-                    () => ComputeReachability(pair.Key, configuredBranch));
+                    () => ComputeReachability(pair.Key.Root, pair.Key.Branch));
             });
 
-        foreach (var (root, repoJobs) in byRepo)
+        foreach (var (repoBranch, repoJobs) in byRepo)
         {
-            var reach = reaches[root];
+            var reach = reaches[repoBranch];
 
             foreach (var job in repoJobs)
             {
@@ -220,12 +220,11 @@ public sealed class BoardMergeStatusService
         });
     }
 
-    private string ConfiguredIntegrationBranch(string projectName)
+    private string ConfiguredIntegrationBranch(TaskInfo task)
     {
-        var configured = _settings.Get(projectName).IntegrationBranch;
-        return string.IsNullOrWhiteSpace(configured)
-            ? new ProjectSettings().IntegrationBranch
-            : configured.Trim();
+        return TaskIntegrationBranch.Resolve(
+            task,
+            _settings.Get(task.ProjectName).IntegrationBranch);
     }
 
     /// <summary>Drops the cached reachability sets. Tests use this to force a fresh read.</summary>
@@ -240,4 +239,6 @@ public sealed class BoardMergeStatusService
         HashSet<string> Integration,
         HashSet<string> Release,
         bool Succeeded);
+
+    private sealed record RepoBranchKey(string Root, string Branch);
 }

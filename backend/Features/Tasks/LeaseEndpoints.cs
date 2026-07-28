@@ -547,7 +547,6 @@ public static class LeaseEndpoints
                         candidate.ProjectName, taskKey, req.RunnerName, move.Status, move.Message);
                     return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}"));
                 }
-
                 logger.LogInformation(
                     "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
@@ -674,6 +673,7 @@ public static class LeaseEndpoints
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
             TaskMutationService mutations,
+            GitService git,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
             HumanReviewEscalation humanReviewEscalation,
@@ -803,6 +803,65 @@ public static class LeaseEndpoints
                     : Results.Conflict(response);
             }
 
+            var deliveryBranch = req.SalvageBranch ?? req.ImmutableResultRef;
+            RemoteDeliveryCommitRange? deliveryRange = null;
+            RemoteCommitAttributionResult? remoteAttribution = null;
+            string? attributionWarning = null;
+            if (!isEpicPlanning && outcome is ("done" or "noop"))
+            {
+                var reportedIntegrationBranch =
+                    TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch);
+                if (reportedIntegrationBranch is not null)
+                {
+                    mutations.SetRunIntegrationBranchOnFolder(
+                        task.FolderPath,
+                        reportedIntegrationBranch);
+                }
+                var repoRoot = git.ResolveRepoRootForWatchPath(task.WatchPath);
+                if (string.IsNullOrWhiteSpace(repoRoot)
+                    || string.IsNullOrWhiteSpace(deliveryBranch)
+                    || string.IsNullOrWhiteSpace(resultSha))
+                {
+                    attributionWarning =
+                        "Remote commit attribution skipped because repository, delivery branch, or result SHA was unavailable.";
+                }
+                else
+                {
+                    deliveryRange = git.InspectRemoteDeliveryCommitRange(
+                        repoRoot,
+                        deliveryBranch,
+                        resultSha,
+                        req.IntegrationBranch);
+                    if (!deliveryRange.Success)
+                    {
+                        attributionWarning = deliveryRange.Warning;
+                    }
+                    else
+                    {
+                        remoteAttribution = RemoteCommitAttributionGuard.Attribute(
+                            req.TaskKey,
+                            deliveryBranch,
+                            deliveryRange.Commits);
+                        attributionWarning = remoteAttribution.Warning;
+                        mutations.SetRunIntegrationBranchOnFolder(
+                            task.FolderPath,
+                            deliveryRange.IntegrationBranch!);
+                        mutations.SetRemoteCommitAttributionOnFolder(
+                            task.FolderPath,
+                            remoteAttribution.Commits);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(attributionWarning))
+                {
+                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                        "remote-commit-attribution task={TaskKey} branch={Branch} warning={Warning}",
+                        req.TaskKey,
+                        deliveryBranch,
+                        attributionWarning);
+                }
+            }
+
             ReviewAttemptDto? reviewAttempt = null;
             if (!isEpicPlanning && outcome is ("done" or "noop"))
             {
@@ -817,7 +876,9 @@ public static class LeaseEndpoints
                     AttemptAuthorityService.Hash(requirements),
                     AttemptAuthorityService.Hash("remote-review-policy:v1"),
                     run.EvidenceDigests,
-                    $"review-subject:{run.AttemptId}:{run.ResultSha}"));
+                    $"review-subject:{run.AttemptId}:{run.ResultSha}",
+                    RepositoryUrl: req.Repository,
+                    ResultRef: deliveryBranch));
                 if (!review.Accepted)
                 {
                     return Results.Conflict(new RemoteRunCompletionResponse(
@@ -826,6 +887,24 @@ public static class LeaseEndpoints
                         FailureClassification: review.Status.ToString()));
                 }
                 reviewAttempt = review.ReviewAttempt;
+
+                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
+                {
+                    TaskKey = req.TaskKey,
+                    Project = task.ProjectName,
+                    Repository = req.Repository
+                                 ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
+                                 ?? string.Empty,
+                    ResultSha = run.ResultSha!,
+                    AttemptChainId = req.AttemptChainId!,
+                    Executor = req.RunnerId,
+                    LeaseId = req.LeaseId,
+                    FencingToken = req.FencingToken,
+                    ResultRef = deliveryBranch,
+                    IntegrationBranch = deliveryRange?.IntegrationBranch
+                                        ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                });
             }
 
             if (!isEpicPlanning
@@ -886,6 +965,14 @@ public static class LeaseEndpoints
                 details["salvageAuthoritativeBaseBranch"] = req.SalvageAuthoritativeBaseBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseSha))
                 details["salvageAuthoritativeBaseSha"] = req.SalvageAuthoritativeBaseSha;
+            if (!string.IsNullOrWhiteSpace(deliveryRange?.IntegrationBranch))
+                details["integrationBranch"] = deliveryRange.IntegrationBranch;
+            else if (!string.IsNullOrWhiteSpace(req.IntegrationBranch))
+                details["integrationBranch"] = TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch)!;
+            if (remoteAttribution is not null)
+                details["attributedCommitCount"] = remoteAttribution.Commits.Count.ToString();
+            if (!string.IsNullOrWhiteSpace(attributionWarning))
+                details["commitAttributionWarning"] = attributionWarning;
             if (!string.IsNullOrWhiteSpace(reportedReason))
                 details["reason"] = reportedReason;
             RemoteClaimFailureDecision? claimFailure = null;
