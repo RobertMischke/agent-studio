@@ -171,8 +171,9 @@ export class OverviewRunsComponent {
 
   /**
    * "Which agent ran this attempt" — CLI plus the model it actually reported.
-   * The model is read from the run's own execution context first and only then
-   * from its token rollup, so a run never inherits the card's current model.
+   * The runner-resolved fields are authoritative for new runs; the run's own
+   * execution context and token rollup remain read fallbacks for older
+   * records, so a run never inherits the card's current model.
    */
   private engineLabel(run: RunRecord): string | null {
     const cli = run.cli?.trim() ?? '';
@@ -180,10 +181,15 @@ export class OverviewRunsComponent {
       ? cliTypeLabel(cli as CliType)
       : cli;
     const rawModel =
-      run.executionContext?.model?.trim() || run.tokenSummary?.lastModel?.trim() || '';
+      run.model?.trim()
+      || run.executionContext?.model?.trim()
+      || run.tokenSummary?.lastModel?.trim()
+      || '';
     const model = rawModel ? shortModelName(rawModel) : '';
-    if (cliLabel && model) return `${cliLabel} · ${model}`;
-    return cliLabel || model || null;
+    const thinkingLevel = run.thinkingLevel?.trim() ?? '';
+    const modelLabel = model && thinkingLevel ? `${model} · ${thinkingLevel}` : model;
+    if (cliLabel && modelLabel) return `${cliLabel} · ${modelLabel}`;
+    return cliLabel || modelLabel || null;
   }
 
   /**

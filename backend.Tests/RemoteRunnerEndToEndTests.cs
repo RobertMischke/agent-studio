@@ -816,7 +816,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     [Fact]
     public async Task Daemon_claim_only_returns_server_assigned_remote_capable_project()
     {
-        SeedTask(TaskStates.Ready, TaskKey, "Daemon pickup", "Prompt.");
+        SeedTask(
+            TaskStates.Ready,
+            TaskKey,
+            "Daemon pickup",
+            "Prompt.",
+            cliType: "codex",
+            model: "gpt-5.6-sol",
+            thinkingLevel: "xhigh");
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
@@ -866,6 +873,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains($"\"fence\":\"{claim.Lease.FencingToken}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains($"\"authorityEpoch\":\"{claim.Lease.AuthorityEpoch}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains("\"idempotencyKey\":\"lane-claim:daemon-claim-1\"", laneTimeline, StringComparison.Ordinal);
+        var sessionEvent = Assert.Single(
+            File.ReadLines(Path.Combine(
+                    _watchPath,
+                    TaskStates.Progress,
+                    TaskKey,
+                    "logs",
+                    "session-events.jsonl"))
+                .Select(line => JsonSerializer.Deserialize<SessionEvent>(line, ApiJson))
+                .OfType<SessionEvent>());
+        Assert.Equal("gpt-5.6-sol", sessionEvent.Model);
+        Assert.Equal("xhigh", sessionEvent.ThinkingLevel);
 
         var replay = await client.ClaimAsync(request, CancellationToken.None);
         Assert.Equal(RClaimStatus.Claimed, replay.Status);

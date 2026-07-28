@@ -2814,6 +2814,8 @@ public class ProjectRunner
                 Ts = execution.StartedAt,
                 Kind = plan.EventKind,
                 Cli = cli.CliType,
+                Model = execution.Model ?? runModel,
+                ThinkingLevel = execution.ThinkingLevel ?? runThinkingLevel,
                 ExecutionLocation = new TaskExecutionLocation
                 {
                     State = TaskExecutionStates.LocalRunning,

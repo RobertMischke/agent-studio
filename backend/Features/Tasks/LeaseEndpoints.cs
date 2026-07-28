@@ -690,6 +690,8 @@ public static class LeaseEndpoints
                     Ts = acquire.Lease.AcquiredAt,
                     Kind = "start",
                     Cli = "remote-runner",
+                    Model = candidate.Model,
+                    ThinkingLevel = candidate.ThinkingLevel,
                     Cwd = candidate.FolderPath,
                     ExecutionLocation = new TaskExecutionLocation
                     {
