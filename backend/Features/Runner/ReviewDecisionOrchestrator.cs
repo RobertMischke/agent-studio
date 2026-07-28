@@ -1402,7 +1402,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
             var steering = new SteeringContext("noop-recovery", "reissue", priorReissues, reason);
-            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: NOOP recovery, reissued with sharpened framing.",
@@ -1633,7 +1633,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var priorCommits = RunOutcomePolicy.PriorCommitLines(current);
             var steering = new SteeringContext("no-completion-signal", "reissue", priorReissues, reason,
                 PriorCommits: priorCommits);
-            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: run finished without a terminal sentinel, reissued demanding one.",
@@ -2427,7 +2427,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 evidenceRef: gradeReport.FileName,
                 findingRefs: new[] { gradeReport.FileName },
                 performer: PostProcessingPerformers.Orchestrator);
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
             _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
                 $"Council reaction reopened \"{(moved.Title ?? moved.Id)}\" for {reaction.Assessments.Count} named review finding(s). Next round: {moved.Id} attempt {reaction.TargetRunAttempt}.");
@@ -2542,7 +2542,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 .ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         // F29: keep the operator-facing reissue note short. The full
         // per-aspect verdict list is in the decision journal record below
@@ -2916,7 +2916,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, gate.Reason);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var count = gate.Findings.Count;
@@ -3039,7 +3039,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 .ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var count = gate.Findings.Count;
@@ -3670,7 +3670,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var count = gate.Findings.Count;
@@ -5077,7 +5077,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             evidenceRef: "post-steps/build-test-gate.log");
 
         var followUp = BuildBuildTestGateFollowUp(result, councilReaction);
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var councilSuffix = councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue
@@ -5213,7 +5213,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DecisionVerdictReissue, LintScssReissueReasonPrefix + $"stylelint exit {result.ExitCode}");
 
         var followUp = BuildLintScssFollowUp(result);
-        await WriteFollowUpFileAsync(moved2, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved2, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved2.Title) ? moved2.Id : moved2.Title;
         _chatLog.Append(moved2, OrchestratorMessageKind.Reissue,
@@ -6017,7 +6017,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             return;
         }
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
@@ -6705,9 +6705,150 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (ASS-734): without it the only record of "what did the orchestrator tell
     /// the agent" was a single file the next reissue clobbered.
     /// </summary>
-    private Task WriteFollowUpFileAsync(
+    private const string SteeringPromptHistoryHeading = "## Steering prompt (verbatim)";
+    private const string ReissueRepeatGuardHeading = "## Reissue repeat guard: diagnosis first";
+
+    private async Task<string> WriteFollowUpFileAsync(
         TaskInfo moved, string followUp, CancellationToken ct, SteeringContext? context = null)
-        => WriteFollowUpFilesAsync(moved.FolderPath, followUp, context, moved.Id, _logger, ct);
+    {
+        var guarded = GuardRepeatedReissuePrompt(moved.FolderPath, followUp);
+        await WriteFollowUpFilesAsync(
+            moved.FolderPath, guarded.Prompt, context, moved.Id, _logger, ct);
+
+        if (guarded.Intervened)
+        {
+            EmitVerdictTimeline(
+                moved.FolderPath,
+                TimelineEventKinds.OrchestratorSteered,
+                TimelineActors.QualityLoop,
+                "Repeated reissue prompt detected; diagnosis-first instructions were added before sending.",
+                new Dictionary<string, string>
+                {
+                    ["cause"] = "reissue-prompt-repeat-guard",
+                    ["action"] = "diagnosis-first-enrichment",
+                    ["normalizedMatch"] = "true",
+                    ["matchingPriorPrompts"] = guarded.MatchingPriorPrompts.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    ["matchedHistoryFile"] = guarded.MatchedHistoryFile ?? "unknown",
+                    ["followUpPrompt"] = Truncate(guarded.Prompt, 4000),
+                });
+        }
+
+        return guarded.Prompt;
+    }
+
+    /// <summary>
+    /// Compare a proposed automatic reissue against the append-only steering
+    /// history. Whitespace and casing differences are ignored. When the same
+    /// base instruction has already been sent, replace any older guard block
+    /// with a diagnosis-first block whose intervention count increases on each
+    /// recurrence. This prevents the guard itself from becoming another
+    /// byte-identical repeated prompt.
+    /// </summary>
+    internal static ReissuePromptGuardResult GuardRepeatedReissuePrompt(
+        string folderPath, string followUp)
+    {
+        var basePrompt = StripReissueRepeatGuard(followUp);
+        var normalizedCandidate = NormalizeReissuePrompt(basePrompt);
+        var historyDir = Path.Combine(folderPath, "orchestrator-follow-up-history");
+        if (normalizedCandidate.Length == 0 || !Directory.Exists(historyDir))
+        {
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        var matchingFiles = new List<string>();
+        try
+        {
+            foreach (var historyPath in Directory
+                         .EnumerateFiles(historyDir, "*.md", SearchOption.TopDirectoryOnly)
+                         .OrderBy(path => path, StringComparer.Ordinal))
+            {
+                var priorPrompt = ExtractSteeringPrompt(File.ReadAllText(historyPath));
+                if (priorPrompt is null) continue;
+                var normalizedPrior = NormalizeReissuePrompt(
+                    StripReissueRepeatGuard(priorPrompt));
+                if (string.Equals(
+                        normalizedCandidate, normalizedPrior,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    matchingFiles.Add(historyPath);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // History is an observability sidecar. If it cannot be read, keep
+            // the existing reissue path available rather than stranding a card.
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        if (matchingFiles.Count == 0)
+        {
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        var times = matchingFiles.Count == 1
+            ? "1 time"
+            : $"{matchingFiles.Count} times";
+        var enriched = basePrompt.TrimEnd() + "\n\n" +
+            ReissueRepeatGuardHeading + "\n\n" +
+            $"The normalized instruction above has already been sent {times}. " +
+            "Repeating the previous approach unchanged did not converge. Before editing again:\n\n" +
+            "1. Diagnose first from the latest run output and the newest relevant evidence file. " +
+            "Name the exact failed check, blocking aspect, or missing evidence.\n" +
+            "2. Name the target artifact and verification that will close that diagnosed gap.\n" +
+            "3. Continue from the existing diff. Do not restart, redesign, or broaden the task.\n" +
+            "4. Address only the diagnosed gap, run the named verification, and then emit the honest terminal sentinel.\n";
+
+        return new ReissuePromptGuardResult(
+            enriched,
+            true,
+            matchingFiles.Count,
+            Path.GetFileName(matchingFiles[^1]));
+    }
+
+    internal static string NormalizeReissuePrompt(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return string.Empty;
+
+        var normalized = new StringBuilder(prompt.Length);
+        var pendingWhitespace = false;
+        foreach (var ch in prompt)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                pendingWhitespace = normalized.Length > 0;
+                continue;
+            }
+
+            if (pendingWhitespace)
+            {
+                normalized.Append(' ');
+                pendingWhitespace = false;
+            }
+            normalized.Append(char.ToUpperInvariant(ch));
+        }
+        return normalized.ToString();
+    }
+
+    private static string StripReissueRepeatGuard(string prompt)
+    {
+        var normalizedNewlines = (prompt ?? string.Empty).Replace("\r\n", "\n");
+        var guardIndex = normalizedNewlines.IndexOf(
+            ReissueRepeatGuardHeading, StringComparison.Ordinal);
+        return guardIndex < 0
+            ? normalizedNewlines.Trim()
+            : normalizedNewlines[..guardIndex].Trim();
+    }
+
+    private static string? ExtractSteeringPrompt(string historyText)
+    {
+        var headingIndex = historyText.IndexOf(
+            SteeringPromptHistoryHeading, StringComparison.OrdinalIgnoreCase);
+        if (headingIndex < 0) return null;
+        var prompt = historyText[(headingIndex + SteeringPromptHistoryHeading.Length)..].Trim();
+        return prompt.Length == 0 ? null : prompt;
+    }
 
     /// <summary>
     /// Pure-IO core of <see cref="WriteFollowUpFileAsync"/>: write the canonical
@@ -6790,7 +6931,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             }
         }
         sb.AppendLine();
-        sb.AppendLine("## Steering prompt (verbatim)");
+        sb.AppendLine(SteeringPromptHistoryHeading);
         sb.AppendLine();
         sb.AppendLine(followUp);
         return sb.ToString();
@@ -6818,6 +6959,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? Reason = null,
         string? ResumeSessionId = null,
         IReadOnlyList<string>? PriorCommits = null);
+
+    internal sealed record ReissuePromptGuardResult(
+        string Prompt,
+        bool Intervened,
+        int MatchingPriorPrompts,
+        string? MatchedHistoryFile);
 
     private enum ReviewSignalKind
     {

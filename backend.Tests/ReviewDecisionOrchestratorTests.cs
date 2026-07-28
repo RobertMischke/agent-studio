@@ -137,6 +137,49 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Reissue_SecondNormalizedIdenticalPrompt_IsDiagnosisFirstAndTimelineRecordsGuard()
+    {
+        const string slug = "repeat-guard";
+        const string question = "which column is primary?";
+        const string decision =
+            "[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A.]]\n[[TASK_DONE]]";
+        SeedReviewJobWithNeedsInput(slug, question);
+
+        await BuildOrchestrator(decision).TickOnceAsync(_workspace, CancellationToken.None);
+
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, slug);
+        var firstPrompt = File.ReadAllText(Path.Combine(readyFolder, "orchestrator-follow-up.md"));
+
+        var reviewFolder = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Directory.Move(readyFolder, reviewFolder);
+        TaskJsonFile.UpdateField(
+            reviewFolder, "state", TaskStates.AutoReview, NullLogger.Instance);
+        File.AppendAllText(
+            Path.Combine(reviewFolder, "logs", "cli-output.log"),
+            $"[12:01:00.000] [stdout] [[TASK_NEEDS_INPUT: {question}]]{Environment.NewLine}");
+
+        await BuildOrchestrator(decision).TickOnceAsync(_workspace, CancellationToken.None);
+
+        var secondPrompt = File.ReadAllText(
+            Path.Combine(readyFolder, "orchestrator-follow-up.md"));
+        Assert.NotEqual(firstPrompt, secondPrompt);
+        Assert.Contains("## Reissue repeat guard: diagnosis first", secondPrompt);
+        Assert.Contains("Name the exact failed check, blocking aspect, or missing evidence", secondPrompt);
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Equal(2, records.Count);
+        Assert.Contains("## Reissue repeat guard: diagnosis first", records[^1].FollowUp);
+
+        var events = ReadTimeline(TaskStates.Ready, slug);
+        var guard = Assert.Single(events, e =>
+            e.Kind == TimelineEventKinds.OrchestratorSteered
+            && e.Details?.GetValueOrDefault("cause") == "reissue-prompt-repeat-guard");
+        Assert.Equal(TimelineActors.QualityLoop, guard.Actor);
+        Assert.Equal("diagnosis-first-enrichment", guard.Details?["action"]);
+        Assert.Equal("1", guard.Details?["matchingPriorPrompts"]);
+    }
+
+    [Fact]
     public async Task Reissue_WithAnotherJobActiveInProgress_DoesNotDisplaceIt()
     {
         // Regression for the 2026-05-11 race: while auto-review verdicts
