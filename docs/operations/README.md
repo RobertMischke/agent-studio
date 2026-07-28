@@ -36,3 +36,4 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [develop-main-promotion.md](develop-main-promotion.md) | Operator checklist and command for exact-SHA `develop` to `main` promotion, full gate, annotated release marker, and deploy-cron handoff. |
 
 Konvergenz-Probe 2026-07-30: develop ist der Arbeitsbranch.
+| [deck-icon-exploration/](deck-icon-exploration/index.html) | Round 2 Deck icon alternatives for the multi-faceted project console, with light and dark proofs, recommendation, rejected Round 1 direction, and implementation seam (AGT-2355). |

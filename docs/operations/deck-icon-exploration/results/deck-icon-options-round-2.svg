@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 330" role="img" aria-labelledby="title desc">
+  <title id="title">Round 2 Deck icon options in light and dark themes</title>
+  <desc id="desc">Three line icons for a multi-faceted project console: recommended project facets, console frame, and faceted project tile.</desc>
+  <defs>
+    <style>
+      .label { font: 700 12px system-ui, sans-serif; letter-spacing: 1.2px; }
+      .name { font: 650 14px system-ui, sans-serif; }
+      .effect { font: 12px system-ui, sans-serif; }
+      .pick { font: 750 10px system-ui, sans-serif; letter-spacing: .8px; }
+      .icon { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <g id="project-facets" class="icon">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M9 3v18M9 10h12"/>
+      <circle cx="15" cy="15.5" r="2"/>
+    </g>
+    <g id="console-frame" class="icon">
+      <rect x="3" y="4" width="18" height="16" rx="2"/>
+      <path d="M3 9h18"/>
+      <circle cx="6.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+      <circle cx="9.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+      <path d="m7 13 2 2-2 2M12 17h5"/>
+    </g>
+    <g id="faceted-project-tile" class="icon">
+      <path d="m12 2.5 8.5 5v9L12 21.5l-8.5-5v-9L12 2.5Z"/>
+      <path d="M12 12 3.5 7.5M12 12l8.5-4.5M12 12v9.5"/>
+    </g>
+  </defs>
+
+  <rect width="1080" height="165" fill="#f5f5f3"/>
+  <rect y="165" width="1080" height="165" fill="#18181b"/>
+  <line x1="0" y1="165" x2="1080" y2="165" stroke="#3f3f46"/>
+
+  <text x="32" y="88" class="label" fill="#71717a">LIGHT</text>
+  <text x="32" y="253" class="label" fill="#a1a1aa">DARK</text>
+
+  <g transform="translate(130 34)">
+    <rect width="275" height="98" rx="9" fill="#e8eef8" stroke="#6d9bd2"/>
+    <text x="223" y="18" class="pick" fill="#2a78d6">PICK</text>
+    <g transform="translate(22 31) scale(1.5)" color="#3f3f46" stroke="#3f3f46"><use href="#project-facets"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">A · Project facets</text>
+    <text x="78" y="66" class="effect" fill="#71717a">One project, several distinct views</text>
+  </g>
+  <g transform="translate(422 34)">
+    <rect width="275" height="98" rx="9" fill="#ffffff" stroke="#ddddda"/>
+    <g transform="translate(22 31) scale(1.5)" color="#3f3f46" stroke="#3f3f46"><use href="#console-frame"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">B · Console frame</text>
+    <text x="78" y="66" class="effect" fill="#71717a">Operational and tool-oriented</text>
+  </g>
+  <g transform="translate(714 34)">
+    <rect width="334" height="98" rx="9" fill="#ffffff" stroke="#ddddda"/>
+    <g transform="translate(22 31) scale(1.5)" color="#3f3f46" stroke="#3f3f46"><use href="#faceted-project-tile"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">C · Faceted project tile</text>
+    <text x="78" y="66" class="effect" fill="#71717a">Multi-sided, distinctive, abstract</text>
+  </g>
+
+  <g transform="translate(130 199)">
+    <rect width="275" height="98" rx="9" fill="#283446" stroke="#3987e5"/>
+    <text x="223" y="18" class="pick" fill="#69aaf3">PICK</text>
+    <g transform="translate(22 31) scale(1.5)" color="#e4e4e7" stroke="#e4e4e7"><use href="#project-facets"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">A · Project facets</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">One project, several distinct views</text>
+  </g>
+  <g transform="translate(422 199)">
+    <rect width="275" height="98" rx="9" fill="#232326" stroke="#3f3f46"/>
+    <g transform="translate(22 31) scale(1.5)" color="#e4e4e7" stroke="#e4e4e7"><use href="#console-frame"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">B · Console frame</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">Operational and tool-oriented</text>
+  </g>
+  <g transform="translate(714 199)">
+    <rect width="334" height="98" rx="9" fill="#232326" stroke="#3f3f46"/>
+    <g transform="translate(22 31) scale(1.5)" color="#e4e4e7" stroke="#e4e4e7"><use href="#faceted-project-tile"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">C · Faceted project tile</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">Multi-sided, distinctive, abstract</text>
+  </g>
+</svg>

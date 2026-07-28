@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "deck-icon-exploration",
+  "title": "Deck Icon Exploration",
+  "summary": "Round 2 explores three compact line-icon alternatives for the Deck as a multi-faceted project console: project facets, a console frame, and a faceted project tile. Includes light and dark theme proofs, a recommendation, the rejected Round 1 direction, and the exact later implementation seam.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-28T00:00:00Z",
+  "sourceTaskKeys": ["AGT-2355"],
+  "implementationTasks": [
+    {
+      "title": "Apply Robert's selected Deck icon",
+      "promptMarkdown": "Implement the Round 2 Deck icon selected in docs/operations/deck-icon-exploration/index.html. Do not use any rejected Round 1 path. Add the selected 24 by 24 path to the canonical Studio icon component, change the Explorer Deck row from `layout` to the new icon in one place, preserve the existing `studio-explorer-project-hub-*` and `studio-explorer-project-deck-*` test IDs, and add focused regression coverage. Do not change the active-section icon used by Deck tabs."
+    }
+  ]
+}

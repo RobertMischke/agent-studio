@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deck Icon Exploration | Concept Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #777671;
+    --line: #d8d6cf;
+    --accent: #2a78d6;
+    --accent-soft: #eaf1fb;
+    --ok: #18753a;
+    --ok-soft: #eaf4ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #9d9c94;
+      --line: #3d3d3a;
+      --accent: #3987e5;
+      --accent-soft: #1e2a3a;
+      --ok: #67b867;
+      --ok-soft: #1f2f1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0 0 72px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    padding: 42px 0 25px;
+    border-bottom: 1px solid var(--line);
+  }
+  .kicker {
+    margin: 0 0 9px;
+    color: var(--ink-3);
+    font-size: 13px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  h1 { margin: 0 0 10px; font-size: 33px; line-height: 1.2; }
+  h2 { margin: 48px 0 8px; font-size: 23px; }
+  h3 { margin: 0; font-size: 16px; }
+  p { max-width: 76ch; }
+  .lede { margin: 0; color: var(--ink-2); font-size: 18px; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 17px;
+    color: var(--ink-3);
+    font-size: 13px;
+  }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  .decision {
+    margin: 24px 0;
+    padding: 17px 20px;
+    border: 1px solid color-mix(in srgb, var(--ok) 28%, var(--line));
+    border-radius: 10px;
+    background: var(--ok-soft);
+  }
+  .decision p { margin: 6px 0 0; }
+  .badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--ok-soft);
+    color: var(--ok);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .mockup {
+    overflow-x: auto;
+    margin: 24px 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+  }
+  .theme-row {
+    display: grid;
+    grid-template-columns: 104px repeat(3, minmax(190px, 1fr));
+    min-width: 760px;
+    padding: 18px;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .theme-row + .theme-row { border-top: 1px solid var(--line); }
+  .theme-row.light {
+    --preview-bg: #f5f5f3;
+    --preview-panel: #ffffff;
+    --preview-fg: #3f3f46;
+    --preview-muted: #71717a;
+    --preview-line: #ddddda;
+    --preview-selected: #e8eef8;
+    background: #f5f5f3;
+  }
+  .theme-row.dark {
+    --preview-bg: #18181b;
+    --preview-panel: #232326;
+    --preview-fg: #e4e4e7;
+    --preview-muted: #a1a1aa;
+    --preview-line: #3f3f46;
+    --preview-selected: #283446;
+    background: #18181b;
+  }
+  .theme-label {
+    align-self: center;
+    color: var(--preview-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .option {
+    position: relative;
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 10px;
+    align-items: center;
+    min-height: 72px;
+    padding: 11px 12px;
+    border: 1px solid var(--preview-line);
+    border-radius: 8px;
+    background: var(--preview-panel);
+    color: var(--preview-fg);
+  }
+  .option.recommended {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--preview-line));
+    background: var(--preview-selected);
+  }
+  .option svg {
+    width: 28px;
+    height: 28px;
+    color: currentColor;
+  }
+  .option-copy { min-width: 0; }
+  .option-name { font-size: 13px; font-weight: 650; }
+  .option-effect { color: var(--preview-muted); font-size: 11.5px; line-height: 1.35; }
+  .pick {
+    position: absolute;
+    top: 6px;
+    right: 7px;
+    color: var(--accent);
+    font-size: 9px;
+    font-weight: 750;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  figcaption { margin: 9px 0 0; color: var(--ink-2); font-size: 13px; }
+  .alternatives {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 16px;
+  }
+  .card {
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface-2);
+  }
+  .card p { margin: 7px 0 0; color: var(--ink-2); font-size: 14px; }
+  .rejected {
+    margin: 20px 0;
+    padding: 17px 20px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+  }
+  .rejected h3 { margin-bottom: 7px; }
+  .rejected p { margin: 5px 0; color: var(--ink-2); }
+  .round-label {
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: var(--ink-3);
+    font-size: 12px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface-3);
+    font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  a { color: var(--accent); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 78ch; }
+  @media (max-width: 760px) {
+    h1 { font-size: 28px; }
+    .alternatives { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Concept Workbench · AGT-2355</p>
+  <h1>Deck Icon Exploration</h1>
+  <p class="lede">Round 2 defines the Deck as the multi-faceted project console: overview panels, settings, Wiki, token usage, and other project views. These 24 by 24 line icons express that container rather than a board or card stack.</p>
+  <div class="meta">
+    <span><b>Status:</b> round 2 ready for Robert's sight review</span>
+    <span><b>Scope:</b> concept only, no product-code change</span>
+    <span><b>Proof:</b> light and dark</span>
+  </div>
+</header>
+
+<section class="decision" aria-labelledby="recommendation" data-concept-section="recommendation">
+  <span class="badge">Recommended</span>
+  <h2 id="recommendation" style="margin: 8px 0 0">A · Project facets</h2>
+  <p>The asymmetric panel frame reads as one project surface with several distinct views. The small focus ring suggests a project overview without turning the icon into a Kanban grid, card stack, or terminal-only symbol.</p>
+</section>
+
+<section data-concept-section="alternatives">
+<p class="round-label">Round 2 · Project console</p>
+<h2>Mockup row</h2>
+<figure>
+  <div class="mockup">
+    <div class="theme-row light" aria-label="Light theme icon options">
+      <div class="theme-label">Light</div>
+      <div class="option recommended">
+        <span class="pick">Pick</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M9 3v18M9 10h12"/>
+          <circle cx="15" cy="15.5" r="2"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">A · Project facets</div><div class="option-effect">One project, several distinct views</div></div>
+      </div>
+      <div class="option">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M3 9h18"/>
+          <circle cx="6.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <circle cx="9.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <path d="m7 13 2 2-2 2M12 17h5"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">B · Console frame</div><div class="option-effect">Operational, direct, tool-oriented</div></div>
+      </div>
+      <div class="option">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m12 2.5 8.5 5v9L12 21.5l-8.5-5v-9L12 2.5Z"/>
+          <path d="M12 12 3.5 7.5M12 12l8.5-4.5M12 12v9.5"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">C · Faceted project tile</div><div class="option-effect">Multi-sided, distinctive, abstract</div></div>
+      </div>
+    </div>
+    <div class="theme-row dark" aria-label="Dark theme icon options">
+      <div class="theme-label">Dark</div>
+      <div class="option recommended">
+        <span class="pick">Pick</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M9 3v18M9 10h12"/>
+          <circle cx="15" cy="15.5" r="2"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">A · Project facets</div><div class="option-effect">One project, several distinct views</div></div>
+      </div>
+      <div class="option">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M3 9h18"/>
+          <circle cx="6.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <circle cx="9.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <path d="m7 13 2 2-2 2M12 17h5"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">B · Console frame</div><div class="option-effect">Operational, direct, tool-oriented</div></div>
+      </div>
+      <div class="option">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m12 2.5 8.5 5v9L12 21.5l-8.5-5v-9L12 2.5Z"/>
+          <path d="M12 12 3.5 7.5M12 12l8.5-4.5M12 12v9.5"/>
+        </svg>
+        <div class="option-copy"><div class="option-name">C · Faceted project tile</div><div class="option-effect">Multi-sided, distinctive, abstract</div></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>The standalone Round 2 review artifact is <a href="results/deck-icon-options-round-2.svg">results/deck-icon-options-round-2.svg</a>. Every icon above is inline SVG, not a font or emoji.</figcaption>
+</figure>
+
+<h2>Effect and recommendation</h2>
+<div class="alternatives">
+  <article class="card">
+    <h3>A · Project facets <span class="badge">Recommended</span></h3>
+    <p>An asymmetric project frame contains three visibly different areas and a focus ring. It communicates a console composed of facets while remaining legible at compact rail sizes.</p>
+  </article>
+  <article class="card">
+    <h3>B · Console frame</h3>
+    <p>The strongest console metaphor. Its prompt mark makes it feel operational, but narrows the Deck toward CLI work and under-represents Wiki, settings, and overview panels.</p>
+  </article>
+  <article class="card">
+    <h3>C · Faceted project tile</h3>
+    <p>The most distinctive expression of one multi-sided object. It avoids board grammar completely, but needs the Deck label because its meaning is intentionally abstract.</p>
+  </article>
+</div>
+</section>
+
+<section data-concept-section="round-1">
+<h2>Round 1: rejected direction</h2>
+<div class="rejected">
+  <h3>Card stack, layered planes, and board stack</h3>
+  <p><b>Rejected after Robert's sight review on 28 July 2026.</b> All three motifs interpreted Deck as a card or Kanban-board object. That premise was wrong.</p>
+  <p>The Deck is the project console containing multiple project facets, including settings, Wiki, token usage, and overview panels. Round 1 remains available as decision history in <a href="results/deck-icon-options.svg">the original SVG proof</a>, but none of its paths should be implemented.</p>
+</div>
+</section>
+
+<section data-concept-section="evidence">
+<h2>Located implementation seam</h2>
+<table>
+  <thead><tr><th>Surface</th><th>Current</th><th>Later one-place change</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Explorer Deck row</td>
+      <td><code>frontend/src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.html</code> uses <code>glyph="layout"</code>.</td>
+      <td>Add the picked Round 2 path as one <code>StudioIconName</code>, then change this glyph binding only.</td>
+    </tr>
+    <tr>
+      <td>Project-row Deck shortcut</td>
+      <td>The inline "Open Deck" action uses <code>name="grid"</code>.</td>
+      <td>Optional follow-up for visual consistency after the primary Explorer row is approved.</td>
+    </tr>
+    <tr>
+      <td>Deck tab</td>
+      <td>The tab intentionally reflects the active Deck section through <code>tabIcon()</code>, such as <code>book</code> for Wiki.</td>
+      <td>Leave unchanged. It communicates the active section, not the Deck container.</td>
+    </tr>
+  </tbody>
+</table>
+<ul>
+  <li>Canonical icon component: <code>frontend/src/app/components/studio-icon/studio-icon.component.{ts,html}</code>.</li>
+  <li>Stable test IDs to preserve: <code>studio-explorer-project-hub-*</code> and the existing Deck wrapper <code>studio-explorer-project-deck-*</code>.</li>
+  <li>No source or test file is changed by this concept card. Implementation waits for Robert's pick.</li>
+</ul>
+</section>
+
+<section data-concept-section="open-decisions">
+<h2>Open decision for Robert</h2>
+<p>Pick A, B, or C from Round 2. The recommended default is <b>A · Project facets</b>. No other dependency or product decision is required before the later implementation card can apply the selected path.</p>
+</section>
+</main>
+</body>
+</html>
