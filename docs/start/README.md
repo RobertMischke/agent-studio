@@ -109,6 +109,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
+| Contributor source-build setup | [operations/setup/contributor-setup.md](../operations/setup/contributor-setup.md) |
 | GitHub repository metadata recommendations | [repo-metadata.md](../repo-metadata.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner / agent host daemon (Linux) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |

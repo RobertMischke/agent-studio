@@ -2,13 +2,17 @@
 
 agent-orchestrator is a local Kanban board that drives your Claude Code, Codex, Copilot, or Gemini CLIs through a sequential task queue per watched project. The product pitch lives in [../../README.md](../../../README.md); the near-term direction lives in [../../ROADMAP.md](../../../ROADMAP.md). The hard rules every CLI driving the repo must follow are in [../../AGENTS.md](../../../AGENTS.md).
 
-This folder is the **operator-facing setup guide**. [getting-started.md](./getting-started.md) is the full step-by-step walkthrough - start there. The other pages go deeper on one topic each: attaching a new project to the board, onboarding a new CLI agent, what a good first task looks like, and what to check when something is off.
+This folder is the **operator-facing setup guide**.
+[getting-started.md](./getting-started.md) is the single new-user installation
+path. The other pages cover contributor builds, attaching a project, onboarding
+an agent CLI, first tasks, and troubleshooting.
 
 ## Pages
 
 | File | Use it when |
 |---|---|
-| [getting-started.md](./getting-started.md) | First time setting up an instance at all: prerequisites, install, start, onboard a project, run a first task, troubleshooting quick list - start here. |
+| [getting-started.md](./getting-started.md) | The single new-user installation path: Docker Compose prerequisites, one start command, health checks, persistence, and troubleshooting - start here. |
+| [contributor-setup.md](./contributor-setup.md) | Source-build workflow for contributors who need to edit, test, or debug Agent Studio itself. Not a product installation path. |
 | [onboard-a-project.md](./onboard-a-project.md) | Product workflow for project creation through the UI or API, central task-store rules, runtime activation, and troubleshooting. |
 | [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) | A new CLI (Claude, Codex, Copilot, Gemini) needs to be installed and made auto-runnable on this machine. Includes the load-bearing **Codex on Windows sandbox quirk**. |
 | [your-first-task.md](./your-first-task.md) | First time using the board on a new project: what to queue, how to watch it run, what counts as a good first task vs. an anti-pattern. |

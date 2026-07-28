@@ -7,9 +7,10 @@ COPY . ./
 RUN dotnet publish backend/OrchestratorApi.csproj -c Release -o /app /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
+# curl: Compose uses the public health endpoint as its readiness contract.
 # git: GitService shells out for merges, worktrees, and integration pushes.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git openssh-client \
+ && apt-get install -y --no-install-recommends curl git openssh-client \
  && rm -rf /var/lib/apt/lists/* \
  && git config --system safe.directory '*'
 WORKDIR /app
