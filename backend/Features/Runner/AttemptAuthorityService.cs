@@ -540,7 +540,25 @@ public sealed class AttemptAuthorityService
             if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, Normalize(attemptId));
             var deliveryKey = DeliveryKey("claim", idempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
-                return ClassifyReviewLeaseReplay(review, executorId, claimDeliveryKey: deliveryKey);
+            {
+                var replay = ClassifyReviewLeaseReplay(review, executorId, claimDeliveryKey: deliveryKey);
+                // A crash-restarted executor re-claims with the same identity and
+                // therefore the same delivery key. Once the recorded lease is dead
+                // there is no surviving authority to replay - this is a takeover
+                // request, so fall through and mint a fresh lease instead of
+                // bouncing the claim poll with LeaseExpired (which crash-looped
+                // the review daemon: claim -> run -> lease dies -> 409 -> restart).
+                if (replay.Status != AttemptWriteStatus.LeaseExpired)
+                    return replay;
+                // BUT: if the dead lease was claimed with exactly this delivery
+                // key, the claiming PROCESS is still alive (a restart changes the
+                // instance id and thus the key) and its executor may still be
+                // running - minting a fresh fence here would double-execute the
+                // review and discard the first run as StaleFence. Keep answering
+                // LeaseExpired; the daemon's in-flight dedup skips the re-claim.
+                if (Same(review.CurrentClaimDeliveryKey, deliveryKey))
+                    return replay;
+            }
             if (!IsCurrentReview(review) || Terminal(review.State))
                 return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
             var now = _utcNow();

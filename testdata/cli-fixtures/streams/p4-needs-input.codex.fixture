@@ -1,0 +1,5 @@
+#! {"scenario":"P4","title":"[[TASK_NEEDS_INPUT:...]] with a question","cli":"codex","form":"stream-json","exitCode":0}
+{"type":"thread.started","thread_id":"019dee78-1f55-7c40-b8a3-6be0d9142c88"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I need a decision before I can write the migration.\n\n[[TASK_NEEDS_INPUT:choose-primary-column]]"}}
+{"type":"turn.completed","usage":{"input_tokens":7712,"cached_input_tokens":1024,"output_tokens":120,"reasoning_output_tokens":16}}

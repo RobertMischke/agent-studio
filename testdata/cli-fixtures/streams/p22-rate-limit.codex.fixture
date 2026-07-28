@@ -1,0 +1,10 @@
+#! {"scenario":"P22","title":"Codex analogue: no rate_limit_event frame, the limit surfaces as turn.failed","cli":"codex","form":"stream-json","exitCode":1}
+# Codex has no informational rate-limit frame. Its quota signal arrives as a
+# terminal turn.failed, which today's adapter classifies as QuotaExceeded ->
+# WaitForCapabilityRecovery. Recorded so the CAR path cannot quietly turn the
+# quota case into a plain CliCrash.
+{"type":"thread.started","thread_id":"019dee85-2a44-7d18-9f31-c0b7e5a41f60"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Starting the change."}}
+!stderr codex: stream error: rate limit exceeded
+{"type":"turn.failed","error":{"message":"rate limit exceeded; retry after 5h"}}

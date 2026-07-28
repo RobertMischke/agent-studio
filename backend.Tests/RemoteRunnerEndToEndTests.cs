@@ -896,6 +896,77 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             completedProjection!.CurrentReviewSubject!.RepositoryId);
     }
 
+    /// <summary>
+    /// T0b (CAR migration plan §3 T0b / §7 AP3): the claim carries the card's
+    /// execution specification, and the runner turns it into the CLI invocation.
+    /// Before this, a remote run took its CLI, model and reasoning level from the
+    /// host's <c>RUNNER_CLI_*</c> environment — the card's choice was honoured
+    /// locally and silently dropped remotely.
+    ///
+    /// <para>
+    /// Two cards in one claim sequence prove both halves: a claude card whose
+    /// pinned rung is supported travels through verbatim, and a codex card whose
+    /// rung the model does not offer is resolved server-side to a supported one
+    /// instead of reaching the CLI as an invalid flag value.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Daemon_claim_carries_the_cards_execution_spec_and_the_runner_builds_its_cli_args()
+    {
+        SeedTask(TaskStates.Ready, "AGT-SPEC-CLAUDE", "Spec on the wire", "Prompt.",
+            cliType: "claude", model: "claude-opus-4-8", thinkingLevel: "max", order: 1);
+        SeedTask(TaskStates.Ready, "AGT-SPEC-CODEX", "Spec on the wire, other CLI", "Prompt.",
+            cliType: "codex", model: "gpt-5.6-codex", thinkingLevel: "max", order: 2);
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner",
+            IdempotencyKey: "spec-claim-claude"));
+
+        Assert.Equal(RClaimStatus.Claimed, claim.Status);
+        Assert.Equal("AGT-SPEC-CLAUDE", claim.JobId);
+        Assert.NotNull(claim.RunSpec);
+        Assert.Equal("claude", claim.RunSpec!.CliType);
+        Assert.Equal("claude-opus-4-8", claim.RunSpec.Model);
+        Assert.Equal("max", claim.RunSpec.ThinkingLevel);
+        // Both modes resolve from live project settings, so they are always
+        // stated; the runner transports them but does not yet build flags.
+        Assert.False(string.IsNullOrWhiteSpace(claim.RunSpec.PermissionMode));
+        Assert.False(string.IsNullOrWhiteSpace(claim.RunSpec.ContextMode));
+
+        var claudeInvocation = Runner::AgentRunner.AgentCliProcess.Resolve(
+            RunnerOptions("claude"), claim.RunSpec);
+        Assert.Equal("claude", claudeInvocation.FileName);
+        Assert.Equal(["--model", "claude-opus-4-8", "--effort", "max"], claudeInvocation.Arguments);
+
+        var codexClaim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner",
+            IdempotencyKey: "spec-claim-codex"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, codexClaim.Status);
+        Assert.Equal("AGT-SPEC-CODEX", codexClaim.JobId);
+        Assert.Equal("codex", codexClaim.RunSpec!.CliType);
+        Assert.Equal("gpt-5.6-codex", codexClaim.RunSpec.Model);
+        // Codex has no "max" rung; the server resolves the card's request against
+        // the model's ladder rather than shipping an invalid selector.
+        Assert.Equal("medium", codexClaim.RunSpec.ThinkingLevel);
+
+        // The card routes to the other CLI, so RUNNER_CLI_BIN / RUNNER_CLI_ARGS
+        // stop being the truth: the codex binary and its minimal headless form win.
+        var codexInvocation = Runner::AgentRunner.AgentCliProcess.Resolve(
+            RunnerOptions("claude"), codexClaim.RunSpec);
+        Assert.Equal("codex", codexInvocation.FileName);
+        Assert.Equal(
+            ["exec", "--experimental-json", "-m", "gpt-5.6-codex", "-c", "model_reasoning_effort=\"medium\"", "-"],
+            codexInvocation.Arguments);
+    }
+
     [Fact]
     public async Task Remote_assigned_ready_epic_completes_planning_with_children_and_no_runner_branch()
     {
@@ -1738,14 +1809,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     private void SeedTask(
         string state, string key, string title, string promptBody,
         string kind = TaskKinds.Task, string? cliType = null, string? model = null,
-        string? watchPath = null,
-        int order = 1)
+        string? thinkingLevel = null, string? watchPath = null, int order = 1)
     {
         var dir = Path.Combine(watchPath ?? _watchPath, state, key);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"), JsonSerializer.Serialize(new
         {
-            id = key, title, state, order, agent = cliType ?? "claude", kind, cliType, model,
+            id = key, title, state, order, agent = cliType ?? "claude", kind, cliType, model, thinkingLevel,
         }));
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), "Result: pending.");

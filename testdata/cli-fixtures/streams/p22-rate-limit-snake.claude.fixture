@@ -1,0 +1,7 @@
+#! {"scenario":"P22","title":"rate_limit_event, snake_case fields plus ISO reset timestamp","cli":"claude","form":"stream-json","exitCode":0}
+# Same run, the other casing, plus an ISO-8601 resets_at and a stringified
+# boolean - the tolerance CAR-E has to grow. Terminal verdict is identical.
+{"type":"system","subtype":"init","session_id":"9f3b7e5d-14c8-4a02-bb6f-2c81d4907e13","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit"],"slash_commands":[]}
+{"type":"rate_limit_event","unknown_top_level":{"future":true},"rate_limit_info":{"rate_limit_type":"seven_day","status":"allowed_warning","resets_at":"2026-07-30T12:00:00Z","overage_status":"not_allowed","is_using_overage":"true","future_field":[1,2,3]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Continuing despite the weekly window warning."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":77220,"num_turns":7,"result":"Applied the change and verified it.\n\n[[TASK_DONE]]","session_id":"9f3b7e5d-14c8-4a02-bb6f-2c81d4907e13","total_cost_usd":0.2044,"usage":{"input_tokens":1330,"cache_creation_input_tokens":900,"cache_read_input_tokens":30440,"output_tokens":410}}

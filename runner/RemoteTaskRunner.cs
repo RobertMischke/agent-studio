@@ -91,7 +91,8 @@ public sealed class RemoteTaskRunner
         string? defaultBranch = null,
         string? taskKind = null,
         string? runId = null,
-        string? leaseInstanceId = null)
+        string? leaseInstanceId = null,
+        RunSpecDto? runSpec = null)
     {
         var isProjectClone = !string.IsNullOrWhiteSpace(projectId);
         if (isProjectClone && string.IsNullOrWhiteSpace(repositoryUrl))
@@ -109,7 +110,7 @@ public sealed class RemoteTaskRunner
             _options, taskKey, _log, projectId, repositoryUrl, defaultBranch, isProjectClone);
         var slot = _state.Create(
             taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
-            projectId, repositoryUrl, defaultBranch, taskKind);
+            projectId, repositoryUrl, defaultBranch, taskKind, runSpec);
         return await RunPersistedAsync(slot, workspace, shutdown, reattach: false);
     }
 
@@ -491,6 +492,7 @@ public sealed class RemoteTaskRunner
                 $"authoritativeBaseSha={recovery.AuthoritativeBaseSha}");
         }
 
+        var runSpec = slot.RunSpec;
         string prompt;
         if (epicPlanning)
         {
@@ -499,6 +501,18 @@ public sealed class RemoteTaskRunner
                 ?? throw new InvalidOperationException("Server returned no Epic planning prompt.");
             prompt = planning.Prompt;
             shipper.Add("system", $"[runner] server-rendered Epic decomposition prompt; cli={planning.CliType ?? "default"} model={planning.Model ?? "default"} thinking={planning.ThinkingLevel ?? "default"}");
+            // T0b: the planning endpoint has always answered with the Epic's CLI
+            // selection and the runner has always thrown it away ("logged only").
+            // The claim spec resolves the same source and additionally validates
+            // the reasoning rung against the model, so it wins where it speaks;
+            // the planning response fills whatever it leaves open, which is what a
+            // server without T0b sends.
+            runSpec = new RunSpecDto(
+                runSpec?.CliType ?? planning.CliType,
+                runSpec?.Model ?? planning.Model,
+                runSpec?.ThinkingLevel ?? planning.ThinkingLevel,
+                runSpec?.PermissionMode,
+                runSpec?.ContextMode);
         }
         else
         {
@@ -512,7 +526,22 @@ public sealed class RemoteTaskRunner
         if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, recursive: true);
         Directory.CreateDirectory(resultsDir);
 
-        shipper.Add("system", $"[runner] spawning {_options.CliBin} {_options.CliArgs}");
+        // T0b proof line: which CLI, model and reasoning level this run actually
+        // starts with, and whether that came from the card's spec or from the
+        // host's RUNNER_CLI_* fallback. This is the line the migration's operating
+        // evidence is filtered on, so it is written to the journal as well as to
+        // the task's shipped log.
+        var invocation = AgentCliProcess.Resolve(_options, runSpec);
+        var specLine =
+            $"[runner] spec cli={invocation.CliType} model={invocation.Model ?? "<cli-default>"} " +
+            $"thinking={invocation.ThinkingLevel ?? "<cli-default>"} " +
+            $"permission={runSpec?.PermissionMode ?? "<host-config>"} " +
+            $"context={runSpec?.ContextMode ?? "<host-config>"} " +
+            $"source={(invocation.SpecApplied ? "card" : "runner-options")}" +
+            (invocation.Note is null ? "" : $" note={invocation.Note}");
+        _log(specLine);
+        shipper.Add("system", specLine);
+        shipper.Add("system", $"[runner] spawning {invocation.FileName} {string.Join(' ', invocation.Arguments)}");
         slot = _state.Save(slot with
         {
             WorktreePath = workspace.RepoPath,
@@ -520,13 +549,18 @@ public sealed class RemoteTaskRunner
             // replacement daemon reattaching to the detached worker reads it back
             // from here to complete with a full Result-Envelope.
             BaseSha = workspace.BaseSha ?? slot.BaseSha,
+            // Persist the spec this run actually starts with (an Epic run refines
+            // it from the planning response), so a same-session resume or a
+            // reattaching daemon relaunches the same CLI selection.
+            RunSpec = runSpec,
             Phase = "launching",
         });
         DurableAgentProcess process;
         try
         {
             process = DurableAgentProcess.Start(
-                _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+                _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir,
+                runSpec: runSpec);
         }
         catch (Exception ex)
         {
@@ -631,7 +665,11 @@ public sealed class RemoteTaskRunner
                             workspace.RepoPath,
                             "Continue the interrupted attempt from the durable workspace state. Complete the requested work, verify it, and end with exactly one required [[TASK_*]] terminal sentinel.",
                             ResultsDir(slot.TaskKey),
-                            AgentCliProcess.SplitArgs(resumeArgs));
+                            AgentCliProcess.SplitArgs(resumeArgs),
+                            // RUNNER_CLI_RESUME_ARGS carries only the resume
+                            // handshake; the card's model / reasoning selection
+                            // must survive the second attempt too.
+                            resumeSlot.RunSpec);
                         resumeSlot = _state.Save(resumeSlot with
                         {
                             ProcessId = resumed.ProcessId,

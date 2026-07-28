@@ -135,6 +135,33 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Living_process_reclaim_of_its_own_dead_lease_keeps_answering_LeaseExpired()
+    {
+        var now = new DateTime(2026, 7, 28, 0, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var first = service.ClaimReview(
+            review.AttemptId, "reviewer", "host", 30, "claim-crash").ReviewAttempt!;
+
+        // Same delivery key = the claiming PROCESS is still alive (a restart
+        // changes the instance id and thus the key) and its executor may still
+        // be running. Minting a fresh fence here would double-execute the
+        // review and discard the first run as StaleFence, so the claim keeps
+        // bouncing with LeaseExpired; the daemon's in-flight dedup skips it.
+        // A genuine crash takeover arrives with a NEW key and is covered by
+        // Review_takeover_on_same_attempt_rejects_old_claim_and_renewal_replays.
+        now = now.AddSeconds(31);
+        var reclaimed = service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-crash");
+
+        Assert.Equal(AttemptWriteStatus.LeaseExpired, reclaimed.Status);
+        Assert.Equal(first.LastFence, reclaimed.ReviewAttempt!.LastFence);
+
+        var takeover = service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-after-restart");
+        Assert.Equal(AttemptWriteStatus.Accepted, takeover.Status);
+        Assert.True(takeover.ReviewAttempt!.LastFence > first.LastFence);
+    }
+
+    [Fact]
     public void Review_takeover_on_same_attempt_rejects_old_claim_and_renewal_replays()
     {
         var now = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);

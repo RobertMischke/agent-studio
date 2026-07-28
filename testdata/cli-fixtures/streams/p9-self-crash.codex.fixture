@@ -1,0 +1,6 @@
+#! {"scenario":"P9","title":"self-crash, non-zero exit, no terminal sentinel","cli":"codex","form":"stream-json","exitCode":1}
+{"type":"thread.started","thread_id":"019dee81-6d70-7bb4-8c22-0e5a91f7c603"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Starting the migration edit."}}
+!stderr codex: stream disconnected before completion
+{"type":"turn.failed","error":{"message":"stream disconnected before completion"}}

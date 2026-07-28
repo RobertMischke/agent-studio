@@ -1,0 +1,10 @@
+#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","form":"plaintext","exitCode":0}
+# Today's remote alt path: claude -p with the prompt on stdin and NO
+# --output-format, so the runner classifies raw prose. Same scenario, same
+# terminal verdict, different bytes - this is the pair P1 parity compares.
+I read the failing test, patched the scanner, and re-ran the suite.
+All 214 tests pass.
+
+Implemented the scanner fix and verified the suite.
+
+[[TASK_DONE]]
