@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "compose:inspect": "node compose-harness.mjs inspect",
+    "compose:run": "node compose-harness.mjs run"
   }
 }

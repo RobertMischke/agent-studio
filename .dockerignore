@@ -1,4 +1,5 @@
 .git
+.tmp
 # Never let runner identity/tokens enter any build context or layer.
 runner.env
 **/runner.env

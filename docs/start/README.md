@@ -117,6 +117,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |
 | Execution hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](../operations/setup/remote-runner-persistent-connection.md) |
+| Remote three-unit Compose infrastructure harness | [operations/setup/remote-compose-test-harness.md](../operations/setup/remote-compose-test-harness.md) |
 | Common problems | [common-problems/README.md](../operations/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [concepts/designated-topics/README.md](../concepts/designated-topics/README.md) |
 | API project identity / watchPath | [concepts/api-project-identity-and-watchpath.md](../concepts/api-project-identity-and-watchpath.md) |

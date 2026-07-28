@@ -153,9 +153,12 @@ state.
   infrastructure scenarios. The `reference-change` manifest drives the public
   v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
   review, and reviewed fixture integration with stable-seed semantic
-  acceptance. Phase hooks observe claim, run, gate, review, and integration
-  without adding scheduler-only branches. It never targets stable or the
-  managed task workspace.
+  acceptance. Its explicit `remote-integration` Compose profile adds the
+  disposable Task Server, deterministic Agent Runner protocol process,
+  production Studio UI, and two-link fault proxy used for remote-host rolling
+  replacement and partition evidence. Phase hooks observe claim, run, gate,
+  review, and integration without adding scheduler-only branches. It never
+  targets stable or the managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing

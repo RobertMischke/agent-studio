@@ -45,3 +45,66 @@ Task Server:
 ```bash
 REMOTE_TEST_SUITE_INTEGRATION=1 npm --prefix tools/remote-test-suite test
 ```
+
+## Three-unit Docker Compose harness
+
+The remote-host harness provisions a separate Task Server, deterministic Agent
+Runner protocol process, and production Studio UI. A small TCP proxy is the only
+supporting service. It supplies named Runner and Studio links so partitions are
+deterministic and do not disconnect or enumerate unrelated Docker networks.
+
+Inspect every resource and lifecycle operation without changing Docker:
+
+```bash
+node tools/remote-test-suite/compose-harness.mjs inspect \
+  --run-id "$(date -u +%Y%m%d-%H%M%S | tr '[:upper:]' '[:lower:]')"
+```
+
+Run the complete acceptance workflow on a Docker host such as
+`agent-runner-01`:
+
+```bash
+node tools/remote-test-suite/compose-harness.mjs run \
+  --run-id "$(date -u +%Y%m%d-%H%M%S)"
+```
+
+That one command uses the explicit `remote-integration` Compose profile,
+builds and health-gates the isolated stack, runs `reference-change`, partitions
+and replaces Studio and Runner while a lease is active, then replaces Task
+Server. The Task Server update must quarantine the old attempt, reject its
+stale completion, and accept a higher-fenced recovery only after the old Runner
+container is positively gone. It exports versions, logs, container inspection,
+API history, audits, invariant state, and assertions below
+`.tmp/remote-test-suite/compose/<run-id>/evidence/`. Finally it drains the
+server, proves there is no unresolved authority, and removes only containers,
+volumes, networks, and images under the run's harness identity. Add `--keep`
+only for interactive diagnosis.
+
+The unit controls are available after `up`:
+
+```bash
+node tools/remote-test-suite/compose-harness.mjs up --run-id rehearsal-01
+node tools/remote-test-suite/compose-harness.mjs control partition runner --run-id rehearsal-01
+node tools/remote-test-suite/compose-harness.mjs control heal runner --run-id rehearsal-01
+node tools/remote-test-suite/compose-harness.mjs control replace studio --run-id rehearsal-01
+node tools/remote-test-suite/compose-harness.mjs down --run-id rehearsal-01
+```
+
+`stop`, `restart`, `replace`, `partition`, and `heal` accept `studio`,
+`task-server`, or `runner`. Task Server stop, restart, and replacement first
+enter `Draining` and call `prepare-shutdown`. They refuse unresolved authority
+unless `--force` is explicit. Successful restart and replacement wait for
+readiness before returning Task Server to `Normal`; stop deliberately leaves
+the persisted mode unchanged. The full acceptance workflow uses a forced
+restart only to verify the documented fail-closed recovery contract.
+
+The Docker scenario stays opt-in:
+
+```bash
+REMOTE_TEST_COMPOSE_INTEGRATION=1 npm --prefix tools/remote-test-suite test
+```
+
+Routine `npm test` runs only fake and plan-level checks. The harness never
+selects a model or provider CLI, runs a benchmark, or compares models. The
+Runner image contains the production `agent-host` binary for version capture,
+but its deterministic harness process drives only the public lease protocol.

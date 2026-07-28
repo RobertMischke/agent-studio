@@ -19,7 +19,7 @@ import {
 import { spawn } from 'node:child_process';
 
 class Api {
-  constructor(baseUrl, runId) {
+  constructor(baseUrl, runId, authToken = null) {
     this.baseUrl = baseUrl;
     this.headers = {
       'Content-Type': 'application/json',
@@ -28,6 +28,7 @@ class Api {
       'X-Task-Protocol-Version': '2',
       'X-Task-Client-Version': 'remote-test-suite/1'
     };
+    if (authToken) this.headers.Authorization = `Bearer ${authToken}`;
   }
   async get(route) { return await this.request('GET', route); }
   async post(route, body) { return await this.request('POST', route, body); }
@@ -47,6 +48,7 @@ class Api {
 const suiteRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(suiteRoot, '..', '..');
 const args = parseArgs(process.argv.slice(2));
+const authToken = await readAuthToken(args.authTokenFile);
 const manifestPath = path.join(suiteRoot, 'scenarios', `${args.scenario}.json`);
 const manifest = validateManifest(await readJson(manifestPath));
 const baseRoot = path.resolve(args.root ?? path.join(repoRoot, '.tmp', 'remote-test-suite'));
@@ -85,7 +87,14 @@ try {
     taskServer?.kill('SIGTERM');
     await cleanupRunRoot(plan.root, baseRoot);
   });
-  const result = await executeScenario({ manifest, root: plan.root, serverUrl, seed: args.seed, runId: args.runId });
+  const result = await executeScenario({
+    manifest,
+    root: plan.root,
+    serverUrl,
+    seed: args.seed,
+    runId: args.runId,
+    authToken
+  });
   completed = true;
   console.log(JSON.stringify(result, null, 2));
 } finally {
@@ -105,7 +114,7 @@ function parseArgs(values) {
     }
   }
   if (!result.scenario || !result.seed || !result.runId) {
-    throw new Error('Usage: node tools/remote-test-suite/index.mjs --scenario NAME --seed SEED --run-id UNIQUE_ID [--dry-run] [--cleanup]');
+    throw new Error('Usage: node tools/remote-test-suite/index.mjs --scenario NAME --seed SEED --run-id UNIQUE_ID [--auth-token-file PATH] [--dry-run] [--cleanup]');
   }
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(result.seed) || !/^[A-Za-z0-9._-]{1,80}$/.test(result.runId)) {
     throw new Error('Seed and run id must use only letters, digits, dot, underscore, or hyphen.');
@@ -124,6 +133,14 @@ async function availablePort() {
       server.close(() => resolve(address.port));
     });
   });
+}
+
+async function readAuthToken(file) {
+  if (!file) return null;
+  const resolved = path.resolve(file);
+  const token = (await readFile(resolved, 'utf8')).trim();
+  if (token.length < 32) throw new Error('The authentication token file must contain at least 32 characters.');
+  return token;
 }
 
 async function seedFixture(root, manifest, seed) {
@@ -185,14 +202,14 @@ async function startTaskServer(root, serverUrl) {
 }
 
 async function executeScenario(context) {
-  const { manifest, root, serverUrl, seed, runId } = context;
+  const { manifest, root, serverUrl, seed, runId, authToken } = context;
   const variables = { suiteRoot, repoRoot, seed, runId };
   const phaseFile = path.join(root, 'phases.jsonl');
   const outboxFile = path.join(root, 'outbox.jsonl');
   const origin = path.join(root, 'fixture-origin.git');
   const ids = Object.fromEntries(Object.entries(manifest.resources)
     .map(([key, value]) => [key, interpolate(value, variables)]));
-  const api = new Api(serverUrl, runId);
+  const api = new Api(serverUrl, runId, authToken);
 
   const hook = async (phase, point, detail = {}) => {
     await appendJsonl(phaseFile, { phase, point, ...detail });
