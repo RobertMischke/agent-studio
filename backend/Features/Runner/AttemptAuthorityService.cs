@@ -13,10 +13,10 @@ namespace AgentStudio.Runner;
 public sealed class AttemptAuthorityService
 {
     public const string RelativePath = ".metadata/attempt-authority.json";
-    public const int DefaultTerminalRetentionDays = 14;
+    public const int DefaultTerminalRetentionCount = 2_000;
     public const int ReviewInfrastructureRetryBudget = 3;
     public const string UnmaterializableReviewSubjectReason = "review-subject-unmaterialisierbar";
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private const int ArchiveSchemaVersion = 1;
     private const string ArchiveFilePattern = "attempt-authority.archive-*.json";
     private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
@@ -32,7 +32,7 @@ public sealed class AttemptAuthorityService
     private readonly ILogger<AttemptAuthorityService> _logger;
     private readonly Func<DateTime> _utcNow;
     private readonly IAtomicJsonFileWriter _writer;
-    private readonly TimeSpan _terminalRetention;
+    private readonly int _terminalRetentionCount;
     private AuthorityState _state;
 
     public AttemptAuthorityService(
@@ -50,11 +50,10 @@ public sealed class AttemptAuthorityService
         var requiresCompactionMigration = _state.SchemaVersion < CurrentSchemaVersion;
         NormalizeLoadedState();
         if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
-        var retentionDays = configuration.GetValue<int?>("AttemptAuthority:TerminalRetentionDays")
-            ?? DefaultTerminalRetentionDays;
-        if (retentionDays <= 0)
-            throw new InvalidDataException("AttemptAuthority:TerminalRetentionDays must be greater than zero.");
-        _terminalRetention = TimeSpan.FromDays(retentionDays);
+        _terminalRetentionCount = configuration.GetValue<int?>("AttemptAuthority:TerminalRetentionCount")
+            ?? DefaultTerminalRetentionCount;
+        if (_terminalRetentionCount <= 0)
+            throw new InvalidDataException("AttemptAuthority:TerminalRetentionCount must be greater than zero.");
         if (requiresCompactionMigration && _path is not null)
             PersistLocked(forceCompaction: true);
     }
@@ -843,14 +842,14 @@ public sealed class AttemptAuthorityService
 
     public RunAttemptDto? GetRun(string attemptId)
     {
-        lock (_gate) return FindRunForHistory(attemptId) is { } run ? ToDto(run) : null;
+        lock (_gate) return FindRun(attemptId) is { } run ? ToDto(run) : null;
     }
 
     public AgentStudio.TaskServer.Contracts.ResultHandoffDto? GetResultHandoff(string attemptId)
     {
         lock (_gate)
         {
-            var run = FindRunForHistory(attemptId);
+            var run = FindRun(attemptId);
             if (run?.ResultEnvelope is null || Blank(run.ResultEnvelopeDigest)) return null;
             var acknowledgedAt = run.TerminalAt ?? run.CreatedAt;
             return new AgentStudio.TaskServer.Contracts.ResultHandoffDto(
@@ -865,15 +864,17 @@ public sealed class AttemptAuthorityService
 
     public ReviewAttemptDto? GetReview(string attemptId)
     {
-        lock (_gate) return FindReviewForHistory(attemptId) is { } review ? ToDto(review) : null;
+        lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
     }
 
     public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
+        // Archive I/O is an explicit history operation and must never hold the
+        // authority gate needed by claim, lease, and report traffic.
+        var archives = includeArchived ? LoadArchivesForHistory() : [];
         lock (_gate)
         {
             var key = Normalize(taskKey);
-            var archives = includeArchived ? LoadArchivesForHistory() : [];
             var runs = _state.RunAttempts
                 .Concat(archives.SelectMany(archive => archive.RunAttempts))
                 .Where(x => Same(x.TaskKey, key))
@@ -1088,14 +1089,6 @@ public sealed class AttemptAuthorityService
 
     private RunAttemptRecord? FindRun(string id) => _state.RunAttempts.FirstOrDefault(x => Same(x.AttemptId, id));
     private ReviewAttemptRecord? FindReview(string id) => _state.ReviewAttempts.FirstOrDefault(x => Same(x.AttemptId, id));
-    private RunAttemptRecord? FindRunForHistory(string id)
-        => FindRun(id) ?? LoadArchivesForHistory()
-            .SelectMany(archive => archive.RunAttempts)
-            .FirstOrDefault(x => Same(x.AttemptId, id));
-    private ReviewAttemptRecord? FindReviewForHistory(string id)
-        => FindReview(id) ?? LoadArchivesForHistory()
-            .SelectMany(archive => archive.ReviewAttempts)
-            .FirstOrDefault(x => Same(x.AttemptId, id));
     private RunAttemptRecord? FindIdempotentRun(string taskKey, string key) => _state.RunAttempts.FirstOrDefault(
         x => Same(x.TaskKey, taskKey) && x.IdempotencyKeys.Contains(key));
     private ReviewAttemptRecord? FindIdempotentReview(string taskKey, string key) => _state.ReviewAttempts.FirstOrDefault(
@@ -1176,10 +1169,44 @@ public sealed class AttemptAuthorityService
     private void CompactTerminalAttemptsLocked(bool force)
     {
         var now = _utcNow();
+        var newestTerminalAttempts = _state.RunAttempts
+            .Where(run => Terminal(run.State))
+            .Select(run => new TerminalAttemptReference(
+                run.AttemptId,
+                IsReview: false,
+                run.TerminalAt ?? run.CreatedAt,
+                run.CreatedAt))
+            .Concat(_state.ReviewAttempts
+                .Where(review => Terminal(review.State))
+                .Select(review => new TerminalAttemptReference(
+                    review.AttemptId,
+                    IsReview: true,
+                    review.TerminalAt ?? review.CreatedAt,
+                    review.CreatedAt)))
+            .OrderByDescending(attempt => attempt.TerminalAt)
+            .ThenByDescending(attempt => attempt.CreatedAt)
+            .ThenByDescending(attempt => attempt.AttemptId, StringComparer.Ordinal)
+            .Take(_terminalRetentionCount)
+            .ToList();
+        var terminalAttemptCount = _state.RunAttempts.Count(run => Terminal(run.State))
+            + _state.ReviewAttempts.Count(review => Terminal(review.State));
+        if (terminalAttemptCount <= _terminalRetentionCount)
+        {
+            if (force)
+                _state.LastCompactedAt = now;
+            return;
+        }
         if (!force && _state.LastCompactedAt?.Date >= now.Date)
             return;
 
-        var cutoff = now.Subtract(_terminalRetention);
+        var retainedRunIds = newestTerminalAttempts
+            .Where(attempt => !attempt.IsReview)
+            .Select(attempt => attempt.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retainedReviewIds = newestTerminalAttempts
+            .Where(attempt => attempt.IsReview)
+            .Select(attempt => attempt.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var protectedReviewIds = new HashSet<string>(
             _state.CurrentReviewByTask.Values,
             StringComparer.OrdinalIgnoreCase);
@@ -1202,8 +1229,7 @@ public sealed class AttemptAuthorityService
         var archivedReviews = _state.ReviewAttempts
             .Where(review => EligibleForArchive(
                 review.State,
-                review.TerminalAt,
-                cutoff,
+                retainedReviewIds.Contains(review.AttemptId),
                 protectedReviewIds.Contains(review.AttemptId)))
             .ToList();
         var archivedReviewIds = archivedReviews
@@ -1216,6 +1242,8 @@ public sealed class AttemptAuthorityService
         var protectedRunIds = new HashSet<string>(
             _state.CurrentRunByTask.Values,
             StringComparer.OrdinalIgnoreCase);
+        foreach (var run in _state.RunAttempts.Where(run => !Terminal(run.State)))
+            protectedRunIds.Add(run.AttemptId);
         foreach (var review in retainedReviews)
             protectedRunIds.Add(review.SourceRunAttemptId);
         foreach (var subject in _state.CurrentSubjectByTask.Values)
@@ -1224,8 +1252,7 @@ public sealed class AttemptAuthorityService
         var archivedRuns = _state.RunAttempts
             .Where(run => EligibleForArchive(
                 run.State,
-                run.TerminalAt,
-                cutoff,
+                retainedRunIds.Contains(run.AttemptId),
                 protectedRunIds.Contains(run.AttemptId)))
             .ToList();
 
@@ -1253,11 +1280,11 @@ public sealed class AttemptAuthorityService
             _state.RunAttempts.RemoveAll(run => archivedRunIds.Contains(run.AttemptId));
             _state.ReviewAttempts.RemoveAll(review => archivedReviewIds.Contains(review.AttemptId));
             _logger.LogInformation(
-                "attempt-authority-compacted archive={ArchivePath} runs={RunCount} reviews={ReviewCount} cutoff={Cutoff:o}",
+                "attempt-authority-compacted archive={ArchivePath} runs={RunCount} reviews={ReviewCount} terminalRetentionCount={TerminalRetentionCount}",
                 archivePath,
                 archivedRuns.Count,
                 archivedReviews.Count,
-                cutoff);
+                _terminalRetentionCount);
         }
 
         _state.LastCompactedAt = now;
@@ -1265,13 +1292,11 @@ public sealed class AttemptAuthorityService
 
     private static bool EligibleForArchive(
         AttemptLifecycleState state,
-        DateTime? terminalAt,
-        DateTime cutoff,
+        bool retainedByCount,
         bool protectedRecord)
         => !protectedRecord
            && Terminal(state)
-           && terminalAt is { } completedAt
-           && completedAt < cutoff;
+           && !retainedByCount;
 
     private string ArchivePath(DateTime archivedAt)
     {
@@ -1418,6 +1443,12 @@ public sealed class AttemptAuthorityService
         public List<RunAttemptRecord> RunAttempts { get; set; } = [];
         public List<ReviewAttemptRecord> ReviewAttempts { get; set; } = [];
     }
+
+    private sealed record TerminalAttemptReference(
+        string AttemptId,
+        bool IsReview,
+        DateTime TerminalAt,
+        DateTime CreatedAt);
 
     private sealed class AttemptLeaseRecord
     {

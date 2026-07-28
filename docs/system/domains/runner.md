@@ -133,17 +133,19 @@ state.
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
-  forget. Terminal attempts older than 14 days by default are compacted at most
-  once per UTC day into
+  forget. Terminal attempts beyond the newest 2,000 by default are compacted at
+  most once per UTC day into
   `<TaskRepository>/.metadata/attempt-authority.archive-YYYY-MM-DD.json`.
-  `AttemptAuthority:TerminalRetentionDays` overrides that positive-day
+  `AttemptAuthority:TerminalRetentionCount` overrides that positive-count
   retention. Current attempts, non-terminal attempts, current review retry
   ancestry, and source runs still needed by retained reviews remain in the live
-  store. The bounded retry ancestry needed to enforce the infrastructure retry
-  budget also stays live. Schema version 3 performs the initial rotation during
-  the first start after upgrade. Normal startup, claim, fencing, and persistence
-  load only `attempt-authority.json`; explicit history reads may load the
-  archives.
+  store in addition to that newest-terminal budget. The bounded retry ancestry
+  needed to enforce the infrastructure retry budget also stays live. Schema
+  version 4 performs the initial rotation during the first start after upgrade.
+  Normal startup, claim, fencing, persistence, and individual run or review
+  lookups load only `attempt-authority.json`; archived records are available
+  only through explicit task history reads, whose archive I/O happens without
+  holding the authority gate.
   Archived records retain their complete scoped idempotency keys for debugging,
   but those keys leave the operational replay boundary when their attempt is
   archived.

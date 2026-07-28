@@ -498,10 +498,10 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
-    public void Startup_migration_archives_old_terminal_history_and_keeps_current_and_nonterminal_records()
+    public void Startup_migration_archives_terminal_history_beyond_count_and_keeps_current_and_nonterminal_records()
     {
         var now = new DateTime(2026, 7, 1, 10, 0, 0, DateTimeKind.Utc);
-        var service = NewService(() => now);
+        var service = NewService(() => now, terminalRetentionCount: 1);
         var oldRun = service.AcquireRun(
             "AGT-1", "PROJ-1", null, "runner-a", "host-a", 60, "old-run-create").RunAttempt!;
         service.SettleRun(
@@ -538,6 +538,7 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             ReviewTerminalOutcome.InfrastructureFailure,
             "SnapshotUnavailable"));
 
+        now = now.AddMinutes(1);
         var currentRun = service.AcquireRun(
             "AGT-1",
             "PROJ-1",
@@ -575,13 +576,13 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
 
         var livePath = Path.Combine(_root, AttemptAuthorityService.RelativePath);
         var legacyJson = JsonNode.Parse(File.ReadAllText(livePath))!.AsObject();
-        legacyJson["schemaVersion"] = 2;
+        legacyJson["schemaVersion"] = 3;
         File.WriteAllText(livePath, legacyJson.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = true,
         }));
 
-        now = now.AddDays(15);
+        now = now.AddHours(1);
         var legacyLiveJson = File.ReadAllText(livePath);
         var failingWriter = new ControllableAtomicJsonFileWriter
         {
@@ -590,10 +591,10 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
                 livePath,
                 StringComparison.OrdinalIgnoreCase),
         };
-        Assert.Throws<IOException>(() => NewService(() => now, failingWriter));
+        Assert.Throws<IOException>(() => NewService(() => now, failingWriter, terminalRetentionCount: 1));
         Assert.Equal(legacyLiveJson, File.ReadAllText(livePath));
 
-        var restarted = NewService(() => now);
+        var restarted = NewService(() => now, terminalRetentionCount: 1);
         var archivePath = Assert.Single(
             Directory.GetFiles(
                 Path.GetDirectoryName(livePath)!,
@@ -636,17 +637,17 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Single(liveProjection.ReviewAttempts);
         Assert.Equal(2, historicalProjection.RunAttempts.Count);
         Assert.Equal(2, historicalProjection.ReviewAttempts.Count);
-        Assert.Equal(oldRun.AttemptId, restarted.GetRun(oldRun.AttemptId)!.AttemptId);
-        Assert.Equal(oldReview.AttemptId, restarted.GetReview(oldReview.AttemptId)!.AttemptId);
+        Assert.Null(restarted.GetRun(oldRun.AttemptId));
+        Assert.Null(restarted.GetReview(oldReview.AttemptId));
 
         var liveAfterMigration = File.ReadAllText(livePath);
         var archiveAfterMigration = File.ReadAllText(archivePath);
-        _ = NewService(() => now.AddHours(1));
+        _ = NewService(() => now.AddHours(1), terminalRetentionCount: 1);
         Assert.Equal(liveAfterMigration, File.ReadAllText(livePath));
         Assert.Equal(archiveAfterMigration, File.ReadAllText(archivePath));
 
         var sameDayWriter = new ControllableAtomicJsonFileWriter();
-        var sameDayService = NewService(() => now.AddHours(2), sameDayWriter);
+        var sameDayService = NewService(() => now.AddHours(2), sameDayWriter, terminalRetentionCount: 1);
         sameDayService.AcquireRun(
             "AGT-3",
             "PROJ-1",
@@ -657,6 +658,101 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "same-day-run-create");
         Assert.Equal(0, sameDayWriter.WritesFor(archivePath));
         Assert.Equal(1, sameDayWriter.WritesFor(livePath));
+    }
+
+    [Fact]
+    public void Startup_migration_shrinks_representative_young_terminal_snapshot()
+    {
+        const int runCount = 273;
+        const int reviewCount = 11_700;
+        const int retentionCount = 2_000;
+        var now = new DateTime(2026, 7, 28, 2, 0, 0, DateTimeKind.Utc);
+        var padding = new string('x', 1_400);
+        var runs = Enumerable.Range(0, runCount)
+            .Select(index => new
+            {
+                attemptId = $"run-{index:D5}",
+                taskKey = $"AGT-{index:D5}",
+                repositoryId = "PROJ-002",
+                state = AttemptLifecycleState.Completed,
+                lastFence = 1,
+                authorityEpoch = 1,
+                createdAt = now.AddHours(-2).AddTicks(index),
+                terminalAt = now.AddHours(-1).AddTicks(index),
+                terminalOutcome = "done",
+                idempotencyKeys = new[] { $"acquire:run-create-{index}", $"settle:run-settle-{index}" },
+            })
+            .ToList();
+        var reviews = Enumerable.Range(0, reviewCount)
+            .Select(index => new
+            {
+                attemptId = $"review-{index:D5}",
+                taskKey = $"AGT-{index % runCount:D5}",
+                repositoryId = "PROJ-002",
+                sourceRunAttemptId = $"run-{index % runCount:D5}",
+                state = AttemptLifecycleState.Failed,
+                lastFence = 2,
+                authorityEpoch = 1,
+                createdAt = now.AddMinutes(-30).AddTicks(index),
+                terminalAt = now.AddMinutes(-20).AddTicks(index),
+                outcome = ReviewTerminalOutcome.InfrastructureFailure,
+                failureClassification = "SnapshotUnavailable",
+                terminalReason = padding,
+                idempotencyKeys = new[] { $"create:review-create-{index}", $"settle:review-settle-{index}" },
+                reports = new[]
+                {
+                    new
+                    {
+                        idempotencyKey = $"review-settle-{index}",
+                        fence = 2,
+                        authorityEpoch = 1,
+                        materializedResultSha = "0123456789abcdef",
+                        outcome = ReviewTerminalOutcome.InfrastructureFailure,
+                        failureClassification = "SnapshotUnavailable",
+                        reason = padding,
+                        authorityStatus = AttemptWriteStatus.Accepted,
+                        receivedAt = now.AddMinutes(-20).AddTicks(index),
+                    },
+                },
+            })
+            .ToList();
+        var livePath = Path.Combine(_root, AttemptAuthorityService.RelativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(livePath)!);
+        File.WriteAllText(
+            livePath,
+            JsonSerializer.Serialize(
+                new
+                {
+                    schemaVersion = 3,
+                    authorityEpoch = 1,
+                    runAttempts = runs,
+                    reviewAttempts = reviews,
+                },
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        var beforeBytes = new FileInfo(livePath).Length;
+
+        _ = NewService(() => now, terminalRetentionCount: retentionCount);
+
+        var afterBytes = new FileInfo(livePath).Length;
+        var archivePath = Assert.Single(
+            Directory.GetFiles(
+                Path.GetDirectoryName(livePath)!,
+                "attempt-authority.archive-*.json"));
+        using var liveDocument = JsonDocument.Parse(File.ReadAllText(livePath));
+        using var archiveDocument = JsonDocument.Parse(File.ReadAllText(archivePath));
+        var liveReviews = liveDocument.RootElement.GetProperty("reviewAttempts").EnumerateArray().ToList();
+        var archivedReviews = archiveDocument.RootElement.GetProperty("reviewAttempts").EnumerateArray().ToList();
+
+        Assert.Equal(runCount, liveDocument.RootElement.GetProperty("runAttempts").GetArrayLength());
+        Assert.Equal(retentionCount, liveReviews.Count);
+        Assert.Equal(reviewCount - retentionCount, archivedReviews.Count);
+        Assert.True(afterBytes < beforeBytes / 4, $"Expected at least a 75% reduction, got {beforeBytes} -> {afterBytes} bytes.");
+        Assert.Contains(
+            "settle:review-settle-0",
+            archivedReviews[0].GetProperty("idempotencyKeys").EnumerateArray().Select(key => key.GetString()));
+        Console.WriteLine(
+            $"Representative attempt-authority live size: {beforeBytes} -> {afterBytes} bytes; "
+            + $"reviews: {reviewCount} -> {liveReviews.Count}; archived: {archivedReviews.Count}.");
     }
 
     [Fact]
@@ -681,6 +777,8 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var liveProjection = restarted.GetTaskProjection("AGT-1");
 
         Assert.Equal(run.AttemptId, liveProjection.CurrentRunAttempt!.AttemptId);
+        Assert.Null(restarted.GetRun("run-archived"));
+        Assert.Null(restarted.GetReview("review-archived"));
         Assert.Throws<InvalidDataException>(
             () => restarted.GetTaskProjection("AGT-1", includeArchived: true));
     }
@@ -696,12 +794,14 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
 
     private AttemptAuthorityService NewService(
         Func<DateTime>? now = null,
-        IAtomicJsonFileWriter? writer = null)
+        IAtomicJsonFileWriter? writer = null,
+        int? terminalRetentionCount = null)
     {
         Directory.CreateDirectory(_root);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["TaskRepository"] = _root,
+            ["AttemptAuthority:TerminalRetentionCount"] = terminalRetentionCount?.ToString(),
         }).Build();
         return new AttemptAuthorityService(
             config,
