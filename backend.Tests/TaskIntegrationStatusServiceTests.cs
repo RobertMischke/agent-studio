@@ -119,6 +119,26 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_AbbreviatedAttributedShaOnDevelop_IsIntegrated()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "short-sha.txt"), "delivered");
+        Commit(repo, "feat: delivered under a full git object id");
+        var fullSha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("short-sha", "TE-1", project, repo, log,
+            commits: [Commit(fullSha[..7])]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(fullSha[..7], status.Sha);
+        Assert.Equal("anchor-ancestor", status.Detail);
+    }
+
+    [Fact]
     public void BuildLookup_RecordedRunIntegrationBranch_OverridesProjectAssumption()
     {
         var repo = SeedDevelopMainRepo();
@@ -209,6 +229,71 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Contains(notLanded[..7], status.Detail);
         Assert.Contains("1/2", status.Detail!);
         Assert.DoesNotContain(landed[..7], status.Detail!);
+    }
+
+    [Fact]
+    public void BuildLookup_MissingZeroFileLifecycleMarkers_DoNotMakeDeliveredWorkPartial()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "delivered.txt"), "delivered");
+        Commit(repo, "feat: real deliverable");
+        var delivered = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("marker-noise", "AGT-2302", project, repo, log,
+            commits:
+            [
+                Commit(delivered),
+                Commit("1111111111111111111111111111111111111111") with
+                {
+                    Message = "wip(runner): salvage before teardown - outcome Unknown",
+                    FilesChanged = 0,
+                    Files = [],
+                },
+                Commit("2222222222222222222222222222222222222222") with
+                {
+                    Message = "chore: snapshot for review",
+                    FilesChanged = 0,
+                    Files = [],
+                },
+            ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(delivered[..7], status.Sha);
+        Assert.Equal("anchor-ancestor", status.Detail);
+    }
+
+    [Fact]
+    public void BuildLookup_MissingSnapshotCommitWithChangedFiles_RemainsPartial()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "delivered.txt"), "delivered");
+        Commit(repo, "feat: real deliverable");
+        var delivered = RunGit(repo, "rev-parse develop").Out.Trim();
+        const string missing = "3333333333333333333333333333333333333333";
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("real-snapshot", "AGT-2303", project, repo, log,
+            commits:
+            [
+                Commit(delivered),
+                Commit(missing) with
+                {
+                    Message = "chore: snapshot for review (1 file changed)",
+                    FilesChanged = 1,
+                    Files = ["backend/real-deliverable.cs"],
+                },
+            ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Partial, status.Status);
+        Assert.Contains("1/2", status.Detail);
+        Assert.Contains(missing[..7], status.Detail);
     }
 
     [Fact]
