@@ -313,6 +313,7 @@ public sealed class RemoteTaskRunner
                     teardown,
                     workspace.RepositoryUrl,
                     workspace.BaseSha,
+                    workspace.IntegrationBranchRef,
                     artifactManifest?.Digest,
                     outputLines,
                     sourceMutated,
@@ -343,6 +344,7 @@ public sealed class RemoteTaskRunner
                     WorktreeTeardownResult.NoWork,
                     workspace.RepositoryUrl,
                     baseSha: null,
+                    workspace.IntegrationBranchRef,
                     artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
@@ -395,6 +397,7 @@ public sealed class RemoteTaskRunner
                             teardown,
                             workspace.RepositoryUrl,
                             workspace.BaseSha,
+                            workspace.IntegrationBranchRef,
                             artifactManifest?.Digest,
                             outputLines,
                             sourceMutated,
@@ -941,6 +944,7 @@ public sealed class RemoteTaskRunner
         WorktreeTeardownResult teardown,
         string? repository,
         string? baseSha,
+        string integrationBranch,
         string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
@@ -972,7 +976,8 @@ public sealed class RemoteTaskRunner
             OutcomeDecision: outcomeDecision,
             BaseSha: envelopeBaseSha,
             ImmutableResultRef: envelopeResultRef,
-            ArtifactManifestDigest: envelopeManifestDigest), ct);
+            ArtifactManifestDigest: envelopeManifestDigest,
+            IntegrationBranch: integrationBranch), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}, result-envelope {(envelopeResultRef is null ? "absent" : "attached")}");
     }
 

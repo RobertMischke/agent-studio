@@ -114,7 +114,7 @@ public sealed class TaskIntegrationStatusService
 
         using var _t = GitProcessTelemetry.BeginRequest("board/integration-status", _logger);
 
-        var byRepo = new Dictionary<string, List<TaskInfo>>(StringComparer.OrdinalIgnoreCase);
+        var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
         var noRepo = new List<TaskInfo>();
         foreach (var job in jobs)
         {
@@ -125,10 +125,11 @@ public sealed class TaskIntegrationStatusService
                 noRepo.Add(job);
                 continue;
             }
-            if (!byRepo.TryGetValue(root!, out var list))
+            var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
+            if (!byRepo.TryGetValue(key, out var list))
             {
                 list = new List<TaskInfo>();
-                byRepo[root!] = list;
+                byRepo[key] = list;
             }
             list.Add(job);
         }
@@ -136,31 +137,33 @@ public sealed class TaskIntegrationStatusService
         // Cards with no resolvable repo can still be honestly classified: a card
         // with no anchor commit and no branch is no-branch, anything else pending.
         foreach (var job in noRepo)
-            result[job.TaskKey] = ClassifyNotIntegrated(job, "develop", repoResolved: false);
+            result[job.TaskKey] = ClassifyNotIntegrated(
+                job,
+                ConfiguredIntegrationBranch(job),
+                repoResolved: false);
 
-        var reaches = new ConcurrentDictionary<string, RepoIntegration>(StringComparer.OrdinalIgnoreCase);
+        var reaches = new ConcurrentDictionary<RepoBranchKey, RepoIntegration>();
         Parallel.ForEach(
             byRepo,
             new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
             pair =>
             {
-                var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
-                var cacheKey = $"{pair.Key}\0{configuredBranch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(pair.Key, [configuredBranch]);
+                var cacheKey = $"{pair.Key.Root}\0{pair.Key.Branch}";
+                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(pair.Key.Root, [pair.Key.Branch]);
                 reaches[pair.Key] = _cache.GetOrCreateVersioned(
                     cacheKey,
                     refFingerprint.Value,
                     value => value.Succeeded
                         ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
                         : FailureCacheTtl,
-                    () => ComputeRepoIntegration(pair.Key, configuredBranch));
+                    () => ComputeRepoIntegration(pair.Key.Root, pair.Key.Branch));
             });
 
-        foreach (var (root, repoJobs) in byRepo)
+        foreach (var (repoBranch, repoJobs) in byRepo)
         {
-            var reach = reaches[root];
+            var reach = reaches[repoBranch];
             foreach (var job in repoJobs)
-                result[job.TaskKey] = ClassifyWithRepo(job, reach, root);
+                result[job.TaskKey] = ClassifyWithRepo(job, reach, repoBranch.Root);
         }
 
         return result;
@@ -188,7 +191,7 @@ public sealed class TaskIntegrationStatusService
 
             var branch = _git.ResolveIntegrationBranch(
                 root,
-                ConfiguredIntegrationBranch(job.ProjectName));
+                ConfiguredIntegrationBranch(job));
             return _git.IsAncestor(root, subject.ResultSha, branch);
         }
         catch (Exception ex)
@@ -337,7 +340,7 @@ public sealed class TaskIntegrationStatusService
                 var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
                     ?? WorktreeTaskLifecycle.BranchFor(job.Id);
                 return $"{evidence} Start the integration recovery action to run a steer round: "
-                       + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job.ProjectName)}', "
+                       + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job)}', "
                        + "resolve the conflicts, and deliver the updated branch.";
             }
             // The pre-develop build gate found the merge result red and rolled the
@@ -455,12 +458,11 @@ public sealed class TaskIntegrationStatusService
         });
     }
 
-    private string ConfiguredIntegrationBranch(string projectName)
+    private string ConfiguredIntegrationBranch(TaskInfo task)
     {
-        var configured = _settings.Get(projectName).IntegrationBranch;
-        return string.IsNullOrWhiteSpace(configured)
-            ? new ProjectSettings().IntegrationBranch
-            : configured.Trim();
+        return TaskIntegrationBranch.Resolve(
+            task,
+            _settings.Get(task.ProjectName).IntegrationBranch);
     }
 
     internal void InvalidateCache() => _cache.Invalidate();
@@ -473,4 +475,6 @@ public sealed class TaskIntegrationStatusService
         HashSet<string> DevelopAncestors,
         Dictionary<string, string> MergeShaByKey,
         bool Succeeded);
+
+    private sealed record RepoBranchKey(string Root, string Branch);
 }

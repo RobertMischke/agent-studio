@@ -19,6 +19,7 @@ public sealed class GitWorkspace
     private readonly string? _projectId;
     private readonly bool _isProjectClone;
     private readonly string _workBranch;
+    private string? _preparedIntegrationBranch;
     private string? _startedHead;
     private readonly string? _restoredBaseSha;
     private bool _startedFromSalvage;
@@ -65,6 +66,8 @@ public sealed class GitWorkspace
     /// observe itself.
     /// </summary>
     public string? BaseSha => _startedHead ?? _restoredBaseSha;
+    public string IntegrationBranchRef =>
+        $"refs/heads/{ToBranchName(_preparedIntegrationBranch ?? _baseBranch)}";
     public SalvageReconciliationResult? PickupReconciliation => _pickupReconciliation;
 
     public async Task<string> PrepareAsync(CancellationToken ct)
@@ -106,6 +109,9 @@ public sealed class GitWorkspace
             // the authoritative continuation base instead of the requested
             // project branch.
             var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
+            var requestedBase = await BranchExistsOnOrigin(requested, ct)
+                ? requested
+                : await OriginDefaultBranch(ct) ?? _baseBranch;
             string branch;
             if (await BranchExistsOnOrigin(_workBranch, ct))
             {
@@ -114,10 +120,9 @@ public sealed class GitWorkspace
             }
             else
             {
-                branch = await BranchExistsOnOrigin(requested, ct)
-                    ? requested
-                    : await OriginDefaultBranch(ct) ?? _baseBranch;
+                branch = requestedBase;
             }
+            _preparedIntegrationBranch = requestedBase;
             if (branch != requested && branch != _workBranch)
                 _log($"branch '{requested}' not found on origin; falling back to base branch '{branch}'");
 
@@ -137,6 +142,16 @@ public sealed class GitWorkspace
         {
             GitMetadataGate.Release();
         }
+    }
+
+    private static string ToBranchName(string value)
+    {
+        var branch = value.Trim();
+        if (branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase))
+            return branch["refs/heads/".Length..];
+        if (branch.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            return branch["origin/".Length..];
+        return branch;
     }
 
     /// <summary>

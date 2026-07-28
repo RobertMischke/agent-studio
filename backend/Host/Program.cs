@@ -251,6 +251,7 @@ builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<TaskChangeNotifier>();
 builder.Services.AddSingleton<TaskStateMachine>();
 builder.Services.AddSingleton<TaskMutationService>();
+builder.Services.AddSingleton<RemoteDeliveryBackfillService>();
 builder.Services.AddSingleton<TaskFileHistoryService>();
 // Consolidation/merge API + completed-lane audit (Part 1+2 of the
 // api-consolidationmerge-api task). All mutations route through
@@ -773,9 +774,9 @@ app.Services.GetRequiredService<TaskStateMachine>().EnsureStateFoldersAndMigrate
             .LogInformation("Backfilled agent defaults on {Count} job(s)", backfillCount);
 }
 
-// F45a: populate workspace + project registries from configured WatchPaths.
-// Additive; does not move or rename anything on disk. Writes only to
-// <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.
+// F45a: populate a missing project registry from configured WatchPaths.
+// An existing registry is authoritative, and an invalid file aborts startup.
+// The pass does not move or rename watched project data.
 try
 {
     AgentStudio.Registry.RegistryBootstrap.Run(
@@ -783,6 +784,11 @@ try
         app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>(),
         app.Services.GetRequiredService<TaskScannerService>(),
         app.Services.GetRequiredService<ILogger<Program>>());
+}
+catch (ProjectRegistryLoadException ex)
+{
+    crashRecorder.Record("RegistryBootstrap", ex);
+    throw;
 }
 catch (Exception ex)
 {
@@ -820,6 +826,18 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("WikiAgentReadBackfill", ex);
+}
+
+// One-time 2026-07-28 repair of the five reviewed remote deliveries. The
+// service writes only through TaskMutationService and leaves an idempotency
+// timeline fact, so later boots perform no remote fetch for repaired cards.
+try
+{
+    app.Services.GetRequiredService<RemoteDeliveryBackfillService>().RunReviewedCards();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RemoteDeliveryBackfill", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

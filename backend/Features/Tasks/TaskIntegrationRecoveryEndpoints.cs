@@ -66,7 +66,9 @@ public static class TaskIntegrationRecoveryEndpoints
                 });
             }
 
-            var integrationBranch = settings.Get(job.ProjectName).IntegrationBranch;
+            var integrationBranch = TaskIntegrationBranch.Resolve(
+                job,
+                settings.Get(job.ProjectName).IntegrationBranch);
             var prompt =
                 $"Integration recovery for {job.Key ?? job.Id}. "
                 + $"Resume the existing delivery branch '{subject.ResultRef}' at the fenced result {subject.ResultSha}. "

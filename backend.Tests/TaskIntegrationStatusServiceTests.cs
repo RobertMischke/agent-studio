@@ -119,6 +119,25 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_RecordedRunIntegrationBranch_OverridesProjectAssumption()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "main-only.txt"), "main work");
+        Commit(repo, "feat: main-line work");
+        var anchor = RunGit(repo, "rev-parse main").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("main-line", "AGT-2400", project, repo, log, commits: new[] { Commit(anchor) })
+            with { IntegrationBranch = "refs/heads/main" };
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal("main", status.IntegrationBranch);
+    }
+
+    [Fact]
     public void BuildLookup_AllAttributedCommitsInDevelop_ButBranchTipHasWip_IsIntegrated()
     {
         // AGT-2171: the attributed commits[] the card widget shows are ALL folded

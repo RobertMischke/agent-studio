@@ -128,8 +128,14 @@ state.
   Remote claim and completion lane facts carry the same attempt, fence, epoch,
   and idempotency tuple. Claim, standalone acquire, and completion are serialized
   at the Task Server mutation boundary, and canonical Remote completion suppresses
-  the generic local auto-commit, commit-attribution, drift, provenance, and
-  post-processing queue path.
+  the generic local auto-commit, drift, provenance, and post-processing queue
+  path. Remote completion owns a separate attribution contract: it fetches the
+  pushed `runner/<runner-id>/<task-key>` ref, verifies that its tip equals the
+  fenced `ResultSha`, and writes every commit in the exact
+  `merge-base..ResultSha` range to `commits[]` with `automatic` attribution.
+  The range is rejected as a whole, left empty, and logged as a warning when
+  the delivery branch belongs to another task or any commit subject explicitly
+  names a different task key.
   `AgentSession` and process-holder identity remain continuity metadata only;
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so
@@ -144,6 +150,13 @@ state.
   orchestration runs, stage results, leases, fences, and restart recovery.
   Expired Engine leases return the same run to `pending`; a replacement Engine
   receives a higher fence and stale settlement is rejected.
+- `tools/remote-test-suite/`: repository-owned, isolated Remote Run
+  infrastructure scenarios. The `reference-change` manifest drives the public
+  v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
+  review, and reviewed fixture integration with stable-seed semantic
+  acceptance. Phase hooks observe claim, run, gate, review, and integration
+  without adding scheduler-only branches. It never targets stable or the
+  managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -228,6 +241,14 @@ state.
   no execution seat; a continuation must pass admission again and remains
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
+
+- `auto-single` reverts to `manual` only when the pickup queue is empty and the
+  project has no run chain in flight. A claimed coding run, runner-side
+  post-processing record, durable `post-processing-running` phase, or card in
+  `4-auto-review` keeps the mode armed. A review reissue to `2-ready` therefore
+  remains part of the same single-run chain and is picked automatically. Once
+  the chain reaches a terminal lane and the pickup queue is empty, the normal
+  revert applies.
 
 - Remote host capacity is reported as distinct workload classes. RUN occupancy
   comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
@@ -326,6 +347,16 @@ state.
   and skipped, never deadlocked.
 - A re-open starts a new run. It must rerun pre steps, core, post steps, and
   append run history instead of flattening earlier evidence.
+- Before any automatic auto-review follow-up is persisted,
+  `ReviewDecisionOrchestrator` compares its whitespace- and case-normalized
+  base text with every prompt under `orchestrator-follow-up-history/`. A match
+  adds a diagnosis-first block that requires the exact failed check or missing
+  evidence, the target artifact and verification, and continuation from the
+  existing diff. The intervention count increases on every recurrence so the
+  guard cannot become another identical prompt. The timeline records the
+  intervention as `orchestrator_steered` with cause
+  `reissue-prompt-repeat-guard`, and the enriched text is the text written to
+  the canonical follow-up, history, and decision journal.
 - Context overflow is non-retryable and routes to human review on first
   detection.
 - Post-processing classifies every run that did not sign off cleanly into one of
@@ -452,6 +483,11 @@ state.
   an exhausted or genuinely unrecoverable git failure retains the worktree and
   uses the existing `worktree-blocked` escalation with the preserved tips and
   next safe action (AGT-2177).
+- Worktree preparation records the actual repository base line as a full ref,
+  such as `refs/heads/main` or `refs/heads/develop`. Completion persists that
+  ref on the task and review subject. Integration status, review planning,
+  merge, push, recovery, and provenance consume the recorded ref instead of
+  reapplying a project-level branch assumption after the run.
 - Epic planning is the deliberate exception: its detached checkout is checked
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only

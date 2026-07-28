@@ -516,6 +516,10 @@ public class TaskScannerService : ITaskScanner
                     : null,
                 Commit = legacyCommit,
                 Commits = commitChain,
+                IntegrationBranch = raw.TryGetProperty("integrationBranch", out var integrationBranch)
+                    && integrationBranch.ValueKind == JsonValueKind.String
+                    ? TaskIntegrationBranch.NormalizeRef(integrationBranch.GetString())
+                    : null,
                 CodeActivityDetected = DetectCodeActivity(raw, jobDir, scanSessionLog: !isArchive),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),

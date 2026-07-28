@@ -1064,13 +1064,36 @@ public class ProjectRunner
             var nextJob = PickNextDisplayedCandidate(slotMax);
             if (nextJob == null)
             {
-                if (_mode == "auto-single")
+                if (_mode == "auto-single" && !HasProjectRunInFlightForAutoSingle())
                     SetMode("manual", "auto-single revert: pickup queue empty");
                 break;
             }
 
             await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
         }
+    }
+
+    /// <summary>
+    /// Auto-single owns one project run chain through coding, runner-side
+    /// finalisation, and auto-review. An empty pickup result is not a drained
+    /// chain while the only candidate is already executing, while its
+    /// execution slot has been released for post-processing, or while the card
+    /// is in auto-review and may still be reissued to Ready.
+    ///
+    /// <para>
+    /// The durable lane/phase checks also preserve the invariant across a
+    /// backend restart, where the in-memory <see cref="ActiveRuns"/> registry
+    /// may no longer contain the post-processing run.
+    /// </para>
+    /// </summary>
+    private bool HasProjectRunInFlightForAutoSingle()
+    {
+        if (_activeRuns.HasInFlight) return true;
+
+        return _scanner.ScanAllJobs().Any(job =>
+            string.Equals(job.ProjectName, ProjectName, StringComparison.Ordinal)
+            && (string.Equals(job.State, TaskStates.AutoReview, StringComparison.Ordinal)
+                || string.Equals(job.Phase, LifecyclePhases.PostProcessingRunning, StringComparison.Ordinal)));
     }
 
     private TaskInfo? PickNextDisplayedCandidate(int slotMax)

@@ -163,9 +163,9 @@ public sealed class MergeIntoDevelopRunner
 
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
             var branch = reviewSubject is { ResultRef.Length: > 0 }
-                ? string.IsNullOrWhiteSpace(integrationBranch)
-                    ? new ProjectSettings().IntegrationBranch
-                    : integrationBranch.Trim()
+                ? TaskIntegrationBranch.Name(
+                    reviewSubject.IntegrationBranch,
+                    TaskIntegrationBranch.Name(integrationBranch))
                 : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
             var taskBranch = reviewSubject?.ResultRef ?? WorktreeTaskLifecycle.BranchFor(jobId);
             var strategy = IntegrationStrategies.Normalize(integrationStrategy);

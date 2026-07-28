@@ -25,6 +25,7 @@ public sealed class GitWorkspaceTests : IDisposable
 
         await workspace.PrepareAsync(CancellationToken.None);
 
+        Assert.Equal("refs/heads/main", workspace.IntegrationBranchRef);
         Assert.Equal(_origin,
             (await GitAsync(workspace.SharedRepoPath, "remote", "get-url", "origin")).StdOut);
         Assert.Equal(_origin,
@@ -428,6 +429,7 @@ public sealed class GitWorkspaceTests : IDisposable
         var requeue = CreateWorkspace();
         var sourceBranch = await requeue.PrepareAsync(CancellationToken.None);
         Assert.Equal(salvaged.Branch, sourceBranch);
+        Assert.Equal("refs/heads/main", requeue.IntegrationBranchRef);
         Assert.Equal("first run", await File.ReadAllTextAsync(Path.Combine(requeue.RepoPath, "work.txt")));
 
         var result = await requeue.TeardownAsync("Done", CancellationToken.None);

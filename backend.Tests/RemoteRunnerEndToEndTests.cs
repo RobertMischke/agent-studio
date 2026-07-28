@@ -265,7 +265,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             Repository: "https://example.invalid/agent-studio.git",
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
-            IdempotencyKey: "remote-done-completion");
+            IdempotencyKey: "remote-done-completion",
+            IntegrationBranch: "refs/heads/main");
 
         var missingAuthority = await http.PostAsJsonAsync(
             "/api/runner/completion", completionRequest with { AttemptId = null }, ct);
@@ -348,8 +349,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(mismatch.ReviewAttempt.Subject.SubjectId, retry.ReviewAttempt.Subject.SubjectId);
         var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
         Assert.True(Directory.Exists(moved));
+        Assert.Equal(
+            "refs/heads/main",
+            ReviewSubjectStore.Read(moved)!.IntegrationBranch);
 
         var taskJson = File.ReadAllText(Path.Combine(moved, "task.json"));
+        using (var completedJson = JsonDocument.Parse(taskJson))
+        {
+            Assert.Equal(
+                "refs/heads/main",
+                completedJson.RootElement.GetProperty("integrationBranch").GetString());
+        }
         Assert.DoesNotContain("externalCompletion", taskJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(LifecyclePhases.PostProcessingRunning, taskJson, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(Path.Combine(moved, "lifecycle.json")));

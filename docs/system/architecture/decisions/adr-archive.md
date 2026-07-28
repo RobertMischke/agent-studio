@@ -883,7 +883,20 @@ Polling, bounded buffers, and visibility-aware timers are already enforced by [`
 
 **Current state (2026-05-24).** F45a (read surface + boot-time auto-discovery) shipped first via the crash-recovery commit. F47 (this ADR) ships F45b on top: workspace + project mutation endpoints (`POST /api/workspaces`, `PUT /api/workspaces/{id}`, `DELETE /api/workspaces/{id}`, `PUT /api/projects/{PROJ-NNN}/displayName | /shortCode | /color | /workspace | /archived`), the matching registry mutation methods + tests, the interactive Settings-panel "Workspaces" section in the studio shell (create / rename / color / reorder / delete with confirmation), the Project-Hub "Manage Project" actions (rename, short-code, color, workspace move, archive), and the WatchPaths-divergence warning in `RegistryBootstrap` so an operator who hand-edits `appsettings.Local.json` after the registry exists sees the conflict in the backend log. F45c (per-project task-key floor backfill, jobKey-format migration, optional folder restructure under `projects/PROJ-NNN/jobs/<shard>/<slug>/`) and F46 (frontend explorer tree migration off `WatchPathEntry` and onto the registry types) remain queued; the rest of the consumers (jobKey resolution, `?watchPath=` query param) keeps working unchanged during the cutover.
 
-**Status.** Accepted; F45a + F45b implemented. F45c (folder restructure / jobKey migration) and F46 (frontend explorer tree on registry) tracked separately.
+**Amendment (2026-07-28).** Legacy WatchPaths bootstrap eligibility is
+tightened from "any unmatched entry on every boot" to "only when
+`projects.json` was absent at the registry's initial load." An existing empty
+file remains authoritative. An existing file that cannot be deserialized now
+aborts startup through `ProjectRegistryLoadException` and
+`project-registry-load-failed` instead of exposing an empty list. Before a
+registry persist reduces the project count, the previous file is copied to
+`projects.json.quarantine-<UTC timestamp>` and the count change is logged as
+`project-registry-shrink-quarantined`. This amendment makes the registry's
+source-of-truth role fail-closed after the 2026-07-28 legacy-reseed incident.
+
+**Status.** Accepted; F45a + F45b implemented and fail-closed persistence
+amended 2026-07-28. F45c (folder restructure / jobKey migration) and F46
+(frontend explorer tree on registry) tracked separately.
 
 ---
 
