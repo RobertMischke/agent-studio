@@ -279,6 +279,49 @@ public sealed class HumanReviewEscalation
     }
 
     /// <summary>
+    /// Journal half of the board contract for a REMOTE v1 review verdict that
+    /// parks a card in 5-human-review. Without this record the boot-time
+    /// verdict-less backfill later misreads the freshly reviewed card as
+    /// pre-funnel legacy and escalates it (observed 28.07.: three Pass-reviewed
+    /// cards bounced to 5e on restart). Pass maps to AcceptAsDone; a
+    /// ProductFailure/Inconclusive park maps to Escalate - both make the
+    /// endpoint-derived OrchestratorVerdict non-null.
+    /// </summary>
+    public void RecordRemoteReviewParkVerdict(
+        string project, string jobId, string? folderPath, string outcome, string summary)
+    {
+        if (string.IsNullOrWhiteSpace(_workspaceRoot) || string.IsNullOrWhiteSpace(project))
+        {
+            _logger.LogDebug(
+                "HumanReviewEscalation: TaskRepository not configured or project empty; skipped remote-review verdict journal for {JobId}.",
+                jobId);
+            return;
+        }
+        try
+        {
+            var pass = string.Equals(outcome, "Pass", StringComparison.OrdinalIgnoreCase);
+            ReviewDecisionLog.Append(_workspaceRoot!, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: jobId,
+                Project: project,
+                Kind: pass ? ReviewDecisionKind.AcceptAsDone : ReviewDecisionKind.Escalate,
+                Reason: $"Remote v1 review parked the card in human review with outcome {outcome}.",
+                Prompt: "(remote v1 review plane)",
+                Response: string.IsNullOrWhiteSpace(summary) ? $"outcome={outcome}" : summary,
+                FollowUp: string.Empty)
+            {
+                AttemptEpoch = OperatorReviewRequeueService.ReadEpoch(folderPath),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "HumanReviewEscalation: failed to append remote-review verdict for {Project}/{JobId} (outcome={Outcome})",
+                project, jobId, outcome);
+        }
+    }
+
+    /// <summary>
     /// Verdict + status only, no move. Used by the boot-time backfill for cards
     /// that are ALREADY parked in 5-human-review with no verdict (the legacy
     /// cards this fix repairs). Idempotent on the status half (it never

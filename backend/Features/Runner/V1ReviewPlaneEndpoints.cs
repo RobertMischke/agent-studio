@@ -472,6 +472,16 @@ public static class V1ReviewPlaneEndpoints
                     else
                     {
                         taskState = TaskStates.HumanReview;
+                        // Board contract: the human-review park needs a journal
+                        // verdict, or the boot-time verdict-less backfill later
+                        // escalates the freshly reviewed card as pre-funnel
+                        // legacy (observed 28.07. after a backend restart).
+                        escalation.RecordRemoteReviewParkVerdict(
+                            task.ProjectName,
+                            task.Id,
+                            task.FolderPath,
+                            request.Outcome,
+                            request.Summary ?? string.Empty);
                     }
                 }
                 else if (string.Equals(task.State, TaskStates.HumanReview, StringComparison.OrdinalIgnoreCase))
