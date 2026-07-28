@@ -1150,6 +1150,28 @@
             repair itself, records the reason in <code>timeline.jsonl</code>.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-28</td>
+          <td><code>AGT-2387</code><br><span class="small">identical reissue prompt loop<br>(observed on <code>AGT-2255</code>)</span></td>
+          <td>
+            Auto-review sent the same evidence-gate instruction to one card five times. The repeated text added no new
+            diagnosis, target artifact, or next-round framing even though its prior copies were already durable in
+            <code>orchestrator-follow-up-history/</code>.
+          </td>
+          <td>
+            Every gate built its follow-up independently, and the shared follow-up writer persisted the result without
+            comparing it with the append-only history. The bounded reissue budget limited each chain, but it did not stop
+            identical text from consuming another attempt.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared writer now compares normalized base prompts with the complete
+            history before sending. A repeat receives a diagnosis-first block naming the failed check or missing evidence,
+            the closing artifact and verification, and the instruction to continue the existing diff. Each intervention
+            gets a rising count, the enriched text reaches the canonical file, history, and decision journal, and an
+            <code>orchestrator_steered</code> timeline event records cause
+            <code>reissue-prompt-repeat-guard</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

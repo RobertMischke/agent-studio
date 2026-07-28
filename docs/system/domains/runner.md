@@ -301,6 +301,16 @@ state.
   and skipped, never deadlocked.
 - A re-open starts a new run. It must rerun pre steps, core, post steps, and
   append run history instead of flattening earlier evidence.
+- Before any automatic auto-review follow-up is persisted,
+  `ReviewDecisionOrchestrator` compares its whitespace- and case-normalized
+  base text with every prompt under `orchestrator-follow-up-history/`. A match
+  adds a diagnosis-first block that requires the exact failed check or missing
+  evidence, the target artifact and verification, and continuation from the
+  existing diff. The intervention count increases on every recurrence so the
+  guard cannot become another identical prompt. The timeline records the
+  intervention as `orchestrator_steered` with cause
+  `reissue-prompt-repeat-guard`, and the enriched text is the text written to
+  the canonical follow-up, history, and decision journal.
 - Context overflow is non-retryable and routes to human review on first
   detection.
 - Post-processing classifies every run that did not sign off cleanly into one of
