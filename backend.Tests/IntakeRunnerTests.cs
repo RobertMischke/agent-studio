@@ -400,6 +400,35 @@ public class IntakeRunnerTests : IDisposable
     }
 
     [Fact]
+    public void BuildEnrichmentManifest_StylingCardInjectsLivingStylingContext()
+    {
+        var target = new TaskInfo
+        {
+            Id = "styling-card",
+            Title = "Unify action styling",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Coding
+        };
+        var guide = new ProjectStyleGuide(
+            "frontend-styling", "Frontend styling context", "quality/frontend-styling.md",
+            "Compact styling rules",
+            "Apply the living guide. Labels never imitate button chrome.",
+            "1",
+            new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"]));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Fix inconsistent styling and typography in the decision bar.",
+            [guide]);
+
+        Assert.Contains("frontend", manifest.Areas);
+        var selected = Assert.Single(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:frontend-styling");
+        Assert.Equal("docs/quality/frontend-styling.md", selected.Source);
+        Assert.Contains("Labels never imitate button chrome", selected.Text);
+    }
+
+    [Fact]
     public void BuildEnrichmentManifest_TaskAreaWildcardMatchesCodingTaskButEmptyTaskAreasDoNot()
     {
         var target = new TaskInfo

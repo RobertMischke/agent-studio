@@ -1,5 +1,11 @@
 # Cards
 
+Deck section shells use the shared `m.deck-panel`,
+`m.deck-panel-muted`, and `m.deck-panel-attention` mixins from
+[`_mixins.scss`](../../../../frontend/src/styles/_mixins.scss). Their semantic
+contract is [Deck-Panel v1](../../../concepts/visual-style-guide/deck-panel-v1.md).
+Apply a mixin to the existing outer shell; do not add a wrapper panel.
+
 A bounded surface with a title row, body, and optional footer or hover-lift. Today there is **no `<app-card>` Angular component** because card surfaces tend to carry feature-specific slots (drag handles and run state inputs). The convergence target is the **shape**: every card reads the same tokens for background, border, padding, and elevation.
 
 See [audit-cards.md](./audit-cards.md) for the inventory.
