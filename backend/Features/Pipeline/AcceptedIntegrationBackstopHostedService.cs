@@ -2,11 +2,11 @@ namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Durable safety net for operator acceptance integration. The normal
-/// HumanReview-to-Completed transition runs the merge synchronously, but the
-/// lane move is already durable when that process window begins. A backend
-/// restart in that window, or a legacy <c>no-branch</c> result from looking for
-/// <c>task/&lt;slug&gt;</c> instead of the fenced remote delivery ref, must not
-/// leave an accepted card permanently unintegrated.
+/// HumanReview-to-Completed transition enqueues the merge after the lane move is
+/// durable. A backend restart before the volatile queue drains, or a legacy
+/// <c>no-branch</c> result from looking for <c>task/&lt;slug&gt;</c> instead of
+/// the fenced remote delivery ref, must not leave an accepted card permanently
+/// unintegrated.
 /// </summary>
 public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 {
