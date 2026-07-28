@@ -44,9 +44,11 @@ The convention is:
    and repository-defined Workbench ids. Internal `watchPath::id` keys stay out
    of browser history.
 
-Surface changes and tab changes use `history.replaceState`. They keep the
-current history entry honest without adding an entry for every rail or detail
-tab click. Existing task-opening flows may create a history entry first, then
+Primary surface changes use `history.pushState`, so Browser Back and Forward
+move between Board, project, task, and settings surfaces. Replaceable substate
+within one surface, such as a Hub rail, Wiki page, or detail tab, uses
+`history.replaceState`. Cold boot canonicalization also replaces the current
+entry. Existing task-opening flows may create a history entry first, then
 replace that entry with the fully resolved canonical route. Browser
 Back/Forward and `hashchange` both run the same route-in reconciliation.
 

@@ -351,6 +351,14 @@ export class BoardFiltersService {
     this.writeFilterHash();
   }
 
+  /** Clear only the project scope while preserving every other board filter. */
+  clearProjectScope(): void {
+    if (this.activeProjects().size === 0) return;
+    this.activeProjects.set(new Set());
+    localStorage.setItem('activeProjects', '[]');
+    this.writeFilterHash();
+  }
+
   /**
    * Single-select project switch. Clicking an inactive project chip with
    * no modifier replaces the active set with just that project, so the
