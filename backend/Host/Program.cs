@@ -251,6 +251,7 @@ builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<TaskChangeNotifier>();
 builder.Services.AddSingleton<TaskStateMachine>();
 builder.Services.AddSingleton<TaskMutationService>();
+builder.Services.AddSingleton<RemoteDeliveryBackfillService>();
 builder.Services.AddSingleton<TaskFileHistoryService>();
 // Consolidation/merge API + completed-lane audit (Part 1+2 of the
 // api-consolidationmerge-api task). All mutations route through
@@ -793,6 +794,18 @@ catch (Exception ex)
     if (dedupCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
+}
+
+// One-time 2026-07-28 repair of the five reviewed remote deliveries. The
+// service writes only through TaskMutationService and leaves an idempotency
+// timeline fact, so later boots perform no remote fetch for repaired cards.
+try
+{
+    app.Services.GetRequiredService<RemoteDeliveryBackfillService>().RunReviewedCards();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RemoteDeliveryBackfill", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

@@ -20,6 +20,7 @@ public sealed record ReviewSubjectRecord
     public string LeaseId { get; init; } = "";
     public long FencingToken { get; init; }
     public string? ResultRef { get; init; }
+    public string? IntegrationBranch { get; init; }
     public DateTimeOffset CompletedAtUtc { get; init; }
 }
 

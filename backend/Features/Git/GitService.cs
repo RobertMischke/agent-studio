@@ -111,6 +111,14 @@ public record GitCommitInfo(
     int Added,
     int Removed);
 
+public sealed record RemoteDeliveryCommitRange(
+    bool Success,
+    string? IntegrationBranch,
+    string? MergeBaseSha,
+    string? TipSha,
+    IReadOnlyList<GitCommitInfo> Commits,
+    string? Warning);
+
 /// <summary>
 /// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
 /// The committer timestamp lets evidence consumers reject a merge that predates
@@ -3053,6 +3061,85 @@ public class GitService
                 Removed: removed));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Fetches the pushed runner branch, verifies its fenced tip, and returns
+    /// the exact merge-base..tip commit range in chronological order.
+    /// </summary>
+    public RemoteDeliveryCommitRange InspectRemoteDeliveryCommitRange(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string? recordedIntegrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return Failed("Repository root does not exist.");
+        var branch = TaskIntegrationBranch.Name(deliveryBranch, fallback: "");
+        if (!IsLikelyBranchName(branch))
+            return Failed($"Invalid delivery branch '{deliveryBranch}'.");
+        if (!ReviewSubjectStore.IsValidResultSha(expectedResultSha))
+            return Failed("Remote delivery has no valid fenced result SHA.");
+        if (!HasRemote(repoRoot, "origin"))
+            return Failed("Remote delivery cannot be inspected because origin is not configured.");
+
+        var deliveryRef = $"refs/remotes/origin/{branch}";
+        var fetchDelivery = $"+refs/heads/{branch}:{deliveryRef}";
+        var (_, deliveryError, deliveryCode) = RunGitArgs(
+            repoRoot, "fetch", "--no-tags", "origin", fetchDelivery);
+        if (deliveryCode != 0)
+            return Failed($"Delivery branch '{branch}' could not be fetched from origin: {deliveryError.Trim()}");
+
+        var (tipOutput, tipError, tipCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--verify", $"{deliveryRef}^{{commit}}");
+        if (tipCode != 0)
+            return Failed($"Fetched delivery branch '{branch}' is not a commit: {tipError.Trim()}");
+        var tip = tipOutput.Trim();
+        if (!string.Equals(tip, expectedResultSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failed(
+                $"Fenced delivery mismatch for '{branch}': completion expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(tip)}.");
+        }
+
+        var candidates = string.IsNullOrWhiteSpace(recordedIntegrationBranch)
+            ? new[] { "main", "develop" }
+            : new[] { TaskIntegrationBranch.Name(recordedIntegrationBranch, fallback: "") };
+        var resolved = new List<(string Branch, string Ref, string Base, int Distance)>();
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!IsLikelyBranchName(candidate)) continue;
+            var integrationRef = $"refs/remotes/origin/{candidate}";
+            var fetchIntegration = $"+refs/heads/{candidate}:{integrationRef}";
+            var (_, _, fetchCode) = RunGitArgs(
+                repoRoot, "fetch", "--no-tags", "origin", fetchIntegration);
+            if (fetchCode != 0) continue;
+            var mergeBase = GetMergeBase(repoRoot, integrationRef, deliveryRef);
+            if (string.IsNullOrWhiteSpace(mergeBase)) continue;
+            var (distanceText, _, distanceCode) = RunGitArgs(
+                repoRoot, "rev-list", "--count", $"{mergeBase}..{deliveryRef}");
+            if (distanceCode != 0 || !int.TryParse(distanceText.Trim(), out var distance)) continue;
+            resolved.Add((candidate, integrationRef, mergeBase, distance));
+        }
+
+        var selected = resolved
+            .OrderBy(candidate => candidate.Distance)
+            .ThenBy(candidate => string.Equals(candidate.Branch, "main", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(selected.Branch))
+            return Failed("No recorded main/develop base line shares history with the remote delivery.");
+
+        var commits = GetCommitsInRangeAtRoot(repoRoot, selected.Base, deliveryRef);
+        commits.Reverse();
+        return new RemoteDeliveryCommitRange(
+            true,
+            TaskIntegrationBranch.NormalizeRef(selected.Branch),
+            selected.Base,
+            tip,
+            commits,
+            null);
+
+        RemoteDeliveryCommitRange Failed(string warning) =>
+            new(false, null, null, null, [], warning);
     }
 
     /// <summary>

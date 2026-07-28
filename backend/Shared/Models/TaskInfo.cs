@@ -121,6 +121,12 @@ public record TaskInfo
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
+    /// <summary>
+    /// Actual repository base line used to prepare the latest runner checkout,
+    /// persisted as <c>refs/heads/main</c> or <c>refs/heads/develop</c>.
+    /// Null on legacy tasks that have not yet been backfilled.
+    /// </summary>
+    public string? IntegrationBranch { get; init; }
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
