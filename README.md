@@ -31,6 +31,14 @@
 
 ## Running locally
 
+For a guided Linux x64 release install with no source checkout and no .NET
+prerequisite, download
+[`agent-orchestrator-setup`](https://github.com/agent-orc/agent-studio/releases/latest/download/agent-orchestrator-setup).
+It offers an isolated Docker demo, a native single-machine install, and a
+guided multi-machine join flow.
+
+For development from source:
+
 ```bash
 ./api.sh
 cd frontend

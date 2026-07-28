@@ -389,9 +389,10 @@ invoking the task-server’s own <code>backup</code> subcommand; the “verified
 of that subcommand, not a product. The §1 package table lists them as archive <em>contents</em>, not
 as runnable units of their own.</p>
 
-<h3>8.8 NEW — D5: a single local installer (discussion)</h3>
+<h3>8.8 D5: a single guided installer</h3>
 <p>Goal: local use with one command, no source checkout, no neighbour repos (AGT-2305’s
-“one-command onboarding” as a first-class target). Two candidate shapes:</p>
+“one-command onboarding” as a first-class target). The implementation keeps the two
+channels deliberately separate:</p>
 <table>
   <tr><th></th><th>A · Docker-based (<code>docker compose up</code>)</th><th>B · Native all-in-one</th></tr>
   <tr><td>Install</td><td>one compose file; requires Docker Desktop</td><td>one binary (the un-split monolith already exists!) via winget/brew/script</td></tr>
@@ -400,11 +401,16 @@ as runnable units of their own.</p>
   <tr><td>Agent CLIs</td><td>must be baked into the image (versions lag) or mounted</td><td>uses the user’s installed codex/claude directly</td></tr>
   <tr><td>Update</td><td><code>compose pull</code></td><td>installer re-run / self-update</td></tr>
 </table>
-<p><b>Leaning:</b> B for the local developer story (the decisive factor is repo/CLI access — local
-use exists precisely to work on local repos), A for evaluation/demo (“look at the board in 2
-minutes”, no repos mounted). That would make Docker the <em>demo</em> channel and the native
-all-in-one the <em>local product</em> — both from the same release pipeline. Open for Robert’s
-call.</p>
+<p><b>Implemented 28.07. (AGT-2334):</b> <code>agent-orchestrator-setup</code> is one
+self-contained Linux x64 executable published beside the three release archives. Its
+guided paths are Demo, native Single Machine, Multi Machine Control Plane, and Agent
+Host join. Docker is checked and used only for the isolated demo. Native repository
+execution uses the host filesystem, Git, and the host-owned Codex or Claude login.
+The Control Plane prints a protected <code>aosj1.*</code> join token; each host consumes
+it without putting the secret in a command-line argument, starts its systemd service,
+and waits for exact Task Server registration. The token honestly follows the current
+separated Task Server bearer contract: encoded rather than encrypted, reusable until
+credential rotation, and never described as one-time.</p>
 
 <h3 id="token-requirements">8.10 D5: token requirements and guided onboarding</h3>
 <p>The guided installer line (AGT-2334) includes a <b>Create token</b> step before

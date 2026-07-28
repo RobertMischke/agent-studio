@@ -1,5 +1,19 @@
 # Getting started
 
+For a release install on Linux x64, use the guided self-contained executable.
+It needs no source checkout and no .NET installation:
+
+```sh
+curl -fLO https://github.com/agent-orc/agent-studio/releases/latest/download/agent-orchestrator-setup
+chmod +x agent-orchestrator-setup
+sudo ./agent-orchestrator-setup
+```
+
+The guide offers Demo, Single Machine, Multi-machine Control Plane, and Agent
+Host join paths. See [multi-machine.md](./multi-machine.md) for the distributed
+flow. The source-checkout instructions below remain the developer path for the
+current Windows monolith.
+
 This is the step-by-step path from a clean Windows machine to a running agent-orchestrator instance with one project attached and one task completed end to end. If you would rather have a coding agent do all of this for you, see the README's ["How to get started"](../../../README.md#how-to-get-started) - tell it to clone the repo and follow [AGENTS.md](../../../AGENTS.md). This page is for doing it yourself, or for checking what the agent actually did.
 
 Everything below was verified against this repository's actual scripts and source on 2026-07-08. All commands are Git Bash (`sh`), not PowerShell.
