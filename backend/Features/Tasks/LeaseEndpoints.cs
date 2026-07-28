@@ -250,7 +250,10 @@ public static class LeaseEndpoints
                             ProjectId: replayedRepository.ProjectId,
                             RepositoryUrl: replayedRepository.RepositoryUrl,
                             DefaultBranch: replayedRepository.DefaultBranch,
-                            TaskKind: replayedTask.Kind));
+                            TaskKind: replayedTask.Kind,
+                            // A replay must describe the same run as the original
+                            // claim, so it resolves the spec from the same card.
+                            RunSpec: BuildRunSpec(replayedTask, settings)));
                     }
                 }
 
@@ -593,6 +596,15 @@ public static class LeaseEndpoints
                         InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                         acquire.Lease.FencingToken));
                 }
+                var runSpec = BuildRunSpec(candidate, settings);
+                logger.LogInformation(
+                    "remote-runner-run-spec task={TaskKey} cli={CliType} model={Model} thinking={ThinkingLevel} permission={PermissionMode} context={ContextMode}",
+                    taskKey,
+                    runSpec.CliType,
+                    runSpec.Model ?? "<cli-default>",
+                    runSpec.ThinkingLevel ?? "<cli-default>",
+                    runSpec.PermissionMode,
+                    runSpec.ContextMode);
                 return Results.Ok(new RunnerClaimResponse(
                     RunnerClaimStatus.Claimed,
                     taskKey,
@@ -602,7 +614,8 @@ public static class LeaseEndpoints
                     ProjectId: repository.ProjectId,
                     RepositoryUrl: repository.RepositoryUrl,
                     DefaultBranch: repository.DefaultBranch,
-                    TaskKind: candidate.Kind));
+                    TaskKind: candidate.Kind,
+                    RunSpec: runSpec));
             }
             finally
             {
@@ -1223,6 +1236,62 @@ public static class LeaseEndpoints
         BackendName = string.IsNullOrWhiteSpace(req.BackendName) ? identity.BackendName : req.BackendName,
         Pid = req.Pid == 0 ? Environment.ProcessId : req.Pid,
     };
+
+    /// <summary>
+    /// T0b (CAR migration plan §3 T0b / §7 AP3) — resolve the claimed card's
+    /// execution specification for the wire. This is deliberately the <b>same</b>
+    /// source the local path reads at spawn time, so a card runs the same way
+    /// wherever it lands:
+    /// <list type="bullet">
+    ///   <item>CLI: <c>task.cliType</c>, normalized exactly as <c>CliRouter.Get</c>
+    ///     resolves it (unknown / unset ⇒ claude, the project default).</item>
+    ///   <item>Model / thinking level: the card's pins, with the project's Epic
+    ///     planning overrides applied for an Epic — mirroring
+    ///     <c>ProjectRunner</c>'s epic branch and the
+    ///     <c>/api/runner/epic-planning-prompt</c> endpoint.</item>
+    ///   <item>Permission / context mode: <c>ProjectSettingsService.ResolveCliMode</c>
+    ///     and <c>ResolveContextMode</c> — the identical live lookups the local
+    ///     spawn performs, so a project toggle takes effect on the next claim.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// Two deliberate differences from the local path, both conservative:
+    /// (1) model <b>qualification</b> is not run here — it needs the rendered
+    /// prompt, the CLI's model catalogue and the project history, none of which
+    /// the claim has; the card's own pin is transported instead. (2) A card that
+    /// pins no thinking level yields <c>null</c> rather than the CLI's default
+    /// rung, so the claim never invents a reasoning flag the operator did not ask
+    /// for; the CLI's own default applies remotely, as it does today.
+    /// </para>
+    /// </summary>
+    private static RunSpecDto BuildRunSpec(TaskInfo task, ProjectSettingsService settings)
+    {
+        var cliType = CliTypes.Normalize(task.CliType);
+        var projectSettings = settings.Get(task.ProjectName);
+        var isEpicPlanning = TaskKinds.IsEpic(task.Kind);
+
+        var model = isEpicPlanning && !string.IsNullOrWhiteSpace(projectSettings.EpicPlanningModel)
+            ? projectSettings.EpicPlanningModel
+            : task.Model;
+        var thinkingLevel = isEpicPlanning && projectSettings.EpicPlanningThinkingLevel is not null
+            ? projectSettings.EpicPlanningThinkingLevel
+            : task.ThinkingLevel;
+
+        model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        // Resolve the requested rung against what this CLI + model can actually
+        // select. An unsupported value would otherwise reach the CLI verbatim and
+        // fail the spawn; CliThinkingLevels falls back to the supported default.
+        thinkingLevel = string.IsNullOrWhiteSpace(thinkingLevel)
+            ? null
+            : CliThinkingLevels.Normalize(cliType, model, thinkingLevel);
+
+        return new RunSpecDto(
+            cliType,
+            model,
+            thinkingLevel,
+            settings.ResolveCliMode(task.ProjectName, cliType).Mode,
+            settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode);
+    }
 
     private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)
     {
