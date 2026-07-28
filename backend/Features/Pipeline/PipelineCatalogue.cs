@@ -459,6 +459,11 @@ public static class PipelineCatalogue
     public static IReadOnlyList<TaskPipeline> All { get; } =
         [StandardPipeline, ReadOnlyPipeline, ConceptPipeline, UiPipeline];
 
+    public static PipelineStep? FindStep(string? id) =>
+        All.SelectMany(pipeline => pipeline.AllSteps)
+            .Append(AbortReviewStep)
+            .FirstOrDefault(step => string.Equals(step.Id, id, StringComparison.OrdinalIgnoreCase));
+
     private static TaskPipeline BuildStandardPipeline()
     {
         var aspects = new List<PipelineStep>();

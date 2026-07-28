@@ -189,6 +189,13 @@ test('pipeline page (real): reworked panel renders against the live backend', as
     path: path.join(SCREENSHOT_DIR, 'pipeline-step-stylelint-probe-output--real.png'),
   });
 
+  const uiGateRow = page.getByTestId('pipeline-step-row-post-ui-human-review-gate');
+  await uiGateRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await page.getByTestId('pipeline-step-probe-post-ui-human-review-gate').click();
+  const uiGateOutput = page.getByTestId('pipeline-step-probe-output-post-ui-human-review-gate');
+  await expect(uiGateOutput).toHaveAttribute('data-status', 'unavailable');
+  await expect(uiGateOutput.locator('pre')).toContainText('task/run context');
+
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-full--real.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-light--real.png') });
   await setTheme(page, 'dark');

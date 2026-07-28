@@ -257,9 +257,7 @@ public static class ProjectSettingsEndpoints
             var project = scanner.GetWatchPaths().FirstOrDefault(e =>
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (project is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-            var step = PipelineCatalogue.Standard.AllSteps
-                .Append(PipelineCatalogue.AbortReviewStep)
-                .FirstOrDefault(candidate => string.Equals(candidate.Id, stepId, StringComparison.OrdinalIgnoreCase));
+            var step = PipelineCatalogue.FindStep(stepId);
             if (step is null) return Results.NotFound(new { error = $"Unknown pipeline step '{stepId}'" });
             var repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath)
                 ? project.RootPath

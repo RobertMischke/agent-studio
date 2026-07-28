@@ -111,6 +111,25 @@ public sealed class ProjectStackDetectorTests : IDisposable
     }
 
     [Fact]
+    public async Task Probe_InternalStepFromNonStandardPipelineReturnsDiagnosticOutput()
+    {
+        var fakeGate = new FakeBuildTestGateRunner();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _root })
+            .Build();
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var service = new PipelineStepProbeService(fakeGate, settings, config);
+        var step = Assert.IsType<PipelineStep>(
+            PipelineCatalogue.FindStep(PipelineCatalogue.UiHumanReviewGateStepId));
+
+        var result = await service.RunAsync("UI Project", _root, step, CancellationToken.None);
+
+        Assert.Equal("unavailable", result.Status);
+        Assert.Contains("task/run context", result.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, fakeGate.InvocationCount);
+    }
+
+    [Fact]
     public async Task StylelintStep_IsProjectSpecific_AndDoesNotProbePureDotNetRepository()
     {
         var angularRoot = Path.Combine(_root, "angular-app");
