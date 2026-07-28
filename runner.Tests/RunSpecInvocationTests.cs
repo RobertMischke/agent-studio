@@ -76,12 +76,25 @@ public sealed class RunSpecInvocationTests : IDisposable
     public void A_cli_this_host_has_no_binary_for_keeps_the_configured_one_and_says_so()
     {
         // The host runs codex only. A claude card must not silently spawn a
-        // binary the operator never configured; the mismatch is stated instead.
+        // binary the operator never configured. The claude model and effort
+        // selectors must not cross-apply to codex; the host's configured args
+        // and default model win, and the mismatch is stated instead.
         var options = Options("codex", "exec --experimental-json");
-        var invocation = AgentCliProcess.Resolve(options, new RunSpecDto("claude", "claude-opus-4-8"));
+        var invocation = AgentCliProcess.Resolve(
+            options,
+            new RunSpecDto("claude", "claude-opus-5", "max"));
 
         Assert.Equal("codex", invocation.FileName);
         Assert.Equal(AgentCliProcess.CodexCli, invocation.CliType);
+        Assert.Equal(["exec", "--experimental-json", "-"], invocation.Arguments);
+        Assert.DoesNotContain("-m", invocation.Arguments);
+        Assert.DoesNotContain("--model", invocation.Arguments);
+        Assert.DoesNotContain("-c", invocation.Arguments);
+        Assert.DoesNotContain("--effort", invocation.Arguments);
+        Assert.DoesNotContain("claude-opus-5", invocation.Arguments);
+        Assert.Null(invocation.Model);
+        Assert.Null(invocation.ThinkingLevel);
+        Assert.Equal("card-cli-fallback(model-pins-dropped)", invocation.Source);
         Assert.NotNull(invocation.Note);
         Assert.Contains("claude", invocation.Note!, StringComparison.Ordinal);
     }

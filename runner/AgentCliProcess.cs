@@ -53,9 +53,9 @@ public sealed class AgentCliProcess
     /// <summary>
     /// One resolved CLI invocation: which binary runs, with which arguments, and
     /// which parts of the decision came from the card's spec rather than from the
-    /// host configuration. <see cref="SpecApplied"/> is what the spawn log states,
-    /// so an operator can tell from one line whether the card or the environment
-    /// decided this run.
+    /// host configuration. <see cref="Source"/> is what the spawn log states, so
+    /// an operator can tell from one line whether the card, the environment, or a
+    /// provider fallback decided this run.
     /// </summary>
     public sealed record CliInvocation(
         string FileName,
@@ -64,6 +64,7 @@ public sealed class AgentCliProcess
         string? Model,
         string? ThinkingLevel,
         bool SpecApplied,
+        string Source,
         string? Note = null);
 
     /// <summary>
@@ -115,6 +116,12 @@ public sealed class AgentCliProcess
             }
         }
 
+        // A model or reasoning selector is meaningful only to the CLI provider
+        // named by the card. If that CLI is unavailable and the host falls back
+        // to its configured CLI, let RUNNER_CLI_ARGS select that CLI's own
+        // default instead of cross-applying a foreign provider's pins.
+        var modelPinsDropped = requestedType is not null
+                               && !string.Equals(requestedType, cliType, StringComparison.Ordinal);
         var args = argsOverride is not null
             ? new List<string>(argsOverride)
             : DefaultArgsFor(cliType, configuredType, options);
@@ -122,8 +129,12 @@ public sealed class AgentCliProcess
         // Model and reasoning selectors are appended, never inserted: the base
         // args are the operator's transport flags (-p / exec --experimental-json)
         // and both CLIs accept the selectors after them.
-        var model = string.IsNullOrWhiteSpace(runSpec?.Model) ? null : runSpec!.Model!.Trim();
-        var thinkingLevel = string.IsNullOrWhiteSpace(runSpec?.ThinkingLevel) ? null : runSpec!.ThinkingLevel!.Trim();
+        var model = modelPinsDropped || string.IsNullOrWhiteSpace(runSpec?.Model)
+            ? null
+            : runSpec!.Model!.Trim();
+        var thinkingLevel = modelPinsDropped || string.IsNullOrWhiteSpace(runSpec?.ThinkingLevel)
+            ? null
+            : runSpec!.ThinkingLevel!.Trim();
         if (model is not null)
         {
             args.Add(cliType == CodexCli ? "-m" : "--model");
@@ -149,13 +160,19 @@ public sealed class AgentCliProcess
         // task at all.
         if (cliType == CodexCli && !args.Contains("-")) args.Add("-");
 
+        var specApplied = model is not null || thinkingLevel is not null || requestedType is not null;
         return new CliInvocation(
             fileName,
             args,
             cliType,
             model,
             thinkingLevel,
-            SpecApplied: model is not null || thinkingLevel is not null || requestedType is not null,
+            SpecApplied: specApplied,
+            Source: modelPinsDropped
+                ? "card-cli-fallback(model-pins-dropped)"
+                : specApplied
+                    ? "card"
+                    : "runner-options",
             Note: note);
     }
 
