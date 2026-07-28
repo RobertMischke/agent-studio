@@ -582,7 +582,7 @@ public static class V1ReviewPlaneEndpoints
 
     private static Contract.ProtocolRangeDto Protocol()
     {
-        var version = typeof(V1ReviewPlaneEndpoints).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+        var version = typeof(V1ReviewPlaneEndpoints).Assembly.GetName().Version?.ToString(3) ?? "unknown";
         return new Contract.ProtocolRangeDto(
             Contract.TaskServerProtocol.Current,
             Contract.TaskServerProtocol.MinimumSupported,

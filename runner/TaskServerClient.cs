@@ -61,7 +61,7 @@ public sealed class TaskServerClient : IDisposable
         // credential in the networked profile.
         SetClientId(options.ClientId ?? options.RunnerId);
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
-        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0");
+        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown");
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task EnsureCompatibleAsync(CancellationToken ct)
     {
-        var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+        var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown";
         using var response = await _http.PostAsJsonAsync(
             "/api/v1/protocol/compatibility",
             new Contract.ProtocolCompatibilityRequest("runner", clientVersion, RunnerOptions.ProtocolVersion),
@@ -155,7 +155,7 @@ public sealed class TaskServerClient : IDisposable
                 displayName,
                 options.Hostname,
                 RunnerInstanceId,
-                typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
+                typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown",
                 RunnerOptions.ProtocolVersion,
                 capabilities);
             try

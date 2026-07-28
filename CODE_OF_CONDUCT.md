@@ -60,8 +60,8 @@ appointed representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported privately to the community leaders through the repository's
-[private advisory flow](https://github.com/agent-orc/agent-studio/security/advisories/new).
+reported privately to the community leaders at
+[conduct@agent-orchestrator.dev](mailto:conduct@agent-orchestrator.dev).
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

@@ -128,7 +128,7 @@ Every release answers `task-server --version` with the release and stamped Git
 SHA. This output is also used by deployment verification:
 
 ```text
-task-server 1.0.0+sha.<40-character-commit>
+task-server 0.1.0+sha.<40-character-commit>
 ```
 
 ## Sole v1 owner and transition proxy

@@ -11,14 +11,21 @@ applies these values in the GitHub repository settings.
 ## Topics
 
 - `agent-orchestration`
+- `ai-agents`
+- `ai-coding`
 - `angular`
 - `claude-code`
 - `codex`
 - `coding-agents`
+- `developer-tools`
+- `devtools`
 - `dotnet`
-- `gemini-cli`
-- `self-hosted`
-- `task-board`
+- `kanban`
+- `open-source`
+- `software-engineering`
+- `task-automation`
+- `task-server`
+- `typescript`
 
 ## Website
 

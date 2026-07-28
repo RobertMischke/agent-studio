@@ -1,6 +1,5 @@
 # agent-orchestrator
 
-[![Release build](https://github.com/agent-orc/agent-studio/actions/workflows/release.yml/badge.svg)](https://github.com/agent-orc/agent-studio/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/agent-orc/agent-studio)](LICENSE)
 
 **Management layers on top of coding work.** Agents (Claude Code, Codex, GitHub Copilot, Gemini) write the code; this repository is the Studio: a task board, agent pipelines, and project wikis that assign, gate, review, and account for it.
@@ -32,30 +31,20 @@
   definitions and in-flight runs remain durable Task Server data, so restarting
   the Engine does not orphan work.
 
-## Running locally
-
-Prerequisites are Windows with Git Bash, the .NET 10 SDK, Node.js 22, npm 11,
-and at least one supported coding-agent CLI. From a fresh checkout:
+## Get started
 
 ```bash
-git clone https://github.com/agent-orc/agent-studio.git agent-orchestrator
-cd agent-orchestrator
-cp backend/appsettings.Local.json.example backend/appsettings.Local.json
-
-# Edit appsettings.Local.json: choose an empty TaskRepository, set
-# Environment.IsDev to false, remove the Runner and DevTools blocks,
-# and start with an empty WatchPaths array.
-dotnet restore agent-taskboard.sln
-npm ci --prefix frontend
-
-ATP_ALLOW_DEV_BACKEND=1 ./api.sh start
-npm start --prefix frontend
+git clone https://github.com/agent-orc/agent-studio.git
+cd agent-studio
+docker compose up --build --wait
 ```
 
-Open `http://localhost:4010`. For CLI onboarding, project registration, and
-anything beyond this single-instance setup, follow the
-[setup guide](./docs/operations/setup/getting-started.md). Contributors should
-also read [AGENTS.md](AGENTS.md).
+Open [http://localhost:4011](http://localhost:4011). Docker Compose is the one
+new-user installation path: no host .NET or Node.js install, local settings
+file, maintainer switch, or neighbouring repository is required. To add
+execution capacity after the Studio is running, follow the
+[Agent Host guide](./docs/operations/setup/linux-runner-host.md). Source
+contributors should start with [AGENTS.md](AGENTS.md).
 
 ## More
 
