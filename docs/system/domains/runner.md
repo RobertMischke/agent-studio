@@ -103,6 +103,12 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `task-server/RemoteRunResultCollector.cs`,
+  `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
+  [the remote run result contract](../contracts/remote-run-result.md): additive
+  infrastructure-test evidence collection. Final Task Server authority is
+  combined with Runner observations into one create-once scenario result. The
+  collector owns no outcome, retry, lease, or task transition decision.
 - `scripts/remote-runner-onboard.sh` and
   `scripts/agent-host-resource-governance.sh`: the current agent-host Linux
   install/update path and its role-specific systemd resource renderer. The
