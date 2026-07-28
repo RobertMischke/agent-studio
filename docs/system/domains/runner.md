@@ -213,6 +213,14 @@ state.
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
 
+- `auto-single` reverts to `manual` only when the pickup queue is empty and the
+  project has no run chain in flight. A claimed coding run, runner-side
+  post-processing record, durable `post-processing-running` phase, or card in
+  `4-auto-review` keeps the mode armed. A review reissue to `2-ready` therefore
+  remains part of the same single-run chain and is picked automatically. Once
+  the chain reaches a terminal lane and the pickup queue is empty, the normal
+  revert applies.
+
 - Remote host capacity is reported as distinct workload classes. RUN occupancy
   comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
   sum is the configured host maximum). Remote SSH build/test GATE occupancy

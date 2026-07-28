@@ -1150,6 +1150,27 @@
             repair itself, records the reason in <code>timeline.jsonl</code>.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-28</td>
+          <td><code>WEB-14</code><br><span class="small">auto-single reverted during its active run</span></td>
+          <td>
+            ProjectRunner claimed the project's only card in <code>auto-single</code>. The next pickup tick skipped that
+            same active card as a conflict, found no other candidate, and reverted the project to <code>manual</code>.
+            Auto Review later reissued WEB-14 to <span class="lane">2-ready</span>, but no automatic pickup remained.
+          </td>
+          <td>
+            The empty-candidate branch treated "the only candidate is already running" as "the run chain is drained".
+            It also had no distinction between a released coding slot and runner-side or Auto Review post-processing.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> <code>auto-single</code> now stays armed while the project has an
+            in-memory run or finalisation record, a durable <code>post-processing-running</code> phase, or a card in
+            <span class="lane">4-auto-review</span>. A review reissue remains eligible for automatic pickup. The mode
+            returns to <code>manual</code> only after the chain reaches Human Review or Completed and the pickup queue is
+            empty. The observed incident itself had no automatic terminal: WEB-14 waited in Ready for four hours until the
+            operator restored an auto mode.
+          </td>
+        </tr>
       </tbody>
     </table>
 
