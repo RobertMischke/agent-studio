@@ -154,6 +154,7 @@
         [chatSendLabel]="chatSendLabel()"
         [chatError]="chatError()"
         [queuedFollowUp]="showQueuedFollowUp()"
+        [mutationsBlocked]="mutationsBlocked()"
         [regenerating]="regeneratingSummary()"
         [runOutcome]="runOutcomePresentation()"
         (maximizeToggle)="toggleMaximize('protocol')"
@@ -162,6 +163,7 @@
         (followupPromptChange)="followupPrompt.set($event)"
         (openLogOverlay)="showLogOverlay.set(true)"
         (sendChat)="sendChatMessage()"
+        (decisionApplied)="fileSaved.emit()"
         (regenerateSummary)="regenerateProtocol()"
         (evidenceMutated)="fileSaved.emit()"
         (followupCreatedFromEvidence)="fileSaved.emit()" />

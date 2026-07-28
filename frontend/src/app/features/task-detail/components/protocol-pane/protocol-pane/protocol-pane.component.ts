@@ -64,6 +64,7 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
+import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -122,6 +123,7 @@ interface InterimSummaryState {
     PaneHeaderComponent,
     PaneTabsComponent,
     RunnerReplayMetadataComponent,
+    DecisionSurfaceComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -139,6 +141,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly chatSendLabel = input<string>('Send');
   readonly chatError = input<string | null>(null);
   readonly queuedFollowUp = input<boolean>(false);
+  readonly mutationsBlocked = input(false);
 
   readonly regenerating = input(false);
   readonly runOutcome = input<ProtocolVerdict | null>(null);
@@ -156,6 +159,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
   readonly regenerateSummary = output<void>();
+  readonly decisionApplied = output<void>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);
