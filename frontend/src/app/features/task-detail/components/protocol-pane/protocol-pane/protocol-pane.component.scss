@@ -908,23 +908,14 @@
 }
 
 /*
- * `<cac-conversation-view>` ships `:host { display: block }` with no sizing
- * of its own (the library leaves scroll ownership to the host, see its
- * `bodyMaxHeight` doc comment). With `[virtualised]="true"` the component's
- * inner `.conv` root caps itself at `[style.max-height]="bodyMaxHeight()"`
- * (default 100%) and scrolls internally — that only bounds correctly if this
- * host resolves to a definite height. `.activity-panel` (task-detail.scss)
- * is already `flex; flex-direction: column; min-height: 0`, so turning this
- * host into a flex:1 min-height:0 item there gives it that definite height,
- * the same pattern `app-activity-log-view` and `cac-chat` use for their own
- * self-scrolling body. Without this the ancestor `.pane__body` (overflow:
- * auto) stays the only scroller and the virtualised windowing math never
- * gets a stable scrollTop/clientHeight.
+ * Activity rows render at their real height. Keep the conversation in normal
+ * flow so `.pane__body` remains the one scroll owner; the shared Follow
+ * directive resolves that ancestor and leaves its scrollTop unchanged after
+ * a manual up-scroll.
  */
 cac-conversation-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
+  display: block;
+  flex: 0 0 auto;
   min-height: 0;
 }
 
