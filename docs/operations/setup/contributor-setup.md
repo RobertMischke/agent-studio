@@ -14,7 +14,7 @@ Everything below was verified against this repository's actual scripts and sourc
 | Windows | - | The only tested target today. `api.sh` and the other repo scripts are `sh`, run under Git Bash. |
 | Git Bash | `bash --version` | Ships with [Git for Windows](https://git-scm.com/download/win). Agents and the repo's own scripts never use PowerShell for these tasks - see [AGENTS.md](../../../AGENTS.md) "Agent shell policy". `api.ps1` exists for manual, human, interactive use only. |
 | .NET SDK 10 | `dotnet --version` -> `10.x` | Backend is `backend/OrchestratorApi.csproj`. |
-| Node.js 22 | `node --version` -> `v22.x` | Pinned in CI ([.github/workflows/frontend-lint.yml](../../../.github/workflows/frontend-lint.yml)). A newer LTS will often work but isn't the tested baseline. |
+| Node.js 22 | `node --version` -> `v22.x` | Pinned in CI ([.github/workflows/release.yml](../../../.github/workflows/release.yml)). A newer LTS will often work but isn't the tested baseline. |
 | Claude Code CLI | `claude --version` | `npm install -g @anthropic-ai/claude-code`. See "Claude Code login" below - this step has a real gotcha. |
 | Codex / Copilot / Gemini CLI (optional) | - | Only needed if you plan to run tasks through that CLI. Full install + quirks per CLI: [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) (includes the load-bearing **Codex-on-Windows sandbox** setting). |
 
@@ -143,6 +143,7 @@ Scripting task creation instead of clicking through the dialog: the Task API ski
 |---|---|---|
 | `./api.sh start` refuses with "refusing to start the dev backend" | ADR-0044 policy gate (see step 2.4) | `ATP_ALLOW_DEV_BACKEND=1 ./api.sh start` |
 | Claude quota panel is empty / plan shows unknown | Claude CLI never finished its first-run onboarding wizard | Run `claude` interactively once and click through to the ready prompt; see step 1. Full detail: [troubleshooting.md](./troubleshooting.md#claude-quota-panel-is-empty-plan-shows-unknown). |
+| `npm ci` fails while resolving `coding-agent-chat` | The npm registry is unavailable or the lock file and manifest have drifted | Restore registry access and verify `frontend/package.json` and `frontend/package-lock.json` agree. Do not add a relative `file:` dependency as a workaround. |
 | `claude` / `gemini` command is missing or broken on Windows after an interrupted npm update | Half-completed npm install left orphan shim files or a stub binary | `bash tools/check-cli-shims.sh` - self-heals and re-verifies with `claude --version`. |
 | Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (kills anything on the pinned port, not just the tracked PID); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
 | A newly-added project's mode toggle returns `400 Invalid project or mode` | Per-project runners are only created at backend startup | `./api.sh restart`. Full detail: [troubleshooting.md](./troubleshooting.md#put-apirunnerprojectmode-returns-400). |
