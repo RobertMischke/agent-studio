@@ -413,8 +413,17 @@ state.
   path.
 - Result refs and manifests have an earliest deletion time of 30 days by
   default. Reaching Completed or Archive extends that time to at least 30 days
-  after the terminal transition. The current store performs no automatic
-  deletion, so retention cannot end early.
+  after the terminal transition. The Task Server runs a periodic result-ref GC
+  sweep. It deletes only the exact
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>` ref when the
+  retention deadline passed, the card is in Completed or Archive, the matching
+  review has a terminal non-infrastructure report with no active retry, and a
+  newer result-bearing RunAttempt superseded the source attempt. The newest
+  result-bearing RunAttempt for a card is always spared, including after
+  acceptance. Missing credentials,
+  malformed refs, active reviews, non-terminal reviews, and Git failures all
+  fail closed. Successful deletions are recorded in the Task Server GC ledger
+  and are not retried.
 - Retained remote-runner worktree pickup reconciles the local and canonical
   salvage tips by ancestry before reuse. Equal and remote-ahead tips keep the
   canonical remote ref, and local-ahead tips advance it with a normal
