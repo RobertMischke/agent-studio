@@ -30,6 +30,7 @@
   .map{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;} @media(max-width:640px){.map{grid-template-columns:1fr;}}
   .card{border:1px solid var(--line);border-radius:9px;padding:12px 15px;background:var(--surface-2);}
   .card h4{margin:0 0 4px;font-size:15px;} .card .path{font:11.5px/1.4 ui-monospace,Consolas,monospace;color:var(--ink-3);} .card p{margin:6px 0 0;font-size:13.5px;color:var(--ink-2);}
+  a.card{display:block;color:inherit;text-decoration:none;} a.card:hover{border-color:color-mix(in srgb,var(--develop) 45%,var(--line));background:var(--accent-soft);} a.card h4{color:var(--develop);}
   .ok{color:var(--ok);} .bad{color:var(--bad);}
 </style>
 </head>
@@ -44,20 +45,20 @@
 <h2>Zielbild in Kürze</h2>
 <p>Agent Studio orchestriert Coding-Agenten: Karten laufen durch <b>code → Auto-Review → Integration</b>. Das Ziel ist ein <b>verteiltes, container-isoliertes System</b>, in dem Runner und Backend über <b>ein sauberes v1-Protokoll</b> (nie driftend) sprechen, jede Ausführung im <b>Container-Default</b> läuft, Agenten <b>autonom selbst pushen</b>, und die Verifikation <b>hermetisch im selben Container</b> stattfindet.</p>
 
-<h2>Stand jetzt (27.07., nach dem Umsetzungs-Marathon)</h2>
+<h2>Stand jetzt (28.07. abends)</h2>
 <table>
   <tr><th>Erledigt</th><th>Offen</th></tr>
   <tr>
     <td>
-      <b class="ok">P0 komplett + deployt:</b> Runner sendet das Envelope-Trio wieder (Revert-Loch geschlossen), Build-Gate vor jedem develop-Merge (build-only, Rollback bei rot, Push nur der freigegebenen SHA), Review-Plane-Diagnoserouten gemappt. Runner-Binary neu auf agent-runner-01, Backend neu gestartet.<br>
+      <b class="ok">P0 komplett, live bewiesen:</b> Auto-Review-Heilung real durchlaufen (Envelope-Probe + 13 Karten durch die volle Strecke); Welle-3-Review-Plane-Fixes deployt (Doppel-Claim-Guard, Journal-Epoch, Renew-Fail-Fast). Eskalierten-Bestand geleert.<br>
       <b class="ok">P1 komplett:</b> 7 Docker-Images bauen (Remote-Host), Compose-Smoke grün, Installer mit Container-Default.<br>
-      <b class="ok">11 Karten direkt umgesetzt/integriert</b> (u.&nbsp;a. 2375, 2382, 2302+2376 koordiniert) + 4 Orphan-WIP-Bereinigungen; main→develop gemergt.<br>
-      <b class="ok">2 adversariale Review-Wellen:</b> 42 Agenten, 25 bestätigte Findings gefixt.
+      <b class="ok">P2 begonnen:</b> T0a (CAR 0.7.0) + <b>T0b RunSpec auf der Leitung</b> (Karten-Pins wirken remote; Codex-Kanarienvogel grün) + T3-Guard-Fundament (Zentralisierungs-Ratchet + Paritäts-Fixtures). Host-Kapazität auf develop.<br>
+      <b class="ok">Board-Durchsatz:</b> zwei volle Wellen am 28.07. (u.&nbsp;a. MKT-6-Slices, Token-Economy-Karten, Registry-Fail-closed-Fix in Review).
     </td>
     <td>
-      <b class="warn" style="color:var(--warn)">Auto-Review-Heilung in Live-Probe</b> (erste Karte läuft durch die Strecke)<br>
-      Eskalierten-Bestand langsam requeuen; Karten-Buchhaltung<br>
-      P2 verteilte Plattform (erster Baustein Host-Kapazität liegt auf develop), P3 Tunnel-Ablösung
+      T1–T4 der CAR-Migration als <b>koordinierte Batches</b> (2370–2373 sind Anker, nicht auto-claimbar)<br>
+      RunSpec-Fallback-Fix (2402) mergen + deployen; 2230-Entscheidungen; Epics 2129/2130/2132<br>
+      <b>Task Server remote neu geschnitten als 2404</b> (Studio bleibt bewusst lokal, kein öffentlicher Listener; ersetzt die entfernte 2277) — zugleich der Weg zu P3 Tunnel-Ablösung (2262)
     </td>
   </tr>
 </table>
@@ -65,7 +66,7 @@
 <h2>Die Schritte (vier Phasen)</h2>
 <div class="phase"><span class="pnum">0</span><div><b>Pipeline heilen</b> — Runner aufs v1-Protokoll (behebt Auto-Review), Build-Gate scharf, Reste-Batch (2302 + 2375 + Modell-Routing-Backend).</div></div>
 <div class="phase"><span class="pnum">1</span><div><b>Container-Default</b> — Basis-Images pro Komponente, <code>docker-compose up</code>, Installer wählt Container vor, Self-Push mit Git-+CLI-Tokens, Isolation via Container.</div></div>
-<div class="phase"><span class="pnum">2</span><div><b>Verteilte Plattform</b> — Control-Plane (2129/2230/2277), CAR-Migration (2370–2373), gepaarte Releases (2132), Qualitäts-Ebene (2130).</div></div>
+<div class="phase"><span class="pnum">2</span><div><b>Verteilte Plattform</b> — Control-Plane (2129/2230; Task Server remote = 2404, Studio bleibt lokal), CAR-Migration (2370–2373), gepaarte Releases (2132), Qualitäts-Ebene (2130).</div></div>
 <div class="phase"><span class="pnum">3</span><div><b>SSH-Tunnel ablösen</b> — Steuerung nur noch per API (2262); Token-Refresh-Konzept ohne Tunnel.</div></div>
 <p class="dim">Feature- und Kleinkram-Karten fließen ab Phase 0 einfach durch die geheilte Pipeline. Details + Kartenzuordnung: siehe „Umsetzungsplan" unten.</p>
 
@@ -83,12 +84,12 @@
 <h2>Landkarte — die Tiefen-Dokumente</h2>
 <p class="dim">Hier geht's ins Detail. Jedes Doc bleibt fokussiert auf sein Thema; den großen Bogen hältst du hier im Nordstern.</p>
 <div class="map">
-  <div class="card"><h4>Umsetzungsplan (Detail)</h4><div class="path">operations/umsetzungsplan-zielbild/</div><p>Die vier Phasen ausführlich, mit Kartenzuordnung, Bündelung (Batch vs. Task), Spawn-Konvergenz &amp; Verifikations-Container.</p></div>
-  <div class="card"><h4>CAR-Migrations-Plan (P2)</h4><div class="path">operations/car-migration-plan.md</div><p>Koordinationsplan der Kette 2370–2373: vier Spawn-Pfade, CAR-Gap-Analyse, T0-Vorleistungen (RunSpec!), Parity-Suite, Hot-Migration, Container-Anschluss.</p></div>
-  <div class="card"><h4>Architektur &amp; Protokolle</h4><div class="path">operations/zielbild-komponenten-protokolle/</div><p>Komponenten, das v1-Plane, die Drift-Analyse, Schnitt/Build/Deploy im Zielbild.</p></div>
-  <div class="card"><h4>Ausführungsmodell: Container-Default</h4><div class="path">operations/execution-model-shift/</div><p>Container-Spawn, Isolation, Image, Installer — die Ausführungs-Richtung im Detail.</p></div>
-  <div class="card"><h4>Modell-Routing-Policy</h4><div class="path">operations/model-routing-policy/</div><p>Wie Token Economy Modell × Reasoning je Karte entscheidet.</p></div>
-  <div class="card"><h4>Log-Retention</h4><div class="path">operations/log-retention/</div><p>Deckelung, Archiv-Sweep, Runner-Backup — Task-Logs nachhaltig.</p></div>
+  <a class="card" href="../umsetzungsplan-zielbild/index.html"><h4>Umsetzungsplan (Detail)</h4><div class="path">operations/umsetzungsplan-zielbild/</div><p>Die vier Phasen ausführlich, mit Kartenzuordnung, Bündelung (Batch vs. Task), Spawn-Konvergenz &amp; Verifikations-Container.</p></a>
+  <a class="card" href="../car-migration-plan.md"><h4>CAR-Migrations-Plan (P2)</h4><div class="path">operations/car-migration-plan.md</div><p>Koordinationsplan der Kette 2370–2373: vier Spawn-Pfade, CAR-Gap-Analyse, T0-Vorleistungen (RunSpec!), Parity-Suite, Hot-Migration, Container-Anschluss.</p></a>
+  <a class="card" href="../zielbild-komponenten-protokolle/index.html"><h4>Architektur &amp; Protokolle</h4><div class="path">operations/zielbild-komponenten-protokolle/</div><p>Komponenten, das v1-Plane, die Drift-Analyse, Schnitt/Build/Deploy im Zielbild.</p></a>
+  <a class="card" href="../execution-model-shift/index.html"><h4>Ausführungsmodell: Container-Default</h4><div class="path">operations/execution-model-shift/</div><p>Container-Spawn, Isolation, Image, Installer — die Ausführungs-Richtung im Detail.</p></a>
+  <a class="card" href="../model-routing-policy/index.html"><h4>Modell-Routing-Policy</h4><div class="path">operations/model-routing-policy/</div><p>Wie Token Economy Modell × Reasoning je Karte entscheidet.</p></a>
+  <a class="card" href="../log-retention/index.html"><h4>Log-Retention</h4><div class="path">operations/log-retention/</div><p>Deckelung, Archiv-Sweep, Runner-Backup — Task-Logs nachhaltig.</p></a>
 </div>
 
 </main>
