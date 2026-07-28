@@ -27,4 +27,4 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [releases.md](releases.md) | Tag-driven release assets, component version matrix, guided install, drain-first update, health-gated auto-rollback, and honest CI contract. |
 | [url-preview-diagnostics.md](url-preview-diagnostics.md) | URL Preview diagnosis classes, bounded evidence, recovery actions, and Project Settings quick setup. |
 | [stable-release-contract.md](stable-release-contract.md) | Immutable Stable tags, build manifests, preflight comparison, rollback identity, and legacy migration. |
-| [deck-icon-exploration/](deck-icon-exploration/index.html) | Decision-ready Deck icon alternatives, light and dark proofs, recommendation, and implementation seam (AGT-2355). |
+| [deck-icon-exploration/](deck-icon-exploration/index.html) | Round 2 Deck icon alternatives for the multi-faceted project console, with light and dark proofs, recommendation, rejected Round 1 direction, and implementation seam (AGT-2355). |

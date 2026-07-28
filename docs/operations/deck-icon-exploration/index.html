@@ -179,6 +179,22 @@
     background: var(--surface-2);
   }
   .card p { margin: 7px 0 0; color: var(--ink-2); font-size: 14px; }
+  .rejected {
+    margin: 20px 0;
+    padding: 17px 20px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+  }
+  .rejected h3 { margin-bottom: 7px; }
+  .rejected p { margin: 5px 0; color: var(--ink-2); }
+  .round-label {
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td {
     padding: 10px 12px;
@@ -213,9 +229,9 @@
 <header class="page">
   <p class="kicker">Concept Workbench · AGT-2355</p>
   <h1>Deck Icon Exploration</h1>
-  <p class="lede">Three small line-icon motifs that separate the project Deck from the current generic board and window symbols. The concepts use the existing 24 by 24 Studio icon grid and inherit <code>currentColor</code>.</p>
+  <p class="lede">Round 2 defines the Deck as the multi-faceted project console: overview panels, settings, Wiki, token usage, and other project views. These 24 by 24 line icons express that container rather than a board or card stack.</p>
   <div class="meta">
-    <span><b>Status:</b> ready for Robert's sight review</span>
+    <span><b>Status:</b> round 2 ready for Robert's sight review</span>
     <span><b>Scope:</b> concept only, no product-code change</span>
     <span><b>Proof:</b> light and dark</span>
   </div>
@@ -223,11 +239,12 @@
 
 <section class="decision" aria-labelledby="recommendation" data-concept-section="recommendation">
   <span class="badge">Recommended</span>
-  <h2 id="recommendation" style="margin: 8px 0 0">A · Card stack</h2>
-  <p>It says "Deck" most directly, stays distinct from the four-cell <code>grid</code> Board icon, and retains its silhouette at the 10 to 14 pixel sizes used by the Explorer and tab strip.</p>
+  <h2 id="recommendation" style="margin: 8px 0 0">A · Project facets</h2>
+  <p>The asymmetric panel frame reads as one project surface with several distinct views. The small focus ring suggests a project overview without turning the icon into a Kanban grid, card stack, or terminal-only symbol.</p>
 </section>
 
 <section data-concept-section="alternatives">
+<p class="round-label">Round 2 · Project console</p>
 <h2>Mockup row</h2>
 <figure>
   <div class="mockup">
@@ -236,28 +253,28 @@
       <div class="option recommended">
         <span class="pick">Pick</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="7" y="3" width="13" height="15" rx="2"/>
-          <path d="M4 6v13a2 2 0 0 0 2 2h11"/>
-          <path d="M2 9v10a4 4 0 0 0 4 4h8"/>
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M9 3v18M9 10h12"/>
+          <circle cx="15" cy="15.5" r="2"/>
         </svg>
-        <div class="option-copy"><div class="option-name">A · Card stack</div><div class="option-effect">Literal, compact, product-specific</div></div>
+        <div class="option-copy"><div class="option-name">A · Project facets</div><div class="option-effect">One project, several distinct views</div></div>
       </div>
       <div class="option">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m12 3 9 5-9 5-9-5 9-5Z"/>
-          <path d="m3 12 9 5 9-5"/>
-          <path d="m3 16 9 5 9-5"/>
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M3 9h18"/>
+          <circle cx="6.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <circle cx="9.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <path d="m7 13 2 2-2 2M12 17h5"/>
         </svg>
-        <div class="option-copy"><div class="option-name">B · Layered planes</div><div class="option-effect">Structural, calm, slightly abstract</div></div>
+        <div class="option-copy"><div class="option-name">B · Console frame</div><div class="option-effect">Operational, direct, tool-oriented</div></div>
       </div>
       <div class="option">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="6" y="3" width="14" height="15" rx="2"/>
-          <line x1="11" y1="7" x2="11" y2="14"/>
-          <line x1="15" y1="7" x2="15" y2="11"/>
-          <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
+          <path d="m12 2.5 8.5 5v9L12 21.5l-8.5-5v-9L12 2.5Z"/>
+          <path d="M12 12 3.5 7.5M12 12l8.5-4.5M12 12v9.5"/>
         </svg>
-        <div class="option-copy"><div class="option-name">C · Board stack</div><div class="option-effect">Board context plus one backing card</div></div>
+        <div class="option-copy"><div class="option-name">C · Faceted project tile</div><div class="option-effect">Multi-sided, distinctive, abstract</div></div>
       </div>
     </div>
     <div class="theme-row dark" aria-label="Dark theme icon options">
@@ -265,48 +282,57 @@
       <div class="option recommended">
         <span class="pick">Pick</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="7" y="3" width="13" height="15" rx="2"/>
-          <path d="M4 6v13a2 2 0 0 0 2 2h11"/>
-          <path d="M2 9v10a4 4 0 0 0 4 4h8"/>
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M9 3v18M9 10h12"/>
+          <circle cx="15" cy="15.5" r="2"/>
         </svg>
-        <div class="option-copy"><div class="option-name">A · Card stack</div><div class="option-effect">Literal, compact, product-specific</div></div>
+        <div class="option-copy"><div class="option-name">A · Project facets</div><div class="option-effect">One project, several distinct views</div></div>
       </div>
       <div class="option">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m12 3 9 5-9 5-9-5 9-5Z"/>
-          <path d="m3 12 9 5 9-5"/>
-          <path d="m3 16 9 5 9-5"/>
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M3 9h18"/>
+          <circle cx="6.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <circle cx="9.5" cy="6.5" r=".6" fill="currentColor" stroke="none"/>
+          <path d="m7 13 2 2-2 2M12 17h5"/>
         </svg>
-        <div class="option-copy"><div class="option-name">B · Layered planes</div><div class="option-effect">Structural, calm, slightly abstract</div></div>
+        <div class="option-copy"><div class="option-name">B · Console frame</div><div class="option-effect">Operational, direct, tool-oriented</div></div>
       </div>
       <div class="option">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="6" y="3" width="14" height="15" rx="2"/>
-          <line x1="11" y1="7" x2="11" y2="14"/>
-          <line x1="15" y1="7" x2="15" y2="11"/>
-          <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
+          <path d="m12 2.5 8.5 5v9L12 21.5l-8.5-5v-9L12 2.5Z"/>
+          <path d="M12 12 3.5 7.5M12 12l8.5-4.5M12 12v9.5"/>
         </svg>
-        <div class="option-copy"><div class="option-name">C · Board stack</div><div class="option-effect">Board context plus one backing card</div></div>
+        <div class="option-copy"><div class="option-name">C · Faceted project tile</div><div class="option-effect">Multi-sided, distinctive, abstract</div></div>
       </div>
     </div>
   </div>
-  <figcaption>The standalone review artifact is <a href="results/deck-icon-options.svg">results/deck-icon-options.svg</a>. Every icon above is inline SVG, not a font or emoji.</figcaption>
+  <figcaption>The standalone Round 2 review artifact is <a href="results/deck-icon-options-round-2.svg">results/deck-icon-options-round-2.svg</a>. Every icon above is inline SVG, not a font or emoji.</figcaption>
 </figure>
 
 <h2>Effect and recommendation</h2>
 <div class="alternatives">
   <article class="card">
-    <h3>A · Card stack <span class="badge">Recommended</span></h3>
-    <p>Reads as a deck of cards without reusing the current board grammar. The stepped lower-left silhouette survives compact rendering.</p>
+    <h3>A · Project facets <span class="badge">Recommended</span></h3>
+    <p>An asymmetric project frame contains three visibly different areas and a focus ring. It communicates a console composed of facets while remaining legible at compact rail sizes.</p>
   </article>
   <article class="card">
-    <h3>B · Layered planes</h3>
-    <p>The cleanest geometry and a good metaphor for collected project layers. It can also mean infrastructure layers, so it is less specific.</p>
+    <h3>B · Console frame</h3>
+    <p>The strongest console metaphor. Its prompt mark makes it feel operational, but narrows the Deck toward CLI work and under-represents Wiki, settings, and overview panels.</p>
   </article>
   <article class="card">
-    <h3>C · Board stack</h3>
-    <p>Keeps a visual link to a board while adding depth. It is the most conservative option, but remains close to today's generic layout icon.</p>
+    <h3>C · Faceted project tile</h3>
+    <p>The most distinctive expression of one multi-sided object. It avoids board grammar completely, but needs the Deck label because its meaning is intentionally abstract.</p>
   </article>
+</div>
+</section>
+
+<section data-concept-section="round-1">
+<h2>Round 1: rejected direction</h2>
+<div class="rejected">
+  <h3>Card stack, layered planes, and board stack</h3>
+  <p><b>Rejected after Robert's sight review on 28 July 2026.</b> All three motifs interpreted Deck as a card or Kanban-board object. That premise was wrong.</p>
+  <p>The Deck is the project console containing multiple project facets, including settings, Wiki, token usage, and overview panels. Round 1 remains available as decision history in <a href="results/deck-icon-options.svg">the original SVG proof</a>, but none of its paths should be implemented.</p>
 </div>
 </section>
 
@@ -317,8 +343,8 @@
   <tbody>
     <tr>
       <td>Explorer Deck row</td>
-      <td><code>explorer-workspace-tree.component.html</code> uses <code>glyph="layout"</code>.</td>
-      <td>Add the picked path as one <code>StudioIconName</code>, then change this glyph binding only.</td>
+      <td><code>frontend/src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.html</code> uses <code>glyph="layout"</code>.</td>
+      <td>Add the picked Round 2 path as one <code>StudioIconName</code>, then change this glyph binding only.</td>
     </tr>
     <tr>
       <td>Project-row Deck shortcut</td>
@@ -341,7 +367,7 @@
 
 <section data-concept-section="open-decisions">
 <h2>Open decision for Robert</h2>
-<p>Pick A, B, or C. The recommended default is <b>A · Card stack</b>. No other dependency or product decision is required before the later implementation card can apply the selected path.</p>
+<p>Pick A, B, or C from Round 2. The recommended default is <b>A · Project facets</b>. No other dependency or product decision is required before the later implementation card can apply the selected path.</p>
 </section>
 </main>
 </body>
