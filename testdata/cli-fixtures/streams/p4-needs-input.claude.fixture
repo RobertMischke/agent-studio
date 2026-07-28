@@ -1,0 +1,4 @@
+#! {"scenario":"P4","title":"[[TASK_NEEDS_INPUT:...]] with a question","cli":"claude","form":"stream-json","exitCode":0}
+{"type":"system","subtype":"init","session_id":"1d9a4c08-63b7-4d51-a0ce-8e2f5b61c704","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit"],"slash_commands":[]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Two columns are plausible primary keys and the card does not say which."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":39117,"num_turns":4,"result":"I need a decision before I can write the migration.\n\n[[TASK_NEEDS_INPUT:choose-primary-column]]","session_id":"1d9a4c08-63b7-4d51-a0ce-8e2f5b61c704","total_cost_usd":0.0771,"usage":{"input_tokens":990,"cache_creation_input_tokens":0,"cache_read_input_tokens":19870,"output_tokens":120}}

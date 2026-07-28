@@ -1,0 +1,6 @@
+#! {"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"claude","form":"stream-json","exitCode":0}
+# The agent signs off blocked but omits the ":reason" segment. The scanner must
+# synthesise the default reason text instead of reporting a null reason.
+{"type":"system","subtype":"init","session_id":"c7e2b511-0aa9-4a63-8f26-19d4e77a0b3f","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Bash"],"slash_commands":[]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"The signing credential is not present in this environment."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":48210,"num_turns":5,"result":"I cannot finish this task here.\n\n[[TASK_BLOCKED]]","session_id":"c7e2b511-0aa9-4a63-8f26-19d4e77a0b3f","total_cost_usd":0.0912,"usage":{"input_tokens":1120,"cache_creation_input_tokens":0,"cache_read_input_tokens":22110,"output_tokens":141}}

@@ -1,0 +1,7 @@
+#! {"scenario":"P9","title":"self-crash, non-zero exit, no terminal sentinel","cli":"claude","form":"stream-json","exitCode":1}
+# Deliberately free of quota / auth / model wording: the diagnostic regexes in
+# ExecutionOutcomeAdapter must not steal this case from CliCrash.
+{"type":"system","subtype":"init","session_id":"7a4f9c22-3e18-4d70-b5f1-9a02c6e3dd41","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit"],"slash_commands":[]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Starting the migration edit."}]}}
+!stderr Error: stream disconnected before completion
+{"type":"result","subtype":"error_during_execution","is_error":true,"duration_ms":91004,"num_turns":6,"result":"Execution stopped before a terminal sentinel was produced.","session_id":"7a4f9c22-3e18-4d70-b5f1-9a02c6e3dd41"}

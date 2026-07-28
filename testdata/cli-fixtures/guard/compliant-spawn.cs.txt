@@ -1,0 +1,39 @@
+// FIXTURE - the shape the guard must stay silent about. Stored as .cs.txt so
+// it is never compiled.
+//
+// Two things are proven here:
+//   1. Raw process starts that are NOT a coding-agent CLI (git, verification
+//      commands) remain legal - the guard centralises CLI invocation, it does
+//      not ban Process.Start.
+//   2. A CLI binary name mentioned only inside a comment is not a violation.
+//      Historical note: this file used to call Process.Start with
+//      FileName = "claude" and RUNNER_CLI_ARGS. It no longer does.
+using System.Diagnostics;
+
+namespace AgentRunner;
+
+internal static class CompliantExecution
+{
+    // Git plumbing keeps its own spawner; the CAR migration does not touch it.
+    public static Process Git(string repoPath, params string[] arguments)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = repoPath,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        foreach (var argument in arguments) psi.ArgumentList.Add(argument);
+        return Process.Start(psi)
+            ?? throw new InvalidOperationException("failed to start git");
+    }
+
+    // The coding-agent CLI goes through the execution layer, never through a
+    // process start assembled here.
+    public static Task<CliRunHandle> RunAgentAsync(
+        ICliDriver driver,
+        CliRunRequest request,
+        CancellationToken cancellationToken)
+        => driver.StartAsync(request, cancellationToken);
+}

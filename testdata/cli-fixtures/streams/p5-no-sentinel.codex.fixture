@@ -1,0 +1,6 @@
+#! {"scenario":"P5","title":"substantial reply, no terminal sentinel","cli":"codex","form":"stream-json","exitCode":0}
+{"type":"thread.started","thread_id":"019dee7c-0b31-73aa-9d02-11f6c4e8b7a9"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"file_change","file_path":"runner/ProcessRunner.cs"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I refactored the output buffer and left the migration notes in the task folder. The remaining work needs a decision on the log sink before it can be finished."}}
+{"type":"turn.completed","usage":{"input_tokens":24110,"cached_input_tokens":8192,"output_tokens":1440,"reasoning_output_tokens":260}}

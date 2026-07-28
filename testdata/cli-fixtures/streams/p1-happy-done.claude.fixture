@@ -1,0 +1,9 @@
+#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","form":"stream-json","exitCode":0}
+# Recorded shape: claude -p --output-format stream-json --verbose (the form the
+# CAR path produces; the legacy remote path emits the plaintext sibling).
+{"type":"system","subtype":"init","session_id":"5b1c9f70-2f4a-4c31-9f0e-2f0c9c4a1e77","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit","Bash"],"slash_commands":[]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the failing test before touching the scanner."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"runner/SentinelScanner.cs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"public static class SentinelScanner { /* ... */ }"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Patch applied; the suite is green."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":184213,"num_turns":9,"result":"Implemented the scanner fix and verified the suite.\n\n[[TASK_DONE]]","session_id":"5b1c9f70-2f4a-4c31-9f0e-2f0c9c4a1e77","total_cost_usd":0.4231,"usage":{"input_tokens":1542,"cache_creation_input_tokens":2010,"cache_read_input_tokens":48230,"output_tokens":911}}

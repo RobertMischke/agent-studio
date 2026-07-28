@@ -1,0 +1,5 @@
+#! {"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"codex","form":"stream-json","exitCode":0}
+{"type":"thread.started","thread_id":"019dee74-9c1e-70b2-84cd-5ac1e0f39d22"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I cannot finish this task here.\n\n[[TASK_BLOCKED]]"}}
+{"type":"turn.completed","usage":{"input_tokens":9044,"cached_input_tokens":2048,"output_tokens":141,"reasoning_output_tokens":32}}
