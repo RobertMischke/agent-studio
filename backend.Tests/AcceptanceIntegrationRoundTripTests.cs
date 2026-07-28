@@ -518,7 +518,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     private string PublishLocalDelivery(string relativePath, string content)
     {
         var branch = WorktreeTaskLifecycle.BranchFor(Slug);
-        RunGit(_repo, "checkout", "-q", "-b", branch, "origin/develop");
+        RunGit(_repo, "branch", "develop", "origin/develop");
+        RunGit(_repo, "checkout", "-q", "-b", branch, "develop");
         File.WriteAllText(Path.Combine(_repo, relativePath), content);
         RunGit(_repo, "add", "-A");
         RunGit(_repo, "commit", "-q", "-m", $"feat({TaskKey}): local delivery");

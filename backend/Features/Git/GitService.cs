@@ -3002,6 +3002,27 @@ public class GitService
     }
 
     /// <summary>
+    /// Returns the first parent of a commit. A newly created integration merge
+    /// uses this as its exact rollback anchor when the configured branch had to
+    /// be recreated from <c>origin/&lt;branch&gt;</c> during the merge and therefore
+    /// had no local tip before the merge primitive ran.
+    /// </summary>
+    public string? GetFirstParent(string repoRoot, string commit)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!ReviewSubjectStore.IsValidResultSha(commit)) return null;
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            $"{commit}^1");
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return ReviewSubjectStore.IsValidResultSha(sha) ? sha : null;
+    }
+
+    /// <summary>
     /// Commits reachable from <paramref name="toRef"/> but not
     /// <paramref name="fromRef"/> (<c>git log fromRef..toRef --no-merges</c>),
     /// newest first. This is the graph merge-set ASS-1724 displays: with
