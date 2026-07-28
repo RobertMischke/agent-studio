@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "name": "gate-transport-loss",
+  "description": "Disconnect gate receipt transport and verify bounded replay fails closed.",
+  "incidentClass": "gate-transport-loss",
+  "expectedOutcome": "lost"
+}

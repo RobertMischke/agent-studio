@@ -1,0 +1,205 @@
+{
+  "$schema": "../../run-result.schema.json",
+  "schemaVersion": 1,
+  "suite": {
+    "name": "Remote Run Infrastructure Test Suite",
+    "sourceTaskKey": "AGT-2200",
+    "sourceTaskHref": "../../../../docs/system/domains/model-routing-policy.md",
+    "chronicleHref": "../../../../docs/operations/haertung-verteilte-ausfuehrung/historie.html"
+  },
+  "generatedAt": "2026-07-29T08:00:00.000Z",
+  "runs": [
+    {
+      "runId": "reference-001",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/reference-001.json#task",
+      "attemptId": "run_01JREFERENCE0001",
+      "attemptHref": "./raw/reference-001.json#attempt",
+      "scenario": {
+        "id": "reference-change",
+        "manifestHref": "../../scenarios/reference-change.json"
+      },
+      "outcome": "baseline",
+      "accepted": true,
+      "wallMs": 18420,
+      "phases": [
+        { "name": "claim", "status": "pass", "queueMs": 420, "executionMs": 180 },
+        { "name": "run", "status": "pass", "queueMs": 0, "executionMs": 9820 },
+        { "name": "gate", "status": "pass", "queueMs": 610, "executionMs": 2360 },
+        { "name": "review", "status": "pass", "queueMs": 840, "executionMs": 3190 },
+        { "name": "integration", "status": "pass", "queueMs": 0, "executionMs": 1000 }
+      ],
+      "tokens": {
+        "available": true,
+        "total": 4218,
+        "input": 3150,
+        "output": 1068,
+        "phases": { "run": 3340, "review": 878 }
+      },
+      "baseSha": "1111111111111111111111111111111111111111",
+      "resultSha": "2222222222222222222222222222222222222222",
+      "rawArtifactHref": "./raw/reference-001.json",
+      "components": [
+        { "name": "Task Server", "version": "2.4.0+fd474234f" },
+        { "name": "Remote Runner", "version": "2.4.0+fd474234f" },
+        { "name": "Report contract", "version": "1" }
+      ],
+      "assertions": [
+        {
+          "id": "claim-fenced",
+          "label": "Claim is fenced",
+          "status": "pass",
+          "detail": "The claim returned a lease id, authority epoch, and monotonic fence.",
+          "evidenceHref": "./raw/reference-001.json#claim"
+        },
+        {
+          "id": "exact-sha-reviewed",
+          "label": "Exact Result SHA reviewed",
+          "status": "pass",
+          "detail": "Review HEAD and the immutable handoff SHA were identical.",
+          "evidenceHref": "./raw/reference-001.json#review"
+        },
+        {
+          "id": "integrated-sha",
+          "label": "Reviewed SHA integrated",
+          "status": "pass",
+          "detail": "Integration consumed the reviewed result without substitution.",
+          "evidenceHref": "./raw/reference-001.json#integration"
+        }
+      ],
+      "incidents": [],
+      "links": [
+        { "label": "Result ref", "href": "#result-ref-reference-001" },
+        { "label": "Phase journal", "href": "./raw/reference-001-phases.jsonl" }
+      ]
+    },
+    {
+      "runId": "lease-recovery-002",
+      "taskKey": "RTS-2",
+      "taskHref": "./raw/lease-recovery-002.json#task",
+      "attemptId": "run_01JRECOVERY0002",
+      "attemptHref": "./raw/lease-recovery-002.json#attempt",
+      "scenario": {
+        "id": "daemon-restart-recovery",
+        "manifestHref": "./manifests/daemon-restart-recovery.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 26880,
+      "phases": [
+        { "name": "claim", "status": "pass", "queueMs": 630, "executionMs": 220 },
+        { "name": "run", "status": "pass", "queueMs": 0, "executionMs": 14640 },
+        { "name": "gate", "status": "pass", "queueMs": 1620, "executionMs": 2710 },
+        { "name": "review", "status": "pass", "queueMs": 980, "executionMs": 3890 },
+        { "name": "integration", "status": "pass", "queueMs": 0, "executionMs": 2190 }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "The injected daemon restart interrupted provider telemetry collection."
+      },
+      "baseSha": "3333333333333333333333333333333333333333",
+      "resultSha": "4444444444444444444444444444444444444444",
+      "rawArtifactHref": "./raw/lease-recovery-002.json",
+      "components": [
+        { "name": "Task Server", "version": "2.4.0+fd474234f" },
+        { "name": "Remote Runner", "version": "2.4.0+fd474234f" },
+        { "name": "Report contract", "version": "1" }
+      ],
+      "assertions": [
+        {
+          "id": "attempt-reconciled",
+          "label": "Attempt reconciled after restart",
+          "status": "pass",
+          "detail": "The live process reattached to the same fenced attempt after daemon restart.",
+          "evidenceHref": "./raw/lease-recovery-002.json#reattach"
+        },
+        {
+          "id": "no-duplicate-claim",
+          "label": "No duplicate claim",
+          "status": "pass",
+          "detail": "No second runner acquired execution authority during recovery.",
+          "evidenceHref": "./raw/lease-recovery-002.json#claims"
+        },
+        {
+          "id": "exact-sha-reviewed",
+          "label": "Exact Result SHA reviewed",
+          "status": "pass",
+          "detail": "Recovered execution still produced an immutable review subject.",
+          "evidenceHref": "./raw/lease-recovery-002.json#review"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "daemon-restart",
+          "label": "Runner daemon restarted while execution remained alive",
+          "chronicleAnchor": "incident-zombie-leases",
+          "injected": true,
+          "recoveryOutcome": "Reattached to the live process and preserved the original fence."
+        }
+      ],
+      "links": [
+        { "label": "Recovery journal", "href": "./raw/lease-recovery-002-recovery.jsonl" }
+      ]
+    },
+    {
+      "runId": "gate-loss-003",
+      "taskKey": "RTS-3",
+      "taskHref": "./raw/gate-loss-003.json#task",
+      "attemptId": "run_01JGATELOSS0003",
+      "attemptHref": "./raw/gate-loss-003.json#attempt",
+      "scenario": {
+        "id": "gate-transport-loss",
+        "manifestHref": "./manifests/gate-transport-loss.json"
+      },
+      "outcome": "lost",
+      "accepted": false,
+      "wallMs": 15120,
+      "phases": [
+        { "name": "claim", "status": "pass", "queueMs": 310, "executionMs": 170 },
+        { "name": "run", "status": "pass", "queueMs": 0, "executionMs": 8430 },
+        { "name": "gate", "status": "fail", "queueMs": 1280, "executionMs": 2740 },
+        { "name": "review", "status": "skipped", "queueMs": 0, "executionMs": 0 }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "The fixture intentionally provides no token telemetry."
+      },
+      "baseSha": "5555555555555555555555555555555555555555",
+      "resultSha": "6666666666666666666666666666666666666666",
+      "rawArtifactHref": "./raw/gate-loss-003.json",
+      "components": [
+        { "name": "Task Server", "version": "2.4.0+fd474234f" },
+        { "name": "Remote Runner", "version": "2.4.0+fd474234f" },
+        { "name": "Report contract", "version": "1" }
+      ],
+      "assertions": [
+        {
+          "id": "gate-result-recovered",
+          "label": "Gate result recovered",
+          "status": "fail",
+          "detail": "Transport recovery exhausted its bounded replay window before the gate receipt was acknowledged.",
+          "evidenceHref": "./raw/gate-loss-003.json#gate-replay"
+        },
+        {
+          "id": "review-blocked",
+          "label": "Review blocked on missing gate receipt",
+          "status": "pass",
+          "detail": "The suite failed closed and did not create a positive review verdict.",
+          "evidenceHref": "./raw/gate-loss-003.json#review-admission"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "gate-transport-loss",
+          "label": "Gate transport disconnected before receipt acknowledgement",
+          "chronicleAnchor": "incident-remote-gates",
+          "injected": true,
+          "recoveryOutcome": "Replay remained unacknowledged; review was blocked and the run was classified lost."
+        }
+      ],
+      "links": [
+        { "label": "Gate replay journal", "href": "./raw/gate-loss-003-gate.jsonl" }
+      ]
+    }
+  ]
+}

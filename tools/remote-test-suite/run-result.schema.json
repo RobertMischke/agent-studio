@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-studio.local/schemas/remote-test-report-v1.json",
+  "title": "Remote infrastructure test suite report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "suite", "generatedAt", "runs"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sourceTaskKey", "sourceTaskHref", "chronicleHref"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "sourceTaskKey": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]*-[0-9]+$" },
+        "sourceTaskHref": { "$ref": "#/$defs/href" },
+        "chronicleHref": { "$ref": "#/$defs/href" }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "runs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/run" }
+    }
+  },
+  "$defs": {
+    "href": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(#|\\./|\\.\\./|https?://)[^\\s]+$"
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "queueMs", "executionMs"],
+      "properties": {
+        "name": { "enum": ["claim", "run", "gate", "review", "integration"] },
+        "status": { "enum": ["pass", "fail", "skipped"] },
+        "queueMs": { "type": "integer", "minimum": 0 },
+        "executionMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status", "detail", "evidenceHref"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+        "label": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["pass", "fail"] },
+        "detail": { "type": "string", "minLength": 1 },
+        "evidenceHref": { "$ref": "#/$defs/href" }
+      }
+    },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "label", "chronicleAnchor", "injected", "recoveryOutcome"],
+      "properties": {
+        "class": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+        "label": { "type": "string", "minLength": 1 },
+        "chronicleAnchor": { "type": "string", "pattern": "^incident-[a-z0-9-]+$" },
+        "injected": { "type": "boolean" },
+        "recoveryOutcome": { "type": "string", "minLength": 1 }
+      }
+    },
+    "tokens": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "reason"],
+          "properties": {
+            "available": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "total", "input", "output", "phases"],
+          "properties": {
+            "available": { "const": true },
+            "total": { "type": "integer", "minimum": 0 },
+            "input": { "type": "integer", "minimum": 0 },
+            "output": { "type": "integer", "minimum": 0 },
+            "phases": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "propertyNames": {
+                "enum": ["claim", "run", "gate", "review", "integration"]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "href"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "href": { "$ref": "#/$defs/href" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId", "taskKey", "taskHref", "attemptId", "attemptHref",
+        "scenario", "outcome", "accepted", "wallMs", "phases", "tokens",
+        "baseSha", "resultSha", "rawArtifactHref", "components",
+        "assertions", "incidents", "links"
+      ],
+      "properties": {
+        "runId": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,100}$" },
+        "taskKey": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]*-[0-9]+$" },
+        "taskHref": { "$ref": "#/$defs/href" },
+        "attemptId": { "type": "string", "minLength": 1 },
+        "attemptHref": { "$ref": "#/$defs/href" },
+        "scenario": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "manifestHref"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+            "manifestHref": { "$ref": "#/$defs/href" }
+          }
+        },
+        "outcome": { "enum": ["baseline", "healed", "recovered", "lost", "invalid"] },
+        "accepted": { "type": "boolean" },
+        "wallMs": { "type": "integer", "minimum": 0 },
+        "phases": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/phase" }
+        },
+        "tokens": { "$ref": "#/$defs/tokens" },
+        "baseSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "resultSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "rawArtifactHref": { "$ref": "#/$defs/href" },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/component" }
+        },
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/assertion" }
+        },
+        "incidents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/incident" }
+        },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/link" }
+        }
+      }
+    }
+  }
+}

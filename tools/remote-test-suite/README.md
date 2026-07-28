@@ -45,3 +45,32 @@ Task Server:
 ```bash
 REMOTE_TEST_SUITE_INTEGRATION=1 npm --prefix tools/remote-test-suite test
 ```
+
+## Static acceptance report
+
+Validated run-result JSON can be rendered as one self-contained, offline HTML
+file:
+
+```bash
+npm --prefix tools/remote-test-suite run report -- \
+  --input /path/to/validated-runs.json \
+  --output /path/to/remote-run-report.html
+```
+
+The versioned contract is
+[`run-result.schema.json`](run-result.schema.json). In addition to structural
+validation, the renderer enforces phase order, full SHAs, accepted-state
+consistency, wall-time bounds, token arithmetic, unique run and assertion ids,
+and safe evidence links. Invalid input still writes a visible rejection report
+and exits with status 2, so incompatible records cannot disappear from a
+nominally green report.
+
+The report is infrastructure-only. Tokens are optional per-run telemetry.
+Model or CLI grouping, comparisons, rankings, and benchmark execution are not
+part of the contract.
+
+Regenerate the repository-viewable deterministic example with:
+
+```bash
+npm --prefix tools/remote-test-suite run report:fixture
+```

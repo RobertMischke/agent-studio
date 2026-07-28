@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "report": "node report.mjs",
+    "report:fixture": "node report.mjs --input fixtures/report/validated-runs.json --output ../../docs/quality/remote-run-testsuite-report/index.html",
     "test": "node --test test/*.test.mjs"
   }
 }

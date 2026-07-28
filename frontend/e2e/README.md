@@ -346,7 +346,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 |------|---------|
 | `menu-no-icons.spec.ts` | Menu surfaces are text-only |
 
-### `mockups/` - 9 specs
+### `mockups/` - 10 specs
 
 | Spec | Summary |
 |------|---------|
@@ -356,6 +356,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `orchestrator-prep-mockup-screenshot.spec.ts` | orchestrator-prep mockup: low-autonomy and fully-auto board states |
 | `plan-strip-mockup.spec.ts` | @mockup plan-strip (real component) |
 | `project-overview-dashboard-mockup.spec.ts` | Project Overview interactive mockup |
+| `remote-run-testsuite-report.spec.ts` | @mockup remote-run testsuite report |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |
 | `task-progress-tracking-mockup.spec.ts` | task-progress-tracking mockup |
 | `vscode-layout-mockup.spec.ts` | @mockup vscode-layout |

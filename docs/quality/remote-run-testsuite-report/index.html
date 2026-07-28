@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>3 run remote infrastructure report</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e8e7e2;
+    --ink-1: #10100f; --ink-2: #565550; --ink-3: #77756f; --line: #d5d3cc;
+    --accent: #246db5; --accent-soft: #e7f0fa; --ok: #167044; --ok-soft: #e7f4ec;
+    --bad: #b9333b; --bad-soft: #f9e9eb; --warn: #8a6400; --warn-soft: #f7efd9;
+    --shadow: 0 12px 30px rgba(22, 22, 18, .08);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #181817; --surface-2: #222221; --surface-3: #2c2c2a;
+    --ink-1: #f7f6f1; --ink-2: #c6c4ba; --ink-3: #9a9890; --line: #3d3c38;
+    --accent: #77afe7; --accent-soft: #1d2b3a; --ok: #65bf8d; --ok-soft: #1b3025;
+    --bad: #ef7b83; --bad-soft: #3a2023; --warn: #e1b84f; --warn-soft: #352f1c;
+    --shadow: 0 12px 30px rgba(0, 0, 0, .22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #181817; --surface-2: #222221; --surface-3: #2c2c2a;
+      --ink-1: #f7f6f1; --ink-2: #c6c4ba; --ink-3: #9a9890; --line: #3d3c38;
+      --accent: #77afe7; --accent-soft: #1d2b3a; --ok: #65bf8d; --ok-soft: #1b3025;
+      --bad: #ef7b83; --bad-soft: #3a2023; --warn: #e1b84f; --warn-soft: #352f1c;
+      --shadow: 0 12px 30px rgba(0, 0, 0, .22);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--surface-1); color: var(--ink-1); font: 15px/1.55 system-ui, "Segoe UI", sans-serif; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex="0"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .page, main { width: 100%; padding-inline: clamp(18px, 4vw, 64px); }
+  .page { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 32px; padding-block: 42px 28px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .page .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--ink-2); }
+  .page.rejected { background: var(--bad-soft); }
+  h1, h2, h3, h4, p { margin-top: 0; }
+  h1 { margin-bottom: 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.12; letter-spacing: -.025em; }
+  h2 { margin-bottom: 0; font-size: clamp(22px, 2.5vw, 30px); line-height: 1.2; }
+  h3 { margin-bottom: 10px; font-size: 17px; }
+  h4 { margin-bottom: 4px; font-size: 15px; }
+  .kicker, .eyebrow { margin-bottom: 7px; color: var(--ink-3); font-size: 12px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+  .lede { max-width: 72ch; margin-bottom: 0; color: var(--ink-2); font-size: 17px; }
+  .theme { align-self: start; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: var(--surface-1); color: var(--ink-1); font: inherit; cursor: pointer; }
+  main { padding-block: 34px 80px; }
+  main > section { margin-bottom: 52px; scroll-margin-top: 20px; }
+  .section-heading, .subheading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .summary-line, .quiet, .subheading span { margin: 0; color: var(--ink-2); }
+  .metrics { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 10px; }
+  .metric { min-height: 126px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+  .metric > span { display: block; color: var(--ink-2); font-weight: 650; }
+  .metric > strong { display: block; margin: 8px 0; font-size: 25px; line-height: 1.1; }
+  .metric small { display: block; color: var(--ink-3); }
+  .metric.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; }
+  th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  thead th { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  tbody tr:last-child > * { border-bottom: 0; }
+  .matrix th[scope="row"] small { display: block; color: var(--ink-3); font-weight: 400; }
+  .status { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 750; letter-spacing: .03em; text-decoration: none; }
+  .status.pass { color: var(--ok); background: var(--ok-soft); }
+  .status.fail, .status.bad { color: var(--bad); background: var(--bad-soft); }
+  .status.warn, .status.skipped { color: var(--warn); background: var(--warn-soft); }
+  .na { color: var(--ink-3); }
+  .runs { display: grid; gap: 12px; }
+  .run-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); box-shadow: var(--shadow); overflow: clip; scroll-margin-top: 18px; }
+  .run-card.failed { background: color-mix(in srgb, var(--bad-soft) 45%, var(--surface-2)); }
+  .run-card summary { display: grid; grid-template-columns: 18px minmax(190px, 1fr) auto auto auto; align-items: center; gap: 14px; padding: 16px 18px; cursor: pointer; list-style: none; }
+  .run-card summary::-webkit-details-marker { display: none; }
+  .chevron { width: 8px; height: 8px; border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(-45deg); transition: transform .16s ease; }
+  details[open] .chevron { transform: rotate(45deg); }
+  .run-identity strong, .run-identity span { display: block; }
+  .run-identity span, .outcome, .wall { color: var(--ink-2); }
+  .run-body { padding: 0 18px 22px; border-top: 1px solid var(--line); }
+  .run-links { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-block: 14px; }
+  code { font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+  .timeline { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .phase { position: relative; min-height: 112px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-1); }
+  .phase-head { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+  .phase-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .phase.fail .phase-dot { background: var(--bad); }
+  .phase.skipped .phase-dot { background: var(--warn); }
+  .phase dl { display: grid; gap: 2px; margin: 12px 0 0; color: var(--ink-2); }
+  .phase dl div { display: flex; justify-content: space-between; gap: 8px; }
+  .phase dt, .phase dd { margin: 0; }
+  .evidence-grid { display: grid; grid-template-columns: 1.3fr .8fr .9fr; gap: 10px; margin-top: 18px; }
+  .data-panel, .incident, .assertion, .validation, .contract { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  .sha-list { display: grid; gap: 10px; margin: 0; }
+  .sha-list div { min-width: 0; }
+  .sha-list dt { color: var(--ink-3); font-size: 12px; }
+  .sha-list dd { margin: 2px 0 0; }
+  .tokens > * { display: block; margin-bottom: 5px; }
+  .tokens span { color: var(--ink-2); }
+  .component-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+  .component-list li { display: flex; justify-content: space-between; gap: 10px; }
+  .incidents, .assertions { margin-top: 18px; }
+  .incident { background: var(--warn-soft); }
+  .incident > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+  .incident p { margin: 8px 0; }
+  .assertions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .assertions > h3 { grid-column: 1 / -1; }
+  .assertion { scroll-margin-top: 18px; }
+  .assertion.fail { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+  .assertion.pass { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 25%, var(--line)); }
+  .assertion > div { display: flex; align-items: center; gap: 9px; }
+  .assertion h4 { margin: 0; }
+  .assertion p { margin: 10px 0; color: var(--ink-2); }
+  .evidence { font-weight: 650; }
+  .validation { max-width: 980px; background: var(--bad-soft); }
+  .validation li { margin-block: 8px; }
+  .contract { background: var(--accent-soft); }
+  .contract p:last-child { max-width: 80ch; margin-bottom: 0; }
+  .empty { color: var(--ink-2); }
+  @media (max-width: 1100px) {
+    .metrics { grid-template-columns: repeat(4, minmax(130px, 1fr)); }
+    .timeline { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+    .evidence-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 680px) {
+    .page { grid-template-columns: 1fr; padding-block: 28px 20px; }
+    .page > div:first-child { padding-right: 82px; }
+    .theme { position: absolute; top: 14px; right: 14px; }
+    main { padding-block-start: 24px; }
+    .section-heading, .subheading { align-items: start; flex-direction: column; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric { min-height: 112px; }
+    .run-card summary { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; }
+    .run-card summary .outcome, .run-card summary .wall { grid-column: 2; }
+    .timeline, .evidence-grid, .assertions { grid-template-columns: 1fr; }
+    .assertions > h3 { grid-column: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+  }
+  @media print {
+    :root { color-scheme: light; }
+    body { background: white; color: black; font-size: 10pt; }
+    .theme { display: none; }
+    .page, main { padding-inline: 0; }
+    main { padding-block: 16px 0; }
+    main > section { margin-bottom: 24px; }
+    .run-card { break-inside: avoid; box-shadow: none; }
+    details:not([open]) > .run-body, details > .run-body { display: block !important; }
+    .chevron { display: none; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+
+    <header class="page">
+      <div>
+        <p class="kicker">Infrastructure verification · Static report</p>
+        <h1>Remote Run Infrastructure Test Suite</h1>
+        <p class="lede">Remote execution acceptance, recovery evidence, phase timing, and telemetry coverage. No model or CLI comparisons are included.</p>
+      </div>
+      <button class="theme" type="button" data-theme-toggle aria-label="Switch color theme">Theme</button>
+      <div class="meta">
+        <span>Generated <strong>29 Jul 2026, 08:00 UTC</strong></span>
+        <span>Source <a id="source-agt-2200" href="../../system/domains/model-routing-policy.md">AGT-2200</a></span>
+        <span>Schema <a href="#contract">v1</a></span>
+      </div>
+    </header>
+
+    <main>
+      <section aria-labelledby="summary-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Acceptance</p><h2 id="summary-heading">Suite summary</h2></div>
+          <p class="summary-line">2 of 3 runs accepted</p>
+        </div>
+        <div class="metrics" aria-label="Outcome and telemetry totals">
+          <article class="metric "><span>Runs</span><strong>3</strong><small>All validated run records</small></article>
+          <article class="metric "><span>Healed</span><strong>0</strong><small>Self-healed infrastructure</small></article>
+          <article class="metric "><span>Recovered</span><strong>1</strong><small>Recovered after an incident</small></article>
+          <article class="metric bad"><span>Lost</span><strong>1</strong><small>Evidence or execution lost</small></article>
+          <article class="metric "><span>Invalid</span><strong>0</strong><small>Schema-incompatible records</small></article>
+          <article class="metric "><span>Wall time</span><strong>1m 0s</strong><small>Across all visible runs</small></article>
+          <article class="metric "><span>Telemetry coverage</span><strong>1/3</strong><small>Tokens · phase timing 3/3 · 4,218 tokens</small></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="matrix-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">One click to assertion</p><h2 id="matrix-heading">Acceptance matrix</h2></div>
+          <p class="quiet">Each status opens the exact assertion. Raw evidence is the next link.</p>
+        </div>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable acceptance matrix">
+          <table class="matrix">
+            <thead><tr><th scope="col">Run</th><th scope="col">Claim is fenced</th><th scope="col">Exact Result SHA reviewed</th><th scope="col">Reviewed SHA integrated</th><th scope="col">Attempt reconciled after restart</th><th scope="col">No duplicate claim</th><th scope="col">Gate result recovered</th><th scope="col">Review blocked on missing gate receipt</th></tr></thead>
+            <tbody><tr>
+    <th scope="row"><a href="#run-reference-001">reference-001</a><small>reference-change</small></th>
+    <td><a class="status pass" href="#assertion-reference-001-claim-fenced">Pass</a></td><td><a class="status pass" href="#assertion-reference-001-exact-sha-reviewed">Pass</a></td><td><a class="status pass" href="#assertion-reference-001-integrated-sha">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-lease-recovery-002">lease-recovery-002</a><small>daemon-restart-recovery</small></th>
+    <td><span class="na" aria-label="Not applicable">n/a</span></td><td><a class="status pass" href="#assertion-lease-recovery-002-exact-sha-reviewed">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><a class="status pass" href="#assertion-lease-recovery-002-attempt-reconciled">Pass</a></td><td><a class="status pass" href="#assertion-lease-recovery-002-no-duplicate-claim">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-gate-loss-003">gate-loss-003</a><small>gate-transport-loss</small></th>
+    <td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><span class="na" aria-label="Not applicable">n/a</span></td><td><a class="status fail" href="#assertion-gate-loss-003-gate-result-recovered">Fail</a></td><td><a class="status pass" href="#assertion-gate-loss-003-review-blocked">Pass</a></td>
+  </tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="timing-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Queue versus execution</p><h2 id="timing-heading">Phase totals</h2></div>
+          <p class="quiet">Totals reconcile only the phase records visible below.</p>
+        </div>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable phase timing table">
+          <table><thead><tr><th scope="col">Phase</th><th scope="col">Queue</th><th scope="col">Execution</th><th scope="col">Runs</th></tr></thead><tbody><tr><th scope="row">Claim</th><td>1.4 s</td><td>570 ms</td><td>3</td></tr><tr><th scope="row">Run</th><td>0 ms</td><td>32.9 s</td><td>3</td></tr><tr><th scope="row">Gate</th><td>3.5 s</td><td>7.8 s</td><td>3</td></tr><tr><th scope="row">Review</th><td>1.8 s</td><td>7.1 s</td><td>3</td></tr><tr><th scope="row">Integration</th><td>0 ms</td><td>3.2 s</td><td>2</td></tr></tbody></table>
+        </div>
+      </section>
+
+      <section aria-labelledby="runs-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Expandable evidence</p><h2 id="runs-heading">Runs</h2></div>
+          <p class="quiet">Native disclosure controls support keyboard navigation and print expansion.</p>
+        </div>
+        <div class="runs"><details class="run-card accepted" id="run-reference-001">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>reference-001</strong><span>reference-change</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Baseline</span>
+      <span class="wall">18.4 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#task">RTS-1</a>
+        <a id="attempt-reference-001" href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#attempt"><code>run_01JREFERENCE0001</code></a>
+        <a href="../../../tools/remote-test-suite/scenarios/reference-change.json">Scenario manifest</a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json">Raw run artifact</a>
+        <a href="#result-ref-reference-001">Result ref</a><a href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001-phases.jsonl">Phase journal</a>
+      </div>
+
+      <section aria-labelledby="timeline-reference-001">
+        <div class="subheading"><h3 id="timeline-reference-001">Phase timeline</h3><span>Queue 1.9 s · Execution 16.6 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>420 ms</dd></div><div><dt>Execution</dt><dd>180 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>9.8 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>610 ms</dd></div><div><dt>Execution</dt><dd>2.4 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>840 ms</dd></div><div><dt>Execution</dt><dd>3.2 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>1 s</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-reference-001">
+          <h3 id="sha-reference-001">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#baseSha"><code>1111111111111111111111111111111111111111</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-reference-001" href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#resultSha"><code>2222222222222222222222222222222222222222</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-reference-001">
+          <h3 id="tokens-reference-001">Token telemetry</h3>
+          <strong>4,218 total</strong><span>3,150 input · 1,068 output</span>
+       <span>Run 3,340 · Review 878</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-reference-001">
+          <h3 id="components-reference-001">Component versions</h3>
+          <ul class="component-list"><li><span>Task Server</span><code>2.4.0+fd474234f</code></li><li><span>Remote Runner</span><code>2.4.0+fd474234f</code></li><li><span>Report contract</span><code>1</code></li></ul>
+        </section>
+      </div>
+
+      
+      <section class="assertions" aria-labelledby="assertions-reference-001">
+        <h3 id="assertions-reference-001">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-reference-001-claim-fenced" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Claim is fenced</h4></div>
+      <p>The claim returned a lease id, authority epoch, and monotonic fence.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#claim">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-reference-001-exact-sha-reviewed" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact Result SHA reviewed</h4></div>
+      <p>Review HEAD and the immutable handoff SHA were identical.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#review">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-reference-001-integrated-sha" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Reviewed SHA integrated</h4></div>
+      <p>Integration consumed the reviewed result without substitution.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/reference-001.json#integration">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-lease-recovery-002">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>lease-recovery-002</strong><span>daemon-restart-recovery</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">26.9 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#task">RTS-2</a>
+        <a id="attempt-lease-recovery-002" href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#attempt"><code>run_01JRECOVERY0002</code></a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/manifests/daemon-restart-recovery.json">Scenario manifest</a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json">Raw run artifact</a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002-recovery.jsonl">Recovery journal</a>
+      </div>
+
+      <section aria-labelledby="timeline-lease-recovery-002">
+        <div class="subheading"><h3 id="timeline-lease-recovery-002">Phase timeline</h3><span>Queue 3.2 s · Execution 23.6 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>630 ms</dd></div><div><dt>Execution</dt><dd>220 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>14.6 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>1.6 s</dd></div><div><dt>Execution</dt><dd>2.7 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>980 ms</dd></div><div><dt>Execution</dt><dd>3.9 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>2.2 s</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-lease-recovery-002">
+          <h3 id="sha-lease-recovery-002">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#baseSha"><code>3333333333333333333333333333333333333333</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-lease-recovery-002" href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#resultSha"><code>4444444444444444444444444444444444444444</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-lease-recovery-002">
+          <h3 id="tokens-lease-recovery-002">Token telemetry</h3>
+          <strong>Unavailable</strong><span>The injected daemon restart interrupted provider telemetry collection.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-lease-recovery-002">
+          <h3 id="components-lease-recovery-002">Component versions</h3>
+          <ul class="component-list"><li><span>Task Server</span><code>2.4.0+fd474234f</code></li><li><span>Remote Runner</span><code>2.4.0+fd474234f</code></li><li><span>Report contract</span><code>1</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-lease-recovery-002">
+      <h3 id="incidents-lease-recovery-002">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Runner daemon restarted while execution remained alive</strong></div>
+          <p>Reattached to the live process and preserved the original fence.</p>
+          <a href="../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases">Open daemon-restart in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-lease-recovery-002">
+        <h3 id="assertions-lease-recovery-002">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-lease-recovery-002-attempt-reconciled" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Attempt reconciled after restart</h4></div>
+      <p>The live process reattached to the same fenced attempt after daemon restart.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#reattach">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-lease-recovery-002-no-duplicate-claim" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>No duplicate claim</h4></div>
+      <p>No second runner acquired execution authority during recovery.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#claims">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-lease-recovery-002-exact-sha-reviewed" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact Result SHA reviewed</h4></div>
+      <p>Recovered execution still produced an immutable review subject.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/lease-recovery-002.json#review">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card failed" id="run-gate-loss-003">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>gate-loss-003</strong><span>gate-transport-loss</span></span>
+      <span class="status fail">Failed</span>
+      <span class="outcome">Lost</span>
+      <span class="wall">15.1 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#task">RTS-3</a>
+        <a id="attempt-gate-loss-003" href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#attempt"><code>run_01JGATELOSS0003</code></a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/manifests/gate-transport-loss.json">Scenario manifest</a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json">Raw run artifact</a>
+        <a href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003-gate.jsonl">Gate replay journal</a>
+      </div>
+
+      <section aria-labelledby="timeline-gate-loss-003">
+        <div class="subheading"><h3 id="timeline-gate-loss-003">Phase timeline</h3><span>Queue 1.6 s · Execution 11.3 s · Other 2.2 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>310 ms</dd></div><div><dt>Execution</dt><dd>170 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>8.4 s</dd></div></dl>
+    </li>
+    <li class="phase fail">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status fail">Fail</span></div>
+      <dl><div><dt>Queue</dt><dd>1.3 s</dd></div><div><dt>Execution</dt><dd>2.7 s</dd></div></dl>
+    </li>
+    <li class="phase skipped">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status skipped">Skipped</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-gate-loss-003">
+          <h3 id="sha-gate-loss-003">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#baseSha"><code>5555555555555555555555555555555555555555</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-gate-loss-003" href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#resultSha"><code>6666666666666666666666666666666666666666</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-gate-loss-003">
+          <h3 id="tokens-gate-loss-003">Token telemetry</h3>
+          <strong>Unavailable</strong><span>The fixture intentionally provides no token telemetry.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-gate-loss-003">
+          <h3 id="components-gate-loss-003">Component versions</h3>
+          <ul class="component-list"><li><span>Task Server</span><code>2.4.0+fd474234f</code></li><li><span>Remote Runner</span><code>2.4.0+fd474234f</code></li><li><span>Report contract</span><code>1</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-gate-loss-003">
+      <h3 id="incidents-gate-loss-003">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Gate transport disconnected before receipt acknowledgement</strong></div>
+          <p>Replay remained unacknowledged; review was blocked and the run was classified lost.</p>
+          <a href="../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates">Open gate-transport-loss in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-gate-loss-003">
+        <h3 id="assertions-gate-loss-003">Assertions</h3>
+        
+    <article class="assertion fail" id="assertion-gate-loss-003-gate-result-recovered" tabindex="-1">
+      <div><span class="status fail">Fail</span><h4>Gate result recovered</h4></div>
+      <p>Transport recovery exhausted its bounded replay window before the gate receipt was acknowledged.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#gate-replay">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-gate-loss-003-review-blocked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Review blocked on missing gate receipt</h4></div>
+      <p>The suite failed closed and did not create a positive review verdict.</p>
+      <a class="evidence" href="../../../tools/remote-test-suite/fixtures/report/raw/gate-loss-003.json#review-admission">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details></div>
+      </section>
+
+      <section id="contract" class="contract" aria-labelledby="contract-heading">
+        <p class="eyebrow">Contract</p>
+        <h2 id="contract-heading">Validation behavior</h2>
+        <p>This report was generated only after schema version 1 and cross-field invariants passed. Unknown fields, malformed links, incorrect phase order, inconsistent token totals, and accepted runs containing failures are rejected visibly.</p>
+      </section>
+    </main>
+  
+<script>
+  (() => {
+    const root = document.documentElement;
+    const button = document.querySelector('[data-theme-toggle]');
+    if (!button) return;
+    button.addEventListener('click', () => {
+      const current = root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      root.dataset.theme = current === 'dark' ? 'light' : 'dark';
+      button.setAttribute('aria-label', 'Switch to ' + current + ' theme');
+    });
+    if (location.hash.startsWith('#assertion-')) {
+      const target = document.querySelector(location.hash);
+      const details = target?.closest('details');
+      if (details) details.open = true;
+    }
+    addEventListener('hashchange', () => {
+      const target = document.querySelector(location.hash);
+      const details = target?.closest('details');
+      if (details) details.open = true;
+    });
+    let printOpenState = [];
+    addEventListener('beforeprint', () => {
+      printOpenState = [...document.querySelectorAll('details')].map(details => details.open);
+      document.querySelectorAll('details').forEach(details => { details.open = true; });
+    });
+    addEventListener('afterprint', () => {
+      document.querySelectorAll('details').forEach((details, index) => {
+        details.open = printOpenState[index] ?? details.open;
+      });
+      printOpenState = [];
+    });
+  })();
+</script>
+</body>
+</html>
