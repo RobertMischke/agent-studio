@@ -1,4 +1,5 @@
 import type { TaskInfo } from '../../../models/task.model';
+import { deriveActiveTaskRun } from '../../../services/run-activity.util';
 import type { HostTelemetryPoint, RemoteHost } from './remote-host.model';
 
 export const RUNNING_TELEMETRY_FRESH_MS = 5 * 60_000;
@@ -12,10 +13,9 @@ export interface BoardRunningTruth {
 
 /**
  * The board's Progress lane is the canonical inventory of active task runs.
- * Local processes prove liveness through their execution record. Remote runs
- * prove it through the fenced lease projection, which is removed when the
- * lease ends. A remote lease wins over an execution snapshot so a task can
- * never be counted in both buckets.
+ * Local processes and fresh remote leases are reconciled by the shared active
+ * run projection. A canonical disconnected location therefore stays outside
+ * both buckets even when a compatibility runner badge is still present.
  */
 export function deriveBoardRunningTruth(progress: readonly TaskInfo[]): BoardRunningTruth {
   let local = 0;
@@ -25,17 +25,16 @@ export function deriveBoardRunningTruth(progress: readonly TaskInfo[]): BoardRun
   for (const task of progress) {
     if (task.state !== '3-progress') continue;
 
-    const runner = task.runner;
-    const hasActiveLease = !!runner?.leaseId;
-    if (hasActiveLease && runner?.isRemote) {
+    const active = deriveActiveTaskRun(task);
+    if (active?.kind === 'remote') {
       remote++;
-      remoteByRunnerId.set(runner.runnerId, (remoteByRunnerId.get(runner.runnerId) ?? 0) + 1);
+      if (active.runnerId) {
+        remoteByRunnerId.set(active.runnerId, (remoteByRunnerId.get(active.runnerId) ?? 0) + 1);
+      }
       continue;
     }
 
-    if (task.execution?.status === 'running' || (hasActiveLease && runner?.isRemote === false)) {
-      local++;
-    }
+    if (active?.kind === 'local') local++;
   }
 
   return { local, remote, total: local + remote, remoteByRunnerId };

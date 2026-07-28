@@ -98,6 +98,52 @@ describe('TaskLiveStatusComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Requirement fit');
   });
 
+  it('shows a fresh remote lease as the current run when no local execution or pipeline step exists', () => {
+    const now = Date.now();
+    fixture.componentRef.setInput('task', task({
+      state: '3-progress',
+      execution: null,
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-remote',
+        fencingToken: 4,
+        acquiredAt: new Date(now - 125_000).toISOString(),
+      },
+      executionLocation: {
+        state: 'remote-running',
+        executionKind: 'remote',
+        runnerId: 'agent-runner-01@linux-host',
+        hostDisplayName: 'agent-runner-01',
+        startedAt: new Date(now - 125_000).toISOString(),
+        lastHeartbeat: new Date(now - 2_000).toISOString(),
+        lastActivityAt: new Date(now - 2_000).toISOString(),
+        connectionState: 'connected',
+        leaseState: 'active',
+        trustReason: 'Fresh fenced lease heartbeat.',
+      },
+      runActivity: { kind: 'no-active-run', attempt: 0 },
+      liveStatus: {
+        attempt: 1,
+        activeStep: null,
+        nextSteps: [{ stepId: 'core-agent-run', displayName: 'Agent run' }],
+        queue: null,
+        latestEventAt: new Date(now - 2_000).toISOString(),
+      },
+    }));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
+    expect(root.dataset['liveTone']).toBe('active');
+    expect(root.textContent).toContain('Running remote on agent-runner-01');
+    expect(root.textContent).toMatch(/Active for 2m0[45]s/);
+    expect(root.textContent).not.toContain('No active run');
+    expect(root.textContent).not.toContain('possible hang');
+  });
+
   it('calls out a possible hang after ten minutes without a step or queue', () => {
     const old = new Date(Date.now() - 12 * 60_000).toISOString();
     fixture.componentRef.setInput('task', task({
@@ -141,6 +187,6 @@ describe('TaskLiveStatusComponent', () => {
     expect(root.textContent).not.toContain('No active run');
     expect(root.textContent).toContain('Preparing');
     // last activity still surfaced, live-ticking via NowTickService
-    expect(root.textContent).toMatch(/Last activity 93h00m ago/);
+    expect(root.textContent).toMatch(/Last activity (?:92h59m|93h00m) ago/);
   });
 });

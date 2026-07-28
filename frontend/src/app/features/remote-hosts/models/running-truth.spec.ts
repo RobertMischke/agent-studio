@@ -113,4 +113,44 @@ describe('running truth', () => {
     expect(freshHostTelemetry(stale, now)).toBeNull();
     expect(freshRemoteTelemetrySlots([stale], now)).toBeNull();
   });
+
+  it('counts a connected remote location but rejects its retained stale lease owner', () => {
+    const activeLocation = {
+      state: 'remote-running',
+      executionKind: 'remote',
+      runnerId: 'runner-1',
+      hostDisplayName: 'Runner 1',
+      startedAt: '2026-07-26T10:00:00Z',
+      lastHeartbeat: '2026-07-26T10:01:00Z',
+      lastActivityAt: '2026-07-26T10:01:00Z',
+      connectionState: 'connected',
+      leaseState: 'active',
+      trustReason: 'Fresh lease heartbeat.',
+    } as TaskInfo['executionLocation'];
+    const runner = {
+      runnerId: 'runner-1',
+      runnerName: 'Runner 1',
+      hostname: 'remote-host',
+      backendName: 'remote',
+      isRemote: true,
+      leaseId: 'lease-1',
+      fencingToken: 1,
+      acquiredAt: '2026-07-26T10:00:00Z',
+    };
+
+    const truth = deriveBoardRunningTruth([
+      task('fresh', { runner, executionLocation: activeLocation }),
+      task('stale', {
+        runner: { ...runner, leaseId: 'lease-2' },
+        executionLocation: {
+          ...activeLocation!,
+          state: 'remote-disconnected',
+          connectionState: 'disconnected',
+          leaseState: 'expired',
+        },
+      }),
+    ]);
+
+    expect(truth).toMatchObject({ local: 0, remote: 1, total: 1 });
+  });
 });

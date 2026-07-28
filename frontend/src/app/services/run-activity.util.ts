@@ -25,6 +25,63 @@ export interface StalledTaskState {
   tooltip: string;
 }
 
+export interface ActiveTaskRun {
+  kind: 'local' | 'remote';
+  runnerId: string | null;
+  hostDisplayName: string | null;
+  startedAt: string | null;
+  lastHeartbeat: string | null;
+}
+
+/**
+ * Canonical active-run projection shared by board cards, liveness copy, and
+ * aggregate counters. When the backend supplied an execution location it wins:
+ * a disconnected or recovering remote lease must not be resurrected by the
+ * compatibility runner badge. Older payloads can still prove a live run from
+ * the active lease or local execution fields.
+ */
+export function deriveActiveTaskRun(job: TaskInfo): ActiveTaskRun | null {
+  if (job.state !== TaskState.Progress) return null;
+
+  const location = job.executionLocation;
+  if (location) {
+    const connected = location.connectionState === 'connected';
+    if (connected && (location.state === 'remote-running' || location.state === 'local-running')) {
+      return {
+        kind: location.state === 'remote-running' ? 'remote' : 'local',
+        runnerId: location.runnerId ?? null,
+        hostDisplayName: location.hostDisplayName ?? location.runnerId ?? null,
+        startedAt: location.startedAt ?? null,
+        lastHeartbeat: location.lastHeartbeat ?? null,
+      };
+    }
+    return null;
+  }
+
+  const runner = job.runner;
+  if (runner?.leaseId) {
+    return {
+      kind: runner.isRemote ? 'remote' : 'local',
+      runnerId: runner.runnerId || null,
+      hostDisplayName: runner.runnerName || runner.hostname || runner.runnerId || null,
+      startedAt: runner.acquiredAt || null,
+      lastHeartbeat: null,
+    };
+  }
+
+  if (job.execution?.status === 'running' || job.runActivity?.kind === 'active') {
+    return {
+      kind: 'local',
+      runnerId: null,
+      hostDisplayName: 'Local',
+      startedAt: job.execution?.startedAt ?? null,
+      lastHeartbeat: null,
+    };
+  }
+
+  return null;
+}
+
 function latestActivityMs(job: TaskInfo): number | null {
   const instants = [
     job.enteredLaneAt,
@@ -39,15 +96,6 @@ function latestActivityMs(job: TaskInfo): number | null {
   return instants.length > 0 ? Math.max(...instants) : null;
 }
 
-function hasLiveRun(job: TaskInfo): boolean {
-  if (job.execution?.status === 'running' || job.runner != null || job.runActivity?.kind === 'active') {
-    return true;
-  }
-  const location = job.executionLocation;
-  return (location?.state === 'local-running' || location?.state === 'remote-running')
-    && location.connectionState === 'connected';
-}
-
 /**
  * Pure board-level derivation of an acute stranded Progress task. A failed run
  * needs attention immediately once no process owns it. A task with no recorded
@@ -60,7 +108,7 @@ export function deriveStalledTaskState(
   nowMs: number = Date.now(),
   idleThresholdMs: number = STALLED_IDLE_THRESHOLD_MS,
 ): StalledTaskState | null {
-  if (job.state !== TaskState.Progress || hasLiveRun(job)) return null;
+  if (job.state !== TaskState.Progress || deriveActiveTaskRun(job)) return null;
   if (job.runActivity?.kind === 'failed-backoff') return null;
 
   const failed = job.runActivity?.kind === 'failed-idle'
