@@ -130,7 +130,13 @@ public sealed class RemoteTaskRunner
     public async Task<bool> ReleaseDeadAsync(PersistedRunnerSlot slot, string reason)
     {
         _log($"releasing dead persisted attempt task={slot.TaskKey} attempt={slot.AttemptId}: {reason}");
-        if (await ReleaseAsync(slot.Lease, CancellationToken.None))
+        var outcome = string.Equals(
+            slot.Phase,
+            "authority-deadline-exhausted",
+            StringComparison.Ordinal)
+            ? "authority-deadline-exhausted"
+            : "runner-process-missing";
+        if (await ReleaseAsync(slot.Lease, CancellationToken.None, outcome))
         {
             _state.Delete(slot);
             return true;
@@ -391,6 +397,39 @@ public sealed class RemoteTaskRunner
             await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
             handedBack = true;
             return 1;
+        }
+        catch (OperationCanceledException) when (heartbeat.LeaseLost)
+        {
+            var phase = authority?.Snapshot.Detail?.Contains(
+                "deadline exhausted",
+                StringComparison.OrdinalIgnoreCase) == true
+                ? "authority-deadline-exhausted"
+                : "lease-authority-rejected";
+            var latestSlot = _state.LoadAll().FirstOrDefault(item =>
+                                 string.Equals(
+                                     item.AttemptId,
+                                     slot.AttemptId,
+                                     StringComparison.Ordinal))
+                             ?? slot;
+            _state.Save(latestSlot with { Phase = phase });
+            if (outbox is not null
+                && !outbox.Items.Any(item => item.Kind == "terminal"))
+            {
+                outbox.Enqueue(
+                    "terminal",
+                    JsonSerializer.Serialize(
+                        new DurableTerminalPayload(
+                            "LeaseLoss",
+                            phase == "authority-deadline-exhausted"
+                                ? "Local autonomy deadline exhausted; contained process generation death was proven."
+                                : "Task Server rejected the fenced lease; contained process generation death was proven."),
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                outbox.RecordHandoffState(phase);
+            }
+            _log(
+                $"lease-loss terminal journaled task={taskKey} phase={phase}; " +
+                "no replacement starts from this execution path");
+            return 3;
         }
         finally
         {
@@ -1100,14 +1139,18 @@ public sealed class RemoteTaskRunner
                $"({refs}; failure: {failure}). No ref was overwritten. {remediation}";
     }
 
-    private async Task<bool> ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)
+    private async Task<bool> ReleaseAsync(
+        RunLeaseInfoDto lease,
+        CancellationToken ct,
+        string outcome = "runner-process-missing")
     {
         try
         {
             var resp = await _client.ReleaseLeaseAsync(new RunLeaseReleaseRequest(
                 lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
                 lease.AttemptId, lease.AuthorityEpoch,
-                $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
+                $"release:{lease.AttemptId}:{lease.LeaseId}",
+                outcome), ct);
             _log($"lease released: {resp.Outcome}");
             return string.Equals(resp.Outcome, "Released", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(resp.Outcome, "NotHeld", StringComparison.OrdinalIgnoreCase)

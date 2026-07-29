@@ -157,10 +157,12 @@ state.
   disposable Task Server, deterministic Agent Runner protocol process,
   production Studio UI, and two-link fault proxy used for remote-host rolling
   replacement and partition evidence. The acceptance run first holds two
-  already-claimed slots through a real ten-minute Task Server partition,
+  already-claimed slots through a configurable real Task Server partition,
   records useful-work and durable-outbox timelines, reconciles each exact fence
-  before replay, and proves exact-once terminal delivery. Runner replacement
-  and Task Server replacement remain separate later checks. Phase hooks observe
+  before replay, and proves exact-once terminal delivery. The card-safe harness
+  uses a 25-second outage by default; the release suite owns the separately
+  marked MachineBound ten-minute invocation. Runner replacement and Task Server
+  replacement remain separate later checks. Phase hooks observe
   claim, run, gate, review, and integration without adding scheduler-only
   branches. It never targets stable or the managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch

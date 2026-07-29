@@ -66,7 +66,8 @@ public sealed record RunLeaseReleaseRequest(
     string RunnerId,
     string? AttemptId = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    string? Outcome = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(

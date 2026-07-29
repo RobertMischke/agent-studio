@@ -16,7 +16,9 @@ import {
   assertAutonomyEvidence,
   assertRollingEvidence,
   composeCommand,
+  createAutonomyPolicy,
   createComposePlan,
+  defaultAutonomyDurationSeconds,
   defaultPorts,
   redact,
   unitOperationPlan
@@ -26,15 +28,19 @@ const suiteRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(suiteRoot, '..', '..');
 const args = parseArgs(process.argv.slice(2));
 const plan = createComposePlan({ repoRoot, runId: args.runId, ports: args.ports });
+const autonomyPolicy = createAutonomyPolicy(
+  args.autonomyDurationSeconds,
+  { machineBound: args.machineBound });
 
 if (args.command === 'inspect') {
   console.log(JSON.stringify({
     dryRun: true,
     ...plan,
+    autonomyPolicy,
     acceptanceSequence: [
       'provision',
       'reference-task',
-      'ten-minute-multi-slot-task-server-partition',
+      `${autonomyPolicy.mode}-multi-slot-task-server-partition`,
       'studio-partition-and-replacement',
       'runner-partition-and-replacement',
       'task-server-partition-and-honest-fence-recovery',
@@ -106,8 +112,9 @@ async function runAcceptance() {
   progress('running deterministic reference task through the isolated Task Server');
   const reference = await runReferenceScenario();
 
-  progress('starting the explicit ten-minute multi-slot Task Server outage canary');
-  const autonomy = await runTenMinuteAutonomyCanary();
+  progress(
+    `starting the ${args.autonomyDurationSeconds}-second multi-slot Task Server outage canary`);
+  const autonomy = await runAutonomyCanary();
 
   progress('claiming the canary task held Ready during transport uncertainty');
   const rollIds = {
@@ -306,7 +313,7 @@ async function runAcceptance() {
   return acceptance;
 }
 
-async function runTenMinuteAutonomyCanary() {
+async function runAutonomyCanary() {
   const ids = {
     workspace: `wsp-autonomy-${args.runId}`,
     project: `prj-autonomy-${args.runId}`
@@ -353,11 +360,15 @@ async function runTenMinuteAutonomyCanary() {
   await executeUnitOperation('partition', 'task-server');
   const partitionStartedMs = Date.now();
   const partitionStartedAt = new Date(partitionStartedMs).toISOString();
-  const requiredWorkThroughMs = partitionStartedMs + 600_000;
+  const requiredWorkThroughMs =
+    partitionStartedMs + autonomyPolicy.requiredDurationMs;
   const requiredWorkThroughAt = new Date(requiredWorkThroughMs).toISOString();
   const claimDuringPartition = await runnerRaw('/claim', { method: 'POST' });
   const samples = [];
   let nextProgressAt = partitionStartedMs;
+  const progressIntervalMs = Math.min(
+    60_000,
+    Math.max(5_000, Math.floor(autonomyPolicy.requiredDurationMs / 5)));
   while (Date.now() < requiredWorkThroughMs) {
     const current = await runner('/status');
     const canarySlots = current.slots.filter(slot =>
@@ -368,7 +379,7 @@ async function runTenMinuteAutonomyCanary() {
           || slot.generation.alive !== true
           || slot.generation.deathProven !== false)) {
       throw new Error(
-        `Autonomy slot stopped before ten minutes: ${JSON.stringify(canarySlots)}`);
+        `Autonomy slot stopped before the configured deadline: ${JSON.stringify(canarySlots)}`);
     }
     samples.push({
       at: new Date().toISOString(),
@@ -382,7 +393,7 @@ async function runTenMinuteAutonomyCanary() {
     if (Date.now() >= nextProgressAt) {
       const elapsedSeconds = Math.floor((Date.now() - partitionStartedMs) / 1000);
       progress(
-        `ten-minute canary ${elapsedSeconds}s/600s; ` +
+        `autonomy canary ${elapsedSeconds}s/${args.autonomyDurationSeconds}s; ` +
         canarySlots.map(slot =>
           `${slot.taskKey}=work:${slot.workUnits},queued:${slot.backlogCount}`)
           .join(' '));
@@ -391,7 +402,7 @@ async function runTenMinuteAutonomyCanary() {
         requiredWorkThroughAt,
         samples
       });
-      nextProgressAt += 60_000;
+      nextProgressAt += progressIntervalMs;
     }
     await delay(Math.min(10_000, Math.max(1, requiredWorkThroughMs - Date.now())));
   }
@@ -426,6 +437,7 @@ async function runTenMinuteAutonomyCanary() {
     `/api/v1/projects/${ids.project}/tasks/${tasks[2].taskId}`);
   const evidence = {
     schemaVersion: 1,
+    policy: autonomyPolicy,
     partitionStartedAt,
     requiredWorkThroughAt,
     partitionEndedAt,
@@ -437,7 +449,7 @@ async function runTenMinuteAutonomyCanary() {
     unclaimedTask
   };
   await writeEvidence('autonomy-canary-unasserted.json', evidence);
-  const assertions = assertAutonomyEvidence(evidence);
+  const assertions = assertAutonomyEvidence(evidence, autonomyPolicy);
   const result = { ...evidence, assertions };
   await writeEvidence('autonomy-canary.json', result);
   await writeEvidence('api/autonomy-histories.json', histories);
@@ -931,6 +943,10 @@ function parseArgs(values) {
     unit: null,
     force: false,
     keep: false,
+    machineBound: false,
+    autonomyDurationSeconds: environmentPositiveInt(
+      'REMOTE_TEST_AUTONOMY_SECONDS',
+      defaultAutonomyDurationSeconds),
     ports: { ...defaultPorts }
   };
   let index = 1;
@@ -942,7 +958,11 @@ function parseArgs(values) {
     const key = values[index];
     if (key === '--force') result.force = true;
     else if (key === '--keep') result.keep = true;
+    else if (key === '--machine-bound') result.machineBound = true;
     else if (key === '--run-id') result.runId = values[++index];
+    else if (key === '--autonomy-duration-seconds') {
+      result.autonomyDurationSeconds = Number(values[++index]);
+    }
     else if (key === '--task-server-port') result.ports.taskServer = Number(values[++index]);
     else if (key === '--studio-port') result.ports.studio = Number(values[++index]);
     else if (key === '--fault-control-port') result.ports.faultControl = Number(values[++index]);
@@ -951,11 +971,21 @@ function parseArgs(values) {
   }
   if (!['inspect', 'run', 'up', 'down', 'control'].includes(result.command) || !result.runId) {
     throw new Error(
-      'Usage: compose-harness.mjs inspect|run|up|down --run-id ID, or compose-harness.mjs control stop|restart|replace|partition|heal studio|task-server|runner --run-id ID'
+      'Usage: compose-harness.mjs inspect|run|up|down --run-id ID [--autonomy-duration-seconds N] [--machine-bound], or compose-harness.mjs control stop|restart|replace|partition|heal studio|task-server|runner --run-id ID'
     );
   }
   if (result.command === 'control' && (!result.operation || !result.unit)) {
     throw new Error('Control requires an operation and unit.');
   }
   return result;
+}
+
+function environmentPositiveInt(name, fallback) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
 }

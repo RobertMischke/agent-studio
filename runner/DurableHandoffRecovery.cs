@@ -46,14 +46,26 @@ public sealed class DurableHandoffRecovery
                 && outbox.Pending.Count == 0)
                 continue;
 
+            var reconciled = false;
             try
             {
+                var lease = await _client.ReconcileOutboxAuthorityAsync(
+                    outbox.Authority,
+                    Math.Max(30, _options.TtlSeconds),
+                    ct);
+                reconciled = true;
+                _log(
+                    $"outbox authority reconciled run={outbox.Authority.RunId} " +
+                    $"fence={outbox.Authority.Fence} expires={lease.ExpiresAt:o}");
                 await RecoverAsync(outbox, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                outbox.RecordHandoffState("transfer-recovery");
-                await ReportSafeAsync(outbox, CancellationToken.None);
+                if (reconciled)
+                {
+                    outbox.RecordHandoffState("transfer-recovery");
+                    await ReportSafeAsync(outbox, CancellationToken.None);
+                }
                 _log($"outbox recovery deferred run={outbox.Authority.RunId} task={outbox.Authority.TaskKey} error={ex.Message}");
             }
         }

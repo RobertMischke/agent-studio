@@ -62,7 +62,10 @@ node tools/remote-test-suite/compose-harness.mjs run \
 ```
 
 The command explicitly enables the `remote-integration` profile and performs a
-bounded workflow:
+bounded workflow. The default card-safe outage is 25 real seconds. Set
+`REMOTE_TEST_AUTONOMY_SECONDS` or pass
+`--autonomy-duration-seconds <seconds>` to configure it. Durations of 600
+seconds or more require the additional explicit `--machine-bound` marker:
 
 1. Validate the Compose model, build images, start services, and wait for every
    readiness check.
@@ -70,7 +73,7 @@ bounded workflow:
 3. Run the deterministic `reference-change` task through public Task Server
    claim, handoff, review, and history APIs.
 4. Claim two autonomy tasks, then partition the Runner's Task Server link for
-   at least ten real wall-clock minutes. Both slots must record useful work
+   the configured real wall-clock duration. Both slots must record useful work
    throughout the outage while a third task remains Ready and unclaimed.
 5. Queue terminal evidence locally, heal the link, and require exact-fence
    reconciliation before replay. Each event, artifact, immutable Result SHA,
@@ -132,7 +135,8 @@ identity-scoped stack.
 The evidence folder contains:
 
 - `autonomy-progress.json` with periodic outage snapshots,
-  `autonomy-canary.json` with the asserted ten-minute timeline, and
+  `autonomy-canary.json` with the asserted configured-duration timeline and
+  policy, and
   `acceptance.json` with combined autonomy, restart, and old/new fence facts.
 - `versions.json` with source, Docker, Compose, component, runtime, and image
   identity.
@@ -151,10 +155,18 @@ Routine tests use fakes and pure command plans:
 npm --prefix tools/remote-test-suite test
 ```
 
-The real Docker workflow requires explicit opt-in:
+The short real-time Docker workflow requires explicit opt-in and remains
+suitable for a card run:
 
 ```bash
-REMOTE_TEST_COMPOSE_INTEGRATION=1 npm --prefix tools/remote-test-suite test
+npm --prefix tools/remote-test-suite run test:compose
+```
+
+The actual ten-minute release canary is a separate `MachineBound` test. Start it
+only from the integration suite, never from a normal card run:
+
+```bash
+npm --prefix tools/remote-test-suite run test:machine-bound:autonomy
 ```
 
 The harness performs no model or CLI comparison, benchmark, ranking, or model

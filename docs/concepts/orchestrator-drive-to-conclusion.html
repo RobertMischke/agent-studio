@@ -1231,9 +1231,10 @@
             <span class="pill ok">fixed in dev</span> a 15-minute server-issued lease now carries a durable stop-before truth.
             Multiple already-claimed slots may continue and journal locally through ten minutes of transport loss, but they
             admit no new work and replay nothing until exact authority reconciles. Deadline exhaustion reaps and verifies the
-            whole worktree process generation and retains an honest terminal record. The isolated Compose canary proved 600012
-            ms of outage, 60 useful work units per slot, exact-once result recovery, empty outboxes, no duplicate claim, and no
-            live completed generation. Runner restart and Task Server restart remain distinct acceptance phases.
+            whole worktree process generation and retains an honest terminal record. Controlled-time tests cover the full
+            authority window. The card-safe Compose acceptance uses a configurable 25-second real outage and retains the same
+            multi-slot, exact-once, empty-outbox, duplicate-claim, and generation-death assertions. The explicit 600-second proof
+            is a separately marked MachineBound suite run. Runner restart and Task Server restart remain distinct acceptance phases.
           </td>
         </tr>
       </tbody>

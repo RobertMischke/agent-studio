@@ -4,6 +4,7 @@ import {
   assertAutonomyEvidence,
   assertRollingEvidence,
   composeCommand,
+  createAutonomyPolicy,
   createComposePlan,
   redact,
   unitOperationPlan,
@@ -107,7 +108,7 @@ test('evidence redaction removes disposable credentials', () => {
   assert.equal(redact(`Authorization: Bearer ${token}`, [token]), 'Authorization: Bearer [REDACTED]');
 });
 
-test('autonomy evidence requires ten real minutes, two useful slots, fenced replay, and unique delivery', () => {
+test('autonomy evidence uses an explicit duration with two useful slots, fenced replay, and unique delivery', () => {
   const started = '2026-07-29T08:00:00.000Z';
   const required = '2026-07-29T08:10:00.000Z';
   const ended = '2026-07-29T08:10:01.000Z';
@@ -141,7 +142,26 @@ test('autonomy evidence requires ten real minutes, two useful slots, fenced repl
     histories
   };
 
-  assert.equal(assertAutonomyEvidence(evidence).length, 8);
+  const realPolicy = createAutonomyPolicy(600, { machineBound: true });
+  assert.equal(realPolicy.mode, 'machine-bound-ten-minute');
+  assert.equal(assertAutonomyEvidence(evidence, realPolicy).length, 8);
   evidence.durationMs = 599_999;
-  assert.throws(() => assertAutonomyEvidence(evidence), /ten-real-minutes/);
+  assert.throws(
+    () => assertAutonomyEvidence(evidence, realPolicy),
+    /configured-real-duration/);
+});
+
+test('card autonomy policy defaults to a short real-time window without weakening canary facts', () => {
+  const policy = createAutonomyPolicy(25);
+  assert.deepEqual(policy, {
+    mode: 'short-card',
+    requiredDurationMs: 25_000,
+    minimumWorkUnits: 2,
+    usefulWorkTailToleranceMs: 15_000
+  });
+  assert.throws(() => createAutonomyPolicy(19), /between 20 and 3600/);
+  assert.throws(() => createAutonomyPolicy(600), /MachineBound marker/);
+  assert.throws(
+    () => createAutonomyPolicy(25, { machineBound: true }),
+    /at least ten real minutes/);
 });

@@ -95,11 +95,10 @@ public sealed class RemoteRunnerDaemon
             shutdown);
         _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
-        await handoffRecovery.RecoverAllAsync(shutdown);
 
         var inventory = new RunnerProcessInventoryTracker();
         var active = new List<ActiveSlot>();
-        foreach (var persisted in persistedAtStartup)
+        foreach (var persisted in state.LoadAll())
         {
             var slot = await RecoverLaunchingIdentityAsync(persisted, state);
             _client.RestoreRunAuthority(slot.TaskKey, slot.RunId, slot.LeaseInstanceId, slot.Lease);
@@ -135,6 +134,7 @@ public sealed class RemoteRunnerDaemon
         }
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
+        await handoffRecovery.RecoverAllAsync(shutdown);
 
         // Recover heartbeats before the potentially slow Git capability probe.
         // Push readiness gates new coding claims, not ownership of work that is

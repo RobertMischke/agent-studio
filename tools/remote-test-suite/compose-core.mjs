@@ -1,6 +1,8 @@
 import path from 'node:path';
 
 export const integrationProfile = 'remote-integration';
+export const defaultAutonomyDurationSeconds = 25;
+export const realAutonomyDurationSeconds = 600;
 export const unitServices = Object.freeze({
   studio: 'studio',
   'task-server': 'task-server',
@@ -28,6 +30,31 @@ export function validatePorts(ports) {
   }
   if (new Set(values).size !== values.length) throw new Error('Harness ports must be unique.');
   return ports;
+}
+
+export function createAutonomyPolicy(
+  durationSeconds,
+  { machineBound = false } = {}) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 20 || durationSeconds > 3600) {
+    throw new Error('Autonomy duration must be an integer between 20 and 3600 seconds.');
+  }
+  if (durationSeconds >= realAutonomyDurationSeconds && !machineBound) {
+    throw new Error(
+      'An autonomy duration of ten minutes or more requires the explicit MachineBound marker.');
+  }
+  if (machineBound && durationSeconds < realAutonomyDurationSeconds) {
+    throw new Error(
+      'The MachineBound autonomy canary must run for at least ten real minutes.');
+  }
+  const requiredDurationMs = durationSeconds * 1000;
+  return Object.freeze({
+    mode: machineBound
+      ? 'machine-bound-ten-minute'
+      : 'short-card',
+    requiredDurationMs,
+    minimumWorkUnits: Math.max(2, Math.floor(durationSeconds / 12)),
+    usefulWorkTailToleranceMs: 15_000
+  });
 }
 
 export function createComposePlan({ repoRoot, runId, ports = defaultPorts }) {
@@ -201,21 +228,22 @@ export function assertRollingEvidence(evidence) {
   return assertions;
 }
 
-export function assertAutonomyEvidence(evidence) {
+export function assertAutonomyEvidence(evidence, policy) {
+  if (!policy) throw new Error('An explicit autonomy policy is required.');
   const assertions = [];
-  check(assertions, 'ten-real-minutes',
-    evidence?.durationMs >= 600_000,
-    'The Task Server partition must last at least ten real wall-clock minutes.');
+  check(assertions, 'configured-real-duration',
+    evidence?.durationMs >= policy.requiredDurationMs,
+    `The Task Server partition must last at least ${policy.requiredDurationMs} real milliseconds.`);
   check(assertions, 'multiple-preclaimed-slots',
     evidence?.slots?.length >= 2
       && new Set(evidence.slots.map(slot => slot.runId)).size === evidence.slots.length,
     'At least two already-claimed remote slots must execute through the outage.');
   check(assertions, 'useful-work-throughout-outage',
     (evidence?.slots ?? []).every(slot =>
-      slot.workUnits >= 50
+      slot.workUnits >= policy.minimumWorkUnits
       && Date.parse(slot.lastUsefulWorkAt)
-        >= Date.parse(evidence.requiredWorkThroughAt) - 15_000),
-    'Every slot must record useful work through the full ten-minute partition.');
+        >= Date.parse(evidence.requiredWorkThroughAt) - policy.usefulWorkTailToleranceMs),
+    'Every slot must record useful work through the configured partition.');
   check(assertions, 'no-unsafe-new-claim',
     (evidence?.claimDuringPartitionStatus === 409
       || evidence?.claimDuringPartitionStatus >= 500)

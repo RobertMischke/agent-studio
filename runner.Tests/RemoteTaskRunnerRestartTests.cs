@@ -221,6 +221,35 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.Empty(replacementStore.LoadAll());
     }
 
+    [Fact]
+    public async Task Deadline_exhausted_generation_is_released_with_the_honest_outcome()
+    {
+        var work = Path.Combine(_root, "runner-work");
+        var stateRoot = Path.Combine(_root, "state");
+        var worktree = Path.Combine(work, "deadline-worktree");
+        Directory.CreateDirectory(worktree);
+        var options = Options(work, stateRoot, Path.Combine(_root, "unused-origin.git"));
+        var lease = Lease();
+        var store = new RunnerStateStore(stateRoot);
+        var slot = store.Create(lease.TaskKey, lease, worktree);
+        slot = store.Save(slot with { Phase = "authority-deadline-exhausted" });
+        var server = new RunnerApiHandler(lease);
+        using var http = new HttpClient(server) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(http, options.RunnerId);
+        var replacement = new RemoteTaskRunner(options, client, _ => { }, store);
+
+        var released = await replacement.ReleaseDeadAsync(
+            slot,
+            "local autonomy deadline exhausted after generation death proof");
+
+        Assert.True(released);
+        using var body = System.Text.Json.JsonDocument.Parse(server.ReleaseBodies.ToString());
+        Assert.Equal(
+            "authority-deadline-exhausted",
+            body.RootElement.GetProperty("outcome").GetString());
+        Assert.Empty(store.LoadAll());
+    }
+
     private static RunnerOptions Options(string work, string stateRoot, string origin) => new()
     {
         ServerUrl = "http://task-server",
@@ -285,6 +314,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         public List<string> Paths { get; } = [];
         public StringBuilder LogBodies { get; } = new();
         public StringBuilder CompletionBodies { get; } = new();
+        public StringBuilder ReleaseBodies { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -299,6 +329,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
                 Paths.Add(path);
                 if (path == "/api/runner/logs") LogBodies.Append(body);
                 if (path == "/api/runner/completion") CompletionBodies.Append(body);
+                if (path == "/api/runner/lease/release") ReleaseBodies.Append(body);
             }
 
             var json = path switch

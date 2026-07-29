@@ -86,19 +86,30 @@ public sealed class DurableLeaseAuthority
         DurableLeaseAuthoritySnapshot snapshot;
         if (File.Exists(path))
         {
-            snapshot = JsonSerializer.Deserialize<DurableLeaseAuthoritySnapshot>(
+            var persisted = JsonSerializer.Deserialize<DurableLeaseAuthoritySnapshot>(
                            File.ReadAllText(path),
                            Json)
                        ?? throw new InvalidDataException(
                            $"Durable lease authority is empty: {path}");
-            snapshot = snapshot with
+            if (initiallyConfirmed)
             {
-                State = initiallyConfirmed ? "confirmed" : "uncertain",
-                UpdatedAtUtc = now(),
-                Detail = initiallyConfirmed
-                    ? "authority restored from the live claim"
-                    : "runner restart requires fenced reconciliation before replay",
-            };
+                var expires = leaseExpiresAt.ToUniversalTime();
+                snapshot = new DurableLeaseAuthoritySnapshot(
+                    expires,
+                    ComputeStopBefore(expires, uncertaintyMargin),
+                    "confirmed",
+                    now(),
+                    "authority restored from the live claim");
+            }
+            else
+            {
+                snapshot = persisted with
+                {
+                    State = "uncertain",
+                    UpdatedAtUtc = now(),
+                    Detail = "runner restart requires fenced reconciliation before replay",
+                };
+            }
         }
         else
         {

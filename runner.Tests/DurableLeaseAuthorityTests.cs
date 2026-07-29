@@ -130,6 +130,33 @@ public sealed class DurableLeaseAuthorityTests
             DurableLeaseAuthority.Read(temp.Path));
     }
 
+    [Fact]
+    public void A_new_live_claim_replaces_stale_authority_in_a_reused_worker_directory()
+    {
+        using var temp = new TempDirectory();
+        var now = new DateTime(2026, 7, 29, 11, 0, 0, DateTimeKind.Utc);
+        var oldExpiry = now.AddMinutes(2);
+        var newExpiry = now.AddMinutes(15);
+        var old = DurableLeaseAuthority.Open(
+            temp.Path,
+            oldExpiry,
+            TimeSpan.FromSeconds(30),
+            initiallyConfirmed: true,
+            () => now);
+        old.MarkUncertain("old attempt lost transport");
+
+        var current = DurableLeaseAuthority.Open(
+            temp.Path,
+            newExpiry,
+            TimeSpan.FromSeconds(30),
+            initiallyConfirmed: true,
+            () => now.AddSeconds(1));
+
+        Assert.True(current.ReplayAllowed);
+        Assert.Equal(newExpiry, current.Snapshot.LeaseExpiresAtUtc);
+        Assert.Equal(newExpiry.AddSeconds(-30), current.StopBeforeUtc);
+    }
+
     private static RunnerOptions Options(string root) => new()
     {
         ServerUrl = "http://localhost",

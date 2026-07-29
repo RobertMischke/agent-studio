@@ -597,6 +597,40 @@ public sealed class TaskServerClient : IDisposable
             FromContract(response?.ReconciliationActions));
     }
 
+    public async Task<Contract.LeaseDto> ReconcileOutboxAuthorityAsync(
+        RunOutboxAuthority authority,
+        int requestedTtlSeconds,
+        CancellationToken ct)
+    {
+        if (!_useV1)
+            throw new InvalidOperationException(
+                "Durable outbox reconciliation requires the versioned Task Server.");
+        var response = await PostJsonAsync<Contract.LeaseRenewRequest, Contract.LeaseResponse>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/renew",
+            new Contract.LeaseRenewRequest(
+                authority.RunnerId,
+                authority.InstanceId,
+                authority.LeaseId,
+                authority.Fence,
+                requestedTtlSeconds),
+            ct);
+        var lease = response?.Lease
+                    ?? throw new TaskServerException(
+                        409,
+                        response?.Message
+                        ?? "Task Server did not confirm durable outbox authority.");
+        if (!string.Equals(lease.RunId, authority.RunId, StringComparison.Ordinal)
+            || !string.Equals(lease.RunnerId, authority.RunnerId, StringComparison.Ordinal)
+            || !string.Equals(lease.InstanceId, authority.InstanceId, StringComparison.Ordinal)
+            || !string.Equals(lease.LeaseId, authority.LeaseId, StringComparison.Ordinal)
+            || lease.Fence != authority.Fence)
+        {
+            throw new InvalidDataException(
+                $"Task Server renewed mismatched outbox authority for run '{authority.RunId}'.");
+        }
+        return lease;
+    }
+
     private static Contract.RunnerProcessInventory? ToContract(RunnerProcessInventory? inventory)
         => inventory is null
             ? null
@@ -643,7 +677,12 @@ public sealed class TaskServerClient : IDisposable
         var authority = cached;
         var response = await PostJsonAsync<Contract.LeaseReleaseRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/release",
-            new Contract.LeaseReleaseRequest(req.RunnerId, authority.InstanceId, req.LeaseId, req.FencingToken, "runner-process-missing"),
+            new Contract.LeaseReleaseRequest(
+                req.RunnerId,
+                authority.InstanceId,
+                req.LeaseId,
+                req.FencingToken,
+                req.Outcome ?? "runner-process-missing"),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
