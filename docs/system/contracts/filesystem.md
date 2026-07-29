@@ -264,6 +264,24 @@ Hard rules:
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
 
+### results/decision.json or results/decision.html (optional)
+
+The active operator hand-off for a task in `5e-escalated`. A conforming
+`decision.json` uses `decision-surface/v1`: one question, one to eight options,
+an optional recommendation, consequences, optional free steering configuration,
+and an allowlisted existing `steer` or `move` action. A conforming
+`decision.html` embeds the same object in
+`<script type="application/json" data-agent-studio-decision>` and may add a
+self-contained visual explanation.
+
+Task Detail renders HTML with an opaque-origin sandbox and renders every action
+in trusted host chrome. A selection reaches the existing Continue/Steer or Move
+endpoint. Steer text is retained in Activity; Move sends the selection as the
+lane-change `reason`. There is no separate decision persistence.
+
+The complete ownership, schema, lifecycle, precedence, allowlist, and failure
+contract is [Operator Decision Surface](../../operations/decision-surface/README.md).
+
 ### model-qualification.jsonl (optional)
 
 Append-only benchmark foundation for the `pre-model-qualification` decision and

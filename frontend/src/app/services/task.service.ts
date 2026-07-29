@@ -647,9 +647,16 @@ export class TaskService {
     );
   }
 
-  moveJob(jobId: string, targetState: string, watchPath?: string, targetIndex?: number) {
-    const body: { targetState: string; targetIndex?: number } = { targetState };
+  moveJob(
+    jobId: string,
+    targetState: string,
+    watchPath?: string,
+    targetIndex?: number,
+    reason?: string,
+  ) {
+    const body: { targetState: string; targetIndex?: number; reason?: string } = { targetState };
     if (typeof targetIndex === 'number') body.targetIndex = targetIndex;
+    if (reason?.trim()) body.reason = reason.trim();
     return this.http.post(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,

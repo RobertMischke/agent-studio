@@ -38,6 +38,8 @@ describe('WorkbenchViewerComponent', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush(DOCUMENT);
     fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/home').flush({ sections: [] });
+    fixture.detectChanges();
 
     const srcdoc = fixture.componentInstance.srcdoc();
     const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
