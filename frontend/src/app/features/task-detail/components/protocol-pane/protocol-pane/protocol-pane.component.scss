@@ -962,4 +962,25 @@ cac-conversation-view {
     border-left: 0;
     border-radius: var(--studio-card-compact-radius);
   }
+
+  /*
+   * Runner lifecycle is supporting evidence, not conversation prose. Keep it
+   * on the shared muted surface with a mono voice and no raw log-prefix chrome.
+   */
+  .conv__row--system-status[data-category='runner'] {
+    background: var(--studio-surface-muted);
+    color: var(--studio-fg-dim);
+    font-family: var(--font-mono);
+  }
+
+  .conv__row--system-status[data-category='runner'] .status-row__chip {
+    background: transparent;
+    color: var(--studio-fg-muted);
+    font-family: inherit;
+    font-weight: 600;
+  }
+
+  .conv__row--system-status[data-category='runner'] .status-row__text {
+    color: inherit;
+  }
 }
