@@ -7,7 +7,11 @@ import { UndoController } from '../../../services/undo.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { TaskSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
-import { laneLabelFor, needsPlanningAcceptWarning } from './triage-actions.model';
+import {
+  laneLabelFor,
+  needsPlanningAcceptWarning,
+  needsUnintegratedArchiveWarning,
+} from './triage-actions.model';
 
 /**
  * Cycle 10c job-detail-feature controller: orchestrates the triage
@@ -79,8 +83,36 @@ export class TriageController {
    * must explicitly accept anyway. Every other move goes straight through.
    */
   move(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
+    if (needsUnintegratedArchiveWarning(info, ev.targetState)) {
+      void this.confirmUnintegratedArchiveThenMove(info, ev);
+      return;
+    }
     if (needsPlanningAcceptWarning(info, ev.targetState)) {
       void this.confirmPlanningAcceptThenMove(info, ev);
+      return;
+    }
+    this.performMove(info, ev);
+  }
+
+  private async confirmUnintegratedArchiveThenMove(
+    info: TaskInfo,
+    ev: { targetState: string; actionId: string },
+  ): Promise<void> {
+    const integration = info.integration;
+    const status = integration?.status ?? 'unknown';
+    const branch = integration?.integrationBranch || 'develop';
+    const ok = await this.confirmDialog.confirm({
+      title: 'Archive before integration?',
+      message:
+        `This task is not integrated into ${branch} (status: ${status}). ` +
+        'Archiving keeps the task and its evidence, but moves the unresolved integration state out of Delivered.',
+      detail: integration?.detail || info.title || info.id,
+      confirmLabel: 'Archive anyway',
+      cancelLabel: 'Keep in Delivered',
+      kind: 'primary',
+    });
+    if (!ok) {
+      this.clearActing();
       return;
     }
     this.performMove(info, ev);

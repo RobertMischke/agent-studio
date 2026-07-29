@@ -83,7 +83,9 @@
     </ng-container>
   </app-pane-header>
   <div class="pane__body">
-    @if (activeInspectorTab() !== 'task' && protocolVerdict(); as v) {
+    @if (activeInspectorTab() !== 'task'
+         && (activeInspectorTab() !== 'protocol' || !detail().statusMarkdown)
+         && protocolVerdict(); as v) {
       <app-protocol-verdict-banner
         data-testid="protocol-run-outcome"
         [verdict]="v"

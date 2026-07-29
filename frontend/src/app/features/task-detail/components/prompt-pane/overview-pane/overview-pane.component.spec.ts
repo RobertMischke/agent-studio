@@ -1100,6 +1100,56 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.stepStatusLabel('running')).toBe('Running');
   });
 
+  it('pipeline block: a settled escalation attempt labels untouched full-pipeline steps as not run', async () => {
+    const fixture = await build(baseJob({
+      state: TaskState.Escalated,
+      orchestratorVerdict: 'escalate',
+    }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'pre-loop-guard', displayName: 'Loop check', kind: 'module', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+          { id: 'post-orchestrator-decision', displayName: 'Decision', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-merge-into-develop', displayName: 'Merge', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false, deferred: true },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: '2026-07-29T10:00:00Z', completedAt: null, attempt: 3,
+        previousAttempts: [
+          { pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test', startedAt: '2026-07-27T10:00:00Z', completedAt: '2026-07-27T10:02:00Z', attempt: 2, steps: [] },
+          { pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test', startedAt: '2026-07-25T10:00:00Z', completedAt: '2026-07-25T10:02:00Z', attempt: 1, steps: [] },
+        ],
+        steps: [
+          { stepId: 'pre-loop-guard', kind: 'module', status: 'pending', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          { stepId: 'core-agent-run', kind: 'core', status: 'pending', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          { stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'pending', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          { stepId: 'post-merge-into-develop', kind: 'tool', status: 'pending', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+    expect(rows.filter(row => row.id !== 'post-merge-into-develop').every(row => row.status === 'not-run')).toBe(true);
+    expect(rows.find(row => row.id === 'core-agent-run')?.skipHint)
+      .toBe('not run: lightweight pipeline or escalation');
+    expect(rows.find(row => row.id === 'post-merge-into-develop')?.status).toBe('pending');
+    expect(c.pipelineGroups().find(group => group.phaseKey === 'core')?.tone).toBe('not-run');
+    expect(c.groupToneLabel('not-run')).toBe('Not run');
+    const currentRun = fixture.nativeElement.querySelector(
+      '[data-testid="overview-pipeline-run-option"][data-current="true"]',
+    ) as HTMLElement | null;
+    expect(currentRun?.textContent).toContain('not run');
+  });
+
   it('pipeline block: subset passes plus failed and skipped statuses expose their recorded reasons', async () => {
     const fixture = await build(baseJob({ state: '5-human-review' }));
     const pipe: TaskPipelineResponse = {

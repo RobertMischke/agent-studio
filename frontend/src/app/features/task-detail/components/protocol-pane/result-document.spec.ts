@@ -169,11 +169,9 @@ describe('buildResultDocument', () => {
     expect(doc.imagesCount).toBe(1);
   });
 
-  it('always emits a verdict metric and reflects tone', () => {
+  it('does not repeat the authoritative case verdict as a metric chip', () => {
     const doc = buildResultDocument(detail(), verdict({ kind: 'problem', label: 'Blocked', emoji: '🔴' }));
-    const m = doc.metrics.find((x) => x.id === 'verdict');
-    expect(m?.value).toBe('Blocked');
-    expect(m?.tone).toBe('problem');
+    expect(doc.metrics.some((x) => x.id === 'verdict')).toBe(false);
   });
 
   it('adds a grade chip from the code-review tag', () => {

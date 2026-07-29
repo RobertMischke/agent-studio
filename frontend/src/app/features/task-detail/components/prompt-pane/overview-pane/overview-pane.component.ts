@@ -101,7 +101,7 @@ interface PipelineRowVm {
   hasExecution: boolean;
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
-  status: PipelineStepStatus | 'disabled';
+  status: PipelineStepStatus | 'disabled' | 'not-run';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
   /** Small causal note for the designed skip cascade after an early escalate. */
@@ -215,6 +215,8 @@ interface PipelineRunOptionVm {
   glyph: string;
   /** Outcome class driving the chip / status-dot colour. */
   kind: 'pass' | 'fail' | 'pending';
+  /** Honest label when no step reached a pass/fail terminal state. */
+  emptyOutcomeLabel: 'pending' | 'not run';
   /** Compact hover summary: "N OK M fail · 3m34s · 6h ago". */
   tooltip: StructuredTooltip;
 }
@@ -294,8 +296,12 @@ function buildStepStatusTooltip(
   const body = detail?.trim();
   if (!body) return null;
   const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
-  if (status !== 'failed' && status !== 'skipped' && !passedTestCoverage) return null;
-  const title = status === 'failed' ? 'Failed' : status === 'skipped' ? 'Skipped' : 'Passed';
+  if (status !== 'failed' && status !== 'skipped' && status !== 'not-run' && !passedTestCoverage) return null;
+  const title = status === 'failed'
+    ? 'Failed'
+    : status === 'skipped'
+      ? 'Skipped'
+      : status === 'not-run' ? 'Not run' : 'Passed';
   return { title: `${label}: ${title}`, body };
 }
 
@@ -567,6 +573,14 @@ export class OverviewPaneComponent {
     TaskState.FailedPickup,
     TaskState.CodeNotComplete,
     TaskState.AutoReview,
+  ]);
+
+  /** Lanes where a non-running attempt cannot honestly still be "pending". */
+  private static readonly PIPELINE_ATTEMPT_SETTLED_STATES = new Set<string>([
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
   ]);
 
   readonly canConfigurePendingPipelineSteps = computed(() =>
@@ -847,6 +861,17 @@ export class OverviewPaneComponent {
 
     const selectedExecution = this.selectedPipelineExecution();
     const isCurrentRun = this.selectedPipelineIsCurrent();
+    const attemptSettledOutsideFullPipeline =
+      isCurrentRun
+      && selectedExecution != null
+      && !this.isRunning()
+      && OverviewPaneComponent.PIPELINE_ATTEMPT_SETTLED_STATES.has(this.job().state)
+      && (
+        selectedExecution.completedAt != null
+        || (selectedExecution.attempt ?? 1) > 1
+        || (selectedExecution.previousAttempts?.length ?? 0) > 0
+        || this.job().orchestratorVerdict === 'escalate'
+      );
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const chainEndedByEarlyEscalate = (selectedExecution?.steps ?? []).some(step =>
       step.stepId !== FINAL_VERDICT_STEP_ID
@@ -868,8 +893,10 @@ export class OverviewPaneComponent {
       if (!enabled) status = 'disabled';
       else if (onDemand) status = onDemand.status.toLowerCase() === 'failed' ? 'failed'
         : onDemand.status.toLowerCase() === 'skipped' ? 'skipped' : 'passed';
+      else if (e?.status === 'pending' && attemptSettledOutsideFullPipeline && !step.deferred) status = 'not-run';
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
+      else if (attemptSettledOutsideFullPipeline && !step.deferred) status = 'not-run';
       else status = 'pending';
       const label = step.displayName || step.id;
       // Model precedence: a recorded execution model (what actually ran) wins;
@@ -887,7 +914,11 @@ export class OverviewPaneComponent {
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
-      const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
+      const statusDetail = e?.verdictSummary
+        ?? e?.reason
+        ?? (status === 'not-run'
+          ? 'This attempt used a lightweight pipeline or escalated before this step ran.'
+          : null);
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
       const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -913,9 +944,11 @@ export class OverviewPaneComponent {
         config: cfg ?? null,
         status,
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
-        skipHint: status === 'skipped' && chainEndedByEarlyEscalate
-          ? 'skipped: chain ended by early escalate'
-          : null,
+        skipHint: status === 'not-run'
+          ? 'not run: lightweight pipeline or escalation'
+          : status === 'skipped' && chainEndedByEarlyEscalate
+            ? 'skipped: chain ended by early escalate'
+            : null,
         model,
         thinkingLevel,
         cliType,
@@ -1546,6 +1579,23 @@ export class OverviewPaneComponent {
     const attempt = rec.attempt ?? 1;
     const startedAt = rec.startedAt ?? null;
     const kind: PipelineRunOptionVm['kind'] = failed > 0 ? 'fail' : passed > 0 ? 'pass' : 'pending';
+    const settledWithoutExecutedSteps =
+      passed === 0
+      && failed === 0
+      && (
+        rec.completedAt != null
+        || (
+          current
+          && OverviewPaneComponent.PIPELINE_ATTEMPT_SETTLED_STATES.has(this.job().state)
+          && (
+            attempt > 1
+            || (rec.previousAttempts?.length ?? 0) > 0
+            || this.job().orchestratorVerdict === 'escalate'
+          )
+        )
+      );
+    const emptyOutcomeLabel: PipelineRunOptionVm['emptyOutcomeLabel'] =
+      settledWithoutExecutedSteps ? 'not run' : 'pending';
     const glyph = kind === 'fail' ? '✗' : kind === 'pass' ? '✓' : '·';
     return {
       attempt,
@@ -1556,7 +1606,16 @@ export class OverviewPaneComponent {
       failed,
       glyph,
       kind,
-      tooltip: this.buildRunChipTooltip(attempt, current, passed, failed, durationMs, startedAt),
+      emptyOutcomeLabel,
+      tooltip: this.buildRunChipTooltip(
+        attempt,
+        current,
+        passed,
+        failed,
+        emptyOutcomeLabel,
+        durationMs,
+        startedAt,
+      ),
     };
   }
 
@@ -1579,13 +1638,14 @@ export class OverviewPaneComponent {
     current: boolean,
     passed: number,
     failed: number,
+    emptyOutcomeLabel: PipelineRunOptionVm['emptyOutcomeLabel'],
     durationMs: number,
     startedAt: string | null,
   ): StructuredTooltip {
     const outcome: string[] = [];
     if (passed > 0) outcome.push(`${passed} OK`);
     if (failed > 0) outcome.push(`${failed} fail`);
-    const parts: string[] = [outcome.length > 0 ? outcome.join(' ') : 'pending'];
+    const parts: string[] = [outcome.length > 0 ? outcome.join(' ') : emptyOutcomeLabel];
     if (durationMs > 0) parts.push(this.formatStepDuration(durationMs));
     if (startedAt) parts.push(this.formatRelativeTime(startedAt));
     return {

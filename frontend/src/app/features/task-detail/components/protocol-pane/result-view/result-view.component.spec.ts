@@ -73,11 +73,12 @@ describe('ResultViewComponent', () => {
     expect(el.querySelector('[data-testid="result-overview-solution"]')?.textContent).toContain('Re-toned');
   });
 
-  it('renders the metric head with verdict, grade, duration and tokens chips', async () => {
+  it('renders one verdict plus grade, duration and tokens metrics', async () => {
     const fixture = await build(detail(HEAD_ONLY), verdict());
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="result-metric-verdict"]')?.textContent).toContain('Success');
+    expect(el.querySelectorAll('[data-testid="result-case-badge"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="result-metric-verdict"]')).toBeNull();
     expect(el.querySelector('[data-testid="result-metric-grade"]')?.textContent).toContain('Grade A');
     expect(el.querySelector('[data-testid="result-metric-duration"]')?.textContent).toContain('4 min');
     expect(el.querySelector('[data-testid="result-metric-tokens"]')).not.toBeNull();

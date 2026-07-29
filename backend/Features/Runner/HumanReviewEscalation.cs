@@ -228,7 +228,12 @@ public sealed class HumanReviewEscalation
         string category, string reason, CancellationToken ct = default,
         AttemptWriteReference? authorityWrite = null)
     {
-        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
+        var beforeFolder = ResolveSourceFolder(jobId, watchPath);
+        // Write the Result scaffold before the lane mutation. The folder moves
+        // with status.md on success, and a refused/interrupted move still leaves
+        // reviewable evidence at the source instead of a verdict-less card.
+        if (!string.IsNullOrWhiteSpace(beforeFolder))
+            WriteStatusStubIfMissing(beforeFolder, category, reason);
         var outcome = await _transitions.MoveAsync(
             jobId,
             TaskStates.Escalated,
@@ -259,7 +264,9 @@ public sealed class HumanReviewEscalation
         string jobId, string watchPath, string project,
         string category, string reason)
     {
-        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
+        var beforeFolder = ResolveSourceFolder(jobId, watchPath);
+        if (!string.IsNullOrWhiteSpace(beforeFolder))
+            WriteStatusStubIfMissing(beforeFolder, category, reason);
         var outcome = _states.MoveJob(
             jobId,
             TaskStates.Escalated,
@@ -460,6 +467,22 @@ public sealed class HumanReviewEscalation
             || value.Equals("Result: pending", StringComparison.OrdinalIgnoreCase)
             || value.Equals("- Result: pending.", StringComparison.OrdinalIgnoreCase)
             || value.Equals("- Result: pending", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? ResolveSourceFolder(string jobId, string watchPath)
+    {
+        var projected = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
+        if (!string.IsNullOrWhiteSpace(projected)) return projected;
+
+        // Explicit-root/test callers do not always inject a scanner. Resolve
+        // the current lane without mutating anything so the pre-move Result
+        // guarantee still applies to those paths.
+        foreach (var state in TaskStates.All)
+        {
+            var candidate = Path.Combine(watchPath, state, jobId);
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        return null;
     }
 
     /// <summary>

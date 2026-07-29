@@ -2,7 +2,7 @@ import { TaskState } from '../../../../../models/task.model';
 import type { StudioIconName } from '../../../../../components/studio-icon/studio-icon.component';
 import type { PipelineStepStatus, StepKind } from '../../../../task-pipeline';
 
-type PipelineDisplayStatus = PipelineStepStatus | 'disabled';
+type PipelineDisplayStatus = PipelineStepStatus | 'disabled' | 'not-run';
 
 export function stepKindLabel(kind: StepKind): string {
   switch (kind) {
@@ -34,6 +34,7 @@ export function stepStatusIcon(status: PipelineDisplayStatus): string {
     case 'failed':   return '❌';
     case 'running':  return '▶️';
     case 'skipped':  return '⏭️';
+    case 'not-run':  return '○';
     case 'planned':  return '🕓';
     case 'disabled': return '🚫';
     default:         return '·';
@@ -46,6 +47,7 @@ export function historicalStepStatusIcon(status: PipelineDisplayStatus): string 
     case 'failed':   return '×';
     case 'running':  return '›';
     case 'skipped':  return '↷';
+    case 'not-run':  return '○';
     case 'planned':  return '○';
     case 'disabled': return '−';
     default:         return '·';
@@ -58,6 +60,7 @@ export function stepStatusLabel(status: PipelineDisplayStatus): string {
     case 'failed':   return 'Failed';
     case 'running':  return 'Running';
     case 'skipped':  return 'Skipped';
+    case 'not-run':  return 'Not run';
     case 'planned':  return 'Planned';
     case 'disabled': return 'Disabled';
     default:         return 'Pending';

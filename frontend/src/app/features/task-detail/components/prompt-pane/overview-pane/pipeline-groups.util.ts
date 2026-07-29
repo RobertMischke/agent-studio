@@ -14,7 +14,7 @@
  */
 
 /** Aggregate section state, mapped to a subtle border/header tint in the template. */
-export type PipelineGroupTone = 'ok' | 'danger' | 'warn' | 'concern' | 'muted' | 'neutral';
+export type PipelineGroupTone = 'ok' | 'danger' | 'warn' | 'concern' | 'muted' | 'not-run' | 'neutral';
 
 /** The subset of the effective display status a row can carry. */
 export type PipelineRowStatusLike =
@@ -23,6 +23,7 @@ export type PipelineRowStatusLike =
   | 'passed'
   | 'failed'
   | 'skipped'
+  | 'not-run'
   | 'planned'
   | 'disabled';
 
@@ -77,6 +78,7 @@ export function groupToneLabel(tone: PipelineGroupTone): string {
     case 'warn':   return 'Running';
     case 'concern': return 'Concerns';
     case 'muted':  return 'Disabled';
+    case 'not-run': return 'Not run';
     default:       return 'Pending';
   }
 }
@@ -157,9 +159,10 @@ export function groupTone(rows: readonly PipelineGroupRowLike[]): PipelineGroupT
   if (rows.some(r => r.status === 'running')) return 'warn';
   if (rows.some(rowHasConcern)) return 'concern';
   const executable = rows.filter(
-    r => r.status !== 'disabled' && r.status !== 'skipped' && r.status !== 'planned',
+    r => r.status !== 'disabled' && r.status !== 'skipped' && r.status !== 'not-run' && r.status !== 'planned',
   );
   if (executable.length > 0 && executable.every(r => r.status === 'passed')) return 'ok';
+  if (executable.length === 0 && rows.some(r => r.status === 'not-run')) return 'not-run';
   if (executable.length === 0) return 'muted';
   return 'neutral';
 }

@@ -444,6 +444,11 @@ operator changes cause the step to fail before its writer runs.
   remain `Pending`, catalogue stubs remain `Planned`, and unknown extension rows
   are preserved. `PipelineExecutionLog.Read` applies the same projection purely
   to legacy current and previous attempts without rewriting their JSON files.
+- Task detail renders pending, non-deferred rows as `Not run` when a settled
+  attempt used a lightweight path or escalated before the full pipeline ran.
+  Deferred rows remain `Pending`. The Result view has one verdict badge, and
+  every human-review escalation writes a minimal Result scaffold before moving
+  the task so preparation failures retain durable evidence.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
   fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect

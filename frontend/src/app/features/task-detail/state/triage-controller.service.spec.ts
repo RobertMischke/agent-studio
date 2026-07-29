@@ -264,6 +264,24 @@ describe('TriageController · planning accept spawn-contract guard', () => {
       mode: 'coding',
     }) as unknown as TaskInfo;
 
+  const makeCompletedJob = (status: 'integrated' | 'pending' | null): TaskInfo =>
+    ({
+      id: 'done-a',
+      taskKey: `${wp}::done-a`,
+      title: 'Done A',
+      state: '6-completed',
+      order: 1,
+      watchPath: wp,
+      projectName: 'p',
+      mode: 'coding',
+      integration: status === null ? null : {
+        status,
+        sha: status === 'integrated' ? 'abc1234' : null,
+        integrationBranch: 'develop',
+        detail: status === 'integrated' ? 'Already integrated.' : 'Merge is still pending.',
+      },
+    }) as unknown as TaskInfo;
+
   // confirmPlanningAcceptThenMove awaits the confirm promise, so let queued
   // microtasks/macrotasks drain before asserting.
   const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -336,5 +354,39 @@ describe('TriageController · planning accept spawn-contract guard', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(jobService.moveJob).toHaveBeenCalled();
+  });
+
+  it('requires a second click before archiving a non-integrated Delivered task', async () => {
+    const job = makeCompletedJob('pending');
+    const confirmSpy = vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(false);
+
+    ctrl.move(job, { targetState: '7-archive', actionId: 'archive' });
+    await flush();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(confirmSpy.mock.calls[0][0].confirmLabel).toBe('Archive anyway');
+    expect(confirmSpy.mock.calls[0][0].message).toContain('status: pending');
+    expect(jobService.moveJob).not.toHaveBeenCalled();
+  });
+
+  it('archives after the operator confirms the non-integrated warning', async () => {
+    const job = makeCompletedJob(null);
+    vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(true);
+
+    ctrl.move(job, { targetState: '7-archive', actionId: 'archive' });
+    await flush();
+
+    expect(jobService.moveJob).toHaveBeenCalledWith('done-a', '7-archive', wp);
+  });
+
+  it('archives an integrated Delivered task without a warning', async () => {
+    const job = makeCompletedJob('integrated');
+    const confirmSpy = vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(true);
+
+    ctrl.move(job, { targetState: '7-archive', actionId: 'archive' });
+    await flush();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(jobService.moveJob).toHaveBeenCalledWith('done-a', '7-archive', wp);
   });
 });

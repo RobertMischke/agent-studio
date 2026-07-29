@@ -175,6 +175,18 @@ export function needsPlanningAcceptWarning(info: TaskInfo, targetState: string):
   return !spawn.contractSatisfied;
 }
 
+/**
+ * Temporary archive guard while the Status Workbench is still being decided.
+ * Only the Delivered -> Archive transition is covered. An unknown integration
+ * projection is treated as not integrated because archiving would otherwise
+ * hide the unresolved delivery state without operator acknowledgement.
+ */
+export function needsUnintegratedArchiveWarning(info: TaskInfo, targetState: string): boolean {
+  return info.state === TaskState.Completed
+    && targetState === TaskState.Archive
+    && info.integration?.status !== 'integrated';
+}
+
 export function laneActionsFor(state: string): TriageButton[] {
   return LANE_ACTIONS[state] ?? [];
 }
