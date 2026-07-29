@@ -737,14 +737,31 @@ public class TaskRunnerPromptTests
     [Fact]
     public void RenderModeFraming_Research_AddsBothReadOnlyAndWebHint()
     {
-        // Research is the read-only-with-web mode: it gets the read-only block
-        // and the web hint, read-only first.
+        // Research gets the read-only block, its HTML result contract, and the
+        // web hint in that order.
         var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
 
         Assert.Contains("Read-only run", framing);
+        Assert.Contains("**Research:**", framing);
+        Assert.Contains("results/report.html", framing);
+        Assert.Contains("self-contained HTML", framing);
+        Assert.Contains("link every supporting document", framing);
         Assert.Contains("Web access is enabled", framing);
-        Assert.InRange(framing.IndexOf("Read-only run", StringComparison.Ordinal), 0,
-            framing.IndexOf("Web access is enabled", StringComparison.Ordinal));
+        var readOnlyIndex = framing.IndexOf("Read-only run", StringComparison.Ordinal);
+        var researchIndex = framing.IndexOf("**Research:**", StringComparison.Ordinal);
+        var webIndex = framing.IndexOf("Web access is enabled", StringComparison.Ordinal);
+        Assert.InRange(readOnlyIndex, 0, researchIndex);
+        Assert.InRange(researchIndex, readOnlyIndex, webIndex);
+    }
+
+    [Fact]
+    public void RenderModeFraming_Planning_DoesNotInheritResearchHtmlContract()
+    {
+        var framing = Prompts().RenderModeFraming("planning", allowWebAccess: false);
+
+        Assert.Contains("Read-only run", framing);
+        Assert.DoesNotContain("**Research:**", framing);
+        Assert.DoesNotContain("results/report.html", framing);
     }
 
     [Fact]

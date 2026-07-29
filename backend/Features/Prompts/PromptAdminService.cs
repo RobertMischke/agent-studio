@@ -524,6 +524,8 @@ internal static class PromptDescriptionCatalog
             "Decomposes an epic-sized task into smaller child tasks.", "Runner"),
         ["mode-framing-readonly.md"] = new("Mode framing: read-only",
             "Framing block injected for read-only modes (planning / research) to forbid mutations.", "Runner"),
+        ["mode-framing-research.md"] = new("Mode framing: research",
+            "Research delivery contract for one primary HTML report with linked supporting material.", "Runner"),
         ["mode-framing-concept.md"] = new("Mode framing: concept",
             "Docs-only Workbench contract injected for concept-mode runs.", "Runner"),
         ["mode-framing-web.md"] = new("Mode framing: web access",

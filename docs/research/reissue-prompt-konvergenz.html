@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Research: Do sharper reissue prompts converge faster? (AGT-2380)</title>
+  <style>
+    :root {
+      --page: #f4f6fa;
+      --surface: #ffffff;
+      --soft: #eef2f7;
+      --text: #182032;
+      --muted: #5e687b;
+      --border: #d8deea;
+      --brand: #3157c8;
+      --brand-soft: #e8edff;
+      --good: #176448;
+      --good-soft: #e4f4ed;
+      --caution: #805300;
+      --caution-soft: #fff1d1;
+      --shadow: 0 14px 36px rgba(28, 39, 65, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0c111a;
+        --surface: #151b27;
+        --soft: #1d2534;
+        --text: #eef2fa;
+        --muted: #adb8cb;
+        --border: #344056;
+        --brand: #9eb4ff;
+        --brand-soft: #26345e;
+        --good: #7dd5b2;
+        --good-soft: #183a30;
+        --caution: #ffd17a;
+        --caution-soft: #443511;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--page);
+      font: 16px/1.62 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      width: 100%;
+      padding: clamp(2rem, 6vw, 5rem) clamp(1rem, 5vw, 5rem);
+      background: linear-gradient(135deg, var(--surface), var(--brand-soft));
+      border-bottom: 1px solid var(--border);
+    }
+    main {
+      display: grid;
+      gap: 1.25rem;
+      width: 100%;
+      padding: clamp(1rem, 4vw, 3.5rem) clamp(1rem, 5vw, 5rem);
+    }
+    footer { padding: 1.5rem clamp(1rem, 5vw, 5rem) 3rem; color: var(--muted); }
+    h1, h2, h3 { line-height: 1.18; margin-top: 0; }
+    h1 { max-width: 22ch; margin-bottom: 1rem; font-size: clamp(2.1rem, 5vw, 4.4rem); }
+    h2 { font-size: clamp(1.35rem, 2.5vw, 2rem); }
+    h3 { font-size: 1.05rem; }
+    p { max-width: 88ch; }
+    a { color: var(--brand); text-underline-offset: 0.18em; }
+    code { padding: 0.08rem 0.35rem; border-radius: 0.3rem; background: var(--soft); }
+    .eyebrow {
+      margin: 0 0 0.65rem;
+      color: var(--brand);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 72ch; color: var(--muted); font-size: 1.15rem; }
+    .panel {
+      min-width: 0;
+      padding: clamp(1rem, 2vw, 1.5rem);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      box-shadow: var(--shadow);
+    }
+    .answer { background: var(--good-soft); }
+    .limit { background: var(--caution-soft); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 1rem;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .metric {
+      padding: 1rem;
+      background: var(--soft);
+      border-radius: 0.8rem;
+    }
+    .metric strong { display: block; font-size: 1.55rem; }
+    .metric span { color: var(--muted); font-size: 0.88rem; }
+    .badge {
+      display: inline-flex;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-size: 0.8rem;
+      font-weight: 750;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.72rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.38rem; }
+    .table-wrap { overflow-x: auto; }
+    .compact td, .compact th { padding: 0.52rem 0.65rem; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Research: AGT-2380</p>
+    <h1>Do sharper reissue prompts converge faster?</h1>
+    <p class="lede">A qualitative corpus review of reissue prompts, combined with the recorded observational comparison and randomized experiment. This HTML edition preserves the delivered research findings and changes their presentation and navigation.</p>
+    <span class="badge">Corpus snapshot: 2026-07-28</span>
+  </header>
+
+  <main>
+    <section class="panel answer" id="answer">
+      <h2>Answer</h2>
+      <p><strong>A sharper prompt structure is plausible and operationally useful, but the available data does not establish that it causes faster convergence.</strong> The observational comparison slightly favors finding-first prompts, but its confidence interval crosses zero. The strongest actionable evidence is about prompt mechanics: correct diagnosis, a concrete target artifact, linked evidence, explicit non-goals, and a closure criterion reduce avoidable ambiguity. Repeating the same prompt verbatim is a clear nonconvergence signal.</p>
+      <div class="metric-grid">
+        <div class="metric"><strong>440</strong><span>cards with reissue or no-op recovery history</span></div>
+        <div class="metric"><strong>98.6%</strong><span>eventually archived, making binary completion too weak</span></div>
+        <div class="metric"><strong>-0.159</strong><span>observed RMST difference, finding-first minus generic</span></div>
+        <div class="metric"><strong>+2.1 pp</strong><span>observed acceptance difference, not statistically decisive</span></div>
+      </div>
+    </section>
+
+    <section class="panel" id="companions">
+      <h2>Companion documents and data</h2>
+      <p>This report is the primary document. The supporting material is intentionally linked here rather than presented as a loose result list.</p>
+      <ul>
+        <li><a href="../quality/reissue-prompt-convergence/index.html">Observational convergence workbench</a></li>
+        <li><a href="../quality/pipeline-time-economy/reissue-prompt-experiment.md">Randomized finding-first experiment contract</a></li>
+        <li><a href="../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md">Randomized experiment analysis</a></li>
+        <li><a href="../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.json">Machine-readable experiment analysis</a></li>
+        <li><a href="../../scripts/reissue-prompt-experiment-analysis.mjs">Reproducible experiment analysis script</a></li>
+      </ul>
+    </section>
+
+    <section class="grid" id="method">
+      <article class="panel">
+        <h2>Method</h2>
+        <ul>
+          <li>Census of 1,375 task cards.</li>
+          <li>996 reissue files plus 8 no-op recovery files, 1,004 files in total.</li>
+          <li>440 distinct cards with at least one relevant intervention.</li>
+          <li>Deep qualitative review of 14 representative cards.</li>
+          <li>Comparison with the existing 404-card observational workbench and the predeclared randomized experiment.</li>
+        </ul>
+      </article>
+      <article class="panel limit">
+        <h2>Interpretation boundary</h2>
+        <p>The corpus is operational evidence, not a clean causal experiment. Model, task difficulty, infrastructure failures, operator interventions, and changing prompt templates are confounders. End-state completion is also a poor speed metric because almost every card eventually archives.</p>
+      </article>
+    </section>
+
+    <section class="panel" id="template-distribution">
+      <h2>Finding 1: production uses eight recurring reissue templates</h2>
+      <div class="table-wrap">
+        <table class="compact">
+          <thead><tr><th>Template</th><th>Count</th><th>Primary intent</th></tr></thead>
+          <tbody>
+            <tr><td>build-gate</td><td>285</td><td>Repair a failing deterministic build or test gate.</td></tr>
+            <tr><td>steer-diff</td><td>255</td><td>Redirect work to the unresolved change set.</td></tr>
+            <tr><td>aspect-block</td><td>187</td><td>Address a blocking review aspect.</td></tr>
+            <tr><td>evidence-gate</td><td>179</td><td>Supply or correct required evidence.</td></tr>
+            <tr><td>needs-input-answer</td><td>57</td><td>Resume with an answered question.</td></tr>
+            <tr><td>quality-concerns</td><td>15</td><td>Resolve nonblocking but material concerns.</td></tr>
+            <tr><td>council-reaction</td><td>10</td><td>React to a bounded council finding.</td></tr>
+            <tr><td>noop-recovery</td><td>8</td><td>Recover a run that made no material progress.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The template vocabulary is already compact. The remaining opportunity is not another generic builder, but better diagnosis and more precise evidence inside the existing families.</p>
+    </section>
+
+    <section class="grid" id="qualitative-findings">
+      <article class="panel">
+        <h2>Finding 2: operator steering often adds a second prompt layer</h2>
+        <p>81 of 1,375 human-owned <code>prompt.md</code> files contained appended steering. Within that set, 37 cards repeated the same operator-wave paragraph. Human intervention therefore frequently compensates for an earlier prompt that did not isolate the actual blocker.</p>
+      </article>
+      <article class="panel">
+        <h2>Finding 3: evidence links help only after diagnosis is correct</h2>
+        <p>Evidence-rich prompts still loop when they point at the wrong failure class. AGT-2168 received ten steer-diff rounds. Precision is not the number of citations; it is the match between cited evidence and the next executable correction.</p>
+      </article>
+      <article class="panel">
+        <h2>Finding 4: raw gate logs are too noisy</h2>
+        <p>AGT-2289 carried about 320 lines of build-gate output, while the first useful error appeared around line 192. A sharper reissue should lead with the first actionable failure and link the full log as supporting evidence.</p>
+      </article>
+      <article class="panel">
+        <h2>Finding 5: exact repetition signals nonconvergence</h2>
+        <p>AGT-2255 received five identical evidence-gate reissues. Once the same prompt has failed, sending it again adds no information. The next attempt should change diagnosis, scope, evidence, or escalation state.</p>
+      </article>
+      <article class="panel">
+        <h2>Finding 7: the six durable nonconvergers were infrastructure cases</h2>
+        <p>All six cards that did not reach archive ended in the same infrastructure class: <code>review-subject-unmaterialisierbar</code>. Prompt sharpness cannot repair a missing review subject. The system must classify and route this separately.</p>
+      </article>
+      <article class="panel">
+        <h2>Finding 8: causal evidence is still incomplete</h2>
+        <p>The randomized experiment is the right mechanism because it holds eligibility and assignment stable. At the checked snapshot it had no completed treatment/control outcomes to interpret, so the observational signal must not be promoted to a causal claim.</p>
+      </article>
+    </section>
+
+    <section class="panel" id="outcomes">
+      <h2>Finding 6: eventual completion hides convergence speed</h2>
+      <p>434 of 440 cards, or 98.6%, eventually archived. That makes final completion a nearly constant outcome. More useful indicators are end quote, immediate prompt repetition, attempts, time to stable review subject, and restricted mean survival time.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Intervention family</th><th>End quote</th><th>Immediate repeat</th></tr></thead>
+          <tbody>
+            <tr><td>council-reaction</td><td>70.0%</td><td>30.0%</td></tr>
+            <tr><td>quality-concerns</td><td>60.0%</td><td>0.0%</td></tr>
+            <tr><td>steer-diff</td><td>55.3%</td><td>30.6%</td></tr>
+            <tr><td>evidence-gate</td><td>54.7%</td><td>24.0%</td></tr>
+            <tr><td>noop-recovery</td><td>37.5%</td><td>0.0%</td></tr>
+            <tr><td>build-gate</td><td>37.2%</td><td>34.4%</td></tr>
+            <tr><td>aspect-block</td><td>31.6%</td><td>31.0%</td></tr>
+            <tr><td>needs-input-answer</td><td>29.8%</td><td>5.3%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>These descriptive rates differ by failure class and task mix. They should not be read as a ranking of prompt quality.</p>
+    </section>
+
+    <section class="panel" id="experiment">
+      <h2>Observational and randomized evidence</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Evidence</th><th>Finding-first</th><th>Generic</th><th>Interpretation</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Observational cohort</td>
+              <td>202 cards, 69 censored</td>
+              <td>202 cards, 84 censored</td>
+              <td>Matched 404-card comparison, still exposed to model and task confounding.</td>
+            </tr>
+            <tr>
+              <td>RMST</td>
+              <td>3.594</td>
+              <td>3.752</td>
+              <td>Difference -0.159; interval -0.530 to +0.194 crosses zero.</td>
+            </tr>
+            <tr>
+              <td>Acceptance</td>
+              <td>49.85%</td>
+              <td>47.75%</td>
+              <td>Difference +2.1 percentage points; interval crosses zero.</td>
+            </tr>
+            <tr>
+              <td>Randomized snapshot</td>
+              <td>0 outcomes</td>
+              <td>0 outcomes</td>
+              <td>No causal conclusion available at the checked report time.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The direction is encouraging but uncertain. Keep the experiment running and do not change the production default until the predeclared threshold and deterministic safeguards pass.</p>
+    </section>
+
+    <section class="panel" id="pattern-catalog">
+      <h2>Pattern catalog for sharper reissue prompts</h2>
+      <ol>
+        <li><strong>Diagnosis first.</strong> Name the failure class before prescribing work.</li>
+        <li><strong>Target artifact.</strong> Name the file, state transition, result, or evidence item that must change.</li>
+        <li><strong>Link evidence.</strong> Summarize the first actionable signal and link the full log or report.</li>
+        <li><strong>State the branch basis.</strong> Distinguish current diff, prior accepted commits, and infrastructure state.</li>
+        <li><strong>Define non-goals.</strong> Prevent a reissue from restarting the entire task.</li>
+        <li><strong>Reduce scope.</strong> Ask for the smallest correction that can clear the blocker.</li>
+        <li><strong>Correct the diagnosis.</strong> When a prompt fails, change the hypothesis rather than intensifying the same wording.</li>
+        <li><strong>Never repeat identical text.</strong> A prompt hash match should trigger adaptation or escalation.</li>
+        <li><strong>Give a closure criterion.</strong> State the observable condition that permits <code>[[TASK_DONE]]</code>.</li>
+      </ol>
+    </section>
+
+    <section class="grid" id="recommendations">
+      <article class="panel answer">
+        <h2>Recommendations</h2>
+        <ol>
+          <li>Do not build a ninth generic reissue-prompt builder.</li>
+          <li>Extend the existing randomized experiment to build-gate and aspect-block cases.</li>
+          <li>Use the pattern catalog in the existing template families.</li>
+          <li>Add an immediate-repetition hash check that forces diagnosis change or escalation.</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <h2>Top five findings</h2>
+        <ol>
+          <li>Eight template families already cover the production reissue surface.</li>
+          <li>Correct diagnosis matters more than the volume of evidence.</li>
+          <li>Raw logs should be companions, not the opening of the prompt.</li>
+          <li>Exact prompt repetition is an actionable loop signal.</li>
+          <li>The observed benefit is small and uncertain; causal proof remains pending.</li>
+        </ol>
+      </article>
+    </section>
+
+    <section class="panel limit" id="limits">
+      <h2>Limitations</h2>
+      <ul>
+        <li>The corpus is a changing production system, not a controlled laboratory sample.</li>
+        <li>Template choice correlates with failure class and task difficulty.</li>
+        <li>Model and thinking-level changes can affect convergence independently of prompt shape.</li>
+        <li>Operator additions are not randomized and may target the hardest cards.</li>
+        <li>Archive is an operational endpoint, not a direct quality measure.</li>
+        <li>Repeated file counts do not by themselves identify distinct semantic attempts.</li>
+        <li>The randomized experiment had no completed outcomes at the checked snapshot.</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="three-sentence-recommendation">
+      <h2>Three-sentence recommendation</h2>
+      <p>Keep the existing template families, but make every reissue lead with a verified diagnosis, one target artifact, the smallest next action, linked evidence, explicit non-goals, and a closure criterion. Detect identical consecutive prompts and require a changed hypothesis or infrastructure escalation instead of another copy. Continue the predeclared randomized experiment before treating the small observational advantage as a production-wide causal effect.</p>
+    </section>
+  </main>
+
+  <footer>
+    Primary research deliverable for AGT-2380. Presentation upgraded for the
+    <a href="../operations/research-deliverables/index.html">Research task delivery convention</a>;
+    research findings unchanged.
+  </footer>
+</body>
+</html>

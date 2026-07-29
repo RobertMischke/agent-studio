@@ -520,9 +520,9 @@ public class PipelineCatalogueTests
         Assert.True(syncIndex < decisionIndex,
             $"agents/wiki-sync (idx {syncIndex}) must precede orchestrator-decision (idx {decisionIndex})");
 
-        // Not a git step: the read-only planning/research pipeline keeps it.
+        // Document-only planning/research runs do not run Wiki automation.
         Assert.DoesNotContain(PipelineCatalogue.AgentsWikiSyncStepId, PipelineCatalogue.GitStepIds);
-        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId);
 
         // Opt-in gate: default off, but a per-project override turns it on.
         Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
@@ -592,9 +592,9 @@ public class PipelineCatalogueTests
                 $"aspect {aspectId} (idx {aspectIndex}) must precede task-spawner (idx {spawnerIndex})");
         }
 
-        // It is not a git step, so the read-only pipeline keeps it.
+        // Document-only planning/research runs do not spawn follow-up tasks.
         Assert.DoesNotContain(PipelineCatalogue.TaskSpawnerStepId, PipelineCatalogue.GitStepIds);
-        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.TaskSpawnerStepId);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.TaskSpawnerStepId);
 
         // Opt-in gate: default off, but a per-project override turns it on.
         Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
@@ -641,9 +641,9 @@ public class PipelineCatalogueTests
                 $"aspect {aspectId} (idx {aspectIndex}) must precede code-review grade (idx {gradeIndex})");
         }
 
-        // Not a git step: the read-only planning/research pipeline keeps it.
+        // Document-only planning/research runs do not receive a code grade.
         Assert.DoesNotContain(PipelineCatalogue.CodeReviewGradeStepId, PipelineCatalogue.GitStepIds);
-        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.CodeReviewGradeStepId);
 
         // Default-on, but an operator can disable it per project.
         Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
@@ -725,34 +725,11 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
-    public void ReadOnlyPipeline_OmitsEveryGitStep_KeepsEverythingElse()
+    public void ReadOnlyPipeline_IsLightweightAndOmitsCodeGates()
     {
-        // Read-only-Pipeline fuer planning/research: the git steps are dropped so
-        // a planning / research run does no worktree / commit / merge / teardown
-        // work - it only renders the prompt, runs the agent, and produces a
-        // report. The single catalogue git step today is commit-attribution.
-        var standard = PipelineCatalogue.Standard;
         var ro = PipelineCatalogue.ReadOnly;
 
         Assert.Equal(PipelineCatalogue.ReadOnlyPipelineId, ro.Id);
-
-        // No step in any section is a git step.
-        foreach (var step in ro.AllSteps)
-            Assert.DoesNotContain(step.Id, PipelineCatalogue.GitStepIds);
-
-        // The commit-attribution slot is present on standard but gone here.
-        Assert.Contains(standard.Post, s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
-        Assert.DoesNotContain(ro.Post, s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
-
-        // Every non-git step from standard survives, in the same relative order,
-        // so the variant tracks the standard pipeline as it grows.
-        var expected = standard.AllSteps
-            .Where(s => !PipelineCatalogue.GitStepIds.Contains(s.Id))
-            .Select(s => s.Id)
-            .ToList();
-        Assert.Equal(expected, ro.AllSteps.Select(s => s.Id).ToList());
-
-        // The core agent run and all Pre steps are not git steps, so they remain.
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
         Assert.Equal(4, ro.Pre.Count);
@@ -760,10 +737,18 @@ public class PipelineCatalogueTests
         Assert.Equal(PipelineCatalogue.ModelQualificationStepId, ro.Pre[1].Id);
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[2].Id);
         Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[3].Id);
+        Assert.Equal(
+            [PipelineCatalogue.OrchestratorReviewStepId, PipelineCatalogue.OrchestratorDecisionStepId],
+            ro.Post.Select(step => step.Id));
 
-        // Every git step was removed from Post.
-        var standardPostGitSteps = standard.Post.Count(s => PipelineCatalogue.GitStepIds.Contains(s.Id));
-        Assert.Equal(standard.Post.Count - standardPostGitSteps, ro.Post.Count);
+        Assert.DoesNotContain(ro.AllSteps, step =>
+            PipelineCatalogue.GitStepIds.Contains(step.Id)
+            || PipelineCatalogue.AspectStepIds.Contains(step.Id)
+            || step.Id == PipelineCatalogue.BuildTestGateStepId
+            || step.Id == PipelineCatalogue.LintScssStepId
+            || step.Id == PipelineCatalogue.CodeReviewGradeStepId
+            || step.Id == PipelineCatalogue.RegressionRadarStepId
+            || step.Id.Contains("drift", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -822,8 +807,8 @@ public class PipelineCatalogueTests
     [Fact]
     public void ReadOnlyPipeline_HasNoDanglingDependsOnEdges()
     {
-        // Filtering out the git steps must not leave a surviving step depending on
-        // a removed id (a DAG-resolver would deadlock on the missing node).
+        // The deliberately small document DAG must not depend on omitted code
+        // gates or aspect steps.
         var ro = PipelineCatalogue.ReadOnly;
         var presentIds = ro.AllSteps.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var step in ro.AllSteps)
