@@ -738,6 +738,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 Executor = "agent-runner-01",
                 LeaseId = "fixture-attempt",
                 FencingToken = 1,
+                ImmutableResultRef = DeliveryRef,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
             });
         }

@@ -19,6 +19,13 @@ public record TaskCommitInfo
     public string Sha { get; init; } = "";
     public string ShortSha { get; init; } = "";
     public string Message { get; init; } = "";
+    /// <summary>
+    /// Delivery branch that carried this attributed commit. Remote attribution
+    /// persists the exact runner/result ref here so acceptance can resolve the
+    /// reviewed source from card data without reconstructing it from the task
+    /// folder slug. Null on legacy and local commits that pre-date this field.
+    /// </summary>
+    public string? Branch { get; init; }
     public int FilesChanged { get; init; }
     public List<string> Files { get; init; } = [];
     public DateTime At { get; init; }
