@@ -33,6 +33,13 @@ Robert signed off the distributable concept (`distributable.html`):
 
 Tranche-0 cards were cut the same day.
 
+- **2026-07-28 - One OSS setup path.** Docker Compose is the sole documented
+  new-user installation route. It matches the later container-default decision
+  and reaches a healthy Studio from one repository without host .NET, Node.js,
+  local application settings, maintainer switches, or a neighbouring checkout.
+  The .NET tool and combined release-launcher options are not parallel entry
+  points. See `setup-scenarios.md` and the operator getting-started guide.
+
 - **2026-07-25 - One runner load gate.** `RunnerLoadGate` is the only claim-admission load gate. It uses the configurable `RUNNER_CLAIM_MAX_LOAD_PER_CORE` threshold introduced with AGT-2320 and requires 120 seconds of sustained high normalized load before it closes new claims. Existing runs continue. The immediate `HostLoadAdmissionPolicy` implementation was removed.
 - **2026-07-25 - One process inventory.** `RunnerProcessInventoryTracker` owns runner process truth. Both consumers use the same snapshot: `ActiveTaskKeys` for the deployed backend claim protocol and the structured inventory for the versioned Task Server claim and heartbeat protocol.
 - **2026-07-25 - One deployed requeue authority.** The backend requeue grace from AGT-2320 remains authoritative today. Versioned Task Server invariant reconciliation is runnable as a hosted Tranche 0 service, uses the same 120-second grace, can request idempotent runner-local orphan termination, and records lease or lane mismatches without moving tasks. Task Server requeue activation requires a later authority cutover; it is not wired in parallel with the backend.

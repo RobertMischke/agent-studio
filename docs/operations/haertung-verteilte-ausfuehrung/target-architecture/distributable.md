@@ -38,6 +38,12 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
   control-plane package.
 - Building the versioned distributable remains a prerequisite for Tranche 1 and
   also serves local installation with the same package and different config.
+- The local OSS entry uses Docker Compose as its sole documented installation
+  path. It builds the current Studio and API containers from one checkout and
+  waits on their health contract. The three release archives remain the
+  production distributable boundary, not a competing getting-started route.
+  The rationale and clean-host evidence live in
+  [setup-scenarios.md](./setup-scenarios.md).
 - On Linux runner hosts, `agent-host` owns role-specific cgroup controls in the
   main Coding and Review units on every install and update. Values follow
   host-derived defaults unless the operator deliberately changes

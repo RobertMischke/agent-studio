@@ -147,6 +147,10 @@
       Deploy-Key-Policy geflippt, Key am Repo.</dd>
     <dt>Status</dt><dd><span class="pill done">deployed 12.07.</span> — Heilungsbeweis: AGT-2123 lief
       danach komplett durch (outcome Done, salvage-push secured=True).</dd>
+    <dt>Harness coverage</dt><dd><code>fault-lost-completion-sentinel</code>,
+      <code>fault-interrupted-terminal-marker</code>, and
+      <code>fault-network-and-terminal</code> replay the missing-proof boundary and require exact
+      Result-SHA evidence before integration.</dd>
     <dt>Referenzen</dt><dd>AGT-2147/2148/2149 · <code>runner/GitWorkspace.cs</code>,
       <code>runner/RemoteTaskRunner.cs</code>, <code>runner/GitPushProbe.cs</code>, <code>runner/SentinelScanner.cs</code> ·
       Handoff <code>lage-kontext-handoff-2026-07-12.md</code></dd>
@@ -168,6 +172,9 @@
       <code>project-settings.json</code> auf <code>pipeline-ready</code>.</dd>
     <dt>Status</dt><dd><span class="pill done">Workarounds aktiv</span>
       <span class="pill open">Validierungsbug offen</span> — strukturelle Antwort ist die Hermetik (Hauptseite §5).</dd>
+    <dt>Harness coverage</dt><dd><code>fault-gate-timeout</code> and
+      <code>fault-network-and-gate-timeout</code> classify the watchdog as infrastructure, reap the
+      process tree, and allow only one bounded recovery.</dd>
   </dl>
 </div>
 
@@ -265,6 +272,8 @@
       (<code>worktree add … &lt;sha&gt;</code>); Divergenz → deterministische Collision-Refs, nie Force-Push.</dd>
     <dt>Status</dt><dd><span class="pill done">gelöst</span>: Seit 11.07. wurde keine neue
       Kreuzkontamination beobachtet; alte Salvage-Branches werden beim Re-Cut bereinigt.</dd>
+    <dt>Harness coverage</dt><dd><code>fault-worktree-collision</code> proves that an occupied
+      target cannot become an implicit base, fallback checkout, or deletion target.</dd>
   </dl>
 </div>
 
@@ -449,7 +458,7 @@
   </dl>
 </div>
 
-<div class="entry">
+<div class="entry" id="incident-worktree-collision">
   <header><h3>AGT-2155: Der External-Completion-Zyklus</h3><span class="date">20.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Ein zurückgebliebener Host-Worktree ließ jeden Remote-Lauf mit
@@ -462,6 +471,9 @@
       Branch-Rekonstruktion nach 2177-Muster.</dd>
     <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
       <span class="pill open">strukturell offen</span> — kein automatischer Zombie-Worktree-Check.</dd>
+    <dt>Harness coverage</dt><dd><code>fault-worktree-collision</code> holds a foreign occupant
+      through the five-attempt prepare bound, checks the reported busy path, and proves the occupant
+      was neither overwritten nor removed.</dd>
     <dt>Referenzen</dt><dd>AGT-2155 · Bezug AGT-1917 (External-Completion), AGT-2177 (Rekonstruktionsmuster)</dd>
   </dl>
 </div>
@@ -498,6 +510,9 @@
     <dt>Status</dt><dd><span class="pill done">structural fix shipped</span> — verified reattach and
       dead-attempt release are covered by Runner and Task Server regression tests; memory profiling and
       crash visibility remain separate follow-up work.</dd>
+    <dt>Harness coverage</dt><dd><code>fault-task-server-network-blips</code> and both selected
+      multi-fault manifests require a renewed live lease after a bounded heartbeat disconnect and
+      reject duplicate RunAttempts.</dd>
     <dt>Referenzen</dt><dd>AGT-2182/2194/2198/2232 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
       (Attempt-Fencing)</dd>
   </dl>
@@ -516,6 +531,8 @@
     <dt>Status</dt><dd><span class="pill done">Brücke live</span>
       <span class="pill part">Zielpfad offen</span>: AGT-2229 ersetzt die Brücke durch claimbare
       Remote-Schritte; eine Folgekarte entfernt anschließend den SSH-Sonderpfad.</dd>
+    <dt>Harness coverage</dt><dd><code>fault-gate-timeout</code> pins timeout classification,
+      process cleanup, and recovery independently from product-test verdicts.</dd>
     <dt>Referenzen</dt><dd>AGT-2222, AGT-2229, <code>review-pipeline-health/incident-2026-07-22-gate-churn.md</code></dd>
   </dl>
 </div>
@@ -544,7 +561,33 @@
       ihre Schreibberechtigung.</dd>
     <dt>Status</dt><dd><span class="pill done">geliefert, Grade B</span>
       Ein benanntes Acquire-to-Lane-Crash-Fenster bleibt als Folgearbeit offen.</dd>
+    <dt>Harness coverage</dt><dd><code>fault-task-server-network-blips</code> loses claim and
+      heartbeat requests before send, then loses event, artifact, and completion responses after
+      commit. The assertions require one RunAttempt, one fenced evidence copy, one completion, and an
+      empty outbox. Terminal-marker manifests bind the same attempt to its immutable Result-SHA.</dd>
     <dt>Referenzen</dt><dd>AGT-2182</dd>
+  </dl>
+</div>
+
+<div class="entry" id="incident-fault-injection-catalog">
+  <header><h3>AGT-2393: Safe Remote Run fault injection catalog</h3><span class="date">29.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>The Remote Run suite had a deterministic happy path but no safe, repeatable
+      controls for the transport, timeout, occupied-worktree, and terminal-proof incidents recorded
+      above.</dd>
+    <dt>Measure</dt><dd>A harness-only catalog now supplies single-fault and selected multi-fault
+      manifests. Activation is bound to an isolated Task Server, explicit flags, a run/root-specific
+      acknowledgement, and a per-run safety marker. Fault resources are automatically cleaned up.</dd>
+    <dt>Assertions</dt><dd>Each manifest declares and verifies its lane, lease/fence, process,
+      worktree, outbox, Result-SHA, and incident outcome. Disabled injection is covered as an inert
+      control. No model or CLI comparison, leaderboard, or benchmark path is present.</dd>
+    <dt>Status</dt><dd><span class="pill done">implemented and regression-covered</span></dd>
+    <dt>References</dt><dd><code>tools/remote-test-suite/fault-catalog.json</code>,
+      <code>tools/remote-test-suite/scenarios/fault-*.json</code>,
+      <a href="#incident-gate-timeout">gate timeout</a>,
+      <a href="#incident-phantom-wave">phantom completion</a>,
+      <a href="#incident-worktree-collision">occupied worktree</a>, and
+      <a href="#incident-attempt-authority">attempt authority</a>.</dd>
   </dl>
 </div>
 

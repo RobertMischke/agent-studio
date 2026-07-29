@@ -1254,6 +1254,31 @@
             operator restored an auto mode.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2393</code><br><span class="small">safe Remote Run fault injection catalog</span></td>
+          <td>
+            The isolated Remote Run suite could prove the clean claim, Result-SHA handoff, review,
+            and integration path, but the four recurring infrastructure incident classes still
+            depended on ad hoc reproduction. A false-positive safety risk also existed if future
+            controls were added directly to a normal Runner configuration.
+          </td>
+          <td>
+            There was no harness-owned fault vocabulary, deterministic operation/occurrence schedule,
+            activation interlock, or shared assertion report spanning lane, lease, process, worktree,
+            outbox, SHA, and incident outcome.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the repository test harness now provides isolated
+            single-fault and selected multi-fault manifests for Task Server blips, a gate watchdog
+            timeout, an occupied worktree target, and lost or interrupted terminal proof. Production
+            binaries import no injection code. Faults require an explicit flag, a run/root-bound
+            acknowledgement, an unchanged safety marker, and a harness-owned Task Server. The timeout
+            process tree is reaped, worktree preparation stops after five attempts without touching
+            the foreign occupant, idempotent evidence replays once, and missing terminal proof reaches
+            Human Review without integration.
+          </td>
+        </tr>
       </tbody>
     </table>
 

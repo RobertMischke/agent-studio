@@ -7,8 +7,6 @@
 #                          container is the isolation boundary).
 # --profile distributed:   target-architecture preview (task-server, engine,
 #                          studio-bff) - not required for a working install.
-#
-# Fresh installs: use deploy/installer/install.sh (container-default).
 name: agent-studio
 
 services:
@@ -24,6 +22,12 @@ services:
       - projects:/data/projects
     environment:
       TaskRepository: /data/workspace
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5031/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
 
   frontend:
     build:
@@ -31,9 +35,16 @@ services:
       dockerfile: frontend/Dockerfile
     restart: unless-stopped
     depends_on:
-      - orchestrator-api
+      orchestrator-api:
+        condition: service_healthy
     ports:
       - "${STUDIO_UI_PORT:-4011}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   agent-host-coding:
     build:
