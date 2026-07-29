@@ -354,15 +354,14 @@ export interface TaskProvenanceView {
  * card via `TaskInfo.provenance` - NOT the live-derived {@link TaskProvenanceView}
  * (which is only fetched per-task for the detail git pane).
  *
- * The card reads three ground-truth signals off this record to show *where the
- * work actually lives*, instead of guessing from the lane:
+ * The card reads worktree lifecycle context from this record:
  *  - a real `task/<id>` worktree branch exists iff some transition carries a
  *    non-null `branchTip` (sequential runs in the shared checkout never cut one);
  *  - the newest transition's `branchTip` is the CURRENT attempt's tip, so a
  *    reissue points at the live worktree, not an earlier run;
- *  - `merge.mergeCommit` is the ground-truth "folded into develop" fact, written
- *    once by the merge-into-develop step - the only safe-to-persist landed signal
- *    (the derived `landedState` goes stale and is never stored here).
+ *  - `merge.mergeCommit` is historical attempt evidence written by the
+ *    merge-into-develop step. It does not prove current target membership;
+ *    accepted-card status comes from {@link TaskIntegrationStatus}.
  */
 export interface TaskProvenanceRecord {
   branch: string;
@@ -392,7 +391,7 @@ export interface TaskMergeSignal {
   integrationBranch: string;
   /** Release branch the signal was computed against (usually "main"). */
   releaseBranch: string;
-  /** Short SHA proving develop membership (merge commit or anchor); null when not in develop. */
+  /** Short attributed SHA proving develop membership; null when not in develop. */
   integrationSha: string | null;
   /** Short SHA of the anchor that reached main; null when not in main. */
   releaseSha: string | null;
@@ -407,22 +406,21 @@ export type IntegrationStatusValue =
   | 'no-branch';
 
 /**
- * AGT-2202 — the honest, git-derived integration verdict for an accepted card
+ * AGT-2202 - the honest, git-derived integration verdict for an accepted card
  * (5-human-review / 6-completed / 7-archive): is this task's work actually folded
  * into the integration branch (develop)? Mirrors backend `TaskIntegrationStatus`
- * and ships via `TaskInfo.integration`. Unlike {@link TaskMergeSignal} (which
- * reads anchor ancestry only) this also honours the curated `merge(<KEY>)` /
- * `merge-recut(<KEY>)` develop-log commit the async curated integrator leaves
- * behind, so it survives commit rewriting. Computed batched + cached per repo on
- * the backend. Null on cards not in an accepted lane.
+ * and ships via `TaskInfo.integration`. It is computed from attributed-commit
+ * membership at the current target HEAD, batched and cached per repository.
+ * Lane state, provenance, and remembered merge attempts are not status inputs.
+ * Null on cards not in an accepted lane.
  */
 export interface TaskIntegrationStatus {
   /** integrated | pending | conflict-skipped | no-branch. */
   status: IntegrationStatusValue;
-  /** Short SHA proving integration (curated merge commit or contained anchor); null unless integrated. */
+  /** Short attributed SHA proving target-branch membership; null unless integrated. */
   sha: string | null;
   /** Integration branch the verdict was computed against (usually "develop"). */
   integrationBranch: string;
-  /** Which signal proved the verdict / why it is not integrated. Tooltip + audit only. */
+  /** Membership evidence or the reason it is not integrated. Tooltip + audit only. */
   detail: string | null;
 }

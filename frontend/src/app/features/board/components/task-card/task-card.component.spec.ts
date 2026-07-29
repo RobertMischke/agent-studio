@@ -882,6 +882,12 @@ describe('TaskCardComponent (smoke)', () => {
         integrationSha: 'a1b2c3d',
         releaseSha: null,
       },
+      integration: {
+        status: 'integrated',
+        sha: 'a1b2c3d',
+        integrationBranch: 'develop',
+        detail: 'Every attributed commit is present in develop.',
+      },
     }));
 
     const signal = fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]') as HTMLElement | null;
@@ -1587,6 +1593,16 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
     );
     expect(chips).toEqual([]);
   });
+
+  it('suppresses the internal integrationpending marker in favor of computed status', () => {
+    const chips = buildTagChips(
+      ['integrationpending', 'architecture'],
+      registry(tag('integrationpending', 'Integration pending'), tag('architecture', 'Architecture')),
+      '5-human-review',
+    );
+
+    expect(chips.map((chip) => chip.id)).toEqual(['architecture']);
+  });
 });
 
 describe('buildCodeReviewGradeBadge — A/B/C/D quality grade (ASS-1657)', () => {
@@ -1730,6 +1746,12 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
 
   it('suppresses a persisted phase after the task reaches Review', () => {
     expect(buildPhaseBadge('post-processing-blocked', null, undefined, '5-human-review')).toBeNull();
+  });
+
+  it('shows transactional integration while the task remains in Review', () => {
+    const badge = buildPhaseBadge('integrating', null, undefined, '5-human-review');
+    expect(badge?.label).toBe('Integrating');
+    expect(badge?.tone).toBe('integrating');
   });
 
   it('surfaces post-processing substates separately from the lane label', () => {

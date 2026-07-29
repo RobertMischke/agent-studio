@@ -5216,52 +5216,6 @@ public class GitService
     }
 
     /// <summary>
-    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
-    /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
-    /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
-    /// repo (the grep pre-filters to only the curated integrator merges, so the
-    /// output is O(accepted tasks), not O(history)). This is the authoritative
-    /// integration signal that anchor-ancestry cannot see: the async curated
-    /// integrator rewrites commits, so a task's own SHAs are frequently NOT
-    /// ancestors of develop even though its work landed under a curated merge
-    /// commit. Read-only; empty on any failure. When several merges reference the
-    /// same key the newest (first in <c>git log</c> order) wins.
-    /// </summary>
-    public Dictionary<string, string> GetIntegrationMergeShaByKey(string repoRoot, string integrationRef)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return map;
-        if (!IsLikelyBranchName(integrationRef)) return map;
-
-        // Extended-regexp grep: match a subject that starts with merge( or
-        // merge-recut( followed by a task key. --grep is ORed across the two
-        // patterns; -E makes the alternation / groups work.
-        var (output, _, code) = RunGitArgs(
-            repoRoot,
-            "log",
-            "--no-color",
-            "-E",
-            "--grep=^merge(-recut)?\\(",
-            "--format=%H%x1f%s",
-            integrationRef);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return map;
-
-        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var sep = line.IndexOf('\x1f');
-            if (sep <= 0) continue;
-            var sha = line[..sep].Trim();
-            var subject = line[(sep + 1)..];
-            var key = ParseIntegrationMergeKey(subject);
-            if (sha.Length == 0 || key == null) continue;
-            // git log is newest-first; keep the first (newest) merge per key.
-            map.TryAdd(key, sha);
-        }
-        return map;
-    }
-
-    /// <summary>
     /// All curated integration commits reachable from the supplied test-run
     /// revisions, grouped by task key. The committer timestamp is part of the
     /// result because a key alone is not revision identity: consumers must

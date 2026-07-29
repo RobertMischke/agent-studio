@@ -408,14 +408,15 @@ public sealed class TaskProvenanceServiceTests : IDisposable
     [Fact]
     public void BuildView_MultiCommitTask_BatchMembershipTracksMergeState()
     {
-        // End-to-end over the batched membership path: a live task branch with
-        // TWO commits, walked from the recorded fork point. Membership must read
-        // "branch only" before the merge and "merged to develop" after, proving
-        // the rev-list set path classifies every commit correctly - the behaviour
-        // the removed per-commit merge-base fan-out used to provide.
+        // End-to-end over the canonical attributed membership path. A live task
+        // branch has two commits and both are explicitly attributed to the card.
+        // Branch-only WIP outside this set must never drive integration fields.
         var (repoRoot, watchPath) = SeedWorktreeRepo("multi-1");
         File.WriteAllText(Path.Combine(repoRoot, "work2.txt"), "more task work");
         Commit(repoRoot, "feat: more task work");
+        var attributed = RunGit(repoRoot, "rev-list --reverse develop..task/multi-1")
+            .Out
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         var prov = BuildProvenanceService(repoRoot, watchPath, "demo");
         var info = Scan(repoRoot, watchPath, "multi-1");
@@ -424,8 +425,19 @@ public sealed class TaskProvenanceServiceTests : IDisposable
         // that base is what the batch membership walks from.
         prov.RecordTransition(info!, TaskStates.AutoReview);
         info = Scan(repoRoot, watchPath, "multi-1");
+        info = info! with
+        {
+            Commits = attributed.Select(sha => new TaskCommitInfo
+            {
+                Sha = sha,
+                ShortSha = sha[..7],
+                Message = "attributed task work",
+                FilesChanged = 1,
+                Files = ["work.txt"],
+            }).ToList(),
+        };
 
-        var before = prov.BuildView(info!);
+        var before = prov.BuildView(info);
         Assert.Equal(LandedStates.OnBranchOnly, before.LandedState);
         Assert.Equal(2, before.Commits.Count);
         Assert.All(before.Commits, c => Assert.True(c.OnTaskBranch));
@@ -437,7 +449,7 @@ public sealed class TaskProvenanceServiceTests : IDisposable
         RunGit(repoRoot, "checkout -q develop");
         RunGit(repoRoot, "merge -q --no-ff --no-edit task/multi-1");
 
-        var after = prov.BuildView(info!);
+        var after = prov.BuildView(info);
         Assert.Equal(LandedStates.MergedToDevelop, after.LandedState);
         Assert.Equal(2, after.Commits.Count);
         Assert.All(after.Commits, c => Assert.True(c.AlsoOnIntegration));

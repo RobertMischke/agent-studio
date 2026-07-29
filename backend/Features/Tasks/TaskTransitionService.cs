@@ -101,7 +101,8 @@ public sealed class TaskTransitionService
         string? reason = null,
         AttemptWriteReference? authorityWrite = null,
         bool suppressProductExecution = false,
-        string? expectedSourceState = null)
+        string? expectedSourceState = null,
+        bool suppressIntegrationTrigger = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -143,6 +144,24 @@ public sealed class TaskTransitionService
 
         var fromState = info.State;
         var projectName = info.ProjectName;
+
+        if (!suppressIntegrationTrigger
+            && !suppressProductExecution
+            && !isReadOnly
+            && !TaskModes.IsConcept(info.Mode)
+            && fromState == TaskStates.HumanReview
+            && targetState == TaskStates.Completed
+            && (_acceptedIntegrationQueue != null || _mergeRunner != null))
+        {
+            return await BeginTransactionalAcceptAsync(
+                info,
+                settings,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite).ConfigureAwait(false);
+        }
 
         if (fromState == TaskStates.Escalated
             && targetState == TaskStates.Completed
@@ -297,6 +316,7 @@ public sealed class TaskTransitionService
             // inline merge failure emits the accept-without-merge warning.
             if (targetState == TaskStates.Completed
                 && !isReadOnly
+                && !suppressIntegrationTrigger
                 && integrationRunsInBackground)
             {
                 var acceptedJob = _scanner.FindJob(jobId, watchPath);
@@ -311,6 +331,7 @@ public sealed class TaskTransitionService
             // AcceptedIntegrationBackstop recovers a dropped in-memory item.
             if (targetState == TaskStates.Completed
                 && !isReadOnly
+                && !suppressIntegrationTrigger
                 && (_acceptedIntegrationQueue != null || _mergeRunner != null))
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
@@ -328,6 +349,7 @@ public sealed class TaskTransitionService
             // not a new brake). Fully guarded and read-only.
             if (targetState == TaskStates.Completed
                 && !isReadOnly
+                && !suppressIntegrationTrigger
                 && !integrationRunsInBackground)
             {
                 var acceptedJob = _scanner.FindJob(jobId, watchPath);
@@ -345,6 +367,235 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private async Task<MoveJobOutcome> BeginTransactionalAcceptAsync(
+        TaskInfo reviewed,
+        ProjectSettings settings,
+        CancellationToken ct,
+        int? targetIndex,
+        string? cause,
+        string? reason,
+        AttemptWriteReference? authorityWrite)
+    {
+        if (string.Equals(reviewed.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Success,
+                "Integration is already in progress.",
+                reviewed.FolderPath);
+        }
+
+        _mutations.SetJobPhase(reviewed.FolderPath, LifecyclePhases.Integrating);
+        var integrating = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        FlagIntegrationOnAccept(integrating, warnIfNotIntegrated: false);
+        RecordIntegrationEvent(
+            integrating,
+            TimelineEventKinds.IntegrationStarted,
+            cause,
+            $"Acceptance started integration into {TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch)}.",
+            outcome: "integrating");
+
+        if (IsAlreadyIntegrated(integrating))
+        {
+            return await CompleteTransactionalAcceptAsync(
+                integrating,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite,
+                outcome: "AlreadyIntegrated").ConfigureAwait(false);
+        }
+
+        var queue = _acceptedIntegrationQueue;
+        if (queue != null)
+        {
+            if (queue.Enqueue(new AgentStudio.Pipeline.AcceptedIntegrationRequest(
+                    integrating.ProjectName,
+                    integrating.Id,
+                    integrating.FolderPath,
+                    integrating.WatchPath,
+                    TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch),
+                    settings.IntegrationStrategy,
+                    targetIndex,
+                    cause,
+                    reason)))
+            {
+                return new MoveJobOutcome(
+                    MoveJobStatus.Success,
+                    "Integration started; the task remains in Human Review until it succeeds.",
+                    integrating.FolderPath);
+            }
+
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                "The integration queue is unavailable; the task remains in Human Review.",
+                cause);
+        }
+
+        var runner = _mergeRunner;
+        if (runner == null)
+        {
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                "The integration runner is unavailable; the task remains in Human Review.",
+                cause);
+        }
+
+        var result = await runner.RunAsync(
+            integrating.ProjectName,
+            integrating.Id,
+            integrating.FolderPath,
+            integrating.WatchPath,
+            TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch),
+            ct,
+            settings.IntegrationStrategy).ConfigureAwait(false);
+        if (result.Outcome is not (
+                MergeIntoIntegrationOutcome.Merged
+                or MergeIntoIntegrationOutcome.AlreadyMerged))
+        {
+            return FailTransactionalAccept(
+                integrating,
+                result.Outcome,
+                result.Error ?? $"Integration ended with {result.Outcome}.",
+                cause);
+        }
+
+        if (_provenance != null
+            && result.Outcome == MergeIntoIntegrationOutcome.Merged
+            && !string.IsNullOrWhiteSpace(result.MergedSha))
+        {
+            _provenance.RecordMerge(integrating, result.MergedSha);
+            integrating = _scanner.FindJob(integrating.Id, integrating.WatchPath) ?? integrating;
+        }
+        return await CompleteTransactionalAcceptAsync(
+            integrating,
+            ct,
+            targetIndex,
+            cause,
+            reason,
+            authorityWrite,
+            result.Outcome.ToString()).ConfigureAwait(false);
+    }
+
+    private bool IsAlreadyIntegrated(TaskInfo job)
+    {
+        if (_integrationStatus == null) return false;
+        var lookup = _integrationStatus.BuildLookup([job]);
+        return lookup.TryGetValue(job.TaskKey, out var status)
+               && status.Status == IntegrationStatuses.Integrated;
+    }
+
+    private async Task<MoveJobOutcome> CompleteTransactionalAcceptAsync(
+        TaskInfo integrating,
+        CancellationToken ct,
+        int? targetIndex,
+        string? cause,
+        string? reason,
+        AttemptWriteReference? authorityWrite,
+        string outcome)
+    {
+        if (outcome == "AlreadyIntegrated")
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(integrating.FolderPath, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Passed,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "already-integrated",
+                VerdictSummary = "Attributed commits are already present in the target branch; no merge was run.",
+            });
+        }
+        var clearedTags = (integrating.Tags ?? [])
+            .Where(tag => !IntegrationStatuses.IsPendingTag(tag))
+            .ToList();
+        if (clearedTags.Count != (integrating.Tags?.Count ?? 0))
+        {
+            _mutations.SetJobTags(integrating.Id, clearedTags, integrating.WatchPath);
+            integrating = _scanner.FindJob(integrating.Id, integrating.WatchPath) ?? integrating;
+        }
+        RecordIntegrationEvent(
+            integrating,
+            TimelineEventKinds.IntegrationSucceeded,
+            TimelineActors.System,
+            $"Integration into {TaskIntegrationBranch.Resolve(
+                integrating,
+                _settings.Get(integrating.ProjectName).IntegrationBranch)} succeeded.",
+            outcome);
+        var completed = await MoveAsync(
+            integrating.Id,
+            TaskStates.Completed,
+            integrating.WatchPath,
+            ct,
+            targetIndex,
+            cause,
+            reason,
+            authorityWrite,
+            expectedSourceState: TaskStates.HumanReview,
+            suppressIntegrationTrigger: true).ConfigureAwait(false);
+        if (completed.Status == MoveJobStatus.Success)
+        {
+            var accepted = _scanner.FindJob(integrating.Id, integrating.WatchPath);
+            if (accepted != null)
+            {
+                _mutations.SetJobPhase(accepted.FolderPath, null);
+            }
+        }
+        return completed;
+    }
+
+    private MoveJobOutcome FailTransactionalAccept(
+        TaskInfo reviewed,
+        MergeIntoIntegrationOutcome outcome,
+        string detail,
+        string? cause)
+    {
+        _mutations.SetJobPhase(reviewed.FolderPath, null);
+        var current = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        RecordIntegrationEvent(
+            current,
+            TimelineEventKinds.IntegrationFailed,
+            cause,
+            $"Integration failed ({outcome}); the task remains in Human Review.",
+            outcome.ToString(),
+            detail);
+        return new MoveJobOutcome(
+            MoveJobStatus.Failure,
+            $"Integration failed ({outcome}); the task remains in Human Review. {detail}",
+            current.FolderPath);
+    }
+
+    private void RecordIntegrationEvent(
+        TaskInfo job,
+        string kind,
+        string? actor,
+        string summary,
+        string outcome,
+        string? detail = null)
+    {
+        _timeline?.Append(
+            job.FolderPath,
+            new TimelineEvent
+            {
+                Ts = DateTime.UtcNow,
+                Kind = kind,
+                Actor = string.IsNullOrWhiteSpace(actor) ? TimelineActors.System : actor,
+                Summary = summary,
+                Details = new Dictionary<string, string>
+                {
+                    ["outcome"] = outcome,
+                    ["integrationBranch"] = TaskIntegrationBranch.Resolve(
+                        job,
+                        _settings.Get(job.ProjectName).IntegrationBranch),
+                    ["detail"] = detail ?? string.Empty,
+                },
+            });
     }
 
     private void RecordConceptSightReviewCompletion(
@@ -667,11 +918,10 @@ public sealed class TaskTransitionService
                 ct,
                 settings.IntegrationStrategy).ConfigureAwait(false);
 
-            // ASS-1752: persist the develop-merge fact so the board card can show
-            // the landed state (`develop @sha`) instead of a dead worktree path,
-            // without a per-card graph query. `moved` was just freshly scanned, so
-            // its provenance is current (replace-all write needs that). Only a real
-            // new merge carries a SHA; write-once on the service side.
+            // ASS-1752: persist historical merge-attempt provenance. Accepted
+            // card status is derived separately from target-branch membership.
+            // `moved` was freshly scanned, so the replace-all provenance write
+            // cannot drop earlier transitions.
             if (_provenance != null
                 && result.Outcome == AgentStudio.Git.MergeIntoIntegrationOutcome.Merged
                 && !string.IsNullOrWhiteSpace(result.MergedSha))
@@ -686,14 +936,11 @@ public sealed class TaskTransitionService
     }
 
     /// <summary>
-    /// AGT-2202 accept-without-merge guard. Derives the honest git integration
-    /// verdict for a freshly accepted card and, when its work is not in develop,
-    /// records a Warn timeline event and stamps the <c>integrationpending</c> tag
-    /// so the state is visible on the board and listable by the completed-lane
-    /// audit. Deliberately NOT a hard block: the acceptance already landed, this
-    /// only makes "Accept != Merge" loud. When the card IS integrated, any stale
-    /// <c>integrationpending</c> tag from an earlier accept is cleared so the
-    /// marker self-heals. Best-effort and fully guarded.
+    /// Derives the canonical target-branch verdict and maintains the durable
+    /// <c>integrationpending</c> recovery marker. Transactional acceptance calls
+    /// this before queue hand-off with warnings disabled; compatibility callers
+    /// may still emit the legacy warning. When the card is integrated, a stale
+    /// pending marker is cleared. Best-effort and fully guarded.
     /// </summary>
     private void FlagIntegrationOnAccept(
         TaskInfo accepted,

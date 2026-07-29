@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { buildMergeSignal } from './task-card-view-model';
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo } from '../../../../models/task.model';
-import type { TaskCommitInfo, TaskMergeSignal, TaskProvenanceRecord } from '../../../../features/git';
+import type {
+  TaskCommitInfo,
+  TaskIntegrationStatus,
+  TaskMergeSignal,
+  TaskProvenanceRecord,
+} from '../../../../features/git';
 
 /**
  * AGT-2046 / AGT-2063: the always-on two-segment merge signal ([develop|main]).
@@ -73,6 +78,16 @@ function provenance(overrides: Partial<TaskProvenanceRecord> = {}): TaskProvenan
   return { branch: 'task/ATP-1', base: 'base000', transitions: [], merge: null, ...overrides };
 }
 
+function integration(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
+  return {
+    status: 'integrated',
+    sha: 'a1b2c3d',
+    integrationBranch: 'develop',
+    detail: 'anchor-ancestor',
+    ...overrides,
+  };
+}
+
 describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => {
   it('is null on a pre-work card with no task commit', () => {
     expect(buildMergeSignal(makeJob({ state: TaskState.Backlog, commits: [] }))).toBeNull();
@@ -116,6 +131,7 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
   it('[d filled | m empty] — merged into develop but not main, with the since-sha', () => {
     const view = buildMergeSignal(makeJob({
       mergeSignal: signal({ inIntegration: true, integrationSha: 'a1b2c3d' }),
+      integration: integration(),
     }))!;
     expect(view.develop.merged).toBe(true);
     expect(view.main.merged).toBe(false);
@@ -127,6 +143,7 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
   it('[d filled | m filled] — released to main', () => {
     const view = buildMergeSignal(makeJob({
       mergeSignal: signal({ inIntegration: true, inRelease: true, integrationSha: 'a1b2c3d', releaseSha: 'ffee001' }),
+      integration: integration(),
     }))!;
     expect(view.develop.merged).toBe(true);
     expect(view.main.merged).toBe(true);
@@ -137,6 +154,7 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
   it('honours a non-default integration/release branch name in labels and tooltip', () => {
     const view = buildMergeSignal(makeJob({
       mergeSignal: signal({ inIntegration: true, integrationBranch: 'integration', releaseBranch: 'release' }),
+      integration: integration({ integrationBranch: 'integration' }),
     }))!;
     expect(view.develop.label).toBe('integration');
     expect(view.main.label).toBe('release');
@@ -151,26 +169,34 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
   });
 
   describe('graceful degradation without the batched signal', () => {
-    it('derives develop from the persisted merge fact; main stays unknown/false', () => {
+    it('does not derive develop from the persisted merge attempt', () => {
       const view = buildMergeSignal(makeJob({
         mergeSignal: null,
         provenance: provenance({ merge: { mergeCommit: 'deadbeef1234', workBranchHeadBefore: null, workBranchHeadAfter: null, atUtc: '2026-07-10T10:00:00Z' } }),
       }))!;
-      expect(view.develop.merged).toBe(true);
-      expect(view.develop.sha).toBe('deadbee');
+      expect(view.develop.merged).toBe(false);
+      expect(view.develop.sha).toBeNull();
       expect(view.main.merged).toBe(false);
     });
 
-    it('treats the terminal Completed lane as merged-to-develop (given an anchor)', () => {
-      // An anchor must exist for any signal to render (matches the backend, which
-      // only computes a signal for anchored cards); the Completed lane then proves
-      // develop without the batched graph result.
+    it('does not treat the Completed lane as proof of integration', () => {
       const view = buildMergeSignal(makeJob({
         state: TaskState.Completed,
         mergeSignal: null,
         provenance: provenance({ transitions: [{ lane: TaskState.Completed, atUtc: '2026-07-10T10:00:00Z', branchTip: 'tip123', workBranchHead: 'dev999' }] }),
       }))!;
+      expect(view.develop.merged).toBe(false);
+      expect(view.main.merged).toBe(false);
+    });
+
+    it('uses the computed integration field as the only fallback proof', () => {
+      const view = buildMergeSignal(makeJob({
+        state: TaskState.Completed,
+        mergeSignal: null,
+        integration: integration({ sha: 'fedcba9' }),
+      }))!;
       expect(view.develop.merged).toBe(true);
+      expect(view.develop.sha).toBe('fedcba9');
       expect(view.main.merged).toBe(false);
     });
 
@@ -184,5 +210,25 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
       expect(view).not.toBeNull();
       expect(view.develop.merged).toBe(false);
     });
+  });
+
+  it('lets canonical target membership override a stale positive merge signal', () => {
+    const view = buildMergeSignal(makeJob({
+      mergeSignal: signal({ inIntegration: true, integrationSha: 'remembered' }),
+      integration: integration({ status: 'pending', sha: null, detail: 'not present' }),
+    }))!;
+
+    expect(view.develop.merged).toBe(false);
+    expect(view.develop.sha).toBeNull();
+  });
+
+  it('lets an out-of-band merge in canonical status override a stale negative signal', () => {
+    const view = buildMergeSignal(makeJob({
+      mergeSignal: signal({ inIntegration: false, integrationSha: null }),
+      integration: integration({ sha: '0ddba11' }),
+    }))!;
+
+    expect(view.develop.merged).toBe(true);
+    expect(view.develop.sha).toBe('0ddba11');
   });
 });

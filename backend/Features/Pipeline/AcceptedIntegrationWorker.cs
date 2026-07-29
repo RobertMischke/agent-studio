@@ -5,9 +5,10 @@ namespace AgentStudio.Pipeline;
 /// <summary>
 /// Integrates accepted deliveries outside the accept HTTP request. The runner
 /// owns merge/gate/rollback serialization and hands a released SHA to the
-/// existing <see cref="IntegrationPushWorker"/>. Successful integration clears
-/// the card's durable pending marker; decided failures retain it for operator
-/// visibility and recovery.
+/// existing <see cref="IntegrationPushWorker"/>. Successful integration moves
+/// the card from Human Review to Completed and clears the durable pending
+/// marker. Decided failures clear the integrating phase, keep the card in Human
+/// Review, and retain the marker for operator visibility and recovery.
 /// </summary>
 public sealed class AcceptedIntegrationWorker : BackgroundService
 {
@@ -17,6 +18,8 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
     private readonly TaskMutationService _mutations;
     private readonly TaskProvenanceService _provenance;
     private readonly ILogger<AcceptedIntegrationWorker> _logger;
+    private readonly TaskTransitionService? _transitions;
+    private readonly TimelineLog? _timeline;
 
     public AcceptedIntegrationWorker(
         AcceptedIntegrationQueue queue,
@@ -24,7 +27,9 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         TaskScannerService scanner,
         TaskMutationService mutations,
         TaskProvenanceService provenance,
-        ILogger<AcceptedIntegrationWorker> logger)
+        ILogger<AcceptedIntegrationWorker> logger,
+        TaskTransitionService? transitions = null,
+        TimelineLog? timeline = null)
     {
         _queue = queue;
         _runner = runner;
@@ -32,6 +37,8 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         _mutations = mutations;
         _provenance = provenance;
         _logger = logger;
+        _transitions = transitions;
+        _timeline = timeline;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -76,7 +83,11 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged
                 or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
-                CompletePendingMarker(request, result);
+                await FinalizeAcceptedTaskAsync(request, result).ConfigureAwait(false);
+            }
+            else
+            {
+                ReturnToReviewWithFailure(request, result);
             }
 
             sw.Stop();
@@ -88,14 +99,85 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogWarning(
-                ex,
-                "Accepted-integration worker failed for {JobId} after {ElapsedMs}ms; the backstop will retry",
-                request.JobId, sw.ElapsedMilliseconds);
-            return MergeIntoIntegrationResult.Of(
+            var errored = MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
                 error: ex.Message);
+            ReturnToReviewWithFailure(request, errored);
+            _logger.LogWarning(
+                ex,
+                "Accepted-integration worker failed for {JobId} after {ElapsedMs}ms; the task returned to Human Review",
+                request.JobId, sw.ElapsedMilliseconds);
+            return errored;
         }
+    }
+
+    private async Task FinalizeAcceptedTaskAsync(
+        AcceptedIntegrationRequest request,
+        MergeIntoIntegrationResult result)
+    {
+        var job = _scanner.FindJob(request.JobId, request.WatchPath);
+        if (job?.State == TaskStates.HumanReview && _transitions != null)
+        {
+            var moved = await _transitions.MoveAsync(
+                request.JobId,
+                TaskStates.Completed,
+                request.WatchPath,
+                CancellationToken.None,
+                request.CompletedLaneIndex,
+                request.Cause ?? TimelineActors.System,
+                request.Reason,
+                expectedSourceState: TaskStates.HumanReview,
+                suppressIntegrationTrigger: true).ConfigureAwait(false);
+            if (moved.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "Integrated {JobId}, but finalizing Completed failed with {Status}: {Message}",
+                    request.JobId,
+                    moved.Status,
+                    moved.Message);
+                return;
+            }
+            job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+            _mutations.SetJobPhase(job.FolderPath, null);
+            job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+        }
+
+        CompletePendingMarker(request, result);
+        if (job != null)
+        {
+            _timeline?.Append(
+                job.FolderPath,
+                TimelineEventKinds.IntegrationSucceeded,
+                TimelineActors.System,
+                $"Integration into {request.IntegrationBranch} succeeded; acceptance completed.",
+                details: new Dictionary<string, string>
+                {
+                    ["outcome"] = result.Outcome.ToString(),
+                    ["integrationBranch"] = request.IntegrationBranch,
+                });
+        }
+    }
+
+    private void ReturnToReviewWithFailure(
+        AcceptedIntegrationRequest request,
+        MergeIntoIntegrationResult result)
+    {
+        var job = _scanner.FindJob(request.JobId, request.WatchPath);
+        if (job == null || job.State != TaskStates.HumanReview) return;
+
+        _mutations.SetJobPhase(job.FolderPath, null);
+        job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+        _timeline?.Append(
+            job.FolderPath,
+            TimelineEventKinds.IntegrationFailed,
+            TimelineActors.System,
+            $"Integration failed ({result.Outcome}); the task remains in Human Review.",
+            details: new Dictionary<string, string>
+            {
+                ["outcome"] = result.Outcome.ToString(),
+                ["integrationBranch"] = request.IntegrationBranch,
+                ["detail"] = result.Error ?? string.Empty,
+            });
     }
 
     private void CompletePendingMarker(

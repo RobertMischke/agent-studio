@@ -2,11 +2,11 @@ namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Durable safety net for operator acceptance integration. The normal
-/// HumanReview-to-Completed transition enqueues the merge after the lane move is
-/// durable. A backend restart before the volatile queue drains must not leave a
-/// local <c>task/&lt;id&gt;</c> delivery or a fenced remote delivery permanently
-/// unintegrated. Legacy remote <c>no-branch</c> outcomes are replayed against
-/// their <c>review-subject.json</c>.
+/// transaction keeps the card in Human Review with phase integrating while the
+/// merge runs. A backend restart before the volatile queue drains must resume
+/// that transaction and move the task to Completed only after successful
+/// integration. Legacy Completed cards and remote <c>no-branch</c> outcomes
+/// remain recoverable.
 /// </summary>
 public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 {
@@ -18,6 +18,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly TaskMutationService _mutations;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AcceptedIntegrationBackstopHostedService> _logger;
+    private readonly TaskTransitionService? _transitions;
+    private readonly TimelineLog? _timeline;
 
     public AcceptedIntegrationBackstopHostedService(
         TaskScannerService scanner,
@@ -27,7 +29,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         TaskIntegrationStatusService integrationStatus,
         TaskMutationService mutations,
         IConfiguration configuration,
-        ILogger<AcceptedIntegrationBackstopHostedService> logger)
+        ILogger<AcceptedIntegrationBackstopHostedService> logger,
+        TaskTransitionService? transitions = null,
+        TimelineLog? timeline = null)
     {
         _scanner = scanner;
         _settings = settings;
@@ -37,12 +41,20 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _mutations = mutations;
         _configuration = configuration;
         _logger = logger;
+        _transitions = transitions;
+        _timeline = timeline;
     }
 
     public int RunOnce()
     {
         var candidates = _scanner.ScanAllJobsWithArchive()
-            .Where(job => job.State is TaskStates.Completed or TaskStates.Archive)
+            .Where(job =>
+                job.State is TaskStates.Completed or TaskStates.Archive
+                || (job.State == TaskStates.HumanReview
+                    && string.Equals(
+                        job.Phase,
+                        LifecyclePhases.Integrating,
+                        StringComparison.Ordinal)))
             .Where(job => !TaskModes.IsReadOnly(job.Mode))
             .Where(RequiresSweep)
             .OrderBy(job => job.EnteredLaneAt)
@@ -58,19 +70,20 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             var lastMerge = LastMergeStep(job.FolderPath);
             if (lastMerge?.Status == PipelineStepStatus.Passed)
             {
+                FinalizeTransactionalAccept(job);
                 ClearPendingTag(job);
                 continue;
             }
 
-            // A curated manual rebase can be truthfully integrated without
-            // retaining the original delivery SHA. Do not replay that old ref.
+            // The canonical attributed set can be integrated while a later
+            // fenced lifecycle snapshot is not itself a delivery expectation.
             // Conversely, when the exact fenced SHA is already contained but the
-            // durable merge step is absent, the backend died after the local
-            // merge and before Record()/queue enqueue. Re-run the idempotent
-            // runner so it records AlreadyMerged and restores the push fact.
+            // durable merge step is absent, re-run the idempotent runner so it
+            // records AlreadyMerged and restores the push fact.
             if (status?.Status == IntegrationStatuses.Integrated
                 && !_integrationStatus.IsFencedDeliveryIntegrated(job))
             {
+                FinalizeTransactionalAccept(job);
                 ClearPendingTag(job);
                 continue;
             }
@@ -87,6 +100,10 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 || (string.Equals(lastMerge?.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
                     && ReviewSubjectStore.Read(job.FolderPath) is null))
             {
+                ReturnTransactionalAcceptToReview(
+                    job,
+                    lastMerge?.Verdict ?? "integration-failed",
+                    lastMerge?.Reason ?? lastMerge?.VerdictSummary);
                 continue;
             }
 
@@ -100,8 +117,16 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 settings.IntegrationStrategy);
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
+                FinalizeTransactionalAccept(job);
                 ClearPendingTag(job);
                 integrated++;
+            }
+            else
+            {
+                ReturnTransactionalAcceptToReview(
+                    job,
+                    result.Outcome.ToString(),
+                    result.Error);
             }
         }
 
@@ -174,5 +199,62 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             .ToList();
         if (tags.Count == (job.Tags?.Count ?? 0)) return;
         _mutations.SetJobTags(job.Id, tags, job.WatchPath);
+    }
+
+    private void FinalizeTransactionalAccept(TaskInfo job)
+    {
+        if (job.State != TaskStates.HumanReview || _transitions == null) return;
+        var moved = _transitions.MoveAsync(
+                job.Id,
+                TaskStates.Completed,
+                job.WatchPath,
+                CancellationToken.None,
+                cause: TimelineActors.System,
+                reason: "Recovered transactional acceptance after integration succeeded.",
+                expectedSourceState: TaskStates.HumanReview,
+                suppressIntegrationTrigger: true)
+            .GetAwaiter()
+            .GetResult();
+        if (moved.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "Backstop integrated {JobId}, but finalizing Completed failed with {Status}: {Message}",
+                job.Id,
+                moved.Status,
+                moved.Message);
+            return;
+        }
+
+        var completed = _scanner.FindJob(job.Id, job.WatchPath) ?? job;
+        _mutations.SetJobPhase(completed.FolderPath, null);
+        completed = _scanner.FindJob(job.Id, job.WatchPath) ?? completed;
+        _timeline?.Append(
+            completed.FolderPath,
+            TimelineEventKinds.IntegrationSucceeded,
+            TimelineActors.System,
+            "Recovered acceptance integration succeeded; task moved to Completed.");
+    }
+
+    private void ReturnTransactionalAcceptToReview(
+        TaskInfo job,
+        string outcome,
+        string? detail)
+    {
+        if (job.State != TaskStates.HumanReview
+            || !string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
+            return;
+
+        _mutations.SetJobPhase(job.FolderPath, null);
+        var reviewed = _scanner.FindJob(job.Id, job.WatchPath) ?? job;
+        _timeline?.Append(
+            reviewed.FolderPath,
+            TimelineEventKinds.IntegrationFailed,
+            TimelineActors.System,
+            $"Recovered acceptance integration failed ({outcome}); the task remains in Human Review.",
+            details: new Dictionary<string, string>
+            {
+                ["outcome"] = outcome,
+                ["detail"] = detail ?? string.Empty,
+            });
     }
 }

@@ -48,6 +48,7 @@ export const PHASE_LABELS: Readonly<Record<string, string>> = {
   'post-processing-running': 'Post processing',
   'post-processing-blocked': 'Post processing blocked',
   'awaiting-review': 'Awaiting review',
+  'integrating': 'Integrating',
 };
 
 /** The two intentional-wait phases whose label carries a live elapsed timer. */

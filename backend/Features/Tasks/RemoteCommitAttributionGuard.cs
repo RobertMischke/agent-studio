@@ -52,6 +52,7 @@ public static partial class RemoteCommitAttributionGuard
             Sha = commit.Sha,
             ShortSha = commit.ShortSha,
             Message = commit.Subject,
+            Branch = TaskIntegrationBranch.Name(deliveryBranch),
             FilesChanged = commit.FilesChanged,
             At = commit.AuthorDateUtc,
             Attribution = CommitAttributionKinds.Automatic,

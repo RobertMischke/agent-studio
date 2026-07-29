@@ -828,7 +828,10 @@ public static class LeaseEndpoints
                     : Results.Conflict(response);
             }
 
-            var deliveryBranch = req.SalvageBranch ?? req.ImmutableResultRef;
+            // The immutable ResultEnvelope ref is the reviewed delivery. A
+            // salvage branch is recovery evidence only and must never outrank
+            // the immutable result when both are present.
+            var deliveryBranch = req.ImmutableResultRef ?? req.SalvageBranch;
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
@@ -925,6 +928,7 @@ public static class LeaseEndpoints
                     Executor = req.RunnerId,
                     LeaseId = req.LeaseId,
                     FencingToken = req.FencingToken,
+                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
                     ResultRef = deliveryBranch,
                     IntegrationBranch = deliveryRange?.IntegrationBranch
                                         ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),

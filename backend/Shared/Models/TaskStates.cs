@@ -56,12 +56,18 @@ public static class LifecyclePhases
     public const string PostProcessingRunning = "post-processing-running";
     public const string PostProcessingBlocked = "post-processing-blocked";
     public const string AwaitingReview = "awaiting-review";
+    /// <summary>
+    /// A human accepted the reviewed delivery and the platform is integrating
+    /// it. The card remains in Human Review until the merge reaches a successful
+    /// terminal outcome.
+    /// </summary>
+    public const string Integrating = "integrating";
 
     public static readonly string[] All =
     [
         HumanReady, IntakeRunning, IntakeBlocked, IntakePassed,
         ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, QuotaWaiting,
-        PostProcessingRunning, PostProcessingBlocked, AwaitingReview
+        PostProcessingRunning, PostProcessingBlocked, AwaitingReview, Integrating
     ];
 
     /// <summary>
@@ -78,6 +84,7 @@ public static class LifecyclePhases
         [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
         [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, QuotaWaiting, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
         [TaskStates.AutoReview] = [PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.HumanReview] = [Integrating],
     };
 
     /// <summary>

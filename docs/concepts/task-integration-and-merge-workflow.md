@@ -41,11 +41,12 @@ Driven by `TaskTransitionService.MoveAsync` (`backend/Features/Tasks/TaskTransit
 
 The merge into `develop` is operator-triggered, not automatic, in sequential mode.
 
-- Trigger: a task moving `5-human-review -> 6-completed` (operator accepts a done-green task). `TaskTransitionService.MoveAsync` stamps `integrationpending` and writes an immutable request to `AcceptedIntegrationQueue`; the HTTP request does not wait for merge or build. This normal queued state does not emit an accept warning.
-- Execution: `AcceptedIntegrationWorker` calls `MergeIntoDevelopRunner.Run` (`backend/Features/Pipeline/MergeIntoDevelopRunner.cs`) after acceptance. The runner selects the accepted delivery from the run contract. A local run uses `task/<id>`. A remote run uses the fenced `ResultRef` and `ResultSha` from `logs/review-subject.json`, fetches that exact `runner/<runner>/<task-key>` ref plus the configured integration branch from origin, verifies that the delivery tip still equals the reviewed SHA, fast-forwards or creates the local integration branch from its origin ref, and merges the immutable SHA. A divergent local integration branch is reported instead of silently falling back to another target. The outcome is recorded into the job's `pipeline-execution.json` (pending -> passed/failed/skipped). Successful integration clears the pending marker and hands the released SHA to the existing integration push worker.
-- It runs AFTER the lane move has already landed and never throws, so it cannot undo or delay the transition.
-- Outcomes: `Merged` / `AlreadyMerged` -> Passed; `NoTaskBranch` -> Skipped; `PushedForReview` -> Skipped when the project explicitly uses the pull-request strategy; `Conflict` -> Failed (merge aborted, working tree left clean, conflicted files and the recovery action are listed); error -> Failed.
-- Restart recovery: `AcceptedIntegrationBackstopHostedService` scans Completed and already archived local and remote deliveries whose durable acceptance has no successful integration and safely re-runs the idempotent merge. A local task branch is eligible without `review-subject.json`. For remote deliveries it also distinguishes a curated manual rebase from the narrower crash window where the exact fenced delivery SHA already landed locally but the process died before recording the merge and queueing its push; in that window it records `already-merged` and restores the push fact. It does not retry a recorded conflict, a local `no-branch` no-op, or a pull-request handoff.
+- Trigger: accepting a done-green task starts a transaction inside `5-human-review`. `TaskTransitionService.MoveAsync` sets phase `integrating`, stamps the internal `integrationpending` recovery marker, writes `integration_started` to `timeline.jsonl`, and enqueues `AcceptedIntegrationQueue`. The HTTP request does not wait for merge or build, and the card does not enter Completed while integration is pending.
+- Delivery ref: `DeliveryRefResolver` reads card truth in this order: immutable result ref from `review-subject.json`, an attributed `commits[].branch`, `runner/<executor>/<task-key>` from the fenced review subject, then the legacy `task/<slug>` fallback. The merge path does not reconstruct a remote delivery from the folder slug. Remote refs are fetched and fenced to the reviewed result SHA before merge.
+- Execution: `AcceptedIntegrationWorker` calls `MergeIntoDevelopRunner.Run` (`backend/Features/Pipeline/MergeIntoDevelopRunner.cs`). The runner fetches the configured integration branch, reports a divergent local branch, and records the outcome in `pipeline-execution.json`.
+- Commit: only `Merged` or `AlreadyMerged` completes the acceptance transaction. The worker clears phase and pending marker, writes `integration_succeeded`, and moves the card to `6-completed`. `NoTaskBranch`, `Conflict`, `GateFailed`, and `Error` clear the phase, retain the pending recovery marker, write `integration_failed`, and leave the card in Human Review with a red Integration failed badge. A configured pull-request handoff also remains in Human Review until target-branch membership is real.
+- Restart recovery: `AcceptedIntegrationBackstopHostedService` resumes cards in `5-human-review` with phase `integrating` from their phase, marker, and pipeline facts. It moves them to Completed only after successful integration. Legacy Completed and archived recovery remains supported. Decided failures return to ordinary Human Review and are not replayed in a loop.
+- Read model: `TaskIntegrationStatusService` recomputes `integration.status` from the attributed `commits[]` membership in the configured target branch. It uses a target-HEAD-fingerprinted ancestor set, accepts valid abbreviated SHAs, and invalidates immediately when the target HEAD moves. Lane, provenance merge records, pipeline success, and curated merge subjects cannot force `integrated`. An out-of-band merge therefore self-heals the card on the next read. Card integration badges, the develop segment, Git-state wording, and acceptance wording consume this computed field; `integrationpending` is not rendered as a second status chip.
 - Conflict recovery: a conflict card renders **Rebase & retry** next to its red
   integration badge. The action calls
   `POST /api/tasks/{id}/integration/rebase`, appends a focused steer prompt,
@@ -55,7 +56,7 @@ The merge into `develop` is operator-triggered, not automatic, in sequential mod
 - Push durability: `IntegrationPushQueue` remains in memory to keep network work off the request path. `IntegrationPushBackstopHostedService` re-drives any passed merge with a non-terminal push step after restart, so queue loss cannot leave the integration branch local-only.
 - Shutdown drain: once the accepted worker enters merge + build gate + possible rollback, it ignores host cancellation until that consistency boundary reaches a terminal result. `/healthz/drain` returns `gate-busy` during that window. The external stable restart watcher waits up to `ATP_GATE_DRAIN_TIMEOUT_SECONDS` before it invokes the hard update/restart path.
 
-### Incident: 2026-07-24 bulk acceptance
+### Incidents: 2026-07-24 and 2026-07-28 bulk acceptance
 
 The operator accepted 35 remote-runner cards. The acceptance hook did fire:
 each sampled card recorded `post-merge-into-develop` immediately after the lane
@@ -77,11 +78,17 @@ recorded as failed and the managed-repository bus failure was emitted. The
 silent durability gap was an item lost with the in-memory channel before the
 worker could process it.
 
-The correction makes `review-subject.json` the remote acceptance source of
-truth, adds archive-inclusive merge and push restart backstops, closes both
-restart windows (before the merge and after the local merge but before its
-durable record), compares the actual persisted pending tag on both the normal
-and recovered success paths, and gives conflicts a typed recovery action.
+The first correction made `review-subject.json` available as a remote acceptance
+source and added restart backstops. It did not close the contract: later delivery
+refs could live under immutable result refs, accepting still moved the card to
+Completed before checking the outcome, and the displayed status could remember a
+merge attempt instead of observing the target branch.
+
+The 29 July correction resolves the delivery ref from card truth, makes acceptance
+transactional in Human Review, and computes every accepted-card integration status
+from target-branch commit membership. This closes the `NoTaskBranch` series from
+the 28 July 23:09 acceptance wave and lets out-of-band salvage merges repair the
+display without fabricating a new merge attempt.
 
 A read-only `git merge-tree` replay used all eleven reported delivery refs as
 incident fixtures. Against the incident head `dfa806689`, all eleven reproduced
@@ -124,7 +131,7 @@ Teardown is deferred and conditional on the work being merged (`WorktreeTaskLife
 | Worktree / branch | None; shared main checkout | Isolated worktree on `task/<id>` |
 | Where agent edits land | Current branch of shared checkout (usually `develop`) | `task/<id>` branch in the worktree |
 | Commit timing | On `3-progress -> 4-auto-review` (if `AutoCommit`), scoped to run windows | At run end via `WorktreeRunCommit` (whole worktree) |
-| Merge timing | Deferred; on operator accept `5-human-review -> 6-completed` | Automatic at run end, before review |
+| Merge timing | Deferred; inside the transactional Human Review accept | Automatic at run end, before review |
 | Merge trigger | Operator acceptance | Run finalization (no human gate) |
 | Merge command / history | `git merge --no-ff` (one revertable merge commit, original SHAs) | rebase + `git merge --ff-only` (linear, rewritten SHAs) |
 | Serialization | Implicit (single active slot) | `_integrateLock` semaphore + cross-runner integration lease |
@@ -150,7 +157,7 @@ Defined in `backend/Shared/Models/ProjectSettings.cs`. Read live on each transit
 These behaviours are real today and being reviewed. See the configuration analysis: [./task-integration-merge-config-analysis.html](./task-integration-merge-config-analysis.html).
 
 - Parallelism coupling: `MaxParallelism` is perceived as a throughput knob, but flipping it `1 <-> >=2` also silently changes the commit target, merge timing/trigger, merge command and history shape, conflict handling, and what "Accept" means. `IntegrationBranch` and `IntegrationStrategy` are not exposed in the frontend.
-- Auto-commit on transition: in sequential mode the auto-commit lands directly on the shared checkout's current branch with no `task/<id>` branch, so the deferred "Merge into Develop" step often records `NoTaskBranch -> Skipped` even though the work already landed. The completed-push target can also diverge from the merge target. The exact on-transition git state is under review.
+- Auto-commit on transition: in sequential mode the auto-commit can land directly on the configured target branch with no `task/<id>` branch. The computed membership check recognizes this as already integrated and completes acceptance without running a merge. The completed-push target can still diverge from the integration target; that configuration detail remains under review.
 
 ## Branch cleanup (Project Hub Git-Management, AGT-2009)
 

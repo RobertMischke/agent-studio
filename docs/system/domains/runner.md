@@ -537,6 +537,11 @@ state.
   ref on the task and review subject. Integration status, review planning,
   merge, push, recovery, and provenance consume the recorded ref instead of
   reapplying a project-level branch assumption after the run.
+- Acceptance resolves the delivery source from persisted card truth, never from
+  the task folder slug alone. Resolution order is immutable result ref,
+  attributed `commits[].branch`, fenced `runner/<runner-id>/<task-key>`, then the
+  legacy local `task/<slug>` fallback. Remote sources remain fenced to the
+  reviewed result SHA.
 - Epic planning is the deliberate exception: its detached checkout is checked
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only

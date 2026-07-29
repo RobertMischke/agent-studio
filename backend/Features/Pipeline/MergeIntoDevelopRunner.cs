@@ -9,9 +9,9 @@ namespace AgentStudio.Pipeline;
 /// this step does NOT run on its own: the catalogue marks it
 /// <see cref="PipelineStep.Deferred"/> so it sits "pending" in the pipeline view
 /// until the operator accepts a done-green task via the "Merge into Develop"
-/// action (the <c>HumanReview -&gt; Completed</c> transition). That acceptance is
-/// the trigger; <see cref="AgentStudio.Tasks.TaskTransitionService"/>
-/// enqueues it for <see cref="AcceptedIntegrationWorker"/>.
+/// action. Acceptance keeps the task in Human Review with phase
+/// <c>integrating</c> and enqueues this runner for
+/// <see cref="AcceptedIntegrationWorker"/>.
 ///
 /// <para>
 /// It performs the real, scoped git merge <c>task/&lt;id&gt; -&gt; develop</c> via
@@ -20,9 +20,8 @@ namespace AgentStudio.Pipeline;
 /// pending to passed / failed / skipped in place. A merge conflict is recorded
 /// <see cref="PipelineStepStatus.Failed"/> with the conflicted files in the
 /// verdict summary - made visible, never silently resolved - while the working
-/// tree is left clean (the merge is aborted). Best-effort and fully guarded: it
-/// runs after the lane move has already landed, so nothing it does can block the
-/// transition.
+/// tree is left clean (the merge is aborted). Only a successful result lets the
+/// acceptance worker move the task to Completed.
 /// </para>
 /// </summary>
 public sealed class MergeIntoDevelopRunner
@@ -172,12 +171,13 @@ public sealed class MergeIntoDevelopRunner
             }
 
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
-            var branch = reviewSubject is { ResultRef.Length: > 0 }
+            var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
+            var branch = reviewSubject is not null
                 ? TaskIntegrationBranch.Name(
                     reviewSubject.IntegrationBranch,
                     TaskIntegrationBranch.Name(integrationBranch))
                 : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
-            var taskBranch = reviewSubject?.ResultRef ?? WorktreeTaskLifecycle.BranchFor(jobId);
+            var taskBranch = delivery.Ref;
             var strategy = IntegrationStrategies.Normalize(integrationStrategy);
             BuildTestGateResult? preMainResult = null;
             BuildTestGateResult? preDevelopResult = null;
@@ -195,11 +195,11 @@ public sealed class MergeIntoDevelopRunner
                     jobId,
                     jobFolderPath,
                     repoRoot,
-                    taskBranch,
+                    delivery,
                     branch,
                     ct).ConfigureAwait(false);
             }
-            else if (reviewSubject is { ResultRef.Length: > 0 })
+            else if (delivery.IsRemote)
             {
                 (result, preDevelopResult) = await MergeIntoIntegrationGatedAsync(
                     project,
@@ -209,8 +209,8 @@ public sealed class MergeIntoDevelopRunner
                     branch,
                     () => _git.MergeRemoteDeliveryIntoIntegration(
                         repoRoot,
-                        reviewSubject.ResultRef,
-                        reviewSubject.ResultSha,
+                        delivery.Ref,
+                        delivery.ExpectedResultSha ?? string.Empty,
                         branch)).ConfigureAwait(false);
             }
             else
@@ -426,11 +426,37 @@ public sealed class MergeIntoDevelopRunner
         string jobId,
         string jobFolderPath,
         string repoRoot,
-        string taskBranch,
+        DeliveryRefResolution delivery,
         string releaseBranch,
         CancellationToken ct)
     {
-        if (!_git.BranchExists(repoRoot, taskBranch))
+        var taskBranch = delivery.Ref;
+        if (delivery.IsRemote)
+        {
+            if (!ReviewSubjectStore.IsValidResultSha(delivery.ExpectedResultSha))
+            {
+                return (
+                    MergeIntoIntegrationResult.Of(
+                        MergeIntoIntegrationOutcome.Error,
+                        error: $"Remote delivery '{taskBranch}' has no valid fenced result SHA."),
+                    null);
+            }
+            var inspected = _git.InspectRemoteDeliveryCommitRange(
+                repoRoot,
+                taskBranch,
+                delivery.ExpectedResultSha!,
+                releaseBranch);
+            if (!inspected.Success)
+            {
+                return (
+                    MergeIntoIntegrationResult.Of(
+                        MergeIntoIntegrationOutcome.NoTaskBranch,
+                        error: inspected.Warning),
+                    null);
+            }
+            taskBranch = "origin/" + taskBranch;
+        }
+        else if (!_git.BranchExists(repoRoot, taskBranch))
         {
             return (
                 MergeIntoIntegrationResult.Of(

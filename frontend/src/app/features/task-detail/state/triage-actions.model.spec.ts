@@ -8,7 +8,7 @@ import {
 } from './triage-actions.model';
 import { TaskState } from '../../../models/task.model';
 import type { PlanningSpawnSummary, TaskInfo, TaskMode } from '../../../models/task.model';
-import type { TaskProvenanceRecord } from '../../../features/git';
+import type { TaskIntegrationStatus, TaskProvenanceRecord } from '../../../features/git';
 
 function reviewJob(provenance: TaskProvenanceRecord | null = null, overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
@@ -44,6 +44,16 @@ function mergedProvenance(mergeCommit: string | null): TaskProvenanceRecord {
     merge: mergeCommit
       ? { mergeCommit, workBranchHeadBefore: 'dev0000', workBranchHeadAfter: mergeCommit, atUtc: '2026-06-10T10:30:00Z' }
       : null,
+  };
+}
+
+function integrated(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
+  return {
+    status: 'integrated',
+    sha: 'ddddddd',
+    integrationBranch: 'develop',
+    detail: 'anchor-ancestor',
+    ...overrides,
   };
 }
 
@@ -229,19 +239,24 @@ describe('mergeAcceptViewFor — state-dependent Human Review acceptance primary
     expect(view.acceptLabel).toBe('Accept');
   });
 
-  it('uses Accept when the merge signal says the task commit is already in develop', () => {
+  it('uses Accept when computed status says the task commit is already in develop', () => {
     const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null), {
-      mergeSignal: {
-        branch: 'task/ATP-1', inIntegration: true, inRelease: false,
-        integrationBranch: 'develop', releaseBranch: 'main', integrationSha: 'abc1234', releaseSha: null,
-      },
+      integration: integrated({ sha: 'abc1234' }),
     }));
     expect(view.landed).toBe(true);
     expect(view.acceptLabel).toBe('Accept');
   });
 
-  it('treats a recorded merge fact as landed and relabels to "Accept"', () => {
+  it('does not treat a recorded merge attempt as target-branch proof', () => {
     const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9abc')));
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Merge into Develop');
+  });
+
+  it('uses canonical membership evidence in the status label', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null), {
+      integration: integrated({ sha: 'ddddddd9abc' }),
+    }));
     expect(view.landed).toBe(true);
     expect(view.landedState).toBe('merged-to-develop');
     expect(view.acceptLabel).toBe('Accept');
@@ -250,22 +265,27 @@ describe('mergeAcceptViewFor — state-dependent Human Review acceptance primary
   });
 
   it('upgrades wording to "Released to main" from the live landed-state hint', () => {
-    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9')), 'released-to-main');
+    const view = mergeAcceptViewFor(
+      reviewJob(mergedProvenance(null), { integration: integrated() }),
+      'released-to-main',
+    );
     expect(view.landed).toBe(true);
     expect(view.landedState).toBe('released-to-main');
     expect(view.acceptLabel).toBe('Accept');
     expect(view.statusLabel).toBe('Released to main');
   });
 
-  it('lands purely on the live hint when no merge fact is persisted yet', () => {
+  it('does not land purely on the live hint when canonical status is absent', () => {
     const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null)), 'merged-to-develop');
-    expect(view.landed).toBe(true);
-    expect(view.acceptLabel).toBe('Accept');
-    expect(view.statusLabel).toBe('Merged to develop');
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Merge into Develop');
   });
 
-  it('never lets a stale on-branch-only hint mask a recorded merge fact', () => {
-    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9')), 'on-branch-only');
+  it('never lets a stale on-branch-only hint mask canonical membership', () => {
+    const view = mergeAcceptViewFor(
+      reviewJob(mergedProvenance(null), { integration: integrated() }),
+      'on-branch-only',
+    );
     expect(view.landed).toBe(true);
     expect(view.landedState).toBe('merged-to-develop');
   });

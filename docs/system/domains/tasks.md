@@ -102,6 +102,17 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
   visible attribution metadata but are not delivery expectations. A matching
   subject with changed files remains a real integration expectation.
+- Accepted-card `integration.status` is a read-time projection of attributed
+  commit membership in the configured target branch, cached against that
+  branch's current HEAD. Lane state, provenance merge records, pipeline success,
+  and curated merge subjects do not force `integrated`; an out-of-band merge is
+  detected on the next read.
+- Human acceptance is transactional. A coding card remains in
+  `5-human-review` with phase `integrating` until the delivery reaches `Merged`
+  or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
+  to ordinary Human Review with an Integration failed badge and timeline
+  evidence. The `integrationpending` tag is an internal recovery marker, not a
+  second UI status.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
@@ -125,7 +136,7 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
   blocks, or starts a new attempt.
 - [../concepts/task-integration-and-merge-workflow.md](../../concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
-  `5-human-review -> 6-completed` accept trigger).
+  transactional Human Review accept trigger).
 - [../concepts/task-integration-merge-config-analysis.html](../../concepts/task-integration-merge-config-analysis.html):
   why integration semantics should not depend on `maxParallelism`.
 - [../concepts/auto-review-evidence-gate-analysis.html](../../concepts/auto-review-evidence-gate-analysis.html):

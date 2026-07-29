@@ -1360,9 +1360,8 @@ export class App implements OnInit, OnDestroy {
    * State-dependent presentation for the studio Human Review acceptance primary
    * (`mark-done`). Null for every other primary. When the work has already
    * landed it carries the landed-status pill text and relabels "Merge into
-   * Develop" to "Accept"; the live `landedState` (graph-derived) upgrades the
-   * wording to "Released to main" when known, with the persisted merge fact as
-   * the synchronous fallback.
+   * Develop" to "Accept"; the computed `integration` field is the only
+   * target-membership proof. A live released-to-main hint can refine the wording.
    */
   readonly studioMergeAcceptView = computed<MergeAcceptView | null>(() => {
     const sel = this.selectedJob();

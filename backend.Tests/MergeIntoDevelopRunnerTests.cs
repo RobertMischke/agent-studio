@@ -160,6 +160,74 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MainTarget_FetchesImmutableRemoteDeliveryWithoutTaskBranch()
+    {
+        var (repo, _) = SeedRepoWithOrigin("runner-main-remote-ref");
+        const string deliveryRef = "agent-studio/results/run-remote-main/result";
+        RunGit(repo, $"checkout -q -b {deliveryRef} main");
+        File.WriteAllText(Path.Combine(repo, "remote-main.txt"), "remote release work");
+        Commit(repo, "feat: remote release work");
+        var resultSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, $"push -q origin {deliveryRef}:{deliveryRef}");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, $"branch -D {deliveryRef}");
+        RunGit(repo, $"update-ref -d refs/remotes/origin/{deliveryRef}");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "full suite passed",
+            true,
+            false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.Full,
+                FullSuiteRequired = true,
+                FullSuiteRan = true,
+            },
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "remote-main");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-REMOTE-MAIN",
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = resultSha,
+            AttemptChainId = "attempt-remote-main",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-remote-main",
+            FencingToken = 1,
+            ImmutableResultRef = deliveryRef,
+            IntegrationBranch = "refs/heads/main",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "remote-main",
+            jobFolder,
+            repo,
+            "develop",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(resultSha, outcome.MergedSha);
+        Assert.Equal(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.False(git.BranchExists(repo, WorktreeTaskLifecycle.BranchFor("remote-main")));
+        Assert.Equal(resultSha, gateRunner.Request!.ExpectedSha);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_RedFullSuiteLeavesMainUnchanged()
     {
         var repo = SeedRepo("runner-main-red");
