@@ -1,0 +1,134 @@
+[
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-1",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-1",
+    "title": "Isolated parallel reference delivery 1",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.3288087Z",
+    "updatedAt": "2026-07-29T02:08:38.6556415Z",
+    "body": "Create only the deterministic namespace for RTB-1. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-2",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-2",
+    "title": "Isolated parallel reference delivery 2",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.3474262Z",
+    "updatedAt": "2026-07-29T02:08:38.680017Z",
+    "body": "Create only the deterministic namespace for RTB-2. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-3",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-3",
+    "title": "Isolated parallel reference delivery 3",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.3612314Z",
+    "updatedAt": "2026-07-29T02:08:38.694353Z",
+    "body": "Create only the deterministic namespace for RTB-3. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-4",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-4",
+    "title": "Isolated parallel reference delivery 4",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.3722734Z",
+    "updatedAt": "2026-07-29T02:08:38.7122016Z",
+    "body": "Create only the deterministic namespace for RTB-4. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-5",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-5",
+    "title": "Isolated parallel reference delivery 5",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.3870907Z",
+    "updatedAt": "2026-07-29T02:08:38.7260087Z",
+    "body": "Create only the deterministic namespace for RTB-5. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-6",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-6",
+    "title": "Isolated parallel reference delivery 6",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.398458Z",
+    "updatedAt": "2026-07-29T02:08:38.743036Z",
+    "body": "Create only the deterministic namespace for RTB-6. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-7",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-7",
+    "title": "Isolated parallel reference delivery 7",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4089399Z",
+    "updatedAt": "2026-07-29T02:08:38.7619449Z",
+    "body": "Create only the deterministic namespace for RTB-7. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-8",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-8",
+    "title": "Isolated parallel reference delivery 8",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4234697Z",
+    "updatedAt": "2026-07-29T02:08:38.7782331Z",
+    "body": "Create only the deterministic namespace for RTB-8. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-9",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-9",
+    "title": "Isolated parallel reference delivery 9",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4352558Z",
+    "updatedAt": "2026-07-29T02:08:38.7935151Z",
+    "body": "Create only the deterministic namespace for RTB-9. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-10",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-10",
+    "title": "Isolated parallel reference delivery 10",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4504978Z",
+    "updatedAt": "2026-07-29T02:08:38.81473Z",
+    "body": "Create only the deterministic namespace for RTB-10. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-11",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-11",
+    "title": "Isolated parallel reference delivery 11",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4647758Z",
+    "updatedAt": "2026-07-29T02:08:38.8352067Z",
+    "body": "Create only the deterministic namespace for RTB-11. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-baseline-12",
+    "projectId": "prj-canary-parallel-12-baseline",
+    "taskKey": "RTB-12",
+    "title": "Isolated parallel reference delivery 12",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:38.4846415Z",
+    "updatedAt": "2026-07-29T02:08:38.8487237Z",
+    "body": "Create only the deterministic namespace for RTB-12. Infrastructure verification task."
+  }
+]

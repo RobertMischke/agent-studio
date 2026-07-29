@@ -1,0 +1,15 @@
+{
+  "task": { "taskKey": "RTS-3" },
+  "attempt": { "attemptId": "run_01JGATELOSS0003" },
+  "baseSha": "5555555555555555555555555555555555555555",
+  "resultSha": "6666666666666666666666666666666666666666",
+  "gateReplay": {
+    "attempts": 2,
+    "acknowledged": false,
+    "terminalClassification": "lost"
+  },
+  "reviewAdmission": {
+    "admitted": false,
+    "reason": "gate receipt unavailable"
+  }
+}

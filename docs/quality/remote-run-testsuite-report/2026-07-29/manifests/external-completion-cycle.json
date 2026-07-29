@@ -1,0 +1,48 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "external-completion-cycle",
+  "description": "Replays one out-of-band result reconciliation, idempotent evidence retention, operator requeue, and a stranded-worktree salvage failure that must not become another delivered result.",
+  "task": {
+    "title": "Replay external completion without a completion loop",
+    "body": "Reconcile one already completed result with exact immutable evidence. A later requeue or failed salvage must not repeat delivery.",
+    "key": "RTS-31"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": [
+      "README.md",
+      "package.json",
+      "src/index.mjs",
+      "src/shipping.mjs",
+      "test/shipping.test.mjs"
+    ]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-external-completion"
+    ],
+    "expectedTerminal": "2-ready",
+    "recoveryBudget": {
+      "unit": "post-completion-requeues",
+      "maximum": 1
+    },
+    "assertions": [
+      "external-result-reconciled-once",
+      "exact-result-evidence-retained",
+      "completion-replay-does-not-move-requeued-task",
+      "failed-salvage-not-delivered",
+      "stranded-worktree-preserved",
+      "external-completion-loop-bounded"
+    ]
+  },
+  "hooks": {}
+}

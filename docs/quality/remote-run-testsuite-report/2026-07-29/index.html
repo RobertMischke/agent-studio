@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>12 run remote infrastructure report</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e8e7e2;
+    --ink-1: #10100f; --ink-2: #565550; --ink-3: #77756f; --line: #d5d3cc;
+    --accent: #246db5; --accent-soft: #e7f0fa; --ok: #167044; --ok-soft: #e7f4ec;
+    --bad: #b9333b; --bad-soft: #f9e9eb; --warn: #8a6400; --warn-soft: #f7efd9;
+    --shadow: 0 12px 30px rgba(22, 22, 18, .08);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #181817; --surface-2: #222221; --surface-3: #2c2c2a;
+    --ink-1: #f7f6f1; --ink-2: #c6c4ba; --ink-3: #9a9890; --line: #3d3c38;
+    --accent: #77afe7; --accent-soft: #1d2b3a; --ok: #65bf8d; --ok-soft: #1b3025;
+    --bad: #ef7b83; --bad-soft: #3a2023; --warn: #e1b84f; --warn-soft: #352f1c;
+    --shadow: 0 12px 30px rgba(0, 0, 0, .22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #181817; --surface-2: #222221; --surface-3: #2c2c2a;
+      --ink-1: #f7f6f1; --ink-2: #c6c4ba; --ink-3: #9a9890; --line: #3d3c38;
+      --accent: #77afe7; --accent-soft: #1d2b3a; --ok: #65bf8d; --ok-soft: #1b3025;
+      --bad: #ef7b83; --bad-soft: #3a2023; --warn: #e1b84f; --warn-soft: #352f1c;
+      --shadow: 0 12px 30px rgba(0, 0, 0, .22);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--surface-1); color: var(--ink-1); font: 15px/1.55 system-ui, "Segoe UI", sans-serif; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex="0"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .page, main { width: 100%; padding-inline: clamp(18px, 4vw, 64px); }
+  .page { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 32px; padding-block: 42px 28px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .page .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--ink-2); }
+  .page.rejected { background: var(--bad-soft); }
+  h1, h2, h3, h4, p { margin-top: 0; }
+  h1 { margin-bottom: 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.12; letter-spacing: -.025em; }
+  h2 { margin-bottom: 0; font-size: clamp(22px, 2.5vw, 30px); line-height: 1.2; }
+  h3 { margin-bottom: 10px; font-size: 17px; }
+  h4 { margin-bottom: 4px; font-size: 15px; }
+  .kicker, .eyebrow { margin-bottom: 7px; color: var(--ink-3); font-size: 12px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+  .lede { max-width: 72ch; margin-bottom: 0; color: var(--ink-2); font-size: 17px; }
+  .theme { align-self: start; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: var(--surface-1); color: var(--ink-1); font: inherit; cursor: pointer; }
+  main { padding-block: 34px 80px; }
+  main > section { margin-bottom: 52px; scroll-margin-top: 20px; }
+  .section-heading, .subheading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .summary-line, .quiet, .subheading span { margin: 0; color: var(--ink-2); }
+  .metrics { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 10px; }
+  .metric { min-height: 126px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+  .metric > span { display: block; color: var(--ink-2); font-weight: 650; }
+  .metric > strong { display: block; margin: 8px 0; font-size: 25px; line-height: 1.1; }
+  .metric small { display: block; color: var(--ink-3); }
+  .metric.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; }
+  th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  thead th { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  tbody tr:last-child > * { border-bottom: 0; }
+  .matrix th[scope="row"] small { display: block; color: var(--ink-3); font-weight: 400; }
+  .status { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 750; letter-spacing: .03em; text-decoration: none; }
+  .status.pass { color: var(--ok); background: var(--ok-soft); }
+  .status.fail, .status.bad { color: var(--bad); background: var(--bad-soft); }
+  .status.warn, .status.skipped { color: var(--warn); background: var(--warn-soft); }
+  .na { color: var(--ink-3); }
+  .runs { display: grid; gap: 12px; }
+  .run-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); box-shadow: var(--shadow); overflow: clip; scroll-margin-top: 18px; }
+  .run-card.failed { background: color-mix(in srgb, var(--bad-soft) 45%, var(--surface-2)); }
+  .run-card summary { display: grid; grid-template-columns: 18px minmax(190px, 1fr) auto auto auto; align-items: center; gap: 14px; padding: 16px 18px; cursor: pointer; list-style: none; }
+  .run-card summary::-webkit-details-marker { display: none; }
+  .chevron { width: 8px; height: 8px; border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(-45deg); transition: transform .16s ease; }
+  details[open] .chevron { transform: rotate(45deg); }
+  .run-identity strong, .run-identity span { display: block; }
+  .run-identity span, .outcome, .wall { color: var(--ink-2); }
+  .run-body { padding: 0 18px 22px; border-top: 1px solid var(--line); }
+  .run-links { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-block: 14px; }
+  code { font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+  .timeline { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .phase { position: relative; min-height: 112px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-1); }
+  .phase-head { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+  .phase-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .phase.fail .phase-dot { background: var(--bad); }
+  .phase.skipped .phase-dot { background: var(--warn); }
+  .phase dl { display: grid; gap: 2px; margin: 12px 0 0; color: var(--ink-2); }
+  .phase dl div { display: flex; justify-content: space-between; gap: 8px; }
+  .phase dt, .phase dd { margin: 0; }
+  .evidence-grid { display: grid; grid-template-columns: 1.3fr .8fr .9fr; gap: 10px; margin-top: 18px; }
+  .data-panel, .incident, .assertion, .validation, .contract { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  .sha-list { display: grid; gap: 10px; margin: 0; }
+  .sha-list div { min-width: 0; }
+  .sha-list dt { color: var(--ink-3); font-size: 12px; }
+  .sha-list dd { margin: 2px 0 0; }
+  .tokens > * { display: block; margin-bottom: 5px; }
+  .tokens span { color: var(--ink-2); }
+  .component-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+  .component-list li { display: flex; justify-content: space-between; gap: 10px; }
+  .incidents, .assertions { margin-top: 18px; }
+  .incident { background: var(--warn-soft); }
+  .incident > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+  .incident p { margin: 8px 0; }
+  .assertions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .assertions > h3 { grid-column: 1 / -1; }
+  .assertion { scroll-margin-top: 18px; }
+  .assertion.fail { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+  .assertion.pass { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 25%, var(--line)); }
+  .assertion > div { display: flex; align-items: center; gap: 9px; }
+  .assertion h4 { margin: 0; }
+  .assertion p { margin: 10px 0; color: var(--ink-2); }
+  .evidence { font-weight: 650; }
+  .validation { max-width: 980px; background: var(--bad-soft); }
+  .validation li { margin-block: 8px; }
+  .contract { background: var(--accent-soft); }
+  .contract p:last-child { max-width: 80ch; margin-bottom: 0; }
+  .empty { color: var(--ink-2); }
+  @media (max-width: 1100px) {
+    .metrics { grid-template-columns: repeat(4, minmax(130px, 1fr)); }
+    .timeline { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+    .evidence-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 680px) {
+    .page { grid-template-columns: 1fr; padding-block: 28px 20px; }
+    .page > div:first-child { padding-right: 82px; }
+    .theme { position: absolute; top: 14px; right: 14px; }
+    main { padding-block-start: 24px; }
+    .section-heading, .subheading { align-items: start; flex-direction: column; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric { min-height: 112px; }
+    .run-card summary { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; }
+    .run-card summary .outcome, .run-card summary .wall { grid-column: 2; }
+    .timeline, .evidence-grid, .assertions { grid-template-columns: 1fr; }
+    .assertions > h3 { grid-column: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+  }
+  @media print {
+    :root { color-scheme: light; }
+    body { background: white; color: black; font-size: 10pt; }
+    .theme { display: none; }
+    .page, main { padding-inline: 0; }
+    main { padding-block: 16px 0; }
+    main > section { margin-bottom: 24px; }
+    .run-card { break-inside: avoid; box-shadow: none; }
+    details:not([open]) > .run-body, details > .run-body { display: block !important; }
+    .chevron { display: none; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+
+    <header class="page">
+      <div>
+        <p class="kicker">Infrastructure verification · Static report</p>
+        <h1>AGT-2200 remote-run infrastructure acceptance canary</h1>
+        <p class="lede">Remote execution acceptance, recovery evidence, phase timing, and telemetry coverage. No model or CLI comparisons are included.</p>
+      </div>
+      <button class="theme" type="button" data-theme-toggle aria-label="Switch color theme">Theme</button>
+      <div class="meta">
+        <span>Generated <strong>29 Jul 2026, 02:29 UTC</strong></span>
+        <span>Source <a id="source-agt-2200" href="./acceptance-matrix.json#AGT-2200">AGT-2200</a></span>
+        <span>Schema <a href="#contract">v1</a></span>
+      </div>
+    </header>
+
+    <main>
+      <section aria-labelledby="summary-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Acceptance</p><h2 id="summary-heading">Suite summary</h2></div>
+          <p class="summary-line">12 of 12 runs accepted</p>
+        </div>
+        <div class="metrics" aria-label="Outcome and telemetry totals">
+          <article class="metric "><span>Runs</span><strong>12</strong><small>All validated run records</small></article>
+          <article class="metric "><span>Healed</span><strong>1</strong><small>Self-healed infrastructure</small></article>
+          <article class="metric "><span>Recovered</span><strong>8</strong><small>Recovered after an incident</small></article>
+          <article class="metric "><span>Lost</span><strong>0</strong><small>Evidence or execution lost</small></article>
+          <article class="metric "><span>Invalid</span><strong>0</strong><small>Schema-incompatible records</small></article>
+          <article class="metric "><span>Wall time</span><strong>11m 10s</strong><small>Across all visible runs</small></article>
+          <article class="metric "><span>Telemetry coverage</span><strong>0/12</strong><small>Tokens · phase timing 12/12</small></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="matrix-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">One click to assertion</p><h2 id="matrix-heading">Acceptance matrix</h2></div>
+          <p class="quiet">Each status opens the exact assertion. Raw evidence is the next link.</p>
+        </div>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable acceptance matrix">
+          <table class="matrix">
+            <thead><tr><th scope="col">Run</th><th scope="col">Declared terminal reached</th><th scope="col">Phase timing present</th><th scope="col">Resources remained scoped</th><th scope="col">Authority and queues reconciled</th><th scope="col">Exact result or expected non-delivery</th><th scope="col">Incident linked to chronicle</th></tr></thead>
+            <tbody><tr>
+    <th scope="row"><a href="#run-canary-ref-a">canary-ref-a</a><small>reference-change</small></th>
+    <td><a class="status pass" href="#assertion-canary-ref-a-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-a-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-a-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-a-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-a-exact-result-or-nondelivery">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-ref-b">canary-ref-b</a><small>reference-change</small></th>
+    <td><a class="status pass" href="#assertion-canary-ref-b-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-b-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-b-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-b-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-ref-b-exact-result-or-nondelivery">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-net-blip">canary-net-blip</a><small>fault-task-server-network-blips</small></th>
+    <td><a class="status pass" href="#assertion-canary-net-blip-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-net-blip-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-net-blip-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-net-blip-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-net-blip-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-net-blip-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-gate-timeout">canary-gate-timeout</a><small>fault-gate-timeout</small></th>
+    <td><a class="status pass" href="#assertion-canary-gate-timeout-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-gate-timeout-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-gate-timeout-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-gate-timeout-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-gate-timeout-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-gate-timeout-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-worktree-collision">canary-worktree-collision</a><small>fault-worktree-collision</small></th>
+    <td><a class="status pass" href="#assertion-canary-worktree-collision-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-worktree-collision-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-worktree-collision-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-worktree-collision-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-worktree-collision-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-worktree-collision-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-sentinel-loss">canary-sentinel-loss</a><small>fault-lost-completion-sentinel</small></th>
+    <td><a class="status pass" href="#assertion-canary-sentinel-loss-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-sentinel-loss-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-sentinel-loss-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-sentinel-loss-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-sentinel-loss-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-sentinel-loss-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-salvage-lineage">canary-salvage-lineage</a><small>divergent-salvage-lineage</small></th>
+    <td><a class="status pass" href="#assertion-canary-salvage-lineage-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-salvage-lineage-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-salvage-lineage-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-salvage-lineage-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-salvage-lineage-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-salvage-lineage-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-lease-adoption">canary-lease-adoption</a><small>lease-adoption-restart</small></th>
+    <td><a class="status pass" href="#assertion-canary-lease-adoption-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-lease-adoption-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-lease-adoption-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-lease-adoption-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-lease-adoption-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-lease-adoption-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-external-cycle">canary-external-cycle</a><small>external-completion-cycle</small></th>
+    <td><a class="status pass" href="#assertion-canary-external-cycle-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-external-cycle-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-external-cycle-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-external-cycle-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-external-cycle-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-external-cycle-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-machine-10m">canary-machine-10m</a><small>compose-machine-bound</small></th>
+    <td><a class="status pass" href="#assertion-canary-machine-10m-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-machine-10m-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-machine-10m-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-machine-10m-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-machine-10m-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-machine-10m-incident-linked">Pass</a></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-parallel-12-baseline">canary-parallel-12-baseline</a><small>parallel-baseline</small></th>
+    <td><a class="status pass" href="#assertion-canary-parallel-12-baseline-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-baseline-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-baseline-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-baseline-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-baseline-exact-result-or-nondelivery">Pass</a></td><td><span class="na" aria-label="Not applicable">n/a</span></td>
+  </tr><tr>
+    <th scope="row"><a href="#run-canary-parallel-12-worker-loss">canary-parallel-12-worker-loss</a><small>parallel-worker-loss</small></th>
+    <td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-declared-terminal">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-phase-timing-present">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-scope-contained">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-authority-clean">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-exact-result-or-nondelivery">Pass</a></td><td><a class="status pass" href="#assertion-canary-parallel-12-worker-loss-incident-linked">Pass</a></td>
+  </tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="timing-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Queue versus execution</p><h2 id="timing-heading">Phase totals</h2></div>
+          <p class="quiet">Totals reconcile only the phase records visible below.</p>
+        </div>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable phase timing table">
+          <table><thead><tr><th scope="col">Phase</th><th scope="col">Queue</th><th scope="col">Execution</th><th scope="col">Runs</th></tr></thead><tbody><tr><th scope="row">Claim</th><td>4.0 s</td><td>896 ms</td><td>12</td></tr><tr><th scope="row">Run</th><td>191 ms</td><td>10m 3s</td><td>12</td></tr><tr><th scope="row">Gate</th><td>99 ms</td><td>7.7 s</td><td>12</td></tr><tr><th scope="row">Review</th><td>868 ms</td><td>5.4 s</td><td>12</td></tr><tr><th scope="row">Integration</th><td>32 ms</td><td>8.9 s</td><td>12</td></tr></tbody></table>
+        </div>
+      </section>
+
+      <section aria-labelledby="runs-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Expandable evidence</p><h2 id="runs-heading">Runs</h2></div>
+          <p class="quiet">Native disclosure controls support keyboard navigation and print expansion.</p>
+        </div>
+        <div class="runs"><details class="run-card accepted" id="run-canary-ref-a">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-ref-a</strong><span>reference-change</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Baseline</span>
+      <span class="wall">909 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-ref-a/result.json">RTS-1</a>
+        <a id="attempt-canary-ref-a" href="./raw/scenarios/canary-ref-a/result.json#attempt"><code>run_43806fcc8e2d4f7cb18cab256bba8afb</code></a>
+        <a href="./manifests/reference-change.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-ref-a/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-ref-a/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-ref-a">
+        <div class="subheading"><h3 id="timeline-canary-ref-a">Phase timeline</h3><span>Queue 263 ms · Execution 646 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>95 ms</dd></div><div><dt>Execution</dt><dd>38 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>25 ms</dd></div><div><dt>Execution</dt><dd>88 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>11 ms</dd></div><div><dt>Execution</dt><dd>93 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>127 ms</dd></div><div><dt>Execution</dt><dd>243 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>5 ms</dd></div><div><dt>Execution</dt><dd>184 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-ref-a">
+          <h3 id="sha-canary-ref-a">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-ref-a/result.json#baseSha"><code>880bbcd089593d3447cbe47575532a63f2a870ba</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-ref-a" href="./raw/scenarios/canary-ref-a/result.json#resultSha"><code>ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-ref-a">
+          <h3 id="tokens-canary-ref-a">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-ref-a">
+          <h3 id="components-canary-ref-a">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+      <section class="assertions" aria-labelledby="assertions-canary-ref-a">
+        <h3 id="assertions-canary-ref-a">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-ref-a-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>6-completed matched 6-completed; recovery 0/0 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-a-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-a-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/reference-change/canary-ref-a.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-a-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-a-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71 is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-ref-b">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-ref-b</strong><span>reference-change</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Baseline</span>
+      <span class="wall">1.0 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-ref-b/result.json">RTS-1</a>
+        <a id="attempt-canary-ref-b" href="./raw/scenarios/canary-ref-b/result.json#attempt"><code>run_8fabbe9d82a44230a101dad02a6301cc</code></a>
+        <a href="./manifests/reference-change.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-ref-b/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-ref-b/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-ref-b">
+        <div class="subheading"><h3 id="timeline-canary-ref-b">Phase timeline</h3><span>Queue 277 ms · Execution 744 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>102 ms</dd></div><div><dt>Execution</dt><dd>35 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>26 ms</dd></div><div><dt>Execution</dt><dd>119 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>12 ms</dd></div><div><dt>Execution</dt><dd>99 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>133 ms</dd></div><div><dt>Execution</dt><dd>266 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>225 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-ref-b">
+          <h3 id="sha-canary-ref-b">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-ref-b/result.json#baseSha"><code>880bbcd089593d3447cbe47575532a63f2a870ba</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-ref-b" href="./raw/scenarios/canary-ref-b/result.json#resultSha"><code>ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-ref-b">
+          <h3 id="tokens-canary-ref-b">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-ref-b">
+          <h3 id="components-canary-ref-b">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+      <section class="assertions" aria-labelledby="assertions-canary-ref-b">
+        <h3 id="assertions-canary-ref-b">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-ref-b-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>6-completed matched 6-completed; recovery 0/0 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-b-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-b-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/reference-change/canary-ref-b.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-b-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-ref-b-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71 is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-net-blip">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-net-blip</strong><span>fault-task-server-network-blips</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Healed</span>
+      <span class="wall">949 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-net-blip/result.json">RTS-1</a>
+        <a id="attempt-canary-net-blip" href="./raw/scenarios/canary-net-blip/result.json#attempt"><code>run_9d298802f1db4a7ba64cd305cdf80806</code></a>
+        <a href="./manifests/fault-task-server-network-blips.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-net-blip/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-net-blip/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-net-blip">
+        <div class="subheading"><h3 id="timeline-canary-net-blip">Phase timeline</h3><span>Queue 289 ms · Execution 660 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>97 ms</dd></div><div><dt>Execution</dt><dd>42 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>25 ms</dd></div><div><dt>Execution</dt><dd>88 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>13 ms</dd></div><div><dt>Execution</dt><dd>101 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>152 ms</dd></div><div><dt>Execution</dt><dd>258 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>2 ms</dd></div><div><dt>Execution</dt><dd>171 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-net-blip">
+          <h3 id="sha-canary-net-blip">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-net-blip/result.json#baseSha"><code>8cabb3f2ed794bb89fb2a3236baab55beff6dc28</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-net-blip" href="./raw/scenarios/canary-net-blip/result.json#resultSha"><code>10a95dcf6cbb966fa1d8de0102582a66f542ff2a</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-net-blip">
+          <h3 id="tokens-canary-net-blip">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-net-blip">
+          <h3 id="components-canary-net-blip">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-net-blip">
+      <h3 id="incidents-canary-net-blip">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Bounded request loss during claim and heartbeat plus response loss after durable event, artifact, and completion commits.</strong></div>
+          <p>network-blips-replayed</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority">Open task-server-network in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-net-blip">
+        <h3 id="assertions-canary-net-blip">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-net-blip-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>6-completed matched 6-completed; recovery 5/5 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-net-blip-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-net-blip-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-net-blip-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-net-blip-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA 10a95dcf6cbb966fa1d8de0102582a66f542ff2a is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-net-blip-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>2 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-gate-timeout">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-gate-timeout</strong><span>fault-gate-timeout</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">1.4 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-gate-timeout/result.json">RTS-1</a>
+        <a id="attempt-canary-gate-timeout" href="./raw/scenarios/canary-gate-timeout/result.json#attempt"><code>run_ad9acc74e771401394112a5d420da367</code></a>
+        <a href="./manifests/fault-gate-timeout.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-gate-timeout/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-gate-timeout/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-gate-timeout">
+        <div class="subheading"><h3 id="timeline-canary-gate-timeout">Phase timeline</h3><span>Queue 280 ms · Execution 1.1 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>104 ms</dd></div><div><dt>Execution</dt><dd>39 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>23 ms</dd></div><div><dt>Execution</dt><dd>99 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>14 ms</dd></div><div><dt>Execution</dt><dd>454 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>135 ms</dd></div><div><dt>Execution</dt><dd>302 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>211 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-gate-timeout">
+          <h3 id="sha-canary-gate-timeout">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-gate-timeout/result.json#baseSha"><code>8510db030ed3c07e23b32656339cfec13f2836b6</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-gate-timeout" href="./raw/scenarios/canary-gate-timeout/result.json#resultSha"><code>2973894fdef57c052261782b4e2a6accbc048423</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-gate-timeout">
+          <h3 id="tokens-canary-gate-timeout">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-gate-timeout">
+          <h3 id="components-canary-gate-timeout">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-gate-timeout">
+      <h3 id="incidents-canary-gate-timeout">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>A deterministic fixture command exceeds the harness watchdog once and its complete process group is reaped before one bounded retry.</strong></div>
+          <p>gate-timeout-recovered</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-gate-timeout">Open gate-timeout in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-gate-timeout">
+        <h3 id="assertions-canary-gate-timeout">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-gate-timeout-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>6-completed matched 6-completed; recovery 1/1 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-gate-timeout-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-gate-timeout-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-gate-timeout-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-gate-timeout-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA 2973894fdef57c052261782b4e2a6accbc048423 is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-gate-timeout-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>2 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-worktree-collision">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-worktree-collision</strong><span>fault-worktree-collision</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">292 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-worktree-collision/result.json">RTS-1</a>
+        <a id="attempt-canary-worktree-collision" href="./raw/scenarios/canary-worktree-collision/result.json#attempt"><code>run_3f8a28f3b06042f4abc5abccaef9219f</code></a>
+        <a href="./manifests/fault-worktree-collision.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-worktree-collision/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-worktree-collision/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-worktree-collision">
+        <div class="subheading"><h3 id="timeline-canary-worktree-collision">Phase timeline</h3><span>Queue 127 ms · Execution 165 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>100 ms</dd></div><div><dt>Execution</dt><dd>36 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>27 ms</dd></div><div><dt>Execution</dt><dd>129 ms</dd></div></dl>
+    </li>
+    <li class="phase skipped">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status skipped">Skipped</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li>
+    <li class="phase skipped">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status skipped">Skipped</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li>
+    <li class="phase skipped">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status skipped">Skipped</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-worktree-collision">
+          <h3 id="sha-canary-worktree-collision">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-worktree-collision/result.json#baseSha"><code>a5acc3d68dd4ab4bae9111b2f2d6acfc01536d8a</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><span id="result-ref-canary-worktree-collision">Not published (expected non-delivery)</span></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-worktree-collision">
+          <h3 id="tokens-canary-worktree-collision">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-worktree-collision">
+          <h3 id="components-canary-worktree-collision">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-worktree-collision">
+      <h3 id="incidents-canary-worktree-collision">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>A fixture-owned foreign occupant holds the intended target through all five bounded preparation attempts.</strong></div>
+          <p>worktree-blocked</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-worktree-collision">Open worktree-collision in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-worktree-collision">
+        <h3 id="assertions-canary-worktree-collision">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-worktree-collision-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>5-human-review matched 5-human-review; recovery 0/0 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-worktree-collision-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>2 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-worktree-collision-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-worktree-collision-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-worktree-collision-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>The declared fail-closed terminal published no Result-SHA, preventing phantom delivery.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-worktree-collision-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>2 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-sentinel-loss">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-sentinel-loss</strong><span>fault-lost-completion-sentinel</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">921 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-sentinel-loss/result.json">RTS-1</a>
+        <a id="attempt-canary-sentinel-loss" href="./raw/scenarios/canary-sentinel-loss/result.json#attempt"><code>run_ae746f453ce04b29871f88605ceae26d</code></a>
+        <a href="./manifests/fault-lost-completion-sentinel.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-sentinel-loss/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-sentinel-loss/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-sentinel-loss">
+        <div class="subheading"><h3 id="timeline-canary-sentinel-loss">Phase timeline</h3><span>Queue 277 ms · Execution 644 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>105 ms</dd></div><div><dt>Execution</dt><dd>36 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>28 ms</dd></div><div><dt>Execution</dt><dd>89 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>12 ms</dd></div><div><dt>Execution</dt><dd>98 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>130 ms</dd></div><div><dt>Execution</dt><dd>257 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>2 ms</dd></div><div><dt>Execution</dt><dd>164 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-sentinel-loss">
+          <h3 id="sha-canary-sentinel-loss">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-sentinel-loss/result.json#baseSha"><code>98afdb0c2908a032e3fe3ae3bb4d4cacece96be2</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-sentinel-loss" href="./raw/scenarios/canary-sentinel-loss/result.json#resultSha"><code>10b6a209eac95b5d5a798e7a2083df24abf67020</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-sentinel-loss">
+          <h3 id="tokens-canary-sentinel-loss">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-sentinel-loss">
+          <h3 id="components-canary-sentinel-loss">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-sentinel-loss">
+      <h3 id="incidents-canary-sentinel-loss">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>The final sentinel is lost while provider completion, exit, outbox, and immutable Result-SHA proof remain durable.</strong></div>
+          <p>lost-terminal-marker-recovered</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave">Open terminal-marker-loss in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-sentinel-loss">
+        <h3 id="assertions-canary-sentinel-loss">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>6-completed matched 6-completed; recovery 0/0 recovery-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA 10b6a209eac95b5d5a798e7a2083df24abf67020 is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-sentinel-loss-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>2 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-salvage-lineage">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-salvage-lineage</strong><span>divergent-salvage-lineage</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">808 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-salvage-lineage/result.json">RTS-11</a>
+        <a id="attempt-canary-salvage-lineage" href="./raw/scenarios/canary-salvage-lineage/result.json#attempt"><code>canary-salvage-lineage:contract</code></a>
+        <a href="./manifests/divergent-salvage-lineage.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-salvage-lineage/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-salvage-lineage/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-salvage-lineage">
+        <div class="subheading"><h3 id="timeline-canary-salvage-lineage">Phase timeline</h3><span>Queue 159 ms · Execution 649 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>80 ms</dd></div><div><dt>Execution</dt><dd>55 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>170 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>13 ms</dd></div><div><dt>Execution</dt><dd>98 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>59 ms</dd></div><div><dt>Execution</dt><dd>297 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>3 ms</dd></div><div><dt>Execution</dt><dd>29 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-salvage-lineage">
+          <h3 id="sha-canary-salvage-lineage">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-salvage-lineage/result.json#baseSha"><code>155ed4c8f766e243643db87c651357c9db354f0b</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-salvage-lineage" href="./raw/scenarios/canary-salvage-lineage/result.json#resultSha"><code>580d2c653da7f8a2697b613260be7961dcab434e</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-salvage-lineage">
+          <h3 id="tokens-canary-salvage-lineage">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-salvage-lineage">
+          <h3 id="components-canary-salvage-lineage">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-salvage-lineage">
+      <h3 id="incidents-canary-salvage-lineage">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Observed</span><strong>Historical replay: divergent-salvage-lineage</strong></div>
+          <p>5-human-review reached within 3/3 review-attempts.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-grade-d">Open divergent-salvage-lineage in the hardening chronicle</a>
+        </article>
+        <article class="incident">
+          <div><span class="status warn">Observed</span><strong>Historical replay: divergent-salvage-lineage</strong></div>
+          <p>5-human-review reached within 3/3 review-attempts.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination">Open divergent-salvage-lineage in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-salvage-lineage">
+        <h3 id="assertions-canary-salvage-lineage">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>5-human-review matched 5-human-review; recovery 3/3 review-attempts.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/divergent-salvage-lineage/canary-salvage-lineage.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA 580d2c653da7f8a2697b613260be7961dcab434e is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-salvage-lineage-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>2 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-lease-adoption">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-lease-adoption</strong><span>lease-adoption-restart</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">5.9 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-lease-adoption/result.json">RTS-21</a>
+        <a id="attempt-canary-lease-adoption" href="./raw/scenarios/canary-lease-adoption/result.json#attempt"><code>run_e48483cbe13f476582a5892124c0a597</code></a>
+        <a href="./manifests/lease-adoption-restart.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-lease-adoption/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-lease-adoption/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-lease-adoption">
+        <div class="subheading"><h3 id="timeline-canary-lease-adoption">Phase timeline</h3><span>Queue 1.4 s · Execution 4.5 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>1.4 s</dd></div><div><dt>Execution</dt><dd>519 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>1.2 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>1.4 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>3 ms</dd></div><div><dt>Execution</dt><dd>1.4 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>5 ms</dd></div><div><dt>Execution</dt><dd>14 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-lease-adoption">
+          <h3 id="sha-canary-lease-adoption">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-lease-adoption/result.json#baseSha"><code>67f05926fdab76a5752306ca870658783a804655</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><span id="result-ref-canary-lease-adoption">Not published (expected non-delivery)</span></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-lease-adoption">
+          <h3 id="tokens-canary-lease-adoption">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-lease-adoption">
+          <h3 id="components-canary-lease-adoption">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-lease-adoption">
+      <h3 id="incidents-canary-lease-adoption">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Observed</span><strong>Historical replay: lease-adoption-restart</strong></div>
+          <p>4-auto-review reached within 1/1 live-generation-adoptions.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases">Open lease-adoption-restart in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-lease-adoption">
+        <h3 id="assertions-canary-lease-adoption">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-lease-adoption-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>4-auto-review matched 4-auto-review; recovery 1/1 live-generation-adoptions.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-lease-adoption-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-lease-adoption-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/lease-adoption-restart/canary-lease-adoption.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-lease-adoption-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-lease-adoption-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>The declared fail-closed terminal published no Result-SHA, preventing phantom delivery.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-lease-adoption-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>1 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-external-cycle">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-external-cycle</strong><span>external-completion-cycle</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">705 ms</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/scenarios/canary-external-cycle/result.json">RTS-31</a>
+        <a id="attempt-canary-external-cycle" href="./raw/scenarios/canary-external-cycle/result.json#attempt"><code>run_7793e40d2f9049c9b8b58e8869fce010</code></a>
+        <a href="./manifests/external-completion-cycle.json">Scenario manifest</a>
+        <a href="./raw/scenarios/canary-external-cycle/result.json">Raw run artifact</a>
+        <a href="./raw/scenarios/canary-external-cycle/phases.jsonl">Phase journal</a><a href="./acceptance-matrix.json">Acceptance matrix</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-external-cycle">
+        <div class="subheading"><h3 id="timeline-canary-external-cycle">Phase timeline</h3><span>Queue 100 ms · Execution 605 ms</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>78 ms</dd></div><div><dt>Execution</dt><dd>56 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>3 ms</dd></div><div><dt>Execution</dt><dd>74 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>12 ms</dd></div><div><dt>Execution</dt><dd>164 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>3 ms</dd></div><div><dt>Execution</dt><dd>54 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>4 ms</dd></div><div><dt>Execution</dt><dd>257 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-external-cycle">
+          <h3 id="sha-canary-external-cycle">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/scenarios/canary-external-cycle/result.json#baseSha"><code>4be99a0da913f6cd7fd439f5590d782dbfb07c80</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-external-cycle" href="./raw/scenarios/canary-external-cycle/result.json#resultSha"><code>c8df7538cf36568745bea48d27ca53f781e66237</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-external-cycle">
+          <h3 id="tokens-canary-external-cycle">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-external-cycle">
+          <h3 id="components-canary-external-cycle">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-external-cycle">
+      <h3 id="incidents-canary-external-cycle">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Observed</span><strong>Historical replay: external-completion-cycle</strong></div>
+          <p>2-ready reached within 1/1 post-completion-requeues.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-external-completion">Open external-completion-cycle in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-external-cycle">
+        <h3 id="assertions-canary-external-cycle">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-external-cycle-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>2-ready matched 2-ready; recovery 1/1 post-completion-requeues.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-external-cycle-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-external-cycle-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/external-completion-cycle/canary-external-cycle.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-external-cycle-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>No duplicate claim or unacknowledged outbox item remained in scenario evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-external-cycle-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Exact Result-SHA c8df7538cf36568745bea48d27ca53f781e66237 is retained in raw evidence.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-external-cycle-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>1 chronicle link(s) are declared by the scenario contract.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-machine-10m">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-machine-10m</strong><span>compose-machine-bound</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">10m 40s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/compose-machine-bound/acceptance.json">AUTO-1</a>
+        <a id="attempt-canary-machine-10m" href="./raw/compose-machine-bound/acceptance.json#autonomy"><code>run_abfa8f77c31247bda96f65559f79fd89</code></a>
+        <a href="./manifests/compose-machine-bound.json">Scenario manifest</a>
+        <a href="./raw/compose-machine-bound/acceptance.json">Raw run artifact</a>
+        <a href="./raw/compose-machine-bound/autonomy-canary.json">Autonomy evidence</a><a href="./raw/compose-machine-bound/api/rolling-history.json">Rolling history</a><a href="./cleanup-verification.json">Teardown proof</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-machine-10m">
+        <div class="subheading"><h3 id="timeline-canary-machine-10m">Phase timeline</h3><span>Queue 252 ms · Execution 10m 1s · Other 38.8 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>89 ms</dd></div><div><dt>Execution</dt><dd>40 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>26 ms</dd></div><div><dt>Execution</dt><dd>10m 0s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>8 ms</dd></div><div><dt>Execution</dt><dd>93 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>126 ms</dd></div><div><dt>Execution</dt><dd>255 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>3 ms</dd></div><div><dt>Execution</dt><dd>163 ms</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-machine-10m">
+          <h3 id="sha-canary-machine-10m">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/compose-machine-bound/acceptance.json#baseSha"><code>2df61404f350edf2cc74b903bffc6b4b877c8a74</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-machine-10m" href="./raw/compose-machine-bound/acceptance.json#resultSha"><code>a703ee085baee8d4edb33c85001a0b2cf611dd52</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-machine-10m">
+          <h3 id="tokens-canary-machine-10m">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-machine-10m">
+          <h3 id="components-canary-machine-10m">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-machine-10m">
+      <h3 id="incidents-canary-machine-10m">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Ten-minute Task Server outage</strong></div>
+          <p>600013 ms outage, two slots, exact-fence reconciliation, zero backlog.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority">Open task-server-outage in the hardening chronicle</a>
+        </article>
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Independent component rolling updates</strong></div>
+          <p>Studio, Runner, and Task Server were replaced independently; stale completion was rejected.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases">Open rolling-authority-restart in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-machine-10m">
+        <h3 id="assertions-canary-machine-10m">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-machine-10m-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>All 19 Compose acceptance assertions passed.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-machine-10m-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>The continuous Task Server outage lasted 600013 ms and is included in Run execution time.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-machine-10m-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Docker project agt2394-rts-canary-machine-10m used one explicit disposable identity.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-machine-10m-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>Both active slots reconciled their original fences before replay; recovery advanced fence 1 to 2.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-machine-10m-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Autonomy events, artifacts, handoffs, and completions were delivered once; final outboxes and authority were empty.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-machine-10m-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>The outage and rolling-restart authority incidents link to the hardening chronicle.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-parallel-12-baseline">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-parallel-12-baseline</strong><span>parallel-baseline</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Baseline</span>
+      <span class="wall">7.1 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/parallel-delivery/baseline/scenario.json">RTB-1</a>
+        <a id="attempt-canary-parallel-12-baseline" href="./raw/parallel-delivery/baseline/scenario.json#tasks"><code>run_4165bc0f1b324392a516fa4fa13c5ac3</code></a>
+        <a href="./manifests/parallel-baseline.json">Scenario manifest</a>
+        <a href="./raw/parallel-delivery/baseline/scenario.json">Raw run artifact</a>
+        <a href="./raw/parallel-delivery/concurrency-report.md">Concurrency report</a><a href="./raw/parallel-delivery/baseline/timeline.jsonl">Timeline</a><a href="./raw/parallel-delivery/baseline/task-histories.json">Task histories</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-parallel-12-baseline">
+        <div class="subheading"><h3 id="timeline-canary-parallel-12-baseline">Phase timeline</h3><span>Queue 883 ms · Execution 6.2 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>883 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>295 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>1.1 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>1.1 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>3.8 s</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-parallel-12-baseline">
+          <h3 id="sha-canary-parallel-12-baseline">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/parallel-delivery/baseline/scenario.json#baseSha"><code>005ade9eaf3aeb02c212bc66dbfb3fe6ee6d7222</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-parallel-12-baseline" href="./raw/parallel-delivery/baseline/scenario.json#resultSha"><code>1453e0a4a10c07b8453fd33f5d42d64ace0ea642</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-parallel-12-baseline">
+          <h3 id="tokens-canary-parallel-12-baseline">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-parallel-12-baseline">
+          <h3 id="components-canary-parallel-12-baseline">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+      <section class="assertions" aria-labelledby="assertions-canary-parallel-12-baseline">
+        <h3 id="assertions-canary-parallel-12-baseline">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-parallel-12-baseline-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>12 cards reached deterministic integration order with 15 applicable assertions passing.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-baseline-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>Claim, Run, Gate, Review, and Integration critical-path boundaries are derived from per-task UTC timing records.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-baseline-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Coding workspaces were unique; disposable gate and review roots were removed after exact-SHA execution.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-baseline-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>12 cards were active or post-processing together; queues and authority actions drained.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-baseline-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Every gate and review ran at its declared Result-SHA, and delivery/report replays remained idempotent.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details><details class="run-card accepted" id="run-canary-parallel-12-worker-loss">
+    <summary>
+      <span class="chevron" aria-hidden="true"></span>
+      <span class="run-identity"><strong>canary-parallel-12-worker-loss</strong><span>parallel-worker-loss</span></span>
+      <span class="status pass">Accepted</span>
+      <span class="outcome">Recovered</span>
+      <span class="wall">9.9 s</span>
+    </summary>
+    <div class="run-body">
+      <div class="run-links">
+        <a href="./raw/parallel-delivery/worker-loss/scenario.json">RTL-1</a>
+        <a id="attempt-canary-parallel-12-worker-loss" href="./raw/parallel-delivery/worker-loss/scenario.json#tasks"><code>run_ef03135ab54446e2926ec3f67e071351</code></a>
+        <a href="./manifests/parallel-worker-loss.json">Scenario manifest</a>
+        <a href="./raw/parallel-delivery/worker-loss/scenario.json">Raw run artifact</a>
+        <a href="./raw/parallel-delivery/concurrency-report.md">Concurrency report</a><a href="./raw/parallel-delivery/worker-loss/timeline.jsonl">Timeline</a><a href="./raw/parallel-delivery/worker-loss/task-histories.json">Task histories</a>
+      </div>
+
+      <section aria-labelledby="timeline-canary-parallel-12-worker-loss">
+        <div class="subheading"><h3 id="timeline-canary-parallel-12-worker-loss">Phase timeline</h3><span>Queue 858 ms · Execution 9.0 s</span></div>
+        <ol class="timeline">
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Claim</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>858 ms</dd></div><div><dt>Execution</dt><dd>0 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Run</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>287 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Gate</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>4.0 s</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Review</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>992 ms</dd></div></dl>
+    </li>
+    <li class="phase pass">
+      <div class="phase-head"><span class="phase-dot" aria-hidden="true"></span><strong>Integration</strong><span class="status pass">Pass</span></div>
+      <dl><div><dt>Queue</dt><dd>0 ms</dd></div><div><dt>Execution</dt><dd>3.7 s</dd></div></dl>
+    </li></ol>
+      </section>
+
+      <div class="evidence-grid">
+        <section class="data-panel" aria-labelledby="sha-canary-parallel-12-worker-loss">
+          <h3 id="sha-canary-parallel-12-worker-loss">Exact revisions</h3>
+          <dl class="sha-list">
+            <div><dt>Base SHA</dt><dd><a href="./raw/parallel-delivery/worker-loss/scenario.json#baseSha"><code>5107f0b621a07f4f0e19e38456b5ebce1f25f89c</code></a></dd></div>
+            <div><dt>Result SHA</dt><dd><a id="result-ref-canary-parallel-12-worker-loss" href="./raw/parallel-delivery/worker-loss/scenario.json#resultSha"><code>2fb404e02d36f580f5442188e5015fd436e20e1c</code></a></dd></div>
+          </dl>
+        </section>
+        <section class="data-panel tokens" aria-labelledby="tokens-canary-parallel-12-worker-loss">
+          <h3 id="tokens-canary-parallel-12-worker-loss">Token telemetry</h3>
+          <strong>Unavailable</strong><span>Infrastructure-only deterministic harness; no model or CLI invocation occurred.</span>
+        </section>
+        <section class="data-panel" aria-labelledby="components-canary-parallel-12-worker-loss">
+          <h3 id="components-canary-parallel-12-worker-loss">Component versions</h3>
+          <ul class="component-list"><li><span>source</span><code>afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764</code></li><li><span>Task Server</span><code>task-server 1.0.0+sha.unknown</code></li><li><span>Agent Runner</span><code>agent-host 0.1.0+sha.unknown</code></li><li><span>Studio</span><code>v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=</code></li><li><span>Docker Engine</span><code>29.1.3</code></li></ul>
+        </section>
+      </div>
+
+      
+    <section class="incidents" aria-labelledby="incidents-canary-parallel-12-worker-loss">
+      <h3 id="incidents-canary-parallel-12-worker-loss">Injected incidents and recovery</h3>
+      
+        <article class="incident">
+          <div><span class="status warn">Injected</span><strong>Controlled gate worker loss</strong></div>
+          <p>undefined retry operations redistributed across the surviving gate pool.</p>
+          <a href="../../../operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates">Open gate-worker-loss in the hardening chronicle</a>
+        </article>
+    </section>
+      <section class="assertions" aria-labelledby="assertions-canary-parallel-12-worker-loss">
+        <h3 id="assertions-canary-parallel-12-worker-loss">Assertions</h3>
+        
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-declared-terminal" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Declared terminal reached</h4></div>
+      <p>12 cards reached deterministic integration order with 18 applicable assertions passing.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-phase-timing-present" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Phase timing present</h4></div>
+      <p>Claim, Run, Gate, Review, and Integration critical-path boundaries are derived from per-task UTC timing records.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-scope-contained" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Resources remained scoped</h4></div>
+      <p>Coding workspaces were unique; disposable gate and review roots were removed after exact-SHA execution.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-authority-clean" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Authority and queues reconciled</h4></div>
+      <p>12 cards were active or post-processing together; queues and authority actions drained.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-exact-result-or-nondelivery" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Exact result or expected non-delivery</h4></div>
+      <p>Every gate and review ran at its declared Result-SHA, and delivery/report replays remained idempotent.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="assertion pass" id="assertion-canary-parallel-12-worker-loss-incident-linked" tabindex="-1">
+      <div><span class="status pass">Pass</span><h4>Incident linked to chronicle</h4></div>
+      <p>Controlled gate-worker loss is linked to the remote-gates chronicle incident.</p>
+      <a class="evidence" href="./acceptance-matrix.json">Open raw evidence <span aria-hidden="true">↗</span></a>
+    </article>
+      </section>
+    </div>
+  </details></div>
+      </section>
+
+      <section id="contract" class="contract" aria-labelledby="contract-heading">
+        <p class="eyebrow">Contract</p>
+        <h2 id="contract-heading">Validation behavior</h2>
+        <p>This report was generated only after schema version 1 and cross-field invariants passed. Unknown fields, malformed links, incorrect phase order, inconsistent token totals, and accepted runs containing failures are rejected visibly.</p>
+      </section>
+    </main>
+  
+<script>
+  (() => {
+    const root = document.documentElement;
+    const button = document.querySelector('[data-theme-toggle]');
+    if (!button) return;
+    button.addEventListener('click', () => {
+      const current = root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      root.dataset.theme = current === 'dark' ? 'light' : 'dark';
+      button.setAttribute('aria-label', 'Switch to ' + current + ' theme');
+    });
+    if (location.hash.startsWith('#assertion-')) {
+      const target = document.querySelector(location.hash);
+      const details = target?.closest('details');
+      if (details) details.open = true;
+    }
+    addEventListener('hashchange', () => {
+      const target = document.querySelector(location.hash);
+      const details = target?.closest('details');
+      if (details) details.open = true;
+    });
+    let printOpenState = [];
+    addEventListener('beforeprint', () => {
+      printOpenState = [...document.querySelectorAll('details')].map(details => details.open);
+      document.querySelectorAll('details').forEach(details => { details.open = true; });
+    });
+    addEventListener('afterprint', () => {
+      document.querySelectorAll('details').forEach((details, index) => {
+        details.open = printOpenState[index] ?? details.open;
+      });
+      printOpenState = [];
+    });
+  })();
+</script>
+</body>
+</html>

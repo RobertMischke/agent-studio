@@ -1,0 +1,82 @@
+{
+  "capturedAt": "2026-07-29T02:10:12.077Z",
+  "repositoryRevision": "afee6f812080dbb2dfeac15be4f651552422f275",
+  "docker": {
+    "Client": {
+      "Version": "29.1.3",
+      "ApiVersion": "1.52",
+      "DefaultAPIVersion": "1.52",
+      "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+      "GoVersion": "go1.24.4",
+      "Os": "linux",
+      "Arch": "amd64",
+      "BuildTime": "Wed Apr 29 16:41:06 2026",
+      "Context": "default"
+    },
+    "Server": {
+      "Platform": {
+        "Name": ""
+      },
+      "Version": "29.1.3",
+      "ApiVersion": "1.52",
+      "MinAPIVersion": "1.44",
+      "Os": "linux",
+      "Arch": "amd64",
+      "Components": [
+        {
+          "Name": "Engine",
+          "Version": "29.1.3",
+          "Details": {
+            "ApiVersion": "1.52",
+            "Arch": "amd64",
+            "BuildTime": "Wed Apr 29 16:41:06 2026",
+            "Experimental": "false",
+            "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+            "GoVersion": "go1.24.4",
+            "KernelVersion": "6.8.0-124-generic",
+            "MinAPIVersion": "1.44",
+            "Os": "linux"
+          }
+        },
+        {
+          "Name": "containerd",
+          "Version": "2.2.1",
+          "Details": {
+            "GitCommit": ""
+          }
+        },
+        {
+          "Name": "runc",
+          "Version": "1.3.4-0ubuntu1~24.04.1",
+          "Details": {
+            "GitCommit": ""
+          }
+        },
+        {
+          "Name": "docker-init",
+          "Version": "0.19.0",
+          "Details": {
+            "GitCommit": ""
+          }
+        }
+      ],
+      "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+      "GoVersion": "go1.24.4",
+      "KernelVersion": "6.8.0-124-generic",
+      "BuildTime": "2026-04-29T16:41:06.000000000+00:00"
+    }
+  },
+  "compose": "2.40.3+ds1-0ubuntu1~24.04.1",
+  "components": {
+    "taskServer": "task-server 1.0.0+sha.unknown",
+    "agentRunner": "agent-host 0.1.0+sha.unknown",
+    "studio": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=",
+    "faultProxyRuntime": "v22.23.1"
+  },
+  "images": {
+    "task-server": "\"sha256:6b194fcd5282dacab7b0aa1946fac45c2d92df6a9ca28e4c85f0458a3be6e59e\"|[\"agt2394-rts-canary-machine-10m-task-server@sha256:6b194fcd5282dacab7b0aa1946fac45c2d92df6a9ca28e4c85f0458a3be6e59e\"]|{\"com.agentstudio.remote-harness.identity\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.project\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.service\":\"task-server\",\"com.docker.compose.version\":\"2.40.3\",\"org.opencontainers.image.revision\":\"afee6f812080dbb2dfeac15be4f651552422f275\",\"org.opencontainers.image.version\":\"24.04\"}",
+    "fault-proxy": "\"sha256:eff728b072ca0047791e84767b829fb9871d792941ed1d4b1e819e617a972021\"|[\"agt2394-rts-canary-machine-10m-fault-proxy@sha256:eff728b072ca0047791e84767b829fb9871d792941ed1d4b1e819e617a972021\"]|{\"com.agentstudio.remote-harness.identity\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.project\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.service\":\"fault-proxy\",\"com.docker.compose.version\":\"2.40.3\",\"org.opencontainers.image.revision\":\"afee6f812080dbb2dfeac15be4f651552422f275\"}",
+    "agent-runner": "\"sha256:257e48bf94cce9a00a7445a9dd56b556b0586556dd2d94d0e43eb72bf6d85a32\"|[\"agt2394-rts-canary-machine-10m-agent-runner@sha256:257e48bf94cce9a00a7445a9dd56b556b0586556dd2d94d0e43eb72bf6d85a32\"]|{\"com.agentstudio.remote-harness.identity\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.project\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.service\":\"agent-runner\",\"com.docker.compose.version\":\"2.40.3\",\"org.opencontainers.image.revision\":\"afee6f812080dbb2dfeac15be4f651552422f275\",\"org.opencontainers.image.version\":\"24.04\"}",
+    "studio": "\"sha256:6ad851e92f88c37d26aa96abba7063cf76ae259c638afac1372a8cf9e36a0ded\"|[\"agt2394-rts-canary-machine-10m-studio@sha256:6ad851e92f88c37d26aa96abba7063cf76ae259c638afac1372a8cf9e36a0ded\"]|{\"com.agentstudio.remote-harness.identity\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.project\":\"agt2394-rts-canary-machine-10m\",\"com.docker.compose.service\":\"studio\",\"com.docker.compose.version\":\"2.40.3\",\"org.opencontainers.image.description\":\"a powerful, enterprise-ready, open source web server with automatic HTTPS written in Go\",\"org.opencontainers.image.documentation\":\"https://caddyserver.com/docs\",\"org.opencontainers.image.licenses\":\"Apache-2.0\",\"org.opencontainers.image.revision\":\"afee6f812080dbb2dfeac15be4f651552422f275\",\"org.opencontainers.image.source\":\"https://github.com/caddyserver/caddy-docker\",\"org.opencontainers.image.title\":\"Caddy\",\"org.opencontainers.image.url\":\"https://caddyserver.com\",\"org.opencontainers.image.vendor\":\"Light Code Labs\",\"org.opencontainers.image.version\":\"v2.11.4\"}"
+  }
+}

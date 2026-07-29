@@ -1,0 +1,4 @@
+{"sequence":1,"phase":"claim","point":"before","recordedAt":"2026-07-29T02:07:59.469Z","monotonicMs":100,"scenarioStartedAt":"2026-07-29T02:07:59.369Z"}
+{"sequence":2,"phase":"claim","point":"after","recordedAt":"2026-07-29T02:07:59.505Z","monotonicMs":136,"scenarioStartedAt":"2026-07-29T02:07:59.369Z","taskKey":"RTS-1","runAttemptId":"run_3f8a28f3b06042f4abc5abccaef9219f","fence":1}
+{"sequence":3,"phase":"run","point":"before","recordedAt":"2026-07-29T02:07:59.533Z","monotonicMs":163,"scenarioStartedAt":"2026-07-29T02:07:59.369Z"}
+{"sequence":4,"phase":"run","point":"after","recordedAt":"2026-07-29T02:07:59.662Z","monotonicMs":292,"scenarioStartedAt":"2026-07-29T02:07:59.369Z","status":"worktree-blocked","busyPath":"/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision/coding/worktree","attempts":5}

@@ -1,0 +1,70 @@
+{
+  "scenario": "divergent-salvage-lineage",
+  "seed": "historical-agt-2177",
+  "runId": "canary-salvage-lineage",
+  "accepted": true,
+  "expectedTerminal": "5-human-review",
+  "actualTerminal": "5-human-review",
+  "recoveryBudget": {
+    "unit": "review-attempts",
+    "maximum": 3,
+    "used": 3
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-grade-d",
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination"
+  ],
+  "assertions": [
+    {
+      "id": "divergent-lineage-reconstructed",
+      "passed": true,
+      "detail": "canonical=0c6ec07bc19b0cdbe40c851f15f101b3b615b34a, host=99438c5b61a17100e8f32f168835c7a5bb1cd755, immutableBase=155ed4c8f766e243643db87c651357c9db354f0b, result=580d2c653da7f8a2697b613260be7961dcab434e"
+    },
+    {
+      "id": "recoverable-host-tip-preserved",
+      "passed": true,
+      "detail": "collision ref refs/heads/runner/coding-canary-salvage-lineage/rts-11-collision-99438c5b61a1-0c6ec07bc19b retains 99438c5b61a17100e8f32f168835c7a5bb1cd755"
+    },
+    {
+      "id": "immutable-range-excludes-foreign-scope",
+      "passed": true,
+      "detail": "range 155ed4c8f766e243643db87c651357c9db354f0b..580d2c653da7f8a2697b613260be7961dcab434e contains only README.md, package.json, src/index.mjs, src/shipping.mjs, test/shipping.test.mjs"
+    },
+    {
+      "id": "cross-contaminated-review-rejected",
+      "passed": true,
+      "detail": "cross-contaminated 99438c5b61a17100e8f32f168835c7a5bb1cd755 classified ShaMismatch"
+    },
+    {
+      "id": "stale-canonical-review-rejected",
+      "passed": true,
+      "detail": "stale canonical 0c6ec07bc19b0cdbe40c851f15f101b3b615b34a classified ShaMismatch"
+    },
+    {
+      "id": "exact-result-review-passed",
+      "passed": true,
+      "detail": "subject rsub_7ebc74f46dd14de3b8343d7a60e354e3 accepted exact result 580d2c653da7f8a2697b613260be7961dcab434e"
+    },
+    {
+      "id": "single-coding-attempt-no-reissue",
+      "passed": true,
+      "detail": "codingRuns=1, taskState=5-human-review, no reissue event"
+    }
+  ],
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "evidence": {
+    "baseSha": "155ed4c8f766e243643db87c651357c9db354f0b",
+    "resultSha": "580d2c653da7f8a2697b613260be7961dcab434e",
+    "canonicalTip": "0c6ec07bc19b0cdbe40c851f15f101b3b615b34a",
+    "hostTip": "99438c5b61a17100e8f32f168835c7a5bb1cd755",
+    "collisionRef": "refs/heads/runner/coding-canary-salvage-lineage/rts-11-collision-99438c5b61a1-0c6ec07bc19b",
+    "reviewSubjectId": "rsub_7ebc74f46dd14de3b8343d7a60e354e3"
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/divergent-salvage-lineage/canary-salvage-lineage"
+}

@@ -1,0 +1,35 @@
+{
+  "serverId": "srv_f15ec870fd1f4e928d7321da13a98709",
+  "serverVersion": "1.0.0+sha.unknown",
+  "schemaVersion": 4,
+  "mode": 3,
+  "authorityReady": true,
+  "dataDirectory": "/var/lib/remote-harness/store",
+  "protocol": {
+    "current": 2,
+    "minimumSupported": 1,
+    "maximumSupported": 2,
+    "serverVersion": "1.0.0+sha.unknown",
+    "serverId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "clientKinds": [
+      "studio",
+      "runner",
+      "review-runner",
+      "engine",
+      "management"
+    ],
+    "capabilities": [
+      "coding-plane",
+      "review-plane",
+      "orchestration-plane",
+      "management-plane"
+    ]
+  },
+  "startedAt": "2026-07-29T02:20:39.923282Z",
+  "outboxBacklog": 0,
+  "oldestUnacknowledgedSequence": null,
+  "finalHandoffStates": {
+    "completed": 2,
+    "working": 1
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "scenario": "fault-gate-timeout",
+  "seed": "agt2200-gate-v1",
+  "runId": "canary-gate-timeout",
+  "accepted": true,
+  "resultSha": "2973894fdef57c052261782b4e2a6accbc048423",
+  "semanticTree": "06d4fa5b56afad6f2369c23212059823f9ae9f79",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "gate-timeout-recovered",
+  "assertions": [
+    {
+      "id": "reference-change-accepted",
+      "passed": true,
+      "detail": "exact result 2973894fdef57c052261782b4e2a6accbc048423 reached 6-completed through all five phases"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "gate-watchdog-timeout"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 1,
+    "consumed": 1
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout",
+  "expectedTerminal": "6-completed",
+  "actualTerminal": "6-completed",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 1,
+    "used": 1
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-gate-timeout",
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates"
+  ]
+}

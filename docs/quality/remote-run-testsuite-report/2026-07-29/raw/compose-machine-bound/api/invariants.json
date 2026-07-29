@@ -1,0 +1,34 @@
+{
+  "definitions": [
+    {
+      "key": "run-inventory",
+      "category": "run-inventory",
+      "comparedTruths": "Runner process inventory and active leases",
+      "violation": "A process has no lease, or a lease has no process after grace.",
+      "selfHealingAction": "Terminate the orphan process; record lease loss for the deployed backend requeue authority."
+    },
+    {
+      "key": "worktree-hygiene",
+      "category": "worktree-hygiene",
+      "comparedTruths": "Runner child cwd and host filesystem",
+      "violation": "A tracked child cwd is marked deleted.",
+      "selfHealingAction": "Terminate the process tree."
+    },
+    {
+      "key": "load-gate",
+      "category": "load-invariant",
+      "comparedTruths": "One-minute host load and logical core count",
+      "violation": "Normalized load remains above the configured threshold.",
+      "selfHealingAction": "Stop new claims while existing runs continue."
+    },
+    {
+      "key": "lane-process-consistency",
+      "category": "lane-process-consistency",
+      "comparedTruths": "Progress lane and active run authority",
+      "violation": "A Progress task has no active run heartbeat after grace.",
+      "selfHealingAction": "Emit the Tranche 0 violation and retain the lane for the deployed backend requeue authority."
+    }
+  ],
+  "recentViolations": [],
+  "pendingRunnerActions": 0
+}

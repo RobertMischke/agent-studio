@@ -1,0 +1,14 @@
+{
+  "role": "review",
+  "workerId": "canary-parallel-12-worker-loss-review-worker-2",
+  "hostId": "canary-parallel-12-worker-loss-review-worker-2-host",
+  "slot": 1,
+  "origin": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/fixture-origin.git",
+  "attemptRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/review/canary-parallel-12-worker-loss-review-worker-2/review-rat-b0eaffff35a8445ba6a0b3e28089bd68-f1",
+  "workspace": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/review/canary-parallel-12-worker-loss-review-worker-2/review-rat-b0eaffff35a8445ba6a0b3e28089bd68-f1/repository",
+  "taskKey": "RTL-2",
+  "ordinal": 2,
+  "resultRef": "refs/heads/agent-studio/results/run_ff8bc0632b734b36b471d24c2fb5ac03/d58217c23d269806571691cdd30e7fdb6f348f9e",
+  "expectedResultSha": "d58217c23d269806571691cdd30e7fdb6f348f9e",
+  "holdMs": 100
+}

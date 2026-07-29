@@ -1,0 +1,319 @@
+[
+    {
+        "Id": "fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec",
+        "Created": "2026-07-29T02:20:39.22126292Z",
+        "Path": "dotnet",
+        "Args": [
+            "task-server.dll"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1571412,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-29T02:20:39.602929629Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-07-29T04:20:44.784350724+02:00",
+                        "End": "2026-07-29T04:20:44.837013727+02:00",
+                        "ExitCode": 0,
+                        "Output": "{\"status\":\"ready\",\"authority\":\"restored\",\"mode\":\"Draining\"}"
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:46.837744045+02:00",
+                        "End": "2026-07-29T04:20:46.882753681+02:00",
+                        "ExitCode": 0,
+                        "Output": "{\"status\":\"ready\",\"authority\":\"restored\",\"mode\":\"Normal\"}"
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:48.883392419+02:00",
+                        "End": "2026-07-29T04:20:48.935177286+02:00",
+                        "ExitCode": 0,
+                        "Output": "{\"status\":\"ready\",\"authority\":\"restored\",\"mode\":\"Normal\"}"
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:50.935897903+02:00",
+                        "End": "2026-07-29T04:20:50.978680722+02:00",
+                        "ExitCode": 0,
+                        "Output": "{\"status\":\"ready\",\"authority\":\"restored\",\"mode\":\"Normal\"}"
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:6b194fcd5282dacab7b0aa1946fac45c2d92df6a9ca28e4c85f0458a3be6e59e",
+        "ResolvConfPath": "/var/lib/docker/containers/fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec/hostname",
+        "HostsPath": "/var/lib/docker/containers/fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec/hosts",
+        "LogPath": "/var/lib/docker/containers/fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec/fbac332ec13f7ef828fbfc67f0f1e0248def5c458670b1d41b0ded5893da8eec-json.log",
+        "Name": "/agt2394-rts-canary-machine-10m-task-server-1",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "agt2394-rts-canary-machine-10m-task-server-data:/var/lib/remote-harness:rw"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "agt2394-rts-canary-machine-10m-network",
+            "PortBindings": {
+                "5071/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19741"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ],
+            "Init": true
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "agt2394-rts-canary-machine-10m-task-server-data",
+                "Source": "/var/lib/docker/volumes/agt2394-rts-canary-machine-10m-task-server-data/_data",
+                "Destination": "/var/lib/remote-harness",
+                "Driver": "local",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "fbac332ec13f",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "5071/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "BACKUP_PATH=/var/lib/remote-harness/backups",
+                "TaskServer__MaximumLeaseSeconds=900",
+                "TaskServer__ResultRefGcEnabled=false",
+                "LISTEN_URL=http://0.0.0.0:5071",
+                "AUTH_TOKEN=[REDACTED]",
+                "STORE_PATH=/var/lib/remote-harness/store",
+                "AllowedHosts=*",
+                "AUTH=bearer",
+                "TaskServer__MinimumLeaseSeconds=5",
+                "TaskServer__InvariantReconciliationSeconds=5",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "APP_UID=1654",
+                "ASPNETCORE_HTTP_PORTS=8080",
+                "DOTNET_RUNNING_IN_CONTAINER=true",
+                "DOTNET_VERSION=10.0.10",
+                "ASPNET_VERSION=10.0.10"
+            ],
+            "Cmd": null,
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "curl",
+                    "--fail",
+                    "--silent",
+                    "http://127.0.0.1:5071/readyz"
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "StartPeriod": 5000000000,
+                "Retries": 30
+            },
+            "Image": "agt2394-rts-canary-machine-10m-task-server:local",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "dotnet",
+                "task-server.dll"
+            ],
+            "Labels": {
+                "com.agentstudio.remote-harness.disposable": "true",
+                "com.agentstudio.remote-harness.identity": "agt2394-rts-canary-machine-10m",
+                "com.agentstudio.remote-harness.run-id": "canary-machine-10m",
+                "com.docker.compose.config-hash": "ba10d56c4db16397717ba930abb84d833d0e41b7df6719d4bd14fd38f9d97202",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:6b194fcd5282dacab7b0aa1946fac45c2d92df6a9ca28e4c85f0458a3be6e59e",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "agt2394-rts-canary-machine-10m",
+                "com.docker.compose.project.config_files": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite/compose.yaml",
+                "com.docker.compose.project.environment_file": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/compose.env",
+                "com.docker.compose.project.working_dir": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite",
+                "com.docker.compose.replace": "task-server-1",
+                "com.docker.compose.service": "task-server",
+                "com.docker.compose.version": "2.40.3",
+                "org.opencontainers.image.revision": "afee6f812080dbb2dfeac15be4f651552422f275",
+                "org.opencontainers.image.version": "24.04"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "8bbf55a1ecde88fb59c263091957210e2a0782181349d89c28b319114acfd530",
+            "SandboxKey": "/var/run/docker/netns/8bbf55a1ecde",
+            "Ports": {
+                "5071/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19741"
+                    }
+                ]
+            },
+            "Networks": {
+                "agt2394-rts-canary-machine-10m-network": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "agt2394-rts-canary-machine-10m-task-server-1",
+                        "task-server"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "21681b62ede945ff1f835337eea4273eb5ceedee27a1f2d28788f067d1ea722a",
+                    "EndpointID": "701e8a1ec1655b11c1ddc8488a1b91fde95aca4cceb8c5472649bd770c89a603",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+                    "MacAddress": "82:66:b1:60:44:0f",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "agt2394-rts-canary-machine-10m-task-server-1",
+                        "task-server",
+                        "fbac332ec13f"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:cf83069c01277b90294de8fe5f6bc27e2c3dfeb5a79cadeb1710181de82cfa39",
+            "size": 2010,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

@@ -1,0 +1,11 @@
+{
+  "harness": "remote-test-suite",
+  "version": 1,
+  "scenario": "fault-worktree-collision",
+  "runId": "canary-worktree-collision",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision",
+  "acknowledgement": "rts-fi-fae0cdd83f9222b2a5c2d017710f146d18bdf87c6cd7d043a379e58bd8138627",
+  "faults": [
+    "worktree-target-collision"
+  ]
+}

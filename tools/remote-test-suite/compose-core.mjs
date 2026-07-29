@@ -1,6 +1,8 @@
 import path from 'node:path';
 
 export const integrationProfile = 'remote-integration';
+export const defaultAutonomyDurationSeconds = 25;
+export const realAutonomyDurationSeconds = 600;
 export const unitServices = Object.freeze({
   studio: 'studio',
   'task-server': 'task-server',
@@ -28,6 +30,31 @@ export function validatePorts(ports) {
   }
   if (new Set(values).size !== values.length) throw new Error('Harness ports must be unique.');
   return ports;
+}
+
+export function createAutonomyPolicy(
+  durationSeconds,
+  { machineBound = false } = {}) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 20 || durationSeconds > 3600) {
+    throw new Error('Autonomy duration must be an integer between 20 and 3600 seconds.');
+  }
+  if (durationSeconds >= realAutonomyDurationSeconds && !machineBound) {
+    throw new Error(
+      'An autonomy duration of ten minutes or more requires the explicit MachineBound marker.');
+  }
+  if (machineBound && durationSeconds < realAutonomyDurationSeconds) {
+    throw new Error(
+      'The MachineBound autonomy canary must run for at least ten real minutes.');
+  }
+  const requiredDurationMs = durationSeconds * 1000;
+  return Object.freeze({
+    mode: machineBound
+      ? 'machine-bound-ten-minute'
+      : 'short-card',
+    requiredDurationMs,
+    minimumWorkUnits: Math.max(2, Math.floor(durationSeconds / 12)),
+    usefulWorkTailToleranceMs: 15_000
+  });
 }
 
 export function createComposePlan({ repoRoot, runId, ports = defaultPorts }) {
@@ -168,7 +195,11 @@ export function assertRollingEvidence(evidence) {
     'Runner replacement must reattach the same active run id and fence.');
   check(assertions, 'task-server-restart-quarantines',
     evidence.quarantined?.task?.state === '3-progress'
-      && evidence.quarantined?.runs?.some(run => run.status === 'process-unknown'),
+      && (evidence.quarantined?.runs?.some(run =>
+        run.status === 'process-unknown')
+        || evidence.quarantined?.events?.some(event =>
+          event.kind === 'lifecycle.process-unknown'
+          && evidence.quarantined?.runs?.some(run => run.runId === event.runId))),
     'Task Server replacement must quarantine unresolved authority as process-unknown.');
   check(assertions, 'stale-write-rejected', evidence.staleWriteStatus === 409,
     'The pre-restart fence must not complete after recovery.');
@@ -194,6 +225,55 @@ export function assertRollingEvidence(evidence) {
     'Audit sequence numbers must remain unique.');
   check(assertions, 'invariants-clear', evidence.invariants?.pendingRunnerActions === 0,
     'Invariant reconciliation must leave no pending Runner actions.');
+  return assertions;
+}
+
+export function assertAutonomyEvidence(evidence, policy) {
+  if (!policy) throw new Error('An explicit autonomy policy is required.');
+  const assertions = [];
+  check(assertions, 'configured-real-duration',
+    evidence?.durationMs >= policy.requiredDurationMs,
+    `The Task Server partition must last at least ${policy.requiredDurationMs} real milliseconds.`);
+  check(assertions, 'multiple-preclaimed-slots',
+    evidence?.slots?.length >= 2
+      && new Set(evidence.slots.map(slot => slot.runId)).size === evidence.slots.length,
+    'At least two already-claimed remote slots must execute through the outage.');
+  check(assertions, 'useful-work-throughout-outage',
+    (evidence?.slots ?? []).every(slot =>
+      slot.workUnits >= policy.minimumWorkUnits
+      && Date.parse(slot.lastUsefulWorkAt)
+        >= Date.parse(evidence.requiredWorkThroughAt) - policy.usefulWorkTailToleranceMs),
+    'Every slot must record useful work through the configured partition.');
+  check(assertions, 'no-unsafe-new-claim',
+    (evidence?.claimDuringPartitionStatus === 409
+      || evidence?.claimDuringPartitionStatus >= 500)
+      && evidence?.unclaimedTask?.state === '2-ready',
+    'Transport uncertainty must not admit the waiting task.');
+  check(assertions, 'authority-before-replay',
+    (evidence?.slots ?? []).every(slot =>
+      Date.parse(slot.reconciledAt) >= Date.parse(evidence.partitionEndedAt)
+      && Date.parse(slot.completedAt) >= Date.parse(slot.reconciledAt)),
+    'Every slot must reconcile its exact fence before replay completes.');
+  check(assertions, 'results-and-terminal-delivered-once',
+    (evidence?.histories ?? []).every((history, index) =>
+      history.task?.state === '4-auto-review'
+      && history.runs?.length === 1
+      && history.runs[0]?.resultSha === evidence.slots[index]?.resultSha
+      && unique((history.events ?? []).map(item => item.idempotencyKey))
+      && unique((history.artifacts ?? []).map(item => item.idempotencyKey))
+      && history.artifacts?.length === 1),
+    'Events, artifacts, Result SHA, terminal, and completion must survive recovery without duplication.');
+  check(assertions, 'outboxes-drained',
+    (evidence?.slots ?? []).every(slot =>
+      slot.backlogCount === 0
+      && slot.lastSequence === slot.lastAcknowledgedSequence),
+    'Every recovered Runner outbox must be fully acknowledged.');
+  check(assertions, 'no-zombie-or-phantom-generation',
+    (evidence?.slots ?? []).every(slot =>
+      slot.phase === 'completed'
+      && slot.generation?.alive === false
+      && slot.generation?.deathProven === true),
+    'Recovered slots must close their one contained generation with no zombie replacement.');
   return assertions;
 }
 

@@ -59,11 +59,13 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model routing policy (model, thinking level, risk floors, benchmark evidence) | [domains/model-routing-policy.md](../system/domains/model-routing-policy.md) |
 | Tokens | [domains/tokens.md](../system/domains/tokens.md) |
 | Remote execution outcome and recovery | [contracts/run-outcome.md](../system/contracts/run-outcome.md#remote-execution-outcome-adapter) |
+| Remote infrastructure scenario result contract | [contracts/remote-run-result.md](../system/contracts/remote-run-result.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
 | Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Remote Run infrastructure testsuite report (acceptance matrix, phase timing, incident recovery, and raw evidence) | [2026-07-29 acceptance canary](../quality/remote-run-testsuite-report/2026-07-29/index.html) · [report workbench](../quality/remote-run-testsuite-report/index.html) · [validated fixture](../../tools/remote-test-suite/fixtures/report/validated-runs.json) · [schema](../../tools/remote-test-suite/run-result.schema.json) |
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |

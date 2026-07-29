@@ -1,0 +1,1 @@
+{"faultId":"gate-watchdog-timeout","incidentClass":"gate-timeout","operation":"gate-command","occurrence":1,"action":"watchdog-timeout","parameters":{"timeoutMs":350,"fixtureDelayMs":10000,"maxRecoveryAttempts":1}}

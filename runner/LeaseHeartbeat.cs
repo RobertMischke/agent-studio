@@ -16,6 +16,8 @@ public sealed class LeaseHeartbeat
     private readonly Action<string> _log;
     private readonly RunnerProcessInventoryTracker? _inventory;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly Func<DateTime> _utcNow;
+    private readonly DurableLeaseAuthority? _authority;
 
     public LeaseHeartbeat(
         TaskServerClient client,
@@ -23,7 +25,9 @@ public sealed class LeaseHeartbeat
         RunLeaseInfoDto lease,
         Action<string> log,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        DurableLeaseAuthority? authority = null,
+        Func<DateTime>? utcNow = null)
     {
         _client = client;
         _options = options;
@@ -31,6 +35,8 @@ public sealed class LeaseHeartbeat
         _log = log;
         _inventory = inventory;
         _delay = delay ?? Task.Delay;
+        _authority = authority;
+        _utcNow = utcNow ?? (() => DateTime.UtcNow);
     }
 
     /// <summary>Set when a heartbeat is rejected: the run must stop, the lease is gone.</summary>
@@ -65,6 +71,8 @@ public sealed class LeaseHeartbeat
                 }
                 catch (TaskServerException ex) when (IsDefinitiveLeaseRejection(ex))
                 {
+                    _authority?.Reject(
+                        $"Task Server rejected lease renewal with HTTP {ex.StatusCode}: {ex.Message}");
                     MarkLeaseLost(
                         stopRun,
                         $"Task Server rejected lease renewal with HTTP {ex.StatusCode}: {ex.Message}");
@@ -77,9 +85,14 @@ public sealed class LeaseHeartbeat
                     // window. Stop before the last known expiry minus one renewal
                     // interval so suspend, clock, and transport uncertainty cannot
                     // turn an unreachable Task Server into autonomous execution.
-                    var stopBefore = authorityExpiresAt - uncertaintyMargin;
-                    if (DateTime.UtcNow >= stopBefore)
+                    _authority?.MarkUncertain(
+                        $"lease renewal transport failure: {ex.Message}");
+                    var stopBefore = _authority?.StopBeforeUtc
+                                     ?? authorityExpiresAt - uncertaintyMargin;
+                    if (_utcNow() >= stopBefore)
                     {
+                        _authority?.Reject(
+                            $"local autonomy deadline exhausted at {stopBefore:o}");
                         MarkLeaseLost(
                             stopRun,
                             "renewal safety boundary reached: task-server-unavailable; " +
@@ -94,11 +107,15 @@ public sealed class LeaseHeartbeat
 
                 if (!resp.Granted)
                 {
+                    _authority?.Reject($"{resp.Outcome} - {resp.Message}");
                     MarkLeaseLost(stopRun, $"{resp.Outcome} - {resp.Message}");
                     return;
                 }
                 if (resp.Lease is not null)
                     authorityExpiresAt = resp.Lease.ExpiresAt.ToUniversalTime();
+                _authority?.Confirm(
+                    authorityExpiresAt,
+                    "fenced lease renewal reconciled before report replay");
                 _inventory?.Apply(resp.ReconciliationActions);
                 await _delay(interval, stopRun.Token);
             }

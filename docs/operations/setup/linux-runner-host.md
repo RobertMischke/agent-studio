@@ -255,7 +255,7 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_CLI_RESUME_ARGS` | `--cli-resume-args` | (none) | Optional provider-specific same-session arguments containing the literal `{sessionId}` placeholder. A supported infrastructure failure resumes at most once; an invalid session falls back to durable salvage once and then escalates. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
 | `RUNNER_AUTH_TOKEN` | none | (none) | Compatibility environment input. Prefer the credential file so the secret is absent from process diagnostics. |
-| `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
+| `RUNNER_TTL_SECONDS` | `--ttl` | `900` | Requested lease TTL; the server clamps it. The default grants a bounded 15-minute authority window so an already-claimed run can survive ten minutes of transport loss. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
 | `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Maximum concurrent task slots on this host. |
@@ -520,7 +520,16 @@ The startup Git push probe still describes coding capability. A host whose
 identity reports `read-only` may claim Epic planning, but it receives no normal
 coding claims until push capability is restored.
 
-At startup the daemon reads `RUNNER_STATE_DIR` before making a new claim. A
+At startup the daemon reads `RUNNER_STATE_DIR` before registration or a new
+claim. Each live worker directory contains a durable `lease-authority.json`
+with the last server-issued expiry, a stop-before deadline one heartbeat before
+expiry, and confirmed, uncertain, or rejected replay state. A persisted
+deadline watcher runs while registration is unavailable. If stop-before is
+reached, it reaps and verifies every process whose cwd belongs to the worktree,
+records `authority-deadline-exhausted`, and retains the slot for honest server
+reconciliation. It never starts a replacement while death is unproven.
+
+A
 persisted attempt is adopted only when its worker PID still has the recorded
 start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
@@ -535,6 +544,17 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+During a Task Server or transport outage, transient claim, heartbeat, event,
+artifact, result-handoff, and completion failures do not terminate the daemon.
+Already-claimed workers may continue only until their durable stop-before
+deadline. Output and terminal facts accumulate in the monotonic local outbox;
+new claims stop, and no queued report is replayed while authority is uncertain.
+After connectivity returns, a successful exact-lease and exact-fence renewal
+must reconcile authority before replay. Idempotency keys make retrying a lost
+response safe. Task Server restart is different from transport recovery: it
+quarantines the attempt as `process-unknown` and requires positive containment
+proof before a higher-fenced replacement can start.
 
 The per-project probe additionally gates the first claim, including an Epic
 planning claim, because a project must have a proven delivery path before the
@@ -659,10 +679,11 @@ next process starts:
    or the moving salvage branch alone is not sufficient.
 
 If upload, push, the connection, the runner process, or the Task Server fails,
-the daemon replays the original monotonic outbox before claiming new work.
-Idempotency keys make a lost response safe. A transfer failure is retried
-without starting the coding CLI and without consuming coding or completion
-budget. `transfer-recovery` means the host still owns recoverable transfer work.
+the daemon replays the original monotonic outbox only after authority has been
+reconciled and before claiming new work. Idempotency keys make a lost response
+safe. A transfer failure is retried without starting the coding CLI and without
+consuming coding or completion budget. `transfer-recovery` means the host still
+owns recoverable transfer work.
 
 Operators can inspect durable server projections without reading host files:
 

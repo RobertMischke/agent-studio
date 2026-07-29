@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "remote-run-result/v1",
+  "scenarioId": "runner-restart-during-run",
+  "runId": "run-reference-001",
+  "seed": 2200,
+  "startedAt": "2026-07-28T08:00:00Z",
+  "finishedAt": "2026-07-28T08:00:12Z",
+  "wallClockDurationMs": 12000,
+  "components": [
+    {
+      "name": "task-server",
+      "image": "registry.example/task-server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "agent-runner",
+      "image": null,
+      "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "host": {
+    "id": "host-01",
+    "name": "runner-host-01"
+  },
+  "runner": {
+    "id": "runner-01",
+    "name": "coding-01"
+  },
+  "phases": [
+    {
+      "phase": "Claim",
+      "status": "Executed",
+      "queuedAt": "2026-07-28T08:00:00Z",
+      "startedAt": "2026-07-28T08:00:01Z",
+      "finishedAt": "2026-07-28T08:00:02Z",
+      "queueDurationMs": 1000,
+      "executionDurationMs": 1000,
+      "durationSource": "UtcWallClock",
+      "reason": null
+    },
+    {
+      "phase": "Run",
+      "status": "Executed",
+      "queuedAt": "2026-07-28T08:00:02Z",
+      "startedAt": "2026-07-28T08:00:03Z",
+      "finishedAt": "2026-07-28T08:00:08Z",
+      "queueDurationMs": 1000,
+      "executionDurationMs": 5000,
+      "durationSource": "Monotonic",
+      "reason": null
+    },
+    {
+      "phase": "Gate",
+      "status": "Skipped",
+      "queuedAt": "2026-07-28T08:00:08Z",
+      "startedAt": null,
+      "finishedAt": "2026-07-28T08:00:08Z",
+      "queueDurationMs": 0,
+      "executionDurationMs": 0,
+      "durationSource": "UtcWallClock",
+      "reason": "scenario does not require an integration gate"
+    },
+    {
+      "phase": "Review",
+      "status": "Executed",
+      "queuedAt": "2026-07-28T08:00:08Z",
+      "startedAt": "2026-07-28T08:00:09Z",
+      "finishedAt": "2026-07-28T08:00:12Z",
+      "queueDurationMs": 1000,
+      "executionDurationMs": 3000,
+      "durationSource": "Monotonic",
+      "reason": null
+    }
+  ],
+  "tokens": {
+    "input": {
+      "status": "Unavailable",
+      "value": null,
+      "unavailableReason": "provider stream omitted usage"
+    },
+    "output": {
+      "status": "Unavailable",
+      "value": null,
+      "unavailableReason": "provider stream omitted usage"
+    },
+    "cached": {
+      "status": "Unavailable",
+      "value": null,
+      "unavailableReason": "provider does not expose cached tokens"
+    },
+    "total": {
+      "status": "Unavailable",
+      "value": null,
+      "unavailableReason": "input and output usage unavailable"
+    },
+    "byPhase": []
+  },
+  "incident": {
+    "id": "incident-runner-restart",
+    "faultSchedule": [
+      {
+        "faultId": "restart-1",
+        "atPhase": "Run",
+        "offsetMs": 2000,
+        "action": "restart runner daemon without killing detached worker"
+      }
+    ]
+  },
+  "outcome": {
+    "expected": "same attempt resumes and reaches review",
+    "actual": "expected-healed"
+  },
+  "assertions": [
+    {
+      "assertionId": "same-attempt",
+      "passed": true,
+      "evidenceRefs": [
+        "task-history"
+      ],
+      "detail": "attempt id, fence, and epoch remained authoritative"
+    }
+  ],
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+  ],
+  "task": {
+    "taskKey": "AGT-REF-1",
+    "baseSha": "1111111111111111111111111111111111111111",
+    "resultSha": "2222222222222222222222222222222222222222",
+    "reviewedSha": "2222222222222222222222222222222222222222",
+    "finalLane": "5-human-review"
+  },
+  "attempts": [
+    {
+      "kind": "Run",
+      "attemptId": "run-attempt-001",
+      "leaseFence": 7,
+      "authorityEpoch": 3
+    },
+    {
+      "kind": "Review",
+      "attemptId": "review-attempt-001",
+      "leaseFence": 8,
+      "authorityEpoch": 3
+    }
+  ],
+  "artifacts": [
+    {
+      "evidenceId": "task-history",
+      "source": "TaskServer",
+      "uri": "task-server://runs/run-reference-001/history",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "evidenceId": "runner-log",
+      "source": "Runner",
+      "uri": "runner://run-reference-001/session-events.jsonl",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "evidenceAuthority": {
+    "authorityEpoch": 3,
+    "maxLeaseFence": 8
+  },
+  "collectedAt": "2026-07-28T08:00:13Z",
+  "contentSha256": "6b79017e000288b20421b5bd882a2b89213e97979f16ba7fb96aa8f3bfed73b0"
+}

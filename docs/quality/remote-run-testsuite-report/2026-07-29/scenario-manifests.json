@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "manifests": [
+    {
+      "id": "compose-machine-bound",
+      "origin": "generated",
+      "href": "./manifests/compose-machine-bound.json",
+      "sha256": "e1fdaeada84fb292308a1ab022896380f9434e5ad5a027a404b4612f3c79f379",
+      "bytes": 354
+    },
+    {
+      "id": "divergent-salvage-lineage",
+      "origin": "checked-in",
+      "href": "./manifests/divergent-salvage-lineage.json",
+      "sha256": "8ac8032a7620e7be2c0fffe1da3195eb02cfdf3ac2a7a369ac63533ffd8899a2",
+      "bytes": 1800
+    },
+    {
+      "id": "external-completion-cycle",
+      "origin": "checked-in",
+      "href": "./manifests/external-completion-cycle.json",
+      "sha256": "3cd89c4d46982267bea0cd52ec17532499bd4560ae9b0a0efca3af990448ce90",
+      "bytes": 1667
+    },
+    {
+      "id": "fault-gate-timeout",
+      "origin": "checked-in",
+      "href": "./manifests/fault-gate-timeout.json",
+      "sha256": "9cc62bb8beaca42b5d320b7cba8eeede451165f73368a5274ab7513463eda9d3",
+      "bytes": 1625
+    },
+    {
+      "id": "fault-lost-completion-sentinel",
+      "origin": "checked-in",
+      "href": "./manifests/fault-lost-completion-sentinel.json",
+      "sha256": "875e4f29119845c3c5c039181774682ac56f42eaa10894380be38249cc6c2f57",
+      "bytes": 1643
+    },
+    {
+      "id": "fault-task-server-network-blips",
+      "origin": "checked-in",
+      "href": "./manifests/fault-task-server-network-blips.json",
+      "sha256": "5c0217ae5c4dd1b4a037a4909a8c0bbcb3cb87a4b917d15cde7625bf9d4ed7ed",
+      "bytes": 1643
+    },
+    {
+      "id": "fault-worktree-collision",
+      "origin": "checked-in",
+      "href": "./manifests/fault-worktree-collision.json",
+      "sha256": "29384b4baca9fd879a6b6585f272c3851cd14dbc2da5568adb91d864a6999945",
+      "bytes": 1580
+    },
+    {
+      "id": "lease-adoption-restart",
+      "origin": "checked-in",
+      "href": "./manifests/lease-adoption-restart.json",
+      "sha256": "3e03223c04652a496da50f91ef236d8a1cf9facb4103905067de4abd896d5b38",
+      "bytes": 1677
+    },
+    {
+      "id": "parallel-baseline",
+      "origin": "generated",
+      "href": "./manifests/parallel-baseline.json",
+      "sha256": "53f4890c107ad688d45e18a2b138056a547438e4bd8f8c1515056c4a36744abb",
+      "bytes": 350
+    },
+    {
+      "id": "parallel-worker-loss",
+      "origin": "generated",
+      "href": "./manifests/parallel-worker-loss.json",
+      "sha256": "53e38f52ebb81b7e4e91d9c4594a860a45d9e66081534513acfcc2dd903b2642",
+      "bytes": 508
+    },
+    {
+      "id": "reference-change",
+      "origin": "checked-in",
+      "href": "./manifests/reference-change.json",
+      "sha256": "219a4d03657ca4e021f3bfe89d0307e964a46f21f2819708029359f0316353fa",
+      "bytes": 1555
+    }
+  ]
+}

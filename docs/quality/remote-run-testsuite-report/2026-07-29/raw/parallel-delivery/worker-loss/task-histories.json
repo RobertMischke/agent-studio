@@ -1,0 +1,1226 @@
+[
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-1",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-1",
+      "title": "Isolated parallel reference delivery 1",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4205517Z",
+      "updatedAt": "2026-07-29T02:08:52.3699668Z",
+      "body": "Create only the deterministic namespace for RTL-1. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_ef03135ab54446e2926ec3f67e071351",
+        "taskId": "tsk-canary-parallel-12-worker-loss-1",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.742866Z",
+        "startedAt": "2026-07-29T02:08:45.742866Z",
+        "finishedAt": "2026-07-29T02:08:46.7495499Z",
+        "resultSha": "50ef20ccd13ce93cf71c99d3a4e9d48c5e636d72",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 25,
+        "eventId": "evt_8438aa368ed7433e8c55913b6fcddb40",
+        "runId": "run_ef03135ab54446e2926ec3f67e071351",
+        "taskId": "tsk-canary-parallel-12-worker-loss-1",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-1.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_ef03135ab54446e2926ec3f67e071351:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7497383Z",
+        "sequence": null
+      },
+      {
+        "cursor": 26,
+        "eventId": "evt_6cb0ac7c029745d1ad4868b0e4e5635b",
+        "runId": "run_ef03135ab54446e2926ec3f67e071351",
+        "taskId": "tsk-canary-parallel-12-worker-loss-1",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_ef03135ab54446e2926ec3f67e071351:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7497987Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 122,
+        "occurredAt": "2026-07-29T02:08:45.4206621Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-1",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-1\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 143,
+        "occurredAt": "2026-07-29T02:08:45.743165Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_ef03135ab54446e2926ec3f67e071351",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-1\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 155,
+        "occurredAt": "2026-07-29T02:08:46.4926797Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_ef03135ab54446e2926ec3f67e071351",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"666649d3ca233e730d42f9ae5b3c79592d9eb8334e4484cdbcf3e004f8264eed\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"50ef20ccd13ce93cf71c99d3a4e9d48c5e636d72\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_ef03135ab54446e2926ec3f67e071351/50ef20ccd13ce93cf71c99d3a4e9d48c5e636d72\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.4924896Z\"}"
+      },
+      {
+        "sequence": 167,
+        "occurredAt": "2026-07-29T02:08:46.7498506Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_ef03135ab54446e2926ec3f67e071351",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-1.\",\"ResultEnvelopeDigest\":\"666649d3ca233e730d42f9ae5b3c79592d9eb8334e4484cdbcf3e004f8264eed\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-1:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 227,
+        "occurredAt": "2026-07-29T02:08:52.3700423Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-1",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 26
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-2",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-2",
+      "title": "Isolated parallel reference delivery 2",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4319895Z",
+      "updatedAt": "2026-07-29T02:08:52.6844037Z",
+      "body": "Create only the deterministic namespace for RTL-2. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-2",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.7604546Z",
+        "startedAt": "2026-07-29T02:08:45.7604546Z",
+        "finishedAt": "2026-07-29T02:08:46.7629882Z",
+        "resultSha": "d58217c23d269806571691cdd30e7fdb6f348f9e",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 27,
+        "eventId": "evt_cb1d3a75c6564f508ad93a4c67407bea",
+        "runId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-2",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-2.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_ff8bc0632b734b36b471d24c2fb5ac03:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7631223Z",
+        "sequence": null
+      },
+      {
+        "cursor": 28,
+        "eventId": "evt_f87060e8fe514645808af092b9a796e9",
+        "runId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-2",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_ff8bc0632b734b36b471d24c2fb5ac03:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7631604Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 123,
+        "occurredAt": "2026-07-29T02:08:45.4320833Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-2",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-2\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 144,
+        "occurredAt": "2026-07-29T02:08:45.7606551Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-2\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 156,
+        "occurredAt": "2026-07-29T02:08:46.5581828Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"3fdd66760844b931780e4f70025261fdadc94f91afa6429da7f988f717ebe6d4\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"d58217c23d269806571691cdd30e7fdb6f348f9e\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_ff8bc0632b734b36b471d24c2fb5ac03/d58217c23d269806571691cdd30e7fdb6f348f9e\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.5580218Z\"}"
+      },
+      {
+        "sequence": 168,
+        "occurredAt": "2026-07-29T02:08:46.7631868Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_ff8bc0632b734b36b471d24c2fb5ac03",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-2.\",\"ResultEnvelopeDigest\":\"3fdd66760844b931780e4f70025261fdadc94f91afa6429da7f988f717ebe6d4\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-2:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 228,
+        "occurredAt": "2026-07-29T02:08:52.6844814Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-2",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 28
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-3",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-3",
+      "title": "Isolated parallel reference delivery 3",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4455723Z",
+      "updatedAt": "2026-07-29T02:08:52.8900568Z",
+      "body": "Create only the deterministic namespace for RTL-3. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "taskId": "tsk-canary-parallel-12-worker-loss-3",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.7808911Z",
+        "startedAt": "2026-07-29T02:08:45.7808911Z",
+        "finishedAt": "2026-07-29T02:08:46.7744423Z",
+        "resultSha": "2e47de84d090b84fa1e3d6aa1f20e0bb841702d5",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 29,
+        "eventId": "evt_1f4c647748764f668df93968cdb0ef21",
+        "runId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "taskId": "tsk-canary-parallel-12-worker-loss-3",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-3.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_7d20d77ffd944beea6ab15453e9aec27:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7745813Z",
+        "sequence": null
+      },
+      {
+        "cursor": 30,
+        "eventId": "evt_b9191a2f0dde4d73a08a66368bca68ae",
+        "runId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "taskId": "tsk-canary-parallel-12-worker-loss-3",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_7d20d77ffd944beea6ab15453e9aec27:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7746214Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 124,
+        "occurredAt": "2026-07-29T02:08:45.4456671Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-3",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-3\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 145,
+        "occurredAt": "2026-07-29T02:08:45.7812899Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-3\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 157,
+        "occurredAt": "2026-07-29T02:08:46.5685433Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"a1f21ef2883475b3d41ca665c3adbc629595e146812b6e9e74b237a45f6fddef\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"2e47de84d090b84fa1e3d6aa1f20e0bb841702d5\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_7d20d77ffd944beea6ab15453e9aec27/2e47de84d090b84fa1e3d6aa1f20e0bb841702d5\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.5683885Z\"}"
+      },
+      {
+        "sequence": 169,
+        "occurredAt": "2026-07-29T02:08:46.7746545Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_7d20d77ffd944beea6ab15453e9aec27",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-3.\",\"ResultEnvelopeDigest\":\"a1f21ef2883475b3d41ca665c3adbc629595e146812b6e9e74b237a45f6fddef\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-3:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 229,
+        "occurredAt": "2026-07-29T02:08:52.8901339Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-3",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 30
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-4",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-4",
+      "title": "Isolated parallel reference delivery 4",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4574446Z",
+      "updatedAt": "2026-07-29T02:08:53.0773936Z",
+      "body": "Create only the deterministic namespace for RTL-4. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-4",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.8109414Z",
+        "startedAt": "2026-07-29T02:08:45.8109414Z",
+        "finishedAt": "2026-07-29T02:08:46.7881397Z",
+        "resultSha": "bb45745b6caefa6afea48b02c025f76926a6bf84",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 31,
+        "eventId": "evt_251b9504c30f4fce91e9a62055d4d3fc",
+        "runId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-4",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-4.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_a9c87293c2b0450686e0f4d0bf966e03:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7882796Z",
+        "sequence": null
+      },
+      {
+        "cursor": 32,
+        "eventId": "evt_92e8994f80724eb9bc50f9d368f7d8ba",
+        "runId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "taskId": "tsk-canary-parallel-12-worker-loss-4",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_a9c87293c2b0450686e0f4d0bf966e03:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7883175Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 125,
+        "occurredAt": "2026-07-29T02:08:45.4575015Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-4",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-4\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 146,
+        "occurredAt": "2026-07-29T02:08:45.8113562Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-4\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 158,
+        "occurredAt": "2026-07-29T02:08:46.5837538Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"2375f97325eea5feb02b3eaaee6d987c908773afd1c58fb73587138e1f5560f5\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"bb45745b6caefa6afea48b02c025f76926a6bf84\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_a9c87293c2b0450686e0f4d0bf966e03/bb45745b6caefa6afea48b02c025f76926a6bf84\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.5835218Z\"}"
+      },
+      {
+        "sequence": 170,
+        "occurredAt": "2026-07-29T02:08:46.7883512Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_a9c87293c2b0450686e0f4d0bf966e03",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-4.\",\"ResultEnvelopeDigest\":\"2375f97325eea5feb02b3eaaee6d987c908773afd1c58fb73587138e1f5560f5\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-4:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 230,
+        "occurredAt": "2026-07-29T02:08:53.0774721Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-4",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 32
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-5",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-5",
+      "title": "Isolated parallel reference delivery 5",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4682357Z",
+      "updatedAt": "2026-07-29T02:08:53.3012121Z",
+      "body": "Create only the deterministic namespace for RTL-5. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "taskId": "tsk-canary-parallel-12-worker-loss-5",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.8396985Z",
+        "startedAt": "2026-07-29T02:08:45.8396985Z",
+        "finishedAt": "2026-07-29T02:08:46.7996873Z",
+        "resultSha": "4e9f3cd708ffc8d3bd91994858c9d3aa84ded081",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 33,
+        "eventId": "evt_a515f977de464499a872d2c3c453cec7",
+        "runId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "taskId": "tsk-canary-parallel-12-worker-loss-5",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-5.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_6434aec770fa49e786deeec5e55c22bd:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7998238Z",
+        "sequence": null
+      },
+      {
+        "cursor": 34,
+        "eventId": "evt_0de139c77098477e924ef24a1a340da7",
+        "runId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "taskId": "tsk-canary-parallel-12-worker-loss-5",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_6434aec770fa49e786deeec5e55c22bd:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.7998862Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 126,
+        "occurredAt": "2026-07-29T02:08:45.4682934Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-5",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-5\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 147,
+        "occurredAt": "2026-07-29T02:08:45.840115Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-5\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 159,
+        "occurredAt": "2026-07-29T02:08:46.5956882Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"4708de85654b110d0ba102e0f122c36dc3b68edd53131c02b6a840dd06479339\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"4e9f3cd708ffc8d3bd91994858c9d3aa84ded081\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_6434aec770fa49e786deeec5e55c22bd/4e9f3cd708ffc8d3bd91994858c9d3aa84ded081\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.59546Z\"}"
+      },
+      {
+        "sequence": 171,
+        "occurredAt": "2026-07-29T02:08:46.7999155Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_6434aec770fa49e786deeec5e55c22bd",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-5.\",\"ResultEnvelopeDigest\":\"4708de85654b110d0ba102e0f122c36dc3b68edd53131c02b6a840dd06479339\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-5:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 231,
+        "occurredAt": "2026-07-29T02:08:53.3012971Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-5",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 34
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-6",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-6",
+      "title": "Isolated parallel reference delivery 6",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4826665Z",
+      "updatedAt": "2026-07-29T02:08:53.5089828Z",
+      "body": "Create only the deterministic namespace for RTL-6. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "taskId": "tsk-canary-parallel-12-worker-loss-6",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.8635506Z",
+        "startedAt": "2026-07-29T02:08:45.8635506Z",
+        "finishedAt": "2026-07-29T02:08:46.8156649Z",
+        "resultSha": "90fd62370ee76caa7a9c16ce75e240a0769a2673",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 35,
+        "eventId": "evt_10a038f121834a55b2e8d84af20814c5",
+        "runId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "taskId": "tsk-canary-parallel-12-worker-loss-6",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-6.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_12dc32fb928b43fd87ac5303c354d7c9:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8157995Z",
+        "sequence": null
+      },
+      {
+        "cursor": 36,
+        "eventId": "evt_c28e9219dcdb4cc392c49985df31502f",
+        "runId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "taskId": "tsk-canary-parallel-12-worker-loss-6",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_12dc32fb928b43fd87ac5303c354d7c9:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8158448Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 127,
+        "occurredAt": "2026-07-29T02:08:45.4827412Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-6",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-6\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 148,
+        "occurredAt": "2026-07-29T02:08:45.8640019Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-6\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 160,
+        "occurredAt": "2026-07-29T02:08:46.611345Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"3f6bec56fd0b2d3d51032f1faa7fdffbb2dd02e6148ebef938b32a823f7d3776\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"90fd62370ee76caa7a9c16ce75e240a0769a2673\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_12dc32fb928b43fd87ac5303c354d7c9/90fd62370ee76caa7a9c16ce75e240a0769a2673\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.6110495Z\"}"
+      },
+      {
+        "sequence": 172,
+        "occurredAt": "2026-07-29T02:08:46.8158774Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_12dc32fb928b43fd87ac5303c354d7c9",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-6.\",\"ResultEnvelopeDigest\":\"3f6bec56fd0b2d3d51032f1faa7fdffbb2dd02e6148ebef938b32a823f7d3776\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-6:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 232,
+        "occurredAt": "2026-07-29T02:08:53.5090594Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-6",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 36
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-7",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-7",
+      "title": "Isolated parallel reference delivery 7",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.4942699Z",
+      "updatedAt": "2026-07-29T02:08:53.7012655Z",
+      "body": "Create only the deterministic namespace for RTL-7. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "taskId": "tsk-canary-parallel-12-worker-loss-7",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.8861105Z",
+        "startedAt": "2026-07-29T02:08:45.8861105Z",
+        "finishedAt": "2026-07-29T02:08:46.8312323Z",
+        "resultSha": "fc6020b4438a14900c70dc2ce1661d96ddd6b338",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 37,
+        "eventId": "evt_3ea7b5b947df4a1bb09b2d06d5e6bd5e",
+        "runId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "taskId": "tsk-canary-parallel-12-worker-loss-7",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-7.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_c3dd97e2716e47ae821a72c099604d31:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8313591Z",
+        "sequence": null
+      },
+      {
+        "cursor": 38,
+        "eventId": "evt_fe3540ef09c74a23807518f755916c1e",
+        "runId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "taskId": "tsk-canary-parallel-12-worker-loss-7",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_c3dd97e2716e47ae821a72c099604d31:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8314016Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 128,
+        "occurredAt": "2026-07-29T02:08:45.4943333Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-7",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-7\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 149,
+        "occurredAt": "2026-07-29T02:08:45.8862873Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-7\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 161,
+        "occurredAt": "2026-07-29T02:08:46.6273001Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"0cd55a0aaec5d901c74c0bd504450517153ccad29827cbeb4a08e3267f9f954d\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"fc6020b4438a14900c70dc2ce1661d96ddd6b338\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_c3dd97e2716e47ae821a72c099604d31/fc6020b4438a14900c70dc2ce1661d96ddd6b338\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.6268524Z\"}"
+      },
+      {
+        "sequence": 173,
+        "occurredAt": "2026-07-29T02:08:46.831427Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_c3dd97e2716e47ae821a72c099604d31",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-7.\",\"ResultEnvelopeDigest\":\"0cd55a0aaec5d901c74c0bd504450517153ccad29827cbeb4a08e3267f9f954d\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-7:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 233,
+        "occurredAt": "2026-07-29T02:08:53.7013432Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-7",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 38
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-8",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-8",
+      "title": "Isolated parallel reference delivery 8",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.5079369Z",
+      "updatedAt": "2026-07-29T02:08:54.0267137Z",
+      "body": "Create only the deterministic namespace for RTL-8. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "taskId": "tsk-canary-parallel-12-worker-loss-8",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.9023738Z",
+        "startedAt": "2026-07-29T02:08:45.9023738Z",
+        "finishedAt": "2026-07-29T02:08:46.8443732Z",
+        "resultSha": "2bb9218fe1bdb72b9d9bece0a34298ffd043f01b",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 39,
+        "eventId": "evt_97c9b9fd9a694341b1e964c581180035",
+        "runId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "taskId": "tsk-canary-parallel-12-worker-loss-8",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-8.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_6c38f9c605ef46cba3e4f4596c2e7562:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8445001Z",
+        "sequence": null
+      },
+      {
+        "cursor": 40,
+        "eventId": "evt_c9beeeceaac443499b669c4815581590",
+        "runId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "taskId": "tsk-canary-parallel-12-worker-loss-8",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_6c38f9c605ef46cba3e4f4596c2e7562:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8445441Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 129,
+        "occurredAt": "2026-07-29T02:08:45.5080045Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-8",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-8\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 150,
+        "occurredAt": "2026-07-29T02:08:45.9024846Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-8\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 162,
+        "occurredAt": "2026-07-29T02:08:46.6452394Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"cb5e9333bb12af6149cc62a95e3d73125eb88512108427c683a1e38175859586\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"2bb9218fe1bdb72b9d9bece0a34298ffd043f01b\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_6c38f9c605ef46cba3e4f4596c2e7562/2bb9218fe1bdb72b9d9bece0a34298ffd043f01b\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.6446432Z\"}"
+      },
+      {
+        "sequence": 174,
+        "occurredAt": "2026-07-29T02:08:46.8445699Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_6c38f9c605ef46cba3e4f4596c2e7562",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-8.\",\"ResultEnvelopeDigest\":\"cb5e9333bb12af6149cc62a95e3d73125eb88512108427c683a1e38175859586\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-8:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 234,
+        "occurredAt": "2026-07-29T02:08:54.0267844Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-8",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 40
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-9",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-9",
+      "title": "Isolated parallel reference delivery 9",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.5223582Z",
+      "updatedAt": "2026-07-29T02:08:54.2713684Z",
+      "body": "Create only the deterministic namespace for RTL-9. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "taskId": "tsk-canary-parallel-12-worker-loss-9",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.9152503Z",
+        "startedAt": "2026-07-29T02:08:45.9152503Z",
+        "finishedAt": "2026-07-29T02:08:46.85709Z",
+        "resultSha": "131026530d628ce30db70cdfa98540c7a2656768",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 41,
+        "eventId": "evt_e3910da8bf1e4451ab08d6fded92a24e",
+        "runId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "taskId": "tsk-canary-parallel-12-worker-loss-9",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-9.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_2a4663685c7c4ea8976fcd8cba9e6e8f:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8572208Z",
+        "sequence": null
+      },
+      {
+        "cursor": 42,
+        "eventId": "evt_9dfd8517a49842e496212a3d27861855",
+        "runId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "taskId": "tsk-canary-parallel-12-worker-loss-9",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_2a4663685c7c4ea8976fcd8cba9e6e8f:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8572573Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 130,
+        "occurredAt": "2026-07-29T02:08:45.5224136Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-9",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-9\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 151,
+        "occurredAt": "2026-07-29T02:08:45.9153427Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-9\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 163,
+        "occurredAt": "2026-07-29T02:08:46.6628159Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"ca457f8251d7df6a32914fdf3078b6f40f1d82837b3982fb304de0f76db35f19\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"131026530d628ce30db70cdfa98540c7a2656768\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_2a4663685c7c4ea8976fcd8cba9e6e8f/131026530d628ce30db70cdfa98540c7a2656768\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.6622178Z\"}"
+      },
+      {
+        "sequence": 175,
+        "occurredAt": "2026-07-29T02:08:46.85729Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_2a4663685c7c4ea8976fcd8cba9e6e8f",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-9.\",\"ResultEnvelopeDigest\":\"ca457f8251d7df6a32914fdf3078b6f40f1d82837b3982fb304de0f76db35f19\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-9:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 235,
+        "occurredAt": "2026-07-29T02:08:54.271473Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-9",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 42
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-10",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-10",
+      "title": "Isolated parallel reference delivery 10",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.5333045Z",
+      "updatedAt": "2026-07-29T02:08:54.4972357Z",
+      "body": "Create only the deterministic namespace for RTL-10. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "taskId": "tsk-canary-parallel-12-worker-loss-10",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.9309029Z",
+        "startedAt": "2026-07-29T02:08:45.9309029Z",
+        "finishedAt": "2026-07-29T02:08:46.8721347Z",
+        "resultSha": "5d0a9c3ada0061a0b3c9cbfdf4d71d595d8a17b2",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 43,
+        "eventId": "evt_c7c33c9c313b4a29ae871a3f4a94ba67",
+        "runId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "taskId": "tsk-canary-parallel-12-worker-loss-10",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-10.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_513830c9e9704b39bd6952cc75d285cb:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8722669Z",
+        "sequence": null
+      },
+      {
+        "cursor": 44,
+        "eventId": "evt_15f7dd24a6ce4e9c9bdfba4374ba1a8c",
+        "runId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "taskId": "tsk-canary-parallel-12-worker-loss-10",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_513830c9e9704b39bd6952cc75d285cb:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8723047Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 131,
+        "occurredAt": "2026-07-29T02:08:45.5333526Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-10",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-10\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 152,
+        "occurredAt": "2026-07-29T02:08:45.9309967Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-10\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 164,
+        "occurredAt": "2026-07-29T02:08:46.682848Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"53b0d404f3b32d112ee72fc0625c52879b5adee56b97736354a0fc2276e42f37\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"5d0a9c3ada0061a0b3c9cbfdf4d71d595d8a17b2\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_513830c9e9704b39bd6952cc75d285cb/5d0a9c3ada0061a0b3c9cbfdf4d71d595d8a17b2\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.6822889Z\"}"
+      },
+      {
+        "sequence": 176,
+        "occurredAt": "2026-07-29T02:08:46.8723298Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_513830c9e9704b39bd6952cc75d285cb",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-10.\",\"ResultEnvelopeDigest\":\"53b0d404f3b32d112ee72fc0625c52879b5adee56b97736354a0fc2276e42f37\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-10:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 236,
+        "occurredAt": "2026-07-29T02:08:54.497312Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-10",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 44
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-11",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-11",
+      "title": "Isolated parallel reference delivery 11",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.5478685Z",
+      "updatedAt": "2026-07-29T02:08:54.7911729Z",
+      "body": "Create only the deterministic namespace for RTL-11. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "taskId": "tsk-canary-parallel-12-worker-loss-11",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.9462525Z",
+        "startedAt": "2026-07-29T02:08:45.9462525Z",
+        "finishedAt": "2026-07-29T02:08:46.8890009Z",
+        "resultSha": "8f21496ca019a65abdc6e91cb8f315d75cfc65a9",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 45,
+        "eventId": "evt_ca0891107a5947f9a5cc8e3a10268416",
+        "runId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "taskId": "tsk-canary-parallel-12-worker-loss-11",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-11.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_f965d652de6147cd9558041ed8ab5cf2:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8891905Z",
+        "sequence": null
+      },
+      {
+        "cursor": 46,
+        "eventId": "evt_2ef55543177d4718a52bf8e31b66c341",
+        "runId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "taskId": "tsk-canary-parallel-12-worker-loss-11",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_f965d652de6147cd9558041ed8ab5cf2:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.8892557Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 132,
+        "occurredAt": "2026-07-29T02:08:45.54792Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-11",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-11\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 153,
+        "occurredAt": "2026-07-29T02:08:45.9463349Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-11\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 165,
+        "occurredAt": "2026-07-29T02:08:46.7020325Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"f6e3047c25de315622d5c39c756a2769cab4bfe0c0e61ed6a9ea10591431c5c5\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"8f21496ca019a65abdc6e91cb8f315d75cfc65a9\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_f965d652de6147cd9558041ed8ab5cf2/8f21496ca019a65abdc6e91cb8f315d75cfc65a9\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.7014585Z\"}"
+      },
+      {
+        "sequence": 177,
+        "occurredAt": "2026-07-29T02:08:46.889302Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_f965d652de6147cd9558041ed8ab5cf2",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-11.\",\"ResultEnvelopeDigest\":\"f6e3047c25de315622d5c39c756a2769cab4bfe0c0e61ed6a9ea10591431c5c5\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-11:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 237,
+        "occurredAt": "2026-07-29T02:08:54.7912429Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-11",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 46
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-worker-loss-12",
+      "projectId": "prj-canary-parallel-12-worker-loss",
+      "taskKey": "RTL-12",
+      "title": "Isolated parallel reference delivery 12",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:45.562216Z",
+      "updatedAt": "2026-07-29T02:08:55.0636621Z",
+      "body": "Create only the deterministic namespace for RTL-12. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_71424cf79b894ce882c455a42d6e074d",
+        "taskId": "tsk-canary-parallel-12-worker-loss-12",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-worker-loss-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:45.9614258Z",
+        "startedAt": "2026-07-29T02:08:45.9614258Z",
+        "finishedAt": "2026-07-29T02:08:46.9033708Z",
+        "resultSha": "2a1680e6a8dbf47ce8f399d933091dfc5a05d1e8",
+        "repositoryId": "repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 47,
+        "eventId": "evt_fa9fb40c4daa4c36a25c1989da5624e0",
+        "runId": "run_71424cf79b894ce882c455a42d6e074d",
+        "taskId": "tsk-canary-parallel-12-worker-loss-12",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-12.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_71424cf79b894ce882c455a42d6e074d:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.9034984Z",
+        "sequence": null
+      },
+      {
+        "cursor": 48,
+        "eventId": "evt_7ddd9d365eed4ad889adaf4263cf4548",
+        "runId": "run_71424cf79b894ce882c455a42d6e074d",
+        "taskId": "tsk-canary-parallel-12-worker-loss-12",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_71424cf79b894ce882c455a42d6e074d:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:46.9035418Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 133,
+        "occurredAt": "2026-07-29T02:08:45.5622907Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-12",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-worker-loss\",\"taskKey\":\"RTL-12\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 154,
+        "occurredAt": "2026-07-29T02:08:45.9615094Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_71424cf79b894ce882c455a42d6e074d",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-worker-loss-12\",\"RunnerId\":\"canary-parallel-12-worker-loss-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-worker-loss-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 166,
+        "occurredAt": "2026-07-29T02:08:46.7180023Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_71424cf79b894ce882c455a42d6e074d",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"1dd1e61910cda7413ea8831d3836c17e431a13da12acb9f00ca6f8d3c9618376\",\"RepositoryId\":\"repo_b4aeb4d2bf56b06d484927959719da9b74c550eb9bd8003e262a030b67fc4675\",\"ResultSha\":\"2a1680e6a8dbf47ce8f399d933091dfc5a05d1e8\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_71424cf79b894ce882c455a42d6e074d/2a1680e6a8dbf47ce8f399d933091dfc5a05d1e8\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:46.7173404Z\"}"
+      },
+      {
+        "sequence": 178,
+        "occurredAt": "2026-07-29T02:08:46.9035789Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_71424cf79b894ce882c455a42d6e074d",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTL-12.\",\"ResultEnvelopeDigest\":\"1dd1e61910cda7413ea8831d3836c17e431a13da12acb9f00ca6f8d3c9618376\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:worker-loss:RTL-12:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 238,
+        "occurredAt": "2026-07-29T02:08:55.0637306Z",
+        "actorId": "parallel-harness:canary-parallel-12:worker-loss",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-worker-loss-12",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 48
+  }
+]

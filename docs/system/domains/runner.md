@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-29
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -103,6 +103,12 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `task-server/RemoteRunResultCollector.cs`,
+  `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
+  [the remote run result contract](../contracts/remote-run-result.md): additive
+  infrastructure-test evidence collection. Final Task Server authority is
+  combined with Runner observations into one create-once scenario result. The
+  collector owns no outcome, retry, lease, or task transition decision.
 - `scripts/remote-runner-onboard.sh` and
   `scripts/agent-host-resource-governance.sh`: the current agent-host Linux
   install/update path and its role-specific systemd resource renderer. The
@@ -163,7 +169,26 @@ state.
   worker pools. It records slot admission, queue and execution timings, system
   pressure, exact-SHA proofs, idempotent delivery, deterministic integration
   collision decisions, and one controlled four-slot gate-worker loss with
-  bounded redistribution.
+  bounded redistribution. Its harness-only fault catalog covers
+  bounded Task Server disconnects, gate watchdog timeouts, occupied worktree
+  targets, and lost or interrupted terminal markers. Fault activation requires
+  a checked-in manifest, an explicit enable flag, a run/root-bound
+  acknowledgement, an unchanged safety marker, and a harness-owned isolated
+  Task Server. Fault runs assert lane, lease/fence, process, worktree, outbox,
+  Result-SHA, and incident terminals. The catalog is not referenced by
+  production binaries and never targets stable or the managed task workspace.
+  First-class historical replays also cover divergent salvage lineage,
+  lease adoption across a real Runner daemon restart, and the external
+  completion cycle. Every manifest binds chronicle incidents to an expected
+  durable terminal, bounded recovery budget, and complete machine-assertion
+  set.
+  The acceptance run first holds two already-claimed slots through a
+  configurable real Task Server partition,
+  records useful-work and durable-outbox timelines, reconciles each exact fence
+  before replay, and proves exact-once terminal delivery. The card-safe harness
+  uses a 25-second outage by default; the release suite owns the separately
+  marked MachineBound ten-minute invocation. Runner replacement and Task Server
+  replacement remain separate later checks.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -274,21 +299,35 @@ state.
   the `Process.Start`-to-slot-save handoff window. The replacement renews
   authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
   persisted worktree, then follows JSONL output and completes the same attempt.
+  Reattachment also reopens the durable outbox with the original persisted
+  attempt instance, never the replacement daemon's process identity.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
-- A failed lease renewal consumes the last server-issued authority window.
-  The standalone Runner stops before the known expiry minus one renewal
-  interval, cancels the CLI process tree, and does not turn transport loss into
-  autonomous authority. Task Server restart records `process-unknown`; only
-  positive containment or infrastructure-fencing proof permits a higher-fence
-  replacement.
+- A failed lease renewal consumes the last server-issued authority window. The
+  default requested window is 15 minutes, with a durable stop-before boundary
+  one renewal interval before expiry. The standalone Runner persists that
+  boundary in the worker directory, continues the already-fenced process while
+  time remains, and journals output and terminal evidence locally. It admits no
+  new work and replays no event, artifact, result handoff, terminal report, or
+  completion while authority is uncertain. Only a successful renewal of the
+  exact lease and fence advances the boundary and opens replay. At stop-before,
+  the Runner reaps and verifies the entire worktree process generation and
+  retains an honest `authority-deadline-exhausted` record. A daemon restart
+  applies the same persisted deadline before it can register or adopt work.
+  Task Server restart records `process-unknown`; only positive containment or
+  infrastructure-fencing proof permits a higher-fence replacement.
 - A remote project clone is eligible only when the project registry contains a
   repository URL. On every new clone and refresh, the standalone runner sets
   both fetch and push URLs to that registry value and logs the effective pair.
   Host-level probe and one-shot fallback URLs never flow into project clones.
   A project without a registry URL stays Ready, is reported as not
   remote-capable, and creates no clone.
+- The separated v1 Task Server resource contract does not yet carry project
+  repository registration on a claim. In that isolated compatibility profile
+  only, the claim adapter binds the configured `--git-remote` to its stable
+  repository identity and configured base branch. This does not relax the
+  registry-owned repository boundary for product project claims.
 - Before the first card for one host/project pair is leased, the claim endpoint
   returns an unleased preflight offer containing the registered repository and
   a registration fingerprint. The host creates or refreshes the exact shared

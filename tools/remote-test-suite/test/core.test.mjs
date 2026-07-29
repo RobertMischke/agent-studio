@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
   expectedPhases,
   resourcePlan,
   resetRunRoot,
+  scenarioAssertions,
   setupWithRollback,
   validateManifest
 } from '../core.mjs';
@@ -24,7 +25,20 @@ const valid = {
   },
   phases: [...expectedPhases],
   resources: { workspaceId: 'w', projectId: 'p', taskId: 't' },
-  hooks: {}
+  contract: {
+    chronicleLinks: [],
+    expectedTerminal: '5-human-review',
+    recoveryBudget: { unit: 'review-attempts', maximum: 2 },
+    assertions: ['exact-subject-reviewed']
+  },
+  hooks: {},
+  faults: [],
+  expected: {
+    accepted: true,
+    finalLane: '6-completed',
+    incidentOutcome: 'none',
+    phaseSequence: [...expectedPhases]
+  }
 };
 
 test('manifest validation accepts the canonical phase contract', () => {
@@ -44,6 +58,22 @@ test('manifest validation rejects unknown fields and traversal paths', () => {
   manifest.parallelism = 8;
   manifest.fixture.expectedChangedFiles = ['a', 'b', '../outside'];
   assert.throws(() => validateManifest(manifest), /manifest.parallelism[\s\S]*safe relative paths/);
+});
+
+test('scenario assertions enforce the declared terminal, budget, and complete assertion set', () => {
+  const manifest = validateManifest(structuredClone(valid));
+  const assertions = scenarioAssertions(manifest);
+  assertions.check('exact-subject-reviewed', true, 'immutable subject accepted');
+  const result = assertions.finish('5-human-review', 2);
+  assert.equal(result.actualTerminal, '5-human-review');
+  assert.equal(result.recoveryBudget.used, 2);
+  assert.deepEqual(result.assertions.map(item => item.id), ['exact-subject-reviewed']);
+
+  const missing = scenarioAssertions(manifest);
+  assert.throws(() => missing.finish('5-human-review', 0), /did not execute declared assertions/);
+  const overBudget = scenarioAssertions(manifest);
+  overBudget.check('exact-subject-reviewed', true, 'immutable subject accepted');
+  assert.throws(() => overBudget.finish('5-human-review', 3), /recovery budget exceeded/);
 });
 
 test('dry-run resource plan explains scoped creates and destroys', () => {
@@ -97,4 +127,14 @@ test('protected stable and managed task roots are rejected', () => {
     runId: 'run-1',
     serverUrl: 'http://127.0.0.1:5071'
   }), /protected resource root/);
+});
+
+test('every checked-in single-fault and multi-fault manifest satisfies the contract', async () => {
+  const scenarioRoot = path.resolve(import.meta.dirname, '..', 'scenarios');
+  const files = (await readdir(scenarioRoot)).filter(file => file.endsWith('.json'));
+  assert.ok(files.length >= 8);
+  for (const file of files) {
+    const manifest = JSON.parse(await readFile(path.join(scenarioRoot, file), 'utf8'));
+    assert.equal(validateManifest(manifest).name, path.basename(file, '.json'));
+  }
 });

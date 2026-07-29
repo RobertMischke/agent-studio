@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "remote-run-result/v0",
+  "scenarioId": "runner-restart-during-run",
+  "runId": "run-reference-legacy",
+  "seed": 2200,
+  "startedAt": "2026-07-28T08:00:00Z",
+  "finishedAt": "2026-07-28T08:00:12Z",
+  "durationMs": 12000,
+  "components": [{ "name": "agent-runner", "image": null, "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }],
+  "host": { "id": "host-01", "name": "runner-host-01" },
+  "runner": { "id": "runner-01", "name": "coding-01" },
+  "phases": [
+    { "phase": "Claim", "status": "Executed", "queuedAt": "2026-07-28T08:00:00Z", "startedAt": "2026-07-28T08:00:01Z", "finishedAt": "2026-07-28T08:00:02Z", "queueDurationMs": 1000, "executionDurationMs": 1000, "durationSource": "UtcWallClock", "reason": null },
+    { "phase": "Run", "status": "Executed", "queuedAt": "2026-07-28T08:00:02Z", "startedAt": "2026-07-28T08:00:03Z", "finishedAt": "2026-07-28T08:00:08Z", "queueDurationMs": 1000, "executionDurationMs": 5000, "durationSource": "Monotonic", "reason": null },
+    { "phase": "Gate", "status": "Skipped", "queuedAt": "2026-07-28T08:00:08Z", "startedAt": null, "finishedAt": "2026-07-28T08:00:08Z", "queueDurationMs": 0, "executionDurationMs": 0, "durationSource": "UtcWallClock", "reason": "not required" },
+    { "phase": "Review", "status": "Executed", "queuedAt": "2026-07-28T08:00:08Z", "startedAt": "2026-07-28T08:00:09Z", "finishedAt": "2026-07-28T08:00:12Z", "queueDurationMs": 1000, "executionDurationMs": 3000, "durationSource": "Monotonic", "reason": null }
+  ],
+  "incident": { "id": "incident-runner-restart", "faultSchedule": [] },
+  "outcome": { "expected": "same attempt resumes", "actual": "recovered" },
+  "assertions": [{ "assertionId": "same-attempt", "passed": true, "evidenceRefs": ["task-history"], "detail": null }],
+  "chronicleLinks": ["docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"],
+  "task": { "taskKey": "AGT-REF-0", "baseSha": "1111111111111111111111111111111111111111", "resultSha": "2222222222222222222222222222222222222222", "reviewedSha": "2222222222222222222222222222222222222222", "finalLane": "5-human-review" },
+  "attempts": [{ "kind": "Run", "attemptId": "run-attempt-legacy", "leaseFence": 7, "authorityEpoch": 3 }],
+  "artifacts": [{ "evidenceId": "task-history", "source": "TaskServer", "uri": "task-server://runs/run-reference-legacy/history", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }],
+  "evidenceAuthority": { "authorityEpoch": 3, "maxLeaseFence": 7 },
+  "collectedAt": "2026-07-28T08:00:13Z",
+  "contentSha256": ""
+}

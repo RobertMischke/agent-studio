@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "remote-run-result/v1",
+  "scenarioId": "invalid",
+  "runId": "run-invalid",
+  "seed": 1,
+  "startedAt": "2026-07-28T08:00:00Z",
+  "finishedAt": "2026-07-28T08:00:01Z",
+  "wallClockDurationMs": 1000,
+  "components": [],
+  "host": { "id": "host", "name": "host" },
+  "runner": { "id": "runner", "name": "runner" },
+  "phases": [],
+  "tokens": {
+    "input": { "status": "Unavailable", "value": null, "unavailableReason": "" },
+    "output": { "status": "Unavailable", "value": null, "unavailableReason": "" },
+    "cached": { "status": "Unavailable", "value": null, "unavailableReason": "" },
+    "total": { "status": "Unavailable", "value": null, "unavailableReason": "" },
+    "byPhase": []
+  },
+  "incident": { "id": "incident", "faultSchedule": [] },
+  "outcome": { "expected": "fail validation", "actual": "lost" },
+  "assertions": [],
+  "chronicleLinks": [],
+  "task": { "taskKey": "", "baseSha": "", "resultSha": "", "reviewedSha": "", "finalLane": "" },
+  "attempts": [],
+  "artifacts": [],
+  "evidenceAuthority": { "authorityEpoch": 0, "maxLeaseFence": 0 },
+  "collectedAt": "2026-07-28T08:00:02Z",
+  "contentSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}

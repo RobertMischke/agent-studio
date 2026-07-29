@@ -1,0 +1,95 @@
+{
+  "scenario": "fault-task-server-network-blips",
+  "seed": "agt2200-network-v1",
+  "runId": "canary-net-blip",
+  "accepted": true,
+  "resultSha": "10a95dcf6cbb966fa1d8de0102582a66f542ff2a",
+  "semanticTree": "5110add244ad60309223242a9e2dccff31f870dd",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "network-blips-replayed",
+  "assertions": {
+    "lane": {
+      "actual": "6-completed",
+      "expected": "6-completed",
+      "passed": true
+    },
+    "lease": {
+      "runAttemptId": "run_9d298802f1db4a7ba64cd305cdf80806",
+      "fence": 1,
+      "status": "completed",
+      "runStatus": "Done",
+      "attempts": 1,
+      "noDuplicateClaim": true
+    },
+    "process": {
+      "active": 0,
+      "observations": [],
+      "allReaped": true
+    },
+    "worktree": {
+      "path": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip/coding/worktree",
+      "isolated": true,
+      "ready": true,
+      "busyPathReported": null,
+      "prepareAttempts": 1,
+      "foreignPreserved": true
+    },
+    "outbox": {
+      "logicalItems": 4,
+      "acknowledgedItems": 4,
+      "backlog": 0,
+      "monotonic": true,
+      "serverEvents": 3,
+      "serverArtifacts": 1,
+      "terminalFactCopies": 1,
+      "terminalArtifactCopies": 1,
+      "apiAttempts": {
+        "claim": 2,
+        "heartbeat": 2,
+        "event-report": 2,
+        "artifact-report": 2,
+        "completion-report": 2
+      }
+    },
+    "sha": {
+      "resultSha": "10a95dcf6cbb966fa1d8de0102582a66f542ff2a",
+      "handoffResultSha": "10a95dcf6cbb966fa1d8de0102582a66f542ff2a",
+      "originHead": "613ced37af14e7fd437869f740db804abe94353c",
+      "integrated": true,
+      "phantomSuccessPrevented": true
+    },
+    "incident": {
+      "selectedFaults": [
+        "task-server-network-blips"
+      ],
+      "outcome": "network-blips-replayed",
+      "expected": "network-blips-replayed",
+      "evidence": []
+    }
+  },
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "task-server-network-blips"
+    ],
+    "encounters": {
+      "claim": 2,
+      "heartbeat": 2,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 2,
+      "artifact-report": 2,
+      "completion-report": 2
+    },
+    "scheduled": 5,
+    "consumed": 5
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip"
+}

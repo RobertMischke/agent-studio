@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "name": "daemon-restart-recovery",
+  "description": "Inject a runner daemon restart while the fenced execution process remains alive.",
+  "incidentClass": "daemon-restart",
+  "expectedOutcome": "recovered"
+}

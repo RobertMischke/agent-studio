@@ -1,0 +1,3 @@
+{"event":"gate-completed","receiptAcknowledged":false}
+{"event":"transport-replay","attempt":1,"receiptAcknowledged":false}
+{"event":"transport-replay","attempt":2,"receiptAcknowledged":false,"terminalClassification":"lost"}

@@ -1,0 +1,1226 @@
+[
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-1",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-1",
+      "title": "Isolated parallel reference delivery 1",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.3288087Z",
+      "updatedAt": "2026-07-29T02:08:42.389696Z",
+      "body": "Create only the deterministic namespace for RTB-1. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "taskId": "tsk-canary-parallel-12-baseline-1",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.6556415Z",
+        "startedAt": "2026-07-29T02:08:38.6556415Z",
+        "finishedAt": "2026-07-29T02:08:39.815082Z",
+        "resultSha": "8052a5891d365fb061320a988a84684f513b5c54",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 15,
+        "eventId": "evt_e82ee06eeb3049e29932acf86d756caf",
+        "runId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "taskId": "tsk-canary-parallel-12-baseline-1",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-1.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_4165bc0f1b324392a516fa4fa13c5ac3:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8159138Z",
+        "sequence": null
+      },
+      {
+        "cursor": 16,
+        "eventId": "evt_0dd70fb88f80473b9afda668e44f27b2",
+        "runId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "taskId": "tsk-canary-parallel-12-baseline-1",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_4165bc0f1b324392a516fa4fa13c5ac3:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8162536Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 3,
+        "occurredAt": "2026-07-29T02:08:38.3313424Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-1",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-1\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 24,
+        "occurredAt": "2026-07-29T02:08:38.6572799Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-1\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 43,
+        "occurredAt": "2026-07-29T02:08:39.5822151Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"43a475c72d63bafbcda136c372255f4ca2093a32edbef3f4d7b82ec682ece9a5\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"8052a5891d365fb061320a988a84684f513b5c54\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_4165bc0f1b324392a516fa4fa13c5ac3/8052a5891d365fb061320a988a84684f513b5c54\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5814506Z\"}"
+      },
+      {
+        "sequence": 55,
+        "occurredAt": "2026-07-29T02:08:39.8164638Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-1.\",\"ResultEnvelopeDigest\":\"43a475c72d63bafbcda136c372255f4ca2093a32edbef3f4d7b82ec682ece9a5\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-1:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 108,
+        "occurredAt": "2026-07-29T02:08:42.3910798Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-1",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 16
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-2",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-2",
+      "title": "Isolated parallel reference delivery 2",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.3474262Z",
+      "updatedAt": "2026-07-29T02:08:42.7252967Z",
+      "body": "Create only the deterministic namespace for RTB-2. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_da71aec36f4f452fa79254369d9e6000",
+        "taskId": "tsk-canary-parallel-12-baseline-2",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.680017Z",
+        "startedAt": "2026-07-29T02:08:38.680017Z",
+        "finishedAt": "2026-07-29T02:08:39.8922047Z",
+        "resultSha": "1010653cf8dec64d69e0ac5dc7dfc09e5c7fc36a",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 23,
+        "eventId": "evt_2fd6e1b2284a479ab326abb3197b6411",
+        "runId": "run_da71aec36f4f452fa79254369d9e6000",
+        "taskId": "tsk-canary-parallel-12-baseline-2",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-2.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_da71aec36f4f452fa79254369d9e6000:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8924484Z",
+        "sequence": null
+      },
+      {
+        "cursor": 24,
+        "eventId": "evt_69a93507ed7548ec84adac56cbcee1f4",
+        "runId": "run_da71aec36f4f452fa79254369d9e6000",
+        "taskId": "tsk-canary-parallel-12-baseline-2",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_da71aec36f4f452fa79254369d9e6000:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8925247Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 4,
+        "occurredAt": "2026-07-29T02:08:38.3475607Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-2",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-2\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 25,
+        "occurredAt": "2026-07-29T02:08:38.6801313Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_da71aec36f4f452fa79254369d9e6000",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-2\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 47,
+        "occurredAt": "2026-07-29T02:08:39.6732911Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_da71aec36f4f452fa79254369d9e6000",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"ed96676c1b194a2038361f846dc358b01e71686c0c8b94d11a9a7182fdc3d288\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"1010653cf8dec64d69e0ac5dc7dfc09e5c7fc36a\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_da71aec36f4f452fa79254369d9e6000/1010653cf8dec64d69e0ac5dc7dfc09e5c7fc36a\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.6731232Z\"}"
+      },
+      {
+        "sequence": 59,
+        "occurredAt": "2026-07-29T02:08:39.8925838Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_da71aec36f4f452fa79254369d9e6000",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-2.\",\"ResultEnvelopeDigest\":\"ed96676c1b194a2038361f846dc358b01e71686c0c8b94d11a9a7182fdc3d288\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-2:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 109,
+        "occurredAt": "2026-07-29T02:08:42.7253824Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-2",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 24
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-3",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-3",
+      "title": "Isolated parallel reference delivery 3",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.3612314Z",
+      "updatedAt": "2026-07-29T02:08:42.8978219Z",
+      "body": "Create only the deterministic namespace for RTB-3. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "taskId": "tsk-canary-parallel-12-baseline-3",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.694353Z",
+        "startedAt": "2026-07-29T02:08:38.694353Z",
+        "finishedAt": "2026-07-29T02:08:39.7788736Z",
+        "resultSha": "90efd717d1c743be8d9b87a92ce4ffa9f231d4a3",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 11,
+        "eventId": "evt_c0327b736ac84c04b62a597189e7e8da",
+        "runId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "taskId": "tsk-canary-parallel-12-baseline-3",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-3.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_0b2d170ac5d84afb9db81643f53e77c3:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7791944Z",
+        "sequence": null
+      },
+      {
+        "cursor": 12,
+        "eventId": "evt_7bcf8aaf0fe44f018a32a487a16d42a6",
+        "runId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "taskId": "tsk-canary-parallel-12-baseline-3",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_0b2d170ac5d84afb9db81643f53e77c3:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7793149Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 5,
+        "occurredAt": "2026-07-29T02:08:38.3613604Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-3",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-3\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 26,
+        "occurredAt": "2026-07-29T02:08:38.6945459Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-3\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 41,
+        "occurredAt": "2026-07-29T02:08:39.5453693Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"f319a7f3c53d884dd8408ac15df3102a347a0b678546645bf4f2120c9be828dc\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"90efd717d1c743be8d9b87a92ce4ffa9f231d4a3\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_0b2d170ac5d84afb9db81643f53e77c3/90efd717d1c743be8d9b87a92ce4ffa9f231d4a3\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5446125Z\"}"
+      },
+      {
+        "sequence": 53,
+        "occurredAt": "2026-07-29T02:08:39.7794343Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_0b2d170ac5d84afb9db81643f53e77c3",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-3.\",\"ResultEnvelopeDigest\":\"f319a7f3c53d884dd8408ac15df3102a347a0b678546645bf4f2120c9be828dc\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-3:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 110,
+        "occurredAt": "2026-07-29T02:08:42.8979121Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-3",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 12
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-4",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-4",
+      "title": "Isolated parallel reference delivery 4",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.3722734Z",
+      "updatedAt": "2026-07-29T02:08:43.0720077Z",
+      "body": "Create only the deterministic namespace for RTB-4. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "taskId": "tsk-canary-parallel-12-baseline-4",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.7122016Z",
+        "startedAt": "2026-07-29T02:08:38.7122016Z",
+        "finishedAt": "2026-07-29T02:08:39.875792Z",
+        "resultSha": "c2cc30b727ebd3f110452b8c6bb7f3b5b56cb927",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 21,
+        "eventId": "evt_1915db249bbe4b72a7c4e00abb8e8683",
+        "runId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "taskId": "tsk-canary-parallel-12-baseline-4",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-4.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_8a09ed6859874ff6a474855ab9561f28:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8762151Z",
+        "sequence": null
+      },
+      {
+        "cursor": 22,
+        "eventId": "evt_c3c736fbdf4e447e9fdd215d05485ada",
+        "runId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "taskId": "tsk-canary-parallel-12-baseline-4",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_8a09ed6859874ff6a474855ab9561f28:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8763485Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 6,
+        "occurredAt": "2026-07-29T02:08:38.3723758Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-4",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-4\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 27,
+        "occurredAt": "2026-07-29T02:08:38.7123099Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-4\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 46,
+        "occurredAt": "2026-07-29T02:08:39.6611301Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"8cfded983f0e1374e134d3a73981ca6e909fa7a8eb6ea2704f0aadf6257aec19\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"c2cc30b727ebd3f110452b8c6bb7f3b5b56cb927\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_8a09ed6859874ff6a474855ab9561f28/c2cc30b727ebd3f110452b8c6bb7f3b5b56cb927\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.66094Z\"}"
+      },
+      {
+        "sequence": 58,
+        "occurredAt": "2026-07-29T02:08:39.8764486Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_8a09ed6859874ff6a474855ab9561f28",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-4.\",\"ResultEnvelopeDigest\":\"8cfded983f0e1374e134d3a73981ca6e909fa7a8eb6ea2704f0aadf6257aec19\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-4:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 111,
+        "occurredAt": "2026-07-29T02:08:43.0720769Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-4",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 22
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-5",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-5",
+      "title": "Isolated parallel reference delivery 5",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.3870907Z",
+      "updatedAt": "2026-07-29T02:08:43.2675115Z",
+      "body": "Create only the deterministic namespace for RTB-5. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_956721a88eba474d8bf19d19309bc083",
+        "taskId": "tsk-canary-parallel-12-baseline-5",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.7260087Z",
+        "startedAt": "2026-07-29T02:08:38.7260087Z",
+        "finishedAt": "2026-07-29T02:08:39.8563407Z",
+        "resultSha": "294a89cd8517a551f181eec745d330d478f20574",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 19,
+        "eventId": "evt_e3963892dc1c4df5999941e519ba648b",
+        "runId": "run_956721a88eba474d8bf19d19309bc083",
+        "taskId": "tsk-canary-parallel-12-baseline-5",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-5.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_956721a88eba474d8bf19d19309bc083:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8572819Z",
+        "sequence": null
+      },
+      {
+        "cursor": 20,
+        "eventId": "evt_cde04f2c139c4b5997f7e00f78bdf091",
+        "runId": "run_956721a88eba474d8bf19d19309bc083",
+        "taskId": "tsk-canary-parallel-12-baseline-5",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_956721a88eba474d8bf19d19309bc083:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.857711Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 7,
+        "occurredAt": "2026-07-29T02:08:38.3872191Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-5",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-5\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 28,
+        "occurredAt": "2026-07-29T02:08:38.7261318Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_956721a88eba474d8bf19d19309bc083",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-5\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 45,
+        "occurredAt": "2026-07-29T02:08:39.6493916Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_956721a88eba474d8bf19d19309bc083",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"1c8fd7bd08d2f390ad5abb8b3bc46597acd543aeae18024797bbbd8842c2de58\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"294a89cd8517a551f181eec745d330d478f20574\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_956721a88eba474d8bf19d19309bc083/294a89cd8517a551f181eec745d330d478f20574\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.6491421Z\"}"
+      },
+      {
+        "sequence": 57,
+        "occurredAt": "2026-07-29T02:08:39.858088Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_956721a88eba474d8bf19d19309bc083",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-5.\",\"ResultEnvelopeDigest\":\"1c8fd7bd08d2f390ad5abb8b3bc46597acd543aeae18024797bbbd8842c2de58\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-5:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 112,
+        "occurredAt": "2026-07-29T02:08:43.2676013Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-5",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 20
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-6",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-6",
+      "title": "Isolated parallel reference delivery 6",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.398458Z",
+      "updatedAt": "2026-07-29T02:08:43.462014Z",
+      "body": "Create only the deterministic namespace for RTB-6. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "taskId": "tsk-canary-parallel-12-baseline-6",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.743036Z",
+        "startedAt": "2026-07-29T02:08:38.743036Z",
+        "finishedAt": "2026-07-29T02:08:39.762278Z",
+        "resultSha": "4472427f98c67b2cff2bfb1c1a045ac521fe3b3f",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 9,
+        "eventId": "evt_8a262471548c482ebfb657d44df31980",
+        "runId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "taskId": "tsk-canary-parallel-12-baseline-6",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-6.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_4b29d154c0904d2896bd80d0acf8e9f8:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.762484Z",
+        "sequence": null
+      },
+      {
+        "cursor": 10,
+        "eventId": "evt_d0347744cc00429f8027379d9ec4567d",
+        "runId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "taskId": "tsk-canary-parallel-12-baseline-6",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_4b29d154c0904d2896bd80d0acf8e9f8:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7625479Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 8,
+        "occurredAt": "2026-07-29T02:08:38.3985423Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-6",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-6\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 29,
+        "occurredAt": "2026-07-29T02:08:38.7431782Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-6\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 40,
+        "occurredAt": "2026-07-29T02:08:39.528616Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"144d378c0fe9961881ad27abaf44546bbec9f99093c4c12ee569808509fec454\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"4472427f98c67b2cff2bfb1c1a045ac521fe3b3f\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_4b29d154c0904d2896bd80d0acf8e9f8/4472427f98c67b2cff2bfb1c1a045ac521fe3b3f\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5281296Z\"}"
+      },
+      {
+        "sequence": 52,
+        "occurredAt": "2026-07-29T02:08:39.762598Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_4b29d154c0904d2896bd80d0acf8e9f8",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-6.\",\"ResultEnvelopeDigest\":\"144d378c0fe9961881ad27abaf44546bbec9f99093c4c12ee569808509fec454\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-6:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 113,
+        "occurredAt": "2026-07-29T02:08:43.4620819Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-6",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 10
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-7",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-7",
+      "title": "Isolated parallel reference delivery 7",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4089399Z",
+      "updatedAt": "2026-07-29T02:08:43.7600778Z",
+      "body": "Create only the deterministic namespace for RTB-7. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_99b16bd925984821a18daeda915b5604",
+        "taskId": "tsk-canary-parallel-12-baseline-7",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.7619449Z",
+        "startedAt": "2026-07-29T02:08:38.7619449Z",
+        "finishedAt": "2026-07-29T02:08:39.7019867Z",
+        "resultSha": "0a33d1f1a690a4d93a3775af5388836f893abd23",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 1,
+        "eventId": "evt_9538432e7caf445f82b8750bebaa7156",
+        "runId": "run_99b16bd925984821a18daeda915b5604",
+        "taskId": "tsk-canary-parallel-12-baseline-7",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-7.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_99b16bd925984821a18daeda915b5604:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7046332Z",
+        "sequence": null
+      },
+      {
+        "cursor": 2,
+        "eventId": "evt_a6e307d7d08941b6ac2d187356dae779",
+        "runId": "run_99b16bd925984821a18daeda915b5604",
+        "taskId": "tsk-canary-parallel-12-baseline-7",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_99b16bd925984821a18daeda915b5604:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7052758Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 9,
+        "occurredAt": "2026-07-29T02:08:38.4090199Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-7",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-7\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 30,
+        "occurredAt": "2026-07-29T02:08:38.7621402Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_99b16bd925984821a18daeda915b5604",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-7\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 37,
+        "occurredAt": "2026-07-29T02:08:39.4849269Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_99b16bd925984821a18daeda915b5604",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"c6b2315ba6451ba023efa2502892b78c64c2505b83fa3e6081322083b883b01e\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"0a33d1f1a690a4d93a3775af5388836f893abd23\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_99b16bd925984821a18daeda915b5604/0a33d1f1a690a4d93a3775af5388836f893abd23\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.484619Z\"}"
+      },
+      {
+        "sequence": 48,
+        "occurredAt": "2026-07-29T02:08:39.7066446Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_99b16bd925984821a18daeda915b5604",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-7.\",\"ResultEnvelopeDigest\":\"c6b2315ba6451ba023efa2502892b78c64c2505b83fa3e6081322083b883b01e\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-7:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 114,
+        "occurredAt": "2026-07-29T02:08:43.7601571Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-7",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 2
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-8",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-8",
+      "title": "Isolated parallel reference delivery 8",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4234697Z",
+      "updatedAt": "2026-07-29T02:08:44.0467389Z",
+      "body": "Create only the deterministic namespace for RTB-8. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "taskId": "tsk-canary-parallel-12-baseline-8",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.7782331Z",
+        "startedAt": "2026-07-29T02:08:38.7782331Z",
+        "finishedAt": "2026-07-29T02:08:39.7960845Z",
+        "resultSha": "056e1aa8dc30e5ca15bb1a4c540910ad8d0687ed",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 13,
+        "eventId": "evt_b8a10f9589f54d579840930b7cc36070",
+        "runId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "taskId": "tsk-canary-parallel-12-baseline-8",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-8.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_de3671c70eea4d1082aa6e185eae6a40:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7967147Z",
+        "sequence": null
+      },
+      {
+        "cursor": 14,
+        "eventId": "evt_071f064f21ca413d8bda2493ceda81f8",
+        "runId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "taskId": "tsk-canary-parallel-12-baseline-8",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_de3671c70eea4d1082aa6e185eae6a40:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7969605Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 10,
+        "occurredAt": "2026-07-29T02:08:38.423574Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-8",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-8\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 31,
+        "occurredAt": "2026-07-29T02:08:38.7784507Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-8\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 42,
+        "occurredAt": "2026-07-29T02:08:39.5631416Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"26092f3eaa00fbe86132c7b64d5dee41d593e42f2096b2cb0bb722233420e275\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"056e1aa8dc30e5ca15bb1a4c540910ad8d0687ed\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_de3671c70eea4d1082aa6e185eae6a40/056e1aa8dc30e5ca15bb1a4c540910ad8d0687ed\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5622561Z\"}"
+      },
+      {
+        "sequence": 54,
+        "occurredAt": "2026-07-29T02:08:39.7970941Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_de3671c70eea4d1082aa6e185eae6a40",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-8.\",\"ResultEnvelopeDigest\":\"26092f3eaa00fbe86132c7b64d5dee41d593e42f2096b2cb0bb722233420e275\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-8:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 115,
+        "occurredAt": "2026-07-29T02:08:44.0468149Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-8",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 14
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-9",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-9",
+      "title": "Isolated parallel reference delivery 9",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4352558Z",
+      "updatedAt": "2026-07-29T02:08:44.2496728Z",
+      "body": "Create only the deterministic namespace for RTB-9. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "taskId": "tsk-canary-parallel-12-baseline-9",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.7935151Z",
+        "startedAt": "2026-07-29T02:08:38.7935151Z",
+        "finishedAt": "2026-07-29T02:08:39.7476588Z",
+        "resultSha": "6be5531a0c7d5680375a72dc4468e1a96c202984",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 7,
+        "eventId": "evt_829d07dac02a438091c23252a8090e78",
+        "runId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "taskId": "tsk-canary-parallel-12-baseline-9",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-9.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_2589bea6deb1410fa691a358afe9a5c6:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7478227Z",
+        "sequence": null
+      },
+      {
+        "cursor": 8,
+        "eventId": "evt_0a49b193be774dd99ddb3c87fd1aa9ef",
+        "runId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "taskId": "tsk-canary-parallel-12-baseline-9",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_2589bea6deb1410fa691a358afe9a5c6:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7478837Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 11,
+        "occurredAt": "2026-07-29T02:08:38.4353662Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-9",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-9\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 32,
+        "occurredAt": "2026-07-29T02:08:38.7937285Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-9\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 39,
+        "occurredAt": "2026-07-29T02:08:39.5109586Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"bdf7faa7988fdeef672fce620305b8b6e2ece9451bf55dd105a827a39d657a77\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"6be5531a0c7d5680375a72dc4468e1a96c202984\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_2589bea6deb1410fa691a358afe9a5c6/6be5531a0c7d5680375a72dc4468e1a96c202984\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5105961Z\"}"
+      },
+      {
+        "sequence": 51,
+        "occurredAt": "2026-07-29T02:08:39.7479246Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_2589bea6deb1410fa691a358afe9a5c6",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-9.\",\"ResultEnvelopeDigest\":\"bdf7faa7988fdeef672fce620305b8b6e2ece9451bf55dd105a827a39d657a77\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-9:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 116,
+        "occurredAt": "2026-07-29T02:08:44.2497487Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-9",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 8
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-10",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-10",
+      "title": "Isolated parallel reference delivery 10",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4504978Z",
+      "updatedAt": "2026-07-29T02:08:44.4683725Z",
+      "body": "Create only the deterministic namespace for RTB-10. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_60fbabe7146147db8964c14e5e666191",
+        "taskId": "tsk-canary-parallel-12-baseline-10",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-1",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.81473Z",
+        "startedAt": "2026-07-29T02:08:38.81473Z",
+        "finishedAt": "2026-07-29T02:08:39.7205941Z",
+        "resultSha": "e36e9804bb1d194036e446f47b8e3ab5c7e167db",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 3,
+        "eventId": "evt_41bc80d0ab7b40de98534c9b480bd43a",
+        "runId": "run_60fbabe7146147db8964c14e5e666191",
+        "taskId": "tsk-canary-parallel-12-baseline-10",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-10.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_60fbabe7146147db8964c14e5e666191:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.720925Z",
+        "sequence": null
+      },
+      {
+        "cursor": 4,
+        "eventId": "evt_05a905a3bc1344d597efe81f24cef22d",
+        "runId": "run_60fbabe7146147db8964c14e5e666191",
+        "taskId": "tsk-canary-parallel-12-baseline-10",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_60fbabe7146147db8964c14e5e666191:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7210324Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 12,
+        "occurredAt": "2026-07-29T02:08:38.4506911Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-10",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-10\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 33,
+        "occurredAt": "2026-07-29T02:08:38.8149684Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_60fbabe7146147db8964c14e5e666191",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-10\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-1\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-1-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 38,
+        "occurredAt": "2026-07-29T02:08:39.4989266Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_60fbabe7146147db8964c14e5e666191",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"3b6810a030d33785c0be418747d74091084c6bb81a92c0eb596957f1bf336c72\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"e36e9804bb1d194036e446f47b8e3ab5c7e167db\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_60fbabe7146147db8964c14e5e666191/e36e9804bb1d194036e446f47b8e3ab5c7e167db\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.4986362Z\"}"
+      },
+      {
+        "sequence": 49,
+        "occurredAt": "2026-07-29T02:08:39.7210972Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_60fbabe7146147db8964c14e5e666191",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-10.\",\"ResultEnvelopeDigest\":\"3b6810a030d33785c0be418747d74091084c6bb81a92c0eb596957f1bf336c72\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-10:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 117,
+        "occurredAt": "2026-07-29T02:08:44.4684407Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-10",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 4
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-11",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-11",
+      "title": "Isolated parallel reference delivery 11",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4647758Z",
+      "updatedAt": "2026-07-29T02:08:44.733392Z",
+      "body": "Create only the deterministic namespace for RTB-11. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "taskId": "tsk-canary-parallel-12-baseline-11",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-2",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.8352067Z",
+        "startedAt": "2026-07-29T02:08:38.8352067Z",
+        "finishedAt": "2026-07-29T02:08:39.8370387Z",
+        "resultSha": "8f271dff528503028db8d34aa6918eba351d7490",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 17,
+        "eventId": "evt_a4ad033d320b444baa3a4b0efcf2a1fa",
+        "runId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "taskId": "tsk-canary-parallel-12-baseline-11",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-11.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_8eebee3c0a5b4bff9ed23fb310e4f52e:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8378544Z",
+        "sequence": null
+      },
+      {
+        "cursor": 18,
+        "eventId": "evt_97e1b3429add4ce3978e1d98c066feda",
+        "runId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "taskId": "tsk-canary-parallel-12-baseline-11",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_8eebee3c0a5b4bff9ed23fb310e4f52e:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.8381275Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 13,
+        "occurredAt": "2026-07-29T02:08:38.465001Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-11",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-11\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 34,
+        "occurredAt": "2026-07-29T02:08:38.8355232Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-11\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-2\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-2-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 44,
+        "occurredAt": "2026-07-29T02:08:39.6337166Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"dce7f7f0bd51c739948b437db5754ad2de351879423cc4456b741f2d397b9ad5\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"8f271dff528503028db8d34aa6918eba351d7490\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_8eebee3c0a5b4bff9ed23fb310e4f52e/8f271dff528503028db8d34aa6918eba351d7490\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.5985272Z\"}"
+      },
+      {
+        "sequence": 56,
+        "occurredAt": "2026-07-29T02:08:39.8383282Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_8eebee3c0a5b4bff9ed23fb310e4f52e",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-11.\",\"ResultEnvelopeDigest\":\"dce7f7f0bd51c739948b437db5754ad2de351879423cc4456b741f2d397b9ad5\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-11:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 118,
+        "occurredAt": "2026-07-29T02:08:44.7334644Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-11",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 18
+  },
+  {
+    "task": {
+      "taskId": "tsk-canary-parallel-12-baseline-12",
+      "projectId": "prj-canary-parallel-12-baseline",
+      "taskKey": "RTB-12",
+      "title": "Isolated parallel reference delivery 12",
+      "state": "6-completed",
+      "version": 5,
+      "createdAt": "2026-07-29T02:08:38.4846415Z",
+      "updatedAt": "2026-07-29T02:08:45.0392254Z",
+      "body": "Create only the deterministic namespace for RTB-12. Infrastructure verification task."
+    },
+    "runs": [
+      {
+        "runId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "taskId": "tsk-canary-parallel-12-baseline-12",
+        "status": "Done",
+        "runnerId": "canary-parallel-12-baseline-coding-worker-3",
+        "fence": 1,
+        "createdAt": "2026-07-29T02:08:38.8487237Z",
+        "startedAt": "2026-07-29T02:08:38.8487237Z",
+        "finishedAt": "2026-07-29T02:08:39.7350311Z",
+        "resultSha": "d2f06cb806e79a3bf83c19f203c475d4deb02956",
+        "repositoryId": "repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa"
+      }
+    ],
+    "events": [
+      {
+        "cursor": 5,
+        "eventId": "evt_c9343f47d4ee4e3aa4f5b8e4e5f5ee7a",
+        "runId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "taskId": "tsk-canary-parallel-12-baseline-12",
+        "kind": "lifecycle.run-completed",
+        "payloadJson": "{\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-12.\",\"authority\":\"task-server\",\"nextState\":\"4-auto-review\"}",
+        "idempotencyKey": "task-server:run_d5d7332f8bf74573b04a8a756251ca1a:lifecycle.run-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7351823Z",
+        "sequence": null
+      },
+      {
+        "cursor": 6,
+        "eventId": "evt_9964ccd6788f43bc8169cbe32b685d1c",
+        "runId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "taskId": "tsk-canary-parallel-12-baseline-12",
+        "kind": "lifecycle.post-processing-completed",
+        "payloadJson": "{\"artifacts\":\"canonical-store\",\"reviewAuthority\":\"deployed-backend\"}",
+        "idempotencyKey": "task-server:run_d5d7332f8bf74573b04a8a756251ca1a:lifecycle.post-processing-completed",
+        "fence": 1,
+        "occurredAt": "2026-07-29T02:08:39.7352411Z",
+        "sequence": null
+      }
+    ],
+    "artifacts": [],
+    "audit": [
+      {
+        "sequence": 14,
+        "occurredAt": "2026-07-29T02:08:38.4850563Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.created",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-12",
+        "detailJson": "{\"projectId\":\"prj-canary-parallel-12-baseline\",\"taskKey\":\"RTB-12\",\"State\":\"2-ready\"}"
+      },
+      {
+        "sequence": 35,
+        "occurredAt": "2026-07-29T02:08:38.8488264Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.claimed",
+        "targetType": "run",
+        "targetId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "detailJson": "{\"TaskId\":\"tsk-canary-parallel-12-baseline-12\",\"RunnerId\":\"canary-parallel-12-baseline-coding-worker-3\",\"InstanceId\":\"canary-parallel-12-baseline-coding-worker-3-instance\",\"fence\":1}"
+      },
+      {
+        "sequence": 36,
+        "occurredAt": "2026-07-29T02:08:39.4203016Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "result-handoff.acknowledged",
+        "targetType": "run",
+        "targetId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "detailJson": "{\"Sequence\":1,\"envelopeDigest\":\"711b9093eb25d2716894d7493e6108694d4ca7cf249c1a888754b3a6056354b2\",\"RepositoryId\":\"repo_edeef509776f0d0d425650d52790336147c4b8ccea18d52e15d41898db3749aa\",\"ResultSha\":\"d2f06cb806e79a3bf83c19f203c475d4deb02956\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_d5d7332f8bf74573b04a8a756251ca1a/d2f06cb806e79a3bf83c19f203c475d4deb02956\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:08:39.417773Z\"}"
+      },
+      {
+        "sequence": 50,
+        "occurredAt": "2026-07-29T02:08:39.7352811Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "run.completed",
+        "targetType": "run",
+        "targetId": "run_d5d7332f8bf74573b04a8a756251ca1a",
+        "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Isolated deterministic delivery for RTB-12.\",\"ResultEnvelopeDigest\":\"711b9093eb25d2716894d7493e6108694d4ca7cf249c1a888754b3a6056354b2\",\"Sequence\":2,\"IdempotencyKey\":\"canary-parallel-12:baseline:RTB-12:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+      },
+      {
+        "sequence": 119,
+        "occurredAt": "2026-07-29T02:08:45.0392877Z",
+        "actorId": "parallel-harness:canary-parallel-12:baseline",
+        "action": "task.updated",
+        "targetType": "task",
+        "targetId": "tsk-canary-parallel-12-baseline-12",
+        "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+      }
+    ],
+    "lastCursor": 6
+  }
+]

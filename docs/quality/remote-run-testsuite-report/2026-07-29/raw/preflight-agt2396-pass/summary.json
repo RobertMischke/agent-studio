@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "observedIdentity": "agt2394-rts-agt2396-pass",
+  "classification": "abandoned-disposable-prerequisite-harness",
+  "observations": {
+    "activeGenerations": 0,
+    "deathProvenGenerations": 2,
+    "staleLocalBacklogPerGeneration": 87,
+    "taskServerUnresolvedAttemptsBeforeReconciliation": 2
+  },
+  "reconciliation": [
+    "healed only the isolated harness transport",
+    "observed both stale generations fenced",
+    "released both expired leases through the Runner control API",
+    "received Task Server safeToStop=true with unresolvedAttempts=0",
+    "removed only resources with exact disposable identity labels"
+  ],
+  "finalResources": {
+    "containers": 0,
+    "networks": 0,
+    "volumes": 0,
+    "images": 0
+  }
+}
