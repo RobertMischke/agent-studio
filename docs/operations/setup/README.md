@@ -18,6 +18,8 @@ an agent CLI, first tasks, and troubleshooting.
 | [your-first-task.md](./your-first-task.md) | First time using the board on a new project: what to queue, how to watch it run, what counts as a good first task vs. an anti-pattern. |
 | [troubleshooting.md](./troubleshooting.md) | FAQ-style: "agent only shows sandbox errors", "auto-mode flipped to manual", "two jobs in 3-progress", "header counters look wrong". |
 | [linux-runner-host.md](./linux-runner-host.md) | Running a task on a remote Linux host with the standalone `agent-runner` (RM-5): provision, configure, and drive one task end-to-end via the Task Server API. |
+| [multi-machine.md](./multi-machine.md) | Guided Linux setup across a Control Plane machine and one or more Agent Hosts, including the join-token flow, topology diagram, and verification. |
+| [website-onboarding-template.md](./website-onboarding-template.md) | Source copy for the marketing website download page: Demo, Single Machine, and Multi Machine paths. Website integration remains owned by MKT/AOW. |
 | [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md) | Unattended remote operation: keep the SSH tunnel to the Task Server up as a supervised, auto-reconnecting service (autossh/systemd or a Windows scheduled task) and use the runner's `--health-check`. |
 | [task-server.md](./task-server.md) | Install, configure, supervise, migrate, drain, back up, restore, and verify the independently deployed Task Server control plane. |
 | [remote-compose-test-harness.md](./remote-compose-test-harness.md) | Run the isolated Task Server, Agent Runner, and Studio Compose acceptance harness on a remote Docker host, with deterministic partitions, rolling replacements, evidence export, and identity-scoped cleanup. |

@@ -39,13 +39,17 @@ cd agent-studio
 docker compose up --build --wait
 ```
 
-Open [http://localhost:4011](http://localhost:4011). Docker Compose is the one
-new-user installation path. It requires at least 8 GB of free disk space; no
-host .NET or Node.js install, local settings file, maintainer switch, or
-neighbouring repository is required. See the
+Open [http://localhost:4011](http://localhost:4011). Docker Compose is the
+primary new-user installation path. It requires at least 8 GB of free disk
+space; no host .NET or Node.js install, local settings file, maintainer switch,
+or neighbouring repository is required. See the
 [setup guide](./docs/operations/setup/getting-started.md) for prerequisites,
-persistence, and troubleshooting. To add execution capacity after the Studio
-is running, follow the
+persistence, and troubleshooting. As an alternative for Linux x64 release
+installs with no source checkout and no .NET prerequisite, the guided
+[`agent-orchestrator-setup`](https://github.com/agent-orc/agent-studio/releases/latest/download/agent-orchestrator-setup)
+executable offers an isolated Docker demo, a native single-machine install, and
+a guided [multi-machine](./docs/operations/setup/multi-machine.md) join flow.
+To add execution capacity after the Studio is running, follow the
 [Agent Host guide](./docs/operations/setup/linux-runner-host.md). Source
 contributors use the separate
 [contributor setup](./docs/operations/setup/contributor-setup.md).
