@@ -361,16 +361,16 @@
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
                       <app-runner-replay-metadata [events]="runnerEvents()" />
-                      <!-- Virtualised: the transcript can grow into the thousands of
-                           events for a long-running task, so the view windows its own
-                           DOM and owns its own scroll container (bounded by the
-                           `cac-conversation-view` host sizing in the stylesheet below)
-                           instead of the ancestor `.pane__body` scrolling everything. -->
+                      <!-- Activity rows have deliberately variable heights (short
+                           status lines, Markdown, code blocks, and images). The
+                           library's fixed-height window cannot preserve a stable
+                           anchor for that mix, so the pane renders real rows and
+                           leaves scrolling plus Follow to the shared directive. -->
                       <cac-conversation-view [events]="nextGenChatEvents()"
                                              [isRunning]="isRunning() || isActiveJob()"
                                              [queuedFollowUp]="queuedFollowUp()"
                                              [showHeader]="false"
-                                             [virtualised]="true"
+                                             [virtualised]="false"
                                              variant="embedded"
                                              (openTrace)="onConversationOpenTrace($event)"
                                              (openFollowUp)="onOpenFollowup($event)"
