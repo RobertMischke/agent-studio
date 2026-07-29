@@ -294,22 +294,12 @@ public sealed class AttemptAuthorityService
         }
     }
 
-    public AttemptWriteResult SettleRun(
-        AttemptWriteReference write,
-        string outcome,
-        string? resultSha,
-        string? reason,
-        string? executorId = null,
-        string? leaseId = null,
-        string? expectedTaskKey = null,
-        bool requireResultSha = true,
-        AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? resultEnvelope = null,
-        string? resultEnvelopeDigest = null)
+    public AttemptWriteResult SettleRun(SettleRunAttemptRequest request)
     {
         lock (_gate)
         {
-            var existing = FindRun(write.AttemptId);
-            var deliveryKey = DeliveryKey("settle", write.IdempotencyKey);
+            var existing = FindRun(request.Write.AttemptId);
+            var deliveryKey = DeliveryKey("settle", request.Write.IdempotencyKey);
             if (existing is not null && existing.IdempotencyKeys.Contains(deliveryKey))
             {
                 var duplicateStatus = IsCurrentRun(existing)
@@ -319,18 +309,18 @@ public sealed class AttemptAuthorityService
             }
 
             var validation = ValidateRunWriteLocked(
-                write,
-                executorId,
+                request.Write,
+                request.ExecutorId,
                 recordIdempotency: false,
                 idempotencyScope: "settle",
-                leaseId: leaseId,
-                expectedTaskKey: expectedTaskKey);
+                leaseId: request.LeaseId,
+                expectedTaskKey: request.ExpectedTaskKey);
             if (validation.Status != AttemptWriteStatus.Accepted) return validation;
-            var run = FindRun(write.AttemptId)!;
-            var normalizedOutcome = Normalize(outcome).ToLowerInvariant();
-            if (requireResultSha
+            var run = FindRun(request.Write.AttemptId)!;
+            var normalizedOutcome = Normalize(request.Outcome).ToLowerInvariant();
+            if (request.RequireResultSha
                 && normalizedOutcome is ("done" or "noop")
-                && Blank(resultSha))
+                && Blank(request.ResultSha))
             {
                 return new AttemptWriteResult(
                     AttemptWriteStatus.Invalid,
@@ -338,11 +328,11 @@ public sealed class AttemptAuthorityService
                     "Successful remote completion requires the immutable Result-SHA.",
                     RunAttempt: ToDto(run));
             }
-            if (resultEnvelope is not null)
+            if (request.ResultEnvelope is not null)
             {
                 try
                 {
-                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Validate(resultEnvelope);
+                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Validate(request.ResultEnvelope);
                 }
                 catch (Exception exception) when (exception is ArgumentException or FormatException)
                 {
@@ -353,12 +343,12 @@ public sealed class AttemptAuthorityService
                         RunAttempt: ToDto(run));
                 }
                 var computedDigest =
-                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
-                if (!Same(resultEnvelope.SourceRunAttemptId, run.AttemptId)
-                    || !Same(resultEnvelope.RepositoryId, run.RepositoryId)
-                    || !Same(resultEnvelope.ResultSha, resultSha)
-                    || (!Blank(resultEnvelopeDigest)
-                        && !Same(computedDigest, resultEnvelopeDigest)))
+                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(request.ResultEnvelope);
+                if (!Same(request.ResultEnvelope.SourceRunAttemptId, run.AttemptId)
+                    || !Same(request.ResultEnvelope.RepositoryId, run.RepositoryId)
+                    || !Same(request.ResultEnvelope.ResultSha, request.ResultSha)
+                    || (!Blank(request.ResultEnvelopeDigest)
+                        && !Same(computedDigest, request.ResultEnvelopeDigest)))
                 {
                     return new AttemptWriteResult(
                         AttemptWriteStatus.SubjectMismatch,
@@ -366,7 +356,7 @@ public sealed class AttemptAuthorityService
                         "Immutable result envelope does not match the fenced RunAttempt.",
                         RunAttempt: ToDto(run));
                 }
-                run.ResultEnvelope = resultEnvelope;
+                run.ResultEnvelope = request.ResultEnvelope;
                 run.ResultEnvelopeDigest = computedDigest;
             }
 
@@ -376,8 +366,8 @@ public sealed class AttemptAuthorityService
                 : normalizedOutcome is "cancelled" ? AttemptLifecycleState.Cancelled : AttemptLifecycleState.Failed;
             run.TerminalAt = _utcNow();
             run.TerminalOutcome = normalizedOutcome;
-            run.TerminalReason = NormalizeNull(reason);
-            run.ResultSha = NormalizeNull(resultSha)?.ToLowerInvariant();
+            run.TerminalReason = NormalizeNull(request.Reason);
+            run.ResultSha = NormalizeNull(request.ResultSha)?.ToLowerInvariant();
             if (run.State == AttemptLifecycleState.Completed
                 && CurrentReview(run.TaskKey) is { } olderReview
                 && !Terminal(olderReview.State)
@@ -1421,27 +1411,75 @@ public sealed class AttemptAuthorityService
 
     private static AttemptWriteResult InvalidRun(string message) => new(AttemptWriteStatus.Invalid, string.Empty, message);
     private static AttemptLeaseDto? ToDto(AttemptLeaseRecord? lease) => lease is null ? null : new(
-        lease.LeaseId, lease.Fence, lease.AuthorityEpoch, lease.ExecutorId, lease.HostId,
-        lease.AcquiredAt, lease.ExpiresAt, lease.LastHeartbeat,
-        lease.ExecutorDisplayName, lease.BackendName, lease.ProcessId, lease.ClientId);
+        LeaseId: lease.LeaseId,
+        Fence: lease.Fence,
+        AuthorityEpoch: lease.AuthorityEpoch,
+        ExecutorId: lease.ExecutorId,
+        HostId: lease.HostId,
+        AcquiredAt: lease.AcquiredAt,
+        ExpiresAt: lease.ExpiresAt,
+        LastHeartbeat: lease.LastHeartbeat,
+        ExecutorDisplayName: lease.ExecutorDisplayName,
+        BackendName: lease.BackendName,
+        ProcessId: lease.ProcessId,
+        ClientId: lease.ClientId);
     private static ReviewSubjectDto ToDto(ReviewSubjectRecord subject) => new(
-        subject.SubjectId, subject.RepositoryId, subject.ExpectedResultSha, subject.SourceRunAttemptId,
-        subject.TaskRequirementsHash, subject.ReviewPolicyHash, subject.EvidenceDigestInputs, subject.CreatedAt,
-        subject.RepositoryUrl, subject.ResultRef, subject.Plan);
+        SubjectId: subject.SubjectId,
+        RepositoryId: subject.RepositoryId,
+        ExpectedResultSha: subject.ExpectedResultSha,
+        SourceRunAttemptId: subject.SourceRunAttemptId,
+        TaskRequirementsHash: subject.TaskRequirementsHash,
+        ReviewPolicyHash: subject.ReviewPolicyHash,
+        EvidenceDigestInputs: subject.EvidenceDigestInputs,
+        CreatedAt: subject.CreatedAt,
+        RepositoryUrl: subject.RepositoryUrl,
+        ResultRef: subject.ResultRef,
+        Plan: subject.Plan);
     private static RunAttemptDto ToDto(RunAttemptRecord run) => new(
-        run.AttemptId, run.TaskKey, run.RepositoryId, run.SourceAttemptId, run.State, ToDto(run.Lease),
-        run.LastFence, run.AuthorityEpoch, run.CreatedAt, run.TerminalAt, run.ResultSha,
-        run.TerminalOutcome, run.TerminalReason, run.EvidenceDigests,
-        run.ResultEnvelope, run.ResultEnvelopeDigest);
+        AttemptId: run.AttemptId,
+        TaskKey: run.TaskKey,
+        RepositoryId: run.RepositoryId,
+        SourceAttemptId: run.SourceAttemptId,
+        State: run.State,
+        Lease: ToDto(run.Lease),
+        LastFence: run.LastFence,
+        AuthorityEpoch: run.AuthorityEpoch,
+        CreatedAt: run.CreatedAt,
+        TerminalAt: run.TerminalAt,
+        ResultSha: run.ResultSha,
+        TerminalOutcome: run.TerminalOutcome,
+        TerminalReason: run.TerminalReason,
+        EvidenceDigests: run.EvidenceDigests,
+        ResultEnvelope: run.ResultEnvelope,
+        ResultEnvelopeDigest: run.ResultEnvelopeDigest);
     private static ReviewAttemptDto ToDto(ReviewAttemptRecord review) => new(
-        review.AttemptId, review.TaskKey, review.RepositoryId, review.SourceRunAttemptId,
-        review.SourceReviewAttemptId, ToDto(review.Subject), review.State, ToDto(review.Lease),
-        review.LastFence, review.AuthorityEpoch, review.CreatedAt, review.TerminalAt, review.Outcome,
-        review.FailureClassification, review.TestedResultSha, review.TerminalReason,
-        review.Reports.Select(ToDto).ToList());
+        AttemptId: review.AttemptId,
+        TaskKey: review.TaskKey,
+        RepositoryId: review.RepositoryId,
+        SourceRunAttemptId: review.SourceRunAttemptId,
+        SourceReviewAttemptId: review.SourceReviewAttemptId,
+        Subject: ToDto(review.Subject),
+        State: review.State,
+        Lease: ToDto(review.Lease),
+        LastFence: review.LastFence,
+        AuthorityEpoch: review.AuthorityEpoch,
+        CreatedAt: review.CreatedAt,
+        TerminalAt: review.TerminalAt,
+        Outcome: review.Outcome,
+        FailureClassification: review.FailureClassification,
+        TestedResultSha: review.TestedResultSha,
+        TerminalReason: review.TerminalReason,
+        Reports: review.Reports.Select(ToDto).ToList());
     private static ReviewReportDeliveryDto ToDto(ReviewReportDeliveryRecord report) => new(
-        report.IdempotencyKey, report.Fence, report.AuthorityEpoch, report.MaterializedResultSha,
-        report.Outcome, report.FailureClassification, report.Reason, report.AuthorityStatus, report.ReceivedAt);
+        IdempotencyKey: report.IdempotencyKey,
+        Fence: report.Fence,
+        AuthorityEpoch: report.AuthorityEpoch,
+        MaterializedResultSha: report.MaterializedResultSha,
+        Outcome: report.Outcome,
+        FailureClassification: report.FailureClassification,
+        Reason: report.Reason,
+        AuthorityStatus: report.AuthorityStatus,
+        ReceivedAt: report.ReceivedAt);
     private static ReviewReportDeliveryRecord ToReport(
         SettleReviewAttemptRequest request,
         AttemptWriteStatus authorityStatus,
