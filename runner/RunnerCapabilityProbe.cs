@@ -13,7 +13,6 @@ internal static class RunnerCapabilityProbe
         string? gitDetail = null,
         ProviderAuthProbe? providerAuth = null)
     {
-        var provider = Provider(options.CliBin);
         var list = new List<AdvertisedCapabilityDto>
         {
             Capability(
@@ -37,14 +36,10 @@ internal static class RunnerCapabilityProbe
             // (task-server/TaskServerCapabilityStore.cs:506). Reporting mere PATH
             // presence as "ready" is what burns cards after an expired token, so
             // this asks the CLI itself - see docs/operations/token-refresh-ohne-tunnel.md.
-            var auth = (providerAuth ?? ProviderAuthProbe.Shared).Current(options.CliBin);
-            list.Add(Capability(
-                CapabilityProtocol.ProviderAuthentication(provider),
-                "provider-auth",
-                ToolVersion(options.CliBin),
-                provider,
-                auth.Status,
-                auth.Detail));
+            AddCodingCliCapabilities(
+                list,
+                options,
+                providerAuth ?? ProviderAuthProbe.Shared);
             list.Add(Capability(
                 CapabilityProtocol.GitPush,
                 "source",
@@ -82,7 +77,28 @@ internal static class RunnerCapabilityProbe
         => new[]
         {
             CapabilityProtocol.CodingExecutor,
-            CapabilityProtocol.ProviderAuthentication(Provider(options.CliBin)),
+            CapabilityProtocol.CliExecution(AgentCliProcess.ConfiguredCliType(options)),
+            CapabilityProtocol.ProviderAuthentication(AgentCliProcess.ConfiguredCliType(options)),
+            CapabilityProtocol.GitFetch,
+            CapabilityProtocol.GitPush,
+            CapabilityProtocol.RepositoryAccess,
+            CapabilityProtocol.Disk,
+            CapabilityProtocol.TaskServerConnectivity,
+        }
+        .Concat(options.RequiredCapabilities)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+
+    /// <summary>
+    /// Host-wide requirements for the legacy card-selecting claim plane. The
+    /// server adds the candidate card's CLI execution and authentication keys,
+    /// so a mixed host is not accidentally forced through its configured
+    /// default provider when it claims a card for its other CLI.
+    /// </summary>
+    public static IReadOnlyList<string> CodingHostRequirements(RunnerOptions options)
+        => new[]
+        {
+            CapabilityProtocol.CodingExecutor,
             CapabilityProtocol.GitFetch,
             CapabilityProtocol.GitPush,
             CapabilityProtocol.RepositoryAccess,
@@ -152,6 +168,50 @@ internal static class RunnerCapabilityProbe
     {
         if (!OnPath(executable)) return;
         capabilities.Add(Capability(key, "toolchain", ToolVersion(executable), executable));
+    }
+
+    private static void AddCodingCliCapabilities(
+        ICollection<AdvertisedCapabilityDto> capabilities,
+        RunnerOptions options,
+        ProviderAuthProbe providerAuth)
+    {
+        foreach (var (cliType, binary) in CodingCliBinaries(options))
+        {
+            var auth = providerAuth.Current(binary);
+            var binaryAvailable = ProviderAuthProbe.ExecutableExists(binary);
+            capabilities.Add(Capability(
+                CapabilityProtocol.CliExecution(cliType),
+                "cli-execution",
+                binaryAvailable ? "available" : null,
+                binary,
+                binaryAvailable ? ProviderAuthProbe.Ready : ProviderAuthProbe.Unavailable,
+                binaryAvailable
+                    ? $"CLI binary '{binary}' is available for {cliType} cards."
+                    : $"CLI binary '{binary}' was not found; {cliType} cards cannot execute."));
+            capabilities.Add(Capability(
+                CapabilityProtocol.ProviderAuthentication(cliType),
+                "provider-auth",
+                binaryAvailable ? "available" : null,
+                cliType,
+                auth.Status,
+                auth.Detail));
+        }
+    }
+
+    internal static IReadOnlyList<(string CliType, string Binary)> CodingCliBinaries(
+        RunnerOptions options)
+    {
+        var configuredType = AgentCliProcess.ConfiguredCliType(options);
+        var binaries = new List<(string CliType, string Binary)>
+        {
+            (configuredType, options.CliBin),
+        };
+        if (configuredType != AgentCliProcess.CodexCli
+            && !string.IsNullOrWhiteSpace(options.CodexCliBin))
+        {
+            binaries.Add((AgentCliProcess.CodexCli, options.CodexCliBin));
+        }
+        return binaries;
     }
 
     private static AdvertisedCapabilityDto Capability(
@@ -271,9 +331,10 @@ public sealed class ProviderAuthProbe
     private readonly TimeSpan _ttl;
     private readonly TimeSpan _timeout;
     private ProviderAuthLauncher? _launcher;
-    private ProviderAuthStatus? _observed;
-    private string? _observedBinary;
-    private bool _refreshInFlight;
+    private readonly Dictionary<string, ProviderAuthStatus> _observed =
+        new(StringComparer.Ordinal);
+    private readonly HashSet<string> _refreshInFlight =
+        new(StringComparer.Ordinal);
 
     public ProviderAuthProbe(
         ProviderAuthLauncher? launcher = null,
@@ -300,8 +361,8 @@ public sealed class ProviderAuthProbe
         lock (_sync)
         {
             _launcher = launcher;
-            _observed = null;
-            _observedBinary = null;
+            _observed.Clear();
+            _refreshInFlight.Clear();
         }
     }
 
@@ -315,15 +376,11 @@ public sealed class ProviderAuthProbe
     {
         lock (_sync)
         {
-            var known = _observed is not null
-                        && string.Equals(_observedBinary, cliBinary, StringComparison.Ordinal)
-                ? _observed
-                : null;
+            _observed.TryGetValue(cliBinary, out var known);
             if (known is not null && _clock() - known.ObservedAt < _ttl) return known;
 
-            if (_launcher is not null && !_refreshInFlight)
+            if (_launcher is not null && _refreshInFlight.Add(cliBinary))
             {
-                _refreshInFlight = true;
                 _ = Task.Run(async () =>
                 {
                     // A failed refresh must never take the daemon loop with it;
@@ -335,8 +392,7 @@ public sealed class ProviderAuthProbe
             if (known is not null) return known;
 
             var bootstrap = PresenceOnly(cliBinary, probeWired: _launcher is not null);
-            _observed = bootstrap;
-            _observedBinary = cliBinary;
+            _observed[cliBinary] = bootstrap;
             return bootstrap;
         }
     }
@@ -352,14 +408,13 @@ public sealed class ProviderAuthProbe
             var status = await ObserveAsync(cliBinary, ct);
             lock (_sync)
             {
-                _observed = status;
-                _observedBinary = cliBinary;
+                _observed[cliBinary] = status;
             }
             return status;
         }
         finally
         {
-            lock (_sync) _refreshInFlight = false;
+            lock (_sync) _refreshInFlight.Remove(cliBinary);
         }
     }
 

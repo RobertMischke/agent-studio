@@ -1,5 +1,6 @@
 using AgentStudio.Pipeline;
 using System.Text;
+using CapabilityProtocol = AgentStudio.TaskServer.Contracts.CapabilityProtocol;
 
 namespace AgentStudio.Tasks;
 
@@ -146,6 +147,7 @@ public static class LeaseEndpoints
             AgentStudio.Clients.HostTelemetryStore telemetry,
             AccessSecurityStore accessSecurity,
             HumanReviewEscalation humanReviewEscalation,
+            AgentStudio.Runner.V1ReviewExecutorRegistry capabilityRegistry,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
@@ -367,6 +369,7 @@ public static class LeaseEndpoints
                 RunnerProjectPreflight? failedProjectPreflight = null;
                 var readOnlyCodingSkipped = false;
                 string? nonRemoteCapableProject = null;
+                string? capabilityMismatch = null;
                 foreach (var task in eligible)
                 {
                     if (client is not null
@@ -377,6 +380,28 @@ public static class LeaseEndpoints
                         logger.LogWarning(
                             "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
                             req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
+                        continue;
+                    }
+                    var cliType = CliTypes.Normalize(task.CliType);
+                    var requiredCapabilities = (req.RequiredCapabilities ?? [])
+                        .Append(CapabilityProtocol.CodingExecutor)
+                        .Append(CapabilityProtocol.CliExecution(cliType))
+                        .Append(CapabilityProtocol.ProviderAuthentication(cliType))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    var capabilityAdmission = capabilityRegistry.EvaluateCodingAdmission(
+                        req.RunnerId.Trim(),
+                        req.CapabilityInstanceId,
+                        requiredCapabilities);
+                    if (!capabilityAdmission.Eligible)
+                    {
+                        capabilityMismatch ??= capabilityAdmission.Message;
+                        logger.LogInformation(
+                            "remote-runner-coding-claim-skipped-capability runner={Runner} task={TaskKey} cli={CliType} reason={Reason}",
+                            req.RunnerName,
+                            task.Key ?? task.TaskKey ?? task.Id,
+                            cliType,
+                            capabilityAdmission.Message);
                         continue;
                     }
                     var registryProject = projects.FindByStorageLocation(task.WatchPath)
@@ -434,7 +459,7 @@ public static class LeaseEndpoints
                             ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
                             : nonRemoteCapableProject is not null
                                 ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                                : null));
+                                : capabilityMismatch));
 
                 if (string.IsNullOrWhiteSpace(clientId))
                     return Results.Ok(new RunnerClaimResponse(

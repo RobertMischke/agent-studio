@@ -680,7 +680,8 @@ public sealed class RemoteTaskRunner
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
                     if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
                     {
-                        var provider = RunnerCapabilityProbe.Provider(_options.CliBin);
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)

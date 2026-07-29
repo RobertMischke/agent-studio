@@ -29,6 +29,7 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease, string InstanceId)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
+    private bool _supportsCapabilityAdvertisement;
     private readonly bool _usesServiceCredential;
 
     public TaskServerClient(RunnerOptions options)
@@ -87,6 +88,7 @@ public sealed class TaskServerClient : IDisposable
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
         SetClientId(configuredClientId ?? runnerId);
         _useV1 = usesDurableTaskServer;
+        _supportsCapabilityAdvertisement = usesDurableTaskServer;
     }
 
     /// <summary>
@@ -106,6 +108,7 @@ public sealed class TaskServerClient : IDisposable
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _useV1 = false;
+            _supportsCapabilityAdvertisement = false;
             return;
         }
 
@@ -115,7 +118,13 @@ public sealed class TaskServerClient : IDisposable
         var compatibility = JsonSerializer.Deserialize<Contract.ProtocolCompatibilityResponse>(detail, Json);
         if (compatibility?.Supported != true)
             throw new TaskServerException(426, compatibility?.Reason ?? "Task Server protocol is not compatible.");
-        _useV1 = true;
+        var serverCapabilities = compatibility.Server.Capabilities ?? [];
+        _supportsCapabilityAdvertisement =
+            serverCapabilities.Contains("capability-advertisement", StringComparer.Ordinal)
+            || serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
+        _useV1 = _options?.Role == "review"
+            ? serverCapabilities.Contains("review-plane", StringComparer.Ordinal)
+            : serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -127,7 +136,7 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
     {
-        if (_useV1)
+        if (_useV1 || _supportsCapabilityAdvertisement)
         {
             var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
             var runnerId = options.RunnerId;
@@ -166,15 +175,15 @@ public sealed class TaskServerClient : IDisposable
                     request,
                     ct);
                 SetClientId(runnerId);
-                return runnerId;
+                if (_useV1)
+                    return runnerId;
             }
             catch (TaskServerException ex) when (ex.StatusCode == 409 && options.Role != "review")
             {
-                // Coding-fallback-guard: the monolith V1 mount admits only the
-                // review-executor identity ("runner-role-conflict"). A coding
-                // runner that negotiated V1 (the protocol endpoint exists in the
-                // monolith) must fall back to the legacy claim plane instead of
-                // crash-looping on the role conflict. Review runners keep V1.
+                // Compatibility guard for an older monolith that advertises the
+                // V1 review plane but still rejects coding registration. Current
+                // monoliths register coding identities for capability admission
+                // while keeping their claims on the legacy card-selection route.
                 _useV1 = false;
                 // fall through to the legacy registration path below.
             }
@@ -317,7 +326,16 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RunnerClaimResponse> ClaimAsync(RunnerClaimRequest req, CancellationToken ct)
     {
         if (!_useV1)
-            return await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
+            return await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>(
+                       "/api/runner/claim",
+                       req with
+                       {
+                           CapabilityInstanceId = RunnerInstanceId,
+                           RequiredCapabilities = _options is null
+                               ? req.RequiredCapabilities
+                               : RunnerCapabilityProbe.CodingHostRequirements(_options),
+                       },
+                       ct)
                    ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
 
         var claim = await PostJsonAsync<Contract.ClaimRequest, Contract.ClaimResponse>(
@@ -517,7 +535,7 @@ public sealed class TaskServerClient : IDisposable
         long generation,
         CancellationToken ct)
     {
-        if (!_useV1) return;
+        if (!_useV1 && !_supportsCapabilityAdvertisement) return;
         var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
         var request = new Contract.CapabilityAdvertisementRequest(
             options.RunnerId,
@@ -545,7 +563,7 @@ public sealed class TaskServerClient : IDisposable
         long? fence,
         CancellationToken ct)
     {
-        if (!_useV1) return;
+        if (!_useV1 && !_supportsCapabilityAdvertisement) return;
         var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
         var request = new Contract.CapabilityFailureRequest(
             options.RunnerId,

@@ -1,10 +1,86 @@
 using AgentRunner;
+using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
 namespace AgentRunner.Tests;
 
 public class TaskServerClientHealthTests
 {
+    [Fact]
+    public async Task Monolith_capability_plane_registers_and_advertises_before_legacy_claim()
+    {
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            var content = path switch
+            {
+                "/api/v1/protocol/compatibility" => """
+                    {
+                      "supported": true,
+                      "server": {
+                        "current": 2,
+                        "minimumSupported": 1,
+                        "maximumSupported": 2,
+                        "serverVersion": "1.0.0",
+                        "serverId": "orchestrator-monolith",
+                        "clientKinds": ["runner"],
+                        "capabilities": ["review-plane", "capability-advertisement"]
+                      }
+                    }
+                    """,
+                "/api/clients/register" => """
+                    {"id":"legacy-client","displayName":"runner","kind":"service"}
+                    """,
+                "/api/runner/claim" => """{"status":"empty"}""",
+                _ => "{}",
+            };
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(content),
+            };
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner",
+            RunnerName = "runner",
+            Hostname = "host",
+            BackendName = "test",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "claude",
+            CliArgs = "",
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner",
+            usesDurableTaskServer: false,
+            options: options);
+
+        await client.EnsureCompatibleAsync(CancellationToken.None);
+        await client.RegisterAsync("runner", "service", CancellationToken.None);
+        await client.AdvertiseCapabilitiesAsync(
+            [new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor")],
+            null,
+            1,
+            CancellationToken.None);
+        await client.ClaimAsync(
+            new RunnerClaimRequest("runner", "runner", "host", 1, "test"),
+            CancellationToken.None);
+
+        Assert.False(client.UsesDurableTaskServer);
+        Assert.Equal(
+            [
+                "/api/v1/protocol/compatibility",
+                "/api/v1/runners/runner",
+                "/api/clients/register",
+                "/api/v1/runners/runner/capabilities",
+                "/api/runner/claim",
+            ],
+            handler.Requests.Select(request => request.PathAndQuery));
+    }
+
     [Fact]
     public async Task Register_uses_and_verifies_the_configured_client_identity()
     {

@@ -85,6 +85,93 @@ public sealed class RunnerCapabilityProbeTests
     }
 
     [Fact]
+    public async Task Capability_advertisement_reports_each_executable_card_cli_independently()
+    {
+        using var temp = new TempDirectory();
+        var claude = Path.Combine(temp.Path, "claude");
+        var codex = Path.Combine(temp.Path, "codex");
+        await File.WriteAllTextAsync(claude, "");
+        await File.WriteAllTextAsync(codex, "");
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = claude,
+            CodexCliBin = codex,
+            CliArgs = "",
+        };
+        var probe = new ProviderAuthProbe(
+            (binary, _, _) => Task.FromResult(
+                Path.GetFileName(binary) == "claude"
+                    ? new ProcessResult(1, "", "Not logged in")
+                    : new ProcessResult(0, "Logged in", "")),
+            File.Exists);
+        await probe.RefreshAsync(claude, CancellationToken.None);
+        await probe.RefreshAsync(codex, CancellationToken.None);
+
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: probe);
+
+        Assert.Equal(
+            "ready",
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.CliExecution("claude")).Status);
+        Assert.Equal(
+            "ready",
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.CliExecution("codex")).Status);
+        Assert.Equal(
+            ProviderAuthProbe.Unavailable,
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.ProviderAuthentication("claude")).Status);
+        Assert.Equal(
+            ProviderAuthProbe.Ready,
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.ProviderAuthentication("codex")).Status);
+    }
+
+    [Fact]
+    public void Missing_secondary_cli_is_advertised_as_unavailable()
+    {
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "/bin/sh",
+            CodexCliBin = Path.Combine(
+                Path.GetTempPath(),
+                $"missing-codex-{Guid.NewGuid():N}"),
+            CliArgs = "",
+        };
+
+        var advertised = RunnerCapabilityProbe.Advertise(options, gitPushReady: true);
+
+        Assert.Equal(
+            ProviderAuthProbe.Unavailable,
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.CliExecution("codex")).Status);
+    }
+
+    [Fact]
     public void Salvage_gate_adds_the_token_scope_fix_for_a_real_workflow_rejection()
     {
         var rejection = new InvalidOperationException(
@@ -102,5 +189,24 @@ public sealed class RunnerCapabilityProbeTests
         Assert.Contains("fine-grained Contents: Read and write", gate);
         Assert.Contains("classic repo plus workflow", gate);
         Assert.Contains(GitPushProbe.TokenRequirementsPath, gate);
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        public TempDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"runner-capability-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Path, recursive: true); }
+            catch { /* best effort */ }
+        }
     }
 }

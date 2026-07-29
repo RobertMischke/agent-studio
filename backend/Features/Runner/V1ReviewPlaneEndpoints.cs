@@ -10,9 +10,10 @@ using Contract = AgentStudio.TaskServer.Contracts;
 namespace AgentStudio.Runner;
 
 /// <summary>
-/// Tranche-0 compatibility mount for the versioned Remote Review plane. The
-/// monolith remains the single task and AttemptAuthority writer; this adapter
-/// only translates the published Task Server contracts used by agent-runner.
+/// Tranche-0 compatibility mount for the versioned Remote Review plane and
+/// runner capability advertisements. The monolith remains the single task and
+/// AttemptAuthority writer; this adapter translates the published Task Server
+/// contracts used by agent-runner.
 /// </summary>
 public static class V1ReviewPlaneEndpoints
 {
@@ -590,7 +591,7 @@ public static class V1ReviewPlaneEndpoints
             version,
             "orchestrator-monolith",
             ["runner", "review-runner"],
-            ["review-plane"]);
+            ["review-plane", "capability-advertisement"]);
     }
 
     private static void RecordPostAcceptanceReportIfTerminal(
@@ -915,10 +916,13 @@ public sealed class V1ReviewExecutorRegistry
             || string.IsNullOrWhiteSpace(request.InstanceId))
             throw new ArgumentException("Runner, host, and instance ids are required.");
         var capabilities = request.Capabilities ?? [];
-        if (!capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
-            || capabilities.Contains(Contract.ReviewCapabilities.CodingExecutor, StringComparer.Ordinal))
+        var reviewExecutor =
+            capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal);
+        var codingExecutor =
+            capabilities.Contains(Contract.ReviewCapabilities.CodingExecutor, StringComparer.Ordinal);
+        if (reviewExecutor == codingExecutor)
             throw new InvalidOperationException(
-                "The monolith V1 mount admits a separate review-executor identity only.");
+                "A runner identity must advertise exactly one coding or review executor role.");
 
         var now = DateTime.UtcNow;
         Registration registration;
@@ -937,9 +941,11 @@ public sealed class V1ReviewExecutorRegistry
                     now),
                 (_, existing) =>
                 {
-                    if (!existing.Capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor))
+                    var existingReview =
+                        existing.Capabilities.Contains(Contract.ReviewCapabilities.ReviewExecutor);
+                    if (existingReview != reviewExecutor)
                         throw new InvalidOperationException(
-                            "A coding identity cannot be changed into a review identity.");
+                            "A coding or review identity cannot change its executor role.");
                     return existing with
                     {
                         Name = request.Name,
@@ -1030,10 +1036,10 @@ public sealed class V1ReviewExecutorRegistry
         {
             if (!_registrations.TryGetValue(runnerId, out var registration))
                 throw new InvalidOperationException(
-                    "Register this review-executor identity before advertising capabilities.");
+                    "Register this runner identity before advertising capabilities.");
             if (!string.Equals(registration.InstanceId, request.InstanceId, StringComparison.Ordinal))
                 throw new InvalidOperationException(
-                    "Capability advertisement instance does not match the registered review executor.");
+                    "Capability advertisement instance does not match the registered runner.");
             if (_capabilityStates.TryGetValue(runnerId, out var existing)
                 && request.Generation < existing.Generation)
             {
@@ -1110,10 +1116,9 @@ public sealed class V1ReviewExecutorRegistry
         var payloadHash = HashPayload(request);
         lock (_gate)
         {
-            // The mount admits review identities, but the same route carries the
-            // coding runner's diagnostics. An unregistered id is still accepted
-            // and recorded - only a stale instance of a known id is rejected,
-            // because that report describes a runner that no longer exists.
+            // An unregistered id is still accepted and recorded for compatibility;
+            // only a stale instance of a known id is rejected, because that report
+            // describes a runner that no longer exists.
             if (_registrations.TryGetValue(runnerId, out var registration)
                 && !string.Equals(registration.InstanceId, request.InstanceId, StringComparison.Ordinal))
             {
@@ -1284,6 +1289,85 @@ public sealed class V1ReviewExecutorRegistry
     }
 
     /// <summary>
+    /// Applies the published capability-admission contract to a legacy coding
+    /// claim. The monolith still owns card selection, but it consumes the same
+    /// fresh, ready advertisement used by the separated Task Server instead of
+    /// maintaining a second scheduler-specific host inventory.
+    /// </summary>
+    public CodingCapabilityAdmission EvaluateCodingAdmission(
+        string runnerId,
+        string? instanceId,
+        IReadOnlyList<string> requestedCapabilities)
+    {
+        var required = requestedCapabilities
+            .Select(key => key.Trim().ToLowerInvariant())
+            .Where(key => key.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var now = DateTime.UtcNow;
+        lock (_gate)
+        {
+            if (!_registrations.TryGetValue(runnerId, out var registration)
+                || !registration.Capabilities.Contains(Contract.ReviewCapabilities.CodingExecutor))
+            {
+                return CodingCapabilityAdmission.Blocked(
+                    required,
+                    "Runner has not registered a coding-executor capability identity.");
+            }
+            if (string.IsNullOrWhiteSpace(instanceId)
+                || !string.Equals(registration.InstanceId, instanceId, StringComparison.Ordinal))
+            {
+                return CodingCapabilityAdmission.Blocked(
+                    required,
+                    "Claim capability instance does not match the registered coding runner.");
+            }
+            if (!_capabilityStates.TryGetValue(runnerId, out var state)
+                || !string.Equals(state.InstanceId, instanceId, StringComparison.Ordinal))
+            {
+                return CodingCapabilityAdmission.Blocked(
+                    required,
+                    "Runner has no capability advertisement for this coding instance.");
+            }
+
+            foreach (var key in required)
+            {
+                var capability = state.Capabilities.FirstOrDefault(item =>
+                    string.Equals(item.Key, key, StringComparison.Ordinal));
+                if (capability is null)
+                    return CodingCapabilityAdmission.Blocked(
+                        required,
+                        $"Required capability '{key}' was not advertised.");
+                if (capability.FreshUntil <= now)
+                    return CodingCapabilityAdmission.Blocked(
+                        required,
+                        $"Required capability '{key}' is stale since {capability.FreshUntil:O}.");
+                if (!string.Equals(capability.AdvertisedStatus, "ready", StringComparison.Ordinal))
+                    return CodingCapabilityAdmission.Blocked(
+                        required,
+                        $"Required capability '{key}' is advertised as {capability.AdvertisedStatus}.");
+            }
+
+            if (_capabilityFailures.TryGetValue(runnerId, out var failures))
+            {
+                var draining = failures.Values
+                    .Where(failure =>
+                        failure.CooldownUntil > now
+                        && (failure.WholeHost || required.Contains(failure.Key, StringComparer.Ordinal)))
+                    .OrderByDescending(failure => failure.CooldownUntil)
+                    .FirstOrDefault();
+                if (draining is not null)
+                {
+                    return CodingCapabilityAdmission.Blocked(
+                        required,
+                        $"Required capability '{draining.Key}' is draining until {draining.CooldownUntil:O}.");
+                }
+            }
+        }
+        return new CodingCapabilityAdmission(true, null, required);
+    }
+
+    /// <summary>
     /// Test seam: backdates this runner's recorded capability failures so the
     /// cooldown-expiry path can be exercised without waiting out the real
     /// two-minute backoff. Never called in production.
@@ -1393,6 +1477,17 @@ public sealed class V1ReviewExecutorRegistry
         string Reason,
         DateTime CooldownUntil,
         bool WholeHost);
+
+    public sealed record CodingCapabilityAdmission(
+        bool Eligible,
+        string? Message,
+        IReadOnlyList<string> Required)
+    {
+        public static CodingCapabilityAdmission Blocked(
+            IReadOnlyList<string> required,
+            string message)
+            => new(false, message, required);
+    }
 
     public sealed record ReviewExecutor(string HostId, IReadOnlySet<string> Capabilities);
 }

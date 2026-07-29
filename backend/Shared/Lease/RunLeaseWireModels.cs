@@ -105,7 +105,9 @@ public sealed record RunnerClaimRequest(
     int? ActiveSlots = null,
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    string? CapabilityInstanceId = null,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 /// <summary>Host result for the unleased project offered by the previous claim poll.</summary>
 public sealed record RunnerProjectPreflightReport(

@@ -21,6 +21,14 @@ public static class CapabilityProtocol
     public const string RepositoryFileSystem = "repository:filesystem";
     public const string TaskServerAuthority = "task-server:authority";
 
+    /// <summary>
+    /// The runner can execute a card through the named coding CLI binary.
+    /// Authentication remains a separate capability so binary loss and expired
+    /// provider credentials stay independently diagnosable.
+    /// </summary>
+    public static string CliExecution(string cliType)
+        => $"cli-execution:{cliType.Trim().ToLowerInvariant()}";
+
     public static string ProviderAuthentication(string provider)
         => $"provider-auth:{provider.Trim().ToLowerInvariant()}";
 }
