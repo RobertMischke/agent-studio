@@ -689,6 +689,7 @@
     &[data-tone='concern'] { color: var(--severity-warn); }
     &[data-tone='danger'] { color: var(--severity-high); }
     &[data-tone='muted']  { color: var(--studio-fg-muted); }
+    &[data-tone='not-run'] { color: var(--studio-fg-muted); }
   }
 
   &__count {
@@ -718,7 +719,8 @@
   &[data-tone='warn']   { --ov-pl-phase-accent: var(--severity-warn); }
   &[data-tone='concern'] { --ov-pl-phase-accent: var(--severity-warn); }
   &[data-tone='danger'] { --ov-pl-phase-accent: var(--severity-high); }
-  &[data-tone='muted'] {
+  &[data-tone='muted'],
+  &[data-tone='not-run'] {
     --ov-pl-phase-accent: var(--studio-border-strong, var(--studio-border));
     opacity: 0.75;
   }

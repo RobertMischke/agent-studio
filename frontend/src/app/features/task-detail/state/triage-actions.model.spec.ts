@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeAcceptViewFor,
   needsPlanningAcceptWarning,
+  needsUnintegratedArchiveWarning,
   overflowActionsFor,
   primaryActionFor,
 } from './triage-actions.model';
@@ -103,6 +104,31 @@ describe('needsPlanningAcceptWarning — AGT-2069 spawn-contract accept guard', 
   it('does not guess when the planning projection is absent (older payload)', () => {
     expect(needsPlanningAcceptWarning(planningJob(null), accept)).toBe(false);
     expect(needsPlanningAcceptWarning(planningJob(undefined), accept)).toBe(false);
+  });
+});
+
+describe('needsUnintegratedArchiveWarning — Delivered archive guard', () => {
+  const completed = (status: 'integrated' | 'pending' | 'conflict-skipped' | null): TaskInfo =>
+    reviewJob(null, {
+      state: TaskState.Completed,
+      integration: status === null ? null : {
+        status,
+        sha: status === 'integrated' ? 'abc1234' : null,
+        integrationBranch: 'develop',
+        detail: status,
+      },
+    });
+
+  it('warns for pending, conflict, and unknown integration truth', () => {
+    expect(needsUnintegratedArchiveWarning(completed('pending'), TaskState.Archive)).toBe(true);
+    expect(needsUnintegratedArchiveWarning(completed('conflict-skipped'), TaskState.Archive)).toBe(true);
+    expect(needsUnintegratedArchiveWarning(completed(null), TaskState.Archive)).toBe(true);
+  });
+
+  it('does not warn once integrated or outside Delivered -> Archive', () => {
+    expect(needsUnintegratedArchiveWarning(completed('integrated'), TaskState.Archive)).toBe(false);
+    expect(needsUnintegratedArchiveWarning(completed('pending'), TaskState.Backlog)).toBe(false);
+    expect(needsUnintegratedArchiveWarning(reviewJob(), TaskState.Archive)).toBe(false);
   });
 });
 

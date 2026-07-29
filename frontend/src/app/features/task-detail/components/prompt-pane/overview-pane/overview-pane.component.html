@@ -214,7 +214,7 @@
                   <span class="ov-runs-strip__fail">{{ cur.failed }} fail</span>
                 }
                 @if (cur.passed === 0 && cur.failed === 0) {
-                  <span class="ov-runs-strip__pending">pending</span>
+                  <span class="ov-runs-strip__pending">{{ cur.emptyOutcomeLabel }}</span>
                 }
               </span>
               @if (cur.durationMs > 0) {

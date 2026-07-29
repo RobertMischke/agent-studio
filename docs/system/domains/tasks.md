@@ -250,6 +250,9 @@ cannot erase an operator decision.
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
+- Moving a task from `6-completed` to `7-archive` in task detail requires a
+  second confirmation while `integration.status` is anything other than
+  `integrated`. This is an operator warning, not a server-side hard block.
 - Only `2-ready` and `3-progress` tasks can be started. A `2-ready` card is
   additionally held back from auto-pickup while its `references.dependsOn`
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
