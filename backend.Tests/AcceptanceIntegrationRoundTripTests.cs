@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -86,6 +88,130 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.NotNull(mergeStep);
         Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
         Assert.Equal("merged", mergeStep.Verdict);
+    }
+
+    [Fact]
+    public async Task AcceptHttp_ReturnsWithinTwoSeconds_WhileColdGateFinishesAsGateFailed()
+    {
+        var deliverySha = PublishDelivery("cold-gate.txt", "remote work\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "checkout", "-q", "main");
+        var deps = Build(deliverySha);
+        deps.Settings.SetBuildProfile(Project, new BuildProfile { BuildCmds = ["cd ."] });
+        var gate = new BlockingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            "CS0103: the merge does not compile",
+            "backend build exit 1",
+            true,
+            false));
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _tempDir,
+                        ["WatchPaths:0:Name"] = Project,
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _repo,
+                        ["WatchPaths:0:RepositoryPath"] = _repo,
+                    });
+                });
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IHostedService>();
+                    services.RemoveAll<IBuildTestGateRunner>();
+                    services.RemoveAll<ProjectSettingsService>();
+                    services.AddSingleton(deps.Settings);
+                    services.AddSingleton<IBuildTestGateRunner>(gate);
+                });
+            });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        Assert.Same(gate, factory.Services.GetRequiredService<IBuildTestGateRunner>());
+        Assert.True(PreDevelopBuildGate.AppliesTo(
+            factory.Services.GetRequiredService<ProjectSettingsService>().Get(Project).BuildProfile));
+
+        var sw = Stopwatch.StartNew();
+        var responseTask = client.PostAsJsonAsync(
+            $"/api/tasks/{Slug}/move?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new { targetState = TaskStates.Completed });
+        try
+        {
+            var winner = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(2)));
+            sw.Stop();
+            Assert.Same(responseTask, winner);
+
+            using var response = await responseTask;
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"Accept took {sw.Elapsed}.");
+
+            var pending = factory.Services.GetRequiredService<TaskScannerService>()
+                .FindJob(Slug, _watchPath);
+            Assert.NotNull(pending);
+            Assert.Contains(pending!.Tags, IntegrationStatuses.IsPendingTag);
+            var pendingStep = factory.Services.GetRequiredService<PipelineExecutionLog>()
+                .Read(pending.FolderPath)?.Steps.LastOrDefault(
+                    step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+            Assert.NotNull(pendingStep);
+            Assert.Equal(PipelineStepStatus.Pending, pendingStep!.Status);
+
+            var queue = factory.Services.GetRequiredService<AcceptedIntegrationQueue>();
+            Assert.True(queue.Reader.TryRead(out var request));
+            Assert.Equal(Project, request!.Project);
+            Assert.True(PreDevelopBuildGate.AppliesTo(deps.Settings.Get(request.Project).BuildProfile));
+            var runner = new MergeIntoDevelopRunner(
+                factory.Services.GetRequiredService<GitService>(),
+                factory.Services.GetRequiredService<PipelineExecutionLog>(),
+                NullLogger<MergeIntoDevelopRunner>.Instance,
+                pushQueue: factory.Services.GetRequiredService<IntegrationPushQueue>(),
+                projectSettings: deps.Settings,
+                preDevelopBuildGate: new PreDevelopBuildGate(gate),
+                preDevelopTimeout: TimeSpan.FromSeconds(30));
+            var worker = new AcceptedIntegrationWorker(
+                queue,
+                runner,
+                factory.Services.GetRequiredService<TaskScannerService>(),
+                factory.Services.GetRequiredService<TaskMutationService>(),
+                factory.Services.GetRequiredService<TaskProvenanceService>(),
+                NullLogger<AcceptedIntegrationWorker>.Instance);
+            var processTask = worker.ProcessAsync(request);
+            var workerWinner = await Task.WhenAny(
+                gate.Entered,
+                processTask,
+                Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.True(
+                ReferenceEquals(workerWinner, gate.Entered),
+                processTask.IsCompleted
+                    ? $"Worker completed before the gate with {(await processTask).Outcome}."
+                    : "Worker did not enter the gate within five seconds.");
+            gate.Release();
+            var integrationResult = await processTask;
+            Assert.Equal(MergeIntoIntegrationOutcome.GateFailed, integrationResult.Outcome);
+
+            var failedStep = factory.Services.GetRequiredService<PipelineExecutionLog>()
+                .Read(pending.FolderPath)?.Steps.LastOrDefault(
+                    step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+            Assert.NotNull(failedStep);
+            Assert.Equal(PipelineStepStatus.Failed, failedStep!.Status);
+            Assert.Equal("gate-failed", failedStep.Verdict);
+            var failedJob = factory.Services.GetRequiredService<TaskScannerService>()
+                .FindJob(Slug, _watchPath)!;
+            Assert.Contains(failedJob.Tags, IntegrationStatuses.IsPendingTag);
+            var integration = factory.Services.GetRequiredService<TaskIntegrationStatusService>()
+                .BuildLookup([failedJob])[failedJob.TaskKey];
+            Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
+        }
+        finally
+        {
+            gate.Release();
+            await responseTask;
+        }
     }
 
     [Fact]
@@ -527,4 +653,34 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         ProjectSettingsService Settings,
         MergeIntoDevelopRunner Merge,
         IConfiguration Configuration);
+
+    private sealed class BlockingBuildTestGateRunner(BuildTestGateResult result)
+        : IBuildTestGateRunner
+    {
+        private readonly TaskCompletionSource _entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Entered => _entered.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public async Task<BuildTestGateResult> RunAsync(
+            BuildTestGateRequest request,
+            IReadOnlyList<string>? changedFiles,
+            BuildProfile? profile,
+            PostStepMode mode,
+            TimeSpan timeout,
+            CancellationToken ct)
+        {
+            _entered.TrySetResult();
+            await _released.Task.WaitAsync(ct);
+            return result with
+            {
+                ExpectedSha = request.ExpectedSha,
+                TestedSha = request.ExpectedSha,
+            };
+        }
+    }
 }

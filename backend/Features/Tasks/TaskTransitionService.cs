@@ -27,6 +27,7 @@ public sealed class TaskTransitionService
     private readonly TimelineLog? _timeline;
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -58,7 +59,8 @@ public sealed class TaskTransitionService
         TaskIntegrationStatusService? integrationStatus = null,
         TimelineLog? timeline = null,
         OperatorReviewRequeueService? operatorReviewRequeue = null,
-        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null)
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null)
     {
         _scanner = scanner;
         _states = states;
@@ -78,6 +80,7 @@ public sealed class TaskTransitionService
         _timeline = timeline;
         _operatorReviewRequeue = operatorReviewRequeue;
         _pipelineLog = pipelineLog;
+        _acceptedIntegrationQueue = acceptedIntegrationQueue;
     }
 
     /// <summary>
@@ -286,28 +289,44 @@ public sealed class TaskTransitionService
                 }
             }
 
-            // Deferred "Merge into Develop" post-step. Accepting a done-green task
-            // (the move into Completed) is the operator trigger that runs the real
-            // task/<id> -> develop merge. Independent of the push strategy above:
-            // a project that never auto-pushes still wants accepted work folded
-            // into the integration branch. Fully guarded - the runner records a
-            // visible conflict / error into the pipeline view but never throws, so
-            // it cannot undo the lane move that already landed on disk.
-            if (targetState == TaskStates.Completed && !isReadOnly && _mergeRunner != null)
+            var integrationRunsInBackground = _acceptedIntegrationQueue != null;
+
+            // Stamp the durable visibility fact before the volatile hand-off.
+            // This ordering prevents a fast worker from clearing the marker and
+            // racing a stale accept-side status read that would add it back.
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && integrationRunsInBackground)
+            {
+                var acceptedJob = _scanner.FindJob(jobId, watchPath);
+                if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
+            }
+
+            // Deferred "Merge into Develop" post-step. Production hands the
+            // accepted delivery to a background worker so merge + cold build
+            // gate never occupy the accept HTTP request. The completed lane,
+            // pending pipeline step, and integrationpending marker are durable;
+            // AcceptedIntegrationBackstop recovers a dropped in-memory item.
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && (_acceptedIntegrationQueue != null || _mergeRunner != null))
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
                 if (mergeJob != null)
                     await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
             }
 
-            // AGT-2202: accept-without-merge visibility. After the deferred merge
-            // step has had its chance, re-derive the honest git integration verdict
-            // for the just-accepted card. If its work is NOT in develop (pending /
-            // conflict), make it loud - a Warn timeline event + an
+            // AGT-2202: compatibility fixtures without the production queue still
+            // run the merge inline. In that path, derive visibility after the
+            // merge so existing synchronous callers retain their historical
+            // result. Production stamped the marker before enqueue above.
+            // If work is NOT in develop, make it loud - a Warn timeline event + an
             // integrationpending tag the completed-lane audit can list - WITHOUT
             // blocking the acceptance that already landed (Robert wants visibility,
             // not a new brake). Fully guarded and read-only.
-            if (targetState == TaskStates.Completed && !isReadOnly)
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && !integrationRunsInBackground)
             {
                 var acceptedJob = _scanner.FindJob(jobId, watchPath);
                 if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
@@ -604,10 +623,10 @@ public sealed class TaskTransitionService
     /// <summary>
     /// Triggers the deferred "Merge into Develop" post-step
     /// (<see cref="AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
-    /// on task acceptance. The runner performs the real
+    /// on task acceptance. Production enqueues the real
     /// <c>task/&lt;id&gt; -&gt; develop</c> merge and records the outcome into the
-    /// pipeline view; it self-guards and never throws, so a conflict is made
-    /// visible without affecting the lane move that already completed.
+    /// pipeline view on a background worker. The synchronous runner fallback is
+    /// retained only for isolated fixtures that do not wire hosted services.
     /// </summary>
     private async Task TriggerMergeIntoDevelopAsync(
         TaskInfo moved,
@@ -615,6 +634,24 @@ public sealed class TaskTransitionService
         CancellationToken ct)
     {
         var runner = _mergeRunner;
+        var queue = _acceptedIntegrationQueue;
+        if (queue != null)
+        {
+            if (!queue.Enqueue(new AgentStudio.Pipeline.AcceptedIntegrationRequest(
+                    moved.ProjectName,
+                    moved.Id,
+                    moved.FolderPath,
+                    moved.WatchPath,
+                    settings.IntegrationBranch,
+                    settings.IntegrationStrategy)))
+            {
+                _logger.LogWarning(
+                    "Accepted integration enqueue failed for {JobId}; the durable backstop will retry",
+                    moved.Id);
+            }
+            return;
+        }
+
         if (runner == null) return;
         try
         {
