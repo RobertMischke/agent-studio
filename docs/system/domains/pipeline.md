@@ -122,8 +122,11 @@ pipeline view.
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel
   is only a latency optimization; phase, pending marker, pipeline record, and
-  timeline are the durability boundary. The backstop finalizes Completed only
-  after successful integration and returns decided failures to Human Review.
+  timeline are the durability boundary. Recovery consumes the same
+  `TaskIntegrationStatusService` target-branch verdict as the board, so a stale
+  Passed step cannot overrule missing Git presence. The backstop finalizes
+  Completed only after successful integration and returns decided failures to
+  Human Review.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
