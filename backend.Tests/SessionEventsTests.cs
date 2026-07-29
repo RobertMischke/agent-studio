@@ -80,6 +80,8 @@ public class SessionEventsTests : IDisposable
             Ts = new DateTime(2026, 5, 1, 14, 22, 10, DateTimeKind.Utc),
             Kind = "continue",
             Cli = "claude",
+            Model = "claude-opus-4-8",
+            ThinkingLevel = "high",
             InputSessionId = "abc-123",
             CapturedSessionId = null,
             Resumed = true,
@@ -91,6 +93,8 @@ public class SessionEventsTests : IDisposable
         Assert.Single(events);
         Assert.Equal("continue", events[0].Kind);
         Assert.Equal("claude", events[0].Cli);
+        Assert.Equal("claude-opus-4-8", events[0].Model);
+        Assert.Equal("high", events[0].ThinkingLevel);
         Assert.Equal("abc-123", events[0].InputSessionId);
         Assert.True(events[0].Resumed);
     }

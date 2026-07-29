@@ -51,6 +51,7 @@ public class RegistryBootstrapTests : IDisposable
     [Fact]
     public void Run_SeedsDefaultWorkspace_AndDiscoversProjects()
     {
+        Assert.False(File.Exists(RegistryPaths.ProjectsFilePath(_root)));
         var (workspaces, projects, scanner) = Build(
             ("Demo A", _projectA),
             ("Demo B", _projectB));
@@ -65,6 +66,65 @@ public class RegistryBootstrapTests : IDisposable
         Assert.Contains(list, p => p.DisplayName == "Demo A" && p.StorageLocation == _projectA);
         Assert.Contains(list, p => p.DisplayName == "Demo B" && p.StorageLocation == _projectB);
         Assert.All(list, p => Assert.Equal(DefaultWorkspace.Id, p.WorkspaceId));
+    }
+
+    [Fact]
+    public void Run_ExistingEmptyRegistry_DoesNotRunLegacySeed()
+    {
+        Directory.CreateDirectory(RegistryPaths.MetadataDir(_root));
+        File.WriteAllText(
+            RegistryPaths.ProjectsFilePath(_root),
+            """
+            {
+              "Version": 1,
+              "NextProjectIdSeq": 1,
+              "Projects": []
+            }
+            """);
+        var (workspaces, projects, scanner) = Build(("Demo A", _projectA));
+
+        RegistryBootstrap.Run(
+            workspaces,
+            projects,
+            scanner,
+            NullLogger<RegistryBootstrapTests>.Instance);
+
+        Assert.Empty(projects.List());
+    }
+
+    [Fact]
+    public void Run_InvalidExistingRegistry_AbortsWithoutLegacyReseed()
+    {
+        Directory.CreateDirectory(RegistryPaths.MetadataDir(_root));
+        var corrupt =
+            """
+            {
+              "Version": 1,
+              "NextProjectIdSeq": 18,
+              "Projects": [
+                {
+                  "Id": "PROJ-017",
+                  "DisplayName": "Protected",
+                  "ShortCode": "PRO",
+                  "WorkspaceId": "ws-default",
+                  "StorageLocation": "/protected",
+                  "Urls": null
+                }
+              ]
+            }
+            """;
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        File.WriteAllText(projectsFile, corrupt);
+        var (workspaces, projects, scanner) = Build(("Legacy", _projectA));
+
+        Assert.Throws<ProjectRegistryLoadException>(() =>
+            RegistryBootstrap.Run(
+                workspaces,
+                projects,
+                scanner,
+                NullLogger<RegistryBootstrapTests>.Instance));
+
+        Assert.Equal(corrupt, File.ReadAllText(projectsFile));
     }
 
     [Fact]

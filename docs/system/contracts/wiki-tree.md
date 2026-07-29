@@ -18,11 +18,43 @@ folder, that folder must exist under `docs/`.
 
 - Backend surface: [`backend/Features/Docs/ProjectDocsEndpoints.cs`](../../../backend/Features/Docs/ProjectDocsEndpoints.cs),
   [`backend/Features/Docs/ProjectDocsService.cs`](../../../backend/Features/Docs/ProjectDocsService.cs),
+  [`backend/Features/Docs/WikiContentCache.cs`](../../../backend/Features/Docs/WikiContentCache.cs),
+  watcher integration in
+  [`backend/Features/Tasks/TaskWatcherService.cs`](../../../backend/Features/Tasks/TaskWatcherService.cs),
   git lookups in [`backend/Features/Git/GitService.cs`](../../../backend/Features/Git/GitService.cs).
 - Frontend surface: `frontend/src/app/features/project-detail/components/project-wiki-section/`
   with the tree model in `wiki-tree.ts` and the history panel in
   `wiki-doc-history/`.
 - Wire shapes: [`frontend/src/app/models/project-docs.model.ts`](../../../frontend/src/app/models/project-docs.model.ts).
+
+## Wiki content cache contract
+
+`WikiContentCache` is the single process-wide source for assembled Wiki reads.
+One project snapshot contains the physical tree and its content signature, the
+full page list, metadata and saved order, folder projections, Home sections,
+Pulse filesystem projections, and the Workbench catalogue used by Pulse.
+`/wiki`, `/wiki/tree`, `/wiki/recent`, `/wiki/pulse`, `/wiki/folder`, and
+`/wiki/home` all acquire that same snapshot. They never validate it by walking
+`docs/` again during a request.
+
+The host preloads every registered project before it starts serving HTTP. A
+newly registered project is preloaded when its watcher is installed. Each
+project repository also has a recursive `docs/` watcher. Its burst-debounced
+event performs a synchronous cache invalidation and rebuild. Backend Wiki
+mutations perform the same eager rebuild directly, including page save/create,
+classification, ordering, Home curation, grading completion, move, and delete.
+The mutation does not return across its cache consistency boundary until the
+replacement snapshot has been published. This guarantees read-after-write and
+keeps the next HTTP reader warm.
+
+Cache keys normalize display names and short codes to the immutable project id
+when a registry record exists. A watcher event that carries a display name
+therefore invalidates the same slot used by id-based API routes.
+
+The docs content signature is computed only while filling a snapshot. It is not
+a per-request freshness probe. Git history and per-file date indexes retain
+their existing HEAD-keyed caches, but they consume page existence, titles, and
+folder membership from the central Wiki snapshot.
 
 ## Physical tree contract
 
@@ -62,6 +94,50 @@ Every page also receives one canonical interaction type: `doc`, `concept`,
 source. A registered `workbench.json` entry page is always a Workbench. Agreed
 path families fill remaining gaps, with `doc` as the default. The tree and page
 head use the same type-to-icon mapping.
+
+## Durable agent-read evidence
+
+Each page can carry observed agent read evidence in its adjacent
+`<page>.meta.json` companion:
+
+```jsonc
+{
+  "agentReads": {
+    "total": 23,
+    "lastReadAt": "2026-07-22T10:15:00Z",
+    "recent": [
+      { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
+    ]
+  }
+}
+```
+
+`total` is the lifetime count reconstructed from durable task CLI logs plus
+continuously observed local and remote runs. `recent` is newest first and
+retains at most 20 reads. The one-time startup backfill is guarded by
+`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; companion
+updates use atomic replace writes.
+
+The persistence and initialization contract is:
+
+- startup scans the complete current and archived task inventory before CLI
+  reattachment, including every `logs/cli-output.log` line rather than the
+  bounded UI log window,
+- the marker has schema `wiki-agent-read-backfill/v1` and records completion
+  time, logs scanned, and reads applied; its presence makes later startups a
+  no-op,
+- a restart after companion writes but before marker creation is safe because
+  backfill merges a monotonic reconstructed baseline instead of adding the
+  baseline again,
+- local CLI output and fenced remote-runner log ingestion both feed the same
+  live attribution method after the log line is durable,
+- each companion update preserves unrelated metadata blocks and is published
+  with an atomic temporary-file replacement.
+
+Only actual read tool uses and recognized read-only shell commands count.
+Agent prose that merely mentions a `docs/**` path, writes, edits, `docs/app/**`
+contracts, companion files, and generated reports do not count. This evidence
+is observational only. It never affects drift, gates, or workflow state.
 
 ## Pulse drift groups and the `human-action` convention
 
@@ -127,9 +203,14 @@ All paths are rooted at `/api/projects/{projectName}/wiki`. `{projectName}` is a
 `WatchPaths` entry name; an unknown project yields `404`. Wiki paths are always
 relative to `docs/`, must not contain `..`, and must not be rooted.
 
+The tree, recent-edits, per-file history, and immutable revision reads return
+an `ETag` with `Cache-Control: no-cache`. A matching `If-None-Match` returns
+`304 Not Modified` without a response body.
+
 ### `GET /wiki/tree`
 
-Returns the recursive physical docs tree.
+Returns the recursive physical docs tree. A page's compact `metadata` includes
+`agentReads` when its companion contains observed read evidence.
 
 ```jsonc
 {
@@ -164,6 +245,13 @@ Returns the recursive physical docs tree.
 }
 ```
 
+### `GET /wiki/recent`
+
+Returns recently edited Wiki pages in newest-first Git order. The Overview uses
+this endpoint as a 15-second conditional poll while it is visible. A `304`
+leaves the rendered feed untouched; a changed response replaces the feed only
+when its page rows differ.
+
 ### `GET /wiki/files/{relPath}`
 
 Reads a Markdown or HTML page from the physical docs tree. HTML pages are served
@@ -181,6 +269,9 @@ working-copy mtime. Folder rows use the newest date among their visible
 descendant pages. The backend obtains all per-file dates through one
 `git log --name-only` walk over `docs/` and caches that index by repository
 HEAD, so rendering a folder never runs Git once per row.
+
+Page rows include the same optional `agentReads` projection as the tree.
+Folder rows never carry agent-read evidence.
 
 `updatedAtSource` is `git` for committed history. A new local page with no Git
 history falls back to its filesystem mtime and returns
@@ -229,6 +320,12 @@ Provenance precedence: frontmatter `model:` / `last-distilled:` / `why:` wins;
 when absent, `model` falls back to the `Co-authored-by` trailer of the most
 recent commit that touched the file. `commits` is empty when the repo root
 cannot be resolved, but frontmatter still renders.
+
+The history validator is scoped to the selected file: it combines the latest
+commit that touched that file with its live working-tree mtime. Unrelated
+repository commits therefore remain `304`, while committed or uncommitted edits
+to the open file change the ETag. The reader uses that change only to show an
+update banner; content is fetched again after the operator confirms reload.
 
 ### `GET /wiki/revisions/{sha}/{relPath}`
 
@@ -300,7 +397,10 @@ The Wiki behaves like an app inside the app:
 - the filter is subtle and opt-in,
 - right-click on files and folders opens a text-only context menu,
 - the context rail shows file path, metadata, history, linked-doc information,
-  and drift actions.
+  drift actions, and the open page's agent-read total, last-read timestamp, and
+  recent task history,
+- folder overview tables show a narrow `Reads` column with the total and a
+  last-read tooltip,
 - an open page has the shared page-head action bar for task creation, archive,
   project chat, and shared Home curation; type-specific actions follow the
   standards.

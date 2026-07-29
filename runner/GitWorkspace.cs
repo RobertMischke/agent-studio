@@ -19,6 +19,7 @@ public sealed class GitWorkspace
     private readonly string? _projectId;
     private readonly bool _isProjectClone;
     private readonly string _workBranch;
+    private string? _preparedIntegrationBranch;
     private string? _startedHead;
     private readonly string? _restoredBaseSha;
     private bool _startedFromSalvage;
@@ -65,6 +66,8 @@ public sealed class GitWorkspace
     /// observe itself.
     /// </summary>
     public string? BaseSha => _startedHead ?? _restoredBaseSha;
+    public string IntegrationBranchRef =>
+        $"refs/heads/{ToBranchName(_preparedIntegrationBranch ?? _baseBranch)}";
     public SalvageReconciliationResult? PickupReconciliation => _pickupReconciliation;
 
     public async Task<string> PrepareAsync(CancellationToken ct)
@@ -106,6 +109,9 @@ public sealed class GitWorkspace
             // the authoritative continuation base instead of the requested
             // project branch.
             var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
+            var requestedBase = await BranchExistsOnOrigin(requested, ct)
+                ? requested
+                : await OriginDefaultBranch(ct) ?? _baseBranch;
             string branch;
             if (await BranchExistsOnOrigin(_workBranch, ct))
             {
@@ -114,10 +120,9 @@ public sealed class GitWorkspace
             }
             else
             {
-                branch = await BranchExistsOnOrigin(requested, ct)
-                    ? requested
-                    : await OriginDefaultBranch(ct) ?? _baseBranch;
+                branch = requestedBase;
             }
+            _preparedIntegrationBranch = requestedBase;
             if (branch != requested && branch != _workBranch)
                 _log($"branch '{requested}' not found on origin; falling back to base branch '{branch}'");
 
@@ -137,6 +142,16 @@ public sealed class GitWorkspace
         {
             GitMetadataGate.Release();
         }
+    }
+
+    private static string ToBranchName(string value)
+    {
+        var branch = value.Trim();
+        if (branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase))
+            return branch["refs/heads/".Length..];
+        if (branch.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
+            return branch["origin/".Length..];
+        return branch;
     }
 
     /// <summary>
@@ -160,6 +175,8 @@ public sealed class GitWorkspace
 
         var projectPath = CachePathForProject(options.WorkDir, projectId);
         var sharedRepoPath = Path.Combine(projectPath, "repo");
+        string? probeRef = null;
+        var probeMayExist = false;
         Directory.CreateDirectory(projectPath);
 
         await GitMetadataGate.WaitAsync(ct);
@@ -196,19 +213,31 @@ public sealed class GitWorkspace
                 "git", ["fetch", "origin", "--prune"], sharedRepoPath, ct: ct);
             if (!fetchResult.Success) return Failed("fetch", fetchResult, fetchUrl, pushUrl);
 
-            var probeRef = $"refs/heads/runner/{SafeSegment(options.RunnerId)}/delivery-preflight-{Guid.NewGuid():N}";
+            probeRef = $"refs/heads/runner/{SafeSegment(options.RunnerId)}/delivery-preflight-{Guid.NewGuid():N}";
             var sourceRef = $"refs/remotes/origin/{defaultBranch.Trim()}";
             var source = await ProcessRunner.RunAsync(
-                "git", ["rev-parse", "--verify", sourceRef], sharedRepoPath, ct: ct);
-            if (!source.Success) return Failed($"resolve registered branch {defaultBranch.Trim()}", source, fetchUrl, pushUrl);
+                "git", ["show-ref", "--verify", "--quiet", sourceRef], sharedRepoPath, ct: ct);
+            if (!source.Success)
+                return new(
+                    false,
+                    fetchUrl,
+                    pushUrl,
+                    $"target branch '{defaultBranch.Trim()}' does not exist on the registered repository");
+            probeMayExist = true;
             var writable = await ProcessRunner.RunAsync(
                 "git", ["push", "origin", $"{sourceRef}:{probeRef}"], sharedRepoPath, ct: ct);
-            if (!writable.Success) return Failed("write probe", writable, fetchUrl, pushUrl);
+            if (!writable.Success)
+                return Failed("write probe", writable, fetchUrl, pushUrl);
 
             var cleanup = await ProcessRunner.RunAsync(
                 "git", ["push", "origin", $":{probeRef}"], sharedRepoPath, ct: ct);
+            probeMayExist = !cleanup.Success;
             return cleanup.Success
-                ? new(true, fetchUrl, pushUrl, $"clone/fetch URLs match registration; write probe created and removed {probeRef}")
+                ? new(
+                    true,
+                    fetchUrl,
+                    pushUrl,
+                    $"clone/fetch URLs match registration; target branch '{defaultBranch.Trim()}' exists; write probe created and removed {probeRef}")
                 : Failed("write probe cleanup", cleanup, fetchUrl, pushUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -217,6 +246,14 @@ public sealed class GitWorkspace
         }
         finally
         {
+            if (probeMayExist && probeRef is not null
+                && Directory.Exists(Path.Combine(sharedRepoPath, ".git")))
+            {
+                var cleanup = await ProcessRunner.RunAsync(
+                    "git", ["push", "origin", $":{probeRef}"], sharedRepoPath, ct: CancellationToken.None);
+                if (!cleanup.Success)
+                    log($"project-delivery-preflight-cleanup-failed project={projectId} ref={probeRef} error={OneLine(cleanup.StdErr)}");
+            }
             GitMetadataGate.Release();
         }
     }
@@ -529,6 +566,7 @@ public sealed class GitWorkspace
         var hasWork = wasDirty || changedDuringRun || _startedFromSalvage;
         string? remoteHead = null;
         SalvageReconciliationResult? reconciliation = null;
+        RemoteDeliveryProof? deliveryProof = null;
 
         // A checkout which is still exactly at its recorded start commit is
         // provably clean and needs no remote query. Crash debris has no start
@@ -553,6 +591,12 @@ public sealed class GitWorkspace
             try
             {
                 reconciliation = await ReconcileSalvageAsync(head, remoteHead, ct);
+                var verifiedBranch = reconciliation.RecoveryBranch ?? reconciliation.CanonicalBranch;
+                var verifiedCommit = reconciliation.RecoveryCommitSha ?? reconciliation.CanonicalCommitSha;
+                deliveryProof = new RemoteDeliveryProof(
+                    RegisteredRepositoryUrl(),
+                    $"refs/heads/{verifiedBranch}",
+                    verifiedCommit);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -571,13 +615,17 @@ public sealed class GitWorkspace
             {
                 await PushImmutableResultAndVerifyAsync(candidateRef, head, ct);
                 immutableResultRef = candidateRef;
+                deliveryProof = new RemoteDeliveryProof(
+                    RegisteredRepositoryUrl(),
+                    candidateRef,
+                    head);
             }
             catch (Exception ex) when (!immutableRefRequired && ex is not OperationCanceledException)
             {
                 // On the legacy completion path the immutable ref is best-effort
                 // evidence: without it the completion simply carries no result
                 // envelope (pre-envelope behaviour) instead of failing a run
-                // whose salvage already succeeded.
+                // whose salvage already succeeded. No ref, no delivery proof.
                 _log($"immutable-result-ref-push-failed ref={candidateRef} path={RepoPath} error={OneLine(ex.Message)}; completing without result envelope");
             }
         }
@@ -592,14 +640,16 @@ public sealed class GitWorkspace
                 BuildBranchUrl(_gitRemote!, _workBranch),
                 ResultSha: head,
                 Reconciliation: reconciliation,
-                ImmutableResultRef: immutableResultRef)
+                ImmutableResultRef: immutableResultRef,
+                DeliveryProof: deliveryProof)
             : new WorktreeTeardownResult(
                 false,
                 null,
                 null,
                 null,
                 ResultSha: head,
-                ImmutableResultRef: immutableResultRef);
+                ImmutableResultRef: immutableResultRef,
+                DeliveryProof: deliveryProof);
     }
 
     private async Task RemoveSecuredWorktreeAsync(bool securedWork, CancellationToken ct)
@@ -676,7 +726,8 @@ public sealed class GitWorkspace
         var published = await RemoteBranchHeadAsync(branch, ct);
         if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
-                $"origin/{branch} resolved to '{published ?? "missing"}' after push, expected '{expectedHead}'.");
+                $"Registered project repository ref 'refs/heads/{branch}' resolved to " +
+                $"'{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
     }
 
@@ -689,12 +740,13 @@ public sealed class GitWorkspace
         await Git(["push", "origin", $"HEAD:{immutableRef}"], RepoPath, ct);
         var result = await ProcessRunner.RunAsync(
             "git",
-            ["ls-remote", "origin", immutableRef],
+            ["ls-remote", RegisteredRepositoryUrl(), immutableRef],
             workingDirectory: SharedRepoPath,
             ct: ct);
         if (!result.Success)
             throw new InvalidOperationException(
-                $"git ls-remote origin {immutableRef} failed ({result.ExitCode}): {result.StdErr.Trim()}");
+                $"git ls-remote against the registered project repository for {immutableRef} " +
+                $"failed ({result.ExitCode}): {result.StdErr.Trim()}");
         var published = result.StdOut.Split(
             (char[]?)null,
             StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
@@ -728,11 +780,13 @@ public sealed class GitWorkspace
     private async Task<string?> RemoteBranchHeadAsync(string branch, CancellationToken ct)
     {
         var result = await ProcessRunner.RunAsync(
-            "git", ["ls-remote", "--heads", "origin", $"refs/heads/{branch}"],
+            "git",
+            ["ls-remote", "--heads", RegisteredRepositoryUrl(), $"refs/heads/{branch}"],
             workingDirectory: SharedRepoPath, ct: ct);
         if (!result.Success)
             throw new InvalidOperationException(
-                $"git ls-remote origin {branch} failed ({result.ExitCode}): {result.StdErr.Trim()}");
+                $"git ls-remote against the registered project repository for {branch} " +
+                $"failed ({result.ExitCode}): {result.StdErr.Trim()}");
         var first = result.StdOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         return string.IsNullOrWhiteSpace(first) ? null : first;
     }
@@ -752,9 +806,17 @@ public sealed class GitWorkspace
     private async Task<bool> BranchExistsOnOrigin(string branch, CancellationToken ct)
     {
         var result = await ProcessRunner.RunAsync(
-            "git", ["ls-remote", "--heads", "origin", branch], workingDirectory: SharedRepoPath, ct: ct);
+            "git",
+            ["ls-remote", "--heads", RegisteredRepositoryUrl(), branch],
+            workingDirectory: SharedRepoPath,
+            ct: ct);
         return result.Success && result.StdOut.Contains($"refs/heads/{branch}", StringComparison.Ordinal);
     }
+
+    private string RegisteredRepositoryUrl()
+        => _gitRemote
+           ?? throw new InvalidOperationException(
+               "Cannot verify delivery because the project registration has no repository URL.");
 
     private async Task<string?> OriginDefaultBranch(CancellationToken ct)
     {
@@ -824,12 +886,22 @@ public sealed record WorktreeTeardownResult(
     string? BranchUrl,
     string? ResultSha = null,
     SalvageReconciliationResult? Reconciliation = null,
-    string? ImmutableResultRef = null)
+    string? ImmutableResultRef = null,
+    RemoteDeliveryProof? DeliveryProof = null)
 {
     public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null, null);
     public static WorktreeTeardownResult NoResult { get; } = new(false, null, null, null, null);
     public static WorktreeTeardownResult Clean(string resultSha) => new(false, null, null, null, resultSha);
 }
+
+/// <summary>
+/// Exact remote evidence captured only after <c>git ls-remote</c> against the
+/// project registration resolved the delivered ref to the expected commit.
+/// </summary>
+public sealed record RemoteDeliveryProof(
+    string RepositoryUrl,
+    string Ref,
+    string CommitSha);
 
 public sealed record SalvageReconciliationResult(
     string Kind,

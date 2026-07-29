@@ -1,15 +1,17 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
+/* Head + metric cells own the inset, so the panel runs flush and clips them. */
 .ph {
-  border: 1px solid var(--studio-card-muted-border);
-  border-radius: var(--studio-card-compact-radius);
-  background: color-mix(in srgb, var(--severity-pass) 5%, var(--studio-card-muted-bg));
+  @include m.deck-panel(0);
+
   overflow: clip;
 }
 
+/* "Attention needed" is acute right now — whole-surface tint, no stripe. */
 .ph--alarm {
-  border-color: color-mix(in srgb, var(--severity-high) 35%, var(--studio-card-muted-border));
-  background: color-mix(in srgb, var(--severity-high) 7%, var(--studio-card-muted-bg));
+  @include m.deck-panel-attention;
 }
 
 .ph__head {

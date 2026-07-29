@@ -156,6 +156,7 @@
             <tr><td>Canonical</td><td><code>mode=research</code> in task metadata. This is separate from the structural <code>taskType</code>.</td></tr>
             <tr><td>Visible card cue</td><td>The Research mode pill on the card.</td></tr>
             <tr><td>Prompt cue</td><td>The effective prompt contains a visible <code>Research:</code> heading and the delivery block below.</td></tr>
+            <tr><td>Settings dimension</td><td><code>PipelineTypes.Resolve(taskType, mode)</code> maps Research to the AGT-2301 <code>planning</code> dimension, so coding-type overrides cannot leak into the report flow.</td></tr>
             <tr><td>Pipeline</td><td><code>read-only-task-pipeline</code>, displayed as Lightweight report pipeline.</td></tr>
           </tbody>
         </table>
@@ -201,6 +202,7 @@ Deliver exactly one primary document at `results/report.html`. Make it a self-co
         <p>AGT-2380 applies this convention without changing its research findings.</p>
         <ul>
           <li><a href="../../research/reissue-prompt-konvergenz.html">Primary AGT-2380 HTML report</a></li>
+          <li><a href="../../quality/reissue-prompt-convergence/index.html">Observational convergence workbench companion</a></li>
           <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment.md">Randomized experiment companion</a></li>
           <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md">Randomized experiment analysis companion</a></li>
           <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.json">Machine-readable experiment companion</a></li>

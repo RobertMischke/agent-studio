@@ -37,7 +37,24 @@ controlled migration that updates its registry record.
 
 ### Project + workspace registry (ADR-0042)
 
-In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name can change without breaking task keys derived from the id. `StorageLocation` is immutable during ordinary project editing and changes only through a controlled legacy-store migration.
+In parallel with the legacy `<projectKey>` slug layout above, projects also
+live as records in `<TaskRepository>/.metadata/projects.json` with immutable
+identifiers (`PROJ-001`, `PROJ-002`, ...) and a workspace membership in
+`<TaskRepository>/.metadata/workspaces.json`. Legacy `WatchPaths` entries are
+auto-registered only when `projects.json` did not exist at the registry's first
+load. An existing empty file is authoritative and does not trigger seeding.
+The id is monotonic and never re-used; the display name can change without
+breaking task keys derived from the id. `StorageLocation` is immutable during
+ordinary project editing and changes only through a controlled legacy-store
+migration.
+
+An existing `projects.json` that cannot be deserialized aborts startup with the
+`project-registry-load-failed` classification. The backend must not substitute
+an empty registry or persist over the invalid file. Before any registry write
+that reduces the project count, the current file is copied byte-for-byte to
+`projects.json.quarantine-<UTC timestamp>` and the
+`project-registry-shrink-quarantined` classification records both counts and
+paths.
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
@@ -107,6 +124,8 @@ Each job folder uses this structure:
   prompt.md         # Task description for the CLI agent
   status.md         # Generated review protocol
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
+  completion-acceptance.json
+                    # Optional: structured requirements, evidence, blockers, and completion lifecycle
   post-processing-outcomes.jsonl
                     # Optional: typed Post Processing outcomes
   .metadata/        # Application-owned sidecars (pipeline-execution.json, files.json, ...)
@@ -213,6 +232,12 @@ Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes.
 ```
 
 Valid `outcome` values are `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`. Valid `performer` values are `orchestrator`, `supporting-agent`, and `tool`. `performerCliType` is optional and should be one of the supported CLI values when a supporting CLI performed the check.
+
+### completion-acceptance.json (optional)
+
+The completion gate writes this structured sidecar before aspect review. It preserves the complete requirement source plus every evidence item and explicit blocker with its source and reason. Its lifecycle object keeps four separate facts: `turnComplete`, `implementationComplete`, `taskAccepted`, and `deploymentPushPending`. A successful `TASK_DONE`/process terminal can therefore complete implementation while acceptance is still under review and platform-owned commit, push, or deployment remains pending.
+
+The gate does not derive open work from `status.md` bullets or narrative. Only structured terminal/process evidence and explicit `TASK_BLOCKED` or `TASK_NEEDS_INPUT` terminals drive the pre-review completion ruling. The structured aspect verdict updates `taskAccepted`; deployment/push pending never masquerades as incomplete implementation.
 
 ### results/review-evidence.jsonl (optional)
 

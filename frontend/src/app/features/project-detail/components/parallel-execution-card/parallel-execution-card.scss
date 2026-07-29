@@ -1,0 +1,49 @@
+@use '../../../../../styles/mixins' as m;
+
+:host { display: block; }
+
+// Deck-Panel v1 so the settings execution grid reads as one row of cards.
+.parallel-card {
+  @include m.deck-panel;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  color: var(--studio-fg);
+}
+
+.parallel-card__head,
+.parallel-card__value {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+.parallel-card__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.parallel-card__title {
+  color: var(--studio-fg-strong);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.parallel-card__badge {
+  margin-left: auto;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 999px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.parallel-card__desc {
+  margin: 0;
+  color: var(--studio-fg-dim);
+  font-size: 0.8rem;
+}

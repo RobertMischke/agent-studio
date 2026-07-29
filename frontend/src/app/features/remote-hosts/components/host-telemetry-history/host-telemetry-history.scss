@@ -1,0 +1,162 @@
+:host { display: block; }
+
+.telemetry {
+  margin-top: var(--studio-spacing-4);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+}
+
+.telemetry__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  font-size: 11px;
+}
+
+.telemetry__context { color: var(--studio-fg-dim); flex: 1 1 auto; }
+.telemetry__context--stale { color: var(--studio-fg-muted); opacity: 0.62; }
+.telemetry__windows { display: flex; gap: var(--studio-spacing-1); }
+.telemetry__windows button {
+  border: 1px solid var(--studio-border);
+  border-radius: 4px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  background: transparent;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+}
+.telemetry__windows button[aria-pressed='true'] {
+  border-color: var(--studio-accent);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
+.telemetry__findings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-2);
+  min-width: 0;
+  overflow: hidden;
+}
+.telemetry__finding {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  overflow: hidden;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.telemetry__finding[data-tone='warn'] {
+  background: var(--notify-warning-icon-bg);
+  color: var(--notify-warning-icon-fg);
+}
+.telemetry__finding-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.telemetry__finding--more { flex: 0 0 auto; }
+.telemetry__charts {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+}
+.telemetry__labels,
+.telemetry__plots {
+  display: grid;
+  grid-template-rows: repeat(4, 30px);
+  gap: var(--studio-spacing-2);
+}
+.telemetry__labels {
+  align-items: center;
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+}
+.telemetry__plots {
+  position: relative;
+  min-width: 0;
+  border-radius: 4px;
+  outline: none;
+  touch-action: pan-y;
+}
+.telemetry__plots:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+.telemetry__plots svg {
+  width: 100%;
+  height: 30px;
+  overflow: visible;
+  border-radius: 4px;
+  background: var(--studio-bg-hover);
+  pointer-events: none;
+}
+.telemetry__plots polyline {
+  fill: none;
+  stroke: var(--studio-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.telemetry__crosshair {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  width: 1px;
+  background: var(--studio-fg-dim);
+  opacity: 0.72;
+  pointer-events: none;
+}
+.telemetry__point {
+  fill: var(--studio-bg-elevated);
+  stroke: var(--studio-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.telemetry__tooltip {
+  position: absolute;
+  z-index: 2;
+  top: var(--studio-spacing-2);
+  min-width: 168px;
+  border: 1px solid var(--studio-tooltip-border);
+  border-radius: 6px;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  transform: translateX(-50%);
+  background: var(--studio-tooltip-bg);
+  box-shadow: var(--elevation-tooltip);
+  color: var(--studio-tooltip-fg);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.telemetry__tooltip--start { transform: none; }
+.telemetry__tooltip--end { transform: translateX(-100%); }
+.telemetry__tooltip time {
+  display: block;
+  color: var(--studio-tooltip-fg-dim);
+  white-space: nowrap;
+}
+.telemetry__tooltip-values {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--studio-spacing-1) var(--studio-spacing-3);
+  margin-top: var(--studio-spacing-2);
+}
+.telemetry__tooltip-values strong {
+  color: var(--studio-tooltip-fg-strong);
+  font-weight: 600;
+  text-align: right;
+}

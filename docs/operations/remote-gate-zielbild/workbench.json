@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "remote-gate-zielbild",
+  "title": "Remote Gate Target Architecture",
+  "summary": "Decision Workbench for replacing the fast but out-of-band SSH gate bridge with a first-class Tranche 0 execution contract. It compares claimable gate steps, the Review Plane, and capability-only dispatch; recommends a bounded GateAttempt protocol with capability-based admission; and defines the implementation-to-AGT-2262 teardown chain.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-26T00:00:00Z",
+  "sourceTaskKeys": [
+    "AGT-2369"
+  ],
+  "implementationTasks": [
+    {
+      "title": "Move build/test gates to claimable Task Server gate steps",
+      "promptMarkdown": "Implement the approved GateAttempt target from the Remote Gate Target Architecture Workbench. Add the bounded Task Server GateSubject/GateAttempt/lease/report lifecycle, capability-based Agent Host gate claims, exact-SHA materialization, typed timeout and infrastructure retry behavior, central visibility, and Orchestrator Engine dispatch. Migrate post-build-test-gate to the new path and prove throughput and restart/failure parity. Do not tear down the SSH bridge in this card; keep AGT-2262 blocked until the cutover acceptance conditions are met."
+    }
+  ],
+  "relatedTaskKeys": [
+    "AGT-2229",
+    "AGT-2262"
+  ]
+}

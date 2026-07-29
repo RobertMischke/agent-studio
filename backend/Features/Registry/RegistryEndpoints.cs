@@ -176,7 +176,7 @@ public static class RegistryEndpoints
         app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces,
             WorkspaceManagementService workspaceManagement, TaskScannerService scanner, TaskWatcherService watcher,
             AgentStudio.Runner.TaskRunnerService runners, AgentStudio.Projects.ProjectSettingsService projectSettings,
-            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
+            ClientIdentityStore clients, WikiContentCache wikiContentCache, ILoggerFactory loggerFactory) =>
         {
             if (body == null)
                 return Results.BadRequest(new { error = "body required" });
@@ -303,6 +303,7 @@ public static class RegistryEndpoints
             var liveEntry = scanner.GetWatchPaths().First(entry =>
                 string.Equals(entry.Path, created.StorageLocation, StringComparison.OrdinalIgnoreCase));
             watcher.EnsureWatching(liveEntry);
+            wikiContentCache.Preload(liveEntry.Name);
             runners.EnsureRunner(liveEntry);
             loggerFactory.CreateLogger("ProjectCreate").LogInformation(
                 "project-onboarded id={Id} workspaceId={WorkspaceId} storage={Storage} repository={Repository} runner={Runner}",
@@ -314,7 +315,7 @@ public static class RegistryEndpoints
         app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body,
             ProjectRegistry projects, WorkspaceRegistry workspaces,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
-            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
+            ClientIdentityStore clients, WikiContentCache wikiContentCache, ILoggerFactory loggerFactory) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
             var previous = projects.FindById(projId);
@@ -370,6 +371,9 @@ public static class RegistryEndpoints
                 if (body.RepositoryUrl != null || body.ClearRepositoryUrl == true
                     || body.RepositoryPath != null || body.ClearRepositoryPath == true)
                     clients.InvalidateRunnerProjectPreflights(projId);
+                if (body.WikiSourceBranch != null || body.ClearWikiSourceBranch == true
+                    || body.RepositoryPath != null || body.ClearRepositoryPath == true)
+                    wikiContentCache.Invalidate(projId);
                 return Results.Ok(ProjectSummary.From(result));
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }

@@ -84,7 +84,68 @@ public record ClientIdentity
     public string? RunnerDaemonState { get; init; }
     public DateTime? RunnerLastClaimAt { get; init; }
     public int? RunnerActiveSlots { get; init; }
+
+    /// <summary>
+    /// Free slots below the host ceiling. Derived from the ceiling minus the
+    /// server's own lease count, never from the daemon's breathing observation,
+    /// so a slot ledger reads as a stable capacity rather than "active + 1".
+    /// </summary>
     public int? RunnerAvailableSlots { get; init; }
+
+    /// <summary>
+    /// Central host capacity targets (AGT-2302 / AGT-2376): the hard ceiling on
+    /// concurrent runs, the CPU load the host aims to stay under, and how fast
+    /// concurrency may grow. These are the one source of truth for capacity;
+    /// per-project <c>maxParallelism</c> is deprecated. Seeded on first contact
+    /// from the daemon's <c>RUNNER_MAX_PARALLELISM</c> (and, transitionally, the
+    /// project values being migrated), then owned by the operator.
+    /// </summary>
+    public int? RunnerDesiredMaxParallelism { get; init; }
+    public int? RunnerTargetLoadPercent { get; init; }
+    public string? RunnerRampStrategy { get; init; }
+
+    /// <summary>When an operator last changed the central targets.</summary>
+    public DateTime? RunnerCapacityUpdatedAt { get; init; }
+
+    /// <summary>Ceiling the live daemon reports as adopted. Telemetry, not policy.</summary>
+    public int? RunnerEffectiveMaxParallelism { get; init; }
+    public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
+}
+
+/// <summary>
+/// How fast a host may grow its concurrency once work is already running.
+/// Paired with <see cref="HostCapacityPolicy.RampInterval"/>.
+/// </summary>
+public static class RunnerRampStrategies
+{
+    public const string Conservative = "conservative";
+    public const string Balanced = "balanced";
+    public const string Aggressive = "aggressive";
+
+    public static readonly IReadOnlyList<string> All = [Conservative, Balanced, Aggressive];
+
+    public static bool IsValid(string? value)
+        => value?.Trim().ToLowerInvariant() is Conservative or Balanced or Aggressive;
+
+    /// <summary>Normalise to a known strategy; anything unknown becomes balanced.</summary>
+    public static string Normalize(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            Conservative => Conservative,
+            Aggressive => Aggressive,
+            _ => Balanced,
+        };
+}
+
+/// <summary>
+/// Body for <c>PUT /api/clients/{id}/runner-capacity</c>. Every field is
+/// optional; omitting one leaves that target untouched.
+/// </summary>
+public record SetRunnerCapacityRequest
+{
+    public int? MaxParallelism { get; init; }
+    public int? TargetLoadPercent { get; init; }
+    public string? RampStrategy { get; init; }
 }
 
 public enum ClientIdentityKind
@@ -160,6 +221,12 @@ public record ClientSummary
     public DateTime? RunnerLastClaimAt { get; init; }
     public int? RunnerActiveSlots { get; init; }
     public int? RunnerAvailableSlots { get; init; }
+    public int? RunnerDesiredMaxParallelism { get; init; }
+    public int? RunnerTargetLoadPercent { get; init; }
+    public string? RunnerRampStrategy { get; init; }
+    public DateTime? RunnerCapacityUpdatedAt { get; init; }
+    public int? RunnerEffectiveMaxParallelism { get; init; }
+    public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
     public int RunnerActiveGateCount { get; init; }
     public int RunnerGateCapacity { get; init; }
 
@@ -193,7 +260,13 @@ public record ClientSummary
         RunnerDaemonState = i.RunnerDaemonState,
         RunnerLastClaimAt = i.RunnerLastClaimAt,
         RunnerActiveSlots = i.RunnerActiveSlots,
-        RunnerAvailableSlots = i.RunnerAvailableSlots
+        RunnerAvailableSlots = i.RunnerAvailableSlots,
+        RunnerDesiredMaxParallelism = i.RunnerDesiredMaxParallelism,
+        RunnerTargetLoadPercent = i.RunnerTargetLoadPercent,
+        RunnerRampStrategy = i.RunnerRampStrategy,
+        RunnerCapacityUpdatedAt = i.RunnerCapacityUpdatedAt,
+        RunnerEffectiveMaxParallelism = i.RunnerEffectiveMaxParallelism,
+        RunnerEffectiveMaxParallelismAppliedAt = i.RunnerEffectiveMaxParallelismAppliedAt
     };
 }
 
@@ -206,6 +279,7 @@ public sealed record RunnerProjectPreflight
     public string RepositoryUrl { get; init; } = "";
     public string FetchUrl { get; init; } = "";
     public string PushUrl { get; init; } = "";
+    public string TargetBranch { get; init; } = "";
     public string Status { get; init; } = "failed";
     public string Detail { get; init; } = "";
     public DateTime CheckedAt { get; init; }

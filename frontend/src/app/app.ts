@@ -120,7 +120,7 @@ import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
 import { displayStateToLaneKey, allowsDragReorder } from './services/lane-sort.util';
-import { buildRunActivityBadge } from './services/run-activity.util';
+import { buildRunActivityBadge, freshestRunInfo } from './services/run-activity.util';
 import { NowTickService } from './services/now-tick.service';
 import { PageContextService } from './services/page-context.service';
 import { DevToolsService } from './services/dev-tools.service';
@@ -260,9 +260,15 @@ export class App implements OnInit, OnDestroy {
   // ASS-1751: run-activity pill for the slim studio tab-bar header. The
   // studio shell hides <app-detail-header>, so the open task's run state is
   // surfaced here (the kanban side-panel keeps its own header pill).
+  // AGT-2378: read through to the live board entry — the detail snapshot is
+  // frozen at open time and would pin the pill on "kein aktiver Run". The live
+  // entry only wins when it is at least as fresh, so a mutation just applied to
+  // the open task does not flicker back — see `freshestRunInfo`.
   readonly studioRunActivityBadge = computed(() => {
     const detail = this.selectedJob();
-    return detail ? buildRunActivityBadge(detail.info, this.nowTick()) : null;
+    if (!detail) return null;
+    const info = freshestRunInfo(detail.info, this.jobService.jobs());
+    return buildRunActivityBadge(info, this.nowTick());
   });
   readonly epicTabTaskDetail = signal<TaskDetail | null>(null);
   readonly epicTabSubTaskPeers = computed<TaskInfo[]>(() => {

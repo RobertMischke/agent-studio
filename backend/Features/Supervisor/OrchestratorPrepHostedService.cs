@@ -172,12 +172,13 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         }
 
         var job = prep.First();
+        var pipelineSettings = PipelineTypeSettings.ForTask(settings, job)!;
 
         // Optional per project: prep is the opt-in pre-orchestrator-prep
         // pipeline step (DefaultEnabled = false). Evaluate the full per-step
         // condition against the head preparation card so task-type / tag gates
         // apply here like they do for post-run pipeline steps.
-        if (!PipelineStepConfigResolver.ShouldRun(settings, PrepStep, new PipelineStepConditionContext
+        if (!PipelineStepConfigResolver.ShouldRun(pipelineSettings, PrepStep, new PipelineStepConditionContext
             {
                 Aborted = false,
                 ExitCode = null,
@@ -221,7 +222,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         sw.Stop();
         _callTimestamps.Enqueue(DateTime.UtcNow);
 
-        RecordPrepStep(job, settings, decision, startedAt, sw.Elapsed);
+        RecordPrepStep(job, pipelineSettings, decision, startedAt, sw.Elapsed);
         ApplyDecision(job, decision, iteration);
     }
 
@@ -252,7 +253,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
         try
         {
-            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(job.Mode), settings);
+            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(job), settings);
             // Attach to the in-flight run when the core / aspect stages already
             // created one; otherwise begin a fresh record so the step is not a
             // silent no-op while the card is still in preparation.

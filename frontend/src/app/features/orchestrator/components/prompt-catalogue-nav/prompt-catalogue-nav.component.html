@@ -10,6 +10,17 @@
       (click)="onlyOverrides.set(!onlyOverrides())">Only overridden</button>
   </div>
 
+  <app-tree-row
+    level="root"
+    glyph="book"
+    [reserveChevron]="true"
+    label="Overview"
+    [active]="selectedName() === null"
+    [ariaCurrent]="selectedName() === null ? 'page' : null"
+    ariaLabel="Prompt registry overview"
+    testid="prompt-admin-home"
+    (selectRequest)="homeRequest.emit()" />
+
   @if (hasTelemetry()) {
     <div class="prompt-catalogue__columns" aria-hidden="true">
       <span>Prompt</span>

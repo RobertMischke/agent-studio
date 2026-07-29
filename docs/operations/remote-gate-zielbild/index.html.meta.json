@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Remote Gate Target Architecture",
+  "source": {
+    "path": "docs/operations/remote-gate-zielbild/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "556d26bf982aa4be1de14799f48f2f31ded5936206b5a3bd3e186832a0646b2c",
+      "sizeBytes": 41597,
+      "lineCount": 500,
+      "capturedAt": "2026-07-26T00:00:00.000Z"
+    }
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "concept",
+    "temporalState": "mixed",
+    "implementationState": "planned",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "workbench",
+    "analyzedAt": "2026-07-26"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2369",
+      "title": "Define the clean remote gate target architecture",
+      "linkedAt": "2026-07-26T00:00:00.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2262",
+      "title": "Remove the SSH gate bridge after replacement",
+      "linkedAt": "2026-07-26T00:00:00.000Z",
+      "source": "manual"
+    }
+  ]
+}

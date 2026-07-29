@@ -1,0 +1,159 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/1959d7ca515a31feac994e633e2049c5e91783c0f02ed53d9ad13463bbb1f0f6",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/AnalysisReportPaths.cs",
+    "displayName": "AnalysisReportPaths.cs"
+  },
+  "reviewedAt": "2026-07-21T11:26:22.1669616Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-b98b4983e8a444c384a7c89282bb97db"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "56694330666938cc00ccc9b87f66a2220e08c58206a39c333b32cf5bc4a835cc"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/AnalysisReportPaths.cs",
+      "selector": "file",
+      "contentHash": "sha256:e87391f9f7d6bf2637bb7e9c99e53396e3891bcf004e06fe228fca157e3492b5"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "64e7708f36514500eedf2e96b11f4808c3c408fe60f3ff42f2730ae44f4e2463"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:7191b171a5b38a7fa2a59d4ec763b92a2b1e2384763612a2f8739c693e459a65"
+    }
+  },
+  "grade": {
+    "score": 68,
+    "band": "D",
+    "rationale": "The API is concise and readable, but unvalidated path segments can escape the documented canonical directory or produce invalid filenames. This is a significant correctness and safety flaw for code responsible for evidence storage paths."
+  },
+  "summary": "The path helpers are simple, deterministic, and well documented. However, projectSlug and reportId are treated as safe path segments without enforcing that constraint. Rooted paths, directory traversal, separators, invalid characters, and empty report identifiers can violate the promised layout or fail later with unclear filesystem errors.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 55,
+        "band": "F",
+        "rationale": "Rooted or traversal-bearing project slugs and report IDs can resolve outside the canonical analysis directory. Empty report IDs also produce unintended filenames such as .md and .json."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 82,
+        "band": "B",
+        "rationale": "The class is compact and centralized, but its implicit path-segment contract is not encoded, and report filename construction is duplicated across two methods."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 92,
+        "band": "A",
+        "rationale": "Names and XML documentation clearly communicate the intended directory structure and the relationship between Markdown and JSON files."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 52,
+        "band": "F",
+        "rationale": "Workspace and project inputs receive basic null-or-whitespace checks, but report IDs receive none, and no input is validated as a single legal path segment. Failures can therefore occur later during filesystem access."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 88,
+        "band": "B",
+        "rationale": "The pure static methods are easy to unit test across platforms, although the missing explicit segment-validation contract makes expected behavior for malformed inputs ambiguous."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "ARP-001",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Project slug can escape the analysis root",
+      "description": "The projectSlug parameter is checked only for null or whitespace before being passed to Path.Combine. A rooted value can discard preceding path components, while values containing parent-directory segments or directory separators can place reports outside logs/analysis. This violates the method\u0027s canonical-layout contract and may permit writes outside the intended project directory when the result is consumed by the store.",
+      "recommendation": "Require projectSlug to be exactly one safe path segment. Reject rooted values, dot segments, directory separators, invalid filename characters, and reserved names as appropriate for supported platforms. For defense in depth, resolve the full path and verify that it remains beneath the normalized analysis root.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportPaths.cs",
+          "range": {
+            "start": {
+              "line": 35,
+              "column": 9
+            },
+            "end": {
+              "line": 36,
+              "column": 76
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ARP-002",
+      "aspect": "error_handling",
+      "severity": "high",
+      "title": "Report identifiers are not validated as filename stems",
+      "description": "MarkdownFile and JsonSidecarFile interpolate reportId directly into a filename. Null becomes an empty interpolation, whitespace produces unusual filenames, and rooted, traversal-bearing, separator-containing, or invalid identifiers can escape the project directory or cause delayed filesystem exceptions. The two sibling methods may also behave inconsistently if future validation is added separately.",
+      "recommendation": "Introduce a shared helper that validates reportId as a non-empty safe filename stem and constructs the report path for a requested extension. Add tests for null, whitespace, rooted paths, parent traversal, both separator characters, invalid filename characters, and valid identifiers.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportPaths.cs",
+          "range": {
+            "start": {
+              "line": 52,
+              "column": 5
+            },
+            "end": {
+              "line": 53,
+              "column": 81
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportPaths.cs",
+          "range": {
+            "start": {
+              "line": 60,
+              "column": 5
+            },
+            "end": {
+              "line": 61,
+              "column": 83
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

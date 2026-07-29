@@ -82,6 +82,9 @@ public sealed class RunnerCapabilityProbeTests
         Assert.DoesNotContain(
             CapabilityProtocol.GitWorkflowPush,
             RunnerCapabilityProbe.CodingRequirements(options));
+        Assert.DoesNotContain(
+            CapabilityProtocol.GitPush,
+            RunnerCapabilityProbe.CodingRequirements(options));
     }
 
     [Fact]
@@ -99,6 +102,9 @@ public sealed class RunnerCapabilityProbeTests
 
         var gate = RemoteTaskRunner.BuildUnsecuredWorktreeGate("runner-host", exception);
 
+        Assert.Contains("host=runner-host", gate);
+        Assert.Contains("worktree=/runner/worktrees/AGT-2347", gate);
+        Assert.Contains("branch=runner/host/AGT-2347", gate);
         Assert.Contains("fine-grained Contents: Read and write", gate);
         Assert.Contains("classic repo plus workflow", gate);
         Assert.Contains(GitPushProbe.TokenRequirementsPath, gate);

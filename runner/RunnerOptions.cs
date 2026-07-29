@@ -125,7 +125,10 @@ public sealed class RunnerOptions
     /// <summary>Hard cap on a single CLI run before the runner gives up and reports a blocked completion.</summary>
     public int RunTimeoutSeconds { get; init; }
 
-    /// <summary>Maximum number of concurrently running task slots on this host.</summary>
+    /// <summary>
+    /// Bootstrap/fallback host slot ceiling. A versioned Task Server persists
+    /// the first reported value and returns the centrally managed live ceiling.
+    /// </summary>
     public int HostMaxParallelism { get; init; }
 
     /// <summary>Delay between empty daemon pickup polls.</summary>

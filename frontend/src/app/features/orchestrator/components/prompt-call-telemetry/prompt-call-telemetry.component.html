@@ -1,0 +1,93 @@
+@let d = detail();
+@let calls = d.calls;
+<section class="prompt-calls" data-testid="prompt-admin-call-telemetry">
+  <header class="prompt-calls__head">
+    <div>
+      <h3>Runtime calls</h3>
+      <p>One append-only event per rendered prompt, separated by content version.</p>
+    </div>
+    @if (calls.lastCalledAt) {
+      <span>last called {{ calls.lastCalledAt | date:'dd.MM.yyyy, HH:mm' }}</span>
+    } @else {
+      <span data-testid="prompt-admin-never-called">never called</span>
+    }
+  </header>
+
+  <div class="prompt-calls__summary">
+    <div>
+      <span>Calls</span>
+      <strong data-testid="prompt-admin-call-total">
+        {{ calls.totalCalls | number }} <small>/ {{ calls.calls7d | number }} in 7d</small>
+      </strong>
+    </div>
+    <div>
+      <span>Current version</span>
+      <strong>{{ calls.currentVersionCalls | number }} <small>calls</small></strong>
+    </div>
+    <div>
+      <span>Estimated prompt tokens</span>
+      <strong>{{ calls.inputTokens | number }}</strong>
+    </div>
+    <div>
+      <span>Theoretical cost</span>
+      <strong data-testid="prompt-admin-call-cost">
+        {{ cost(calls.costUsd, calls.unpricedCalls, calls.totalCalls) }}
+        <small>/ {{ cost(calls.costUsd7d, calls.unpricedCalls7d, calls.calls7d) }} in 7d</small>
+      </strong>
+    </div>
+  </div>
+
+  <div class="prompt-calls__trend" aria-label="Calls during the last 14 days">
+    @for (day of calls.daily; track day.date) {
+      <div class="prompt-calls__day"
+        [attr.title]="day.date + ': ' + day.calls + ' calls'"
+        [attr.aria-label]="day.date + ': ' + day.calls + ' calls'">
+        <span [style.height]="barHeight(day.calls)"></span>
+      </div>
+    }
+  </div>
+
+  @if (calls.versions.length) {
+    <table class="prompt-calls__versions" data-testid="prompt-admin-version-history">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>First / last call</th>
+          <th>Calls</th>
+          <th>Tokens</th>
+          <th>Cost</th>
+          <th>Models</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (version of calls.versions; track version.version) {
+          <tr [class.prompt-calls__version--current]="version.isCurrent">
+            <td>
+              <code [title]="version.version">{{ shortVersion(version.version) }}</code>
+              @if (version.isCurrent) { <span class="prompt-calls__current">current</span> }
+            </td>
+            <td>
+              {{ version.firstCalledAt | date:'dd.MM.yyyy' }}
+              / {{ version.lastCalledAt | date:'dd.MM.yyyy' }}
+            </td>
+            <td>{{ version.calls | number }}</td>
+            <td>{{ version.inputTokens | number }}</td>
+            <td>{{ cost(version.costUsd, version.unpricedCalls, version.calls) }}</td>
+            <td>{{ version.models.length ? version.models.join(', ') : 'unknown' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="prompt-calls__empty">
+      No runtime evidence yet. The first render will create this prompt's first version row.
+    </p>
+  }
+
+  <p class="prompt-calls__disclaimer">
+    {{ d.costDisclaimer }}
+    @if (calls.unpricedCalls) {
+      <span>* {{ calls.unpricedCalls }} call{{ calls.unpricedCalls === 1 ? '' : 's' }} could not be priced.</span>
+    }
+  </p>
+</section>

@@ -279,8 +279,11 @@ public sealed class AspectRunnerService
             });
 
             var prompt = !string.IsNullOrWhiteSpace(promptOverride)
-                ? promptOverride!
-                : BuildAspectPrompt(def, inputs);
+                ? _prompts.UseProjectOverride(
+                    def.PromptTemplate,
+                    promptOverride!,
+                    new PromptCallContext(inputs.Project, pipelineStepId, model))
+                : BuildAspectPrompt(def, inputs, model);
             string response;
             OrchestratorTokenUsage? callUsage = null;
             long durationMs = 0;
@@ -423,7 +426,7 @@ public sealed class AspectRunnerService
     /// produces a verdict (the missing template surfaces as a build /
     /// startup smell, not as a quiet "no-op" run).
     /// </summary>
-    private string BuildAspectPrompt(AspectDefinition def, AspectRunInputs inputs)
+    private string BuildAspectPrompt(AspectDefinition def, AspectRunInputs inputs, string model)
     {
         var values = new Dictionary<string, string?>
         {
@@ -445,7 +448,10 @@ public sealed class AspectRunnerService
         };
         try
         {
-            return _prompts.Render(def.PromptTemplate, values);
+            return _prompts.Render(
+                def.PromptTemplate,
+                values,
+                new PromptCallContext(inputs.Project, $"aspect-{def.Id}", model));
         }
         catch (Exception ex)
         {

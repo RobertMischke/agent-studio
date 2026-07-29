@@ -212,7 +212,11 @@ export interface TaskInfo {
    */
   tokenSummary?: TaskTokenSummary | null;
   model: string | null;
+  /** False when model qualification derives the route from task type + policy. */
+  modelExplicit?: boolean;
   thinkingLevel?: string | null;
+  /** False when the policy supplies the reasoning level together with the model tier. */
+  thinkingLevelExplicit?: boolean;
   cliType: CliType | null;
   quotaFallback?: {
     cliType: string;
@@ -577,6 +581,14 @@ export interface ClientSummary {
   runnerLastClaimAt?: string | null;
   runnerActiveSlots?: number | null;
   runnerAvailableSlots?: number | null;
+  /** Central host capacity targets (AGT-2302 / AGT-2376). */
+  runnerDesiredMaxParallelism?: number | null;
+  runnerTargetLoadPercent?: number | null;
+  runnerRampStrategy?: 'conservative' | 'balanced' | 'aggressive' | null;
+  runnerCapacityUpdatedAt?: string | null;
+  /** Ceiling the live daemon reports as adopted. Telemetry, not policy. */
+  runnerEffectiveMaxParallelism?: number | null;
+  runnerEffectiveMaxParallelismAppliedAt?: string | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
 }
@@ -588,6 +600,7 @@ export interface RunnerProjectPreflight {
   repositoryUrl: string;
   fetchUrl: string;
   pushUrl: string;
+  targetBranch?: string;
   status: 'ready' | 'failed';
   detail: string;
   checkedAt: string;

@@ -67,6 +67,14 @@ public record SessionEvent
     /// <summary><c>start</c> | <c>continue</c> | <c>recovery</c></summary>
     public string Kind { get; init; } = "";
     public string? Cli { get; init; }
+    /// <summary>
+    /// Effective model resolved for this run at confirmed process start.
+    /// Stored independently of CLI init frames and token reporting so every
+    /// new run has durable model attribution.
+    /// </summary>
+    public string? Model { get; init; }
+    /// <summary>Effective thinking / reasoning level resolved for this run.</summary>
+    public string? ThinkingLevel { get; init; }
     /// <summary>Runtime-backed execution owner captured at run start for durable history.</summary>
     public TaskExecutionLocation? ExecutionLocation { get; init; }
     /// <summary>Session id we attempted to resume (null on fresh start / recovery).</summary>

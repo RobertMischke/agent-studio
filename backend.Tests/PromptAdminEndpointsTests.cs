@@ -177,6 +177,36 @@ public sealed class PromptAdminEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
+    [Fact]
+    public async Task ReviewAll_WritesSidecarsAndReturnsFindings()
+    {
+        using var factory = CreateFactory();
+        using var client = CreateClient(factory);
+
+        using var resp = await client.PostAsJsonAsync(
+            "/api/admin/prompts/review-all",
+            new { reviewedBy = "endpoint-test" });
+        resp.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        Assert.Equal(1, doc.RootElement.GetProperty("reviewedCount").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("findingCount").GetInt32() >= 0);
+        Assert.True(File.Exists(Path.Combine(_defaultsDir, Template + ".meta.json")));
+
+        using var catalogResp = await client.GetAsync("/api/admin/prompts");
+        catalogResp.EnsureSuccessStatusCode();
+        using var catalog = JsonDocument.Parse(await catalogResp.Content.ReadAsStringAsync());
+        var item = catalog.RootElement.GetProperty("items")[0];
+        Assert.Equal(
+            "endpoint-test",
+            doc.RootElement.GetProperty("results")[0]
+                .GetProperty("metadata")
+                .GetProperty("reviewedBy")
+                .GetString());
+        Assert.NotEqual(JsonValueKind.Null, item.GetProperty("lastReviewedAt").ValueKind);
+        Assert.True(item.TryGetProperty("lastChangedSha", out _));
+    }
+
     private static string?[] Names(JsonElement root, string property) =>
         root.GetProperty(property).EnumerateArray().Select(s => s.GetString()).ToArray();
 
@@ -208,6 +238,7 @@ public sealed class PromptAdminEndpointsTests : IDisposable
                         // catalog is deterministic and PUT/DELETE stay isolated.
                         ["PromptTemplates:RuntimePath"] = _defaultsDir,
                         ["PromptTemplates:OverridePath"] = _overridesDir,
+                        ["PromptTelemetry:Path"] = Path.Combine(_tempDir, "prompt-calls.jsonl"),
                     });
                 });
             });

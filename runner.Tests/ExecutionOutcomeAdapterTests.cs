@@ -342,6 +342,53 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Missing_sentinel_uses_out_of_band_only_with_exact_registered_repo_proof()
+    {
+        var commit = new string('a', 40);
+        var verified = new WorktreeTeardownResult(
+            true,
+            "runner/agent-runner-01/AGT-2220",
+            commit,
+            "https://example.invalid/branch",
+            ResultSha: commit,
+            DeliveryProof: new RemoteDeliveryProof(
+                "https://example.invalid/project.git",
+                "refs/heads/runner/agent-runner-01/AGT-2220",
+                commit));
+        var missingSentinel = new RunOutcome(
+            RunOutcomeKind.Unknown,
+            "The provider completed without a terminal sentinel.");
+
+        var request = RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            missingSentinel,
+            verified,
+            "agent-runner-01");
+
+        Assert.NotNull(request);
+        Assert.Equal("5-human-review", request!.TargetState);
+        Assert.Contains(commit, request.Summary);
+        Assert.Contains(
+            request.Deliverables!,
+            item => item.Path == $"refs/heads/runner/agent-runner-01/AGT-2220@{commit}");
+
+        Assert.Null(RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            missingSentinel,
+            verified with { DeliveryProof = null },
+            "agent-runner-01"));
+        Assert.Null(RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            missingSentinel,
+            verified with
+            {
+                DeliveryProof = verified.DeliveryProof! with { CommitSha = new string('b', 40) },
+            },
+            "agent-runner-01"));
+        Assert.Null(RemoteTaskRunner.BuildVerifiedOutOfBandRequest(
+            new RunOutcome(RunOutcomeKind.Done, "Sentinel present."),
+            verified,
+            "agent-runner-01"));
+    }
+
+    [Fact]
     public void Claude_error_result_is_provider_failure_not_successful_completion()
     {
         const string terminal = """

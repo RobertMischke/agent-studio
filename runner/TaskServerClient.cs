@@ -30,6 +30,8 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
     private readonly bool _usesServiceCredential;
+    private int? _centralHostMaxParallelism;
+    private DateTime? _centralHostMaxParallelismAppliedAt;
 
     public TaskServerClient(RunnerOptions options)
     {
@@ -157,14 +159,16 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
-                capabilities);
+                capabilities,
+                BootstrapMaxParallelism: options.HostMaxParallelism);
             try
             {
-                _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
+                var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
                     HttpMethod.Put,
                     $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
                     request,
                     ct);
+                AdoptRuntimeCapacity(registered?.RuntimeCapacity);
                 SetClientId(runnerId);
                 return runnerId;
             }
@@ -247,6 +251,10 @@ public sealed class TaskServerClient : IDisposable
 
     public bool UsesDurableTaskServer => _useV1;
     internal string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+    internal int HostMaxParallelism => Math.Clamp(
+        _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
+        1,
+        256);
 
     internal RunOutboxAuthority OutboxAuthority(string taskKey)
     {
@@ -317,8 +325,23 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RunnerClaimResponse> ClaimAsync(RunnerClaimRequest req, CancellationToken ct)
     {
         if (!_useV1)
-            return await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
-                   ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+        {
+            var stamped = req with
+            {
+                EffectiveMaxParallelism = req.EffectiveMaxParallelism ?? HostMaxParallelism,
+                EffectiveMaxParallelismAppliedAt =
+                    req.EffectiveMaxParallelismAppliedAt ?? _centralHostMaxParallelismAppliedAt,
+                BootstrapMaxParallelism = req.BootstrapMaxParallelism ?? _options?.HostMaxParallelism,
+            };
+            var legacy = await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>(
+                             "/api/runner/claim", stamped, ct)
+                         ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+            // The legacy claim plane carries the same central host policy as the
+            // v1 plane, so a ceiling changed in Studio takes effect on the next
+            // poll without restarting the daemon.
+            AdoptCentralMaxParallelism(legacy.DesiredMaxParallelism);
+            return legacy;
+        }
 
         var claim = await PostJsonAsync<Contract.ClaimRequest, Contract.ClaimResponse>(
             $"/api/v1/runners/{Uri.EscapeDataString(req.RunnerId)}/claims",
@@ -328,8 +351,10 @@ public sealed class TaskServerClient : IDisposable
                 req.RequestedTtlSeconds ?? 120,
                 req.AvailableSlots,
                 ToContract(req.Inventory),
-                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options)),
+                _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options),
+                req.EffectiveMaxParallelism ?? HostMaxParallelism),
             ct);
+        AdoptRuntimeCapacity(claim?.RuntimeCapacity);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
             || claim.Task is null || claim.Run is null || claim.Lease is null)
             return new RunnerClaimResponse(
@@ -361,6 +386,22 @@ public sealed class TaskServerClient : IDisposable
             RunId: claim.Run.RunId,
             LeaseInstanceId: RunnerInstanceId,
             ReconciliationActions: FromContract(claim.ReconciliationActions));
+    }
+
+    private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
+        => AdoptCentralMaxParallelism(capacity?.MaxParallelism);
+
+    /// <summary>
+    /// Adopt a server-owned ceiling and remember when it took effect, so the
+    /// host row can show whether the daemon is already running the central
+    /// value or is still draining down to it.
+    /// </summary>
+    private void AdoptCentralMaxParallelism(int? maxParallelism)
+    {
+        if (maxParallelism is not (>= 1 and <= 256)) return;
+        if (_centralHostMaxParallelism == maxParallelism) return;
+        _centralHostMaxParallelism = maxParallelism;
+        _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -396,7 +437,7 @@ public sealed class TaskServerClient : IDisposable
                                : RunnerCapabilityProbe.ReviewRequirements(_options)),
                    },
                    ct)
-               ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
+                ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
     }
 
     public async Task<Contract.ReviewLeaseDto> RenewReviewLeaseAsync(

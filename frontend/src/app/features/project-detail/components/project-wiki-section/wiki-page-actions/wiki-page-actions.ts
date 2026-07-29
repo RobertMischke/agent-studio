@@ -56,9 +56,24 @@ export class WikiPageActionsComponent {
     this.archivedOverrides().has(this.relPath())
     || this.classification()?.status?.toLowerCase() === 'archived');
 
+  /**
+   * Everything inside a registered Workbench folder settles through the
+   * Workbench's own two-phase decision gate. Wiki classification writes a
+   * `.meta.json` sidecar that a Workbench's visibility never reads, so the
+   * backend refuses it with 409 - the UI must not offer the path at all.
+   */
+  readonly decisionActionsOwned = computed(() => {
+    const rel = normalizeWikiPath(this.relPath());
+    for (const entryPath of this.registeredWorkbenchPaths()) {
+      const folder = workbenchFolder(normalizeWikiPath(entryPath));
+      if (folder && (rel === folder || rel.startsWith(`${folder}/`))) return true;
+    }
+    return false;
+  });
+
   archivePage(): void {
     const context = this.context();
-    if (this.archiveBusy() || this.archived()) return;
+    if (this.archiveBusy() || this.archived() || this.decisionActionsOwned()) return;
     this.archivedOverrides.update(current => new Set(current).add(context.relPath));
     this.archiveBusy.set(true);
     this.docs.setWikiClassification(context.projectName, context.relPath, 'archived').subscribe({
@@ -78,4 +93,15 @@ export class WikiPageActionsComponent {
       },
     });
   }
+}
+
+/** Repo-relative, case-insensitive comparison form; `docs/` is optional. */
+function normalizeWikiPath(relPath: string): string {
+  return (relPath ?? '').replaceAll('\\', '/').replace(/^\/+/, '').replace(/^docs\//i, '').toLowerCase();
+}
+
+/** The folder that owns a Workbench entry point, or null for a bare file. */
+function workbenchFolder(entryPath: string): string | null {
+  const cut = entryPath.lastIndexOf('/');
+  return cut > 0 ? entryPath.slice(0, cut) : null;
 }

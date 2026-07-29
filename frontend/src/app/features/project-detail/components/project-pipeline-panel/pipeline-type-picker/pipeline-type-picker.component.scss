@@ -1,0 +1,26 @@
+:host { display: inline-block; }
+
+.type-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+
+span {
+  color: var(--studio-fg-muted);
+  font-size: var(--studio-card-meta-size);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+select {
+  min-width: 7.5rem;
+  min-height: var(--studio-card-pill-height);
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg);
+  font: inherit;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CliModelsPanelComponent } from './cli-models-panel';
 import { CLI_TYPES } from '../../../../models/task.model';
@@ -23,6 +23,16 @@ describe('CliModelsPanelComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(CliModelsPanelComponent);
     fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/cli/model-routing/policy').flush({
+      version: '2026-07-24',
+      wikiPath: 'docs/system/domains/model-routing-policy.md',
+      economyMode: false,
+      economyModeLabel: 'Economy mode',
+      tiers: [],
+      taskTypeDefaults: {},
+    });
+    fixture.detectChanges();
 
     const groups = fixture.componentInstance.groups();
     expect(groups.length).toBe(CLI_TYPES.length);
@@ -32,5 +42,17 @@ describe('CliModelsPanelComponent', () => {
     const cards = fixture.nativeElement.querySelectorAll('[data-testid^="cli-models-card-"]');
     expect(cards).toHaveLength(CLI_TYPES.length);
     expect(Array.from(cards, (card: Element) => card.getAttribute('data-cli'))).toEqual(CLI_TYPES);
+
+    const economy = fixture.nativeElement.querySelector(
+      '[data-testid="model-routing-economy-mode"]',
+    ) as HTMLInputElement;
+    expect(economy.checked).toBe(false);
+    economy.click();
+    const save = http.expectOne('/api/cli/model-routing/economy-mode');
+    expect(save.request.method).toBe('PUT');
+    expect(save.request.body).toEqual({ economyMode: true });
+    save.flush({ economyMode: true });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.policy()?.economyMode).toBe(true);
   });
 });

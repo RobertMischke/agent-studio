@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
 import { WikiStarsService } from './wiki-stars.service';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
+import { WIKI_LIVE_REFRESH_MS } from '../../services/wiki-live-refresh.service';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -46,6 +47,14 @@ const TREE: WikiTree = {
             companionPath: 'concepts/overview.md.meta.json',
             sourceChangedSinceReview: false,
             findingsCount: 2,
+            agentReads: {
+              total: 23,
+              lastReadAt: '2026-07-22T10:15:00Z',
+              recent: [
+                { at: '2026-07-22T10:15:00Z', taskKey: 'AGT-2242' },
+                { at: '2026-07-21T09:00:00Z', taskKey: 'AGT-2200' },
+              ],
+            },
           },
           classification: {
             status: 'ueberholt',
@@ -353,6 +362,11 @@ const HISTORY: WikiFileHistory = {
 };
 
 describe('ProjectWikiSectionComponent', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     clearWikiStorage();
     openTaskKey.mockClear();
@@ -382,6 +396,62 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect((el(fixture).querySelector('[data-testid="project-wiki-edit"]') as HTMLButtonElement).disabled).toBe(true);
     http.verify();
+  });
+
+  it('shows the update banner on an ETag change and reloads only after confirmation', async () => {
+    vi.useFakeTimers();
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')?.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Original' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md')
+      .flush(HISTORY, { headers: { ETag: '"page-v1"' } });
+    fixture.detectChanges();
+
+    await vi.advanceTimersByTimeAsync(WIKI_LIVE_REFRESH_MS);
+    const unchanged = http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md');
+    expect(unchanged.request.headers.get('If-None-Match')).toBe('"page-v1"');
+    unchanged.flush(null, {
+      status: 304,
+      statusText: 'Not Modified',
+      headers: { ETag: '"page-v1"' },
+    });
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-update-banner"]')).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Original');
+
+    await vi.advanceTimersByTimeAsync(WIKI_LIVE_REFRESH_MS);
+    const changed = http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md');
+    expect(changed.request.headers.get('If-None-Match')).toBe('"page-v1"');
+    changed.flush({
+      ...HISTORY,
+      commits: [{
+        ...HISTORY.commits[0],
+        sha: 'def',
+        shortSha: 'def5678',
+        subject: 'external update',
+      }],
+    }, { headers: { ETag: '"page-v2"' } });
+    fixture.detectChanges();
+
+    const banner = el(fixture).querySelector('[data-testid="project-wiki-update-banner"]');
+    expect(banner?.textContent).toContain('Diese Seite wurde aktualisiert.');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Original');
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-update-reload"]')!.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Aktualisiert' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md')
+      .flush({ ...HISTORY, commits: [{ ...HISTORY.commits[0], sha: 'def' }] }, {
+        headers: { ETag: '"page-v2"' },
+      });
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-update-banner"]')).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer"]')?.textContent).toContain('Aktualisiert');
+    fixture.destroy();
+    vi.useRealTimers();
   });
 
   it('renders the physical folder tree with folders collapsed by default and md/html/json files when expanded', async () => {
@@ -491,6 +561,31 @@ describe('ProjectWikiSectionComponent', () => {
     expect(fixture.componentInstance.openedRel()).toBe('concepts/new-overview.md');
     // The successor is not in the tree / unclassified, so the block hides again.
     expect(el(fixture).querySelector('[data-testid="project-wiki-classification-panel"]')).toBeNull();
+    http.verify();
+  });
+
+  it('shows total, last-read time, and recent task history in the meta panel', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const panel = el(fixture).querySelector('[data-testid="project-wiki-agent-reads-panel"]');
+    expect(panel, 'agent reads panel').toBeTruthy();
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-total"]')!.textContent?.trim())
+      .toBe('23');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-last"]')!.textContent)
+      .toContain('2026');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-recent"]')!.textContent)
+      .toContain('AGT-2242');
+    expect(panel!.querySelector('[data-testid="project-wiki-agent-reads-recent"]')!.textContent)
+      .toContain('AGT-2200');
     http.verify();
   });
 
@@ -1649,9 +1744,9 @@ describe('ProjectWikiSectionComponent', () => {
 
     const view = root.querySelector('[data-testid="wiki-folder-view"]')!;
     expect(view, 'folder overview').toBeTruthy();
-    // Column headers: Titel | Datei | Typ | Status | Geändert | Größe.
+    // Column headers: Titel | Datei | Typ | Status | Reads | Geändert | Größe.
     const headers = [...view.querySelectorAll('th')].map(th => th.textContent?.trim());
-    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Geändert', 'Größe']);
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Reads', 'Geändert', 'Größe']);
     // Folders first, then pages in payload order.
     const rowIds = [...view.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
       .map(row => row.getAttribute('data-testid'));

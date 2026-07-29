@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import type { ClientSummary } from '../../../models/task.model';
 import type {
   HostActionKind,
+  HostRampStrategy,
   HostTelemetrySeries,
   RemoteHost,
   RemoteHostAdmission,
@@ -214,6 +215,12 @@ export class RemoteHostsService {
               gitPushCheckedAt:
                 gitWorkflowPush?.advertisedAt ?? gitPush?.advertisedAt ?? current.gitPushCheckedAt,
               hostAdmission: snapshot.hostAdmission,
+              capacityHostId: snapshot.hostId,
+              runtimeCapacity: snapshot.runtimeCapacity ?? current.runtimeCapacity ?? null,
+              effectiveMaxParallelism:
+                snapshot.effectiveMaxParallelism ?? current.effectiveMaxParallelism ?? null,
+              runtimeCapacityAppliedAt:
+                snapshot.runtimeCapacityAppliedAt ?? current.runtimeCapacityAppliedAt ?? null,
               stats,
             };
             if (index >= 0) projected[index] = next;
@@ -319,6 +326,93 @@ export class RemoteHostsService {
     this.postAction(id, 'revive', `/api/clients/${encodeURIComponent(this.clientId(id))}/revive`);
   }
 
+  /**
+   * Persist the host's central capacity targets. The record is owned either by
+   * the standalone Task Server (versioned, optimistic concurrency) or by the
+   * monolith's client identity (unversioned, version 0); the write goes to
+   * whichever server produced the record this row is showing.
+   *
+   * A host with no published ceiling at all is a valid starting point, not an
+   * error: the client-identity route creates the record, so the host row can
+   * offer a "set a ceiling" form instead of a dead end.
+   */
+  setCapacity(
+    id: string,
+    maxParallelism: number,
+    targetLoadPercent: number,
+    rampStrategy: HostRampStrategy,
+  ): void {
+    const current = this.hosts().find(host => host.id === id);
+    if (!current || current.busyAction || !this.http) return;
+    const capacity = current.runtimeCapacity;
+
+    const hostId = current.capacityHostId;
+    if (!capacity || !hostId || capacity.version < 1) {
+      this.setClientCapacity(current, maxParallelism, targetLoadPercent, rampStrategy);
+      return;
+    }
+
+    this.patch(id, host => ({ ...host, busyAction: 'capacity' }));
+    this.http.put<NonNullable<RemoteHost['runtimeCapacity']>>(
+      `/api/v1/hosts/${encodeURIComponent(hostId)}/runtime-capacity`,
+      {
+        maxParallelism,
+        targetLoadPercent,
+        rampStrategy,
+        expectedVersion: capacity.version,
+      },
+    ).subscribe({
+      next: updated => {
+        this.hosts.update(hosts => hosts.map(host =>
+          host.capacityHostId === hostId
+            ? {
+                ...host,
+                runtimeCapacity: updated,
+                busyAction: host.id === id ? null : host.busyAction,
+              }
+            : host));
+        this.log('capacity-saved', {
+          hostId,
+          maxParallelism,
+          targetLoadPercent,
+          rampStrategy,
+        });
+      },
+      error: error => this.actionFailed(id, error),
+    });
+  }
+
+  /** Monolith write path: capacity lives on the host's client identity. */
+  private setClientCapacity(
+    current: RemoteHost,
+    maxParallelism: number,
+    targetLoadPercent: number,
+    rampStrategy: HostRampStrategy,
+  ): void {
+    if (!this.http) return;
+    this.patch(current.id, host => ({ ...host, busyAction: 'capacity' }));
+    this.http.put<ClientSummary>(
+      `/api/clients/${encodeURIComponent(current.clientId)}/runner-capacity`,
+      { maxParallelism, targetLoadPercent, rampStrategy },
+    ).subscribe({
+      next: client => {
+        this.patch(current.id, host => ({
+          ...host,
+          ...clientCapacity(host, client),
+          availableSlots: client.runnerAvailableSlots ?? host.availableSlots,
+          busyAction: null,
+        }));
+        this.log('capacity-saved', {
+          hostId: current.clientId,
+          maxParallelism,
+          targetLoadPercent,
+          rampStrategy,
+        });
+      },
+      error: error => this.actionFailed(current.id, error),
+    });
+  }
+
   permanentlyDelete(id: string): void {
     const host = this.hosts().find(item => item.id === id);
     if (!host || !this.http) return;
@@ -389,6 +483,9 @@ interface TaskServerRunnerCapabilitySnapshot {
   hostAdmission: RemoteHostAdmission;
   capabilities: RemoteHostCapabilityHealth[];
   telemetry?: TaskServerTelemetrySnapshot | null;
+  runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
+  effectiveMaxParallelism?: number | null;
+  runtimeCapacityAppliedAt?: string | null;
 }
 
 function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {
@@ -416,10 +513,56 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     projectPreflights: client.runnerProjectPreflights ?? [],
-    daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? (client.runnerGitStatus === 'read-only' ? 'read-only' : 'running'),
+    daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? 'running',
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
     activeGateCount: client.runnerActiveGateCount ?? 0, gateCapacity: client.runnerGateCapacity ?? 0,
+    ...clientCapacity(host, client),
+  };
+}
+
+/**
+ * The monolith keeps host capacity on the client identity. Project it into the
+ * same shape the standalone Task Server returns so the host row has one capacity
+ * concept regardless of which server answers. Version 0 marks the unversioned
+ * client-identity record; {@link RemoteHostsService.setCapacity} uses it to pick
+ * the write route. The Task Server projection runs afterwards and wins when it
+ * carries a record of its own.
+ *
+ * A record that already came from the Task Server (version >= 1) is never
+ * replaced here. The /api/clients poll repeats on every reload, so overwriting
+ * it would silently demote the row to version 0 and send the next save to the
+ * monolith route - losing the optimistic-concurrency check. Only the
+ * daemon-reported adoption telemetry is merged in from the client identity.
+ */
+function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<RemoteHost> {
+  const taskServerOwned = (host.runtimeCapacity?.version ?? 0) >= 1;
+  if (taskServerOwned) {
+    return {
+      runtimeCapacity: host.runtimeCapacity,
+      effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
+      runtimeCapacityAppliedAt:
+        client.runnerEffectiveMaxParallelismAppliedAt ?? host.runtimeCapacityAppliedAt ?? null,
+    };
+  }
+  if (client.runnerDesiredMaxParallelism === null
+    || client.runnerDesiredMaxParallelism === undefined) {
+    return {
+      runtimeCapacity: host.runtimeCapacity ?? null,
+      effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
+    };
+  }
+  return {
+    runtimeCapacity: {
+      hostId: client.id,
+      maxParallelism: client.runnerDesiredMaxParallelism,
+      targetLoadPercent: client.runnerTargetLoadPercent ?? 80,
+      rampStrategy: client.runnerRampStrategy ?? 'balanced',
+      version: 0,
+      updatedAt: client.runnerCapacityUpdatedAt ?? client.lastSeenAt ?? '',
+    },
+    effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? null,
+    runtimeCapacityAppliedAt: client.runnerEffectiveMaxParallelismAppliedAt ?? null,
   };
 }
 

@@ -305,7 +305,7 @@ public sealed class RemoteTaskRunner
             }
             else
             {
-                await CompleteAsync(
+                await CompleteOrReconcileAsync(
                     taskKey,
                     lease,
                     outcome,
@@ -313,6 +313,7 @@ public sealed class RemoteTaskRunner
                     teardown,
                     workspace.RepositoryUrl,
                     workspace.BaseSha,
+                    workspace.IntegrationBranchRef,
                     artifactManifest?.Digest,
                     outputLines,
                     sourceMutated,
@@ -343,6 +344,7 @@ public sealed class RemoteTaskRunner
                     WorktreeTeardownResult.NoWork,
                     workspace.RepositoryUrl,
                     baseSha: null,
+                    workspace.IntegrationBranchRef,
                     artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
@@ -387,7 +389,7 @@ public sealed class RemoteTaskRunner
                     if (!handedBack && !heartbeat.LeaseLost && !releaseOnly)
                     {
                         outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
-                        await CompleteAsync(
+                        await CompleteOrReconcileAsync(
                             taskKey,
                             lease,
                             outcome,
@@ -395,6 +397,7 @@ public sealed class RemoteTaskRunner
                             teardown,
                             workspace.RepositoryUrl,
                             workspace.BaseSha,
+                            workspace.IntegrationBranchRef,
                             artifactManifest?.Digest,
                             outputLines,
                             sourceMutated,
@@ -537,7 +540,7 @@ public sealed class RemoteTaskRunner
             $"thinking={invocation.ThinkingLevel ?? "<cli-default>"} " +
             $"permission={runSpec?.PermissionMode ?? "<host-config>"} " +
             $"context={runSpec?.ContextMode ?? "<host-config>"} " +
-            $"source={(invocation.SpecApplied ? "card" : "runner-options")}" +
+            $"source={invocation.Source}" +
             (invocation.Note is null ? "" : $" note={invocation.Note}");
         _log(specLine);
         shipper.Add("system", specLine);
@@ -941,6 +944,7 @@ public sealed class RemoteTaskRunner
         WorktreeTeardownResult teardown,
         string? repository,
         string? baseSha,
+        string integrationBranch,
         string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
@@ -972,8 +976,80 @@ public sealed class RemoteTaskRunner
             OutcomeDecision: outcomeDecision,
             BaseSha: envelopeBaseSha,
             ImmutableResultRef: envelopeResultRef,
-            ArtifactManifestDigest: envelopeManifestDigest), ct);
+            ArtifactManifestDigest: envelopeManifestDigest,
+            IntegrationBranch: integrationBranch), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}, result-envelope {(envelopeResultRef is null ? "absent" : "attached")}");
+    }
+
+    private async Task CompleteOrReconcileAsync(
+        string taskKey,
+        RunLeaseInfoDto lease,
+        RunOutcome outcome,
+        ExecutionOutcomeDecision outcomeDecision,
+        WorktreeTeardownResult teardown,
+        string? repository,
+        string? baseSha,
+        string? artifactManifestDigest,
+        IReadOnlyList<string> outputLines,
+        bool sourceMutated,
+        CancellationToken ct)
+    {
+        var external = BuildVerifiedOutOfBandRequest(outcome, teardown, _options.RunnerName);
+        if (external is not null)
+        {
+            var response = await _client.CompleteAsync(taskKey, external, ct);
+            _log(
+                $"remote-runner-verified-out-of-band recorded: state {response?.TargetState}, " +
+                $"ref {teardown.DeliveryProof!.Ref}, sha {teardown.DeliveryProof.CommitSha}");
+            return;
+        }
+
+        await CompleteAsync(
+            taskKey,
+            lease,
+            outcome,
+            outcomeDecision,
+            teardown,
+            repository,
+            baseSha,
+            artifactManifestDigest,
+            outputLines,
+            sourceMutated,
+            ct);
+    }
+
+    internal static ExternalCompletionRequest? BuildVerifiedOutOfBandRequest(
+        RunOutcome outcome,
+        WorktreeTeardownResult teardown,
+        string source)
+    {
+        var proof = teardown.DeliveryProof;
+        if (outcome.Kind != RunOutcomeKind.Unknown
+            || !teardown.SecuredWork
+            || proof is null
+            || string.IsNullOrWhiteSpace(teardown.ResultSha)
+            || !string.Equals(
+                proof.CommitSha,
+                teardown.ResultSha,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var summary =
+            $"Remote work completed without a terminal sentinel. " +
+            $"The registered project repository was verified at {proof.Ref} " +
+            $"with commit {proof.CommitSha}.";
+        return new ExternalCompletionRequest(
+            Summary: summary,
+            Deliverables:
+            [
+                new ExternalDeliverable(
+                    Path: $"{proof.Ref}@{proof.CommitSha}",
+                    Note: "Verified by ls-remote against the project registration.")
+            ],
+            Source: source,
+            TargetState: "5-human-review");
     }
 
     /// <summary>
@@ -1062,8 +1138,8 @@ public sealed class RemoteTaskRunner
         var remediation = GitPushProbe.IsWorkflowScopeFailure(failure)
             ? GitPushProbe.WorkflowScopeFix()
             : "Restore origin push access, publish the retained HEAD to a new ref, then requeue.";
-        return $"worktree-blocked: unsecured worktree on {hostname}: {ex.WorktreePath} " +
-               $"({refs}; failure: {failure}). No ref was overwritten. {remediation}";
+        return $"worktree-blocked: host={hostname}; worktree={ex.WorktreePath}; branch={ex.Branch}; " +
+               $"{refs}; failure={failure}. No ref was overwritten. Recovery recipe: {remediation}";
     }
 
     private async Task<bool> ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)

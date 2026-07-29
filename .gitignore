@@ -14,6 +14,8 @@ frontend/build_log.txt
 # re-include specific tracked files below; a bare tools/ would prevent any
 # whitelisting under it.
 tools/*
+!tools/remote-test-suite/
+!tools/remote-test-suite/**
 # Whitelisted: idempotent self-heal script that start.sh runs as a hard
 # pre-flight before the backend boots. Tracked so stable picks it up via
 # update-stable.sh; everything else under tools/ stays local.

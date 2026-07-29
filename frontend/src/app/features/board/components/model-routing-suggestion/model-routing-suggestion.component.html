@@ -1,0 +1,23 @@
+<div class="model-routing"
+     data-testid="create-model-policy-suggestion"
+     [attr.data-tier]="suggestion().tier"
+     [attr.data-source]="explicit() ? 'override' : 'policy'">
+  <div class="model-routing__copy">
+    <span class="model-routing__status">
+      {{ explicit() ? 'Override active' : 'Suggested default' }}
+      @if (suggestion().economyDowngraded) {
+        <span class="model-routing__economy">Economy mode</span>
+      }
+    </span>
+    <span class="model-routing__route">{{ suggestion().model }} · {{ suggestion().thinkingLevel || 'model default' }}</span>
+    <span class="model-routing__origin" [title]="'Source: ' + suggestion().policyWikiPath">
+      Policy {{ suggestion().policyVersion }} · {{ suggestion().taskType }} → {{ suggestion().tier }}
+    </span>
+  </div>
+  @if (explicit()) {
+    <button type="button"
+            class="model-routing__reset"
+            data-testid="create-use-policy-model"
+            (click)="usePolicy.emit()">Use policy</button>
+  }
+</div>

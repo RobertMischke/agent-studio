@@ -236,7 +236,9 @@ public class PipelineStepConditionTests
             Assert.Equal("Bug", stored.Condition.Value); // trimmed
 
             // A fresh instance reads it back off disk.
-            var reloaded = NewService(dir).Get("Proj").PipelineSteps![PipelineCatalogue.PostAbortReviewStepId];
+            var reloaded = PipelineTypeSettings.ForType(
+                NewService(dir).Get("Proj"),
+                PipelineTypes.Task)!.PipelineSteps![PipelineCatalogue.PostAbortReviewStepId];
             Assert.Equal(PipelineStepConditions.TaskType, reloaded.Condition!.When);
             Assert.Equal("Bug", reloaded.Condition.Value);
         }
@@ -320,7 +322,10 @@ public class PipelineStepConditionTests
 
             var stored = svc.Get("Proj").PipelineSteps!["aspect-code-quality"];
             Assert.True(stored.EconomyModel);
-            Assert.True(NewService(dir).Get("Proj").PipelineSteps!["aspect-code-quality"].EconomyModel);
+            var reloaded = PipelineTypeSettings.ForType(
+                NewService(dir).Get("Proj"),
+                PipelineTypes.Task)!;
+            Assert.True(reloaded.PipelineSteps!["aspect-code-quality"].EconomyModel);
         }
         finally
         {

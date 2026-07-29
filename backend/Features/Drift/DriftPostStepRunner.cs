@@ -225,15 +225,20 @@ public sealed class DriftPostStepRunner
             return;
         }
 
-        var (defaultPrompt, persist) = BuildDimension(step.Id, project, projectRoot, repoRoot, workspace);
+        var (prompt, persist) = BuildDimension(
+            step.Id,
+            project,
+            projectRoot,
+            repoRoot,
+            workspace,
+            promptOverride,
+            model);
         if (persist == null)
         {
             // Unknown drift step id - record a no-op so the telemetry is honest.
             RecordStep(jobFolderPath, step.Id, model, PipelineStepStatus.Failed, null, "unknown-drift-step");
             return;
         }
-        var prompt = string.IsNullOrWhiteSpace(promptOverride) ? defaultPrompt : promptOverride!;
-
         var cli = _thinkingAwareCliRunner is null
             ? await CliRunner(cliType, model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false)
             : await _thinkingAwareCliRunner(cliType, model, prompt, project, jobId, thinkingLevel, PerDimensionTimeout, ct).ConfigureAwait(false);
@@ -290,12 +295,18 @@ public sealed class DriftPostStepRunner
     /// delegate for an unknown step id.
     /// </summary>
     private (string Prompt, Func<string, string, string, CancellationToken, Task>? Persist) BuildDimension(
-        string stepId, string project, string projectRoot, string repoRoot, string workspace)
+        string stepId,
+        string project,
+        string projectRoot,
+        string repoRoot,
+        string workspace,
+        string? promptOverride,
+        string model)
     {
         if (string.Equals(stepId, PipelineCatalogue.DriftAdrCodeStepId, StringComparison.OrdinalIgnoreCase))
         {
             var scope = _adrCode.SelectScope(project, projectRoot, repoRoot, _driftStore, _analysisStore, workspace);
-            var template = _prompts.Render("adr-code-drift.md", new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var template = EffectiveTemplate("adr-code-drift.md", stepId, promptOverride, project, model);
             var prompt = _adrCode.BuildPrompt(scope, template);
             Func<string, string, string, CancellationToken, Task> persist = async (agent, reportId, _, ct) =>
             {
@@ -310,7 +321,7 @@ public sealed class DriftPostStepRunner
         {
             var watchedProjectRoot = _config[$"Drift:WatchedProjectRoots:{project}"];
             var scope = _softwareArch.SelectScope(project, projectRoot, repoRoot, watchedProjectRoot, workspace, _driftStore, _analysisStore);
-            var template = _prompts.Render("software-architecture-drift.md", new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var template = EffectiveTemplate("software-architecture-drift.md", stepId, promptOverride, project, model);
             var prompt = _softwareArch.BuildPrompt(scope, template);
             Func<string, string, string, CancellationToken, Task> persist = async (agent, reportId, _, ct) =>
             {
@@ -325,7 +336,7 @@ public sealed class DriftPostStepRunner
         {
             var marketingRepo = _config["Drift:MarketingRepoPath"];
             var scope = _docsMarketing.SelectScope(project, projectRoot, repoRoot, marketingRepo, _driftStore, _analysisStore, workspace);
-            var template = _prompts.Render("docs-marketing-drift.md", new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var template = EffectiveTemplate("docs-marketing-drift.md", stepId, promptOverride, project, model);
             var prompt = _docsMarketing.BuildPrompt(scope, template);
             Func<string, string, string, CancellationToken, Task> persist = async (agent, reportId, _, ct) =>
             {
@@ -339,7 +350,7 @@ public sealed class DriftPostStepRunner
         if (string.Equals(stepId, PipelineCatalogue.DriftSpecTaskJobStepId, StringComparison.OrdinalIgnoreCase))
         {
             var scope = _specTask.SelectScope(project, projectRoot, repoRoot, _driftStore, _analysisStore, workspace);
-            var template = _prompts.Render("spec-task-job-drift.md", new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var template = EffectiveTemplate("spec-task-job-drift.md", stepId, promptOverride, project, model);
             var prompt = _specTask.BuildPrompt(scope, template);
             Func<string, string, string, CancellationToken, Task> persist = async (agent, reportId, _, ct) =>
             {
@@ -351,6 +362,22 @@ public sealed class DriftPostStepRunner
         }
 
         return (string.Empty, null);
+    }
+
+    private string EffectiveTemplate(
+        string templateName,
+        string stepId,
+        string? promptOverride,
+        string project,
+        string model)
+    {
+        var context = new PromptCallContext(project, stepId, model);
+        return string.IsNullOrWhiteSpace(promptOverride)
+            ? _prompts.Render(
+                templateName,
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+                context)
+            : _prompts.UseProjectOverride(templateName, promptOverride, context);
     }
 
     private static string MarkdownFor(string agentText, DriftReport report) =>

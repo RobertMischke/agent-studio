@@ -64,6 +64,45 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Run_RemoteSubjectRecordedMain_OverridesConfiguredDevelop()
+    {
+        var repo = SeedRepo("runner-recorded-main");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, "checkout -q -b runner/agent-runner-01/AGT-2400");
+        File.WriteAllText(Path.Combine(repo, "main-only.txt"), "task work");
+        Commit(repo, "feat: main-line task work");
+        var resultSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, "remote add origin .");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "AGT-2400");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-2400",
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = resultSha,
+            AttemptChainId = "attempt-main",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-main",
+            FencingToken = 1,
+            ResultRef = "runner/agent-runner-01/AGT-2400",
+            IntegrationBranch = "refs/heads/main",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+        var outcome = runner.Run("Fixture", "AGT-2400", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("Pre-main test gate", outcome.Error, StringComparison.Ordinal);
+        Assert.NotEqual(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.NotEqual(resultSha, RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_RunsFullSuiteOnExactSourceBeforeFastForward()
     {
         var repo = SeedRepo("runner-main-full-suite");

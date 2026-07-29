@@ -1,0 +1,99 @@
+<section class="telemetry" data-testid="remote-host-telemetry" aria-label="Host performance history">
+  <div class="telemetry__head">
+    <strong>Performance history</strong>
+    <span class="telemetry__context"
+          [class.telemetry__context--stale]="stale()"
+          data-testid="remote-host-slots-context">{{ context() }}</span>
+    <div class="telemetry__windows" aria-label="Telemetry time window">
+      @for (item of ['1h', '6h', '48h', '14d']; track item) {
+        <button type="button" [attr.aria-pressed]="window() === item"
+                [attr.data-testid]="'remote-host-window-' + item"
+                (click)="selectWindow($any(item))">{{ item }}</button>
+      }
+    </div>
+  </div>
+  @if (findings().length) {
+    <div class="telemetry__findings" data-testid="remote-host-findings">
+      @for (finding of visibleFindings(); track finding.kind + ':' + (finding.isActive === false ? 'history' : 'active')) {
+        <span class="telemetry__finding"
+              [attr.data-tone]="finding.isActive === false ? null : 'warn'"
+              [attr.data-finding-kind]="finding.kind"
+              [attr.data-finding-active]="finding.isActive !== false"
+              data-testid="remote-host-finding"
+              [appTooltip]="findingTooltip(finding)">
+          @if (finding.isActive === false) {
+            <span class="telemetry__finding-label">
+              {{ finding.label }} · {{ finding.occurrences ?? 1 }}× in window
+            </span>
+          } @else {
+            <span class="telemetry__finding-label">
+              {{ finding.label }} · since {{ finding.since | date:'short' }}
+            </span>
+          }
+        </span>
+      }
+      @if (additionalFindingCount()) {
+        <span class="telemetry__finding telemetry__finding--more"
+              data-testid="remote-host-findings-more"
+              [attr.aria-label]="additionalFindingCount() + ' additional findings'">
+          +{{ additionalFindingCount() }} more
+        </span>
+      }
+    </div>
+  }
+  <div class="telemetry__charts">
+    <div class="telemetry__labels" aria-hidden="true">
+      @for (row of rows(); track row.key) {
+        <span>{{ row.label }}</span>
+      }
+    </div>
+    <div class="telemetry__plots"
+         data-testid="remote-host-telemetry-plots"
+         tabindex="0"
+         role="group"
+         aria-label="Performance history. Hover, tap, or use arrow keys to inspect exact values."
+         (pointerdown)="showPoint($event)"
+         (pointermove)="showPoint($event)"
+         (pointerleave)="hidePoint($event)"
+         (focus)="focus()"
+         (blur)="clear()"
+         (keydown)="move($event)">
+      @for (row of rows(); track row.key) {
+        <svg [attr.data-chart]="row.key"
+             viewBox="0 0 100 30"
+             preserveAspectRatio="none"
+             role="img"
+             [attr.aria-label]="row.label + ' history'">
+          <polyline [attr.points]="row.path"></polyline>
+          @if (row.hoverY !== null) {
+            <circle class="telemetry__point"
+                    [attr.cx]="hovered()?.position"
+                    [attr.cy]="row.hoverY"
+                    r="1.8"></circle>
+          }
+        </svg>
+      }
+      @if (hovered(); as point) {
+        <span class="telemetry__crosshair"
+              aria-hidden="true"
+              [style.left.%]="point.position"></span>
+        <div class="telemetry__tooltip"
+             [class.telemetry__tooltip--start]="point.position < 20"
+             [class.telemetry__tooltip--end]="point.position > 80"
+             [style.left.%]="point.position"
+             [attr.data-point-index]="point.index"
+             [attr.data-point-timestamp]="point.point.timestamp"
+             data-testid="remote-host-telemetry-tooltip"
+             role="tooltip">
+          <time [attr.datetime]="point.point.timestamp">{{ point.point.timestamp | date:'medium' }}</time>
+          <div class="telemetry__tooltip-values">
+            @for (detail of point.values; track detail.key) {
+              <span>{{ detail.label }}</span>
+              <strong [attr.data-metric]="detail.key">{{ detail.value }}</strong>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</section>

@@ -14,6 +14,17 @@ import { setTheme } from '../helpers/theme';
  */
 
 interface WatchPath { name: string; path: string }
+interface PipelineCatalogueResponse {
+  detectedStacks?: string[];
+  steps: {
+    id: string;
+    appliesTo?: string;
+    applicable?: boolean;
+    effectiveExecution?: {
+      commands: { workingSubdir: string; command: string }[];
+    };
+  }[];
+}
 
 const SCREENSHOT_DIR = (() => {
   const fromEnv = process.env.JOB_RESULTS_DIR || process.env.PROJECT_SHELL_RESULTS_DIR;
@@ -79,6 +90,18 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
   expect(preferred, 'needs at least one watched project').toBeTruthy();
   const projectSlug = slugFor(preferred.name);
+  const catalogueResponse = await fetch(
+    `${devBackend.baseUrl}/api/projects/pipeline-catalogue?projectName=${encodeURIComponent(preferred.name)}`,
+  );
+  expect(catalogueResponse.ok, 'project pipeline catalogue should load from the live backend').toBe(true);
+  const catalogue = await catalogueResponse.json() as PipelineCatalogueResponse;
+  expect(catalogue.detectedStacks).toContain('angular');
+  const stylelintStep = catalogue.steps.find(step => step.id === 'post-lint-scss');
+  expect(stylelintStep).toMatchObject({ appliesTo: 'angular', applicable: true });
+  expect(stylelintStep?.effectiveExecution?.commands).toContainEqual({
+    workingSubdir: 'frontend',
+    command: 'npx stylelint "src/**/*.scss"',
+  });
 
   await page.setViewportSize({ width: 1440, height: 2400 });
 
@@ -150,6 +173,28 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(toolRow.getByTestId('pipeline-step-setting-tokens-post-build-test-gate')).toHaveCount(0);
   await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = false; });
+
+  const stylelintRow = page.getByTestId('pipeline-step-row-post-lint-scss');
+  await expect(stylelintRow).toBeVisible();
+  await expect(stylelintRow).toHaveAttribute('data-applicable', 'true');
+  await expect(page.getByTestId('pipeline-step-stack-post-lint-scss')).toHaveText('angular');
+  await stylelintRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await expect(page.getByTestId('pipeline-step-commands-post-lint-scss'))
+    .toContainText('cd frontend && npx stylelint "src/**/*.scss"');
+  await page.getByTestId('pipeline-step-probe-post-lint-scss').click();
+  const probeOutput = page.getByTestId('pipeline-step-probe-output-post-lint-scss');
+  await expect(probeOutput).toBeVisible({ timeout: 120_000 });
+  await expect(probeOutput.locator('pre')).not.toHaveText('');
+  await probeOutput.screenshot({
+    path: path.join(SCREENSHOT_DIR, 'pipeline-step-stylelint-probe-output--real.png'),
+  });
+
+  const uiGateRow = page.getByTestId('pipeline-step-row-post-ui-human-review-gate');
+  await uiGateRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await page.getByTestId('pipeline-step-probe-post-ui-human-review-gate').click();
+  const uiGateOutput = page.getByTestId('pipeline-step-probe-output-post-ui-human-review-gate');
+  await expect(uiGateOutput).toHaveAttribute('data-status', 'unavailable');
+  await expect(uiGateOutput.locator('pre')).toContainText('task/run context');
 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-full--real.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-light--real.png') });

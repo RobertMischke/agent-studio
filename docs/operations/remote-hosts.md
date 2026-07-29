@@ -65,9 +65,9 @@ RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
 ```
 
-The host card must show **Writable: yes** and the latest push-probe date before
-it receives work. **Writable: no** means the daemon is read-only and the server
-refuses new claims.
+The host card shows the fallback-repository probe separately from project
+delivery. A failed fallback probe does not classify every project as read-only
+and does not suppress claims whose own repository preflight succeeds.
 
 AGT-2141 added per-project repository URLs and isolated shared clones. Configure
 each project repository to move from one remote project to all projects remote.
@@ -75,13 +75,15 @@ The fallback URLs above remain startup probe inputs only. Each project clone
 uses its registry URL for both fetch and push and repairs both values on every
 refresh.
 
-The first claim for each host/project pair is a preflight offer, not a lease.
+The first claim for each host/project pair, and the first claim after a
+five-minute proof expiry, is a preflight offer, not a lease.
 The daemon prepares the project's real shared clone, requires its fetch and push
-URLs to match the registered repository URL, fetches, then creates and removes
-a temporary runner ref. This real write exercises server-side hooks and
-permissions that a dry-run can miss. The green result is cached until that
-project registration changes. A failure keeps the card Ready and appears with
-its reason on both the host card and the project's Execution card.
+URLs to match the registered repository URL, fetches, verifies the exact
+integration branch, then creates and removes a temporary runner ref. This real
+write exercises server-side hooks and permissions that a dry-run can miss. A
+failure or missing repository URL keeps only that project's card Ready and
+appears with its target branch and reason on both the host card and the
+project's Execution card. Other projects on the host continue independently.
 
 ## Connect the daemon
 
@@ -103,6 +105,7 @@ RUNNER_NAME=agent-runner-01
 RUNNER_CLIENT_ID=agent-runner-01
 RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
+# Seeds a newly registered host and remains the fallback for an older server.
 RUNNER_MAX_PARALLELISM=2
 # Optional repository-specific requirements:
 RUNNER_REQUIRED_CAPABILITIES=toolchain:dotnet,toolchain:node,toolchain:playwright
@@ -122,6 +125,19 @@ claim, active slots, task inflow, last contact, and push status. Active slots
 come from the daemon's latest telemetry sample. If that sample or the host
 heartbeat is older than five minutes, the last slot value is explicitly marked
 stale and rendered quietly instead of being presented as live.
+
+The same card shows the server-owned **Runtime capacity** policy. Change the
+slot ceiling, target load, or ramp strategy there and choose **Apply**. The
+Task Server versions the update, enforces the ceiling across Coding RUN leases
+on the host, and returns it on the next claim poll. The Coding daemon adopts it
+without a restart. Existing work continues when the ceiling is lowered; only
+new admission stops. The card distinguishes the central ceiling from the last
+value reported as adopted by the daemon. Review GATE work remains a separate
+pool and does not consume a RUN slot.
+
+`RUNNER_MAX_PARALLELISM` is no longer the live operator control for a versioned
+Task Server. It seeds the first registration and remains a compatibility
+fallback. Subsequent file changes do not replace the central policy.
 
 The workspace status bar defines `running` from the Board's `3-progress`
 snapshot: a local run needs a running process execution and a remote run needs
@@ -146,7 +162,7 @@ terminal, with an immutable handoff when required, or an authoritative
 non-infrastructure review report reopens normal capacity. Product findings
 prove that review infrastructure recovered without becoming a product pass.
 Canary failure returns to a longer cooldown. Do not lower
-`RUNNER_MAX_PARALLELISM` as a repair. Healthy capabilities and unrelated
+the central runtime capacity as a repair. Healthy capabilities and unrelated
 services on the same host continue using the configured slots.
 
 Execution Hosts shows the capability state, reason, first and last failure,

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentStudio.Drift;
+using AgentStudio.Pipeline;
 
 using Xunit;
 
@@ -7,6 +9,22 @@ namespace AgentStudio.Tests;
 
 public sealed class PromptAdminServiceTests
 {
+    [Fact]
+    public void EveryShippedPrompt_HasAReviewCompanion()
+    {
+        var promptDirectory = Path.Combine(
+            DriftRepoRootLocator.Resolve(),
+            "prompts",
+            "runtime");
+        var missing = Directory.EnumerateFiles(promptDirectory, "*.md")
+            .Where(path => !File.Exists(path + ".meta.json"))
+            .Select(Path.GetFileName)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Assert.Empty(missing);
+    }
+
     [Fact]
     public void Render_UsesOverrideAndResetReturnsToDefault()
     {
@@ -175,6 +193,64 @@ public sealed class PromptAdminServiceTests
             i.Component.EndsWith("CodePatternDriftAnalysisService.cs") && i.Status == "covered");
     }
 
+    [Fact]
+    public void Review_WritesAdjacentSidecarAndFlagsAuditedDeadPrompt()
+    {
+        using var home = new PromptTestHome();
+        const string name = "recurring-output-pattern-review.md";
+        home.WriteDefault(name, "Review recurring output.");
+        var prompts = home.CreatePromptService();
+        var admin = home.CreateAdminService(prompts);
+
+        var result = admin.Review(name, "Robert");
+
+        Assert.NotNull(result);
+        Assert.Equal("stale", result.Metadata.Status);
+        Assert.Equal("Robert", result.Metadata.ReviewedBy);
+        Assert.Contains(result.Metadata.Findings, finding => finding.Code == "dead-prompt");
+        Assert.True(File.Exists(home.ReviewSidecarPath(name)));
+
+        var catalog = admin.GetCatalog();
+        var item = Assert.Single(catalog.Items);
+        Assert.NotNull(item.LastReviewedAt);
+        Assert.Equal("stale", item.ReviewStatus);
+        Assert.True(item.ReviewFindingCount > 0);
+    }
+
+    [Fact]
+    public void CatalogAndDetail_ProjectOverridesIncludeOriginDiffAndOrphans()
+    {
+        using var home = new PromptTestHome();
+        const string name = "review-aspect-code-quality.md";
+        home.WriteDefault(name, "Default prompt");
+        var prompts = home.CreatePromptService();
+        var settings = home.CreateProjectSettings();
+        settings.SetPipelineStep(
+            "Alpha",
+            "aspect-code-quality",
+            new PipelineStepSetting { Prompt = "Project-specific prompt" });
+        settings.SetPipelineStep(
+            "Alpha",
+            "retired-review-step",
+            new PipelineStepSetting { Prompt = "Unused override" });
+        var admin = home.CreateAdminService(prompts, settings);
+
+        var catalog = admin.GetCatalog();
+        var detail = admin.GetDetail(name);
+
+        Assert.Equal(1, Assert.Single(catalog.Items).ProjectOverrideCount);
+        var orphan = Assert.Single(catalog.OrphanedOverrides);
+        Assert.Equal("retired-review-step", orphan.StepId);
+        Assert.True(orphan.Orphaned);
+
+        Assert.NotNull(detail);
+        var projectOverride = Assert.Single(detail.ProjectOverrides);
+        Assert.Equal("Alpha", projectOverride.ProjectName);
+        Assert.Equal("aspect-code-quality", projectOverride.StepId);
+        Assert.False(projectOverride.MatchesDefault);
+        Assert.True(projectOverride.AddedLines > 0);
+    }
+
     private sealed class PromptTestHome : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"prompt-admin-tests-{Guid.NewGuid():N}");
@@ -194,6 +270,9 @@ public sealed class PromptAdminServiceTests
         public void WriteOverrideFile(string name, string content) =>
             File.WriteAllText(Path.Combine(OverrideDir, name), content);
 
+        public string ReviewSidecarPath(string name) =>
+            Path.Combine(DefaultDir, name + ".meta.json");
+
         public RuntimePromptService CreatePromptService()
         {
             var config = new ConfigurationBuilder()
@@ -206,23 +285,26 @@ public sealed class PromptAdminServiceTests
             return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         }
 
-        public ProjectSettingsService CreateProjectSettings()
-        {
-            var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["TaskRepository"] = _root,
-                })
-                .Build();
-            return new ProjectSettingsService(
+        public ProjectSettingsService CreateProjectSettings() =>
+            new(
                 NullLogger<ProjectSettingsService>.Instance,
-                config);
-        }
+                new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _root,
+                    })
+                    .Build());
 
         public PromptAdminService CreateAdminService(
             RuntimePromptService prompts,
-            ProjectSettingsService? settings = null) =>
-            new(prompts, NullLogger<PromptAdminService>.Instance, settings);
+            ProjectSettingsService? projectSettings = null) =>
+            new(
+                prompts,
+                new PromptReviewService(
+                    prompts,
+                    projectSettings ?? CreateProjectSettings(),
+                    NullLogger<PromptReviewService>.Instance),
+                NullLogger<PromptAdminService>.Instance);
 
         public void Dispose()
         {

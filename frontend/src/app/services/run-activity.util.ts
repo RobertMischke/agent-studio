@@ -39,13 +39,85 @@ function latestActivityMs(job: TaskInfo): number | null {
   return instants.length > 0 ? Math.max(...instants) : null;
 }
 
-function hasLiveRun(job: TaskInfo): boolean {
-  if (job.execution?.status === 'running' || job.runner != null || job.runActivity?.kind === 'active') {
+/**
+ * Current-run liveness is intentionally derived from every positive runtime
+ * projection. `runActivity` is built from the runner registry before the live
+ * pipeline overlay is attached, so it can briefly say no-active-run while a
+ * pre-step is already running. Between pipeline steps there may be no
+ * `activeStep`, but execution ownership remains authoritative.
+ */
+export function isTaskRunActive(job: TaskInfo): boolean {
+  if (job.liveStatus?.activeStep != null
+    || job.execution?.status === 'running'
+    || job.runner != null
+    || job.runActivity?.kind === 'active') {
     return true;
   }
   const location = job.executionLocation;
   return (location?.state === 'local-running' || location?.state === 'remote-running')
     && location.connectionState === 'connected';
+}
+
+/**
+ * Instants that mark a *state transition of the task itself*, used to decide
+ * which of two representations of one task saw the world later.
+ *
+ * Deliberately narrower than `latestActivityMs`: the runtime heartbeat fields
+ * (`executionLocation.lastHeartbeat` / `.lastActivityAt`) are run liveness, not
+ * lane provenance. A run keeps heartbeating while it is still attached to the
+ * lane it was picked up in, so its heartbeat can be newer than a lane move it
+ * knows nothing about — comparing it would reintroduce exactly the regression
+ * this ordering exists to prevent.
+ */
+function stateStampMs(job: TaskInfo): number | null {
+  const instants = [
+    job.enteredLaneAt,
+    job.phaseEnteredAt,
+    job.lastActivity,
+    job.createdAt,
+  ]
+    .map((value) => value ? Date.parse(value) : Number.NaN)
+    .filter(Number.isFinite);
+  return instants.length > 0 ? Math.max(...instants) : null;
+}
+
+/**
+ * AGT-2378 — pick the freshest `TaskInfo` for a run-liveness derivation.
+ *
+ * A task tab / side panel renders a `TaskDetail` that was fetched once when the
+ * task was opened; nothing re-syncs that snapshot afterwards. The board list, in
+ * contrast, is kept current by the jobs hub push plus its heartbeat poll, and it
+ * carries the same runtime overlay (`runActivity`, `runner`, `execution`,
+ * `executionLocation`, `liveStatus`). Deriving liveness from the frozen snapshot
+ * therefore pins the detail on whatever the run looked like at open time — for a
+ * remote run, where no local CLI output poll can paper over it, that shows up as
+ * a permanent "kein aktiver Run" next to a card that is demonstrably running.
+ *
+ * The board entry is not unconditionally newer, though. A mutation performed in
+ * the detail (a lane move, say) updates the snapshot immediately, while the
+ * board push that carries the same change can be seconds behind — letting the
+ * live entry win there would visibly jump the display back to the pre-mutation
+ * lane. So the live entry only overrides the snapshot when it is demonstrably at
+ * least as fresh:
+ *   (a) same lane — the two can only disagree about run liveness, and there the
+ *       live overlay is by construction the more current one;
+ *   (b) different lane — the newer state stamp wins, and a tie or a missing
+ *       stamp on either side keeps the snapshot (conservative: never step back).
+ *
+ * Falls back to the snapshot when the task is not in the live list (filtered
+ * away, archived, or a cross-project detail opened from search).
+ */
+export function freshestRunInfo(snapshot: TaskInfo, liveJobs: readonly TaskInfo[]): TaskInfo {
+  const live = snapshot.taskKey
+    ? liveJobs.find(job => job.taskKey === snapshot.taskKey)
+    : liveJobs.find(job => job.id === snapshot.id);
+  if (!live) return snapshot;
+  if (live.state === snapshot.state) return live;
+
+  const liveMs = stateStampMs(live);
+  const snapshotMs = stateStampMs(snapshot);
+  if (liveMs === null || snapshotMs === null) return snapshot;
+  return liveMs > snapshotMs ? live : snapshot;
 }
 
 /**
@@ -60,7 +132,7 @@ export function deriveStalledTaskState(
   nowMs: number = Date.now(),
   idleThresholdMs: number = STALLED_IDLE_THRESHOLD_MS,
 ): StalledTaskState | null {
-  if (job.state !== TaskState.Progress || hasLiveRun(job)) return null;
+  if (job.state !== TaskState.Progress || isTaskRunActive(job)) return null;
   if (job.runActivity?.kind === 'failed-backoff') return null;
 
   const failed = job.runActivity?.kind === 'failed-idle'
@@ -127,11 +199,19 @@ export function buildRunActivityBadge(job: TaskInfo, nowMs: number = Date.now())
     ? `<div><b>Letzter Fehler:</b> ${escapeHtml(activity.lastError)}</div>`
     : '';
 
-  switch (activity.kind) {
+  // Positive live evidence wins over a stale negative runner classification.
+  // This is most visible during pre-steps (activeStep, no CLI execution yet)
+  // and in the hand-off between pipeline steps.
+  const effectiveKind: TaskRunActivityKind = isTaskRunActive(job) ? 'active' : activity.kind;
+
+  switch (effectiveKind) {
     case 'active': {
-      const pid = typeof activity.processId === 'number' && activity.processId > 0 ? activity.processId : null;
+      const projectedPid = activity.processId
+        ?? job.execution?.processId
+        ?? job.executionLocation?.processId;
+      const pid = typeof projectedPid === 'number' && projectedPid > 0 ? projectedPid : null;
       return {
-        kind: activity.kind,
+        kind: 'active',
         label: 'Run aktiv',
         tone: 'active',
         tooltip: {

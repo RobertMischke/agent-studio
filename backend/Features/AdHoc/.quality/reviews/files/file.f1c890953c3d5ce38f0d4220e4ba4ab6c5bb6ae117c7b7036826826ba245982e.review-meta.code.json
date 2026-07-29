@@ -1,0 +1,123 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/9076537b41963bc9be795620e520279608d65525fdb8dc6e9689e9bdb7017f0f",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/AdHoc/AdHocUsageEndpoints.cs",
+    "displayName": "AdHocUsageEndpoints.cs"
+  },
+  "reviewedAt": "2026-07-21T11:22:45.4994225Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-695871e6d55c4ba99448266e0cdec0b8"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "8dab7d62f4b5fd948686e71a390f0ed80383c5f7230f988657f271126969dc7a"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/AdHoc/AdHocUsageEndpoints.cs",
+      "selector": "file",
+      "contentHash": "sha256:a85f9f760dde75a175b345e3d81727a6131aff63953a09a67deeb9423e9a0d64"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "e40cbbde5271f10168e3d5c0036f888da9fa691c09998a012ec2c7ee3b6fca3f"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:950625704239cd574ad5255162588e61cee0b519525f8d09521bdb3b124c85a9"
+    }
+  },
+  "grade": {
+    "score": 84,
+    "band": "B",
+    "rationale": "The endpoints are concise and generally correct, but the optional timestamp filter is parsed permissively and invalid values silently disable filtering. This creates an avoidable correctness and error-handling hazard and makes the documented ISO 8601 UTC contract unreliable."
+  },
+  "summary": "The implementation is small, readable, and appropriately delegates aggregation and log inspection to injected services. Its main weakness is request validation: malformed or non-ISO timestamps are treated as though no filter was supplied, potentially returning substantially more usage data than requested. Extracting timestamp parsing or using typed parameter binding would also improve isolated testability.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 80,
+        "band": "B",
+        "rationale": "Valid timestamps are normalized to UTC and passed to the aggregator, but invalid timestamps silently become a null cutoff, changing a filtered request into an unfiltered one."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 88,
+        "band": "B",
+        "rationale": "The code is compact and delegates domain work to services, though inline parsing and anonymous response construction leave request and response contracts implicit."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 87,
+        "band": "B",
+        "rationale": "Endpoint intent and routes are well documented, but the implementation does not clearly enforce the stated ISO 8601 UTC requirement."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 76,
+        "band": "C",
+        "rationale": "Malformed query input receives a successful unfiltered response rather than a clear client error, making mistakes difficult for callers to detect."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 84,
+        "band": "B",
+        "rationale": "Injected collaborators support integration testing, but parsing embedded in a route lambda is less convenient to unit test across malformed, culture-sensitive, and timezone-related inputs."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "ADHOC-001",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Invalid \u0060since\u0060 values silently disable filtering",
+      "description": "When \u0060since\u0060 is non-empty but cannot be parsed, \u0060cutoff\u0060 remains null and the endpoint returns HTTP 200 with the complete aggregate. A caller expecting a filtered result can therefore receive more data than intended without any indication that its input was rejected. In addition, \u0060DateTime.TryParse\u0060 with a null format provider is culture-sensitive and accepts many formats beyond the documented ISO 8601 UTC contract.",
+      "recommendation": "Reject a supplied but invalid value with HTTP 400 and a clear validation message. Prefer typed binding to \u0060DateTimeOffset\u0060 or parse with \u0060DateTimeOffset.TryParseExact\u0060 using \u0060CultureInfo.InvariantCulture\u0060 and explicitly supported ISO 8601 formats, then convert to UTC before invoking the aggregator. Consider extracting this validation into a named method so its edge cases can be unit tested directly.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 25,
+              "column": 17
+            },
+            "end": {
+              "line": 31,
+              "column": 66
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

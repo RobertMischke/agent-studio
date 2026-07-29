@@ -11,36 +11,75 @@ import {
   PromptCoverageResponse,
   PromptDetail,
   PromptPreviewResult,
+  PromptReviewResult,
+  PromptReviewRunResponse,
 } from '../../../../services/prompt-admin.service';
 
 const FRESH = 'runner-fresh-start.md';
 const DRIFT = 'review-aspect-code-quality.md';
 
+function calls(totalCalls = 0) {
+  return {
+    totalCalls,
+    calls7d: totalCalls,
+    lastCalledAt: totalCalls ? '2026-07-23T09:00:00Z' : null,
+    inputTokens: totalCalls * 120,
+    costUsd: totalCalls * 0.0001,
+    costUsd7d: totalCalls * 0.0001,
+    unpricedCalls: 0,
+    unpricedCalls7d: 0,
+    currentVersionCalls: totalCalls,
+    isDead: totalCalls === 0,
+    daily: [{ date: '2026-07-23', calls: totalCalls, inputTokens: totalCalls * 120, costUsd: totalCalls * 0.0001 }],
+    versions: [],
+  };
+}
+
 function catalog(): PromptCatalogResponse {
   return {
     overrideDirectory: '/tmp/prompt-overrides',
+    orphanedOverrides: [],
+    telemetryPath: '/tmp/prompt-calls.jsonl',
+    deadPromptDays: 30,
+    costDisclaimer: 'Theoretical API-equivalent estimate.',
     items: [
       {
         name: FRESH,
         title: 'Runner: fresh start',
         description: 'Bootstrap prompt handed to the CLI agent when a task starts from scratch.',
         group: 'Runner',
+        promptClass: 'runtime-step',
         hasDefault: true,
         hasOverride: false,
         defaultChangedSinceOverride: false,
         slots: ['taskId', 'thing'],
         usageCount: 1,
+        lastChangedAt: '2026-07-21T10:00:00Z',
+        lastChangedSha: 'abc12345def',
+        lastReviewedAt: '2026-07-22T10:00:00Z',
+        reviewStatus: 'current',
+        reviewFindingCount: 0,
+        projectOverrideCount: 0,
+        calls: calls(12),
       },
       {
         name: DRIFT,
         title: 'Aspect: code quality',
         description: 'Review aspect that grades code quality of the change.',
         group: 'Review',
+        promptClass: 'runtime-step',
         hasDefault: true,
         hasOverride: true,
         defaultChangedSinceOverride: true,
         slots: ['diff'],
         usageCount: 1,
+        lastChangedAt: '2026-07-20T10:00:00Z',
+        lastChangedSha: 'def67890aaa',
+        lastReviewedAt: null,
+        reviewStatus: null,
+        reviewFindingCount: 0,
+        projectOverrideCount: 1,
+        calls: calls(),
       },
     ],
   };
@@ -68,6 +107,7 @@ function freshDetail(): PromptDetail {
     title: 'Runner: fresh start',
     description: 'Bootstrap prompt handed to the CLI agent when a task starts from scratch.',
     group: 'Runner',
+    promptClass: 'runtime-step',
     hasDefault: true,
     hasOverride: false,
     defaultContent: 'Task {{taskId}} — do {{thing}}.',
@@ -82,6 +122,17 @@ function freshDetail(): PromptDetail {
     usages: [
       { component: 'ProjectRunner', member: 'BuildOrchestratorPrompt', purpose: 'Fresh-start bootstrap prompt.' },
     ],
+    lastChangedAt: '2026-07-21T10:00:00Z',
+    lastChangedSha: 'abc12345def',
+    review: {
+      lastReviewedAt: '2026-07-22T10:00:00Z',
+      reviewedBy: 'Robert',
+      status: 'current',
+      findings: [],
+    },
+    projectOverrides: [],
+    calls: calls(12),
+    costDisclaimer: 'Theoretical API-equivalent estimate.',
   };
 }
 
@@ -91,6 +142,7 @@ function driftDetail(): PromptDetail {
     title: 'Aspect: code quality',
     description: 'Review aspect that grades code quality of the change.',
     group: 'Review',
+    promptClass: 'runtime-step',
     hasDefault: true,
     hasOverride: true,
     defaultContent: 'Default line v2\nshared',
@@ -105,6 +157,21 @@ function driftDetail(): PromptDetail {
     usages: [
       { component: 'AspectRunnerService', member: 'RunAspect', purpose: 'Code-quality aspect grading.' },
     ],
+    lastChangedAt: '2026-07-20T10:00:00Z',
+    lastChangedSha: 'def67890aaa',
+    review: null,
+    projectOverrides: [{
+      projectName: 'Alpha',
+      stepId: 'aspect-code-quality',
+      promptName: DRIFT,
+      content: 'Project override',
+      orphaned: false,
+      matchesDefault: false,
+      addedLines: 1,
+      removedLines: 1,
+    }],
+    calls: calls(),
+    costDisclaimer: 'Theoretical API-equivalent estimate.',
   };
 }
 
@@ -144,6 +211,22 @@ class FakePromptAdminService {
   rebaseline(): Promise<PromptDetail> {
     return Promise.resolve({ ...driftDetail(), defaultChangedSinceOverride: false });
   }
+  review(name: string): Promise<PromptReviewResult> {
+    return Promise.resolve({
+      name,
+      metadata: freshDetail().review!,
+      projectOverrides: [],
+    });
+  }
+  reviewAll(): Promise<PromptReviewRunResponse> {
+    return Promise.resolve({
+      reviewedAt: '2026-07-23T10:00:00Z',
+      reviewedCount: 2,
+      findingCount: 1,
+      results: [],
+      orphanedOverrides: [],
+    });
+  }
 }
 
 async function flush(): Promise<void> {
@@ -174,12 +257,12 @@ describe('PromptAdminPanelComponent', () => {
     const list = host.querySelector<HTMLElement>('[data-testid="prompt-admin-list"]')!;
 
     expect(host.querySelector('[data-testid="prompt-admin-panel"]')).not.toBeNull();
-    expect(host.querySelectorAll('.tree-row').length).toBe(2);
+    expect(host.querySelectorAll('.tree-row').length).toBe(3);
 
     const groupHeads = Array.from(host.querySelectorAll('.section-header__title')).map(e => e.textContent?.trim());
     expect(groupHeads).toEqual(['Runner', 'Review']);
     expect(host.querySelector('[data-testid="prompt-admin-group-Runner"]')?.getAttribute('aria-expanded')).toBe('true');
-    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
+    expect(host.querySelector('[data-testid="prompt-admin-home"]')?.classList).toContain('tree-row--active');
 
     expect(list.textContent).not.toContain('shipped');
     expect(list.textContent).toContain('1 overridden');
@@ -217,10 +300,18 @@ describe('PromptAdminPanelComponent', () => {
     expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)).not.toBeNull();
   });
 
-  it('auto-selects the first template and shows its slots + registered usages', async () => {
+  it('starts on the landing and opens a prompt with slots + registered usages', async () => {
     const fixture = await mount();
     const host = fixture.nativeElement as HTMLElement;
+    const detail = host.querySelector<HTMLElement>('[data-testid="prompt-admin-detail"]')!;
 
+    expect(fixture.componentInstance.selectedName()).toBeNull();
+    expect(host.querySelector('[data-testid="prompt-admin-landing"]')).not.toBeNull();
+    detail.scrollTop = 120;
+    await fixture.componentInstance.select(FRESH);
+    fixture.detectChanges();
+
+    expect(detail.scrollTop).toBe(0);
     expect(fixture.componentInstance.selectedName()).toBe(FRESH);
     expect(host.querySelector('.prompts__detail-title')?.textContent).toContain('Runner: fresh start');
 
@@ -274,6 +365,7 @@ describe('PromptAdminPanelComponent', () => {
 
   it('Probelauf renders the draft and reports the unfilled slot', async () => {
     const fixture = await mount();
+    await fixture.componentInstance.select(FRESH);
     await fixture.componentInstance.runPreview();
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;

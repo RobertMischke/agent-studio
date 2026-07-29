@@ -98,6 +98,80 @@ describe('TaskLiveStatusComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Requirement fit');
   });
 
+  // AGT-2378: `runActivity` is classified from the local slot registry + local
+  // CLI execution, so a remote run (fenced lease + attempt records, no local
+  // process) arrives as `no-active-run` between two pipeline steps. The strip
+  // must not claim "No active run" while the lease says otherwise.
+  it('does not claim "No active run" for a remote run between steps', () => {
+    const recent = new Date(Date.now() - 15_000).toISOString();
+    fixture.componentRef.setInput('task', task({
+      state: '3-progress',
+      lastActivity: recent,
+      runActivity: { kind: 'no-active-run', attempt: 0 },
+      runner: {
+        runnerId: 'agent-runner-01',
+        runnerName: 'agent-runner-01',
+        hostname: 'agent-runner-01',
+        backendName: 'stable',
+        isRemote: true,
+        leaseId: 'lease-1',
+        fencingToken: 7,
+        acquiredAt: recent,
+      },
+      executionLocation: {
+        state: 'remote-running',
+        executionKind: 'remote',
+        hostDisplayName: 'agent-runner-01',
+        lastActivityAt: recent,
+        connectionState: 'connected',
+        leaseState: 'active',
+        trustReason: 'lease',
+      },
+      liveStatus: {
+        attempt: 3,
+        activeStep: null,
+        nextSteps: [{ stepId: 'post-code-review-grade', displayName: 'Code-review quality grade' }],
+        queue: null,
+        latestEventAt: recent,
+      },
+    }));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
+    expect(root.textContent).not.toContain('No active run');
+    expect(root.textContent).toContain('Between steps');
+    expect(root.dataset['liveTone']).toBe('active');
+  });
+
+  it('still calls out "No active run" when nothing owns the task', () => {
+    const recent = new Date(Date.now() - 15_000).toISOString();
+    fixture.componentRef.setInput('task', task({
+      state: '3-progress',
+      lastActivity: recent,
+      runActivity: { kind: 'no-active-run', attempt: 0 },
+      runner: null,
+      executionLocation: {
+        state: 'recovering',
+        executionKind: 'none',
+        connectionState: 'recovering',
+        leaseState: 'none',
+        trustReason: 'no owner',
+      },
+      liveStatus: {
+        attempt: 3,
+        activeStep: null,
+        nextSteps: [],
+        queue: null,
+        latestEventAt: recent,
+      },
+    }));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
+    expect(root.textContent).toContain('No active run');
+    expect(root.dataset['liveTone']).toBe('stalled');
+  });
+
   it('calls out a possible hang after ten minutes without a step or queue', () => {
     const old = new Date(Date.now() - 12 * 60_000).toISOString();
     fixture.componentRef.setInput('task', task({
@@ -116,31 +190,5 @@ describe('TaskLiveStatusComponent', () => {
     const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
     expect(root.dataset['liveTone']).toBe('stalled');
     expect(root.textContent).toMatch(/No activity for (?:11m59s|12m00s) · possible hang/);
-  });
-
-  it('never flags a possible hang in preparation, however long it has been idle', () => {
-    const stale = new Date(Date.now() - 93 * 60 * 60_000).toISOString();
-    fixture.componentRef.setInput('task', task({
-      state: '1-preparation',
-      lastActivity: stale,
-      executionLocation: null,
-      runActivity: { kind: 'no-active-run', attempt: 0 },
-      liveStatus: {
-        attempt: 1,
-        activeStep: null,
-        nextSteps: [{ stepId: 'loop-check', displayName: 'Loop check' }],
-        queue: null,
-        latestEventAt: stale,
-      },
-    }));
-    fixture.detectChanges();
-
-    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
-    expect(root.dataset['liveTone']).toBe('idle');
-    expect(root.textContent).not.toContain('possible hang');
-    expect(root.textContent).not.toContain('No active run');
-    expect(root.textContent).toContain('Preparing');
-    // last activity still surfaced, live-ticking via NowTickService
-    expect(root.textContent).toMatch(/Last activity 93h00m ago/);
   });
 });

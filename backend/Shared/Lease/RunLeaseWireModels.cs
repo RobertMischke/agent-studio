@@ -105,7 +105,13 @@ public sealed record RunnerClaimRequest(
     int? ActiveSlots = null,
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    // Ceiling the daemon has actually adopted, reported as telemetry.
+    int? EffectiveMaxParallelism = null,
+    DateTime? EffectiveMaxParallelismAppliedAt = null,
+    // The daemon's own RUNNER_MAX_PARALLELISM. It only seeds the central host
+    // ceiling on first contact; afterwards the server value wins.
+    int? BootstrapMaxParallelism = null);
 
 /// <summary>Host result for the unleased project offered by the previous claim poll.</summary>
 public sealed record RunnerProjectPreflightReport(
@@ -169,6 +175,14 @@ public sealed record RunnerClaimResponse(
     string? DefaultBranch = null,
     string? TaskKind = null,
     string? RegistrationFingerprint = null,
+    // Central host capacity echoed on every poll, granted or not. The daemon
+    // adopts these values instead of its own environment configuration, which
+    // makes the host row in Studio the one place capacity is steered.
+    int? DesiredMaxParallelism = null,
+    int? TargetLoadPercent = null,
+    string? RampStrategy = null,
+    // Reason code when a poll was held back by host capacity.
+    string? AdmissionReason = null,
     // T0b: additive execution spec. Placed last so every existing positional
     // construction keeps compiling and every older runner keeps deserialising.
     RunSpecDto? RunSpec = null);
@@ -230,7 +244,8 @@ public sealed record RemoteRunCompletionRequest(
     IReadOnlyList<string>? GateItems = null,
     string? BaseSha = null,
     string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    string? ArtifactManifestDigest = null,
+    string? IntegrationBranch = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

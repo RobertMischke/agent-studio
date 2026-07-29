@@ -50,6 +50,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
+| Runtime prompt registry, review companions, call telemetry, and costs | [contracts/runtime-prompts.md](../system/contracts/runtime-prompts.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
 | Frontend | [domains/frontend.md](../system/domains/frontend.md) |
 | Stable view URL contract | [contracts/stable-view-urls.md](../system/contracts/stable-view-urls.md) |
@@ -64,6 +65,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
 | Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Reissue prompt sharpness and convergence evidence (AGT-2380) | [interactive Workbench](../quality/reissue-prompt-convergence/index.html) · [evidence snapshot](../quality/reissue-prompt-convergence/evidence-snapshot.json) · [analysis script](../quality/reissue-prompt-convergence/analyze.mjs) |
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
@@ -94,6 +96,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
+| Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
 | Orchestrator control-plane migration plan | [target architecture plan](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md) |
 | Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
@@ -109,6 +112,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
+| GitHub repository metadata recommendations | [repo-metadata.md](../repo-metadata.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner / agent host daemon (Linux) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
 | Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "The screen is a guest, not the owner.",
+  "source": {
+    "path": "docs/concepts/mockups/decoupled-lifecycles.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "91a4aa016d0d200d6f4f6edac3899aad473dc457ab103d2b48e3f3e501b1d863",
+      "sizeBytes": 31683,
+      "lineCount": 458,
+      "capturedAt": "2026-07-26T17:41:05.8030082Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "unknown",
+    "status": "archived",
+    "analyzedAt": "2026-07-26"
+  }
+}

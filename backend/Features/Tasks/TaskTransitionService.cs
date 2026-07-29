@@ -147,7 +147,8 @@ public sealed class TaskTransitionService
         {
             return new MoveJobOutcome(
                 MoveJobStatus.Failure,
-                $"Escalated tasks can only be accepted after their latest task commit is integrated into {settings.IntegrationBranch}.");
+                $"Escalated tasks can only be accepted after their latest task commit is integrated into "
+                + $"{TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch)}.");
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
@@ -225,7 +226,9 @@ public sealed class TaskTransitionService
             // affect the lane transition that already completed above.
             if (attributed != null && _driftRunner != null)
             {
-                TriggerDriftPostSteps(attributed, settings);
+                TriggerDriftPostSteps(
+                    attributed,
+                    AgentStudio.Pipeline.PipelineTypeSettings.ForTask(settings, attributed)!);
             }
 
             if (attributed != null)
@@ -381,7 +384,9 @@ public sealed class TaskTransitionService
         // ancestor probe always fails (rc=128, SHA absent) and NO escalated coding
         // task can ever be accepted. Resolve the real code repo root first.
         var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath) ?? info.WatchPath;
-        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, settings.IntegrationBranch);
+        var integrationBranch = _git.ResolveIntegrationBranch(
+            repoRoot,
+            TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch));
         return _git.IsAncestor(repoRoot, latest, integrationBranch);
     }
 
@@ -620,9 +625,10 @@ public sealed class TaskTransitionService
                 moved.Id,
                 moved.FolderPath,
                 moved.WatchPath,
-                settings.IntegrationBranch,
+                TaskIntegrationBranch.Resolve(moved, settings.IntegrationBranch),
                 ct,
-                settings.IntegrationStrategy).ConfigureAwait(false);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(moved)).ConfigureAwait(false);
 
             // ASS-1752: persist the develop-merge fact so the board card can show
             // the landed state (`develop @sha`) instead of a dead worktree path,

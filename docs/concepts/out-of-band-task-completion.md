@@ -43,6 +43,14 @@ ingest path with its own provenance, not a manual folder edit:
   the card badge are small renderable summaries that point at it.
 - **The lane move is a consequence, not the act.** Moving the card is the last
   step, after the evidence is reconciled — never a substitute for it.
+- **Remote delivery requires repository proof.** A remote runner may use this
+  path for a missing terminal sentinel only after `git ls-remote` against the
+  repository URL in the project registration resolves the delivered ref to the
+  exact local result commit. Push success and the configured push URL are not
+  evidence. A missing or mismatched ref is a recoverable Escalated failure:
+  retain the host worktree and report the cause, hostname, worktree path,
+  branch, and recovery recipe instead of writing external-completion
+  provenance.
 
 ## 3. The reconciliation endpoint — `POST /api/tasks/{id}/external-completion`
 

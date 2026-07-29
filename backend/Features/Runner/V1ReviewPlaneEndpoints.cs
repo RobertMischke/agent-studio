@@ -641,7 +641,9 @@ public static class V1ReviewPlaneEndpoints
               ?? projects.FindByIdOrDisplayName(task.ProjectName);
         var integrationRef = task is null
             ? null
-            : IntegrationRef(settings.Get(task.ProjectName).IntegrationBranch);
+            : IntegrationRef(TaskIntegrationBranch.Resolve(
+                task,
+                settings.Get(task.ProjectName).IntegrationBranch));
         var plan = review.Subject.Plan
                    ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
         if (string.IsNullOrWhiteSpace(plan.IntegrationRef) && integrationRef is not null)
@@ -677,7 +679,9 @@ public static class V1ReviewPlaneEndpoints
             ? null
             : RemoteProjectRepositoryResolver.Resolve(
                 project,
-                settings.Get(task.ProjectName).IntegrationBranch);
+                TaskIntegrationBranch.Resolve(
+                    task,
+                    settings.Get(task.ProjectName).IntegrationBranch));
         var repositoryUrl = review.Subject.RepositoryUrl ?? repository?.RepositoryUrl;
         var repositoryId = Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)
                            ?? review.RepositoryId;

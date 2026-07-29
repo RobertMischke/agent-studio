@@ -1,0 +1,264 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/166d041c1fd3bb586f9dbb11bfa50d5f3cf30395ae10018aaa3ca03c3ab663b4",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+    "displayName": "AnalysisReportContract.cs"
+  },
+  "reviewedAt": "2026-07-21T11:25:48.3461560Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-4b3b3009fc6346a3b616c9703c7f5c8d"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "322840707892035fce4c680302b342d41b29d0b4f7ef1ffe457ff599e95f9980"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+      "selector": "file",
+      "contentHash": "sha256:81be2ff4e341721a7a3d55fb66bd700aa94f33288c80030fac542d0d82b7dd9b"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "948014d91481d826bf6e89242b5f2f46fff2626b9d38a1314689e6db4ece5545"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:e2c8803352bd517450c552a74fa829fcac451a359af2081388cb4618f47fe8e3"
+    }
+  },
+  "grade": {
+    "score": 76,
+    "band": "C",
+    "rationale": "The contract is readable and well documented, but it permits several invalid or ambiguous states that consumers must detect at runtime. Time handling, parse-result consistency, target-state typing, and collection immutability deserve stronger modeling."
+  },
+  "summary": "The file provides a clear set of records and enums, but relies heavily on an external validator while presenting itself as a typed application contract. Strengthening temporal types and encoding cross-field invariants would improve correctness, error handling, and testability.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 74,
+        "band": "C",
+        "rationale": "The time-window model neither preserves an unambiguous offset nor prevents an inverted interval, and several record properties allow semantically invalid combinations."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 78,
+        "band": "C",
+        "rationale": "Naming and documentation are strong, but duplicated producer and trigger enums can drift, while stringly typed target states weaken compile-time guarantees."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 86,
+        "band": "B",
+        "rationale": "XML documentation clearly explains the intended schema and lifecycle. Some types nevertheless communicate stronger guarantees than they actually provide, particularly around immutability and validation."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 70,
+        "band": "C",
+        "rationale": "Parse status and parse error are modeled independently, allowing contradictory results, and the malformed-sidecar representation requires undocumented synthesis outside this contract."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 73,
+        "band": "C",
+        "rationale": "The records are easy to construct in tests, but their broad invalid-state space forces repetitive validation tests and makes fixtures less representative unless every consumer invokes the external validator."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "AR-001",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Time windows use ambiguous DateTime values and permit inverted ranges",
+      "description": "From and To can contain Local, Utc, or Unspecified DateTime values, so serialized reports may be interpreted differently across machines. The record also accepts From values later than To without enforcing or documenting normalization.",
+      "recommendation": "Use DateTimeOffset for both boundaries and validate that From is not later than To, either in a validated factory/constructor or in a validator that is mandatory at every deserialization boundary.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 149,
+              "column": 1
+            },
+            "end": {
+              "line": 151,
+              "column": 18
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-002",
+      "aspect": "error_handling",
+      "severity": "medium",
+      "title": "Parse status and parse error can contradict each other",
+      "description": "The public constructor permits combinations such as Structured with a non-null ParseError or MalformedJson with no error. Moreover, malformed JSON cannot directly deserialize into this record, so representing MalformedJson requires a separate loader to synthesize an AnalysisReport, but that requirement is not expressed by the type.",
+      "recommendation": "Model parsing as a discriminated result or provide validated factories for structured, unstructured, and malformed reports. At minimum, enforce status/error invariants in the validator and document that all construction and deserialization paths must invoke it.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 217,
+              "column": 1
+            },
+            "end": {
+              "line": 233,
+              "column": 28
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-003",
+      "aspect": "maintainability",
+      "severity": "medium",
+      "title": "Follow-up target state remains stringly typed",
+      "description": "TargetState accepts any string even though the documentation permits only two states. The constants provide discoverability but do not prevent spelling errors, unsupported workflow states, or schema drift.",
+      "recommendation": "Introduce a dedicated enum or validated value type with explicit JSON values for the supported target states. If TaskStates must remain the source of truth, validate TargetState against the two allowed constants during construction or deserialization.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 132,
+              "column": 1
+            },
+            "end": {
+              "line": 142,
+              "column": 2
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 200,
+              "column": 1
+            },
+            "end": {
+              "line": 206,
+              "column": 34
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-004",
+      "aspect": "correctness",
+      "severity": "low",
+      "title": "Scope-specific invariants are not encoded by the contract",
+      "description": "AnalysisReportScope permits every pointer for every scope kind, including missing required pointers and unrelated combinations such as Workspace with a RunIndex. Although the comment names an external validator, callers can freely create and propagate invalid scopes without using it.",
+      "recommendation": "Prefer scope-specific records behind a common abstraction, or provide validated factories for each scope kind and restrict direct construction. If the current shape is required for serialization, ensure deserialization always invokes AnalysisReportValidator before values enter the application domain.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 153,
+              "column": 1
+            },
+            "end": {
+              "line": 164,
+              "column": 58
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-005",
+      "aspect": "clarity",
+      "severity": "low",
+      "title": "IReadOnlyList properties do not guarantee immutable report contents",
+      "description": "IReadOnlyList prevents mutation through the exposed interface but can wrap a mutable List that another holder changes after report construction. This makes a sealed record appear immutable while its equality, serialization output, and observed contents can change.",
+      "recommendation": "Store immutable collections such as ImmutableArray\u003CT\u003E, or defensively copy incoming collections in a constructor or factory. Also normalize optional collections consistently to empty collections where absence has no distinct meaning.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 189,
+              "column": 1
+            },
+            "end": {
+              "line": 193,
+              "column": 52
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 217,
+              "column": 1
+            },
+            "end": {
+              "line": 233,
+              "column": 28
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR-006",
+      "aspect": "maintainability",
+      "severity": "low",
+      "title": "Producer and trigger enums duplicate the same value set",
+      "description": "AnalysisReportProducerKind and AnalysisReportTrigger currently contain identical members. Maintaining two independent enums makes it easy to add a producer or trigger to one without deliberately deciding whether the other should also change.",
+      "recommendation": "If the concepts are intentionally independent, add tests that lock each enum to the schema and clarify that their matching values are coincidental. If they are required to remain identical, share one enum or generate both definitions from the schema.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportContract.cs",
+          "range": {
+            "start": {
+              "line": 23,
+              "column": 1
+            },
+            "end": {
+              "line": 46,
+              "column": 2
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

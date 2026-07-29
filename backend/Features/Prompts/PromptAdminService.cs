@@ -21,30 +21,43 @@ namespace AgentStudio.Prompts;
 public sealed class PromptAdminService
 {
     private readonly RuntimePromptService _prompts;
+    private readonly PromptReviewService _reviews;
+    private readonly PromptCallTelemetryService? _calls;
     private readonly ILogger<PromptAdminService> _logger;
-    private readonly ProjectSettingsService? _projectSettings;
 
     public PromptAdminService(
         RuntimePromptService prompts,
+        PromptReviewService reviews,
+        ILogger<PromptAdminService> logger)
+        : this(prompts, reviews, logger, null)
+    {
+    }
+
+    public PromptAdminService(
+        RuntimePromptService prompts,
+        PromptReviewService reviews,
         ILogger<PromptAdminService> logger,
-        ProjectSettingsService? projectSettings = null)
+        PromptCallTelemetryService? calls)
     {
         _prompts = prompts;
+        _reviews = reviews;
+        _calls = calls;
         _logger = logger;
-        _projectSettings = projectSettings;
     }
 
     public PromptCatalogResponse GetCatalog()
     {
-        var projectOverrides = ReadProjectOverrides();
+        var names = _prompts.EnumerateTemplateNames();
+        var review = _reviews.GetSnapshot(names);
+        var callAnalytics = GetCallAnalytics(names);
         var items = new List<PromptCatalogItem>();
-        foreach (var name in _prompts.EnumerateTemplateNames())
+        foreach (var name in names)
         {
             var meta = PromptDescriptionCatalog.Describe(name);
             var hasGlobalOverride = _prompts.HasOverride(name);
             var defaultContent = _prompts.TryReadDefault(name);
             var effective = _prompts.TryReadOverride(name) ?? defaultContent;
-            var matchingProjectOverrides = projectOverrides
+            var matchingProjectOverrides = review.ProjectOverrides
                 .Where(item => string.Equals(
                     item.PromptName,
                     name,
@@ -52,6 +65,9 @@ public sealed class PromptAdminService
                 .ToList();
             var globalDefaultChanged = hasGlobalOverride
                 && DefaultChanged(name, defaultContent);
+            review.Revisions.TryGetValue(name, out var revision);
+            review.Reviews.TryGetValue(name, out var reviewMeta);
+            callAnalytics.TryGetValue(name, out var calls);
             items.Add(new PromptCatalogItem
             {
                 Name = name,
@@ -59,6 +75,7 @@ public sealed class PromptAdminService
                 Description = meta.Description,
                 Group = meta.Group,
                 HasGlobalOverride = hasGlobalOverride,
+                PromptClass = PromptClassFor(name, meta.Group),
                 HasOverride = hasGlobalOverride || matchingProjectOverrides.Count > 0,
                 HasDefault = defaultContent != null,
                 GlobalDefaultChangedSinceOverride = globalDefaultChanged,
@@ -66,7 +83,14 @@ public sealed class PromptAdminService
                     || matchingProjectOverrides.Any(item => item.DefaultChangedSinceOverride),
                 Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
                 UsageCount = PromptUsageCatalog.For(name).Count,
+                LastChangedAt = revision?.ChangedAt,
+                LastChangedSha = revision?.CommitSha,
+                LastReviewedAt = reviewMeta?.LastReviewedAt,
+                ReviewStatus = reviewMeta?.Status,
+                ReviewFindingCount = reviewMeta?.Findings.Count ?? 0,
+                ProjectOverrideCount = matchingProjectOverrides.Count,
                 ProjectOverrides = matchingProjectOverrides,
+                Calls = calls ?? new PromptCallAnalytics { IsDead = true },
             });
         }
         return new PromptCatalogResponse
@@ -76,6 +100,10 @@ public sealed class PromptAdminService
                 .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             OverrideDirectory = _prompts.OverrideDirectory,
+            OrphanedOverrides = review.ProjectOverrides.Where(item => item.Orphaned).ToList(),
+            TelemetryPath = _calls?.LogPath,
+            DeadPromptDays = PromptCallTelemetryService.DeadPromptDays,
+            CostDisclaimer = PromptCostDisclaimer,
         };
     }
 
@@ -90,6 +118,11 @@ public sealed class PromptAdminService
         var meta = PromptDescriptionCatalog.Describe(name);
         var sidecar = ReadSidecar(name);
         var defaultSha = defaultContent == null ? null : Sha(defaultContent);
+        var review = _reviews.GetSnapshot([name]);
+        review.Revisions.TryGetValue(name, out var revision);
+        review.Reviews.TryGetValue(name, out var reviewMeta);
+        var calls = GetCallAnalytics([name]).GetValueOrDefault(name)
+            ?? new PromptCallAnalytics { IsDead = true };
 
         var effective = overrideContent ?? defaultContent ?? string.Empty;
         return new PromptDetail
@@ -98,6 +131,7 @@ public sealed class PromptAdminService
             Title = meta.Title,
             Description = meta.Description,
             Group = meta.Group,
+            PromptClass = PromptClassFor(name, meta.Group),
             HasDefault = defaultContent != null,
             HasOverride = hasOverride,
             DefaultContent = defaultContent,
@@ -112,14 +146,22 @@ public sealed class PromptAdminService
             OverrideUpdatedAt = hasOverride ? sidecar?.UpdatedAt : null,
             Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
             Usages = PromptUsageCatalog.For(name).ToList(),
-            ProjectOverrides = ReadProjectOverrides()
-                .Where(item => string.Equals(
-                    item.PromptName,
-                    name,
-                    StringComparison.OrdinalIgnoreCase))
+            LastChangedAt = revision?.ChangedAt,
+            LastChangedSha = revision?.CommitSha,
+            Review = reviewMeta,
+            ProjectOverrides = review.ProjectOverrides
+                .Where(item => string.Equals(item.PromptName, name, StringComparison.OrdinalIgnoreCase))
                 .ToList(),
+            Calls = calls,
+            CostDisclaimer = PromptCostDisclaimer,
         };
     }
+
+    public PromptReviewResult? Review(string name, string? reviewedBy) =>
+        _reviews.Review(name, reviewedBy);
+
+    public PromptReviewRunResponse ReviewAll(string? reviewedBy) =>
+        _reviews.ReviewAll(reviewedBy);
 
     /// <summary>
     /// Renders the effective template (override -&gt; default), or an explicit
@@ -271,85 +313,6 @@ public sealed class PromptAdminService
         return !string.Equals(sidecar.BaseDefaultSha, Sha(defaultContent), StringComparison.OrdinalIgnoreCase);
     }
 
-    private IReadOnlyList<PromptProjectOverride> ReadProjectOverrides()
-    {
-        if (_projectSettings is null) return [];
-
-        var result = new List<PromptProjectOverride>();
-        foreach (var (projectName, settings) in _projectSettings.GetAll())
-        {
-            if (settings.PipelineSteps is null) continue;
-            foreach (var (stepId, setting) in settings.PipelineSteps)
-            {
-                if (string.IsNullOrWhiteSpace(setting.Prompt)) continue;
-
-                var promptName = PromptPipelineBindings.ForStep(stepId);
-                var defaultContent = promptName is null
-                    ? null
-                    : _prompts.TryReadDefault(promptName);
-                var currentDefaultSha = defaultContent is null
-                    ? null
-                    : Sha(defaultContent);
-                var (added, removed) = DiffCounts(defaultContent, setting.Prompt);
-                result.Add(new PromptProjectOverride
-                {
-                    ProjectName = projectName,
-                    StepId = stepId,
-                    PromptName = promptName,
-                    Content = setting.Prompt,
-                    Orphaned = promptName is null || defaultContent is null,
-                    MatchesDefault = defaultContent is not null
-                        && Normalize(defaultContent) == Normalize(setting.Prompt),
-                    AddedLines = added,
-                    RemovedLines = removed,
-                    BaseDefaultSha = setting.PromptBaseDefaultSha,
-                    DefaultChangedSinceOverride =
-                        setting.PromptBaseDefaultSha is not null
-                        && currentDefaultSha is not null
-                        && !string.Equals(
-                            setting.PromptBaseDefaultSha,
-                            currentDefaultSha,
-                            StringComparison.OrdinalIgnoreCase),
-                });
-            }
-        }
-
-        return result
-            .OrderBy(item => item.ProjectName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(item => item.StepId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static (int Added, int Removed) DiffCounts(
-        string? defaultContent,
-        string overrideContent)
-    {
-        if (defaultContent is null)
-            return (Normalize(overrideContent).Split('\n').Length, 0);
-
-        var leftCounts = Normalize(defaultContent)
-            .Split('\n')
-            .GroupBy(line => line)
-            .ToDictionary(group => group.Key, group => group.Count());
-        var rightCounts = Normalize(overrideContent)
-            .Split('\n')
-            .GroupBy(line => line)
-            .ToDictionary(group => group.Key, group => group.Count());
-        var added = 0;
-        var removed = 0;
-        foreach (var line in leftCounts.Keys.Concat(rightCounts.Keys).Distinct())
-        {
-            leftCounts.TryGetValue(line, out var before);
-            rightCounts.TryGetValue(line, out var after);
-            if (after > before) added += after - before;
-            if (before > after) removed += before - after;
-        }
-        return (added, removed);
-    }
-
-    private static string Normalize(string value) =>
-        value.Replace("\r\n", "\n").Trim();
-
     // --- sidecar IO (records the default version an override was made against) ---
 
     private string SidecarPath(string name) =>
@@ -394,12 +357,45 @@ public sealed class PromptAdminService
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content.Replace("\r\n", "\n")));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    private static string PromptClassFor(string name, string group)
+    {
+        if (name.StartsWith("mode-framing-", StringComparison.OrdinalIgnoreCase))
+            return "framing";
+        if (string.Equals(group, "Orchestrator", StringComparison.OrdinalIgnoreCase))
+            return "orchestrator";
+        if (string.Equals(group, "Drift & Analysis", StringComparison.OrdinalIgnoreCase))
+            return "drift";
+        return "runtime-step";
+    }
+
+    private IReadOnlyDictionary<string, PromptCallAnalytics> GetCallAnalytics(
+        IReadOnlyCollection<string> names)
+    {
+        if (_calls is null)
+            return new Dictionary<string, PromptCallAnalytics>(
+                StringComparer.OrdinalIgnoreCase);
+        var versions = names.ToDictionary(
+            name => name,
+            name => _prompts.TryGetEffectiveVersion(name),
+            StringComparer.OrdinalIgnoreCase);
+        return _calls.Aggregate(names, versions);
+    }
+
+    private const string PromptCostDisclaimer =
+        "Theoretical API-equivalent estimate for the rendered prompt input only. "
+        + "Runs use CLI subscriptions, so this is a comparison metric, not an invoice. "
+        + "Tokens are estimated and calls without a historically priced model remain unpriced.";
 }
 
 public sealed class PromptCatalogResponse
 {
     public List<PromptCatalogItem> Items { get; set; } = new();
     public string OverrideDirectory { get; set; } = "";
+    public List<PromptProjectOverride> OrphanedOverrides { get; set; } = new();
+    public string? TelemetryPath { get; set; }
+    public int DeadPromptDays { get; set; }
+    public string CostDisclaimer { get; set; } = "";
 }
 
 public sealed class PromptCatalogItem
@@ -408,6 +404,7 @@ public sealed class PromptCatalogItem
     public string Title { get; set; } = "";
     public string Description { get; set; } = "";
     public string Group { get; set; } = "";
+    public string PromptClass { get; set; } = "";
     public bool HasDefault { get; set; }
     public bool HasGlobalOverride { get; set; }
     public bool HasOverride { get; set; }
@@ -415,7 +412,14 @@ public sealed class PromptCatalogItem
     public bool DefaultChangedSinceOverride { get; set; }
     public List<string> Slots { get; set; } = new();
     public int UsageCount { get; set; }
+    public DateTimeOffset? LastChangedAt { get; set; }
+    public string? LastChangedSha { get; set; }
+    public DateTimeOffset? LastReviewedAt { get; set; }
+    public string? ReviewStatus { get; set; }
+    public int ReviewFindingCount { get; set; }
+    public int ProjectOverrideCount { get; set; }
     public List<PromptProjectOverride> ProjectOverrides { get; set; } = new();
+    public PromptCallAnalytics Calls { get; set; } = new();
 }
 
 public sealed class PromptDetail
@@ -424,6 +428,7 @@ public sealed class PromptDetail
     public string Title { get; set; } = "";
     public string Description { get; set; } = "";
     public string Group { get; set; } = "";
+    public string PromptClass { get; set; } = "";
     public bool HasDefault { get; set; }
     public bool HasOverride { get; set; }
     public string? DefaultContent { get; set; }
@@ -436,21 +441,12 @@ public sealed class PromptDetail
     public DateTimeOffset? OverrideUpdatedAt { get; set; }
     public List<string> Slots { get; set; } = new();
     public List<PromptUsageRef> Usages { get; set; } = new();
+    public DateTimeOffset? LastChangedAt { get; set; }
+    public string? LastChangedSha { get; set; }
+    public PromptReviewMetadata? Review { get; set; }
     public List<PromptProjectOverride> ProjectOverrides { get; set; } = new();
-}
-
-public sealed class PromptProjectOverride
-{
-    public string ProjectName { get; set; } = "";
-    public string StepId { get; set; } = "";
-    public string? PromptName { get; set; }
-    public string Content { get; set; } = "";
-    public bool Orphaned { get; set; }
-    public bool MatchesDefault { get; set; }
-    public int AddedLines { get; set; }
-    public int RemovedLines { get; set; }
-    public string? BaseDefaultSha { get; set; }
-    public bool DefaultChangedSinceOverride { get; set; }
+    public PromptCallAnalytics Calls { get; set; } = new();
+    public string CostDisclaimer { get; set; } = "";
 }
 
 /// <summary>
@@ -520,12 +516,18 @@ internal static class PromptDescriptionCatalog
             "Prompt used to resume a task by restarting the CLI session from disk state.", "Runner"),
         ["runner-recovery-continuation.md"] = new("Runner: recovery continuation",
             "Prompt used to continue a task after a recovery/crash-recovery boundary.", "Runner"),
+        ["runner-reissue-control-v1.md"] = new("Runner: reissue control",
+            "Control-arm prompt used by the versioned reissue experiment.", "Runner"),
+        ["runner-reissue-treatment-v1.md"] = new("Runner: reissue treatment",
+            "Structured treatment-arm prompt used by the versioned reissue experiment.", "Runner"),
         ["epic-decomposition.md"] = new("Epic decomposition",
             "Decomposes an epic-sized task into smaller child tasks.", "Runner"),
         ["mode-framing-readonly.md"] = new("Mode framing: read-only",
             "Framing block injected for read-only modes (planning / research) to forbid mutations.", "Runner"),
         ["mode-framing-research.md"] = new("Mode framing: research",
             "Research delivery contract for one primary HTML report with linked supporting material.", "Runner"),
+        ["mode-framing-concept.md"] = new("Mode framing: concept",
+            "Docs-only Workbench contract injected for concept-mode runs.", "Runner"),
         ["mode-framing-web.md"] = new("Mode framing: web access",
             "Framing block injected when a run is allowed to access the web.", "Runner"),
         ["commit-message.md"] = new("Commit message",
@@ -550,6 +552,8 @@ internal static class PromptDescriptionCatalog
 
         ["orchestrator-review-decision.md"] = new("Orchestrator review decision",
             "Final orchestrator verdict for the auto-review lane (accept / reissue / escalate).", "Orchestrator"),
+        ["orchestrator-chat-clarify-first.md"] = new("Orchestrator chat: clarify first",
+            "Standalone clarify-first guidance currently not loaded by a runtime code path.", "Orchestrator"),
 
         ["adr-code-drift.md"] = new("Drift: ADR vs code",
             "Reports drift between architecture-decision records and the code.", "Drift & Analysis"),

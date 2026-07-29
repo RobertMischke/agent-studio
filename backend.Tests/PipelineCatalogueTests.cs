@@ -15,6 +15,18 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class PipelineCatalogueTests
 {
+    [Theory]
+    [InlineData(PipelineCatalogue.UiHumanReviewGateStepId)]
+    [InlineData(PipelineCatalogue.ConceptPromotionStepId)]
+    [InlineData(PipelineCatalogue.PostAbortReviewStepId)]
+    public void FindStep_ResolvesEveryStepExposedByTheProjectCatalogue(string stepId)
+    {
+        var step = PipelineCatalogue.FindStep(stepId);
+
+        Assert.NotNull(step);
+        Assert.Equal(stepId, step.Id);
+    }
+
     [Fact]
     public void StandardPipeline_HasExpectedSections()
     {
@@ -525,6 +537,15 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void FrontendStylelint_IsMarkedAngularSpecific()
+    {
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.LintScssStepId);
+
+        Assert.Equal(PipelineStepStacks.Angular, step.AppliesTo);
+    }
+
+    [Fact]
     public void StandardPipeline_ModelQualification_IsVisibleDefaultOnPreStepBeforeExecution()
     {
         var p = PipelineCatalogue.Standard;
@@ -739,6 +760,26 @@ public class PipelineCatalogueTests
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("coding"));
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode(null));
         Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("anything-else"));
+    }
+
+    [Fact]
+    public void ForTask_SelectsByCardTypeAndKeepsPlanningReadOnly()
+    {
+        Assert.Same(
+            PipelineCatalogue.Standard,
+            PipelineCatalogue.ForTask(TaskTypes.Bug, TaskModes.Coding));
+        Assert.Same(
+            PipelineCatalogue.Standard,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Coding));
+        Assert.Same(
+            PipelineCatalogue.ReadOnly,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Planning));
+        Assert.Same(
+            PipelineCatalogue.ReadOnly,
+            PipelineCatalogue.ForTask(TaskTypes.Bug, TaskModes.Research));
+        Assert.Same(
+            PipelineCatalogue.Concept,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Concept));
     }
 
     [Fact]

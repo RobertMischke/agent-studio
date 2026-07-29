@@ -251,6 +251,7 @@ builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<TaskChangeNotifier>();
 builder.Services.AddSingleton<TaskStateMachine>();
 builder.Services.AddSingleton<TaskMutationService>();
+builder.Services.AddSingleton<RemoteDeliveryBackfillService>();
 builder.Services.AddSingleton<TaskFileHistoryService>();
 // Consolidation/merge API + completed-lane audit (Part 1+2 of the
 // api-consolidationmerge-api task). All mutations route through
@@ -376,7 +377,9 @@ builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
+builder.Services.AddSingleton<PromptCallTelemetryService>();
 builder.Services.AddSingleton<RuntimePromptService>();
+builder.Services.AddSingleton<PromptReviewService>();
 builder.Services.AddSingleton<PromptAdminService>();
 builder.Services.AddSingleton<TitleGenerationService>();
 builder.Services.AddSingleton<PromptEnhancementService>();
@@ -498,6 +501,10 @@ builder.Services.AddHostedService(sp =>
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskLiveStatusProjection>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyRegistry>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelRoutingModeProvider>(sp =>
+    sp.GetRequiredService<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>());
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineModelCatalogueProvider,
     AgentStudio.Pipeline.CliPipelineModelCatalogueProvider>();
@@ -512,6 +519,7 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.ITestSelectionAdvisor,
 builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreMainTestGate>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineStepProbeService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreDevelopBuildGate>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
@@ -610,11 +618,17 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<WikiContentCache>();
+// Warms the central wiki cache off the startup path and logs the periodic
+// hit/miss/fill rollup. See WikiCacheWarmupService for why this must not block
+// StartAsync.
+builder.Services.AddHostedService<WikiCacheWarmupService>();
 // Lexical wiki search (BM25 in-memory index, lazily rebuilt on a docs
 // fingerprint change) with the fail-open semantic query-expansion layer.
 builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
+builder.Services.AddSingleton<WorkbenchDecisionService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
@@ -622,6 +636,7 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingServi
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
 builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadService>();
 builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
@@ -759,9 +774,9 @@ app.Services.GetRequiredService<TaskStateMachine>().EnsureStateFoldersAndMigrate
             .LogInformation("Backfilled agent defaults on {Count} job(s)", backfillCount);
 }
 
-// F45a: populate workspace + project registries from configured WatchPaths.
-// Additive; does not move or rename anything on disk. Writes only to
-// <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.
+// F45a: populate a missing project registry from configured WatchPaths.
+// An existing registry is authoritative, and an invalid file aborts startup.
+// The pass does not move or rename watched project data.
 try
 {
     AgentStudio.Registry.RegistryBootstrap.Run(
@@ -769,6 +784,11 @@ try
         app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>(),
         app.Services.GetRequiredService<TaskScannerService>(),
         app.Services.GetRequiredService<ILogger<Program>>());
+}
+catch (ProjectRegistryLoadException ex)
+{
+    crashRecorder.Record("RegistryBootstrap", ex);
+    throw;
 }
 catch (Exception ex)
 {
@@ -793,6 +813,31 @@ catch (Exception ex)
     if (dedupCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
+}
+
+// One-time initialization of durable per-page agent read counters from the
+// historical cli-output.log inventory. The marker makes subsequent boots a
+// cheap no-op; this runs before CLI reattachment and before the listener starts
+// so historical and new live observations cannot race each other.
+try
+{
+    app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>().EnsureBackfilled();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("WikiAgentReadBackfill", ex);
+}
+
+// One-time 2026-07-28 repair of the five reviewed remote deliveries. The
+// service writes only through TaskMutationService and leaves an idempotency
+// timeline fact, so later boots perform no remote fetch for repaired cards.
+try
+{
+    app.Services.GetRequiredService<RemoteDeliveryBackfillService>().RunReviewedCards();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RemoteDeliveryBackfill", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
@@ -968,6 +1013,19 @@ taskScanner.SetStatsMetadataCache(jobStatsMetadataCache);
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
 watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 
+// Central wiki read model: bind the process-wide cache and rebuild it eagerly
+// on debounced docs/ watcher events. All wiki endpoints then read an
+// already-published snapshot instead of validating it with a per-request
+// filesystem walk. The binding has to happen here, before the host starts, so
+// that WikiCacheWarmupService (registered above) fills the same instance the
+// endpoints read. The warmup itself runs in the background - preloading a
+// multi-hundred-file docs/ tree synchronously would delay the HTTP listener.
+var wikiContentCache = app.Services.GetRequiredService<WikiContentCache>();
+var projectDocs = app.Services.GetRequiredService<ProjectDocsService>();
+projectDocs.SetWikiContentCache(wikiContentCache);
+watcher.OnWikiChanged += (projectName, _) =>
+    wikiContentCache.Invalidate(projectName, WikiContentCache.InvalidationSource.Watcher);
+
 // TaskAccess layer (ADR-0024): force a synchronous first index read so
 // boot-time disk problems surface here rather than on the first HTTP
 // request. The host's other lifecycle calls (ReloadProjectAsync,
@@ -1104,8 +1162,13 @@ watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();
+var wikiAgentReads = app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>();
 cliRouter.OnOutput += (cliType, jobId, line) =>
-    TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+{
+    try { wikiAgentReads.ProcessOutput(jobId, new[] { line }); }
+    catch (Exception ex) { SilentCatch.Note(ex, "WikiAgentReadService: live CLI output attribution failed."); }
+    _ = TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+};
 cliRouter.OnStarted += (cliType, jobId, exec) =>
     TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
 cliRouter.OnFinished += (cliType, jobId, exec) =>

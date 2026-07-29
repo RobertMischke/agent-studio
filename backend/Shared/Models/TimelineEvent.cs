@@ -107,6 +107,7 @@ public static class TimelineEventKinds
     public const string IntegrationLease = "integration_lease";
     /// <summary>The CLI invocation ended; <see cref="TimelineEvent.Summary"/> carries the outcome.</summary>
     public const string AgentRunFinished = "agent_run_finished";
+    public const string RemoteDeliveryBackfilled = "remote_delivery_backfilled";
     /// <summary>A pipeline pre-step started (ADR-0045).</summary>
     public const string PreStepStarted = "pre_step_started";
     /// <summary>A pipeline pre-step finished.</summary>

@@ -1,0 +1,132 @@
+@let h = host();
+@if (h.runtimeCapacity; as capacity) {
+  <section class="capacity" data-testid="remote-host-capacity" aria-label="Host runtime capacity">
+    <div class="capacity__copy">
+      <strong>Runtime capacity</strong>
+      <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
+      <span>
+        Central ceiling {{ capacity.maxParallelism }} slots. Daemon adopted
+        {{ h.effectiveMaxParallelism ?? 'not reported' }}.
+        @if (h.runtimeCapacityAppliedAt) {
+          Applied {{ h.runtimeCapacityAppliedAt | date:'short' }}.
+        }
+      </span>
+      <span>
+        Target load {{ capacity.targetLoadPercent }}% · {{ capacity.rampStrategy }} ramp.
+      </span>
+      @if (awaitingAdoption()) {
+        <span class="capacity__pending" data-testid="remote-host-capacity-awaiting-adoption">
+          Waiting for the daemon to adopt the new ceiling. Running work continues.
+        </span>
+      }
+      <ul class="capacity__projects" data-testid="remote-host-project-slots"
+          aria-label="Projects using this host's slots">
+        @for (entry of projectSlots(); track entry.projectName) {
+          <li>
+            <span class="capacity__project-name">{{ entry.projectName }}</span>
+            <span class="capacity__project-slots">{{ entry.activeSlots }} of {{ capacity.maxParallelism }}</span>
+          </li>
+        } @empty {
+          <li class="capacity__projects-empty">No project is holding a slot on this host.</li>
+        }
+      </ul>
+      <span class="capacity__projects-note">
+        The ceiling is shared by every project on this host; projects have no cap of their own.
+      </span>
+    </div>
+    <div class="capacity__form">
+      <label>
+        Slot ceiling
+        <input type="number" min="1" max="256" step="1"
+               data-testid="remote-host-capacity-input"
+               [value]="capacityDraft() ?? capacity.maxParallelism"
+               [disabled]="!!h.busyAction"
+               (input)="updateCapacityDraft($event)" />
+      </label>
+      <label>
+        Target load
+        <input type="number" min="50" max="95" step="1"
+               data-testid="remote-host-target-load-input"
+               [value]="targetLoadDraft() ?? capacity.targetLoadPercent"
+               [disabled]="!!h.busyAction"
+               (input)="updateTargetLoadDraft($event)" />
+      </label>
+      <label>
+        Ramp
+        <select data-testid="remote-host-ramp-select"
+                [disabled]="!!h.busyAction"
+                (change)="updateRampDraft($event)">
+          @for (strategy of ['conservative', 'balanced', 'aggressive']; track strategy) {
+            <option [value]="strategy"
+                    [selected]="strategy === (rampDraft() ?? capacity.rampStrategy)">
+              {{ strategy }}
+            </option>
+          }
+        </select>
+      </label>
+      <button class="capacity__save" type="button"
+              data-testid="remote-host-capacity-save"
+              [appPendingButton]="h.busyAction === 'capacity'"
+              pendingLabel="Saving capacity…"
+              [disabled]="!!h.busyAction"
+              (click)="save()">
+        Apply
+      </button>
+    </div>
+  </section>
+} @else {
+  <section class="capacity capacity--unknown" data-testid="remote-host-capacity"
+           aria-label="Host runtime capacity">
+    <div class="capacity__copy">
+      <strong>Runtime capacity</strong>
+      <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
+      <span>
+        No server has published a ceiling for this host yet. The slot total stays
+        blank rather than being guessed from daemon telemetry, and the server
+        enforces no cap until you set one.
+        @if (h.effectiveMaxParallelism) {
+          The daemon reports it currently runs {{ h.effectiveMaxParallelism }}.
+        }
+      </span>
+    </div>
+    <div class="capacity__form">
+      <label>
+        Slot ceiling
+        <input type="number" min="1" max="256" step="1"
+               data-testid="remote-host-capacity-seed-input"
+               [value]="capacityDraft() ?? suggestedCeiling()"
+               [disabled]="!!h.busyAction"
+               (input)="updateCapacityDraft($event)" />
+      </label>
+      <label>
+        Target load
+        <input type="number" min="50" max="95" step="1"
+               data-testid="remote-host-capacity-seed-target-load"
+               [value]="targetLoadDraft() ?? suggestedTargetLoad"
+               [disabled]="!!h.busyAction"
+               (input)="updateTargetLoadDraft($event)" />
+      </label>
+      <label>
+        Ramp
+        <select data-testid="remote-host-capacity-seed-ramp"
+                [disabled]="!!h.busyAction"
+                (change)="updateRampDraft($event)">
+          @for (strategy of ['conservative', 'balanced', 'aggressive']; track strategy) {
+            <option [value]="strategy"
+                    [selected]="strategy === (rampDraft() ?? 'balanced')">
+              {{ strategy }}
+            </option>
+          }
+        </select>
+      </label>
+      <button class="capacity__save" type="button"
+              data-testid="remote-host-capacity-seed-save"
+              [appPendingButton]="h.busyAction === 'capacity'"
+              pendingLabel="Saving capacity…"
+              [disabled]="!!h.busyAction"
+              (click)="save()">
+        Set a ceiling
+      </button>
+    </div>
+  </section>
+}

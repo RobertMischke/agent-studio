@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
   display: block;
 }
@@ -55,15 +57,19 @@
 }
 
 .pbc__state {
-  padding: var(--studio-spacing-3);
-  border-radius: 8px;
-  background: var(--studio-bg-hover);
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
+
   color: var(--studio-fg-dim);
 }
 
 .pbc__state--error,
 .pbc__error {
   color: var(--studio-error);
+}
+
+.pbc__state--error {
+  @include m.deck-panel-attention;
 }
 
 .pbc__actions {

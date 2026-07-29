@@ -112,7 +112,13 @@ public sealed record RunnerClaimRequest(
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
     RunnerProcessInventory? Inventory = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    // Ceiling this daemon currently runs with, and when it adopted it. Pure
+    // telemetry: the server owns the policy and echoes it back on every poll.
+    int? EffectiveMaxParallelism = null,
+    DateTime? EffectiveMaxParallelismAppliedAt = null,
+    // RUNNER_MAX_PARALLELISM. Seeds the central host ceiling on first contact.
+    int? BootstrapMaxParallelism = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,
@@ -212,6 +218,12 @@ public sealed record RunnerClaimResponse(
     string? LeaseInstanceId = null,
     IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
     string? RegistrationFingerprint = null,
+    // Central host capacity, echoed on every poll whether or not work was
+    // granted. The daemon adopts these instead of its own environment values.
+    int? DesiredMaxParallelism = null,
+    int? TargetLoadPercent = null,
+    string? RampStrategy = null,
+    string? AdmissionReason = null,
     // T0b: additive execution spec; an older server simply omits it.
     RunSpecDto? RunSpec = null);
 
@@ -330,7 +342,8 @@ public sealed record RemoteRunCompletionRequest(
     AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null,
     string? BaseSha = null,
     string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    string? ArtifactManifestDigest = null,
+    string? IntegrationBranch = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

@@ -160,7 +160,7 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
           () => document.documentElement.dataset.network = 'blocked'
         );
       </script><html><head><base href="https://base.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body><h1>Isolation probe</h1></body></html>`,
-      branch: 'develop', revision: null, workingTreeModified: true,
+      branch: 'develop', revision: null, workingTreeModified: true, fingerprint: null,
     },
   }));
   await page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`).click();

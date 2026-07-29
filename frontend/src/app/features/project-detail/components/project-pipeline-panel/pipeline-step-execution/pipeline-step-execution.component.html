@@ -1,0 +1,44 @@
+<section class="pse" [attr.data-testid]="'pipeline-step-execution-' + step().id">
+  <div class="pse__head">
+    <div>
+      <span class="pse__label">Effective execution</span>
+      <span class="pse__source">{{ step().effectiveExecution.source }}</span>
+    </div>
+    <button type="button" class="pse__probe" [disabled]="busy()"
+            [attr.data-testid]="'pipeline-step-probe-' + step().id" (click)="runProbe()">
+      {{ busy() ? 'Probe running...' : 'Run probe' }}
+    </button>
+  </div>
+
+  @if (!step().applicable) {
+    <p class="pse__notice" [attr.data-testid]="'pipeline-step-not-applicable-' + step().id">
+      Not applicable to this project. Requires {{ step().appliesTo }}.
+    </p>
+  }
+
+  <div class="pse__commands" [attr.data-testid]="'pipeline-step-commands-' + step().id">
+    @for (command of step().effectiveExecution.commands; track $index) {
+      <code>{{ commandLabel(command.workingSubdir, command.command) }}</code>
+    } @empty {
+      <span>{{ step().effectiveExecution.executionKind === 'internal'
+        ? 'Internal pipeline runner; no standalone shell command.'
+        : 'No command could be derived for this project.' }}</span>
+    }
+  </div>
+
+  @if (result(); as probe) {
+    <div class="pse__output" aria-live="polite" [attr.data-status]="probe.status"
+         [attr.data-testid]="'pipeline-step-probe-output-' + step().id">
+      <div class="pse__output-meta">
+        <strong>{{ probe.status }}</strong>
+        <span>{{ probe.durationMs }} ms</span>
+        @if (probe.exitCode !== null && probe.exitCode !== undefined) { <span>exit {{ probe.exitCode }}</span> }
+        @if (probe.queueWaitMs > 0) { <span>lock wait {{ probe.queueWaitMs }} ms</span> }
+      </div>
+      <pre>{{ probe.output }}</pre>
+    </div>
+  }
+  @if (error(); as message) {
+    <p class="pse__error" role="alert" [attr.data-testid]="'pipeline-step-probe-error-' + step().id">{{ message }}</p>
+  }
+</section>

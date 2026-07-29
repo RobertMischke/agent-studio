@@ -33,6 +33,7 @@ public class TaskWatcherService : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly ILogger<TaskWatcherService> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
+    private readonly List<FileSystemWatcher> _wikiWatchers = [];
     private readonly TimeSpan _debounce;
     private readonly ConcurrentDictionary<string, string> _taskIndexSignatures = new(PathComparer);
     private DateTime? _startedAt;
@@ -40,6 +41,11 @@ public class TaskWatcherService : BackgroundService
     private string? _lastError;
 
     public event Action<string>? OnJobChanged;
+    /// <summary>
+    /// Debounced docs/ changes, carrying the owning project name and changed
+    /// path. The wiki cache subscribes with an eager rebuild.
+    /// </summary>
+    public event Action<string, string>? OnWikiChanged;
     /// <summary>
     /// Raw filesystem change stream for consumers that own their own narrow
     /// filtering (for example conversation projection of cli-output.log).
@@ -79,6 +85,7 @@ public class TaskWatcherService : BackgroundService
     /// <summary>Add a live watcher for an API-created project.</summary>
     public bool EnsureWatching(WatchPathEntry entry)
     {
+        EnsureWikiWatching(entry);
         if (string.IsNullOrWhiteSpace(entry.Path))
         {
             _logger.LogWarning("WatchPath '{Name}' resolved to empty path; skipping watcher", entry.Name);
@@ -127,6 +134,52 @@ public class TaskWatcherService : BackgroundService
         }
     }
 
+    private void EnsureWikiWatching(WatchPathEntry entry)
+    {
+        var repositoryRoot = !string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            && Directory.Exists(entry.RepositoryPath)
+                ? entry.RepositoryPath
+                : entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot)) return;
+        var docsPath = Path.Combine(repositoryRoot, ProjectDocsService.WikiRel);
+        if (!Directory.Exists(docsPath)) return;
+
+        lock (_lock)
+        {
+            if (_wikiWatchers.Any(w => string.Equals(w.Path, docsPath, StringComparison.OrdinalIgnoreCase)))
+                return;
+        }
+
+        try
+        {
+            var watcher = new FileSystemWatcher(docsPath)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
+                    | NotifyFilters.DirectoryName | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+                InternalBufferSize = 64 * 1024,
+            };
+            watcher.Changed += (_, e) => HandleWikiChange(entry.Name, e.FullPath);
+            watcher.Created += (_, e) => HandleWikiChange(entry.Name, e.FullPath);
+            watcher.Deleted += (_, e) => HandleWikiChange(entry.Name, e.FullPath);
+            watcher.Renamed += (_, e) => HandleWikiChange(entry.Name, e.FullPath);
+            watcher.Error += (_, e) =>
+            {
+                var error = e.GetException();
+                lock (_lock) _lastError = error?.Message ?? "Wiki FileSystemWatcher reported an unknown error.";
+                _logger.LogWarning(error, "Wiki FileSystemWatcher error for {Path}", docsPath);
+            };
+            lock (_lock) _wikiWatchers.Add(watcher);
+            _logger.LogInformation("wiki-watch-activated project={Name} path={Path}", entry.Name, docsPath);
+        }
+        catch (Exception ex)
+        {
+            lock (_lock) _lastError = ex.Message;
+            _logger.LogError(ex, "Failed to start wiki watcher for {Path}", docsPath);
+        }
+    }
+
     /// <summary>
     /// Cheap read-only watcher health used by the orchestrator context digest.
     /// It deliberately reports the actual active handle count and last observed
@@ -153,10 +206,19 @@ public class TaskWatcherService : BackgroundService
     private DateTime _lastEvent = DateTime.MinValue;
     private readonly Lock _lock = new();
     private readonly Dictionary<string, PendingDispatch> _pendingDispatches = new(PathComparer);
+    private readonly Dictionary<string, PendingWikiDispatch> _pendingWikiDispatches =
+        new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     private sealed class PendingDispatch(string path, Timer timer)
     {
+        public string Path { get; set; } = path;
+        public Timer Timer { get; } = timer;
+    }
+
+    private sealed class PendingWikiDispatch(string projectName, string path, Timer timer)
+    {
+        public string ProjectName { get; } = projectName;
         public string Path { get; set; } = path;
         public Timer Timer { get; } = timer;
     }
@@ -172,6 +234,45 @@ public class TaskWatcherService : BackgroundService
 
         if (!ShouldNotifyIndexChange(watchPath, path, changeType, oldPath)) return;
         Debounce(path);
+    }
+
+    internal void HandleWikiChange(string projectName, string path)
+    {
+        if (string.IsNullOrWhiteSpace(projectName) || string.IsNullOrWhiteSpace(path)) return;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            if (_pendingWikiDispatches.TryGetValue(projectName, out var pending))
+            {
+                pending.Path = path;
+                pending.Timer.Change(_debounce, Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            var timer = new Timer(
+                _ => DispatchPendingWiki(projectName),
+                null,
+                _debounce,
+                Timeout.InfiniteTimeSpan);
+            _pendingWikiDispatches[projectName] = new PendingWikiDispatch(projectName, path, timer);
+        }
+    }
+
+    private void DispatchPendingWiki(string projectName)
+    {
+        PendingWikiDispatch? pending;
+        lock (_lock)
+        {
+            if (_disposed || !_pendingWikiDispatches.Remove(projectName, out pending)) return;
+            _lastEvent = DateTime.UtcNow;
+        }
+        pending.Timer.Dispose();
+        _logger.LogDebug("Wiki watcher fired for {Project} {Path}", pending.ProjectName, pending.Path);
+        try { OnWikiChanged?.Invoke(pending.ProjectName, pending.Path); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OnWikiChanged subscriber threw for {Project} {Path}", pending.ProjectName, pending.Path);
+        }
     }
 
     /// <summary>
@@ -228,21 +329,32 @@ public class TaskWatcherService : BackgroundService
     private void DisposeResources()
     {
         FileSystemWatcher[] watchers;
+        FileSystemWatcher[] wikiWatchers;
         Timer[] timers;
         lock (_lock)
         {
             if (_disposed) return;
             _disposed = true;
             watchers = _watchers.ToArray();
-            timers = _pendingDispatches.Values.Select(p => p.Timer).ToArray();
+            wikiWatchers = _wikiWatchers.ToArray();
+            timers = _pendingDispatches.Values.Select(p => p.Timer)
+                .Concat(_pendingWikiDispatches.Values.Select(p => p.Timer))
+                .ToArray();
             _watchers.Clear();
+            _wikiWatchers.Clear();
             _pendingDispatches.Clear();
+            _pendingWikiDispatches.Clear();
         }
         foreach (var timer in timers) timer.Dispose();
         foreach (var watcher in watchers)
         {
             try { watcher.Dispose(); }
             catch (Exception ex) { SilentCatch.Note(ex, "TaskWatcherService: watcher dispose"); }
+        }
+        foreach (var watcher in wikiWatchers)
+        {
+            try { watcher.Dispose(); }
+            catch (Exception ex) { SilentCatch.Note(ex, "TaskWatcherService: wiki watcher dispose"); }
         }
     }
 

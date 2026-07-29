@@ -192,6 +192,57 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task Runtime_capacity_endpoint_reads_and_versions_the_host_policy()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add("X-Client-Id", "capacity-api-test");
+
+        var registration = await client.PutAsJsonAsync(
+            "/api/v1/runners/runner-capacity",
+            new RegisterRunnerRequest(
+                "runner-capacity",
+                "host-capacity",
+                "host-capacity:1",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor],
+                BootstrapMaxParallelism: 3));
+        registration.EnsureSuccessStatusCode();
+
+        var current = await client.GetFromJsonAsync<RuntimeCapacitySettingsDto>(
+            "/api/v1/hosts/host-capacity/runtime-capacity");
+        Assert.Equal(3, current!.MaxParallelism);
+
+        var update = await client.PutAsJsonAsync(
+            "/api/v1/hosts/host-capacity/runtime-capacity",
+            new UpdateRuntimeCapacitySettingsRequest(
+                5,
+                85,
+                "aggressive",
+                current.Version));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<RuntimeCapacitySettingsDto>();
+        Assert.Equal(5, updated!.MaxParallelism);
+        Assert.Equal(current.Version + 1, updated.Version);
+
+        var staleUpdate = await client.PutAsJsonAsync(
+            "/api/v1/hosts/host-capacity/runtime-capacity",
+            new UpdateRuntimeCapacitySettingsRequest(
+                7,
+                80,
+                "balanced",
+                current.Version));
+        Assert.Equal(HttpStatusCode.Conflict, staleUpdate.StatusCode);
+        var error = await staleUpdate.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("resource-version-mismatch", error!.Code);
+    }
+
+    [Fact]
     public async Task Published_contract_fixtures_pin_supported_and_unsupported_mixed_versions()
     {
         var root = RepositoryRoot();

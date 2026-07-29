@@ -57,6 +57,7 @@ import { classifyLatestActivityOutcome } from './components/agent-outcome.util';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
+import { freshestRunInfo, isTaskRunActive } from '../../services/run-activity.util';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -288,6 +289,16 @@ export class TaskDetailComponent implements OnDestroy {
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
+  /** AGT-2378: `detail()` is fetched once on open, so its runtime overlay ages
+   *  out; read run liveness through the live board entry instead. The board
+   *  entry only wins when it is at least as fresh, so a lane move applied here
+   *  is not undone by a board push that predates it — see `freshestRunInfo`. */
+  readonly liveRunInfo = computed(() =>
+    freshestRunInfo(this.detail().info, this.jobService.jobs()));
+  /** Includes pipeline pre-steps, between-step ownership, and remote runs (the
+   *  CLI output poll only ever sees locally spawned processes). */
+  readonly effectiveRunActive = computed(() =>
+    this.isRunning() || isTaskRunActive(this.liveRunInfo()));
   readonly startedAt = this.cliPoll.startedAt;
   readonly elapsedTime = this.cliPoll.elapsedTime;
   readonly errorMsg = signal<string | null>(null);
@@ -708,7 +719,7 @@ export class TaskDetailComponent implements OnDestroy {
       && !!this.detail().statusMarkdown?.trim();
   });
   readonly runOutcomePresentation = computed(() => deriveProtocolVerdict({
-    isRunning: this.isRunning(),
+    isRunning: this.effectiveRunActive(),
     summaryStatus: this.detail().summaryState?.status ?? 'none',
     statusMarkdown: this.detail().statusMarkdown,
     outcomeIssue: this.detail().info.outcomeIssue,

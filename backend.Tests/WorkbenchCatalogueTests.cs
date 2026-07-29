@@ -83,6 +83,61 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void List_ProjectsDurableDecisionReceipt()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "settled-decision");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Settled decision</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 2,
+            "id": "settled-decision",
+            "title": "Settled decision",
+            "summary": "Durable receipt",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "decided",
+            "phase": "decision-ready",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-26T10:02:00Z",
+            "lifecycleHistory": [
+              { "state": "decided", "editedBy": "Robert", "editedAt": "2026-07-26T10:02:00Z" }
+            ],
+            "decision": {
+              "outcome": "feature-spawn",
+              "state": "succeeded",
+              "operationId": "workbench-ui-settled",
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sourceFingerprint": null,
+              "preparedAt": "2026-07-26T10:00:00Z",
+              "preparedBy": "Robert",
+              "confirmedAt": "2026-07-26T10:01:00Z",
+              "confirmedBy": "Robert",
+              "decidedAt": "2026-07-26T10:02:00Z",
+              "spawnedTaskKeys": ["AGT-2400"],
+              "taskDraft": {
+                "title": "Implement the decision",
+                "goal": "Ship the confirmed Workbench direction.",
+                "acceptanceCriteria": ["The direction is implemented and verified."],
+                "evidenceLinks": [],
+                "relatedTaskKeys": [],
+                "initialLane": "1-preparation",
+                "mode": "coding",
+                "taskType": "feature"
+              }
+            }
+          }
+          """);
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.Equal("decided", item.Status);
+        Assert.Equal("succeeded", item.DecisionStage);
+        Assert.Equal("feature-spawn", item.Decision!.Outcome);
+        Assert.Equal(new[] { "AGT-2400" }, item.Decision.SpawnedTaskKeys);
+    }
+
+    [Fact]
     public void List_SchemaTwoRejectsDuplicateLegacyStateAndMismatchedHistory()
     {
         var dir = Path.Combine(_root, "docs", "workbenches", "duplicate-state");
@@ -132,6 +187,68 @@ public sealed class WorkbenchCatalogueTests : IDisposable
             && item.Error!.Contains("legacy status", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(items, item => item.Id == "mismatched-history" && !item.Valid
             && item.Error!.Contains("latest lifecycleHistory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void List_ProjectsALegacyDecisionReceiptWithoutCouplingItToALifecycleState()
+    {
+        // Schema v1 has no lifecycleState, but it stores the receipt under the
+        // same key. Without this projection the decision service cannot see the
+        // operationId it wrote and answers a retry with 409 instead of the
+        // settled result (AGT-2375).
+        var dir = Path.Combine(_root, "docs", "workbenches", "legacy-settled");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Legacy settled</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), $$"""
+          {
+            "schemaVersion": 1,
+            "id": "legacy-settled",
+            "title": "Legacy settled",
+            "summary": "Question",
+            "entrypoint": "index.html",
+            "status": "archived",
+            "updatedAt": "2026-07-26T10:02:00Z",
+            "decision": {
+              "outcome": "archive",
+              "state": "succeeded",
+              "operationId": "workbench-ui-legacy",
+              "sourceFingerprint": "{{new string('a', 64)}}",
+              "preparedAt": "2026-07-26T10:00:00Z",
+              "preparedBy": "Robert",
+              "confirmedAt": "2026-07-26T10:01:00Z",
+              "confirmedBy": "Robert",
+              "decidedAt": "2026-07-26T10:02:00Z",
+              "reason": "The experiment disproved the direction.",
+              "spawnedTaskKeys": []
+            }
+          }
+          """);
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.True(item.Valid, item.Error);
+        Assert.Equal("archived", item.Status); // still the flat v1 field, not a lifecycle projection
+        Assert.Equal("archived", item.DecisionStage);
+        Assert.Equal("workbench-ui-legacy", item.Decision!.OperationId);
+    }
+
+    [Fact]
+    public void OwnsCanonicalPath_CoversBothDescriptorSchemas()
+    {
+        // The Wiki-classification archive bug is a property of workbench.json,
+        // not of its version: the repository's Workbenches are overwhelmingly
+        // schema v1, so a v2-only guard protected almost none of them.
+        WriteWorkbench("legacy", "Legacy", "active", "2026-07-12T10:00:00Z");
+        WriteSchemaTwoWorkbench("modern");
+        Directory.CreateDirectory(Path.Combine(_root, "docs", "concepts"));
+        File.WriteAllText(Path.Combine(_root, "docs", "concepts", "plain.md"), "# Plain\n");
+
+        var service = Service();
+
+        Assert.True(service.OwnsCanonicalPath("Project", "docs/workbenches/legacy/index.html"));
+        Assert.True(service.OwnsCanonicalPath("Project", "workbenches/legacy/notes.md"));
+        Assert.True(service.OwnsCanonicalPath("Project", "docs/workbenches/modern/index.html"));
+        Assert.False(service.OwnsCanonicalPath("Project", "docs/concepts/plain.md"));
     }
 
     [Fact]
@@ -224,6 +341,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var clean = service.Read("Project", "provenance")!;
         Assert.Equal(head, clean.Revision);
         Assert.False(clean.WorkingTreeModified);
+        Assert.NotNull(clean.Fingerprint);
 
         File.AppendAllText(Path.Combine(_root, "docs", "workbenches", "provenance", "index.html"),
             "<p>Uncommitted bytes</p>");
@@ -231,6 +349,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
 
         Assert.Null(dirty.Revision);
         Assert.True(dirty.WorkingTreeModified);
+        Assert.NotEqual(clean.Fingerprint, dirty.Fingerprint);
         Assert.Contains("Uncommitted bytes", dirty.Html);
     }
 
@@ -241,6 +360,30 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "index.html"), $"<h1>{title}</h1>");
         File.WriteAllText(Path.Combine(dir, "workbench.json"), $$"""
           {"schemaVersion":1,"id":"{{id}}","title":"{{title}}","summary":"Question", "entrypoint":"index.html","status":"{{status}}","phase":"testing","updatedAt":"{{updatedAt}}"}
+          """);
+    }
+
+    private void WriteSchemaTwoWorkbench(string id)
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", id);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), $"<h1>{id}</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), $$"""
+          {
+            "schemaVersion": 2,
+            "id": "{{id}}",
+            "title": "Modern",
+            "summary": "Question",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "review-requested",
+            "phase": "decision-ready",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-26T10:00:00Z",
+            "lifecycleHistory": [
+              { "state": "review-requested", "editedBy": "Robert", "editedAt": "2026-07-26T10:00:00Z" }
+            ]
+          }
           """);
     }
 

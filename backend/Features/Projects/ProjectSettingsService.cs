@@ -687,6 +687,51 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Upsert one step override inside an explicit pipeline type. This is the
+    /// canonical write path for pipeline administration. The flat overload is
+    /// retained only for compatibility with older callers and persisted files.
+    /// </summary>
+    public void SetPipelineStep(
+        string projectName,
+        string pipelineType,
+        string stepId,
+        PipelineStepSetting? setting)
+    {
+        if (string.IsNullOrWhiteSpace(stepId)) return;
+        var type = PipelineTypes.Normalize(pipelineType);
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var byType = ClonePipelineStepsByType(current.PipelineStepsByType);
+            var map = byType.TryGetValue(type, out var existing)
+                ? new Dictionary<string, PipelineStepSetting>(existing, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase);
+
+            var normalized = NormalizePipelineStepSetting(setting);
+            if (normalized is null)
+                map.Remove(stepId.Trim());
+            else
+                map[stepId.Trim()] = normalized;
+
+            if (map.Count == 0)
+                byType.Remove(type);
+            else
+                byType[type] = map;
+
+            _cache[key] = current with
+            {
+                PipelineStepsByType = byType.Count == 0 ? null : byType,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Pipeline step '{StepId}' config updated for project {Project}, type {PipelineType}",
+            stepId, projectName, type);
+    }
+
+    /// <summary>
     /// Stores the operator-selected order for configurable pre/post pipeline
     /// steps. Unknown-step validation is done by the endpoint because only the
     /// endpoint has the current catalogue in hand; this method normalizes the
@@ -706,6 +751,95 @@ public class ProjectSettingsService
         _logger.LogInformation(
             "Pipeline step order updated for project {Project} ({Count} configured ids)",
             projectName, normalized.Count);
+    }
+
+    /// <summary>Store the pre/post order for one explicit pipeline type.</summary>
+    public void SetPipelineStepOrder(
+        string projectName,
+        string pipelineType,
+        IReadOnlyList<string>? stepIds)
+    {
+        var type = PipelineTypes.Normalize(pipelineType);
+        EnsureLoaded();
+        var normalized = NormalizePipelineStepOrder(stepIds);
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var byType = current.PipelineStepOrderByType is null
+                ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, IReadOnlyList<string>>(
+                    current.PipelineStepOrderByType,
+                    StringComparer.OrdinalIgnoreCase);
+            if (normalized.Count == 0)
+                byType.Remove(type);
+            else
+                byType[type] = normalized;
+            _cache[key] = current with
+            {
+                PipelineStepOrderByType = byType.Count == 0 ? null : byType,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Pipeline step order updated for project {Project}, type {PipelineType} ({Count} configured ids)",
+            projectName, type, normalized.Count);
+    }
+
+    private static Dictionary<string, Dictionary<string, PipelineStepSetting>> ClonePipelineStepsByType(
+        IReadOnlyDictionary<string, Dictionary<string, PipelineStepSetting>>? source)
+    {
+        var result = new Dictionary<string, Dictionary<string, PipelineStepSetting>>(
+            StringComparer.OrdinalIgnoreCase);
+        if (source is null) return result;
+        foreach (var type in source)
+        {
+            result[type.Key] = new Dictionary<string, PipelineStepSetting>(
+                type.Value,
+                StringComparer.OrdinalIgnoreCase);
+        }
+        return result;
+    }
+
+    private static PipelineStepSetting? NormalizePipelineStepSetting(PipelineStepSetting? setting)
+    {
+        var normalizedCliType = string.IsNullOrWhiteSpace(setting?.CliType)
+            ? null
+            : setting!.CliType!.Trim().ToLowerInvariant();
+        var normalizedModel = string.IsNullOrWhiteSpace(setting?.Model) ? null : setting!.Model!.Trim();
+        var normalizedThinkingLevel = string.IsNullOrWhiteSpace(setting?.ThinkingLevel)
+            ? null
+            : setting!.ThinkingLevel!.Trim().ToLowerInvariant();
+        var normalizedMode = string.IsNullOrWhiteSpace(setting?.Mode)
+            ? null
+            : setting!.Mode!.Trim().ToLowerInvariant();
+        var normalizedPrompt = string.IsNullOrWhiteSpace(setting?.Prompt) ? null : setting!.Prompt!.Trim();
+        var normalizedCondition = NormalizeCondition(setting?.Condition);
+        var isEmpty = setting is null
+            || (setting.Enabled is null
+                && setting.EconomyModel is null
+                && setting.MaxIterations is null
+                && normalizedMode is null
+                && normalizedCliType is null
+                && normalizedModel is null
+                && normalizedThinkingLevel is null
+                && normalizedPrompt is null
+                && normalizedCondition is null);
+        if (isEmpty) return null;
+        return new PipelineStepSetting
+        {
+            Enabled = setting!.Enabled,
+            EconomyModel = setting.EconomyModel,
+            MaxIterations = setting.MaxIterations,
+            Mode = normalizedMode,
+            CliType = normalizedCliType,
+            Model = normalizedModel,
+            ThinkingLevel = normalizedThinkingLevel,
+            Prompt = normalizedPrompt,
+            PromptBaseDefaultSha = normalizedPrompt is null ? null : setting.PromptBaseDefaultSha,
+            PromptBaseDefaultContent = normalizedPrompt is null ? null : setting.PromptBaseDefaultContent,
+            Condition = normalizedCondition,
+        };
     }
 
     private static IReadOnlyList<string> NormalizePipelineStepOrder(IReadOnlyList<string>? stepIds)
@@ -977,16 +1111,77 @@ public class ProjectSettingsService
                 var doc = JsonSerializer.Deserialize<Dictionary<string, ProjectSettings>>(
                     json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (doc != null)
+                {
                     _cache = doc.ToDictionary(
                         kv => kv.Key,
                         kv => ProjectExecutionPolicy.Migrate(kv.Value),
                         StringComparer.OrdinalIgnoreCase);
+                    if (MigrateLegacyPipelineSettings())
+                    {
+                        Persist();
+                        _logger.LogInformation(
+                            "Migrated legacy flat pipeline settings to task, bug, and feature types");
+                    }
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to read project-settings.json — starting with defaults");
             }
         }
+    }
+
+    /// <summary>
+    /// Move the former flat pipeline configuration into all three coding types.
+    /// Planning is intentionally not populated. Typed values win when a
+    /// partially migrated file contains both shapes.
+    /// </summary>
+    private bool MigrateLegacyPipelineSettings()
+    {
+        var changed = false;
+        foreach (var project in _cache.Keys.ToList())
+        {
+            var current = _cache[project];
+            if (current.PipelineSteps is null && current.PipelineStepOrder is null) continue;
+
+            var stepsByType = ClonePipelineStepsByType(current.PipelineStepsByType);
+            if (current.PipelineSteps is { Count: > 0 } legacySteps)
+            {
+                foreach (var type in PipelineTypes.LegacyCodingTypes)
+                {
+                    var merged = new Dictionary<string, PipelineStepSetting>(
+                        legacySteps,
+                        StringComparer.OrdinalIgnoreCase);
+                    if (stepsByType.TryGetValue(type, out var typed))
+                    {
+                        foreach (var entry in typed)
+                            merged[entry.Key] = entry.Value;
+                    }
+                    stepsByType[type] = merged;
+                }
+            }
+
+            var orderByType = current.PipelineStepOrderByType is null
+                ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, IReadOnlyList<string>>(
+                    current.PipelineStepOrderByType,
+                    StringComparer.OrdinalIgnoreCase);
+            if (current.PipelineStepOrder is { Count: > 0 } legacyOrder)
+            {
+                foreach (var type in PipelineTypes.LegacyCodingTypes)
+                    orderByType.TryAdd(type, legacyOrder.ToArray());
+            }
+
+            _cache[project] = current with
+            {
+                PipelineSteps = null,
+                PipelineStepOrder = null,
+                PipelineStepsByType = stepsByType.Count == 0 ? null : stepsByType,
+                PipelineStepOrderByType = orderByType.Count == 0 ? null : orderByType,
+            };
+            changed = true;
+        }
+        return changed;
     }
 
     private void Persist()

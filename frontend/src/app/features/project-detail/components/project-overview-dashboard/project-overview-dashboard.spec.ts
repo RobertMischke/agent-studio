@@ -3,12 +3,17 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TaskInfo } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { ProjectOverviewDashboardComponent } from './project-overview-dashboard';
 
 describe('ProjectOverviewDashboardComponent', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   it('renders operator metrics, deployment, Wiki, and planning without machine plumbing', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectOverviewDashboardComponent],
@@ -103,6 +108,68 @@ describe('ProjectOverviewDashboardComponent', () => {
       .querySelector<HTMLButtonElement>('[data-testid="project-overview-open-wiki"]')!.click();
 
     expect(rails).toEqual(['token-usage', 'wiki']);
+  });
+
+  it('swaps the recent Wiki feed when its conditional poll returns a new ETag', async () => {
+    vi.useFakeTimers();
+    await TestBed.configureTestingModule({
+      imports: [ProjectOverviewDashboardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectOverviewDashboardComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    flushEmpty(http);
+    fixture.detectChanges();
+    const originalWiki = fixture.componentInstance.wiki();
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    const poll = http.expectOne('/api/projects/Demo%20Project/wiki/recent?limit=6');
+    expect(poll.request.headers.has('If-None-Match')).toBe(false);
+    poll.flush({
+      projectName: 'Demo Project',
+      baseDir: 'C:/repo/docs',
+      exists: true,
+      edits: [{
+        relPath: 'concepts/live-refresh.md',
+        title: 'Wiki live refresh',
+        author: 'Robert',
+        authorDateUtc: '2026-07-26T10:00:00Z',
+        sha: 'def',
+        shortSha: 'def',
+        subject: 'Refresh Wiki live',
+      }],
+    }, { headers: { ETag: '"recent-v2"' } });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.wiki()).not.toBe(originalWiki);
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="project-overview-wiki"]')?.textContent)
+      .toContain('Wiki live refresh');
+    fixture.destroy();
+    vi.useRealTimers();
+  });
+
+  it('pauses the recent Wiki poll while the document is hidden', async () => {
+    vi.useFakeTimers();
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    await TestBed.configureTestingModule({
+      imports: [ProjectOverviewDashboardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectOverviewDashboardComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    flushEmpty(http);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    http.expectNone('/api/projects/Demo%20Project/wiki/recent?limit=6');
+
+    fixture.destroy();
+    hidden.mockRestore();
+    vi.useRealTimers();
   });
 });
 

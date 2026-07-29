@@ -38,6 +38,7 @@ export class PromptCatalogueNavComponent {
   readonly selectedName = input<string | null>(null);
   /** Null means workspace/global scope; a name limits project origins to it. */
   readonly projectName = input<string | null>(null);
+  readonly homeRequest = output<void>();
   readonly selectPrompt = output<string>();
 
   readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());

@@ -16,7 +16,7 @@ test.beforeAll(() => {
 
 test('keeps pickup mode and execution location as independent controls', async ({ page, devBackend }) => {
   expect(devBackend.workspace).toBeTruthy();
-  const projectName = 'Agent Studio';
+  const projectName = 'Agent Studio Worktree';
   await page.route('**/api/crash-recovery/pending', async (route) => {
     await route.fulfill({
       status: 200,
@@ -125,7 +125,10 @@ test('keeps pickup mode and execution location as independent controls', async (
 });
 
 test('shows the assigned host project delivery failure', async ({ page, devBackend }) => {
-  const projectName = 'Agent Studio';
+  const projectName = 'Agent Studio Worktree';
+  await page.route('**/api/crash-recovery/pending', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: '[]',
+  }));
   await page.route('**/api/auth/status', route => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
@@ -150,7 +153,7 @@ test('shows the assigned host project delivery failure', async ({ page, devBacke
         projectId: 'PROJ-001', projectName, registrationFingerprint: 'b'.repeat(64),
         repositoryUrl: 'https://github.com/example/agent-studio.git',
         fetchUrl: 'https://github.com/example/agent-studio.git',
-        pushUrl: 'https://github.com/example/agent-studio.git', status: 'failed',
+        pushUrl: 'https://github.com/example/agent-studio.git', targetBranch: 'develop', status: 'failed',
         detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
       }],
     }]),
@@ -160,6 +163,7 @@ test('shows the assigned host project delivery failure', async ({ page, devBacke
   const card = page.getByTestId('project-execution-card');
   const failure = card.getByTestId('project-delivery-preflight');
   await expect(failure).toContainText('blocked');
+  await expect(failure).toContainText('Target develop');
   await expect(failure).toContainText('permission denied');
   await setTheme(page, 'light');
   await card.screenshot({ path: path.join(SCREENSHOT_DIR, 'project-delivery-preflight-failed--mocked.png') });

@@ -11,6 +11,7 @@ import {
   output,
   signal,
   untracked,
+  viewChildren,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, RegistryProjectSummary, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
@@ -147,6 +148,29 @@ export class StudioShellComponent {
   readonly activeKey = this.tabState.activeKey;
   readonly activeTab = this.tabState.activeTab;
   readonly tabKey = studioTabKey;
+  private readonly tabElements = viewChildren<ElementRef<HTMLElement>>('studioTab');
+
+  /** Keep every newly activated editor tab inside the horizontally scrolling
+   *  strip without moving the page or disturbing an already visible tab. */
+  private readonly keepActiveTabVisibleFx = effect(() => {
+    const activeKey = this.activeKey();
+    const tabs = this.tabs();
+    if (!activeKey || !tabs.some(tab => studioTabKey(tab) === activeKey)) return;
+
+    const activeElement = this.tabElements()
+      .find(ref => ref.nativeElement.dataset['tabKey'] === activeKey)
+      ?.nativeElement;
+    if (!activeElement || typeof activeElement.scrollIntoView !== 'function') return;
+
+    const listRect = activeElement.parentElement?.getBoundingClientRect();
+    const activeRect = activeElement.getBoundingClientRect();
+    if (!listRect || (activeRect.left >= listRect.left && activeRect.right <= listRect.right)) return;
+    activeElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  });
 
   /**
    * AGT-2135 — keep the active tab visible in the horizontally-scrolling

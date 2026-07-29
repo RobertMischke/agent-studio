@@ -133,6 +133,13 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Shared/Models/PipelineTypes.cs` and
+  `backend/Features/Pipeline/PipelineTypeSettings.cs`: resolve each card to the
+  extensible `task`, `bug`, `feature`, or `planning` settings dimension and
+  project that type's step overrides and order before runtime resolution.
+- `backend/Features/Projects/ProjectSettingsService.cs`: persists typed
+  pipeline overrides and migrates legacy flat settings into all three coding
+  types. Planning deliberately starts from its lightweight defaults.
 - `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
   the lane policy, changed files, project/component ownership, explicit impact
   rules, and Test Hub history. It produces the immutable selection audit used
@@ -148,6 +155,13 @@ pipeline view.
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
   handling.
+- `backend/Features/Pipeline/ProjectStackDetector.cs`: bounded convention-based
+  Angular, .NET, and Node detection from repository markers. Pipeline catalogue
+  applicability never reads the configured build-profile stack label.
+- `backend/Features/Pipeline/PipelineStepExecutionResolver.cs` and
+  `PipelineStepProbeService.cs`: effective shell-command projection and isolated
+  per-step probes. Probes do not create or move tasks and execute through the
+  build/test gate runner so they share its machine lock.
 - `backend/Services/Pipeline/ProjectPipelineCostService.cs` and
   `PipelineCostCalculator.cs`: cost summary projection.
 - `backend/Services/Runner/PostAbortReviewStepService.cs` and
@@ -209,6 +223,12 @@ pipeline view.
 
 ## Invariants
 
+- Pipeline settings are resolved from the card before enablement, ordering,
+  model, prompt, condition, gate, deferred merge, or push decisions. Generic
+  coding work, bugs, and features have independent override maps even though
+  they currently share the standard catalogue defaults. Planning and research
+  use the lightweight planning chain and never inherit migrated coding
+  overrides. Concept retains its dedicated document-first catalogue.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
@@ -252,6 +272,13 @@ pipeline view.
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the
   same boundary.
+- Framework-specific catalogue steps declare `appliesTo`; `any` remains the
+  default. The project catalogue response includes derived `detectedStacks`, an
+  `applicable` flag, and the effective resolved command list for every step.
+  Inapplicable steps remain visible in Project Hub -> Pipeline.
+- A project-level step probe is diagnostic only. It may run the step's resolved
+  shell command against the repository, but it never creates a task or changes a
+  lane. Every shell probe is serialized by the build/test machine lock.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model
@@ -364,13 +391,16 @@ operator changes cause the step to fail before its writer runs.
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
 - A fenced remote completion persists `review-subject.json` with its exact
-  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
-  SHA as their authoritative subject. The build gate's selected subject is
-  carried through the later aspect and grade steps. The grade reviews the full
+  `ResultSha`, delivery ref, and actual integration branch ref. Both
+  `post-build-test-gate` and `post-code-review-grade` use that SHA as their
+  authoritative subject. The build gate's selected subject is carried through
+  the later aspect and grade steps. The grade reviews the full
   merge-base-to-`ResultSha` task range, not only the result commit, and must not
   fall back to the canonical task-branch HEAD when the runner delivered a
-  different commit. Otherwise the pipeline would test one revision and review
-  another, or omit earlier commits from a multi-commit delivery.
+  different commit. Merge and integration projections use the recorded branch
+  ref, not the current project default. Otherwise the pipeline could test one
+  revision, review another, omit earlier commits from a multi-commit delivery,
+  or merge the reviewed result into the wrong line.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.

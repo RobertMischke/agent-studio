@@ -50,6 +50,7 @@ import {
 } from '../../../../models/page-context.model';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
+import { WikiAgentReadsComponent } from './wiki-agent-reads/wiki-agent-reads.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
@@ -91,6 +92,7 @@ import {
 import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
 import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
 import { WikiPageActionsComponent } from './wiki-page-actions/wiki-page-actions';
+import { WikiLiveRefreshService } from '../../services/wiki-live-refresh.service';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -112,7 +114,6 @@ interface WikiPersistedState {
   contextWidth?: number;
   expandedIds?: string[];
 }
-
 interface WikiResizeState {
   panel: WikiResizablePanel;
   pointerId: number;
@@ -153,6 +154,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     TooltipDirective,
     AppTooltipDirective,
     WikiDashboardComponent,
+    WikiAgentReadsComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
     WikiMetaSectionComponent,
@@ -161,7 +163,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiSearchResultsComponent,
     WikiSourceBadgeComponent,
   ],
-  providers: [WikiMetaPanelStateService],
+  providers: [WikiLiveRefreshService, WikiMetaPanelStateService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
   styleUrl: './project-wiki-section.scss',
@@ -181,6 +183,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readonly notifications = inject(NotificationService);
   private readonly taskNavigation = inject(TaskReferenceNavigationService);
   private readonly metaPanelState = inject(WikiMetaPanelStateService);
+  private readonly wikiLiveRefresh = inject(WikiLiveRefreshService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -245,6 +248,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly saveResult = signal<WikiFileSaveResult | null>(null);
   readonly history = signal<WikiFileHistory | null>(null);
   readonly loadingHistory = signal(false);
+  readonly pageUpdated = signal(false);
+  readonly pageReloading = signal(false);
 
   // Folder overview: selecting a folder *name* in the tree shows its overview
   // page in the content pane (an open page always wins over the selection).
@@ -895,6 +900,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.saveResult.set(null);
     this.revisionSha.set(null);
     this.revisionContent.set('');
+    this.pageUpdated.set(false);
+    this.pageReloading.set(false);
+    this.wikiLiveRefresh.watchPage(this.projectName(), rel, () => {
+      if (this.openedRel() === rel) this.pageUpdated.set(true);
+    });
     this.loadingDoc.set(true);
     this.docs.getWikiFile(this.projectName(), rel).subscribe({
       next: r => {
@@ -908,9 +918,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     });
     this.history.set(null);
     this.loadingHistory.set(true);
-    this.docs.getWikiFileHistory(this.projectName(), rel).subscribe({
-      next: h => {
-        this.history.set(h);
+    this.docs.getWikiFileHistoryVersion(this.projectName(), rel).subscribe({
+      next: response => {
+        if (!response.body || this.openedRel() !== rel) return;
+        this.history.set(response.body);
+        this.wikiLiveRefresh.setPageVersion(response.etag);
         this.loadingHistory.set(false);
       },
       error: () => this.loadingHistory.set(false),
@@ -923,6 +935,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
 
   closeFile(): void {
+    this.wikiLiveRefresh.stopPage();
     this.openedRel.set(null);
     this.openedContent.set('');
     this.reportContent.set('');
@@ -935,6 +948,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.history.set(null);
     this.revisionSha.set(null);
     this.revisionContent.set('');
+    this.pageUpdated.set(false);
+    this.pageReloading.set(false);
     this.pendingOpenRestore = null;
     this.deepLinkMissing.set(null);
     this.syncDeepLinkUrl('replace');
@@ -983,6 +998,30 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     });
   }
 
+  reloadUpdatedPage(): void {
+    const rel = this.openedRel();
+    if (!rel || this.pageReloading()) return;
+    this.pageReloading.set(true);
+    this.docs.getWikiFile(this.projectName(), rel).subscribe({
+      next: response => {
+        if (this.openedRel() !== rel) return;
+        this.openedContent.set(response.content);
+        this.revisionSha.set(null);
+        this.revisionContent.set('');
+        this.pageUpdated.set(false);
+        this.pageReloading.set(false);
+        this.reloadHistory(rel);
+      },
+      error: () => {
+        if (this.openedRel() === rel) this.pageReloading.set(false);
+      },
+    });
+  }
+
+  dismissPageUpdate(): void {
+    this.pageUpdated.set(false);
+  }
+
   private loadReport(): void {
     const path = this.reportPath();
     if (!path) {
@@ -1011,11 +1050,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
 
   private reloadHistory(rel: string): void {
-    this.history.set(null);
     this.loadingHistory.set(true);
-    this.docs.getWikiFileHistory(this.projectName(), rel).subscribe({
-      next: h => {
-        this.history.set(h);
+    this.docs.getWikiFileHistoryVersion(this.projectName(), rel).subscribe({
+      next: response => {
+        if (!response.body || this.openedRel() !== rel) return;
+        this.history.set(response.body);
+        this.wikiLiveRefresh.setPageVersion(response.etag);
         this.loadingHistory.set(false);
       },
       error: () => this.loadingHistory.set(false),
