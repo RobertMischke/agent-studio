@@ -46,6 +46,57 @@ Task Server:
 REMOTE_TEST_SUITE_INTEGRATION=1 npm --prefix tools/remote-test-suite test
 ```
 
+## Parallel delivery and post-processing load
+
+Run the isolated 12-task baseline plus the controlled worker-loss repeat:
+
+```bash
+node tools/remote-test-suite/parallel-harness.mjs \
+  --run-id "$(date -u +%Y%m%dT%H%M%SZ)" \
+  --seed parallel-reference-v1 \
+  --export-root "$JOB_RESULTS_DIR/parallel-delivery"
+```
+
+Each scenario creates one disposable project and twelve disjoint reference
+tasks. Three coding workers claim four slots each before execution starts, so
+the Task Server records twelve simultaneous Progress cards and every admission
+decision. Separate gate and review process pools materialize fresh workspaces,
+verify the declared Result SHA, and report their process, queue, duration, CPU,
+memory, and namespace evidence. The Studio host is not part of admission or
+post-processing.
+
+Integration workspaces prepare concurrently. Push admission then follows task
+ordinal, and every stale-base observation records the deterministic
+`refresh-and-merge-exact-result` collision decision before merging the reviewed
+SHA. Result handoff, completion, and review report are replayed once to prove
+idempotency.
+
+The worker-loss repeat terminates one four-slot gate worker while its processes
+are live. Those cancellations are classified
+`environmental-worker-loss`, retried once on healthy workers, and recorded as a
+capacity reduction from twelve to eight gate slots. Healthy gate processes
+continue during the loss.
+
+Evidence lives under
+`.tmp/remote-test-suite/parallel-delivery/<run-id>/evidence/`, or is copied to
+`--export-root`. The durable files are:
+
+- `acceptance.json` and `concurrency-report.md`.
+- Per-scenario `timeline.jsonl`, `telemetry.jsonl`, and
+  `runtime-events.jsonl`.
+- Task histories, review attempts, audit rows, invariant snapshots, and final
+  task state.
+
+The real regression is opt-in:
+
+```bash
+REMOTE_TEST_PARALLEL_INTEGRATION=1 \
+  node --test tools/remote-test-suite/test/parallel-delivery.integration.test.mjs
+```
+
+The harness records no model or CLI comparison dimension. Token counts, if a
+future executor provides them, remain per-run telemetry only.
+
 ## Three-unit Docker Compose harness
 
 The remote-host harness provisions a separate Task Server, deterministic Agent

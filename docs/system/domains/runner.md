@@ -158,7 +158,12 @@ state.
   production Studio UI, and two-link fault proxy used for remote-host rolling
   replacement and partition evidence. Phase hooks observe claim, run, gate,
   review, and integration without adding scheduler-only branches. It never
-  targets stable or the managed task workspace.
+  targets stable or the managed task workspace. The `parallel-harness.mjs`
+  workload adds two twelve-task passes over separate coding, gate, and review
+  worker pools. It records slot admission, queue and execution timings, system
+  pressure, exact-SHA proofs, idempotent delivery, deterministic integration
+  collision decisions, and one controlled four-slot gate-worker loss with
+  bounded redistribution.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing

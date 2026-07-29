@@ -94,6 +94,32 @@ contract does not claim that an in-flight process survives Task Server restart.
 It preserves the durable fence, reports process state as unknown, and requires
 positive containment proof before a higher-fenced replacement can run.
 
+## Parallel delivery load
+
+The sibling protocol harness verifies horizontal slot and post-processing
+behavior without adding scheduler-only branches:
+
+```bash
+node tools/remote-test-suite/parallel-harness.mjs \
+  --run-id "$(date -u +%Y%m%dT%H%M%SZ)" \
+  --seed parallel-reference-v1 \
+  --export-root "$JOB_RESULTS_DIR/parallel-delivery"
+```
+
+It runs two isolated 12-task scenarios against one disposable Task Server.
+The baseline admits twelve coding claims before releasing their start barrier,
+then uses independent coding, gate, and review worker pools. The repeat kills
+one live four-slot gate worker and redistributes each cancelled gate once while
+healthy workers continue. Integration preparation is concurrent, but stale
+base collisions resolve in deterministic task ordinal through exact reviewed
+Result SHAs.
+
+`acceptance.json` is the machine-readable verdict.
+`concurrency-report.md`, the per-scenario timelines, pressure samples, Task
+Server histories, reviews, audits, and invariants are the review surface. The
+runtime-event stream stays separate from the detailed harness timeline. No
+model comparison, leaderboard, or benchmark dimension is present.
+
 ## Manual unit controls
 
 For diagnosis, keep a named stack up:

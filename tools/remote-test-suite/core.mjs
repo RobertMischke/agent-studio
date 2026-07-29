@@ -149,7 +149,7 @@ export async function runCommand(command, { cwd, env = {}, capture = true } = {}
     child.stdout?.on('data', chunk => { stdout += chunk; });
     child.stderr?.on('data', chunk => { stderr += chunk; });
     child.on('error', reject);
-    child.on('exit', code => {
+    child.on('close', code => {
       if (code === 0) resolve({ stdout, stderr, code });
       else reject(new Error(`${command.join(' ')} failed (${code}): ${stderr || stdout}`));
     });
