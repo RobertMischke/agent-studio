@@ -13,6 +13,7 @@ import {
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assertAutonomyEvidence,
   assertRollingEvidence,
   composeCommand,
   createComposePlan,
@@ -33,6 +34,7 @@ if (args.command === 'inspect') {
     acceptanceSequence: [
       'provision',
       'reference-task',
+      'ten-minute-multi-slot-task-server-partition',
       'studio-partition-and-replacement',
       'runner-partition-and-replacement',
       'task-server-partition-and-honest-fence-recovery',
@@ -104,36 +106,20 @@ async function runAcceptance() {
   progress('running deterministic reference task through the isolated Task Server');
   const reference = await runReferenceScenario();
 
-  progress('seeding an active rolling-update task');
+  progress('starting the explicit ten-minute multi-slot Task Server outage canary');
+  const autonomy = await runTenMinuteAutonomyCanary();
+
+  progress('claiming the canary task held Ready during transport uncertainty');
   const rollIds = {
-    workspace: `wsp-roll-${args.runId}`,
-    project: `prj-roll-${args.runId}`,
-    task: `tsk-roll-${args.runId}`
+    project: autonomy.unclaimedTask.projectId,
+    task: autonomy.unclaimedTask.taskId
   };
-  await api('/api/v1/workspaces', {
-    method: 'POST',
-    body: { name: `Compose rolling ${args.runId}`, workspaceId: rollIds.workspace }
-  });
-  await api('/api/v1/projects', {
-    method: 'POST',
-    body: {
-      workspaceId: rollIds.workspace,
-      name: `Compose rolling ${args.runId}`,
-      taskKeyPrefix: 'ROLL',
-      projectId: rollIds.project
-    }
-  });
-  const rollingTask = await api(`/api/v1/projects/${rollIds.project}/tasks`, {
-    method: 'POST',
-    body: {
-      title: 'Hold deterministic infrastructure authority',
-      body: 'Infrastructure-only lease used by the remote Compose harness.',
-      state: '2-ready',
-      taskId: rollIds.task,
-      taskKey: 'ROLL-1'
-    }
-  });
+  const rollingTask = autonomy.unclaimedTask;
   const claimed = await runner('/claim', { method: 'POST' });
+  if (claimed.task.taskId !== rollingTask.taskId) {
+    throw new Error(
+      `Runner claimed ${claimed.task.taskId}; expected the canary waiting task ${rollingTask.taskId}.`);
+  }
   const originalAuthority = structuredClone(claimed);
   await waitForRunner(value => value.renewals >= 1, 20_000);
   const active = await history(rollIds.project, rollingTask.taskId);
@@ -205,7 +191,12 @@ async function runAcceptance() {
     body: { mode: 0, reason: 'remote Compose harness recovery inspection' }
   });
   const quarantined = await history(rollIds.project, rollingTask.taskId);
-  if (!quarantined.runs.some(run => run.status === 'process-unknown')) {
+  const processUnknownEvent = quarantined.events.find(
+    event => event.kind === 'lifecycle.process-unknown');
+  const unknownRun = quarantined.runs.find(run => run.status === 'process-unknown')
+    ?? quarantined.runs.find(run => run.runId === processUnknownEvent?.runId);
+  await writeEvidence('rolling-quarantine-unasserted.json', quarantined);
+  if (!unknownRun) {
     throw new Error('Task Server restart did not quarantine active authority.');
   }
 
@@ -214,7 +205,6 @@ async function runAcceptance() {
   await executeUnitOperation('replace', 'runner');
   const recoveryRunnerContainer = await containerId('agent-runner');
   assertChangedContainer('Recovery Runner', staleRunnerContainer, recoveryRunnerContainer);
-  const unknownRun = quarantined.runs.find(run => run.status === 'process-unknown');
   await api(`/api/v1/management/attempts/${unknownRun.runId}/resolve-unknown`, {
     method: 'POST',
     body: {
@@ -263,6 +253,7 @@ async function runAcceptance() {
   const invariants = await api('/api/v1/management/invariants');
   const evidence = {
     reference,
+    autonomy,
     active,
     afterStudio,
     afterRunner,
@@ -277,7 +268,10 @@ async function runAcceptance() {
     audit,
     invariants
   };
-  const assertions = assertRollingEvidence(evidence);
+  const assertions = [
+    ...autonomy.assertions,
+    ...assertRollingEvidence(evidence)
+  ];
   const acceptance = {
     schemaVersion: 1,
     runId: args.runId,
@@ -285,6 +279,7 @@ async function runAcceptance() {
     completedAt: new Date().toISOString(),
     assertions,
     reference,
+    autonomy,
     rollingTask: {
       projectId: rollIds.project,
       taskId: rollingTask.taskId,
@@ -309,6 +304,144 @@ async function runAcceptance() {
   await writeEvidence('api/outboxes.json', outboxes);
   await writeEvidence('api/rolling-history.json', finalHistory);
   return acceptance;
+}
+
+async function runTenMinuteAutonomyCanary() {
+  const ids = {
+    workspace: `wsp-autonomy-${args.runId}`,
+    project: `prj-autonomy-${args.runId}`
+  };
+  await api('/api/v1/workspaces', {
+    method: 'POST',
+    body: {
+      name: `Compose autonomy ${args.runId}`,
+      workspaceId: ids.workspace
+    }
+  });
+  await api('/api/v1/projects', {
+    method: 'POST',
+    body: {
+      workspaceId: ids.workspace,
+      name: `Compose autonomy ${args.runId}`,
+      taskKeyPrefix: 'AUTO',
+      projectId: ids.project
+    }
+  });
+  const tasks = [];
+  for (let index = 1; index <= 3; index++) {
+    tasks.push(await api(`/api/v1/projects/${ids.project}/tasks`, {
+      method: 'POST',
+      body: {
+        title: `Autonomy canary slot ${index}`,
+        body: 'Infrastructure-only deterministic useful work.',
+        state: '2-ready',
+        taskId: `tsk-autonomy-${args.runId}-${index}`,
+        taskKey: `AUTO-${index}`
+      }
+    }));
+  }
+
+  const claims = [
+    await runner('/claim', { method: 'POST' }),
+    await runner('/claim', { method: 'POST' })
+  ];
+  await waitForRunner(value =>
+    value.slots?.filter(slot => slot.phase === 'working').length === 2
+      && value.slots.filter(slot => slot.phase === 'working')
+        .every(slot => slot.renewals >= 1), 30_000);
+
+  await executeUnitOperation('partition', 'task-server');
+  const partitionStartedMs = Date.now();
+  const partitionStartedAt = new Date(partitionStartedMs).toISOString();
+  const requiredWorkThroughMs = partitionStartedMs + 600_000;
+  const requiredWorkThroughAt = new Date(requiredWorkThroughMs).toISOString();
+  const claimDuringPartition = await runnerRaw('/claim', { method: 'POST' });
+  const samples = [];
+  let nextProgressAt = partitionStartedMs;
+  while (Date.now() < requiredWorkThroughMs) {
+    const current = await runner('/status');
+    const canarySlots = current.slots.filter(slot =>
+      claims.some(claim => claim.run.runId === slot.runId));
+    if (canarySlots.length !== 2
+        || canarySlots.some(slot =>
+          slot.phase !== 'working'
+          || slot.generation.alive !== true
+          || slot.generation.deathProven !== false)) {
+      throw new Error(
+        `Autonomy slot stopped before ten minutes: ${JSON.stringify(canarySlots)}`);
+    }
+    samples.push({
+      at: new Date().toISOString(),
+      slots: canarySlots.map(slot => ({
+        runId: slot.runId,
+        workUnits: slot.workUnits,
+        backlogCount: slot.backlogCount,
+        stopBefore: slot.authority.stopBefore
+      }))
+    });
+    if (Date.now() >= nextProgressAt) {
+      const elapsedSeconds = Math.floor((Date.now() - partitionStartedMs) / 1000);
+      progress(
+        `ten-minute canary ${elapsedSeconds}s/600s; ` +
+        canarySlots.map(slot =>
+          `${slot.taskKey}=work:${slot.workUnits},queued:${slot.backlogCount}`)
+          .join(' '));
+      await writeEvidence('autonomy-progress.json', {
+        partitionStartedAt,
+        requiredWorkThroughAt,
+        samples
+      });
+      nextProgressAt += 60_000;
+    }
+    await delay(Math.min(10_000, Math.max(1, requiredWorkThroughMs - Date.now())));
+  }
+
+  await runner('/finish-all', { method: 'POST' });
+  const partitionEndedMs = Date.now();
+  const partitionEndedAt = new Date(partitionEndedMs).toISOString();
+  await executeUnitOperation('heal', 'task-server');
+  const recovered = await waitForRunner(value => {
+    const canarySlots = value.slots?.filter(slot =>
+      claims.some(claim => claim.run.runId === slot.runId)) ?? [];
+    return canarySlots.length === 2
+      && canarySlots.every(slot => slot.phase === 'completed');
+  }, 120_000);
+  const slots = recovered.slots
+    .filter(slot => claims.some(claim => claim.run.runId === slot.runId))
+    .map(slot => {
+      const completed = recovered.timeline.findLast(item =>
+        item.kind === 'completion-acknowledged'
+          && item.runId === slot.runId);
+      return {
+        ...slot,
+        reconciledAt: slot.authority.reconciledAt,
+        completedAt: completed?.at ?? null
+      };
+    });
+  const histories = [];
+  for (let index = 0; index < 2; index++) {
+    histories.push(await history(ids.project, tasks[index].taskId));
+  }
+  const unclaimedTask = await api(
+    `/api/v1/projects/${ids.project}/tasks/${tasks[2].taskId}`);
+  const evidence = {
+    schemaVersion: 1,
+    partitionStartedAt,
+    requiredWorkThroughAt,
+    partitionEndedAt,
+    durationMs: partitionEndedMs - partitionStartedMs,
+    claimDuringPartitionStatus: claimDuringPartition.status,
+    slots,
+    samples,
+    histories,
+    unclaimedTask
+  };
+  await writeEvidence('autonomy-canary-unasserted.json', evidence);
+  const assertions = assertAutonomyEvidence(evidence);
+  const result = { ...evidence, assertions };
+  await writeEvidence('autonomy-canary.json', result);
+  await writeEvidence('api/autonomy-histories.json', histories);
+  return result;
 }
 
 async function runReferenceScenario() {
@@ -616,10 +749,17 @@ async function apiRaw(route, { method = 'GET', body } = {}) {
 }
 
 async function runner(route, { method = 'GET' } = {}) {
+  const response = await runnerRaw(route, { method });
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Runner control ${route} failed (${response.status}): ${JSON.stringify(response.value)}`);
+  }
+  return response.value;
+}
+
+async function runnerRaw(route, { method = 'GET' } = {}) {
   const response = await fetch(`${plan.urls.runnerControl}${route}`, { method });
   const value = await response.json();
-  if (!response.ok) throw new Error(`Runner control ${route} failed (${response.status}): ${JSON.stringify(value)}`);
-  return value;
+  return { status: response.status, value };
 }
 
 async function proxy(link, action) {

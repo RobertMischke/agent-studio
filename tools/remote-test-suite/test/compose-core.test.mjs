@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertAutonomyEvidence,
   assertRollingEvidence,
   composeCommand,
   createComposePlan,
@@ -76,7 +77,11 @@ test('rolling evidence accepts preservation plus honest Task Server fencing', ()
     active: { task: { state: '3-progress' }, runs: [{ ...run1, status: 'running' }] },
     afterStudio: { task: { state: '3-progress' }, runs: [{ ...run1, status: 'running' }] },
     afterRunner: { task: { state: '3-progress' }, runs: [{ ...run1, status: 'running' }] },
-    quarantined: { task: { state: '3-progress' }, runs: [run1] },
+    quarantined: {
+      task: { state: '3-progress' },
+      runs: [run1],
+      events: [{ kind: 'lifecycle.process-unknown', runId: 'run-1' }]
+    },
     staleWriteStatus: 409,
     finalHistory: { task: { state: '2-ready' }, runs: [run1, run2] },
     finalShutdown: { safeToStop: true, unresolvedAttempts: 0 },
@@ -91,9 +96,52 @@ test('rolling evidence accepts preservation plus honest Task Server fencing', ()
 
   evidence.finalHistory.runs.push({ ...run2 });
   assert.throws(() => assertRollingEvidence(evidence), /no-duplicate-claims/);
+
+  evidence.finalHistory.runs.pop();
+  evidence.quarantined.events = [];
+  assert.ok(assertRollingEvidence(evidence).every(item => item.passed));
 });
 
 test('evidence redaction removes disposable credentials', () => {
   const token = 'secret-token-value';
   assert.equal(redact(`Authorization: Bearer ${token}`, [token]), 'Authorization: Bearer [REDACTED]');
+});
+
+test('autonomy evidence requires ten real minutes, two useful slots, fenced replay, and unique delivery', () => {
+  const started = '2026-07-29T08:00:00.000Z';
+  const required = '2026-07-29T08:10:00.000Z';
+  const ended = '2026-07-29T08:10:01.000Z';
+  const slots = [1, 2].map(value => ({
+    runId: `run-${value}`,
+    phase: 'completed',
+    workUnits: 60,
+    lastUsefulWorkAt: '2026-07-29T08:09:59.000Z',
+    reconciledAt: '2026-07-29T08:10:02.000Z',
+    completedAt: '2026-07-29T08:10:03.000Z',
+    resultSha: String(value).repeat(40),
+    backlogCount: 0,
+    lastSequence: 64,
+    lastAcknowledgedSequence: 64,
+    generation: { alive: false, deathProven: true }
+  }));
+  const histories = slots.map((slot, index) => ({
+    task: { state: '4-auto-review' },
+    runs: [{ runId: slot.runId, resultSha: slot.resultSha }],
+    events: [{ idempotencyKey: `event-${index}` }],
+    artifacts: [{ idempotencyKey: `artifact-${index}` }]
+  }));
+  const evidence = {
+    partitionStartedAt: started,
+    requiredWorkThroughAt: required,
+    partitionEndedAt: ended,
+    durationMs: 601_000,
+    claimDuringPartitionStatus: 409,
+    unclaimedTask: { state: '2-ready' },
+    slots,
+    histories
+  };
+
+  assert.equal(assertAutonomyEvidence(evidence).length, 8);
+  evidence.durationMs = 599_999;
+  assert.throws(() => assertAutonomyEvidence(evidence), /ten-real-minutes/);
 });

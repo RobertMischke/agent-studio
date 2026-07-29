@@ -69,20 +69,29 @@ bounded workflow:
 2. Capture repository, Docker, Compose, component, runtime, and image versions.
 3. Run the deterministic `reference-change` task through public Task Server
    claim, handoff, review, and history APIs.
-4. Hold a second task under an active fenced lease.
-5. Partition and replace Studio. The Runner must keep renewing the same run and
+4. Claim two autonomy tasks, then partition the Runner's Task Server link for
+   at least ten real wall-clock minutes. Both slots must record useful work
+   throughout the outage while a third task remains Ready and unclaimed.
+5. Queue terminal evidence locally, heal the link, and require exact-fence
+   reconciliation before replay. Each event, artifact, immutable Result SHA,
+   terminal report, and completion is retried with its idempotency key and
+   accepted once. Both local and server outboxes must drain, with no live
+   completed generation.
+6. Claim the same third task that remained Ready during uncertainty and hold it
+   under an active fenced lease for the independent restart checks.
+7. Partition and replace Studio. The Runner must keep renewing the same run and
    fence, proving Studio does not own or cancel execution.
-6. Partition and replace Runner. Its disposable volume must reattach the same
+8. Partition and replace Runner. Its disposable volume must reattach the same
    active run and fence without another claim.
-7. Partition Task Server from both clients, heal it, then exercise a Task
+9. Partition Task Server from both clients, heal it, then exercise a Task
    Server replacement. `prepare-shutdown` must first report unresolved
-   authority. Restart must quarantine the attempt as `process-unknown`.
-8. Replace the old Runner container to provide positive no-overlap evidence,
+   authority. Restart must write a `lifecycle.process-unknown` quarantine event.
+10. Replace the old Runner container to provide positive no-overlap evidence,
    fence the unknown attempt, and claim one higher-fenced recovery.
-9. Prove a stale completion from the old fence is rejected, release the
+11. Prove a stale completion from the old fence is rejected, release the
    recovery task back to Ready, and assert empty authority and delivery
    backlogs.
-10. Export evidence and tear down only the run's identity.
+12. Export evidence and tear down only the run's identity.
 
 Startup, readiness, component operations, evidence commands, and teardown all
 have explicit time bounds. A failed run still attempts evidence capture and
@@ -122,10 +131,13 @@ identity-scoped stack.
 
 The evidence folder contains:
 
-- `acceptance.json` with machine-readable assertions and old/new fence facts.
+- `autonomy-progress.json` with periodic outage snapshots,
+  `autonomy-canary.json` with the asserted ten-minute timeline, and
+  `acceptance.json` with combined autonomy, restart, and old/new fence facts.
 - `versions.json` with source, Docker, Compose, component, runtime, and image
   identity.
-- Task Server status, audit, invariant, outbox, and task-history snapshots.
+- Task Server status, audit, invariant, outbox, and task-history snapshots,
+  including the two autonomy run histories.
 - Per-service logs and redacted container inspection.
 - The reference-task result, Compose source, resource plan, and teardown proof.
 

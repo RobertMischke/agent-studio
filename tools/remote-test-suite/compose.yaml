@@ -27,7 +27,7 @@ services:
       AUTH_TOKEN: ${REMOTE_HARNESS_AUTH_TOKEN}
       AllowedHosts: "*"
       TaskServer__MinimumLeaseSeconds: "5"
-      TaskServer__MaximumLeaseSeconds: "120"
+      TaskServer__MaximumLeaseSeconds: "900"
       TaskServer__InvariantReconciliationSeconds: "5"
       TaskServer__ResultRefGcEnabled: "false"
     volumes:
@@ -103,8 +103,11 @@ services:
       REMOTE_HARNESS_RUNNER_INSTANCE: ${REMOTE_HARNESS_PROJECT}-instance
       REMOTE_HARNESS_RUNNER_HOST: ${REMOTE_HARNESS_PROJECT}-host
       REMOTE_HARNESS_RUNNER_STATE: /var/lib/remote-harness-runner/claim.json
-      REMOTE_HARNESS_RUNNER_TTL_SECONDS: "30"
+      REMOTE_HARNESS_RUNNER_TTL_SECONDS: "900"
       REMOTE_HARNESS_RUNNER_HEARTBEAT_MS: "1000"
+      REMOTE_HARNESS_WORK_INTERVAL_MS: "10000"
+      REMOTE_HARNESS_AUTHORITY_SAFETY_MARGIN_MS: "30000"
+      REMOTE_HARNESS_MAX_SLOTS: "2"
       REMOTE_HARNESS_CONTROL_PORT: "8080"
     volumes:
       - runner-workspace:/var/lib/remote-harness-runner

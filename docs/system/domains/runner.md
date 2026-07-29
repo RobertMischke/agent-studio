@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-29
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -156,9 +156,13 @@ state.
   acceptance. Its explicit `remote-integration` Compose profile adds the
   disposable Task Server, deterministic Agent Runner protocol process,
   production Studio UI, and two-link fault proxy used for remote-host rolling
-  replacement and partition evidence. Phase hooks observe claim, run, gate,
-  review, and integration without adding scheduler-only branches. It never
-  targets stable or the managed task workspace.
+  replacement and partition evidence. The acceptance run first holds two
+  already-claimed slots through a real ten-minute Task Server partition,
+  records useful-work and durable-outbox timelines, reconciles each exact fence
+  before replay, and proves exact-once terminal delivery. Runner replacement
+  and Task Server replacement remain separate later checks. Phase hooks observe
+  claim, run, gate, review, and integration without adding scheduler-only
+  branches. It never targets stable or the managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -272,12 +276,19 @@ state.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
-- A failed lease renewal consumes the last server-issued authority window.
-  The standalone Runner stops before the known expiry minus one renewal
-  interval, cancels the CLI process tree, and does not turn transport loss into
-  autonomous authority. Task Server restart records `process-unknown`; only
-  positive containment or infrastructure-fencing proof permits a higher-fence
-  replacement.
+- A failed lease renewal consumes the last server-issued authority window. The
+  default requested window is 15 minutes, with a durable stop-before boundary
+  one renewal interval before expiry. The standalone Runner persists that
+  boundary in the worker directory, continues the already-fenced process while
+  time remains, and journals output and terminal evidence locally. It admits no
+  new work and replays no event, artifact, result handoff, terminal report, or
+  completion while authority is uncertain. Only a successful renewal of the
+  exact lease and fence advances the boundary and opens replay. At stop-before,
+  the Runner reaps and verifies the entire worktree process generation and
+  retains an honest `authority-deadline-exhausted` record. A daemon restart
+  applies the same persisted deadline before it can register or adopt work.
+  Task Server restart records `process-unknown`; only positive containment or
+  infrastructure-fencing proof permits a higher-fence replacement.
 - A remote project clone is eligible only when the project registry contains a
   repository URL. On every new clone and refresh, the standalone runner sets
   both fetch and push URLs to that registry value and logs the effective pair.

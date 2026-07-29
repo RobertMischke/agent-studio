@@ -168,7 +168,11 @@ export function assertRollingEvidence(evidence) {
     'Runner replacement must reattach the same active run id and fence.');
   check(assertions, 'task-server-restart-quarantines',
     evidence.quarantined?.task?.state === '3-progress'
-      && evidence.quarantined?.runs?.some(run => run.status === 'process-unknown'),
+      && (evidence.quarantined?.runs?.some(run =>
+        run.status === 'process-unknown')
+        || evidence.quarantined?.events?.some(event =>
+          event.kind === 'lifecycle.process-unknown'
+          && evidence.quarantined?.runs?.some(run => run.runId === event.runId))),
     'Task Server replacement must quarantine unresolved authority as process-unknown.');
   check(assertions, 'stale-write-rejected', evidence.staleWriteStatus === 409,
     'The pre-restart fence must not complete after recovery.');
@@ -194,6 +198,54 @@ export function assertRollingEvidence(evidence) {
     'Audit sequence numbers must remain unique.');
   check(assertions, 'invariants-clear', evidence.invariants?.pendingRunnerActions === 0,
     'Invariant reconciliation must leave no pending Runner actions.');
+  return assertions;
+}
+
+export function assertAutonomyEvidence(evidence) {
+  const assertions = [];
+  check(assertions, 'ten-real-minutes',
+    evidence?.durationMs >= 600_000,
+    'The Task Server partition must last at least ten real wall-clock minutes.');
+  check(assertions, 'multiple-preclaimed-slots',
+    evidence?.slots?.length >= 2
+      && new Set(evidence.slots.map(slot => slot.runId)).size === evidence.slots.length,
+    'At least two already-claimed remote slots must execute through the outage.');
+  check(assertions, 'useful-work-throughout-outage',
+    (evidence?.slots ?? []).every(slot =>
+      slot.workUnits >= 50
+      && Date.parse(slot.lastUsefulWorkAt)
+        >= Date.parse(evidence.requiredWorkThroughAt) - 15_000),
+    'Every slot must record useful work through the full ten-minute partition.');
+  check(assertions, 'no-unsafe-new-claim',
+    (evidence?.claimDuringPartitionStatus === 409
+      || evidence?.claimDuringPartitionStatus >= 500)
+      && evidence?.unclaimedTask?.state === '2-ready',
+    'Transport uncertainty must not admit the waiting task.');
+  check(assertions, 'authority-before-replay',
+    (evidence?.slots ?? []).every(slot =>
+      Date.parse(slot.reconciledAt) >= Date.parse(evidence.partitionEndedAt)
+      && Date.parse(slot.completedAt) >= Date.parse(slot.reconciledAt)),
+    'Every slot must reconcile its exact fence before replay completes.');
+  check(assertions, 'results-and-terminal-delivered-once',
+    (evidence?.histories ?? []).every((history, index) =>
+      history.task?.state === '4-auto-review'
+      && history.runs?.length === 1
+      && history.runs[0]?.resultSha === evidence.slots[index]?.resultSha
+      && unique((history.events ?? []).map(item => item.idempotencyKey))
+      && unique((history.artifacts ?? []).map(item => item.idempotencyKey))
+      && history.artifacts?.length === 1),
+    'Events, artifacts, Result SHA, terminal, and completion must survive recovery without duplication.');
+  check(assertions, 'outboxes-drained',
+    (evidence?.slots ?? []).every(slot =>
+      slot.backlogCount === 0
+      && slot.lastSequence === slot.lastAcknowledgedSequence),
+    'Every recovered Runner outbox must be fully acknowledged.');
+  check(assertions, 'no-zombie-or-phantom-generation',
+    (evidence?.slots ?? []).every(slot =>
+      slot.phase === 'completed'
+      && slot.generation?.alive === false
+      && slot.generation?.deathProven === true),
+    'Recovered slots must close their one contained generation with no zombie replacement.');
   return assertions;
 }
 

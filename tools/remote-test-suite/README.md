@@ -69,12 +69,18 @@ node tools/remote-test-suite/compose-harness.mjs run \
 ```
 
 That one command uses the explicit `remote-integration` Compose profile,
-builds and health-gates the isolated stack, runs `reference-change`, partitions
-and replaces Studio and Runner while a lease is active, then replaces Task
-Server. The Task Server update must quarantine the old attempt, reject its
+builds and health-gates the isolated stack, and runs `reference-change`. It then
+holds two already-claimed slots through a real Task Server partition lasting at
+least ten wall-clock minutes. The slots journal useful work through the outage;
+a waiting third task remains unclaimed; and recovery must reconcile each exact
+fence before idempotently replaying events, artifacts, Result SHAs, terminal
+reports, and completions. The workflow separately replaces Runner and Task
+Server after safely claiming the same third task that remained Ready through
+the outage. The Task Server update must quarantine the old attempt, reject its
 stale completion, and accept a higher-fenced recovery only after the old Runner
-container is positively gone. It exports versions, logs, container inspection,
-API history, audits, invariant state, and assertions below
+container is positively gone. It exports periodic and asserted autonomy
+timelines, versions, logs, container inspection, API history, audits, invariant
+state, and assertions below
 `.tmp/remote-test-suite/compose/<run-id>/evidence/`. Finally it drains the
 server, proves there is no unresolved authority, and removes only containers,
 volumes, networks, and images under the run's harness identity. Add `--keep`

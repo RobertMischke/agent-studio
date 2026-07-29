@@ -78,6 +78,17 @@ public sealed class RemoteRunnerDaemon
 
     public async Task RunAsync(CancellationToken shutdown)
     {
+        var state = new RunnerStateStore(_options.StateDir);
+        var persistedAtStartup = state.LoadAll();
+        using var startupAuthorityWatch = CancellationTokenSource.CreateLinkedTokenSource(
+            shutdown);
+        var startupAuthorityTasks = persistedAtStartup
+            .Select(slot => EnforcePersistedAuthorityDeadlineAsync(
+                slot,
+                state,
+                startupAuthorityWatch.Token))
+            .ToArray();
+
         var clientId = await WithServerRetryAsync(
             "runner registration",
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
@@ -86,10 +97,9 @@ public sealed class RemoteRunnerDaemon
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
         await handoffRecovery.RecoverAllAsync(shutdown);
 
-        var state = new RunnerStateStore(_options.StateDir);
         var inventory = new RunnerProcessInventoryTracker();
         var active = new List<ActiveSlot>();
-        foreach (var persisted in state.LoadAll())
+        foreach (var persisted in persistedAtStartup)
         {
             var slot = await RecoverLaunchingIdentityAsync(persisted, state);
             _client.RestoreRunAuthority(slot.TaskKey, slot.RunId, slot.LeaseInstanceId, slot.Lease);
@@ -116,6 +126,12 @@ public sealed class RemoteRunnerDaemon
                         $"Dead attempt '{slot.AttemptId}' for task '{slot.TaskKey}' could not be released. " +
                         "Startup is fail-closed and retained the durable state for the next bounded systemd retry.");
             }
+        }
+        startupAuthorityWatch.Cancel();
+        foreach (var watcher in startupAuthorityTasks)
+        {
+            try { await watcher; }
+            catch (OperationCanceledException) { }
         }
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
@@ -417,6 +433,39 @@ public sealed class RemoteRunnerDaemon
         // workers are intentionally left alive for the replacement daemon.
         state.Flush();
         _log($"daemon drain complete; leaving {active.Count} detached job(s) for startup reattach");
+    }
+
+    private async Task EnforcePersistedAuthorityDeadlineAsync(
+        PersistedRunnerSlot slot,
+        RunnerStateStore state,
+        CancellationToken adopted)
+    {
+        var durable = DurableLeaseAuthority.Read(slot.WorkerDirectory);
+        var stopBefore = durable?.StopBeforeUtc
+                         ?? DurableLeaseAuthority.ComputeStopBefore(
+                             slot.Lease.ExpiresAt,
+                             TimeSpan.FromSeconds(
+                                 Math.Max(5, _options.HeartbeatSeconds)));
+        var remaining = stopBefore - DateTime.UtcNow;
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining, adopted);
+        adopted.ThrowIfCancellationRequested();
+
+        _log(
+            $"persisted authority deadline exhausted task={slot.TaskKey} " +
+            $"attempt={slot.AttemptId} stop-before={stopBefore:o}; " +
+            "reaping the contained process generation before any replacement");
+        await WorktreeProcessReaper.ReapAsync(
+            slot.WorktreePath,
+            _log,
+            CancellationToken.None);
+        state.Save(slot with
+        {
+            Phase = "authority-deadline-exhausted",
+        });
+        _log(
+            $"persisted authority generation death proven task={slot.TaskKey} " +
+            $"attempt={slot.AttemptId}; durable state retained for honest release reconciliation");
     }
 
     private async Task<PersistedRunnerSlot> RecoverLaunchingIdentityAsync(
