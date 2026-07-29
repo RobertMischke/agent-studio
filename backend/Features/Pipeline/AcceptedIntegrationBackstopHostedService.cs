@@ -85,7 +85,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 }
                 else if (result.Outcome == MergeIntoIntegrationOutcome.Error)
                 {
-                    _logger.LogWarning(
+                    _logger.LogError(
                         "accepted-integration-backstop integration failed project={Project} job={JobId} error={Error}",
                         job.ProjectName,
                         job.Id,

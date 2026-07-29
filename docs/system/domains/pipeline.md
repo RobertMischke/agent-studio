@@ -88,9 +88,12 @@ pipeline view.
   divergent one fails visibly. This same fenced preparation applies when the
   recorded target is `main`; the full-suite gate runs on the immutable fetched
   SHA and the subsequent push targets the recorded branch, never the caller's
-  fallback setting. The outcome is recorded so the pending step flips to
-  passed / failed / skipped in place. After a successful merge it also pushes
-  the integration branch itself to `origin`
+  fallback setting. An existing but invalid review subject fails visibly and
+  never falls back to a guessed local task branch. The outcome is recorded so
+  the pending step flips to passed / failed / skipped in place. Integration
+  exceptions, returned error outcomes, and result-recording failures are logged
+  at error level. After a successful merge it also pushes the integration
+  branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as

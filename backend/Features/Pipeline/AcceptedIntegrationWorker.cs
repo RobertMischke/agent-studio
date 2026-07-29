@@ -80,15 +80,28 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             }
 
             sw.Stop();
-            _logger.LogInformation(
-                "Accepted-integration worker completed {JobId} with {Outcome} in {ElapsedMs}ms",
-                request.JobId, result.Outcome, sw.ElapsedMilliseconds);
+            if (result.Outcome == MergeIntoIntegrationOutcome.Error)
+            {
+                _logger.LogError(
+                    "Accepted-integration worker completed {JobId} with an integration error in {ElapsedMs}ms: {Error}",
+                    request.JobId,
+                    sw.ElapsedMilliseconds,
+                    result.Error ?? "unknown error");
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Accepted-integration worker completed {JobId} with {Outcome} in {ElapsedMs}ms",
+                    request.JobId,
+                    result.Outcome,
+                    sw.ElapsedMilliseconds);
+            }
             return result;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogWarning(
+            _logger.LogError(
                 ex,
                 "Accepted-integration worker failed for {JobId} after {ElapsedMs}ms; the backstop will retry",
                 request.JobId, sw.ElapsedMilliseconds);

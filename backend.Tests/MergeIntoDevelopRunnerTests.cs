@@ -351,6 +351,44 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Run_InvalidReviewSubject_FailsVisiblyWithoutGuessingLocalTaskBranch()
+    {
+        var repo = SeedRepo("runner-invalid-subject");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/21-invalid");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "must not be guessed");
+        Commit(repo, "feat: local branch with ambiguous authority");
+        var taskSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "21-invalid");
+        var subjectPath = ReviewSubjectStore.PathFor(jobFolder);
+        Directory.CreateDirectory(Path.GetDirectoryName(subjectPath)!);
+        File.WriteAllText(subjectPath, "{ invalid review subject");
+        var logger = new LevelCapturingLogger<MergeIntoDevelopRunner>();
+        var runner = new MergeIntoDevelopRunner(git, log, logger);
+
+        var outcome = runner.Run(
+            "Fixture",
+            "21-invalid",
+            jobFolder,
+            repo,
+            "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("refusing to guess a local task branch", outcome.Error);
+        Assert.False(git.IsAncestor(repo, taskSha, "develop"));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Error
+                && entry.Message.Contains("post-step failed", StringComparison.Ordinal));
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Equal("error", step.Verdict);
+    }
+
+    [Fact]
     public void Run_Conflict_RecordsStepFailed_WithConflictedFilesVisible()
     {
         var repo = SeedRepo("runner-conflict");
@@ -998,6 +1036,24 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
                 TestedSha = request.ExpectedSha,
             });
         }
+    }
+
+    private sealed class LevelCapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+            => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 
     private string SeedRepo(string name)
