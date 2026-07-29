@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "board-statusmodell-ist-soll",
+  "title": "Board-Statusmodell: IST-Karte und SOLL-Regeln",
+  "summary": "Entscheidungsreife Workbench zum Statusmodell des Boards. Sie kartiert alle aktiven, additiven und technischen Lane-Uebergaenge samt Ausloesern und Code-Referenzen, belegt die Integrations- und Pipeline-Widersprueche vom 28./29.07. am Fall AGT-2301 und formuliert konfigurierbare SOLL-Guards fuer Review, Accept, Archive und out-of-band-Integration.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-29T18:58:09Z",
+  "sourceTaskKeys": [
+    "AGT-2424"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2301",
+    "AGT-2417",
+    "AGT-2425",
+    "AGT-2202"
+  ],
+  "implementationTasks": []
+}

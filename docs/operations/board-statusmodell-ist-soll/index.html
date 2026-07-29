@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board-Statusmodell: IST / SOLL | Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #fbfbf9;
+    --surface: #f3f2ee;
+    --surface-strong: #e9e8e2;
+    --ink: #171716;
+    --muted: #615f59;
+    --quiet: #85827a;
+    --line: #d5d3ca;
+    --accent: #1769aa;
+    --accent-soft: #e9f2fb;
+    --runner: #6750a4;
+    --runner-soft: #f0ecfa;
+    --review: #0b7285;
+    --review-soft: #e7f5f7;
+    --runtime: #a45b12;
+    --runtime-soft: #fff1df;
+    --operator: #1769aa;
+    --operator-soft: #e9f2fb;
+    --sweep: #59636e;
+    --sweep-soft: #eceff2;
+    --ok: #247a42;
+    --ok-soft: #e8f5eb;
+    --warn: #9a6900;
+    --warn-soft: #fff4d7;
+    --bad: #b43a35;
+    --bad-soft: #faeaea;
+    --shadow: 0 1px 2px rgba(20, 20, 18, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #181817;
+      --surface: #232321;
+      --surface-strong: #2d2d2a;
+      --ink: #f6f5f1;
+      --muted: #c0beb5;
+      --quiet: #96938b;
+      --line: #3d3c37;
+      --accent: #75b9ec;
+      --accent-soft: #172b3c;
+      --runner: #b3a4e6;
+      --runner-soft: #2b263d;
+      --review: #65c8d5;
+      --review-soft: #173238;
+      --runtime: #e9a35f;
+      --runtime-soft: #3b291a;
+      --operator: #75b9ec;
+      --operator-soft: #172b3c;
+      --sweep: #aeb8c2;
+      --sweep-soft: #292e33;
+      --ok: #75c58b;
+      --ok-soft: #193323;
+      --warn: #e6b84e;
+      --warn-soft: #393019;
+      --bad: #ef8882;
+      --bad-soft: #3c2221;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15.5px/1.62 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  .shell { width: min(100%, 1440px); margin: 0 auto; padding: 0 32px 88px; }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    overflow-x: auto;
+    margin: 0 -32px;
+    padding: 10px 32px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+  }
+  .topbar a {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 650;
+    text-decoration: none;
+    padding: 5px 9px;
+    border-radius: 999px;
+  }
+  .topbar a:hover { color: var(--ink); background: var(--surface); }
+  header.page {
+    padding: 54px 0 30px;
+    border-bottom: 1px solid var(--line);
+  }
+  .kicker {
+    margin: 0 0 10px;
+    color: var(--quiet);
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  h1 { max-width: 1000px; margin: 0 0 13px; font-size: clamp(32px, 5vw, 52px); line-height: 1.08; letter-spacing: -.025em; }
+  .lede { max-width: 78ch; margin: 0; color: var(--muted); font-size: 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+  .badge, .actor, .state, .config {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 720;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+  .badge { background: var(--surface-strong); color: var(--muted); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .actor::before, .state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .actor.operator { background: var(--operator-soft); color: var(--operator); }
+  .actor.runner { background: var(--runner-soft); color: var(--runner); }
+  .actor.review { background: var(--review-soft); color: var(--review); }
+  .actor.runtime { background: var(--runtime-soft); color: var(--runtime); }
+  .actor.sweep { background: var(--sweep-soft); color: var(--sweep); }
+  .state.live { background: var(--ok-soft); color: var(--ok); }
+  .state.additive { background: var(--warn-soft); color: var(--warn); }
+  .state.retired { background: var(--sweep-soft); color: var(--sweep); }
+  .config.hard { background: var(--bad-soft); color: var(--bad); }
+  .config.project { background: var(--accent-soft); color: var(--accent); }
+  .config.global { background: var(--runtime-soft); color: var(--runtime); }
+  .config.action { background: var(--warn-soft); color: var(--warn); }
+  section { scroll-margin-top: 64px; }
+  h2 { margin: 62px 0 8px; font-size: 28px; line-height: 1.2; letter-spacing: -.012em; }
+  h3 { margin: 34px 0 8px; font-size: 19px; line-height: 1.3; }
+  h4 { margin: 0 0 7px; font-size: 15px; }
+  p { max-width: 88ch; margin: 9px 0; }
+  .muted { color: var(--muted); }
+  .small { color: var(--muted); font-size: 13px; }
+  .grid { display: grid; gap: 14px; margin: 20px 0; }
+  .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card, .callout {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .card > :last-child, .callout > :last-child { margin-bottom: 0; }
+  .callout.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .callout.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+  .callout.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+  .callout.info { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .metric { font-size: 29px; font-weight: 780; line-height: 1; margin: 5px 0 8px; }
+  .table-wrap {
+    overflow-x: auto;
+    margin: 18px 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-strong);
+    color: var(--quiet);
+    font-size: 11px;
+    font-weight: 760;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  td:first-child { white-space: nowrap; }
+  code, .code {
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: var(--surface-strong);
+    border-radius: 5px;
+    padding: 1px 5px;
+    overflow-wrap: anywhere;
+  }
+  .ref { display: block; margin-top: 4px; color: var(--quiet); font: 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+  ul, ol { padding-left: 22px; }
+  li { max-width: 92ch; margin: 6px 0; }
+  figure { margin: 22px 0; }
+  figure svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  figcaption { max-width: 92ch; margin-top: 9px; color: var(--muted); font-size: 13px; }
+  .flow-node { fill: var(--surface-strong); stroke: var(--line); }
+  .flow-node.review { fill: var(--review-soft); stroke: var(--review); }
+  .flow-node.done { fill: var(--ok-soft); stroke: var(--ok); }
+  .flow-node.warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .flow-label { fill: var(--ink); font: 700 12px system-ui, sans-serif; }
+  .flow-sub { fill: var(--muted); font: 10.5px system-ui, sans-serif; }
+  .flow-line { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+  .flow-recovery { fill: none; stroke: var(--warn); stroke-width: 1.4; stroke-dasharray: 5 4; }
+  .rule { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 16px; margin: 18px 0; padding: 19px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .rule-id { display: grid; place-items: center; align-self: start; width: 48px; height: 48px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 820; }
+  .rule h3 { margin: 0 0 8px; }
+  .rule .contract { margin: 12px 0; padding: 12px 14px; border-radius: 9px; background: var(--surface-strong); font-weight: 650; }
+  .decision {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 13px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .decision:last-child { border-bottom: 0; }
+  .decision-no { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-weight: 800; }
+  .decision h3 { margin: 0 0 4px; font-size: 16px; }
+  .verdict { margin-top: 8px; color: var(--muted); font-size: 13px; }
+  .verdict strong { color: var(--ink); }
+  .source-list { columns: 2; column-gap: 34px; }
+  .source-list li { break-inside: avoid; margin-bottom: 10px; }
+  .end-marker { margin-top: 24px; color: var(--quiet); font-size: 12px; }
+  @media (max-width: 980px) {
+    .grid.four, .grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .source-list { columns: 1; }
+  }
+  @media (max-width: 700px) {
+    .shell { padding-left: 18px; padding-right: 18px; }
+    .topbar { margin-left: -18px; margin-right: -18px; padding-left: 18px; padding-right: 18px; }
+    .grid.two, .grid.three, .grid.four { grid-template-columns: 1fr; }
+    .rule { grid-template-columns: 1fr; }
+    h2 { font-size: 24px; }
+  }
+  @media print {
+    .topbar { display: none; }
+    .shell { width: 100%; padding: 0; }
+    .card, .callout, .rule, .table-wrap, figure svg { box-shadow: none; break-inside: avoid; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="topbar" aria-label="Dokumentnavigation">
+    <a href="#kurzfassung">Kurzfassung</a>
+    <a href="#methode">Methode</a>
+    <a href="#ist-lanes">IST-Lanes</a>
+    <a href="#ist-uebergaenge">Übergänge</a>
+    <a href="#sonderpfade">Sonderpfade</a>
+    <a href="#praxis">Praxis 28./29.07.</a>
+    <a href="#konfiguration">Konfiguration</a>
+    <a href="#soll">SOLL</a>
+    <a href="#quellen">Quellen</a>
+    <a href="#entscheidungen">Entscheidungen</a>
+  </nav>
+
+  <header class="page">
+    <p class="kicker">Operations Workbench · AGT-2424 · Stand 29.07.2026</p>
+    <h1>Das Board kennt Lanes, aber noch keinen verbindlichen Lieferzustand</h1>
+    <p class="lede">IST-Karte der Statusübergänge von <code>0-backlog</code> bis <code>7-archive</code>, einschließlich <code>5e-escalated</code> und der additiven Zwischen-Lanes. Dazu ein aus AGT-2301 belegter SOLL-Vorschlag: Integration wird Gate vor Human Review, Accept und Archive werden fail-closed, und out-of-band-Merges heilen den Integrationsstatus aus Git-Wahrheit.</p>
+    <div class="meta">
+      <span class="badge warn">Robert-Entscheidung offen</span>
+      <span class="badge">IST: Code + API + Git</span>
+      <span class="badge">Praxis: 28./29.07.</span>
+      <span class="badge ok">Nur Dokumentation, keine Code-Änderung</span>
+    </div>
+  </header>
+
+  <section id="kurzfassung">
+    <h2>1. Kurzfassung</h2>
+    <div class="grid four">
+      <article class="card">
+        <div class="metric">12</div>
+        <h4>persistierte Lane-Werte</h4>
+        <p class="small">Acht reguläre Lanes, <code>5e</code> sowie die additiven Lanes <code>1a</code>, <code>3a</code> und <code>3b</code>. Zwei davon sind faktisch im Ruhestand, eine hat keinen aktiven Writer.</p>
+      </article>
+      <article class="card">
+        <div class="metric">Any → Any</div>
+        <h4>technische Erreichbarkeit</h4>
+        <p class="small">Die zentrale State Machine validiert nur, ob die Ziel-Lane bekannt ist. Eine fachliche Kantenmatrix existiert nicht.</p>
+      </article>
+      <article class="card">
+        <div class="metric">5 → 6</div>
+        <h4>Accept vor Integration</h4>
+        <p class="small">Der Lane-Wechsel landet zuerst. Merge, Gate und Push laufen danach im Hintergrund und können den bereits sichtbaren Abschluss nicht zurücknehmen.</p>
+      </article>
+      <article class="card">
+        <div class="metric">6 → 7</div>
+        <h4>ohne Archive-Guard</h4>
+        <p class="small">Ein Operator- oder Management-Sweep kann nicht integrierte Karten archivieren. Der Backstop sieht sie noch, aber Archive selbst beweist keine Lieferung.</p>
+      </article>
+    </div>
+    <div class="callout bad">
+      <h4>Kernbefund</h4>
+      <p><strong>Lane, Pipeline und Git können drei verschiedene Wahrheiten erzählen.</strong> AGT-2301 steht in <code>6-completed</code>, das UI nennt diese Lane „Delivered“, die Pipeline meldet 28 Schritte <code>pending</code> und einen fehlgeschlagenen Merge, während der tatsächlich gelieferte Commit <code>89becc2a</code> bereits über <code>ef9c3cfc3</code> in <code>origin/develop</code> enthalten ist. Das ist nicht nur eine Anzeigeabweichung: Derselbe lose Vertrag erlaubt auch den gefährlicheren Gegenfall „archiviert, aber nie integriert“.</p>
+    </div>
+    <div class="callout ok" data-concept-section="recommendation">
+      <h4>Empfehlung</h4>
+      <p>Für integrierbare Lieferungen wird <strong>Integration zum Eintritts-Gate von Human Review</strong>. Die Karte bleibt während Merge und Verifikation in <code>4-auto-review</code> mit einer klaren Integrationsphase. Nur <code>integrated</code> darf nach <code>5-human-review</code>. Konflikt oder nicht automatisch behebbarer Fehler geht nach <code>5e-escalated</code>. <code>5 → 6</code> bestätigt dann den bereits integrierten Stand; <code>6 → 7</code> prüft ihn erneut oder verlangt einen begründeten Override.</p>
+    </div>
+  </section>
+
+  <section id="methode" data-concept-section="evidence">
+    <h2>2. Scope, Methode und Belegqualität</h2>
+    <p>Die Karte trennt absichtlich drei Ebenen. So wird ein Kommentar im Code nicht mit tatsächlichem Laufzeitverhalten verwechselt.</p>
+    <div class="grid three">
+      <article class="card">
+        <h4>A. Persistenzvertrag</h4>
+        <p class="small"><code>TaskStates</code>, <code>TaskStateMachine</code> und die API-Endpunkte beantworten: Welche Zustände werden gespeichert und welche Ziele akzeptiert die Anwendung technisch?</p>
+      </article>
+      <article class="card">
+        <h4>B. Auslöser und Seiteneffekte</h4>
+        <p class="small">Runner, Auto-Review, Runtime, Operator und Sweeps beantworten: Wer nutzt welche Kante, mit welchen Gates, Retries, Backfills und Git-Nebenwirkungen?</p>
+      </article>
+      <article class="card">
+        <h4>C. Feldbeleg</h4>
+        <p class="small">Read-only API-Abfragen, AGT-2301-Timeline und Git-Ancestry vom 29.07. beantworten: Was ist wirklich passiert, unabhängig von der beabsichtigten Semantik?</p>
+      </article>
+    </div>
+    <div class="callout info">
+      <h4>Quellenschnitte</h4>
+      <p>Der aktive Worktree basiert auf <code>origin/main @ 3278e0c60</code>. Für das „heute“ der leichten AGT-2301-Pipeline wurde zusätzlich der bereits integrierte Entwicklungsstand <code>origin/develop @ 9a7244a9a</code> gelesen. Die Live-API auf Port 15031 lieferte den operativen Zustand von AGT-2301. Abweichungen zwischen diesen Schnitten sind unten ausdrücklich markiert, nicht zusammengemischt.</p>
+    </div>
+    <p class="small">Keine Board-Datei, Projekt-Metadatei oder Git-Ref wurde verändert. Die API-Nutzung war ausschließlich lesend. Zeitangaben sind UTC, sofern nicht anders angegeben.</p>
+  </section>
+
+  <section id="ist-lanes">
+    <h2>3. IST: Lane-Inventar</h2>
+    <p>Die numerische Reihenfolge ist nur eine Sortier- und Darstellungsordnung. Sie ist heute <strong>keine</strong> serverseitige Übergangsordnung.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Lane</th><th>Fachliche Rolle heute</th><th>Automatische Writer</th><th>Status des Vertrags</th><th>Code-Referenz</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0-backlog</code></td>
+            <td>Triage-Staging und Standardziel neuer Karten. Kein Auto-Pickup.</td>
+            <td>Task-Erzeugung ohne explizites Ziel; Epic-/Promotion-Flows können hier erzeugen.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Shared/Models/TaskStates.cs:350-417</span><span class="ref">backend/Features/Tasks/TaskMutationService.cs:608-643</span></td>
+          </tr>
+          <tr>
+            <td><code>1-preparation</code></td>
+            <td>Operator-Vorbereitung. Optionaler Orchestrator-Prep-Schritt arbeitet in-place und gibt nach Ready frei.</td>
+            <td>Orchestrator Prep; Concept-Promotion erzeugt Implementierungskarten hier.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Features/Supervisor/OrchestratorPrepHostedService.cs:5-35,146-225</span></td>
+          </tr>
+          <tr>
+            <td><code>1a-orchestrator-prep</code></td>
+            <td>Persistierter Altwert. Die sichtbare Lane ist abgeschafft; Prep ist jetzt Pipeline-Schritt in <code>1-preparation</code>.</td>
+            <td>Nur Einmal-Rettung beim Start: <code>1a → 1</code>.</td>
+            <td><span class="state retired">retired</span></td>
+            <td><span class="ref">OrchestratorPrepHostedService.cs:93-104,288-319</span></td>
+          </tr>
+          <tr>
+            <td><code>2-ready</code></td>
+            <td>Ausführbare Queue. Nur diese Lane wird regulär automatisch gepickt.</td>
+            <td>Operator, Prep, Reissue, Recovery, Audit-Reopen.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Features/Runner/ProjectRunner.cs:1045-1049</span><span class="ref">backend/Features/Tasks/LeaseEndpoints.cs:337-359</span></td>
+          </tr>
+          <tr>
+            <td><code>3-progress</code></td>
+            <td>Aktiver Coding-/Agent-Run oder manuell fortgesetzte frühere Karte.</td>
+            <td>Lokaler Runner, Remote Claim, manuelles Start/Continue aus Ready, Review, Escalated oder Completed.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Features/Runner/RunPlanner.cs:102-193</span><span class="ref">backend/Features/Runner/ProjectRunner.cs:2202-2245</span></td>
+          </tr>
+          <tr>
+            <td><code>3a-failed-pickup</code></td>
+            <td>Historische Dead-Letter-Lane. Live-Pfade sollen sie nicht mehr befüllen.</td>
+            <td>Boot-Drain: echte Karte nach Ready, Debris nach Archive. Operator-Restore bleibt vorhanden.</td>
+            <td><span class="state retired">drain-only</span></td>
+            <td><span class="ref">backend/Features/Runner/StaleProgressArchiver.cs:266-323</span><span class="ref">backend/Features/Tasks/TaskCrudEndpoints.cs:548-608</span></td>
+          </tr>
+          <tr>
+            <td><code>3b-code-not-complete</code></td>
+            <td>Als Park-Lane für ausgeschöpfte Coding-Retries beschrieben und im UI sichtbar, wenn befüllt.</td>
+            <td>Am 29.07. kein produktiver Writer auffindbar. Nur Modell, Scanner, UI und Operator-Aktionen referenzieren sie.</td>
+            <td><span class="state additive">Vertragsdrift</span></td>
+            <td><span class="ref">backend/Shared/Models/TaskStates.cs:390-401</span><span class="ref">Quellensuche TaskStates.CodeNotComplete: kein MoveJob/MoveAsync-Writer</span></td>
+          </tr>
+          <tr>
+            <td><code>4-auto-review</code></td>
+            <td>Post-Processing, deterministische Gates, Aspekt-Review und automatische Entscheidung.</td>
+            <td>Runner nach Done/NoOp oder Stale-Sentinel-Recovery.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Features/Runner/ReviewDecisionOrchestrator.cs:411-429,603-680</span></td>
+          </tr>
+          <tr>
+            <td><code>5e-escalated</code></td>
+            <td>Interventionsbecken: Maschine kann nicht sicher fortfahren oder ein Mensch muss entscheiden.</td>
+            <td>Runner, Remote Completion, Auto-Review, Boot-Backfill, Timeout- und Fehlerpfade.</td>
+            <td><span class="state live">aktiv</span></td>
+            <td><span class="ref">backend/Features/Runner/HumanReviewEscalation.cs:5-174</span></td>
+          </tr>
+          <tr>
+            <td><code>5-human-review</code></td>
+            <td>Menschliche Abnahme einer als fertig bewerteten Lieferung. Heute noch nicht gleichbedeutend mit „integriert“.</td>
+            <td>Auto-Review-Pass, Remote Review-Pass, External Completion mit Defaultziel.</td>
+            <td><span class="state additive">semantisch unscharf</span></td>
+            <td><span class="ref">ReviewDecisionOrchestrator.cs:2281-2332,6115-6146</span><span class="ref">ExternalCompletionService.cs:64-80</span></td>
+          </tr>
+          <tr>
+            <td><code>6-completed</code></td>
+            <td>Im UI „Delivered“. Operator-Accept ist heute der Trigger für den nachgelagerten Merge.</td>
+            <td>Operator, Concept-Promotion. Kein Integrationsnachweis als Eintrittsbedingung aus Human Review.</td>
+            <td><span class="state additive">Lane vor Git-Wahrheit</span></td>
+            <td><span class="ref">backend/Features/Tasks/TaskTransitionService.cs:273-335</span><span class="ref">frontend/.../lane-pager.service.ts:47</span></td>
+          </tr>
+          <tr>
+            <td><code>7-archive</code></td>
+            <td>Terminale Ablage und separate paginierte Ansicht. Backstops scannen Archive weiterhin.</td>
+            <td>Operator, Batch Move, Management Archive Sweep, Debris Sweep.</td>
+            <td><span class="state additive">ohne Integration-Guard</span></td>
+            <td><span class="ref">backend/Features/Management/ManagementService.cs:214-222</span><span class="ref">backend/Features/Tasks/TaskCrudEndpoints.cs:190-258</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="ist-uebergaenge">
+    <h2>4. IST: vollständige Übergangskarte</h2>
+    <p>Die Grafik zeigt den fachlichen Hauptstrom. Die Tabelle darunter ergänzt alle produktiven Recovery-, Backfill-, Reissue- und Operator-Kanten. Die technische Any-to-Any-Regel folgt separat.</p>
+    <figure>
+      <svg viewBox="0 0 1360 360" role="img" aria-label="Hauptstrom und Recovery-Schleifen des Board-Statusmodells">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/>
+          </marker>
+          <marker id="arrowWarn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--warn)"/>
+          </marker>
+        </defs>
+        <text x="28" y="30" class="flow-label">Fachlicher Hauptstrom</text>
+        <rect x="28" y="52" width="120" height="58" rx="9" class="flow-node"/>
+        <text x="42" y="76" class="flow-label">0 Backlog</text><text x="42" y="94" class="flow-sub">Triage</text>
+        <rect x="174" y="52" width="130" height="58" rx="9" class="flow-node"/>
+        <text x="188" y="76" class="flow-label">1 Preparation</text><text x="188" y="94" class="flow-sub">optional Prep</text>
+        <rect x="330" y="52" width="115" height="58" rx="9" class="flow-node"/>
+        <text x="344" y="76" class="flow-label">2 Ready</text><text x="344" y="94" class="flow-sub">Pickup-Queue</text>
+        <rect x="471" y="52" width="125" height="58" rx="9" class="flow-node"/>
+        <text x="485" y="76" class="flow-label">3 Progress</text><text x="485" y="94" class="flow-sub">Agent aktiv</text>
+        <rect x="622" y="52" width="135" height="58" rx="9" class="flow-node review"/>
+        <text x="636" y="76" class="flow-label">4 Auto Review</text><text x="636" y="94" class="flow-sub">Gates + Review</text>
+        <rect x="783" y="52" width="145" height="58" rx="9" class="flow-node review"/>
+        <text x="797" y="76" class="flow-label">5 Human Review</text><text x="797" y="94" class="flow-sub">Operator-Accept</text>
+        <rect x="954" y="52" width="132" height="58" rx="9" class="flow-node done"/>
+        <text x="968" y="76" class="flow-label">6 Completed</text><text x="968" y="94" class="flow-sub">„Delivered“</text>
+        <rect x="1112" y="52" width="118" height="58" rx="9" class="flow-node"/>
+        <text x="1126" y="76" class="flow-label">7 Archive</text><text x="1126" y="94" class="flow-sub">terminal</text>
+        <path d="M148 81 H174 M304 81 H330 M445 81 H471 M596 81 H622 M757 81 H783 M928 81 H954 M1086 81 H1112" class="flow-line" marker-end="url(#arrow)"/>
+
+        <text x="28" y="164" class="flow-label">Recovery und Intervention</text>
+        <rect x="622" y="184" width="145" height="58" rx="9" class="flow-node warn"/>
+        <text x="636" y="208" class="flow-label">5e Escalated</text><text x="636" y="226" class="flow-sub">Mensch / Recovery</text>
+        <rect x="312" y="184" width="145" height="58" rx="9" class="flow-node warn"/>
+        <text x="326" y="208" class="flow-label">3a Failed Pickup</text><text x="326" y="226" class="flow-sub">retired, drain-only</text>
+        <rect x="471" y="184" width="135" height="58" rx="9" class="flow-node warn"/>
+        <text x="485" y="208" class="flow-label">3b Not Complete</text><text x="485" y="226" class="flow-sub">kein Live-Writer</text>
+
+        <path d="M689 110 V184" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <path d="M533 110 C533 145 670 145 670 184" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <path d="M622 213 C555 278 405 278 388 110" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <path d="M622 202 C540 145 415 142 388 110" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <path d="M855 110 C855 298 430 316 388 110" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <path d="M1020 110 C1012 328 440 345 388 110" class="flow-recovery" marker-end="url(#arrowWarn)"/>
+        <text x="808" y="330" class="flow-sub">Reissue, Operator-Requeue, Audit-Reopen oder manuelles Continue führen zurück nach Ready/Progress.</text>
+      </svg>
+      <figcaption><strong>Wichtig:</strong> Die Grafik ist eine semantische Karte, keine serverseitig erzwungene Kantenmatrix. Integration ist im IST außerdem keine Lane: Im parallelen Worktree-Pfad passiert sie vor Review; im sequentiellen beziehungsweise Remote-Accept-Pfad erst nach dem Eintritt in Completed.</figcaption>
+    </figure>
+
+    <h3>4.1 Übergangsregister nach Auslöser</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Von → nach</th><th>Auslöser</th><th>IST-Bedingung / Bedeutung</th><th>Code-Referenz</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>∅ → jede Lane</code></td>
+            <td><span class="actor operator">Operator / API</span></td>
+            <td>Default ist Backlog. Ein explizites bekanntes <code>targetState</code> ist jedoch autoritativ, einschließlich Review- und Terminal-Lanes.</td>
+            <td><span class="ref">TaskMutationService.cs:633-643</span></td>
+          </tr>
+          <tr>
+            <td><code>0 → 1</code>, <code>0 → 2</code></td>
+            <td><span class="actor operator">Operator</span></td>
+            <td>Triage beziehungsweise direktes Queueing. Keine automatische Backlog-Promotion.</td>
+            <td><span class="ref">TaskStates.cs:352-359</span><span class="ref">TaskCrudEndpoints.cs:482-514</span></td>
+          </tr>
+          <tr>
+            <td><code>1 → 2</code></td>
+            <td><span class="actor review">Orchestrator Prep</span> <span class="actor operator">Operator</span></td>
+            <td>Prep-Accept und selbst Prep-Bounce geben heute nach Ready frei; Iterate/Hold bleibt in Preparation.</td>
+            <td><span class="ref">OrchestratorPrepHostedService.cs:322-354</span></td>
+          </tr>
+          <tr>
+            <td><code>1a → 1</code></td>
+            <td><span class="actor sweep">Boot-Rettung</span></td>
+            <td>Einmal pro Prozess nach 20 Sekunden, unabhängig davon, ob Prep aktiv ist. Die Lane ist retired.</td>
+            <td><span class="ref">OrchestratorPrepHostedService.cs:93-104,288-319</span></td>
+          </tr>
+          <tr>
+            <td><code>2 → 3</code></td>
+            <td><span class="actor runner">Runner</span></td>
+            <td>Lokaler Pickup oder Remote Lease Claim. Der Remote-Pfad schreibt Attempt-/Fencing-Authority mit.</td>
+            <td><span class="ref">ProjectRunner.cs:2221-2245</span><span class="ref">LeaseEndpoints.cs:513-549</span></td>
+          </tr>
+          <tr>
+            <td><code>3 → 2</code></td>
+            <td><span class="actor runner">Runner</span> <span class="actor runtime">Runtime</span> <span class="actor sweep">Sweep</span></td>
+            <td>EnvironmentFailure unter Retry-Budget, Lease-Recovery, Spawn-Failure, Liveness-/Crash-Recovery, stale Run ohne Completion-Sentinel.</td>
+            <td><span class="ref">LeaseEndpoints.cs:275-332,698-705</span><span class="ref">StaleProgressArchiver.cs:200-243,621-656</span><span class="ref">ProjectRunner.cs:8432-8502</span></td>
+          </tr>
+          <tr>
+            <td><code>3 → 4</code></td>
+            <td><span class="actor runner">Runner</span> <span class="actor sweep">Sweep</span></td>
+            <td>Done/NoOp mit gültigem Abschluss; Remote Coding verlangt fenced Result SHA. Stale Progress mit Completion-Sentinel wird nachgezogen.</td>
+            <td><span class="ref">LeaseEndpoints.cs:698-724,1141-1144</span><span class="ref">ProjectRunner.cs:5894-5900</span><span class="ref">StaleProgressArchiver.cs:211-239</span></td>
+          </tr>
+          <tr>
+            <td><code>3 → 5</code></td>
+            <td><span class="actor operator">External Completion</span></td>
+            <td>Sonder-Bypass: Defaultziel des External-Completion-Vertrags ist Human Review. Er schreibt Result-Artefakte, aber umgeht Auto Review und Integration.</td>
+            <td><span class="ref">ExternalCompletionService.cs:64-80,91-173</span></td>
+          </tr>
+          <tr>
+            <td><code>3 → 5e</code></td>
+            <td><span class="actor runner">Runner</span> <span class="actor runtime">Runtime</span></td>
+            <td>Blocked, NeedsInput, Unknown, ausgeschöpftes Environment-Budget, Pickup-Zombie, Worktree-Blocker oder weitere typisierte Eskalation.</td>
+            <td><span class="ref">LeaseEndpoints.cs:698-705,1192-1226</span><span class="ref">HumanReviewEscalation.cs:11-174</span></td>
+          </tr>
+          <tr>
+            <td><code>3 → 7</code></td>
+            <td><span class="actor sweep">Stale Sweep</span></td>
+            <td>Nur Debris ohne <code>task.json</code>. Eine echte unterbrochene Karte geht nach Ready, nicht ins Archive.</td>
+            <td><span class="ref">StaleProgressArchiver.cs:200-243</span></td>
+          </tr>
+          <tr>
+            <td><code>3a → 2</code>, <code>3a → 7</code></td>
+            <td><span class="actor sweep">Boot-Drain</span></td>
+            <td>Echte Altkarte wird requeued; Ordner ohne <code>task.json</code> wird als Debris archiviert. Operator-Restore bietet zusätzlich <code>3a → 2</code>.</td>
+            <td><span class="ref">StaleProgressArchiver.cs:266-374</span><span class="ref">TaskCrudEndpoints.cs:548-608</span></td>
+          </tr>
+          <tr>
+            <td><code>3b → *</code></td>
+            <td><span class="actor operator">Operator</span></td>
+            <td>Kein automatischer Eintritt und kein automatischer Austritt auffindbar. UI bietet Ready, Preparation, Backlog, Completed, Archive und Delete.</td>
+            <td><span class="ref">docs/concepts/task-detail-header-state-actions/README.md:232-237</span></td>
+          </tr>
+          <tr>
+            <td><code>4 → 2</code></td>
+            <td><span class="actor review">Auto-Review</span> <span class="actor sweep">Backfill</span></td>
+            <td>Reissue, Blocking Aspect, Gate-Failure, Unworked/NoOp-Recovery oder ein aufgezeichneter Reissue-Verdict ohne gelandeten Lane-Move. Ready erhält Order 0 und Reissue-Tag.</td>
+            <td><span class="ref">ReviewDecisionOrchestrator.cs:1812-1861,6623-6694</span></td>
+          </tr>
+          <tr>
+            <td><code>4 → 5</code></td>
+            <td><span class="actor review">Auto-Review / Remote Review</span></td>
+            <td>Accept-as-done beziehungsweise Review-Pass. Kein allgemeiner Integrations-Guard. Der Remote-Review-Pass von AGT-2301 nutzte diese Kante.</td>
+            <td><span class="ref">ReviewDecisionOrchestrator.cs:2281-2332,6115-6146</span><span class="ref">LeaseEndpoints.cs:1128-1188</span></td>
+          </tr>
+          <tr>
+            <td><code>4 → 5e</code></td>
+            <td><span class="actor review">Auto-Review</span></td>
+            <td>Agent blockiert, Review-Subject nicht materialisierbar, Retry-/Qualitätsbudget erschöpft, Infra- oder Gate-Fehler.</td>
+            <td><span class="ref">ReviewDecisionOrchestrator.cs:1270-1277,2454,2808,2873,2975,3614</span></td>
+          </tr>
+          <tr>
+            <td><code>5 → 6</code></td>
+            <td><span class="actor operator">Operator Accept</span></td>
+            <td>Kein Integrations-Guard. Lane landet zuerst; danach <code>integrationpending</code>, Queue, Merge/Gate und Push. Read-only/Concept hat Sondersemantik.</td>
+            <td><span class="ref">TaskTransitionService.cs:252-335</span><span class="ref">TaskCrudEndpoints.cs:482-514</span></td>
+          </tr>
+          <tr>
+            <td><code>5 → 2/1/0/3/5e/7</code></td>
+            <td><span class="actor operator">Operator</span> <span class="actor runner">Manual Continue</span></td>
+            <td>Generische Move-API erlaubt jedes Ziel. Verlassen der Decision-Lane in eine nicht-terminale Lane eröffnet eine neue Review-Epoch; manuelles Start/Continue führt nach Progress.</td>
+            <td><span class="ref">OperatorReviewRequeueService.cs:42-67</span><span class="ref">RunPlanner.cs:141-193</span></td>
+          </tr>
+          <tr>
+            <td><code>5 → 5e</code></td>
+            <td><span class="actor sweep">Boot-Backfill</span></td>
+            <td>Ältere Human-Review-Karte mit Run-Provenienz, ohne Verdict und ohne jüngeren Operator-Move wird retroaktiv <code>unknown-legacy</code> eskaliert.</td>
+            <td><span class="ref">ReviewDecisionOrchestrator.cs:977-1055</span></td>
+          </tr>
+          <tr>
+            <td><code>5e → 2</code></td>
+            <td><span class="actor operator">Operator Requeue</span></td>
+            <td>Normaler Recovery-Pfad mit Begründung, neuer Review-Epoch und Rotation aktiver Verdict-Artefakte.</td>
+            <td><span class="ref">OperatorReviewRequeueService.cs:42-150</span></td>
+          </tr>
+          <tr>
+            <td><code>5e → 6</code></td>
+            <td><span class="actor operator">Operator Accept</span></td>
+            <td>Einzige heute explizit integrationsgeschützte Accept-Kante: Coding darf nur abgeschlossen werden, wenn der letzte Task-Commit integriert ist. Read-only/no-code ist ausgenommen.</td>
+            <td><span class="ref">TaskTransitionService.cs:147-155</span></td>
+          </tr>
+          <tr>
+            <td><code>4/5/5e/6 → 3</code></td>
+            <td><span class="actor runner">Manual Start / Continue</span></td>
+            <td>Ein neuer oder fortgesetzter Agent-Run macht eine frühere Review-, Eskalations- oder Completed-Karte wieder aktiv.</td>
+            <td><span class="ref">RunPlanner.cs:141-193</span><span class="ref">ProjectRunner.cs:2221-2245</span></td>
+          </tr>
+          <tr>
+            <td><code>6 → 7</code></td>
+            <td><span class="actor operator">Operator</span> <span class="actor sweep">Management Sweep</span></td>
+            <td>Einzel-/Batch-Move oder <code>archive-sweep</code>. Keine Abfrage von <code>integration.status</code>, kein Override-Grund.</td>
+            <td><span class="ref">TaskCrudEndpoints.cs:482-545</span><span class="ref">ManagementService.cs:214-222</span></td>
+          </tr>
+          <tr>
+            <td><code>6/7 → 2</code></td>
+            <td><span class="actor sweep">Completed Audit</span> <span class="actor operator">Re-evaluate</span></td>
+            <td><code>NotReallyDone</code> reöffnet nach Ready. Der Audit kann Archive einschließen, führt aber keine Archive-Zulassungsprüfung aus.</td>
+            <td><span class="ref">CompletedLaneAuditService.cs:142-189,231-307</span></td>
+          </tr>
+          <tr>
+            <td><code>* → *</code></td>
+            <td><span class="actor operator">Operator / External API</span></td>
+            <td>Technische Escape-Hatch: Ziel muss lediglich in <code>TaskStates.All</code> vorkommen. Source-State kann optional gegen Rennen gefenced werden, nicht gegen fachlich verbotene Kanten.</td>
+            <td><span class="ref">TaskStateMachine.cs:92-131</span><span class="ref">ExternalCompletionService.cs:74-80</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <h4>Die vollständige technische Karte ist ein gerichteter vollständiger Graph</h4>
+      <p><code>TaskStateMachine.MoveJob</code> prüft <code>TaskStates.All.Contains(targetState)</code>, sperrt den Projektpfad, prüft optional den erwarteten Quellzustand und persistiert dann das Ziel. Es gibt keine zentrale Liste „von X sind nur Y/Z erlaubt“. Einzelne Aufrufer haben lokale Guards, etwa <code>5e → 6</code>. Ein anderer Aufrufer oder der generische Move-Endpunkt kann diese fachliche Absicht jedoch umgehen. Das erklärt, warum die Praxis mehr Kanten zeigt als das Sollbild der Lane-Namen vermuten lässt.</p>
+    </div>
+  </section>
+
+  <section id="sonderpfade">
+    <h2>5. Sonderpfade</h2>
+
+    <h3>5.1 Reissue ist keine einzelne Attempt-Zahl</h3>
+    <div class="grid two">
+      <article class="card">
+        <h4>Auto-Review-Reissue</h4>
+        <p>Der <code>ReviewDecisionOrchestrator</code> zählt Reissue-Records im Projektjournal. NEEDS_INPUT und NOOP teilen sich das Budget. Default: zwei automatische Reissues, global über <code>ReviewDecisionOrchestrator:MaxAutoReissueAttempts</code> überschreibbar.</p>
+        <p class="small"><code>4 → 2</code>, Order 0, Tag <code>reissue:autoreview</code>, Follow-up-Artefakt.</p>
+        <span class="ref">ReviewDecisionOrchestrator.cs:81-88,431-440,6623-6694</span>
+      </article>
+      <article class="card">
+        <h4>Operator-Requeue</h4>
+        <p>Ein menschlicher Move aus <code>5</code> oder <code>5e</code> in eine nicht-terminale Lane erhöht <code>.metadata/review-attempt.json</code>, rotiert Verdict-Artefakte nach <code>results/history/</code> und schreibt ein <code>operator_requeued</code>-Event.</p>
+        <p class="small">Das ist eine Review-Epoch, nicht dieselbe Zählung wie Run Attempt, Lease Attempt oder Pipeline Attempt.</p>
+        <span class="ref">OperatorReviewRequeueService.cs:42-150</span>
+      </article>
+    </div>
+    <p>Daneben existieren weitere Zählungen: Remote Lease Attempt/Fence, lokaler Session-/Run-Index, Pipeline <code>attempt</code> mit maximal zehn archivierten Pipeline-Versuchen, EnvironmentFailure-Zähler, Gate-Retry und UI-Iteration. Der Begriff „Attempt“ ist daher heute nur zusammen mit seinem Namespace eindeutig.</p>
+
+    <h3>5.2 Vollständige Eskalations-Taxonomie</h3>
+    <p>Jeder systemseitige Eintritt nach <code>5e</code> soll durch den zentralen <code>HumanReviewEscalation</code>-Funnel laufen. Er schreibt Kategorie, Grund, Verdict-Journal und nötigenfalls einen minimalen Status. Die am 29.07. definierten Kategorien:</p>
+    <div class="grid four">
+      <article class="card">
+        <h4>Agent und Entscheidung</h4>
+        <p class="small"><code>agent-blocked</code>, <code>agent-needs-input</code>, <code>needs-human-input</code>, <code>human-decision-needed</code>, <code>steer-unanswered</code>, <code>completion-gate-unresolved</code>, <code>no-completion-signal</code>, <code>remote-outcome-unknown</code>, <code>orchestrator-inconclusive</code>.</p>
+      </article>
+      <article class="card">
+        <h4>Host, CLI und Umgebung</h4>
+        <p class="small"><code>remote-claim-environment</code>, <code>remote-repository-unavailable</code>, <code>remote-environment-preparation</code>, <code>watchdog-kill</code>, <code>permission-blocked</code>, <code>environment-blocker</code>, <code>environmental</code>, <code>cli-launch-failed</code>, <code>auth-refresh-failed</code>, <code>quota-exhausted</code>, <code>context-overflow</code>, <code>model-invalid</code>, <code>infra-crash</code>.</p>
+      </article>
+      <article class="card">
+        <h4>Pickup, Loop und Integrität</h4>
+        <p class="small"><code>auto-failure-park</code>, <code>pickup-zombie</code>, <code>worktree-blocked</code>, <code>empty-fast-exit</code>, <code>quarantined</code>, <code>agent-git-violation</code>, <code>ui-iteration-cap</code>, <code>inconclusive-with-results</code>.</p>
+      </article>
+      <article class="card">
+        <h4>Review, Ingest und Migration</h4>
+        <p class="small"><code>auto-review-escalation</code>, <code>external-completion-blocked</code>, <code>review-subject-unmaterialisierbar</code>, <code>unknown-legacy</code>.</p>
+      </article>
+    </div>
+    <p class="small">Quelle: <code>backend/Features/Runner/HumanReviewEscalation.cs:11-149</code>. Kategorie und Lane sind orthogonal: <code>5e</code> sagt „Intervention“, die Kategorie sagt „warum“.</p>
+
+    <h3>5.3 Boot-Backfill und Sweeps</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mechanismus</th><th>Wann</th><th>Lane-Wirkung</th><th>Grenze / Risiko</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>State-Index-Boot</strong></td>
+            <td>Backend-Start</td>
+            <td>Keine Lane-Migration; nur Jobs-/Index-Verzeichnisse und Rebuild des abgeleiteten State-Index.</td>
+            <td>Bewusst kein auto-migrierender Eingriff in den Shared Workspace.</td>
+          </tr>
+          <tr>
+            <td><strong>Prep-Stray-Rettung</strong></td>
+            <td>20 Sekunden nach Start</td>
+            <td><code>1a → 1</code>.</td>
+            <td>Retired-Lane-Drain, einmal pro Prozess.</td>
+          </tr>
+          <tr>
+            <td><strong>Verdictless Human Review</strong></td>
+            <td>Jeder Start, unabhängig vom Orchestrator-Kill-Switch</td>
+            <td><code>5 → 5e</code> als <code>unknown-legacy</code>.</td>
+            <td>Der 28.07.-Sichtungszettel belegt frühere False Escalations. Heute schützen Mindestalter, Run-Provenienz und jüngster Operator-Move.</td>
+          </tr>
+          <tr>
+            <td><strong>Stale-with-verdict</strong></td>
+            <td>Boot-Tick und wiederkehrender Review-Tick</td>
+            <td>Aufgezeichneter Reissue <code>4 → 2</code>, Accept <code>4 → 5</code>, Escalate <code>4 → 5e</code>.</td>
+            <td>Repariert einen fehlgeschlagenen Lane-Move nach bereits geschriebenem Verdict.</td>
+          </tr>
+          <tr>
+            <td><strong>Remote Delivery Backfill</strong></td>
+            <td>Einmalige 28.07.-Reparatur</td>
+            <td>Keine Lane-Änderung. Repariert <code>commits[]</code>, Integrationsbranch und Review Subject für AGT-2242, 2386, 2387, 2389, 2305.</td>
+            <td>Explizite Schlüsselliste, AGT-2301 war nicht enthalten.</td>
+          </tr>
+          <tr>
+            <td><strong>Stale Progress</strong></td>
+            <td>Boot/Uptime nach Resume-Fenster</td>
+            <td>Echte Karte mit Sentinel <code>3 → 4</code>; echte Karte ohne Sentinel <code>3 → 2</code>; Debris <code>3 → 7</code>.</td>
+            <td>Aktive Job-ID und Steer-Pending werden geschützt.</td>
+          </tr>
+          <tr>
+            <td><strong>Failed-Pickup-Drain</strong></td>
+            <td>Einmal pro Boot</td>
+            <td>Echte Karte <code>3a → 2</code>; Debris <code>3a → 7</code>.</td>
+            <td>Lane wird nicht mehr live befüllt.</td>
+          </tr>
+          <tr>
+            <td><strong>Completed Audit</strong></td>
+            <td>Operator / asynchroner Projektlauf</td>
+            <td><code>6/7 → 2</code> bei <code>NotReallyDone</code>.</td>
+            <td>Reaktiv, nicht als Eintritts- oder Archive-Guard.</td>
+          </tr>
+          <tr>
+            <td><strong>Archive Sweep</strong></td>
+            <td>Management Command</td>
+            <td>Alle aktuell Completed-Karten <code>6 → 7</code>.</td>
+            <td>Keine Integration-Prüfung.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>5.4 Orphan-Detektor ist zweigeteilt</h3>
+    <p><strong>Der Lane-Orphan-Detektor</strong> ist <code>StaleProgressArchiver</code> und verändert Karten wie oben beschrieben. <strong>Der Prozess-Orphan-Reaper</strong> räumt dagegen alle fünf Minuten verwaiste CLI-Prozessbäume auf und verändert keine Lane. Die ähnliche Benennung verdeckt zwei verschiedene Verantwortlichkeiten.</p>
+    <p class="small"><code>StaleProgressArchiver.cs:77-323</code>; <code>OrphanReaperHostedService.cs:4-80</code>, konfigurierbar über <code>Runner:OrphanReaperEnabled</code> und <code>Runner:OrphanReaperIntervalMinutes</code>.</p>
+
+    <h3>5.5 Integration nach develop oder main</h3>
+    <div class="grid three">
+      <article class="card">
+        <h4>Paralleler Worktree-Pfad</h4>
+        <p class="small">Am Run-Ende: Commit auf <code>task/&lt;id&gt;</code>, Push, serialisierte Integration in den Projekt-Integrationsbranch. Das passiert vor Review. Konflikte können in einen Resolver-Pfad gehen.</p>
+      </article>
+      <article class="card">
+        <h4>Deferred Accept-Pfad</h4>
+        <p class="small">Nach <code>5 → 6</code>: <code>AcceptedIntegrationWorker</code> merged lokale Task-Branch oder fenced Remote Delivery. <code>direct-merge</code> merged; <code>pull-request</code> bleibt als <code>pushed-for-review</code> außerhalb des Zielbranches.</p>
+      </article>
+      <article class="card">
+        <h4>main als Release-Ziel</h4>
+        <p class="small">Ist der Zielbranch <code>main</code>, verlangt der Runner einen vollständigen Pre-Main-Testlauf, exakte Source-/Target-SHAs und Fast-Forward. Ohne Gate wird fail-closed abgebrochen.</p>
+      </article>
+    </div>
+    <p>Der Merge-Ausgang wird auf den Pipeline-Step projiziert: <code>Merged</code>/<code>AlreadyMerged</code> werden Passed, <code>NoTaskBranch</code> wird Skipped, PR-Handoff wird Skipped, Conflict/GateFailed/Error werden Failed. Diese Step-Klassifikation ändert die bereits gelandete Lane nicht.</p>
+    <p class="small"><code>MergeIntoDevelopRunner.cs:5-25,96-136,174-249,424-518,830-884</code></p>
+
+    <h3>5.6 Accepted-Integration-Backstop</h3>
+    <p>Der Backstop scannt alle nicht-read-only Karten in Completed und Archive, wenn <code>integrationpending</code> gesetzt ist oder der letzte Merge-Step nicht Passed ist. Defaultintervall: 15 Minuten. Erfolgreiche Integration entfernt das Pending-Tag.</p>
+    <ul>
+      <li>Ein bereits Passed Merge wird nicht erneut ausgeführt.</li>
+      <li>Eine aus Git als integriert erkannte kuratierte/manuelle Integration wird akzeptiert und das Tag geheilt.</li>
+      <li>Ein exakter fenced Result SHA, der schon enthalten ist, wird idempotent erneut verarbeitet, um verlorene Step-/Push-Fakten zu reparieren.</li>
+      <li>Conflict, PR-Handoff, GateFailed und lokales NoTaskBranch ohne Remote Review Subject werden nicht wiederholt.</li>
+      <li>Ein generisches Error ist nicht in dieser Stoppliste und kann wiederholt anlaufen, behebt aber einen falschen Review-Subject-SHA nicht selbst.</li>
+    </ul>
+    <p class="small"><code>AcceptedIntegrationBackstopHostedService.cs:42-122,146-177</code></p>
+  </section>
+
+  <section id="praxis">
+    <h2>6. Praxisbefunde vom 28./29.07.</h2>
+
+    <h3>6.1 AGT-2301: dieselbe Karte, drei Wahrheiten</h3>
+    <div class="grid three">
+      <article class="card">
+        <span class="badge ok">Board</span>
+        <div class="metric">6-completed</div>
+        <p class="small">Seit 28.07. 21:08:46 UTC. <code>orchestratorVerdict=accept</code>. UI-Name der Lane: „Delivered“. Tag: <code>integrationpending</code>.</p>
+      </article>
+      <article class="card">
+        <span class="badge bad">Pipeline</span>
+        <div class="metric">28 pending</div>
+        <p class="small">Attempt 1, kein <code>completedAt</code>, 28 Pending, 1 Planned, Merge-Step Failed/Error. Gleichzeitig existiert <code>resultFiles["core-agent-run"]="status.md"</code>.</p>
+      </article>
+      <article class="card">
+        <span class="badge ok">Git</span>
+        <div class="metric">89becc2a</div>
+        <p class="small">Der Delivery-Commit ist Ancestor von <code>origin/develop</code>. Integrationscommit: <code>ef9c3cfc3 integrate: AGT-2301</code>.</p>
+      </article>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Zeit UTC</th><th>Beobachtung</th><th>Bedeutung</th></tr></thead>
+        <tbody>
+          <tr><td>28.07. 09:45:33</td><td><code>0 → 2</code> durch Operator.</td><td>Neuer Zustellversuch.</td></tr>
+          <tr><td>09:45:36 bis 09:45:56</td><td>Drei Remote Claims. Zwei Mal <code>3 → 2</code> als Environment Retry, beim dritten Mal <code>3 → 5e</code>, Kategorie <code>remote-claim-environment</code>.</td><td>Environment-Budget ist ein eigener Attempt-Zähler.</td></tr>
+          <tr><td>09:47:41</td><td>Operator <code>5e → 2</code> mit Grund; <code>operator_requeued</code>, <code>attemptEpoch=2</code>.</td><td>Review-Epoch 2, obwohl danach erst ein weiterer Remote Run folgt.</td></tr>
+          <tr><td>10:27:02</td><td>Remote Done, Result-Commit <code>89becc2a</code>, <code>3 → 4</code>.</td><td>Immutable Lieferung vorhanden.</td></tr>
+          <tr><td>10:48:11</td><td>Remote Review Pass, <code>4 → 5</code>.</td><td>Human Review ohne zuvor nachgewiesene Integration.</td></tr>
+          <tr><td>21:08:46</td><td>Operator Accept, <code>5 → 6</code>.</td><td>Completed/Delivered landet vor Merge.</td></tr>
+          <tr><td>21:08:49</td><td><code>integration_pending_warning</code>.</td><td>Warnung nach bereits erfolgreichem Lane-Wechsel.</td></tr>
+          <tr><td>29.07. 18:39:53</td><td>Backstop-Merge Failed/Error: Review erwartet <code>af979701</code>, Origin-Delivery-Ref zeigt <code>89becc2a</code>.</td><td>Gespeicherte Merge-Erinnerung und Review Subject sind stale.</td></tr>
+          <tr><td>29.07. Feldprüfung</td><td><code>git merge-base --is-ancestor 89becc2a origin/develop</code> ist erfolgreich.</td><td>Out-of-band-Integration ist real, wird vom Kartenstatus aber nicht erkannt.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.2 Befund: Review ohne Integration</h3>
+    <div class="callout bad">
+      <p><strong>Belegt.</strong> <code>4 → 5</code> prüft Integration nicht. External Completion kann sogar <code>3 → 5</code> direkt auslösen. Der Deferred Merge wird erst durch <code>5 → 6</code> gestartet. <code>NoTaskBranch</code> wird lediglich zu einem Skipped Step; <code>Error</code> wird Failed. Weder Ausgang bringt die Karte automatisch aus Review/Completed zurück oder blockiert das vorherige Accept.</p>
+    </div>
+    <p>Die Karte „lügt“ dabei nicht in jedem Teil der Oberfläche: Der Integrationsbadge kann Pending/Conflict anzeigen. Der starke Lane-Name „Delivered“ und die Möglichkeit, weiter zu archivieren, überstimmen diese Warnung jedoch semantisch. Die dominante Statusaussage ist falsch oder mindestens unvollständig.</p>
+
+    <h3>6.3 Befund: Accept ohne integrierten Stand</h3>
+    <p><strong>Belegt durch Code und AGT-2301.</strong> Nur <code>5e → 6</code> hat einen speziellen Coding-Integration-Guard. Die normale Abnahmekante <code>5 → 6</code> hat keinen. Der Codekommentar hält sogar ausdrücklich fest: Completed landet zuerst; Sichtbarkeit ist Warnung, keine Bremse.</p>
+    <p class="small"><code>TaskTransitionService.cs:147-155</code> gegenüber <code>292-335</code>.</p>
+
+    <h3>6.4 Befund: Archive prüft Integration nicht</h3>
+    <p><strong>Belegt.</strong> Einzel-Move, Batch-Move und Management <code>archive-sweep</code> fragen <code>integration.status</code> nicht ab. Der Backstop scannt Archive zwar weiterhin, aber damit wird ein falsch archivierter Lieferzustand nur nachträglich reparierbar, nicht verhindert. Ein entschiedener Conflict, PR-Handoff, GateFailed oder lokales NoTaskBranch kann dauerhaft im Archive verbleiben.</p>
+    <div class="callout warn">
+      <h4>Lieferverlust-Risiko</h4>
+      <p>Archive löscht die Branch nicht direkt. Der Verlust entsteht durch <strong>falsche Endgültigkeit</strong>: Die Karte verschwindet aus dem aktiven Board, kann später in Cleanup-, Rebase- oder Retention-Prozesse geraten, und Operatoren gehen von Lieferung aus. Das Risiko ist besonders hoch, wenn der einzige echte Commit nicht in <code>commits[]</code> attribuiert und nur auf einem Runner-Ref vorhanden ist.</p>
+    </div>
+
+    <h3>6.5 Befund: Pipeline zeigt PENDING trotz Result</h3>
+    <p><strong>Belegt an AGT-2301.</strong> Der Pipeline-Endpunkt leitet Result-Dateien unabhängig von der Execution-Tabelle aus vorhandenen Dateien ab. Fehlt eine Pipeline-Execution, erzeugt <code>MergeIntoDevelopRunner.Record</code> beim späteren Accept eine frische <strong>Standard</strong>-Baseline mit allen Schritten Pending und schreibt nur den Merge-Step. Ohne <code>Complete()</code> bleiben die übrigen Zeilen Pending, obwohl <code>status.md</code> existiert und die Karte Completed ist.</p>
+    <p class="small"><code>TaskPipelineEndpoints.cs:41-67</code>; <code>MergeIntoDevelopRunner.cs:762-796</code>; <code>PipelineExecutionLog.cs:53-78,207-252,312-340</code>.</p>
+
+    <h3>6.6 Befund: Attempt und „re-opened“ sind nicht kohärent lesbar</h3>
+    <p><strong>Belegt an AGT-2301.</strong> Der Runs-Endpunkt listete elf Einträge, alle mit Status <code>unknown</code> und ohne Endzeit. Die Pipeline zeigte dennoch nur Attempt 1. Die Timeline führte getrennt Environment Attempts <code>1/3</code> bis <code>3/3</code> sowie Operator <code>attemptEpoch=1</code> und später <code>2</code>. Frühere Quality-Loop-Reopens und External-Completions kommen hinzu.</p>
+    <p>Jede Zählung hat intern einen Zweck, aber die Oberfläche bietet keine kanonische Klammer „Lieferungsversuch N“ mit darunterliegenden Run-, Review-, Gate- und Integrationsteilversuchen. „Run #2 re-opened into #3“ kann deshalb etwas anderes zählen als Pipeline Attempt 1 oder Review Epoch 2.</p>
+
+    <h3>6.7 Breiterer Feldbeleg 28.07.</h3>
+    <p>Der <a href="../sichtungszettel-2026-07-28.md"><code>docs/operations/sichtungszettel-2026-07-28.md</code></a> dokumentiert dieselbe Problemklasse über mehrere Karten: vier von fünf Frontend-/Docs-Karten meldeten <code>no-branch</code> und leere <code>commits[]</code>, obwohl echte Arbeit auf Remote Runner Refs lag; Zielbranches wichen ab; der Boot-Backfill hatte Pass-Karten fälschlich eskaliert. AGT-2301 war dort als Pass eingeordnet. Damit ist AGT-2301 kein isolierter UI-Ausreißer, sondern ein gut beobachtbarer Vertreter eines Attributions- und Statusvertragsproblems.</p>
+  </section>
+
+  <section id="konfiguration">
+    <h2>7. Was heute konfigurierbar ist</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Bereich</th><th>Heute einstellbar</th><th>Scope</th><th>Relevanz für Statusmodell</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Projektlauf</strong></td>
+            <td><code>pickupMode</code>, Execution Location/Runner, Remote Execution, Crash Recovery, Autonomy, Quota Wait.</td>
+            <td><span class="config project">Projekt</span></td>
+            <td>Bestimmt, wer <code>2 → 3</code> auslöst und wie Recovery arbeitet, nicht welche Lane-Kanten zulässig sind.</td>
+          </tr>
+          <tr>
+            <td><strong>Git</strong></td>
+            <td><code>autoCommit</code>, <code>autoPushStrategy</code>, <code>integrationBranch</code> (Default develop), <code>integrationStrategy</code> (direct-merge / pull-request).</td>
+            <td><span class="config project">Projekt</span></td>
+            <td>Bestimmt Transport und Ziel. Kein „Review nur integriert“ und kein Archive-Guard.</td>
+          </tr>
+          <tr>
+            <td><strong>Build/Test</strong></td>
+            <td><code>buildProfile</code>, <code>testExecution</code>, Step Modes warn/fail/off.</td>
+            <td><span class="config project">Projekt</span></td>
+            <td>Kann Merge oder Review stoppen, aber nur dort, wo der jeweilige Runner das Gate aufruft.</td>
+          </tr>
+          <tr>
+            <td><strong>Pipeline Step</strong></td>
+            <td>Enabled, Mode, CLI, Modell, Thinking Level, Economy Model, Prompt, Condition, Max Iterations und Reihenfolge, soweit vom Step unterstützt.</td>
+            <td><span class="config project">Projekt</span></td>
+            <td>Feingranulare Pipeline-Steuerung. Kein zentraler Lane-Zulassungsvertrag.</td>
+          </tr>
+          <tr>
+            <td><strong>Pipeline-Typ</strong></td>
+            <td>Auf <code>origin/develop</code>: <code>task</code>, <code>bug</code>, <code>feature</code>, <code>planning</code>; eigene Step-Maps und Reihenfolgen je Typ.</td>
+            <td><span class="config project">Projekt × Typ</span></td>
+            <td>AGT-2301 liefert die leichte Planning-Pipeline. Coding-Typen erben Altwerte, Planning startet mit git-freien Defaults.</td>
+          </tr>
+          <tr>
+            <td><strong>Spezial-Pipelines</strong></td>
+            <td>Standard, Read-only, Concept Workbench und UI Iteration. Concept bleibt außerhalb der vier Settings-Typen als eigener dokumentzentrierter Katalog.</td>
+            <td><span class="config project">Modus / Task</span></td>
+            <td>Erfordert eine ausdrückliche Kategorie <code>integration-required</code> versus <code>not-applicable</code>, statt NoTaskBranch als Erfolg zu missdeuten.</td>
+          </tr>
+          <tr>
+            <td><strong>Review Reissue</strong></td>
+            <td><code>ReviewDecisionOrchestrator:Enabled</code>, Interval, Calls per Hour, Max Auto Reissue Attempts, Parallel Reviews.</td>
+            <td><span class="config global">Runtime global</span></td>
+            <td>Steuert <code>4 → 2/5/5e</code>. Der Max-Wert ist kein Projektsetting.</td>
+          </tr>
+          <tr>
+            <td><strong>Orphan / Liveness</strong></td>
+            <td>Stuck Resume Window, Orphan Reaper Enabled/Interval, Remote Requeue Grace.</td>
+            <td><span class="config global">Runtime global</span></td>
+            <td>Steuert Recovery aus Progress, nicht Abnahme oder Archive.</td>
+          </tr>
+          <tr>
+            <td><strong>Integration Backstop</strong></td>
+            <td><code>Integration:BackstopIntervalMinutes</code>, Default 15.</td>
+            <td><span class="config global">Runtime global</span></td>
+            <td>Nur Takt. Keine Projektpolicy, kein Zulassungs-Guard.</td>
+          </tr>
+          <tr>
+            <td><strong>Lane Sortierung</strong></td>
+            <td>Sortierstrategie je Lane.</td>
+            <td><span class="config project">Projekt</span></td>
+            <td>Nur Reihenfolge, keine State-Machine-Policy.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>7.1 Die leichte AGT-2301-Pipeline präzise eingeordnet</h3>
+    <div class="grid two">
+      <article class="card">
+        <h4>In <code>origin/develop</code> integriert</h4>
+        <p><code>PipelineTypes.Resolve</code> routet report-only Planning/Research immer auf <code>planning</code>; Bug und Feature behalten ihren Strukturtyp; alles andere wird <code>task</code>. <code>PipelineStepsByType</code> und <code>PipelineStepOrderByType</code> isolieren die Konfiguration.</p>
+        <p class="small"><code>origin/develop:backend/Shared/Models/PipelineTypes.cs:13-53</code>; <code>ProjectSettings.cs:156-203</code>.</p>
+      </article>
+      <article class="card">
+        <h4>„Leicht“ heißt derzeit git-frei</h4>
+        <p>Der Read-only-Katalog ist die Standard-Pipeline minus definierte Git-Steps. Das hält Standard und Planning synchron, bedeutet aber: Neue nicht-Git-Steps gelangen automatisch auch in Planning, sofern sie nicht anders konditioniert werden.</p>
+        <p class="small"><code>origin/develop:PipelineCatalogue.cs:410-450,783-801</code>.</p>
+      </article>
+    </div>
+    <div class="callout warn">
+      <h4>Deploy-/Projektionsdrift am 29.07.</h4>
+      <p>Der live gelesene API-Prozess projizierte für AGT-2301 noch <code>standard-task-pipeline</code> und das ältere flache <code>pipelineSteps</code>-Modell. Der neue Typvertrag war gleichzeitig bereits in <code>origin/develop</code> integriert. Für Entscheidungen gilt deshalb: Die Typkonfiguration ist „heute im Entwicklungsstand“, aber nicht automatisch Beweis, dass jeder laufende Backend-Prozess sie schon verwendet.</p>
+    </div>
+
+    <h3>7.2 Was für das SOLL noch fehlt</h3>
+    <ul>
+      <li>Eine zentrale, testbare Transition Policy mit Quell-Lane, Ziel-Lane, Akteur, Delivery Class und Guard-Ergebnis.</li>
+      <li>Ein einheitliches Integrations-Gate vor Human Review, nicht nur ein Badge in akzeptierten Lanes.</li>
+      <li>Ein Archive-Guard für Einzel-, Batch-, Management- und sonstige Move-Pfade.</li>
+      <li>Ein typisierter Override mit Grund, Actor, Zeit und Integrationssnapshot.</li>
+      <li>Ein Integrationsstatus, der den tatsächlich reviewten Result-Commit gegen den Zielbranch prüft und auf Ref-Änderungen invalidiert.</li>
+      <li>Eine kanonische Delivery-Epoch, die Runs, Review-Epoch, Pipeline Attempts und Integration Attempts zusammenführt.</li>
+      <li>Eine Pipeline-Projektion, die vorhandenes Result und historische Pipeline-Version nicht als 28 aktuelle Pending-Schritte darstellt.</li>
+    </ul>
+  </section>
+
+  <section id="alternativen" data-concept-section="alternatives">
+    <h2>8. Alternativen für Review und Integration</h2>
+    <div class="grid three">
+      <article class="card">
+        <span class="badge ok">A · empfohlen</span>
+        <h3>Integrated-only Human Review</h3>
+        <p>Nach bestandenem Auto-Review bleibt die Karte in <code>4</code>, bis die geprüfte Lieferung integriert ist. Danach <code>4 → 5</code>. Konflikt/Fehler geht nach <code>5e</code>.</p>
+        <p class="small"><strong>Vorteil:</strong> Lane-Semantik wird wahr. Accept ist reine fachliche Abnahme. <strong>Kosten:</strong> Integration liegt früher; PR-Strategie braucht ein eigenes Vor-Gate.</p>
+      </article>
+      <article class="card">
+        <span class="badge warn">B · Übergang</span>
+        <h3>Review erlaubt, Accept blockiert</h3>
+        <p><code>4 → 5</code> bleibt erlaubt, aber die Karte trägt einen harten, nicht übersehbaren Badge und Accept ist bis <code>integrated</code> deaktiviert.</p>
+        <p class="small"><strong>Vorteil:</strong> geringerer Ablaufumbau. <strong>Nachteil:</strong> Human Review bleibt semantisch gemischt und voller technisch unfertiger Lieferungen.</p>
+      </article>
+      <article class="card">
+        <span class="badge bad">C · verwerfen</span>
+        <h3>Warnung nach Accept</h3>
+        <p>Heutiges Verhalten: erst <code>5 → 6</code>, dann Pending-Tag, Hintergrundmerge und Backstop.</p>
+        <p class="small"><strong>Nachteil:</strong> „Delivered“ und Archive sind vor dem Liefernachweis erreichbar. Das dokumentierte Verlustrisiko bleibt bestehen.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="soll">
+    <h2>9. SOLL-Regeln</h2>
+
+    <article class="rule">
+      <div class="rule-id">R1</div>
+      <div>
+        <h3>Human Review ist nur für integrierte Lieferungen</h3>
+        <div class="contract"><code>requiresIntegration &amp;&amp; integration.status != integrated</code> verbietet <code>* → 5-human-review</code>.</div>
+        <p><strong>Empfohlener Ablauf:</strong> Auto-Review-Pass startet Integration, während die Karte in <code>4-auto-review</code> und Phase <code>integration-pending</code> bleibt. Bei <code>integrated</code> folgt <code>4 → 5</code>. Conflict, GateFailed, NoTaskBranch mit erwarteter Code-Lieferung oder nicht automatisch behebbarer Error folgt <code>4 → 5e</code> mit Kategorie und Recovery-Aktion. External Completion muss durch denselben Admission Guard.</p>
+        <p><strong>Ausnahme:</strong> Report-only/Planning ohne Repository-Änderung erhält einen expliziten Delivery-Typ <code>not-applicable</code>, nicht <code>no-branch</code>. Concept- und Docs-Lieferungen sind nur dann ausgenommen, wenn ihr Vertrag tatsächlich out-of-repo ist; Repository-Dokumente bleiben integrierbar.</p>
+        <p><span class="config hard">Hard invariant</span> <span class="config project">Projekt liefert Zielbranch</span> <span class="config action">Rollout-Alternative B möglich</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Nicht pro Projekt abschaltbar, sonst verliert Human Review wieder seine globale Bedeutung. Konfigurierbar sind nur Delivery Class und Zielbranch. Für eine begrenzte Migration kann workspaceweit zwischen A und B gewählt werden; keine per-card stille Ausnahme.</p>
+      </div>
+    </article>
+
+    <article class="rule">
+      <div class="rule-id">R2</div>
+      <div>
+        <h3>Accept bestätigt einen bereits gelieferten Stand</h3>
+        <div class="contract"><code>5-human-review → 6-completed</code> verlangt <code>integrated</code> oder <code>not-applicable</code>.</div>
+        <p>Accept darf nicht mehr der erste Merge-Trigger sein. Es bindet das menschliche Urteil an genau die Delivery-Epoch und den Result SHA, die bereits integriert und reviewt wurden. Ändert sich der Zielbranch oder die Delivery nach dem Review, wird das Urteil stale und die Karte geht zurück in den Integrations-/Review-Fluss.</p>
+        <p><span class="config hard">Hard invariant</span> <span class="config project">Delivery Class</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Keine Abschaltung. Read-only/Planning nutzt <code>not-applicable</code> mit dauerhaftem Grund. Pull-Request-Projekte benötigen eine Entscheidung, ob Merge vor Human Review geschieht oder eine separate PR-Decision-Surface vorgeschaltet wird.</p>
+      </div>
+    </article>
+
+    <article class="rule">
+      <div class="rule-id">R3</div>
+      <div>
+        <h3>Archive ist ein bewachter Terminalübergang</h3>
+        <div class="contract"><code>6-completed → 7-archive</code> nur bei <code>integrated</code>/<code>not-applicable</code> oder explizitem Override mit Grund.</div>
+        <p>Der Guard gilt zentral für Einzel-Move, Drag, Batch Move, Management Archive Sweep und alle zukünftigen Archive-Aktionen. Ein Override enthält mindestens Grund, Actor, Zeit, Delivery-Epoch, Zielbranch, aktuellen Integrationsstatus und bekannte Recovery-Referenz. Er wird als Timeline-/Audit-Event sichtbar.</p>
+        <p><span class="config hard">Default fail-closed</span> <span class="config action">Override pro Aktion</span> <span class="config global">Berechtigung global</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Kein Projekt-Kill-Switch. Konfigurierbar sind nur berechtigte Rollen, minimale Grundlänge und ob Batch-Overrides überhaupt zugelassen werden. Ein Archive Sweep überspringt blockierte Karten und berichtet sie einzeln.</p>
+      </div>
+    </article>
+
+    <article class="rule">
+      <div class="rule-id">R4</div>
+      <div>
+        <h3>Integration wird aus Zielbranch-Präsenz abgeleitet</h3>
+        <div class="contract">Primäre Wahrheit ist: Ist der akzeptierte Result-Commit auf dem konfigurierten Zielbranch erreichbar?</div>
+        <p>Die heutige Projektion erkennt bereits kuratierte <code>merge(KEY)</code>-Commits, einen aufgezeichneten Merge und attribuierte <code>commits[]</code>. Der exakte fenced <code>ReviewSubject.ResultSha</code> wird aber nur in einer Recovery-Hilfsfunktion geprüft, nicht als Hauptanker der Kartenklassifikation. SOLL-Priorität:</p>
+        <ol>
+          <li>Aktuelle Delivery-Epoch und ihr immutable <code>ResultSha</code>.</li>
+          <li>Alle integrablen, der Epoch attribuierten Commits.</li>
+          <li>Ein kuratierter/rewrittener Merge nur mit dauerhafter Zuordnung von Source Result SHA zu Integration Commit.</li>
+          <li>Der letzte eigene Merge-Versuch ist Diagnose, nie alleinige Wahrheit.</li>
+        </ol>
+        <p>Bei jeder Änderung des Zielbranch-Ref-Fingerprints wird neu bewertet. Ist der Result-Commit Ancestor, wird ein früheres NoTaskBranch/Error/Conflict als historischer Versuch angezeigt, aber der aktuelle Status selbstheilend <code>integrated</code>. Genau das hätte AGT-2301 korrigiert.</p>
+        <p><span class="config hard">Datenvertrag</span> <span class="config project">Zielbranch</span> <span class="config global">Cache/Concurrency</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Die Wahrheitsregel ist nicht abschaltbar. Nur Cache-TTL, Read-only-Git-Concurrency und zulässige Rewrite-Nachweise sind Betriebsparameter.</p>
+      </div>
+    </article>
+
+    <article class="rule">
+      <div class="rule-id">R5</div>
+      <div>
+        <h3>Eine zentrale Transition Policy ersetzt lokale Einzelguards</h3>
+        <div class="contract">Jeder Lane-Wechsel wird gegen <code>from + to + actorKind + deliveryClass + guardFacts</code> entschieden.</div>
+        <p>Die State Machine bleibt Persistenz-Committer, erhält aber vor dem Schreiben eine zentrale Policy-Entscheidung. Operator-Override ist eine typisierte Policy-Aktion, nicht „beliebiges bekanntes Ziel“. Backfills und Sweeps deklarieren ihren Actor Kind. Tests enumerieren jede zulässige Kante und beweisen, dass Archive- und Accept-Guards über alle API-Pfade gelten.</p>
+        <p><span class="config hard">Kantenmatrix im Code</span> <span class="config action">typisierte Overrides</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Fachliche Grundkanten werden versioniert im Code gehalten. Projektsettings dürfen Verhalten innerhalb einer Kante steuern, aber keine beliebigen neuen Kanten freischalten.</p>
+      </div>
+    </article>
+
+    <article class="rule">
+      <div class="rule-id">R6</div>
+      <div>
+        <h3>Pipeline und Attempt-Projektion werden ehrlich</h3>
+        <div class="contract">Result, Execution und Attempt dürfen sich nicht gegenseitig als aktuelles PENDING übermalen.</div>
+        <p>Eine nachträglich erzeugte Merge-Baseline darf nicht so aussehen, als sei die gesamte Standard-Pipeline gerade angelaufen. Sie referenziert die historische Pipeline-ID/-Version der Delivery oder zeigt nur den isolierten Integration Attempt. Vorhandenes <code>status.md</code> wird als Result mit Quelle und Epoch dargestellt. Eine kanonische Delivery-Epoch gruppiert Run Attempts, Review Reissues, Pipeline Attempts und Integration Attempts; die jeweiligen Zähler bleiben als Unterzähler erhalten.</p>
+        <p><span class="config hard">Read-model contract</span> <span class="config global">History cap</span></p>
+        <p class="small"><strong>Konfigurierbarkeit:</strong> Keine Wahrheitsumschaltung. Konfigurierbar sind nur Retention/History-Limit und UI-Dichte.</p>
+      </div>
+    </article>
+
+    <h3>9.1 SOLL-Statusvokabular für Integration</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Bedeutung</th><th>Human Review?</th><th>Accept?</th><th>Archive?</th></tr></thead>
+        <tbody>
+          <tr><td><code>integrated</code></td><td>Akzeptierter Result SHA oder gültig zugeordneter Rewrite ist auf Zielbranch vorhanden.</td><td>ja</td><td>ja</td><td>ja</td></tr>
+          <tr><td><code>not-applicable</code></td><td>Delivery-Vertrag verlangt keine Repository-Integration; Grund ist typisiert und dauerhaft.</td><td>ja</td><td>ja</td><td>ja</td></tr>
+          <tr><td><code>pending</code></td><td>Integration läuft oder wartet in Queue.</td><td>nein, bleibt in 4</td><td>nein</td><td>nein</td></tr>
+          <tr><td><code>partial</code></td><td>Nicht alle Commits der Delivery-Epoch sind vorhanden.</td><td>nein</td><td>nein</td><td>nur Override</td></tr>
+          <tr><td><code>no-branch</code></td><td>Transportartefakt fehlt. Bei erwarteter Code-Lieferung ein Fehler, kein Erfolg.</td><td>nein</td><td>nein</td><td>nur Override</td></tr>
+          <tr><td><code>conflict</code></td><td>Merge wurde sauber abgebrochen; Recovery nötig.</td><td>nein, nach 5e</td><td>nein</td><td>nur Override</td></tr>
+          <tr><td><code>gate-failed</code></td><td>Gemergter Kandidat wurde wegen rotem Build/Test-Gate zurückgerollt.</td><td>nein, nach 5e</td><td>nein</td><td>nur Override</td></tr>
+          <tr><td><code>error</code></td><td>Versuch fehlgeschlagen; Git-Präsenz wird trotzdem unabhängig neu geprüft.</td><td>nein</td><td>nein</td><td>nur Override</td></tr>
+          <tr><td><code>review-handoff</code></td><td>Pull Request liegt vor, ist aber noch nicht integriert.</td><td>Entscheidung E3</td><td>nein</td><td>nur Override</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="folgen">
+    <h2>10. Umsetzungsfolgen nach Entscheidung</h2>
+    <p>Diese Karte ändert bewusst keinen Code. Nach Roberts Entscheidung lassen sich Folgearbeiten entlang klarer Verträge schneiden:</p>
+    <ol>
+      <li><strong>Transition Policy + Guards:</strong> zentrale Kantenmatrix, Review Admission, Accept und Archive einschließlich Batch/Sweep/Override-Audit.</li>
+      <li><strong>Integration Truth:</strong> Delivery-Epoch/Result-SHA als Hauptanker, Zielbranch-Ancestry, Rewrite-Zuordnung, self-healing Status.</li>
+      <li><strong>Integration vor Review:</strong> Worker-Trigger auf Auto-Review-Pass verschieben, Phasenprojektion in Lane 4, typisierte Eskalation und PR-Variante.</li>
+      <li><strong>Pipeline/Attempt Read Model:</strong> historische Pipeline-Version, isolierter Integration Attempt, Result-Herkunft, kanonische Delivery-Epoch.</li>
+      <li><strong>Backfill:</strong> vorhandene Completed-/Archive-Karten neu klassifizieren; nicht integrierte Fälle sichtbar blockieren, aber nicht automatisch archivieren oder löschen.</li>
+    </ol>
+    <div class="callout info">
+      <h4>Migration ohne Datenverlust</h4>
+      <p>Bestehende Lane-Historie bleibt append-only. Alte <code>NoTaskBranch</code>/Error-Steps werden nicht umgeschrieben, sondern als historische Versuche neben einem neu berechneten aktuellen Integrationsstatus gezeigt. Ein initialer Dry Run listet, wie viele Karten durch R1/R3 blockiert würden, bevor Guards scharf geschaltet werden.</p>
+    </div>
+  </section>
+
+  <section id="quellen">
+    <h2>11. Quellenregister</h2>
+    <ul class="source-list">
+      <li><code>backend/Shared/Models/TaskStates.cs</code><br><span class="small">Persistierte Lane-Werte und Kommentare zu additiven Lanes.</span></li>
+      <li><code>backend/Features/Tasks/TaskStateMachine.cs</code><br><span class="small">Zentrale Persistenz, Zielvalidierung, Lane-Lock, Index-Boot.</span></li>
+      <li><code>backend/Features/Tasks/TaskTransitionService.cs</code><br><span class="small">Git-Seiteneffekte, Accept, Pending-Tag, Escalated-Guard.</span></li>
+      <li><code>backend/Features/Tasks/TaskCrudEndpoints.cs</code><br><span class="small">Operator Move, Batch Move, Failed-Pickup-Restore.</span></li>
+      <li><code>backend/Features/Tasks/LeaseEndpoints.cs</code><br><span class="small">Remote Claim, Recovery, Outcome-Routing und fenced Completion.</span></li>
+      <li><code>backend/Features/Tasks/ExternalCompletionService.cs</code><br><span class="small">Out-of-band Completion mit frei wählbarem Ziel und Default Human Review.</span></li>
+      <li><code>backend/Features/Runner/ReviewDecisionOrchestrator.cs</code><br><span class="small">Auto-Review, Reissue, Accept/Escalate und Boot-Backfills.</span></li>
+      <li><code>backend/Features/Runner/HumanReviewEscalation.cs</code><br><span class="small">Vollständige Eskalationskategorien und zentraler Funnel.</span></li>
+      <li><code>backend/Features/Runner/OperatorReviewRequeueService.cs</code><br><span class="small">Review-Epoch, Artefaktrotation und Operator-Requeue.</span></li>
+      <li><code>backend/Features/Runner/StaleProgressArchiver.cs</code><br><span class="small">Stale Progress, Debris und 3a-Drain.</span></li>
+      <li><code>backend/Features/Runner/OrphanReaperHostedService.cs</code><br><span class="small">Prozess-Orphan-Reaper ohne Lane-Wirkung.</span></li>
+      <li><code>backend/Features/Supervisor/OrchestratorPrepHostedService.cs</code><br><span class="small">Preparation-in-place und 1a-Rettung.</span></li>
+      <li><code>backend/Features/Pipeline/MergeIntoDevelopRunner.cs</code><br><span class="small">Deferred Merge, develop/main-Gates und Step-Projektion.</span></li>
+      <li><code>backend/Features/Pipeline/AcceptedIntegrationWorker.cs</code><br><span class="small">Hintergrundintegration nach Accept.</span></li>
+      <li><code>backend/Features/Pipeline/AcceptedIntegrationBackstopHostedService.cs</code><br><span class="small">Completed-/Archive-Recovery.</span></li>
+      <li><code>backend/Features/Tasks/TaskIntegrationStatusService.cs</code><br><span class="small">Heutige Git-basierte Integrationserkennung und ihre Anker.</span></li>
+      <li><code>backend/Features/Pipeline/PipelineExecutionLog.cs</code><br><span class="small">Pipeline Attempts, Pending-Baseline und Completion.</span></li>
+      <li><code>backend/Features/Tasks/TaskPipelineEndpoints.cs</code><br><span class="small">Unabhängige Projektion von Execution und Result Files.</span></li>
+      <li><code>backend/Features/Tasks/Audit/CompletedLaneAuditService.cs</code><br><span class="small">Audit-Reopen und Integration-Pending-Liste.</span></li>
+      <li><code>backend/Features/Management/ManagementService.cs</code><br><span class="small">Archive Sweep ohne Integration-Guard.</span></li>
+      <li><code>origin/develop:backend/Shared/Models/PipelineTypes.cs</code><br><span class="small">AGT-2301 Typvokabular task/bug/feature/planning.</span></li>
+      <li><code>origin/develop:backend/Shared/Models/ProjectSettings.cs</code><br><span class="small">PipelineStepsByType und PipelineStepOrderByType.</span></li>
+      <li><a href="../../concepts/task-integration-and-merge-workflow.md"><code>docs/concepts/task-integration-and-merge-workflow.md</code></a><br><span class="small">Implementierter Integrationsvertrag und Incident 24.07.</span></li>
+      <li><a href="../sichtungszettel-2026-07-28.md"><code>docs/operations/sichtungszettel-2026-07-28.md</code></a><br><span class="small">Feldbefunde zu Attribution, Zielbranch und Boot-Backfill.</span></li>
+      <li><code>GET /api/tasks/AGT-2301</code>, <code>/pipeline</code>, <code>/runs</code>, <code>/timeline</code><br><span class="small">Read-only Live-Beleg, abgerufen 29.07.2026.</span></li>
+      <li><code>git merge-base --is-ancestor 89becc2a origin/develop</code><br><span class="small">Erfolgreicher Ancestry-Nachweis; Integrationscommit <code>ef9c3cfc3</code>.</span></li>
+    </ul>
+  </section>
+
+  <section id="entscheidungen" data-concept-section="open-decisions">
+    <h2>12. Entscheidungsfragen für Robert</h2>
+    <p class="muted">Die Liste ist absichtlich das Ende des Dokuments. Jede Frage nennt den empfohlenen Default und die relevante Konfigurationsgrenze.</p>
+
+    <div class="decision">
+      <div class="decision-no">E1</div>
+      <div>
+        <h3>Darf eine integrierbare, noch nicht integrierte Lieferung nach <code>5-human-review</code>?</h3>
+        <p><strong>A:</strong> Nein, sie bleibt in 4 bis <code>integrated</code>. <strong>B:</strong> Ja, aber harter Badge und Accept blockiert.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A, entsprechend Roberts Tendenz. Workspaceweiter Rollout-Schalter nur für die Migration, nicht dauerhaft pro Projekt.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E2</div>
+      <div>
+        <h3>Wohin geht ein Integrationsfehler vor Human Review?</h3>
+        <p><strong>A:</strong> Conflict/GateFailed/Error nach <code>5e-escalated</code>. <strong>B:</strong> In 4 bleiben, aber blockiert.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A für entschiedene menschliche Recovery, Pending bleibt in 4. Keine Projektkonfiguration.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E3</div>
+      <div>
+        <h3>Wie verhält sich <code>pull-request</code> unter „integrated-only Review“?</h3>
+        <p><strong>A:</strong> PR-Approval ist vorgeschaltete Decision-Surface; Human Review 5 beginnt erst nach Merge. <strong>B:</strong> Human Review 5 wird für PR-Projekte zum Merge-Gate und bleibt damit semantisch anders.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A. IntegrationStrategy bleibt Projektsetting, Lane-Semantik bleibt global.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E4</div>
+      <div>
+        <h3>Soll <code>6 → 7</code> einen begründeten Override erlauben?</h3>
+        <p><strong>A:</strong> Ja, nur privilegiert, pro Karte, mit Audit-Feldern. <strong>B:</strong> Nein, Archive ausnahmslos nur integrated/not-applicable.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A für echte Abbruch-/Nichtlieferungsfälle, aber kein Batch-Override und kein Projekt-Kill-Switch.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E5</div>
+      <div>
+        <h3>Welche Lieferungen dürfen <code>not-applicable</code> sein?</h3>
+        <p>Nur Planning/Research-Reports außerhalb des Produktrepos, oder auch Concept-/Docs-Karten?</p>
+        <p class="verdict"><strong>Empfehlung:</strong> Nach tatsächlichem Delivery-Vertrag entscheiden, nicht nach Titel: Jede Repository-Änderung ist integration-required. Typ ist konfigurierbar, Wahrheit nicht.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E6</div>
+      <div>
+        <h3>Wie werden kuratierte Rebase-/Cherry-pick-Integrationen anerkannt, wenn der Result SHA umgeschrieben wurde?</h3>
+        <p><strong>A:</strong> Nur über eine dauerhafte Source-SHA → Integration-SHA-Zuordnung. <strong>B:</strong> Ein <code>merge(KEY)</code>-Betreff reicht weiterhin.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A. Key-Matching allein ist schwächer als der immutable Delivery-Vertrag.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E7</div>
+      <div>
+        <h3>Soll die technische Any-to-Any-Operator-Kante vollständig verschwinden?</h3>
+        <p><strong>A:</strong> Ja, nur erlaubte Kanten plus typisierte Overrides. <strong>B:</strong> Generische Move-API bleibt für Admins.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A. Admin-Notfälle nutzen denselben Override-Vertrag mit Grund und Audit, nicht eine unsichtbare Hintertür.</p>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="decision-no">E8</div>
+      <div>
+        <h3>Soll eine kanonische Delivery-Epoch die verschiedenen Attempt-Zähler in der UI bündeln?</h3>
+        <p><strong>A:</strong> Ja, Run/Lease, Pipeline, Review und Integration bleiben Unterversuche einer Delivery. <strong>B:</strong> Nur bessere Labels für die bestehenden unabhängigen Zähler.</p>
+        <p class="verdict"><strong>Empfehlung:</strong> A. Keine fachliche Konfigurierbarkeit; nur Retention und UI-Dichte.</p>
+      </div>
+    </div>
+    <p class="end-marker">Stand der Entscheidungsvorlage: 29.07.2026 18:58 UTC · Quelle AGT-2424 · keine Code-Änderungen in dieser Karte.</p>
+  </section>
+</div>
+</body>
+</html>
