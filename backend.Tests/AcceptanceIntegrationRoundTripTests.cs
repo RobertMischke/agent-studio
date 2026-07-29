@@ -336,6 +336,38 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptOutOfBandIntegratedCard_CompletesWithoutOwnMergeAttempt()
+    {
+        var deliverySha = PublishDelivery("out-of-band.txt", "already integrated\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        RunGit(_repo, "checkout", "-q", "main");
+        var deps = Build(deliverySha, backgroundIntegration: true);
+
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var statusBeforeAccept = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
+        Assert.Equal(IntegrationStatuses.Integrated, statusBeforeAccept.Status);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Equal(TaskStates.Completed, completed!.State);
+        Assert.Null(completed.Phase);
+        Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Equal("already-integrated", mergeStep.Verdict);
+        Assert.Contains(
+            deps.Timeline.ReadAll(completed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationSucceeded
+                     && entry.Details?.GetValueOrDefault("outcome") == "AlreadyIntegrated");
+    }
+
+    [Fact]
     public async Task AcceptedIntegrationWorker_Shutdown_DrainsActiveMergeGate()
     {
         var deliverySha = PublishDelivery("worker-drain.txt", "remote work\n");
@@ -842,6 +874,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             provenance: provenance,
             integrationStatus: integration,
             timeline: timeline,
+            pipelineLog: pipeline,
             acceptedIntegrationQueue: acceptedQueue);
         return new Deps(
             scanner,

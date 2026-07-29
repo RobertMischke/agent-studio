@@ -396,6 +396,18 @@ public sealed class TaskTransitionService
             $"Acceptance started integration into {TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch)}.",
             outcome: "integrating");
 
+        if (IsAlreadyIntegrated(integrating))
+        {
+            return await CompleteTransactionalAcceptAsync(
+                integrating,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite,
+                outcome: "AlreadyIntegrated").ConfigureAwait(false);
+        }
+
         var queue = _acceptedIntegrationQueue;
         if (queue != null)
         {
@@ -459,6 +471,47 @@ public sealed class TaskTransitionService
             _provenance.RecordMerge(integrating, result.MergedSha);
             integrating = _scanner.FindJob(integrating.Id, integrating.WatchPath) ?? integrating;
         }
+        return await CompleteTransactionalAcceptAsync(
+            integrating,
+            ct,
+            targetIndex,
+            cause,
+            reason,
+            authorityWrite,
+            result.Outcome.ToString()).ConfigureAwait(false);
+    }
+
+    private bool IsAlreadyIntegrated(TaskInfo job)
+    {
+        if (_integrationStatus == null) return false;
+        var lookup = _integrationStatus.BuildLookup([job]);
+        return lookup.TryGetValue(job.TaskKey, out var status)
+               && status.Status == IntegrationStatuses.Integrated;
+    }
+
+    private async Task<MoveJobOutcome> CompleteTransactionalAcceptAsync(
+        TaskInfo integrating,
+        CancellationToken ct,
+        int? targetIndex,
+        string? cause,
+        string? reason,
+        AttemptWriteReference? authorityWrite,
+        string outcome)
+    {
+        if (outcome == "AlreadyIntegrated")
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(integrating.FolderPath, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Passed,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "already-integrated",
+                VerdictSummary = "Attributed commits are already present in the target branch; no merge was run.",
+            });
+        }
         var clearedTags = (integrating.Tags ?? [])
             .Where(tag => !IntegrationStatuses.IsPendingTag(tag))
             .ToList();
@@ -471,8 +524,10 @@ public sealed class TaskTransitionService
             integrating,
             TimelineEventKinds.IntegrationSucceeded,
             TimelineActors.System,
-            $"Integration into {TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch)} succeeded.",
-            result.Outcome.ToString());
+            $"Integration into {TaskIntegrationBranch.Resolve(
+                integrating,
+                _settings.Get(integrating.ProjectName).IntegrationBranch)} succeeded.",
+            outcome);
         var completed = await MoveAsync(
             integrating.Id,
             TaskStates.Completed,
@@ -863,11 +918,10 @@ public sealed class TaskTransitionService
                 ct,
                 settings.IntegrationStrategy).ConfigureAwait(false);
 
-            // ASS-1752: persist the develop-merge fact so the board card can show
-            // the landed state (`develop @sha`) instead of a dead worktree path,
-            // without a per-card graph query. `moved` was just freshly scanned, so
-            // its provenance is current (replace-all write needs that). Only a real
-            // new merge carries a SHA; write-once on the service side.
+            // ASS-1752: persist historical merge-attempt provenance. Accepted
+            // card status is derived separately from target-branch membership.
+            // `moved` was freshly scanned, so the replace-all provenance write
+            // cannot drop earlier transitions.
             if (_provenance != null
                 && result.Outcome == AgentStudio.Git.MergeIntoIntegrationOutcome.Merged
                 && !string.IsNullOrWhiteSpace(result.MergedSha))
@@ -882,14 +936,11 @@ public sealed class TaskTransitionService
     }
 
     /// <summary>
-    /// AGT-2202 accept-without-merge guard. Derives the honest git integration
-    /// verdict for a freshly accepted card and, when its work is not in develop,
-    /// records a Warn timeline event and stamps the <c>integrationpending</c> tag
-    /// so the state is visible on the board and listable by the completed-lane
-    /// audit. Deliberately NOT a hard block: the acceptance already landed, this
-    /// only makes "Accept != Merge" loud. When the card IS integrated, any stale
-    /// <c>integrationpending</c> tag from an earlier accept is cleared so the
-    /// marker self-heals. Best-effort and fully guarded.
+    /// Derives the canonical target-branch verdict and maintains the durable
+    /// <c>integrationpending</c> recovery marker. Transactional acceptance calls
+    /// this before queue hand-off with warnings disabled; compatibility callers
+    /// may still emit the legacy warning. When the card is integrated, a stale
+    /// pending marker is cleared. Best-effort and fully guarded.
     /// </summary>
     private void FlagIntegrationOnAccept(
         TaskInfo accepted,

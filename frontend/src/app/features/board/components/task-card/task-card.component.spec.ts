@@ -882,6 +882,12 @@ describe('TaskCardComponent (smoke)', () => {
         integrationSha: 'a1b2c3d',
         releaseSha: null,
       },
+      integration: {
+        status: 'integrated',
+        sha: 'a1b2c3d',
+        integrationBranch: 'develop',
+        detail: 'Every attributed commit is present in develop.',
+      },
     }));
 
     const signal = fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]') as HTMLElement | null;
@@ -1586,6 +1592,16 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
       '5-human-review',
     );
     expect(chips).toEqual([]);
+  });
+
+  it('suppresses the internal integrationpending marker in favor of computed status', () => {
+    const chips = buildTagChips(
+      ['integrationpending', 'architecture'],
+      registry(tag('integrationpending', 'Integration pending'), tag('architecture', 'Architecture')),
+      '5-human-review',
+    );
+
+    expect(chips.map((chip) => chip.id)).toEqual(['architecture']);
   });
 });
 

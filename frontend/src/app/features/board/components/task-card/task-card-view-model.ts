@@ -499,6 +499,9 @@ function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined, st
   if (CODE_REVIEW_GRADE_TAG_RE.test(id)) return true;
   const compactId = compactTagText(id);
   const compactLabel = entry ? compactTagText(entry.label) : '';
+  // Internal transaction recovery marker. The computed integration badge is
+  // the only card-facing source for integration truth.
+  if (compactId === 'integrationpending' || compactLabel === 'integrationpending') return true;
   if (SUPPRESSED_CARD_TAG_TEXT.has(compactId) || SUPPRESSED_CARD_TAG_TEXT.has(compactLabel)) return true;
   const laneMirrors = state ? LANE_MIRROR_CARD_TAG_TEXT[state] ?? [] : [];
   return laneMirrors.includes(compactId) || (compactLabel.length > 0 && laneMirrors.includes(compactLabel));
@@ -668,25 +671,23 @@ function currentBranchTip(prov: TaskInfo['provenance']): string | null {
   return null;
 }
 
-/** Ground-truth "folded into develop" merge SHA, or null when not recorded. */
+/** Historical merge attempt SHA used only for pre-accept worktree context. */
 function recordedMergeSha(prov: TaskInfo['provenance']): string | null {
   const sha = prov?.merge?.mergeCommit;
   return sha && sha.trim().length > 0 ? sha : null;
 }
 
 /**
- * Git-state badge (ASS-1665, reworked for ASS-1752). Shows the operator *where
- * the work actually lives* from the provenance ground truth (ASS-1724), not a
- * lane guess. The lane only decides whether a pill shows at all; the label is
- * driven by three persisted facts on `job.provenance`:
+ * Git-state badge (ASS-1665, reworked for ASS-1752). Accepted cards derive
+ * target-branch location only from `job.integration`; earlier lanes use
+ * provenance to describe their active worktree context:
  *
  *  1. Active worktree — a `task/<id>` branch exists (newest transition has a
  *     `branchTip`) and is not yet integrated. Names the branch + current-attempt
  *     tip, so a reissue tracks the live worktree.
- *  2. Landed in develop — the recorded merge fact, the terminal Completed lane,
- *     or a post-integration review lane whose parallel worktree was already torn
- *     down. Shows `develop @sha`; never a dead worktree path.
- *  3. Shared main checkout — a sequential run with no task branch at all. Says so
+ *  2. Landed in develop - computed attributed-commit membership for accepted
+ *     cards, or legacy pre-accept integration context.
+ *  3. Shared main checkout - a sequential run with no task branch at all. Says so
  *     instead of inventing a `task/<id>` that was never cut.
  *
  * Archived cards collapse to a quiet `tagged` pill. The three kinds keep the
@@ -701,7 +702,7 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
       label: 'tagged',
       glyph: '🏷',
       tooltip:
-        "Git state: archived — this task is out of the active git flow; its work, if any, was integrated into develop before it was archived.",
+        'Git state: archived. The computed integration badge shows current target-branch membership.',
     };
   }
 
@@ -709,28 +710,32 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   const branchName = prov?.branch || `task/${job.key || job.id}`;
   const tip = currentBranchTip(prov);
   const mergeSha = recordedMergeSha(prov);
+  const canonicalIntegration = currentIntegrationStatus(job);
+  const usesCanonicalIntegration = INTEGRATION_STATUS_LANES.has(job.state);
 
   if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
     return null;
   }
 
-  // (2) Landed in develop. Ground-truth merge fact wins; otherwise the lane is
-  // terminal (Completed) or a post-integration review lane whose parallel
-  // worktree has already been torn down (a real branch was cut, so this is not a
-  // sequential run). In every case the worktree, if any, is gone — show develop.
-  const landed =
-    !!mergeSha ||
-    job.state === TaskState.Completed ||
-    (POST_INTEGRATION_REVIEW_LANES.has(job.state) && !!tip);
+  // Accepted cards use only the target-branch membership projection. Earlier
+  // lanes retain the worktree lifecycle fallback because they have no
+  // integration projection yet.
+  const landed = usesCanonicalIntegration
+    ? canonicalIntegration?.status === 'integrated'
+    : !!mergeSha || (POST_INTEGRATION_REVIEW_LANES.has(job.state) && !!tip);
   if (landed) {
-    const label = mergeSha ? `develop @${shortSha(mergeSha)}` : 'develop';
+    const landedSha = usesCanonicalIntegration ? canonicalIntegration?.sha : mergeSha;
+    const landedBranch = usesCanonicalIntegration
+      ? canonicalIntegration?.integrationBranch || 'develop'
+      : 'develop';
+    const label = landedSha ? `${landedBranch} @${shortSha(landedSha)}` : landedBranch;
     return {
       kind: 'post-merge',
       label,
       glyph: '⬇',
-      tooltip: mergeSha
-        ? `Git state: merged into develop at ${shortSha(mergeSha)}. The task/<id> worktree has been integrated and torn down — its work now lives on develop.`
-        : "Git state: integrated — this task's commits live on the develop branch; its worktree, if any, has been torn down.",
+      tooltip: landedSha
+        ? `Git state: attributed commits are present in ${landedBranch} at ${shortSha(landedSha)}.`
+        : `Git state: attributed commits are present in ${landedBranch}.`,
     };
   }
 
@@ -764,11 +769,10 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
  * `[d|m]` indicator whose segments read filled/green when merged and muted/empty
  * when not.
  *
- * Primary source is the backend-computed {@link TaskInfo.mergeSignal} (batched +
- * cached per repo, so no per-card graph query). When that is absent (an older
- * payload, or a surface that doesn't compute it) the develop segment degrades
- * gracefully from the persisted merge fact / terminal lane; main needs the graph
- * and stays "unknown" (shown as not-merged) until the signal arrives.
+ * Main membership comes from the backend-computed
+ * {@link TaskInfo.mergeSignal}. On accepted cards the develop segment is always
+ * overlaid from {@link TaskInfo.integration}, including when the merge signal is
+ * stale or absent. Lane and provenance facts never substitute for membership.
  *
  * Semantics + colours match the detail-header landed-state (ASS-1724 / AGT-1989):
  * develop and main are the same worktree -> develop -> main ladder rungs.
@@ -836,7 +840,8 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
 
   const sig = job.mergeSignal ?? null;
   const prov = job.provenance ?? null;
-  const mergeSha = prov?.merge?.mergeCommit ?? null;
+  const canonicalIntegration = currentIntegrationStatus(job);
+  const usesCanonicalIntegration = INTEGRATION_STATUS_LANES.has(job.state);
 
   let inDevelop: boolean;
   let inMain: boolean;
@@ -847,22 +852,26 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
   let releaseLabel: string;
 
   if (sig) {
-    inDevelop = sig.inIntegration;
+    inDevelop = usesCanonicalIntegration
+      ? canonicalIntegration?.status === 'integrated'
+      : sig.inIntegration;
     inMain = sig.inRelease;
-    developSha = sig.integrationSha ?? null;
+    developSha = usesCanonicalIntegration
+      ? inDevelop ? canonicalIntegration?.sha ?? null : null
+      : sig.integrationSha ?? null;
     mainSha = sig.releaseSha ?? null;
     branch = sig.branch || prov?.branch || null;
-    integrationLabel = sig.integrationBranch || 'develop';
+    integrationLabel = canonicalIntegration?.integrationBranch || sig.integrationBranch || 'develop';
     releaseLabel = sig.releaseBranch || 'main';
   } else {
-    // Graceful degradation: the persisted develop-merge fact and the terminal
-    // Completed lane both prove develop; main is unknown without the graph.
-    inDevelop = !!mergeSha || job.state === TaskState.Completed;
+    // Conservative degradation: only the canonical integration projection can
+    // prove target-branch membership. Lane and provenance never substitute.
+    inDevelop = canonicalIntegration?.status === 'integrated';
     inMain = false;
-    developSha = shortShaOf(mergeSha);
+    developSha = inDevelop ? shortShaOf(canonicalIntegration?.sha) : null;
     mainSha = null;
     branch = prov?.branch || null;
-    integrationLabel = 'develop';
+    integrationLabel = canonicalIntegration?.integrationBranch || 'develop';
     releaseLabel = 'main';
   }
 

@@ -9,9 +9,9 @@ namespace AgentStudio.Pipeline;
 /// this step does NOT run on its own: the catalogue marks it
 /// <see cref="PipelineStep.Deferred"/> so it sits "pending" in the pipeline view
 /// until the operator accepts a done-green task via the "Merge into Develop"
-/// action (the <c>HumanReview -&gt; Completed</c> transition). That acceptance is
-/// the trigger; <see cref="AgentStudio.Tasks.TaskTransitionService"/>
-/// enqueues it for <see cref="AcceptedIntegrationWorker"/>.
+/// action. Acceptance keeps the task in Human Review with phase
+/// <c>integrating</c> and enqueues this runner for
+/// <see cref="AcceptedIntegrationWorker"/>.
 ///
 /// <para>
 /// It performs the real, scoped git merge <c>task/&lt;id&gt; -&gt; develop</c> via
@@ -20,9 +20,8 @@ namespace AgentStudio.Pipeline;
 /// pending to passed / failed / skipped in place. A merge conflict is recorded
 /// <see cref="PipelineStepStatus.Failed"/> with the conflicted files in the
 /// verdict summary - made visible, never silently resolved - while the working
-/// tree is left clean (the merge is aborted). Best-effort and fully guarded: it
-/// runs after the lane move has already landed, so nothing it does can block the
-/// transition.
+/// tree is left clean (the merge is aborted). Only a successful result lets the
+/// acceptance worker move the task to Completed.
 /// </para>
 /// </summary>
 public sealed class MergeIntoDevelopRunner

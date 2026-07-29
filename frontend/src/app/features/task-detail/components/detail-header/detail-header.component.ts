@@ -98,9 +98,8 @@ export class DetailHeaderComponent {
   /**
    * Live-derived landed position of the task's work (graph-derived provenance
    * view; null when unknown / still loading). Lets the Human Review acceptance
-   * primary read "Released to main" when the recorded merge fact only proves
-   * develop. The persisted `info.provenance.merge` fact is still the synchronous
-   * fallback, so a "Merged to develop" status renders even before this resolves.
+   * primary refine a canonical integrated result to "Released to main".
+   * `info.integration` remains the only proof of target-branch membership.
    */
   readonly landedState = input<LandedState | null>(null);
   /**

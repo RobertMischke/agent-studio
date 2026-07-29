@@ -1340,6 +1340,27 @@
             <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2426</code><br><span class="small">accepted but not integrated</span></td>
+          <td>
+            The 28 July 23:09 acceptance wave moved reviewed remote cards to Completed while their integration steps
+            emitted a series of <code>NoTaskBranch</code> outcomes. The missing AGT-2423 integration on 29 July showed
+            that the UI could still describe the remembered attempt instead of the target-branch graph.
+          </td>
+          <td>
+            The integration runner reconstructed <code>task/&lt;slug&gt;</code> although Remote Run had published
+            <code>runner/&lt;host&gt;/&lt;task-key&gt;</code> and immutable result refs. Acceptance committed the lane
+            transition before inspecting the integration result, while status shortcuts trusted provenance and curated
+            merge subjects rather than attributed-commit presence.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> delivery refs now resolve from immutable card truth; acceptance remains in
+            Human Review with phase <code>integrating</code> until <code>Merged</code> or <code>AlreadyMerged</code>;
+            failures return to Review with a hard badge and journal evidence. Integration fields are recomputed from
+            attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
+          </td>
+        </tr>
       </tbody>
     </table>
 

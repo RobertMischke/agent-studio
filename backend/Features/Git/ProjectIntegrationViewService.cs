@@ -69,14 +69,15 @@ public sealed record ProjectIntegrationView(
 public sealed class ProjectIntegrationViewService
 {
     /// <summary>
-    /// Queue membership starts only after the operator accepted the card.
-    /// Human Review may already carry a task-level integration preview, but it
-    /// is not an accepted-card queue item until it reaches Completed.
+    /// Queue membership includes completed history plus transactional acceptance
+    /// cards that are integrating or returned to Human Review with the durable
+    /// integration-pending marker.
     /// </summary>
     internal static readonly HashSet<string> AcceptedQueueLanes = new(StringComparer.Ordinal)
     {
         TaskStates.Completed,
         TaskStates.Archive,
+        TaskStates.HumanReview,
     };
 
     private readonly GitService _git;
@@ -116,6 +117,7 @@ public sealed class ProjectIntegrationViewService
         var accepted = _scanner.ScanAllJobsWithArchive()
             .Where(task => string.Equals(task.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
             .Where(task => AcceptedQueueLanes.Contains(task.State))
+            .Where(IsAcceptedQueueTask)
             .Where(task => !task.Fixture)
             .ToList();
         var titles = accepted
@@ -128,34 +130,17 @@ public sealed class ProjectIntegrationViewService
             _git.TryGetAncestorShaSet(root, [releaseRef], out releaseAncestors);
 
         var publisherCommits = _git.GetIntegrationMergeCommits(root, integrationRef);
-        var publisherByKey = publisherCommits
-            .GroupBy(commit => commit.TaskKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var fallback = _taskIntegration.BuildLookup(accepted);
         var proofByTask = new Dictionary<string, string>(StringComparer.Ordinal);
 
         var queue = accepted.Select(task =>
         {
-            var key = TaskKey(task);
             string? proof = null;
-            if (publisherByKey.TryGetValue(key, out var curated))
-            {
-                proof = curated.Sha;
-            }
-            else
-            {
-                var recorded = task.Provenance?.Merge?.MergeCommit;
-                if (!string.IsNullOrWhiteSpace(recorded) && integrationAncestors.Contains(recorded))
-                    proof = recorded;
-                else
-                {
-                    var attributed = TaskIntegrationStatusService.AttributedCommits(task);
-                    if (attributed.Count > 0
-                        && attributed.All(sha =>
-                            TaskIntegrationStatusService.AncestorSetContains(integrationAncestors, sha)))
-                        proof = attributed[^1];
-                }
-            }
+            var attributed = TaskIntegrationStatusService.AttributedCommits(task);
+            if (attributed.Count > 0
+                && attributed.All(sha =>
+                    TaskIntegrationStatusService.AncestorSetContains(integrationAncestors, sha)))
+                proof = attributed[^1];
 
             if (proof != null)
             {
@@ -250,6 +235,14 @@ public sealed class ProjectIntegrationViewService
 
     private static IntegrationQueueItem Item(TaskInfo task, string status, string? sha, string? reason)
         => new(task.Id, TaskKey(task), task.Title, task.State, task.EnteredLaneAt, status, sha, reason);
+
+    private static bool IsAcceptedQueueTask(TaskInfo task)
+    {
+        if (task.State is TaskStates.Completed or TaskStates.Archive) return true;
+        if (task.State != TaskStates.HumanReview) return false;
+        return string.Equals(task.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal)
+               || (task.Tags ?? []).Any(IntegrationStatuses.IsPendingTag);
+    }
 
     private static string TaskKey(TaskInfo task)
         => string.IsNullOrWhiteSpace(task.Key) ? task.Id : task.Key!;

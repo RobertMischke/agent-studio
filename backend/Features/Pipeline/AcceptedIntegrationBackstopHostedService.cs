@@ -75,12 +75,11 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 continue;
             }
 
-            // A curated manual rebase can be truthfully integrated without
-            // retaining the original delivery SHA. Do not replay that old ref.
+            // The canonical attributed set can be integrated while a later
+            // fenced lifecycle snapshot is not itself a delivery expectation.
             // Conversely, when the exact fenced SHA is already contained but the
-            // durable merge step is absent, the backend died after the local
-            // merge and before Record()/queue enqueue. Re-run the idempotent
-            // runner so it records AlreadyMerged and restores the push fact.
+            // durable merge step is absent, re-run the idempotent runner so it
+            // records AlreadyMerged and restores the push fact.
             if (status?.Status == IntegrationStatuses.Integrated
                 && !_integrationStatus.IsFencedDeliveryIntegrated(job))
             {

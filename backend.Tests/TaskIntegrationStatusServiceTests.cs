@@ -12,16 +12,15 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// AGT-2202: the honest, git-derived integration verdict for an accepted card must
-/// resolve the "Accept != Merge" blind spot from ground truth (the develop
-/// git-log), not the ephemeral anchor-ancestry signal. The verdict's anchor is the
+/// resolve the "Accept != Merge" blind spot from target-branch commit membership,
+/// not remembered merge attempts. The verdict's anchor is the
 /// attributed <c>commits[]</c> the card widget shows, so badge and widget can never
 /// contradict (AGT-2171). Every test drives real git against a throwaway repo so
 /// every <see cref="IntegrationStatuses"/> class is exercised end to end:
-///   - integrated via a curated <c>merge(&lt;KEY&gt;)</c> log commit (the signal
-///     anchor-ancestry cannot see because the curated integrator rewrites commits),
-///   - integrated via attributed-commit ancestry (the plain --no-ff merge),
+///   - remembered curated/provenance attempts cannot override missing commits,
+///   - integrated via attributed-commit ancestry after an out-of-band merge,
 ///   - integrated when all attributed commits are in develop even though the branch
-///     tip carries further un-integrated WIP commits (the AGT-2171 case),
+///     tip carries further un-integrated WIP commits,
 ///   - partial (some attributed commits in develop, some not) with the missing SHAs,
 ///   - pending (accepted work still only on the task branch),
 ///   - conflict-skipped (a recorded merge-into-develop conflict),
@@ -61,7 +60,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void BuildLookup_CuratedMergeCommitOnDevelop_IsIntegratedEvenWhenAnchorIsNotAnAncestor()
+    public void BuildLookup_AttemptArtifactsDoNotOverrideMissingCommitPresence()
     {
         // The curated integrator lands the work under a merge(KEY) commit on
         // develop WITHOUT the task's own commit being an ancestor (it rewrites).
@@ -81,14 +80,14 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         var svc = BuildService(repo, out var project, out var log);
         var job = Job("curated", "AGT-2202", project, repo, log, commits: new[] { Commit(anchor) },
-            prov: Prov(branch: "task/curated"));
+            prov: Prov(branch: "task/curated", merge: curatedSha));
 
         var status = svc.BuildLookup(new[] { job })[job.TaskKey];
 
-        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
-        Assert.Equal(curatedSha[..7], status.Sha);
-        Assert.Equal("curated-merge", status.Detail);
-        // Ground-truth cross-check: the anchor really is NOT an ancestor of develop.
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Null(status.Sha);
+        // Ground-truth cross-check: neither the curated subject nor the recorded
+        // merge attempt can replace the missing attributed commit.
         var svcGit = new GitService(NullLogger<GitService>.Instance,
             new TaskScannerService(EmptyConfig(), NullLogger<TaskScannerService>.Instance,
                 new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, EmptyConfig())), EmptyConfig());
@@ -96,7 +95,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void BuildLookup_PlainMergeIntoDevelop_IsIntegratedViaAnchorAncestry()
+    public void BuildLookup_OutOfBandMergeWithoutOwnAttempt_IsIntegrated()
     {
         var repo = SeedDevelopMainRepo();
         RunGit(repo, "checkout -q develop");
@@ -110,6 +109,8 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         var svc = BuildService(repo, out var project, out var log);
         var job = Job("merged", "AGT-3000", project, repo, log, commits: new[] { Commit(anchor) },
             prov: Prov(branch: "task/merged"));
+        Assert.Null(log.Read(job.FolderPath));
+        Assert.Null(job.Provenance?.Merge);
 
         var status = svc.BuildLookup(new[] { job })[job.TaskKey];
 
@@ -160,10 +161,9 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     [Fact]
     public void BuildLookup_AllAttributedCommitsInDevelop_ButBranchTipHasWip_IsIntegrated()
     {
-        // AGT-2171: the attributed commits[] the card widget shows are ALL folded
-        // into develop, but the task branch tip carries further un-integrated WIP
-        // commits. Badge must agree with the widget: integrated, with the WIP count
-        // in the detail - NOT "not integrated".
+        // The attributed commits[] the card widget shows are all folded into
+        // develop, but the task branch tip carries further un-integrated WIP
+        // commits. Only the attributed set participates in the verdict.
         var repo = SeedDevelopMainRepo();
         RunGit(repo, "checkout -q develop");
         RunGit(repo, "checkout -q -b task/wiptip");
@@ -189,8 +189,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         Assert.Equal(IntegrationStatuses.Integrated, status.Status);
         Assert.Equal(attributed[..7], status.Sha);
-        Assert.Contains("unintegrated WIP", status.Detail);
-        Assert.Contains("2", status.Detail!);
+        Assert.Equal("anchor-ancestor", status.Detail);
         // Ground-truth cross-check: the branch tip really is NOT an ancestor of develop.
         var svcGit = new GitService(NullLogger<GitService>.Instance,
             new TaskScannerService(EmptyConfig(), NullLogger<TaskScannerService>.Instance,
@@ -315,6 +314,35 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         Assert.Equal(IntegrationStatuses.Pending, status.Status);
         Assert.Null(status.Sha);
+    }
+
+    [Fact]
+    public void BuildLookup_TargetHeadMoveInvalidatesCachedStatusImmediately()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/out-of-band");
+        File.WriteAllText(Path.Combine(repo, "out-of-band.txt"), "work");
+        Commit(repo, "feat: out-of-band work");
+        var anchor = RunGit(repo, "rev-parse task/out-of-band").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "out-of-band",
+            "AGT-2426",
+            project,
+            repo,
+            log,
+            commits: [Commit(anchor)]);
+
+        Assert.Equal(IntegrationStatuses.Pending, svc.BuildLookup([job])[job.TaskKey].Status);
+        Assert.Equal(1, svc.ComputationCount);
+
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/out-of-band");
+
+        Assert.Equal(IntegrationStatuses.Integrated, svc.BuildLookup([job])[job.TaskKey].Status);
+        Assert.Equal(2, svc.ComputationCount);
     }
 
     [Fact]

@@ -21,13 +21,11 @@ namespace AgentStudio.Tasks;
 /// </para>
 ///
 /// <para>
-/// The card <b>anchor</b> is the latest attributed TASK commit on the board
-/// payload (<see cref="AnchorFor"/>) - never a fresh per-card branch-tip read, and
-/// never a branch tip / merge fact on their own (AGT-2063: a commit-less card gets
-/// no signal). A recorded develop-merge fact
-/// (<see cref="TaskProvenanceMerge.MergeCommit"/>) still short-circuits the develop
-/// segment to <c>true</c> without any set lookup for an anchored card, because a
-/// merge into develop is an append-only fact.
+/// The card source is the same attributed commit set used by
+/// <see cref="TaskIntegrationStatusService"/>. Every attributed commit must be
+/// present in a target branch for that segment to light up. Lane state,
+/// provenance merge records, and branch tips never override graph membership.
+/// This keeps the compact chip aligned with the canonical integration field.
 /// </para>
 /// </summary>
 public sealed class BoardMergeStatusService
@@ -92,7 +90,7 @@ public sealed class BoardMergeStatusService
         var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
         foreach (var job in jobs)
         {
-            if (AnchorFor(job) is null) continue;
+            if (TaskIntegrationStatusService.AttributedCommits(job).Count == 0) continue;
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
             if (string.IsNullOrWhiteSpace(root)) continue;
             var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
@@ -129,21 +127,16 @@ public sealed class BoardMergeStatusService
 
             foreach (var job in repoJobs)
             {
-                var anchor = AnchorFor(job)!;
-                var mergeSha = job.Provenance?.Merge?.MergeCommit;
+                var commits = TaskIntegrationStatusService.AttributedCommits(job);
+                var anchor = commits[^1];
                 var branch = !string.IsNullOrWhiteSpace(job.Provenance?.Branch)
                     ? job.Provenance!.Branch
                     : WorktreeTaskLifecycle.BranchFor(job.Id);
 
-                // Develop: the recorded merge fact is authoritative (append-only,
-                // zero-cost); otherwise the anchor's graph membership. Main: the
-                // anchor - or the develop-merge commit - reaching the release line.
-                var inIntegration =
-                    (mergeSha is { Length: > 0 })
-                    || reach.Integration.Contains(anchor);
-                var inRelease =
-                    reach.Release.Contains(anchor)
-                    || (mergeSha is { Length: > 0 } && reach.Release.Contains(mergeSha));
+                var inIntegration = commits.All(sha =>
+                    TaskIntegrationStatusService.AncestorSetContains(reach.Integration, sha));
+                var inRelease = commits.All(sha =>
+                    TaskIntegrationStatusService.AncestorSetContains(reach.Release, sha));
 
                 result[job.TaskKey] = new TaskMergeSignal
                 {
@@ -152,7 +145,7 @@ public sealed class BoardMergeStatusService
                     InRelease = inRelease,
                     IntegrationBranch = reach.IntegrationBranch,
                     ReleaseBranch = ReleaseBranch,
-                    IntegrationSha = inIntegration ? Short(mergeSha ?? anchor) : null,
+                    IntegrationSha = inIntegration ? Short(anchor) : null,
                     ReleaseSha = inRelease ? Short(anchor) : null,
                 };
             }
@@ -162,26 +155,12 @@ public sealed class BoardMergeStatusService
     }
 
     /// <summary>
-    /// The card anchor read entirely from the persisted board payload (no git
-    /// spawn): the latest attributed TASK commit SHA. Null when the card has
-    /// committed nothing yet, which suppresses its signal.
-    ///
-    /// <para>
-    /// AGT-2063: the anchor is the task's own commit and nothing else. A recorded
-    /// <c>task/&lt;id&gt;</c> branch tip is deliberately NOT used: for a task that
-    /// produced no commit the tip is just the branch base, which is trivially an
-    /// ancestor of develop/main and would light the develop segment on a card that
-    /// changed nothing (the "merge state on a commit-less card" bug). The recorded
-    /// merge fact still proves the develop segment in <see cref="BuildLookup"/>
-    /// (it reads <c>Merge.MergeCommit</c> directly), but on its own it does not
-    /// manufacture an anchor: no task commit means no signal.
-    /// </para>
+    /// The latest integrable attributed task commit. This delegates to the
+    /// canonical integration source so zero-file lifecycle markers, legacy
+    /// singular commits, and abbreviated SHA handling stay aligned.
     /// </summary>
     internal static string? AnchorFor(TaskInfo job)
-    {
-        var last = job.Commits.Count > 0 ? job.Commits[^1].Sha : job.Commit?.Sha;
-        return string.IsNullOrWhiteSpace(last) ? null : last;
-    }
+        => TaskIntegrationStatusService.AnchorFor(job);
 
     /// <summary>
     /// The develop + main ancestor SHA sets for one repo. TWO (up to four with the

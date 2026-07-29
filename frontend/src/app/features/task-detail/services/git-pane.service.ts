@@ -311,8 +311,8 @@ export class GitPaneService implements OnDestroy {
     if (!info) return;
     this.jobService.getTaskProvenance(info.id, info.watchPath).subscribe({
       // Flip the resolved flag on both settle paths: a failed load still means
-      // "we are no longer waiting", so the acceptance primary falls back to the
-      // persisted merge fact instead of staying disabled forever.
+      // "we are no longer waiting". Acceptance still reads target membership
+      // only from the task's computed integration field.
       next: (view) => { this.provenance.set(view); this.provenanceLoaded.set(true); },
       error: () => { this.provenance.set(null); this.provenanceLoaded.set(true); },
     });
