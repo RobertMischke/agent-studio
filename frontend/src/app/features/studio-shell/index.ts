@@ -11,7 +11,7 @@ export {
   isTaskDetailTab,
   isTaskInspectorTab,
   parseStudioRoute,
-  replaceStudioRoute,
+  navigateStudioRoute,
   replaceStudioRouteQuery,
   replaceTaskViewRoute,
   studioProjectSlug,

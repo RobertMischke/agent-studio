@@ -262,6 +262,21 @@ describe('BoardFiltersService URL-hash coexistence with a route overlay', () => 
     expect(window.location.hash).toBe('#/workspace/settings');
   });
 
+  it('clearing project scope keeps the board route and unrelated filters', () => {
+    history.replaceState(
+      null,
+      '',
+      '/#/board&filters=projects%3AAgent%20Studio%20Marketing%3Btype%3Abug',
+    );
+    svc.hydrateFromUrl();
+
+    svc.clearProjectScope();
+
+    expect(svc.activeProjects().size).toBe(0);
+    expect(svc.activeType()).toBe('bug');
+    expect(window.location.hash).toBe('#/board&filters=type%3Abug');
+  });
+
   it('hydrates the filter from a composite hash where the route comes first', () => {
     history.replaceState(null, '', '/#/workspace/settings&filters=type%3Abug');
 

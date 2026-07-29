@@ -131,18 +131,25 @@ export function studioRouteForTab(
 }
 
 /**
- * Replace the visible Studio route without adding a history entry for every
- * rail/tab click. Route-local query state already present on the same base
- * path is retained, so a later signal refresh cannot erase a Wiki page or a
- * Task tab selection.
+ * Mirror an active Studio surface into the address bar.
+ *
+ * A user-visible surface transition gets its own history entry so Back and
+ * Forward restore the previous editor surface. Cold boot and legacy URLs that
+ * do not name a Studio surface are canonicalized in place. Route hydration
+ * and popstate already carry the requested route, so they are naturally
+ * no-ops and cannot create a duplicate history entry.
+ *
+ * Route-local query state already present on the same base path is retained,
+ * so a later signal refresh cannot erase a Wiki page or Task tab selection.
  */
-export function replaceStudioRoute(route: string): void {
+export function navigateStudioRoute(route: string): void {
   if (typeof window === 'undefined') return;
   const current = routeSegmentOf(window.location.hash);
   if (sameRouteBase(current, route)) return;
   const target = withRouteSegment(window.location.hash, route);
   if (target === window.location.hash) return;
-  window.history.replaceState(
+  const method = current ? 'pushState' : 'replaceState';
+  window.history[method](
     null,
     '',
     window.location.pathname + window.location.search + target,

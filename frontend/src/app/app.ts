@@ -91,7 +91,7 @@ import {
   StudioPanelStateService,
   studioTabKey,
   parseStudioRoute,
-  replaceStudioRoute,
+  navigateStudioRoute,
   replaceTaskViewRoute,
   studioProjectSlug,
   studioRouteForTab,
@@ -999,12 +999,7 @@ export class App implements OnInit, OnDestroy {
       if (project === undefined) return;
       untracked(() => {
         if (project === null) {
-          this.boardFilters.activeProjects.set(new Set<string>());
-          try {
-            localStorage.setItem('activeProjects', JSON.stringify([]));
-          } catch {
-            /* storage may be blocked */
-          }
+          this.boardFilters.clearProjectScope();
         } else {
           this.boardFilters.setSoleProject(project);
         }
@@ -1125,7 +1120,7 @@ export class App implements OnInit, OnDestroy {
       const inspectorTab = this.routeInspectorTab()
         ?? (selected?.info.state === TaskState.Progress ? 'activity' : 'protocol');
       untracked(() => {
-        replaceStudioRoute(route);
+        navigateStudioRoute(route);
         if (tab.kind === 'task') replaceTaskViewRoute(detailTab, inspectorTab);
       });
     });
