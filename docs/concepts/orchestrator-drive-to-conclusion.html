@@ -1284,6 +1284,42 @@
             is a separately marked MachineBound suite run. Runner restart and Task Server restart remain distinct acceptance phases.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2423</code><br><span class="small">salvage commits observed on <code>origin/main</code></span></td>
+          <td>
+            Three teardown commits created for <code>AGT-2394</code>, <code>AGT-2397</code>, and
+            <code>AGT-2399</code> appeared consecutively on the <code>origin/main</code> first-parent line.
+            Later card-scoped integrations then collided with the large changes already present there.
+            All three contain substantive work:
+            <ul>
+              <li><code>ab75046a</code>, <code>AGT-2394</code>, run
+                <code>run_2ba410a28c184fb0a43340e8665019d2</code>: Compose-backed Remote Run
+                harness and operator documentation, 21 files, 2,019 insertions, 9 deletions.</li>
+              <li><code>afee6f81</code>, <code>AGT-2397</code>, run
+                <code>run_d56198256e004cec940895a00c0159ad</code>: parallel delivery and
+                worker-loss harness, 10 files, 2,203 insertions, 3 deletions.</li>
+              <li><code>67d3039c</code>, <code>AGT-2399</code>, run
+                <code>run_bdf4283bc2924d6c99b102a335fc713c</code>: published acceptance
+                report and evidence plus result-contract and durable Runner authority work,
+                273 files, 59,071 insertions, 278 deletions.</li>
+            </ul>
+          </td>
+          <td>
+            Git object and ref evidence distinguishes creation from integration. Each exact commit is still the tip of its
+            <code>runner/agent-runner-01/&lt;task-key&gt;</code> ref and its run-scoped immutable result ref. The Runner's
+            salvage path publishes <code>HEAD</code> explicitly to that card ref. The same objects were subsequently used
+            as fast-forward integration tips for <code>main</code>; their original salvage subjects therefore remained
+            visible on the main line. No zero-file marker or direct salvage-to-base refspec was involved.
+          </td>
+          <td>
+            <span class="pill ok">hardened</span> every moving salvage push now passes a fail-closed target allowlist
+            immediately before <code>git push</code>. Only the exact card branch and collision refs derived from it are
+            accepted; <code>main</code>, <code>develop</code>, fully qualified base refs, and other cards are rejected.
+            An end-to-end regression proves teardown from an authoritative <code>main</code> base leaves
+            <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
+          </td>
+        </tr>
       </tbody>
     </table>
 
