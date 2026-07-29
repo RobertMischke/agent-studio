@@ -195,5 +195,14 @@ public static class SystemEndpoints
             context.Response.Headers["X-Agent-Studio-Commit"] = identity.Commit;
             return Results.Ok("ok");
         });
+
+        // External stable-process watchdogs consult this immediately before a
+        // hard restart. The merge gate is one consistency boundary that must
+        // finish its build decision and possible rollback before process exit.
+        // Plain text keeps the shell probe dependency-free.
+        app.MapGet("/healthz/drain", (MergeIntoDevelopRunner merge) =>
+            Results.Text(
+                merge.IsMergeGateBusy ? "gate-busy" : "idle",
+                "text/plain"));
     }
 }

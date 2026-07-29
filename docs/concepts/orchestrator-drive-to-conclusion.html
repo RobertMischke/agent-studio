@@ -1173,6 +1173,26 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-28</td>
+          <td><code>AGT-2418</code><br><span class="small">stable watchdog cut an accepted merge gate<br>(follow-up to <code>AGT-2384</code>)</span></td>
+          <td>
+            The external stable restart watcher could observe an idle task runner while the accepted-integration worker
+            was still inside merge, pre-develop build, or rollback. Its update path then stopped the backend hard and
+            could cut the integration branch mutation before that consistency boundary reached a durable verdict.
+          </td>
+          <td>
+            Runner-idle state did not include background merge-gate activity. The backend exposed no drain signal for
+            that boundary, and the watchdog had no bounded grace window before invoking the hard restart.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> <code>/healthz/drain</code> now reports <code>gate-busy</code> while a merge,
+            gate, or rollback is active or waiting. The accepted worker ignores host cancellation once that boundary
+            starts and finishes it before stopping. The external restart watcher waits up to a configurable 120-second
+            window before the hard update path; durable Completed-lane and pipeline facts remain the recovery terminal
+            if the bounded window expires or the process still dies.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-29</td>
           <td><code>AGT-2395</code><br><span class="small">historical lease-adoption replay<br>(reconstructs <code>AGT-2182/2194/2198/2232</code>)</span></td>
           <td>

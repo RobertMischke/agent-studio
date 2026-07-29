@@ -271,6 +271,104 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
         Assert.Contains("rebase", integration.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("develop", integration.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            deps.Timeline.ReadAll(completed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationPendingWarning);
+    }
+
+    [Fact]
+    public async Task BackgroundAccept_QueuesPendingIntegration_WithoutNormalPathWarning()
+    {
+        var deliverySha = PublishDelivery("background.txt", "remote work\n");
+        var deps = Build(deliverySha, backgroundIntegration: true);
+
+        var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Contains(completed!.Tags, IntegrationStatuses.IsPendingTag);
+        Assert.DoesNotContain(
+            deps.Timeline.ReadAll(completed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationPendingWarning);
+        Assert.NotNull(deps.AcceptedQueue);
+        Assert.True(deps.AcceptedQueue!.Reader.TryRead(out var queued));
+        Assert.Equal(Slug, queued!.JobId);
+    }
+
+    [Fact]
+    public async Task AcceptedIntegrationWorker_Shutdown_DrainsActiveMergeGate()
+    {
+        var deliverySha = PublishDelivery("worker-drain.txt", "remote work\n");
+        var gate = new BlockingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            "CS0103: the merge does not compile",
+            "backend build exit 1",
+            true,
+            false));
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            gateRunner: gate);
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+
+        var worker = new AcceptedIntegrationWorker(
+            deps.AcceptedQueue!,
+            deps.Merge,
+            deps.Scanner,
+            deps.Mutations,
+            deps.Provenance,
+            NullLogger<AcceptedIntegrationWorker>.Instance);
+        await worker.StartAsync(CancellationToken.None);
+        await gate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(deps.Merge.IsMergeGateBusy);
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _tempDir,
+                        ["WatchPaths:0:Name"] = Project,
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _repo,
+                        ["WatchPaths:0:RepositoryPath"] = _repo,
+                    });
+                });
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IHostedService>();
+                    services.RemoveAll<MergeIntoDevelopRunner>();
+                    services.AddSingleton(deps.Merge);
+                });
+            });
+        using var client = factory.CreateClient();
+        Assert.Equal("gate-busy", await client.GetStringAsync("/healthz/drain"));
+
+        var stopTask = worker.StopAsync(CancellationToken.None);
+        await Task.Delay(100);
+        Assert.False(stopTask.IsCompleted);
+        Assert.True(deps.Merge.IsMergeGateBusy);
+
+        gate.Release();
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(deps.Merge.IsMergeGateBusy);
+        Assert.Equal("idle", await client.GetStringAsync("/healthz/drain"));
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        var mergeStep = deps.Pipeline.Read(completed!.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Failed, mergeStep!.Status);
+        Assert.Equal("gate-failed", mergeStep.Verdict);
+        worker.Dispose();
     }
 
     [Fact]
@@ -444,6 +542,33 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void AcceptanceMerge_LocalDeliveryWithoutReviewSubject_IsRecoveredFromCompletedLane()
+    {
+        var deliverySha = PublishLocalDelivery("local-restart.txt", "local delivery\n");
+        var deps = Build(deliverySha, writeReviewSubject: false);
+
+        var moved = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+
+        var backstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Pipeline,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
+        var recovered = backstop.RunOnce();
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+        Assert.Null(ReviewSubjectStore.Read(
+            deps.Scanner.FindJob(Slug, _watchPath)!.FolderPath));
+    }
+
+    [Fact]
     public async Task AcceptanceMerge_LandedBeforeRestart_RecoversMissingRecordAndPush()
     {
         var deliverySha = PublishDelivery("merge-record-restart.txt", "local merge survived\n");
@@ -515,9 +640,25 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         return sha;
     }
 
+    private string PublishLocalDelivery(string relativePath, string content)
+    {
+        var branch = WorktreeTaskLifecycle.BranchFor(Slug);
+        RunGit(_repo, "branch", "develop", "origin/develop");
+        RunGit(_repo, "checkout", "-q", "-b", branch, "develop");
+        File.WriteAllText(Path.Combine(_repo, relativePath), content);
+        RunGit(_repo, "add", "-A");
+        RunGit(_repo, "commit", "-q", "-m", $"feat({TaskKey}): local delivery");
+        var sha = Git(_repo, "rev-parse", "HEAD").Out.Trim();
+        RunGit(_repo, "checkout", "-q", "main");
+        return sha;
+    }
+
     private Deps Build(
         string deliverySha,
-        string integrationStrategy = IntegrationStrategies.DirectMerge)
+        string integrationStrategy = IntegrationStrategies.DirectMerge,
+        bool backgroundIntegration = false,
+        IBuildTestGateRunner? gateRunner = null,
+        bool writeReviewSubject = true)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -542,13 +683,26 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         settings.SetIntegrationBranch(Project, "develop");
         settings.SetIntegrationStrategy(Project, integrationStrategy);
         settings.SetAutoPushStrategy(Project, AutoPushStrategies.Never);
+        if (gateRunner != null)
+            settings.SetBuildProfile(Project, new BuildProfile { BuildCmds = ["cd ."] });
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var pipeline = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         var merge = new MergeIntoDevelopRunner(
-            git, pipeline, NullLogger<MergeIntoDevelopRunner>.Instance, projectSettings: settings);
+            git,
+            pipeline,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preDevelopBuildGate: gateRunner == null ? null : new PreDevelopBuildGate(gateRunner),
+            preDevelopTimeout: TimeSpan.FromSeconds(30));
         var integration = new TaskIntegrationStatusService(
             git, settings, pipeline, NullLogger<TaskIntegrationStatusService>.Instance);
         var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+        var provenance = new TaskProvenanceService(
+            git,
+            settings,
+            mutations,
+            NullLogger<TaskProvenanceService>.Instance);
+        var acceptedQueue = backgroundIntegration ? new AcceptedIntegrationQueue() : null;
 
         var jobFolder = Path.Combine(_watchPath, TaskStates.HumanReview, Slug);
         Directory.CreateDirectory(jobFolder);
@@ -571,19 +725,22 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         File.WriteAllText(
             Path.Combine(jobFolder, "task.json"),
             JsonSerializer.Serialize(job, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
-        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        if (writeReviewSubject)
         {
-            TaskKey = TaskKey,
-            Project = Project,
-            Repository = _origin,
-            ResultSha = deliverySha,
-            ResultRef = DeliveryRef,
-            AttemptChainId = "fixture-attempt",
-            Executor = "agent-runner-01",
-            LeaseId = "fixture-attempt",
-            FencingToken = 1,
-            CompletedAtUtc = DateTimeOffset.UtcNow,
-        });
+            ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+            {
+                TaskKey = TaskKey,
+                Project = Project,
+                Repository = _origin,
+                ResultSha = deliverySha,
+                ResultRef = DeliveryRef,
+                AttemptChainId = "fixture-attempt",
+                Executor = "agent-runner-01",
+                LeaseId = "fixture-attempt",
+                FencingToken = 1,
+                CompletedAtUtc = DateTimeOffset.UtcNow,
+            });
+        }
         pipeline.Begin(jobFolder, PipelineCatalogue.Standard, Project, Slug);
         Assert.NotNull(scanner.FindJob(Slug, _watchPath));
 
@@ -595,9 +752,23 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             settings,
             NullLogger<TaskTransitionService>.Instance,
             mergeRunner: merge,
+            provenance: provenance,
             integrationStatus: integration,
-            timeline: timeline);
-        return new Deps(scanner, states, mutations, transitions, pipeline, integration, settings, merge, config);
+            timeline: timeline,
+            acceptedIntegrationQueue: acceptedQueue);
+        return new Deps(
+            scanner,
+            states,
+            mutations,
+            transitions,
+            pipeline,
+            integration,
+            settings,
+            merge,
+            config,
+            timeline,
+            provenance,
+            acceptedQueue);
     }
 
     private static object Commit(string sha) => new
@@ -652,7 +823,10 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         TaskIntegrationStatusService Integration,
         ProjectSettingsService Settings,
         MergeIntoDevelopRunner Merge,
-        IConfiguration Configuration);
+        IConfiguration Configuration,
+        TimelineLog Timeline,
+        TaskProvenanceService Provenance,
+        AcceptedIntegrationQueue? AcceptedQueue);
 
     private sealed class BlockingBuildTestGateRunner(BuildTestGateResult result)
         : IBuildTestGateRunner

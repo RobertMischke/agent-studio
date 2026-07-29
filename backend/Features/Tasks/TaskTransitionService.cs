@@ -291,15 +291,17 @@ public sealed class TaskTransitionService
 
             var integrationRunsInBackground = _acceptedIntegrationQueue != null;
 
-            // Stamp the durable visibility fact before the volatile hand-off.
-            // This ordering prevents a fast worker from clearing the marker and
-            // racing a stale accept-side status read that would add it back.
+            // Stamp the durable pending fact before the volatile hand-off. A
+            // pending status is the normal state while the worker waits and is
+            // therefore deliberately quiet. Only a failed hand-off or a decided
+            // inline merge failure emits the accept-without-merge warning.
             if (targetState == TaskStates.Completed
                 && !isReadOnly
                 && integrationRunsInBackground)
             {
                 var acceptedJob = _scanner.FindJob(jobId, watchPath);
-                if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
+                if (acceptedJob != null)
+                    FlagIntegrationOnAccept(acceptedJob, warnIfNotIntegrated: false);
             }
 
             // Deferred "Merge into Develop" post-step. Production hands the
@@ -319,8 +321,8 @@ public sealed class TaskTransitionService
             // AGT-2202: compatibility fixtures without the production queue still
             // run the merge inline. In that path, derive visibility after the
             // merge so existing synchronous callers retain their historical
-            // result. Production stamped the marker before enqueue above.
-            // If work is NOT in develop, make it loud - a Warn timeline event + an
+            // result. If work is NOT in develop, make it loud - a Warn timeline
+            // event plus an
             // integrationpending tag the completed-lane audit can list - WITHOUT
             // blocking the acceptance that already landed (Robert wants visibility,
             // not a new brake). Fully guarded and read-only.
@@ -645,6 +647,7 @@ public sealed class TaskTransitionService
                     settings.IntegrationBranch,
                     settings.IntegrationStrategy)))
             {
+                FlagIntegrationOnAccept(moved);
                 _logger.LogWarning(
                     "Accepted integration enqueue failed for {JobId}; the durable backstop will retry",
                     moved.Id);
@@ -692,7 +695,9 @@ public sealed class TaskTransitionService
     /// <c>integrationpending</c> tag from an earlier accept is cleared so the
     /// marker self-heals. Best-effort and fully guarded.
     /// </summary>
-    private void FlagIntegrationOnAccept(TaskInfo accepted)
+    private void FlagIntegrationOnAccept(
+        TaskInfo accepted,
+        bool warnIfNotIntegrated = true)
     {
         if (_integrationStatus == null) return;
         try
@@ -710,6 +715,8 @@ public sealed class TaskTransitionService
                     tags.Add(IntegrationStatuses.PendingTag);
                     _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
                 }
+
+                if (!warnIfNotIntegrated) return;
 
                 _timeline?.Append(accepted.FolderPath, new TimelineEvent
                 {

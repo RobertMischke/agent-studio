@@ -39,6 +39,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly Func<int, TimeSpan> _environmentalBackoff;
     private readonly SemaphoreSlim _mergeGate = new(1, 1);
     private readonly SemaphoreSlim _pushGate = new(1, 1);
+    private int _mergeGateUsers;
 
     public MergeIntoDevelopRunner(
         GitService git,
@@ -107,23 +108,38 @@ public sealed class MergeIntoDevelopRunner
         CancellationToken ct,
         string integrationStrategy = IntegrationStrategies.DirectMerge)
     {
-        // Deliberately NOT the caller's token. Merge + gate + rollback form one
-        // consistency boundary after acceptance is already durable. Production
-        // reaches this through AcceptedIntegrationWorker, so waiting for the
-        // serialized gate no longer extends the accept HTTP request. A process
-        // exit is recovered by AcceptedIntegrationBackstopHostedService.
-        await _mergeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        // Count both the active operation and serialized waiters. The external
+        // stable watchdog uses this drain signal to avoid cutting the process
+        // between merge and gate/rollback. The accepted lane and pipeline facts
+        // still recover queued work that has not entered this boundary.
+        Interlocked.Increment(ref _mergeGateUsers);
         try
         {
-            return await RunSerializedAsync(
-                project, jobId, jobFolderPath, watchPath,
-                integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+            // Deliberately NOT the caller's token. Merge + gate + rollback form
+            // one consistency boundary after acceptance is already durable.
+            await _mergeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                return await RunSerializedAsync(
+                    project, jobId, jobFolderPath, watchPath,
+                    integrationBranch, integrationStrategy, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _mergeGate.Release();
+            }
         }
         finally
         {
-            _mergeGate.Release();
+            Interlocked.Decrement(ref _mergeGateUsers);
         }
     }
+
+    /// <summary>
+    /// True while an accepted integration is inside, or waiting to enter, the
+    /// serialized merge + build-gate + rollback consistency boundary.
+    /// </summary>
+    public bool IsMergeGateBusy => Volatile.Read(ref _mergeGateUsers) > 0;
 
     private async Task<MergeIntoIntegrationResult> RunSerializedAsync(
         string project,
@@ -293,12 +309,6 @@ public sealed class MergeIntoDevelopRunner
             : PreDevelopBuildGate.AppliesTo(profile)
                 ? null
                 : "the project declares no build-profile build commands";
-        // Without an exact rollback anchor the gate could not undo a red merge, so
-        // it must not pretend to guard one.
-        var preMergeTip = skipReason is null ? _git.GetBranchTip(repoRoot, integrationBranch) : null;
-        if (skipReason is null && string.IsNullOrWhiteSpace(preMergeTip))
-            skipReason = $"the pre-merge tip of {integrationBranch} could not be read";
-
         var result = merge();
         if (skipReason is not null)
         {
@@ -308,6 +318,40 @@ public sealed class MergeIntoDevelopRunner
             return (result, null);
         }
         if (result.Outcome != MergeIntoIntegrationOutcome.Merged) return (result, null);
+
+        // The remote-delivery merge may create the configured local integration
+        // branch from origin. In that case there was no local tip to capture
+        // before the merge. The first parent of the new --no-ff merge commit is
+        // the exact synchronized integration tip and therefore the authoritative
+        // rollback anchor.
+        var preMergeTip = string.IsNullOrWhiteSpace(result.MergedSha)
+            ? null
+            : _git.GetFirstParent(repoRoot, result.MergedSha);
+        if (string.IsNullOrWhiteSpace(preMergeTip))
+        {
+            var missingAnchorReason =
+                $"The build gate could not determine the pre-merge tip of {integrationBranch}; " +
+                "the merged branch requires manual verification and repair.";
+            var missingAnchor = new BuildTestGateResult(
+                BuildTestGateVerdict.Fail,
+                null,
+                0,
+                string.Empty,
+                missingAnchorReason,
+                false,
+                false)
+            {
+                ExpectedSha = result.MergedSha,
+                FailureKind = BuildTestGateFailureKind.MissingSource,
+            };
+            RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", missingAnchor);
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    mergedSha: result.MergedSha,
+                    error: missingAnchor.Reason),
+                missingAnchor);
+        }
 
         var gate = await _preDevelopBuildGate!.RunAsync(
             new BuildTestGateRequest(repoRoot, result.MergedSha, "merge-into-develop-build-gate")
