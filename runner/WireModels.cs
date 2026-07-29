@@ -233,7 +233,9 @@ public sealed record RunnerClaimResponse(
     string? RampStrategy = null,
     string? AdmissionReason = null,
     // T0b: additive execution spec; an older server simply omits it.
-    RunSpecDto? RunSpec = null);
+    RunSpecDto? RunSpec = null,
+    // Exact additive context selected and audited before this claim.
+    string? PromptEnrichmentContext = null);
 
 public static class RemoteChatWorkKinds
 {

@@ -49,9 +49,10 @@ public class TaskRunnerService : BackgroundService
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly AgentStudio.Pipeline.IConceptWorkbenchPublisher? _conceptWorkbenchPublisher;
-    // Forwarded to each ProjectRunner. DI injects the registered singleton; the
-    // step is default-OFF per project, so a wired-but-disabled step changes
-    // nothing. Null only when a test fixture builds the service directly.
+    private readonly PromptEnrichmentService? _promptEnrichment;
+    // Forwarded to each ProjectRunner. DI injects the registered singleton; a
+    // project can disable the default-on step through its pipeline convention.
+    // Null only when a test fixture builds the service directly.
     private readonly AgentStudio.Runner.PostAbortReviewStepService? _postAbortReview;
     // Forwarded to each ProjectRunner for post-hoc Claude token reconstruction
     // from session transcripts. DI injects the registered singleton; null only
@@ -144,7 +145,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
         AgentStudio.Clients.ClientIdentityStore? clients = null,
         CliQuotaWaitPolicyService? quotaWaitPolicy = null,
-        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null)
+        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
+        PromptEnrichmentService? promptEnrichment = null)
     {
         _config = config;
         _logger = logger;
@@ -180,6 +182,7 @@ public class TaskRunnerService : BackgroundService
         _modelQualification = modelQualification;
         _integrationPushQueue = integrationPushQueue;
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
+        _promptEnrichment = promptEnrichment;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
@@ -357,7 +360,8 @@ public class TaskRunnerService : BackgroundService
                 loadThrottle: _loadThrottle,
                 modelQualification: _modelQualification,
                 integrationPushQueue: _integrationPushQueue,
-                conceptWorkbenchPublisher: _conceptWorkbenchPublisher);
+                conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
+                promptEnrichment: _promptEnrichment);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -1262,7 +1266,8 @@ public class TaskRunnerService : BackgroundService
             quotaFallback: _quotaFallback,
             quotaWaitPolicy: _quotaWaitPolicy,
             loadThrottle: _loadThrottle,
-            conceptWorkbenchPublisher: _conceptWorkbenchPublisher);
+            conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
+            promptEnrichment: _promptEnrichment);
         runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
         runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));

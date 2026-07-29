@@ -37,7 +37,10 @@ public sealed record PersistedRunnerSlot(
     // replacement daemon that reattaches (or runs the bounded same-session
     // resume) must relaunch with the card's CLI, model and reasoning level
     // instead of silently dropping back to the host's RUNNER_CLI_* configuration.
-    RunSpecDto? RunSpec = null);
+    RunSpecDto? RunSpec = null,
+    // Server-selected prompt context for this exact claim. Persisted so daemon
+    // replacement cannot silently relaunch without the audited enrichment.
+    string? PromptEnrichmentContext = null);
 
 /// <summary>Atomic JSON persistence under RUNNER_STATE_DIR.</summary>
 public sealed class RunnerStateStore
@@ -63,7 +66,8 @@ public sealed class RunnerStateStore
         string? repositoryUrl = null,
         string? defaultBranch = null,
         string? taskKind = null,
-        RunSpecDto? runSpec = null)
+        RunSpecDto? runSpec = null,
+        string? promptEnrichmentContext = null)
     {
         var workerDirectory = Path.Combine(Root, GitWorkspace.SafeSegment(lease.LeaseId));
         Directory.CreateDirectory(workerDirectory);
@@ -84,7 +88,8 @@ public sealed class RunnerStateStore
             0,
             "claimed",
             DateTime.UtcNow,
-            RunSpec: runSpec);
+            RunSpec: runSpec,
+            PromptEnrichmentContext: promptEnrichmentContext);
         Save(slot);
         return slot;
     }

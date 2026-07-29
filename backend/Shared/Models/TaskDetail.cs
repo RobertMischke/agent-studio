@@ -5,6 +5,11 @@ public record TaskDetail
     public TaskInfo Info { get; init; } = new();
     public string? PromptMarkdown { get; init; }
     /// <summary>
+    /// Server-authored preprocessing audit for the prompt most recently
+    /// materialized before dispatch. Null before the first preprocessing run.
+    /// </summary>
+    public PromptEnrichmentReport? EnrichmentReport { get; init; }
+    /// <summary>
     /// Append-only timeline of task extensions: <c>prompt-1.md</c>,
     /// <c>prompt-2.md</c>, ... written by Extend mode. Empty when the user
     /// has never extended the task. Read in the order the timeline was

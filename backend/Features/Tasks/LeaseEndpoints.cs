@@ -1,4 +1,5 @@
 using AgentStudio.Pipeline;
+using AgentStudio.Runner;
 using System.Text;
 using CapabilityProtocol = AgentStudio.TaskServer.Contracts.CapabilityProtocol;
 
@@ -151,6 +152,7 @@ public static class LeaseEndpoints
             AgentStudio.Prompts.RuntimePromptService prompts,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
+            PromptEnrichmentService promptEnrichment,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
@@ -683,6 +685,32 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
+                var runSpec = BuildRunSpec(candidate, settings, prompts);
+                PromptEnrichmentPreparation? enrichmentPreparation = null;
+                try
+                {
+                    // Epics use the separately rendered decomposition prompt,
+                    // not the authored coding prompt consumed by this step.
+                    if (!string.Equals(candidate.Kind, TaskKinds.Epic, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var promptPath = Path.Combine(candidate.FolderPath, "prompt.md");
+                        var authoredPrompt = File.Exists(promptPath)
+                            ? await File.ReadAllTextAsync(promptPath, ct)
+                            : string.Empty;
+                        enrichmentPreparation =
+                            promptEnrichment.Prepare(candidate, authoredPrompt, runSpec.Model);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "remote-runner-prompt-enrichment-blocked project={Project} task={TaskKey}",
+                        candidate.ProjectName,
+                        taskKey);
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty,
+                        Message: $"Prompt enrichment blocked dispatch: {ex.Message}"));
+                }
                 remoteClaimFailures.PrepareForClaim(candidate);
                 var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
                     ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
@@ -779,7 +807,6 @@ public static class LeaseEndpoints
                         InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                         acquire.Lease.FencingToken));
                 }
-                var runSpec = BuildRunSpec(candidate, settings, prompts);
                 logger.LogInformation(
                     "remote-runner-run-spec task={TaskKey} cli={CliType} model={Model} thinking={ThinkingLevel} permission={PermissionMode} context={ContextMode}",
                     taskKey,
@@ -798,7 +825,8 @@ public static class LeaseEndpoints
                     RepositoryUrl: repository.RepositoryUrl,
                     DefaultBranch: repository.DefaultBranch,
                     TaskKind: candidate.Kind,
-                    RunSpec: runSpec), admission.ReasonCode));
+                    RunSpec: runSpec,
+                    PromptEnrichmentContext: enrichmentPreparation?.ContextMarkdown), admission.ReasonCode));
             }
             finally
             {

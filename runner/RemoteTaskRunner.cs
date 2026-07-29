@@ -92,7 +92,8 @@ public sealed class RemoteTaskRunner
         string? taskKind = null,
         string? runId = null,
         string? leaseInstanceId = null,
-        RunSpecDto? runSpec = null)
+        RunSpecDto? runSpec = null,
+        string? promptEnrichmentContext = null)
     {
         var isProjectClone = !string.IsNullOrWhiteSpace(projectId);
         if (isProjectClone && string.IsNullOrWhiteSpace(repositoryUrl))
@@ -110,7 +111,8 @@ public sealed class RemoteTaskRunner
             _options, taskKey, _log, projectId, repositoryUrl, defaultBranch, isProjectClone);
         var slot = _state.Create(
             taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
-            projectId, repositoryUrl, defaultBranch, taskKind, runSpec);
+            projectId, repositoryUrl, defaultBranch, taskKind, runSpec,
+            promptEnrichmentContext);
         return await RunPersistedAsync(slot, workspace, shutdown, reattach: false);
     }
 
@@ -584,12 +586,15 @@ public sealed class RemoteTaskRunner
         }
         else
         {
-        var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
-                         ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
-            prompt = RemoteRunPrompt.Build(taskPrompt, runSpec?.ModeFraming, ResultsDir(taskKey));
-        shipper.Add("system", string.IsNullOrWhiteSpace(runSpec?.ModeFraming)
-            ? "[runner] results-dir context + remote-completion-protocol appended to task prompt"
-            : "[runner] server-rendered mode framing + results-dir context + remote-completion-protocol appended to task prompt");
+            var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
+                             ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
+            var enrichmentContext = slot.PromptEnrichmentContext
+                                    ?? await _client.ReadPromptEnrichmentAsync(taskKey, shutdown);
+            prompt = RemoteRunPrompt.Build(taskPrompt, enrichmentContext);
+            shipper.Add("system",
+                string.IsNullOrWhiteSpace(enrichmentContext)
+                    ? "[runner] remote-completion-protocol appended to task prompt"
+                    : "[runner] server prompt enrichment and remote-completion-protocol appended to task prompt");
         }
 
         var resultsDir = ResultsDir(taskKey);

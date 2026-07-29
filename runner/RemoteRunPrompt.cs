@@ -30,41 +30,16 @@ public static class RemoteRunPrompt
         "This is required, not optional. The orchestrator parses this token; " +
         "without it the run lands in review as missing-terminal-sentinel.";
 
-    public static string Build(string taskPrompt) => Build(taskPrompt, modeFraming: null, resultsDirectory: null);
-
-    /// <summary>
-    /// Builds the remote prompt with the server-rendered per-mode framing block
-    /// (read-only / research / concept / web contracts) between the task body and
-    /// the standing instructions - the same relative position the local runner
-    /// gives its <c>{{mode_framing}}</c> slot ("read after the task above").
-    /// A null/empty framing keeps the historical verbatim behaviour.
-    /// <para>
-    /// <paramref name="resultsDirectory"/> is the host-absolute collected-results
-    /// directory (also exported as <c>JOB_RESULTS_DIR</c>). The local runner's
-    /// template names the job folder for evidence; a standalone remote agent has
-    /// no job folder in sight, and AGT-2442 proved that a relative
-    /// <c>results/</c> path silently lands in the disposable worktree and dies
-    /// with it. Only files in this directory are shipped to the task server.
-    /// </para>
-    /// </summary>
-    public static string Build(string taskPrompt, string? modeFraming, string? resultsDirectory = null)
+    public static string Build(string taskPrompt, string? enrichmentContext = null)
     {
         ArgumentNullException.ThrowIfNull(taskPrompt);
-        var framingBlock = string.IsNullOrWhiteSpace(modeFraming)
-            ? string.Empty
-            : modeFraming.Trim() + Environment.NewLine + Environment.NewLine;
-        var resultsBlock = string.IsNullOrWhiteSpace(resultsDirectory)
-            ? string.Empty
-            : "Run context: result files (reports, screenshots, evidence - e.g. `results/report.html`) must be "
-              + $"written into the absolute directory `{resultsDirectory.Trim()}` (also exported as the "
-              + "`JOB_RESULTS_DIR` environment variable). Only files in that directory are collected and shipped "
-              + "to the reviewer; a relative `results/` path inside the repository checkout is NOT collected and "
-              + "is discarded with the temporary worktree."
-              + Environment.NewLine + Environment.NewLine;
-        return taskPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
+        var enrichedPrompt = string.IsNullOrWhiteSpace(enrichmentContext)
+            ? taskPrompt
+            : taskPrompt + (taskPrompt.EndsWith('\n') ? Environment.NewLine : Environment.NewLine + Environment.NewLine)
+              + "---" + Environment.NewLine + Environment.NewLine
+              + enrichmentContext.TrimEnd() + Environment.NewLine;
+        return enrichedPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
             + "---" + Environment.NewLine + Environment.NewLine
-            + framingBlock
-            + resultsBlock
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + ContributionGuideInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;

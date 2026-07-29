@@ -1040,6 +1040,16 @@ public sealed class TaskServerClient : IDisposable
         return await resp.Content.ReadAsStringAsync(ct);
     }
 
+    /// <summary>
+    /// Fetch the server-materialized prompt-enrichment block. The separated V1
+    /// Task Server does not publish job-folder sidecars yet, so that profile
+    /// returns no block instead of probing a legacy route.
+    /// </summary>
+    public Task<string?> ReadPromptEnrichmentAsync(string jobId, CancellationToken ct)
+        => _useV1
+            ? Task.FromResult<string?>(null)
+            : ReadTaskFileAsync(jobId, "intake/enriched-context.md", ct);
+
     private async Task<TResp?> PostJsonAsync<TReq, TResp>(string url, TReq body, CancellationToken ct)
         => await SendJsonAsync<TReq, TResp>(HttpMethod.Post, url, body, ct);
 

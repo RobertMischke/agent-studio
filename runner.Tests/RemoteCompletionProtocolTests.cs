@@ -91,6 +91,33 @@ public sealed class RemoteCompletionProtocolTests
     }
 
     [Fact]
+    public void Daemon_prompt_keeps_authored_prompt_then_appends_server_enrichment()
+    {
+        const string authored = "# Original\n\nOperator-authored text.";
+        const string enrichment =
+            "## Prompt enrichment\n\n> Appended by the task server.\n\n- **Use the style guide** (`style-guide:frontend`)";
+
+        var prompt = RemoteRunPrompt.Build(authored, enrichment);
+
+        Assert.StartsWith(authored, prompt, StringComparison.Ordinal);
+        Assert.True(prompt.IndexOf(enrichment, StringComparison.Ordinal)
+                    < prompt.IndexOf(RemoteRunPrompt.ModelRoutingPolicyInstruction, StringComparison.Ordinal));
+        Assert.Equal(1, Count(prompt, enrichment));
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = text.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+        return count;
+    }
+
+    [Fact]
     public void Codex_exec_jsonl_done_event_is_recognized_as_a_regular_done_outcome()
     {
         const string codex0144Output = """

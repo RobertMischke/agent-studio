@@ -205,7 +205,7 @@ public record ContextManifest
 /// </summary>
 public record IntakeEnrichmentManifest
 {
-    public int Version { get; init; } = 2;
+    public int Version { get; init; } = 3;
     /// <summary>Relative Markdown artifact path inside the job folder.</summary>
     public string ArtifactPath { get; init; } = "";
     /// <summary>Selector implementation that produced this manifest.</summary>
@@ -220,6 +220,8 @@ public record IntakeEnrichmentManifest
     public int CharacterBudget { get; init; }
     /// <summary>Conservative planning estimate derived from the character ceiling.</summary>
     public int EstimatedTokenBudget { get; init; }
+    /// <summary>Maximum number of non-mandatory context blocks that may be appended.</summary>
+    public int OptionalBlockLimit { get; init; }
     /// <summary>Final rendered artifact length after deterministic omissions.</summary>
     public int UsedCharacters { get; init; }
     /// <summary>Estimated final token count using the documented four-characters-per-token rule.</summary>
@@ -237,8 +239,11 @@ public record IntakeEnrichmentManifest
 public record IntakeConstraintOmission
 {
     public string Id { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Source { get; init; } = "";
     public string Reason { get; init; } = "";
     public int EstimatedCharacters { get; init; }
+    public int EstimatedTokens { get; init; }
 }
 
 /// <summary>One repository-wide constraint selected for a task by intake.</summary>
@@ -249,6 +254,14 @@ public record IntakeConstraintSelection
     public string Title { get; init; } = "";
     public string Text { get; init; } = "";
     public string Source { get; init; } = "";
+    /// <summary>Source-owned revision used to invalidate cached enrichment decisions.</summary>
+    public string Revision { get; init; } = "1";
+    /// <summary>Mandatory project policy or optional task-specific context.</summary>
+    public string Tier { get; init; } = "optional";
+    /// <summary>Mandatory blocks do not consume the optional-block allowance.</summary>
+    public bool Mandatory { get; init; }
+    /// <summary>Deterministic selection priority. Lower values are selected first.</summary>
+    public int Priority { get; init; } = 100;
     public List<string> Areas { get; init; } = [];
 }
 
