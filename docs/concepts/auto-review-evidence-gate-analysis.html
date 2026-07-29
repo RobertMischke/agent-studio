@@ -44,13 +44,14 @@
   </div>
 
   <h2 id="summary">1. Executive summary</h2>
-  <p>On 2026-06-22 all nine tasks in <code>5-human-review</code> for the Agent Task Processor project displayed the red <strong>"Needs rework"</strong> badge. An audit of each task against its acceptance criteria and on-disk evidence found that <strong>only two were genuinely justified</strong> (ASS-1724, ASS-1740). Five were false positives and two were partial. The badge comes from an auto-review <em>reissue</em> verdict that is <strong>decoupled from the code-review grade</strong>, so grade-A work is routinely flagged. The dominant root cause is an <strong>evidence gate that judges off a truncated CLI log instead of the artifacts actually on disk</strong>.</p>
+  <p>On 2026-06-22 all nine tasks in <code>5-human-review</code> for the Agent Task Processor project displayed the red <strong>"Needs rework"</strong> badge. An audit of each task against its acceptance criteria and on-disk evidence found that <strong>only two were genuinely justified</strong> (ASS-1724, ASS-1740). Five were false positives and two were partial. The badge came from an auto-review <em>reissue</em> verdict that was <strong>decoupled from the code-review grade</strong>, so grade-A work was routinely flagged. The dominant root cause was an <strong>evidence gate that judged off a truncated CLI log instead of the artifacts actually on disk</strong>.</p>
+  <p><strong>UI amendment, 2026-07-28 (AGT-2410):</strong> decision-journal history no longer produces a permanent status badge on a Review card. Current <code>5e-escalated</code> lane state owns the acute <strong>Escalated</strong> badge; reissue and abort history remains available in the timeline.</p>
 
   <h2 id="mechanism">2. How "Needs rework" is produced</h2>
   <ul>
     <li>The auto-review step (lane <code>4-auto-review</code>) records a decision of kind <code>Reissue</code> in the decisions journal (<code>backend/Features/Runner/ReviewDecisionRecord.cs</code>).</li>
     <li>That becomes <code>TaskInfo.OrchestratorVerdict = "reissue"</code> at read time (<code>backend/Features/Tasks/TaskEndpointHelpers.cs</code>).</li>
-    <li>The frontend maps <code>orchestratorVerdict === 'reissue'</code> to the operator-visible label <strong>"Needs rework"</strong> in <code>buildHumanReviewBadge()</code> (<code>frontend/src/app/features/board/components/task-card/task-card-view-model.ts:988</code>).</li>
+    <li>At the time of the incident, the frontend mapped <code>orchestratorVerdict === 'reissue'</code> to the operator-visible label <strong>"Needs rework"</strong>. The AGT-2410 card-status contract removed that historical mapping from Review cards.</li>
     <li><strong>The code-review grade (A-D) is decoupled</strong>: "a grade is reporting evidence, never a lane gate". A grade-A task is exactly as likely to be reissued as a grade-D one.</li>
     <li>Reissue is driven by three gates, with a budget of <code>MaxAutoReissueAttempts = 2</code>: <em>completion</em> (open checklist / self-reported build/test fail), <em>evidence</em> (a tests-and-evidence aspect concern), and <em>solution-quality</em>.</li>
   </ul>

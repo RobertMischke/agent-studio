@@ -437,8 +437,6 @@ export interface TaskTagChip {
   ghost: boolean;
   concern: boolean;
   unparseable: boolean;
-  historical: boolean;
-  historyGlyph: string | null;
   tooltip: string;
 }
 
@@ -485,13 +483,6 @@ const HISTORY_PRESENTATION_LANES = new Set<string>([
   TaskState.Archive,
 ]);
 
-function historyTagDetails(id: string): { kind: 'reissue' | 'abort'; reason: string } | null {
-  const match = HISTORY_TAG_RE.exec(id);
-  if (!match) return null;
-  const kind = id.toLowerCase().startsWith('reissue:') ? 'reissue' : 'abort';
-  return { kind, reason: match[1].replace(/[-_]+/g, ' ').trim() };
-}
-
 function compactTagText(value: string): string {
   return value
     .trim()
@@ -528,26 +519,8 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
-    const history = historyTagDetails(id);
-    const historical = history !== null && state !== undefined && HISTORY_PRESENTATION_LANES.has(state);
-    if (history) {
-      const label = entry?.label ?? (history.kind === 'reissue' ? 'Reissue' : 'Abort review');
-      const reason = entry?.description || history.reason || 'No reason recorded';
-      const occurrences = list.filter((candidate) => historyTagDetails(candidate)?.kind === history.kind).length;
-      return {
-        id,
-        label,
-        color: historical ? 'var(--studio-fg-dim)' : (entry?.color ?? (history.kind === 'reissue' ? '#f59e0b' : '#ef4444')),
-        ghost: false,
-        concern: false,
-        unparseable: false,
-        historical,
-        historyGlyph: historical ? '↺' : null,
-        tooltip: historical
-          ? `History only: ${label}. When: before the task reached its current ${state} lane. Recorded occurrences: ${occurrences} tag${occurrences === 1 ? '' : 's'}. Reason: ${reason}. Open the task timeline for the exact run time and full context.`
-          : `${label} is active in the ${state ?? 'current'} lane. Reason: ${reason}.`
-      };
-    }
+    // Reissue/abort tags are event history, not current card status.
+    if (HISTORY_TAG_RE.test(id)) return [];
     if (entry) {
       return {
         id,
@@ -556,8 +529,6 @@ export function buildTagChips(
         ghost: false,
         concern: false,
         unparseable: false,
-        historical: false,
-        historyGlyph: null,
         tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
       };
     }
@@ -568,8 +539,6 @@ export function buildTagChips(
       ghost: true,
       concern: false,
       unparseable: false,
-      historical: false,
-      historyGlyph: null,
       tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
   });
@@ -823,6 +792,17 @@ export interface MergeSignalView {
   tooltip: string;
   /** Compact aria label for screen readers ("in develop, not in main"). */
   ariaLabel: string;
+}
+
+const INTEGRATION_STATUS_LANES = new Set<string>([
+  TaskState.HumanReview,
+  TaskState.Completed,
+  TaskState.Archive,
+]);
+
+/** Defensive lane gate for a read-time integration overlay from an older poll. */
+export function currentIntegrationStatus(job: TaskInfo): TaskInfo['integration'] {
+  return INTEGRATION_STATUS_LANES.has(job.state) ? job.integration ?? null : null;
 }
 
 function shortShaOf(sha: string | null | undefined): string | null {
@@ -1097,7 +1077,9 @@ export function buildPhaseBadge(
   phase: TaskInfo['phase'],
   steerPendingSince?: string | null,
   nowMs?: number,
+  state?: string,
 ): PhaseBadge | null {
+  if (state && HISTORY_PRESENTATION_LANES.has(state)) return null;
   if (!phase) return null;
   const pill = PHASE_PILL[phase];
   if (!pill) return null;
@@ -1318,12 +1300,6 @@ export function formatAutoReviewWait(elapsedMs: number): string {
   return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-// Lanes that sit in the "Done & Decide" super-column and carry an orchestrator
-// verdict the operator must act on. 4-auto-review is deliberately excluded — it
-// lives in the "active" column and already surfaces its verdict via the
-// auto-review process badge.
-const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
-
 export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
 
 /** Decision-backlog impact is independent of the orchestrator review verdict. */
@@ -1338,33 +1314,17 @@ export function buildDecisionDamBadge(job: TaskInfo): HumanReviewBadge | null {
 }
 
 /**
- * Human-decision badge. An escalated / reissue card parked in 5-human-review
- * used to render identically to a Completed card, hiding that a human still has
- * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
- * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
- * verdicts. Accepted cards stay quiet; the lane and commit context carry enough
- * state without repeating "Reviewed" as another chip.
+ * Acute decision badge. The current lane is authoritative: only a card that is
+ * still in 5e-escalated may render "Escalated". A journal verdict on Review is
+ * historical and stays in the timeline.
  */
 export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
-  if (!HUMAN_DECISION_LANES.has(job.state)) return null;
-  switch (job.orchestratorVerdict) {
-    case 'escalate':
-      return {
-        label: 'Escalated',
-        tone: 'attention',
-        tooltip: 'Auto-review escalated this task: the orchestrator could not accept the result and a human must decide what happens next. This is NOT a completed task.'
-      };
-    case 'reissue':
-      return {
-        label: 'Needs rework',
-        tone: 'attention',
-        tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
-      };
-    case 'accept':
-      return null;
-    default:
-      return null;
-  }
+  if (job.state !== TaskState.Escalated) return null;
+  return {
+    label: 'Escalated',
+    tone: 'attention',
+    tooltip: 'This task is currently in the Escalated lane and needs an operator decision.'
+  };
 }
 
 export interface RunnerBadge {
@@ -1440,11 +1400,9 @@ function formatExternalCompletionDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 }
 
-/** Host-level "this card needs a human" flag: an escalate/reissue verdict in a
- *  human-decision lane. Drives the red uniform ring + faint tint. */
+/** Host-level attention follows the current acute lane, never an old verdict. */
 export function cardNeedsAttention(job: TaskInfo): boolean {
-  if (!HUMAN_DECISION_LANES.has(job.state)) return false;
-  return job.orchestratorVerdict === 'escalate' || job.orchestratorVerdict === 'reissue';
+  return job.state === TaskState.Escalated;
 }
 
 /** Matches the per-task quality-grade tag the automatic code-review step hangs
@@ -1491,29 +1449,34 @@ export function buildCodeReviewGradeBadge(tags: readonly string[] | undefined): 
   return null;
 }
 
-export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; historical: boolean; tooltip: string; }
+export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }
+
+const CURRENT_OUTCOME_ISSUE_LANES = new Set<string>([
+  TaskState.Progress,
+  TaskState.FailedPickup,
+  TaskState.CodeNotComplete,
+  TaskState.AutoReview,
+  TaskState.Escalated,
+]);
+const SUCCESSFUL_RUN_OUTCOMES = new Set(['success', 'noop']);
+const INTEGRATION_ISSUE_KINDS = new Set(['integration-error', 'integration-conflict']);
 
 export function buildOutcomeIssueBadge(job: TaskInfo): OutcomeIssueBadge | null {
   const issue = job.outcomeIssue;
   if (!issue) return null;
+  if (!CURRENT_OUTCOME_ISSUE_LANES.has(job.state)) return null;
+  const runOutcome = (job.execution?.runOutcome ?? '').toLowerCase();
+  if (SUCCESSFUL_RUN_OUTCOMES.has(runOutcome)) return null;
+  if (job.integration?.status === 'integrated'
+      && INTEGRATION_ISSUE_KINDS.has(issue.kind.toLowerCase())) return null;
   const severity = (issue.severity ?? '').toLowerCase();
-  const issueAt = issue.lastSeenAt ? Date.parse(issue.lastSeenAt) : Number.NaN;
-  const acceptedAt = job.lastActivity ? Date.parse(job.lastActivity) : Number.NaN;
-  const historical = HISTORY_PRESENTATION_LANES.has(job.state)
-    && job.orchestratorVerdict === 'accept'
-    && Number.isFinite(issueAt)
-    && Number.isFinite(acceptedAt)
-    && issueAt < acceptedAt;
-  const tone = historical ? 'info' : severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
   const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
   const summary = issue.summary ? `\n\n${issue.summary}` : '';
   return {
     label: issue.label || issue.kind,
     tone,
-    historical,
-    tooltip: historical
-      ? `History only: this runner issue predates the later accepted run.${seen}${summary}`
-      : `Runner outcome issue: ${issue.kind}${seen}${summary}`
+    tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
   };
 }
 

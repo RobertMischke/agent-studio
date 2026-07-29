@@ -141,11 +141,7 @@
         0 14px 32px color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
     }
 
-    /* "Failed-Cards sehen aus wie Done" fix (Option C): an escalated /
-       reissue card parked in 5-human-review shares the "Done & Decide"
-       column with Completed and Archive cards and used to read as just
-       another finished card. The attention treatment — red uniform ring +
-       faint red tint — visually pulls it out of the "done" cluster so the
+    /* Current Escalated cards use a uniform ring and faint red tint so the
        operator sees at a glance that a human still has to act.
 
        The compound selector .task-card.task-card--attention is deliberate,
@@ -737,12 +733,6 @@
       background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 40%, transparent);
     }
-    .task-card__issue-pill--historical {
-      color: var(--studio-fg-dim);
-      background: color-mix(in srgb, var(--studio-fg-dim) 8%, transparent);
-      border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
-      font-weight: 500;
-    }
     /* Quality-grade pill (ASS-1657). The automatic code-review step grades
        every pipelined task A/B/C/D; the grade reads loud and colour-coded so
        the operator gets the quality verdict at a glance. A/B share the calm
@@ -972,18 +962,6 @@
       color: var(--studio-fg-dim);
       background: rgba(255, 255, 255, 0.02);
       border: 1px dashed rgba(148, 163, 184, 0.40);
-    }
-    .task-card__tag-chip--historical {
-      color: var(--studio-fg-dim);
-      background: color-mix(in srgb, var(--studio-fg-dim) 8%, transparent);
-      border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
-      font-weight: 500;
-      gap: var(--studio-spacing-1);
-    }
-    .task-card__tag-chip-history-glyph {
-      font-size: 9px;
-      line-height: 1;
-      opacity: 0.75;
     }
     /* ADR-0025: ephemeral aspect-concern chips. The ⚠ glyph + amber
        tone signals "the orchestrator looked at this and flagged
