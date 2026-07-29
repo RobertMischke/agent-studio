@@ -103,6 +103,67 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_RemoteMainSubject_FetchesFencedResultAndQueuesRecordedTarget()
+    {
+        const string deliveryRef = "runner/agent-runner-01/AGT-2401";
+        var (repo, _) = SeedRepoWithOrigin("runner-remote-main");
+        RunGit(repo, $"checkout -q -b {deliveryRef}");
+        File.WriteAllText(Path.Combine(repo, "remote-main.txt"), "remote release work");
+        Commit(repo, "feat: remote release work");
+        var resultSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, $"push -q origin {deliveryRef}");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, $"branch -D {deliveryRef}");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile
+        {
+            TestCmds = [TagMarker("remote-main-suite-ran")],
+        });
+        var queue = new IntegrationPushQueue();
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(
+                new BuildTestGateRunner(NullLogger<BuildTestGateRunner>.Instance)),
+            preMainTimeout: TimeSpan.FromSeconds(30));
+        var jobFolder = BeginRun(log, repo, jobId: "AGT-2401");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-2401",
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = resultSha,
+            AttemptChainId = "attempt-main",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-main",
+            FencingToken = 1,
+            ResultRef = deliveryRef,
+            IntegrationBranch = "refs/heads/main",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "AGT-2401",
+            jobFolder,
+            repo,
+            "develop",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(resultSha, outcome.MergedSha);
+        Assert.Equal(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.True(HasTag(repo, "remote-main-suite-ran"));
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal("main", queued!.IntegrationBranch);
+        Assert.Equal(resultSha, queued.ApprovedSha);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_RunsFullSuiteOnExactSourceBeforeFastForward()
     {
         var repo = SeedRepo("runner-main-full-suite");

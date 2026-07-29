@@ -119,6 +119,13 @@ public sealed record RemoteDeliveryCommitRange(
     IReadOnlyList<GitCommitInfo> Commits,
     string? Warning);
 
+public sealed record RemoteDeliveryPreparation(
+    bool Success,
+    string? DeliverySha,
+    string? IntegrationSha,
+    MergeIntoIntegrationOutcome FailureOutcome,
+    string? Error);
+
 /// <summary>
 /// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
 /// The committer timestamp lets evidence consumers reject a merge that predates
@@ -2666,12 +2673,12 @@ public class GitService
     /// <summary>
     /// Advances an explicit target branch to an exact, already-tested source
     /// revision using a fast-forward only. The expected SHAs close the gap
-    /// between a pre-main test run and the ref mutation: if either branch moved
-    /// while the suite was running, no merge is attempted.
+    /// between a pre-main test run and the ref mutation: if the source ref or
+    /// target branch moved while the suite was running, no merge is attempted.
     /// </summary>
-    public MergeIntoIntegrationResult MergeBranchFastForward(
+    public MergeIntoIntegrationResult MergeRefFastForward(
         string repoRoot,
-        string sourceBranch,
+        string sourceRef,
         string targetBranch,
         string expectedSourceSha,
         string expectedTargetSha)
@@ -2679,11 +2686,11 @@ public class GitService
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
-        if (!IsLikelyBranchName(sourceBranch) || !IsLikelyBranchName(targetBranch))
+        if (!IsLikelyBranchName(sourceRef) || !IsLikelyBranchName(targetBranch))
             return MergeIntoIntegrationResult.Of(
-                MergeIntoIntegrationOutcome.Error, error: "Invalid source or target branch.");
+                MergeIntoIntegrationOutcome.Error, error: "Invalid source ref or target branch.");
 
-        var sourceSha = GetBranchTip(repoRoot, sourceBranch);
+        var sourceSha = GetBranchTip(repoRoot, sourceRef);
         var targetSha = GetBranchTip(repoRoot, targetBranch);
         if (!string.Equals(sourceSha, expectedSourceSha, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(targetSha, expectedTargetSha, StringComparison.OrdinalIgnoreCase))
@@ -2693,13 +2700,13 @@ public class GitService
                 error: "Source or target branch moved after the pre-main test run; release merge was not attempted.");
         }
 
-        if (IsAncestor(repoRoot, sourceBranch, targetBranch))
+        if (IsAncestor(repoRoot, sourceRef, targetBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
-        if (!IsAncestor(repoRoot, targetBranch, sourceBranch))
+        if (!IsAncestor(repoRoot, targetBranch, sourceRef))
         {
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Release source '{sourceBranch}' is not a fast-forward of '{targetBranch}'.");
+                error: $"Release source '{sourceRef}' is not a fast-forward of '{targetBranch}'.");
         }
         if (RepoHasUncommittedChanges(repoRoot))
         {
@@ -2743,8 +2750,8 @@ public class GitService
         }
 
         _logger.LogInformation(
-            "Fast-forwarded release target {TargetBranch} to tested source {SourceBranch} at {Sha}",
-            targetBranch, sourceBranch, mergedSha);
+            "Fast-forwarded release target {TargetBranch} to tested source {SourceRef} at {Sha}",
+            targetBranch, sourceRef, mergedSha);
         return MergeIntoIntegrationResult.Of(
             MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
     }
@@ -3243,16 +3250,48 @@ public class GitService
         string expectedResultSha,
         string integrationBranch)
     {
+        var preparation = PrepareRemoteDelivery(
+            repoRoot,
+            deliveryBranch,
+            expectedResultSha,
+            integrationBranch);
+        if (!preparation.Success)
+        {
+            return MergeIntoIntegrationResult.Of(
+                preparation.FailureOutcome,
+                error: preparation.Error);
+        }
+
+        return MergeRefIntoIntegration(
+            repoRoot,
+            preparation.DeliverySha!,
+            integrationBranch);
+    }
+
+    /// <summary>
+    /// Fetches a remote delivery and its recorded integration target, verifies
+    /// the fenced result SHA, and synchronizes the local target with origin.
+    /// Both normal integration and the release gate use this one preparation
+    /// path so neither can fall back to a guessed local task branch.
+    /// </summary>
+    public RemoteDeliveryPreparation PrepareRemoteDelivery(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string integrationBranch)
+    {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
+            return Failed(MergeIntoIntegrationOutcome.Error, "Repo root does not exist.");
         if (!IsLikelyBranchName(deliveryBranch))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid delivery branch '{deliveryBranch}'.");
+            return Failed(MergeIntoIntegrationOutcome.Error, $"Invalid delivery branch '{deliveryBranch}'.");
         if (!ReviewSubjectStore.IsValidResultSha(expectedResultSha))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery has no valid fenced result SHA.");
+            return Failed(MergeIntoIntegrationOutcome.Error, "Remote delivery has no valid fenced result SHA.");
         if (!IsLikelyBranchName(integrationBranch))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid integration branch '{integrationBranch}'.");
+            return Failed(MergeIntoIntegrationOutcome.Error, $"Invalid integration branch '{integrationBranch}'.");
         if (!HasRemote(repoRoot, "origin"))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery cannot be fetched because origin is not configured.");
+            return Failed(
+                MergeIntoIntegrationOutcome.Error,
+                "Remote delivery cannot be fetched because origin is not configured.");
 
         var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
         var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
@@ -3262,9 +3301,9 @@ public class GitService
             repoRoot, "fetch", "--no-tags", "origin", integrationFetchTarget);
         if (integrationFetchCode != 0)
         {
-            return MergeIntoIntegrationResult.Of(
+            return Failed(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Integration branch '{integrationBranch}' could not be fetched from origin: {integrationFetchError.Trim()}");
+                $"Integration branch '{integrationBranch}' could not be fetched from origin: {integrationFetchError.Trim()}");
         }
 
         var fetchSource = $"refs/heads/{deliveryBranch}";
@@ -3272,26 +3311,26 @@ public class GitService
         var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
         if (fetchCode != 0)
         {
-            return MergeIntoIntegrationResult.Of(
+            return Failed(
                 MergeIntoIntegrationOutcome.NoTaskBranch,
-                error: $"Delivery branch '{deliveryBranch}' could not be fetched from origin: {fetchError.Trim()}");
+                $"Delivery branch '{deliveryBranch}' could not be fetched from origin: {fetchError.Trim()}");
         }
 
         var (fetchedSha, verifyError, verifyCode) = RunGitArgs(
             repoRoot, "rev-parse", "--verify", $"{remoteRef}^{{commit}}");
         if (verifyCode != 0)
         {
-            return MergeIntoIntegrationResult.Of(
+            return Failed(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Fetched delivery branch '{deliveryBranch}' is not a commit: {verifyError.Trim()}");
+                $"Fetched delivery branch '{deliveryBranch}' is not a commit: {verifyError.Trim()}");
         }
 
         var actualResultSha = fetchedSha.Trim();
         if (!string.Equals(actualResultSha, expectedResultSha, StringComparison.OrdinalIgnoreCase))
         {
-            return MergeIntoIntegrationResult.Of(
+            return Failed(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Fenced delivery mismatch for '{deliveryBranch}': review expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(actualResultSha)}.");
+                $"Fenced delivery mismatch for '{deliveryBranch}': review expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(actualResultSha)}.");
         }
 
         if (!BranchExists(repoRoot, integrationBranch))
@@ -3300,17 +3339,66 @@ public class GitService
                 repoRoot, "branch", integrationBranch, remoteIntegrationRef);
             if (createCode != 0)
             {
-                return MergeIntoIntegrationResult.Of(
+                return Failed(
                     MergeIntoIntegrationOutcome.Error,
-                    error: $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
+                    $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
             }
         }
 
-        return MergeRefIntoIntegration(
+        if (RepoHasUncommittedChanges(repoRoot))
+        {
+            return Failed(
+                MergeIntoIntegrationOutcome.Error,
+                "Integration working tree has uncommitted changes; refusing to merge.");
+        }
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(
+                repoRoot,
+                "checkout",
+                integrationBranch);
+            if (checkoutCode != 0)
+            {
+                return Failed(
+                    MergeIntoIntegrationOutcome.Error,
+                    $"Could not check out '{integrationBranch}': {checkoutError.Trim()}");
+            }
+        }
+
+        var (_, syncError, syncCode) = RunGitArgs(
             repoRoot,
-            expectedResultSha,
-            integrationBranch,
+            "merge",
+            "--ff-only",
             remoteIntegrationRef);
+        if (syncCode != 0)
+        {
+            return Failed(
+                MergeIntoIntegrationOutcome.Error,
+                $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries. ({syncError.Trim()})");
+        }
+
+        var integrationSha = GetBranchTip(repoRoot, integrationBranch);
+        if (string.IsNullOrWhiteSpace(integrationSha))
+        {
+            return Failed(
+                MergeIntoIntegrationOutcome.Error,
+                $"Could not resolve synchronized integration branch '{integrationBranch}'.");
+        }
+
+        return new RemoteDeliveryPreparation(
+            true,
+            actualResultSha,
+            integrationSha,
+            MergeIntoIntegrationOutcome.Error,
+            null);
+
+        static RemoteDeliveryPreparation Failed(
+            MergeIntoIntegrationOutcome outcome,
+            string error)
+            => new(false, null, null, outcome, error);
     }
 
     private static string AbbreviateSha(string sha)

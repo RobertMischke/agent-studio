@@ -221,7 +221,6 @@ public sealed class MergeIntoDevelopRunner
                 jobId,
                 jobFolderPath,
                 watchPath,
-                integrationBranch,
                 repoRoot,
                 delivery,
                 result);
@@ -299,7 +298,7 @@ public sealed class MergeIntoDevelopRunner
                 jobId,
                 jobFolderPath,
                 repoRoot,
-                delivery.SourceRef,
+                delivery,
                 delivery.IntegrationBranch,
                 ct).ConfigureAwait(false);
             return new IntegrationExecution(merge, PreMainResult: gate);
@@ -329,7 +328,6 @@ public sealed class MergeIntoDevelopRunner
         string jobId,
         string jobFolderPath,
         string? watchPath,
-        string requestedIntegrationBranch,
         string repoRoot,
         AcceptedDelivery delivery,
         MergeIntoIntegrationResult result)
@@ -342,9 +340,7 @@ public sealed class MergeIntoDevelopRunner
         }
 
         // Pin the object the push may publish: the merge result this card's gate
-        // released, or the branch tip when no commit was created. The requested
-        // integration branch is intentionally retained here for behavior
-        // compatibility; a recorded remote target is reviewed separately.
+        // released, or the branch tip when no commit was created.
         var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
             ? result.MergedSha
             : _git.GetBranchTip(repoRoot, delivery.IntegrationBranch);
@@ -353,7 +349,7 @@ public sealed class MergeIntoDevelopRunner
             jobId,
             jobFolderPath,
             watchPath,
-            requestedIntegrationBranch,
+            delivery.IntegrationBranch,
             approvedSha);
     }
 
@@ -509,11 +505,29 @@ public sealed class MergeIntoDevelopRunner
         string jobId,
         string jobFolderPath,
         string repoRoot,
-        string deliveryRef,
+        AcceptedDelivery delivery,
         string releaseBranch,
         CancellationToken ct)
     {
-        if (!_git.BranchExists(repoRoot, deliveryRef))
+        var deliveryRef = delivery.SourceRef;
+        if (delivery.IsRemote)
+        {
+            var preparation = _git.PrepareRemoteDelivery(
+                repoRoot,
+                delivery.ReviewSubject!.ResultRef!,
+                delivery.ReviewSubject.ResultSha,
+                releaseBranch);
+            if (!preparation.Success)
+            {
+                return (
+                    MergeIntoIntegrationResult.Of(
+                        preparation.FailureOutcome,
+                        error: preparation.Error),
+                    null);
+            }
+            deliveryRef = preparation.DeliverySha!;
+        }
+        else if (!_git.BranchExists(repoRoot, deliveryRef))
         {
             return (
                 MergeIntoIntegrationResult.Of(
@@ -588,7 +602,7 @@ public sealed class MergeIntoDevelopRunner
                 gate);
         }
 
-        var merge = _git.MergeBranchFastForward(
+        var merge = _git.MergeRefFastForward(
             repoRoot,
             deliveryRef,
             releaseBranch,

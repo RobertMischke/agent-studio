@@ -85,9 +85,12 @@ pipeline view.
   `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
   mismatch. The configured integration ref is fetched and fast-forwarded
   before the merge; a missing local branch is created from origin and a
-  divergent one fails visibly. The outcome is recorded so the pending step
-  flips to passed / failed / skipped in place. After a successful merge it
-  also pushes the integration branch itself to `origin`
+  divergent one fails visibly. This same fenced preparation applies when the
+  recorded target is `main`; the full-suite gate runs on the immutable fetched
+  SHA and the subsequent push targets the recorded branch, never the caller's
+  fallback setting. The outcome is recorded so the pending step flips to
+  passed / failed / skipped in place. After a successful merge it also pushes
+  the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as
@@ -259,7 +262,8 @@ pipeline view.
   release check. It also forces exact-subject execution even if the caller
   supplied a weaker request. The existing deferred integration merge is an
   enforced caller when its configured target resolves to `main`: it runs the
-  full suite once on the exact source SHA, records
+  full suite once on the exact source SHA, including a fetched remote
+  `ResultSha` when the review subject names one, records
   `post-steps/pre-main-test-gate-*.log`, rechecks both branch tips after the
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the
