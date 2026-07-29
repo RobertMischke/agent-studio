@@ -31,7 +31,11 @@ export interface TaskTimelineEvent {
 export const TIMELINE_KIND = {
   promptCreated: 'prompt_created',
   agentRunStarted: 'agent_run_started',
+  quotaFallbackActivated: 'quota_fallback_activated',
+  quotaAdmissionDecision: 'quota_admission_decision',
+  loadThrottleDecision: 'load_throttle_decision',
   runnerSlotAdmission: 'runner_slot_admission',
+  integrationLease: 'integration_lease',
   agentRunFinished: 'agent_run_finished',
   preStepStarted: 'pre_step_started',
   preStepFinished: 'pre_step_finished',
@@ -43,11 +47,17 @@ export const TIMELINE_KIND = {
   orchestratorVerdictAccepted: 'orchestrator_verdict_accepted',
   qualityLoopReopened: 'quality_loop_reopened',
   humanReviewDecided: 'human_review_decided',
+  operatorRequeued: 'operator_requeued',
+  postAcceptanceReviewReportRecorded: 'post_acceptance_review_report_recorded',
   laneChanged: 'lane_changed',
   epicDecomposed: 'epic_decomposed',
   mergedIn: 'merged_in',
   readOnlyContainmentViolation: 'read_only_containment_violation',
+  executionContext: 'execution_context',
+  taskSpawned: 'task_spawned',
   externalCompletion: 'external_completion',
+  integrationPendingWarning: 'integration_pending_warning',
+  integrationRecoveryQueued: 'integration_recovery_queued',
 } as const;
 
 /** The three terminals of the completion loop. */

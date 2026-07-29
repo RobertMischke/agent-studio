@@ -5158,16 +5158,9 @@ public class ProjectRunner
             {
                 _timeline?.Append(
                     finishedInfo.FolderPath,
-                    TimelineEventKinds.AgentRunFinished,
-                    TimelineActors.Agent,
-                    summary: $"{cliType} run {execution.Status ?? "unknown"}" +
-                             (execution.DurationSeconds is double d ? $" after {d:F1}s" : ""),
-                    runId: planSnapshot?.EventInputSessionId,
-                    details: new()
-                    {
-                        ["cli"] = cliType ?? string.Empty,
-                        ["status"] = execution.Status ?? "unknown",
-                    });
+                    RunTimelineEventFactory.AgentRunFinished(
+                        execution,
+                        planSnapshot?.EventInputSessionId));
 
                 // Containment, not trust: a planning / research run is supposed
                 // to produce only a report. If it left a non-empty working-tree
@@ -5194,28 +5187,16 @@ public class ProjectRunner
             // a write failure never affects the run's outcome.
             try
             {
-                if (cli.DescribeContextSources(jobKey) is { } execContext)
+                if (cli.DescribeContextSources(jobKey) is { } describedContext)
                 {
+                    var (execContext, timelineEvent) = RunTimelineEventFactory.ExecutionContext(
+                        cliType,
+                        execution,
+                        describedContext,
+                        planSnapshot?.EventInputSessionId);
                     _sessions.BackfillLatestSessionEventExecutionContext(jobId, execContext, Entry.Path);
                     if (finishedInfo != null)
-                    {
-                        var mcpCount = execContext.Sources.Count(s => s.Kind == AgentStudio.Shared.CliContextSourceKinds.Mcp);
-                        _timeline?.Append(
-                            finishedInfo.FolderPath,
-                            TimelineEventKinds.ExecutionContext,
-                            TimelineActors.System,
-                            summary: $"{cliType} context: {execContext.Sources.Count} sources" +
-                                     (string.IsNullOrWhiteSpace(execContext.Model) ? "" : $", model {execContext.Model}") +
-                                     (string.IsNullOrWhiteSpace(execContext.PermissionMode) ? "" : $", {execContext.PermissionMode}"),
-                            runId: planSnapshot?.EventInputSessionId,
-                            details: new()
-                            {
-                                ["cli"] = cliType ?? string.Empty,
-                                ["source"] = execContext.Source,
-                                ["sources"] = execContext.Sources.Count.ToString(),
-                                ["mcp"] = mcpCount.ToString(),
-                            });
-                    }
+                        _timeline?.Append(finishedInfo.FolderPath, timelineEvent);
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Execution-context capture failed for {JobId}", jobId); }
