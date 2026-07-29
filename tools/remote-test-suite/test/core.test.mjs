@@ -8,6 +8,7 @@ import {
   expectedPhases,
   resourcePlan,
   resetRunRoot,
+  scenarioAssertions,
   setupWithRollback,
   validateManifest
 } from '../core.mjs';
@@ -24,6 +25,12 @@ const valid = {
   },
   phases: [...expectedPhases],
   resources: { workspaceId: 'w', projectId: 'p', taskId: 't' },
+  contract: {
+    chronicleLinks: [],
+    expectedTerminal: '5-human-review',
+    recoveryBudget: { unit: 'review-attempts', maximum: 2 },
+    assertions: ['exact-subject-reviewed']
+  },
   hooks: {},
   faults: [],
   expected: {
@@ -51,6 +58,22 @@ test('manifest validation rejects unknown fields and traversal paths', () => {
   manifest.parallelism = 8;
   manifest.fixture.expectedChangedFiles = ['a', 'b', '../outside'];
   assert.throws(() => validateManifest(manifest), /manifest.parallelism[\s\S]*safe relative paths/);
+});
+
+test('scenario assertions enforce the declared terminal, budget, and complete assertion set', () => {
+  const manifest = validateManifest(structuredClone(valid));
+  const assertions = scenarioAssertions(manifest);
+  assertions.check('exact-subject-reviewed', true, 'immutable subject accepted');
+  const result = assertions.finish('5-human-review', 2);
+  assert.equal(result.actualTerminal, '5-human-review');
+  assert.equal(result.recoveryBudget.used, 2);
+  assert.deepEqual(result.assertions.map(item => item.id), ['exact-subject-reviewed']);
+
+  const missing = scenarioAssertions(manifest);
+  assert.throws(() => missing.finish('5-human-review', 0), /did not execute declared assertions/);
+  const overBudget = scenarioAssertions(manifest);
+  overBudget.check('exact-subject-reviewed', true, 'immutable subject accepted');
+  assert.throws(() => overBudget.finish('5-human-review', 3), /recovery budget exceeded/);
 });
 
 test('dry-run resource plan explains scoped creates and destroys', () => {

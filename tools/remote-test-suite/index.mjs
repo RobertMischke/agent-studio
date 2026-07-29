@@ -28,6 +28,7 @@ import {
   validateFaultCatalog
 } from './faults.mjs';
 import { spawn } from 'node:child_process';
+import { executeHistoricalReplay } from './replay-scenarios.mjs';
 
 class Api {
   constructor(baseUrl, runId, faults) {
@@ -80,6 +81,22 @@ class Api {
       throw error;
     }
     return text ? JSON.parse(text) : null;
+  }
+  // Non-throwing single attempt used by the historical replay scenarios to
+  // assert expected rejections (e.g. stale-writer 409s) without try/catch.
+  async attempt(method, route, body) {
+    const response = await fetch(`${this.baseUrl}${route}`, {
+      method,
+      headers: this.headers,
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    const text = await response.text();
+    let value = null;
+    if (text) {
+      try { value = JSON.parse(text); }
+      catch { value = text; }
+    }
+    return { ok: response.ok, status: response.status, text, value };
   }
   snapshot() {
     return Object.fromEntries(this.attempts);
@@ -351,6 +368,20 @@ async function executeScenario(context) {
       });
     }
   };
+
+  // Historical replay scenarios declare a chronicle contract; everything else
+  // (reference-change and the fault-injection manifests) runs the standard
+  // engine below.
+  if (manifest.contract) {
+    return await executeHistoricalReplay({
+      ...context,
+      api,
+      hook,
+      suiteRoot,
+      repoRoot,
+      register
+    });
+  }
 
   await api.post('/api/v1/workspaces', { name: `Remote Test ${runId}`, workspaceId: ids.workspaceId });
   await api.post('/api/v1/projects', {
@@ -821,7 +852,7 @@ async function executeScenario(context) {
   await runCommand(['git', 'push', 'origin', manifest.fixture.defaultBranch], { cwd: integrationRepo });
   const integratedTree = (await runCommand(['git', 'rev-parse', 'HEAD^{tree}'], { cwd: integrationRepo })).stdout.trim();
   const currentTask = await api.get(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`);
-  await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
+  const terminalTask = await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
     title: null,
     body: null,
     state: '6-completed',

@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-27
+Version: 2026-07-29
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -166,8 +166,13 @@ state.
   a checked-in manifest, an explicit enable flag, a run/root-bound
   acknowledgement, an unchanged safety marker, and a harness-owned isolated
   Task Server. Fault runs assert lane, lease/fence, process, worktree, outbox,
-  Result-SHA, and incident terminals. The catalog is not referenced by
-  production binaries and never targets stable or the managed task workspace.
+  Result-SHA, and incident terminals. In addition, first-class historical
+  replays cover divergent salvage lineage, lease adoption across a real Runner
+  daemon restart, and the external completion cycle; each replay manifest binds
+  chronicle incidents to an expected durable terminal, bounded recovery budget,
+  and complete machine-assertion set via its `contract`. Neither catalog is
+  referenced by production binaries and nothing here targets stable or the
+  managed task workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -302,6 +307,8 @@ state.
   the `Process.Start`-to-slot-save handoff window. The replacement renews
   authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
   persisted worktree, then follows JSONL output and completes the same attempt.
+  Reattachment also reopens the durable outbox with the original persisted
+  attempt instance, never the replacement daemon's process identity.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
@@ -317,6 +324,11 @@ state.
   Host-level probe and one-shot fallback URLs never flow into project clones.
   A project without a registry URL stays Ready, is reported as not
   remote-capable, and creates no clone.
+- The separated v1 Task Server resource contract does not yet carry project
+  repository registration on a claim. In that isolated compatibility profile
+  only, the claim adapter binds the configured `--git-remote` to its stable
+  repository identity and configured base branch. This does not relax the
+  registry-owned repository boundary for product project claims.
 - Before the first card for one host/project pair is leased, the claim endpoint
   returns an unleased preflight offer containing the registered repository and
   a registration fingerprint. The host creates or refreshes the exact shared
@@ -480,8 +492,17 @@ state.
   path.
 - Result refs and manifests have an earliest deletion time of 30 days by
   default. Reaching Completed or Archive extends that time to at least 30 days
-  after the terminal transition. The current store performs no automatic
-  deletion, so retention cannot end early.
+  after the terminal transition. The Task Server runs a periodic result-ref GC
+  sweep. It deletes only the exact
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>` ref when the
+  retention deadline passed, the card is in Completed or Archive, the matching
+  review has a terminal non-infrastructure report with no active retry, and a
+  newer result-bearing RunAttempt superseded the source attempt. The newest
+  result-bearing RunAttempt for a card is always spared, including after
+  acceptance. Missing credentials,
+  malformed refs, active reviews, non-terminal reviews, and Git failures all
+  fail closed. Successful deletions are recorded in the Task Server GC ledger
+  and are not retried.
 - Retained remote-runner worktree pickup reconciles the local and canonical
   salvage tips by ancestry before reuse. Equal and remote-ahead tips keep the
   canonical remote ref, and local-ahead tips advance it with a normal

@@ -11,7 +11,10 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    public const int CurrentSchemaVersion = 5;
+    // 6 = union of develop's capacity/quota schema (5) and AGT-2395's additive
+    // result_ref_gc table (branched as 4 from base 3). The migration block is
+    // idempotent; the number only guards downgrades.
+    public const int CurrentSchemaVersion = 6;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -1749,6 +1752,7 @@ public sealed partial class TaskServerStore
                      "workspaces", "projects", "tasks", "runs", "events", "artifacts",
                      "audit", "fence_counters", "leases", "runners", "review_subjects",
                      "review_attempts", "review_fence_counters", "review_deliveries",
+                     "result_handoffs", "result_ref_gc",
                      "runner_inventories", "invariant_reports",
                      "runner_reconciliation_actions",
                  })
@@ -2018,6 +2022,14 @@ public sealed partial class TaskServerStore
                 retain_until TEXT NOT NULL,
                 CHECK ((immutable_remote_ref IS NULL) <> (source_bundle_digest IS NULL))
             );
+            CREATE TABLE IF NOT EXISTS result_ref_gc(
+                run_id TEXT PRIMARY KEY REFERENCES result_handoffs(run_id),
+                immutable_remote_ref TEXT NOT NULL,
+                status TEXT NOT NULL,
+                attempted_at TEXT NOT NULL,
+                deleted_at TEXT,
+                last_error TEXT
+            );
             CREATE TABLE IF NOT EXISTS run_completions(
                 run_id TEXT PRIMARY KEY REFERENCES runs(id),
                 outcome TEXT NOT NULL,
@@ -2172,6 +2184,7 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
             CREATE INDEX IF NOT EXISTS ix_artifacts_run ON artifacts(run_id);
             CREATE INDEX IF NOT EXISTS ix_result_handoffs_retain_until ON result_handoffs(retain_until);
+            CREATE INDEX IF NOT EXISTS ix_result_ref_gc_deleted_at ON result_ref_gc(deleted_at);
             CREATE INDEX IF NOT EXISTS ix_runner_outbox_backlog ON runner_outbox_status(backlog_count);
             CREATE INDEX IF NOT EXISTS ix_outbox_receipts_run ON outbox_receipts(run_id, sequence);
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);

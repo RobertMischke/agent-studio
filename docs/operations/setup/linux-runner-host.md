@@ -681,8 +681,32 @@ curl -sS https://tasks.example.com/api/v1/runs/<run-id>/result-handoff \
 The status projection includes total backlog, oldest unacknowledged sequence,
 and counts by final handoff state. Each outbox row includes its RunAttempt.
 Result envelopes are retained through task completion and for at least
-`TaskServer:ResultRetentionDays` afterward, default 30 days. Automatic deletion
-is not currently enabled.
+`TaskServer:ResultRetentionDays` afterward, default 30 days. The Task Server
+runs the result-ref GC sweep immediately after startup and every
+`TaskServer:ResultRefGcSweepMinutes` afterward, default six hours. Each pass is
+bounded by `TaskServer:ResultRefGcBatchSize`, default 50. The sweep deletes an
+immutable ref only when all of these facts hold:
+
+- the retention deadline passed;
+- the card is accepted in `6-completed` or `7-archive`;
+- the matching review produced a terminal `Pass` or `ProductFailure` report
+  and has no queued, leased, or process-unknown retry;
+- a newer result-bearing RunAttempt exists for the card, so the source attempt
+  is no longer the current review subject; and
+- the ref exactly matches
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>`.
+
+The newest result-bearing RunAttempt is retained even for an accepted or
+archived card. This keeps current review and integration recovery
+materializable. A missing
+repository URL, a malformed ref, a Git error, or an unavailable credential
+spares the ref. The Task Server service account therefore needs permission to
+delete only the `refs/heads/agent-studio/results/**` namespace on each
+registered origin. Repository URLs are never written to the sweep log. Every
+pass emits one structured `result-ref-gc` line per deleted, spared, or failed
+ref plus a summary, and successful deletion is persisted in the GC ledger.
+Set `TaskServer:ResultRefGcEnabled=false` to pause remote deletion while
+retention and safety facts continue to accumulate.
 
 On a later pickup, the retained local tip and the existing canonical salvage
 ref are compared by ancestry. Local-ahead is published by normal fast-forward;

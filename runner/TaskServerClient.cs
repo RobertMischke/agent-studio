@@ -263,7 +263,7 @@ public sealed class TaskServerClient : IDisposable
             authority.RunId,
             taskKey,
             authority.Lease.RunnerId,
-            RunnerInstanceId,
+            authority.InstanceId,
             authority.Lease.LeaseId,
             authority.Lease.FencingToken);
     }
@@ -382,7 +382,15 @@ public sealed class TaskServerClient : IDisposable
             claim.Task.TaskId,
             ProjectName: claim.Task.ProjectId,
             Lease: legacyLease,
-            ProjectId: claim.Task.ProjectId,
+            // The separated v1 resource contract currently carries task-project
+            // identity but no repository registration. Use the runner's
+            // configured fallback URL plus its stable repository identity for
+            // the isolated compatibility profile. Reusing the Task Server
+            // project id here would leave the durable result context unbound to
+            // a repository; omitting it would release the claim before launch.
+            ProjectId: RepositoryIdentity(_options?.GitRemote),
+            RepositoryUrl: _options?.GitRemote,
+            DefaultBranch: _options?.BaseBranch,
             RunId: claim.Run.RunId,
             LeaseInstanceId: RunnerInstanceId,
             ReconciliationActions: FromContract(claim.ReconciliationActions));
