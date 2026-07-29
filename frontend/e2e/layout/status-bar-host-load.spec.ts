@@ -125,7 +125,7 @@ async function stubHostLoad(
       cpuStealPercent: 0,
       ioWaitPercent: 0,
       cpuCores: 12,
-      activeSlots: runningCount,
+      activeSlots: telemetrySlots,
     }],
     findings: [],
   }));
@@ -140,17 +140,17 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('4 running');
+    await expect(running).toContainText('1 local · 3 remote');
     await expect(running).toHaveAttribute('data-signal-tone', 'working');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText('Open execution hosts');
     await expect(page.getByTestId('cac-tooltip')).toContainText('Execution host load 7.2 / 12 cores (60%)');
-    await expect(page.getByTestId('cac-tooltip')).toContainText('4 active execution slots');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('3 active execution slots');
   });
 
   test('click opens Execution Hosts management', async ({ page }) => {
-    await stubHostLoad(page, 2, 3.6);
+    await stubHostLoad(page, 2, 0, 0, 3.6);
     await page.goto('/');
 
     await page.getByTestId('status-bar-running').click();
@@ -166,7 +166,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('0 running');
+    await expect(running).toContainText('0 local · 0 remote');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'load-without-runs');
     await running.hover();
@@ -193,7 +193,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('3 running');
+    await expect(running).toContainText('0 local · 3 remote');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'runs-without-load');
     await running.hover();
@@ -207,7 +207,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('2 running');
+    await expect(running).toContainText('0 local · 2 remote');
     await expect(page.getByTestId('status-bar-running-divergence')).toBeVisible();
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(

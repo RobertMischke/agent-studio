@@ -5,7 +5,7 @@
       [pulsing]="runningCount() > 0"
       [signalTone]="hostLoad()?.tone ?? 'unknown'"
       [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
-      [label]="runningCount() + ' running'"
+      [label]="runningLabel()"
       [tooltip]="runningTooltip()"
       [warning]="runningSourcesDiverge()"
       testid="status-bar-running"
