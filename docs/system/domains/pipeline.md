@@ -36,6 +36,13 @@ pipeline view.
   that classifies the task in project context and maps it onto the selected
   CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
   `TokenEconomy.SuggestModel` seam.
+- `backend/Features/Runner/PromptEnrichmentService.cs`: deterministic,
+  zero-selector-token `pre-prompt-enrichment` step. It classifies the authored
+  card, selects curated versioned project/style/delegation blocks, appends at
+  most two optional blocks within a 1,500-token budget, and persists
+  `enrichment-report.json` before dispatch. Failure to persist the report blocks
+  dispatch. The step is default-on and can be disabled through the normal
+  per-project `PipelineSteps` convention.
 - `backend/Features/Pipeline/PipelineStepEconomyAdvisor.cs`: opt-in automated
   recommendation layer for cheap pipeline work. It passes only live-discovered
   Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
@@ -265,6 +272,12 @@ pipeline view.
   ids. Explicit card model/reasoning pins always win; legacy cards without
   provenance are treated as pinned. The selected/recommended pair remains
   visible on the step record.
+- `pre-prompt-enrichment` runs after qualification and before CORE spawn. The
+  original prompt remains byte-for-byte at the front of the launch prompt; the
+  labelled enrichment is additive. Its step token buckets describe selector
+  work only, which is zero in the deterministic implementation. Appended prompt
+  tokens are attributed in `enrichment-report.json` and remain part of CORE
+  input, so pipeline cost totals do not count them twice.
 - Cheap-model routing is explicit and reversible. `PipelineStepSetting` owns the
   `(cliType, model, thinkingLevel)` override per project and step; absent fields
   preserve the current runtime default. Aspect reviews and abort review honor

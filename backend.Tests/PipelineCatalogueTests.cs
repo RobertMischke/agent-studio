@@ -21,15 +21,16 @@ public class PipelineCatalogueTests
         var p = PipelineCatalogue.Standard;
         Assert.Equal(PipelineCatalogue.StandardPipelineId, p.Id);
         Assert.Equal(1, p.Version);
-        // Pre: the auto-mode loop guard (Ralph-loop early detection) leads,
-        // followed by the opt-in orchestrator-prep step that replaced the
-        // standalone 1a-orchestrator-prep backlog lane, then the deterministic
-        // reissue open-items check that foregrounds leftover items on a re-issue.
-        Assert.Equal(4, p.Pre.Count);
+        // Pre: loop guard and model qualification lead, followed by prompt
+        // enrichment, opt-in orchestrator prep, and the deterministic reissue
+        // open-items check.
+        Assert.Equal(5, p.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.ModelQualificationStepId, p.Pre[1].Id);
-        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, p.Pre[2].Id);
-        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, p.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PromptEnrichmentStepId, p.Pre[2].Id);
+        Assert.True(p.Pre[2].DefaultEnabled);
+        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, p.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, p.Pre[4].Id);
         Assert.Single(p.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, p.Core[0].Id);
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
@@ -42,6 +43,26 @@ public class PipelineCatalogueTests
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
         Assert.Equal(25, p.Post.Count);
+    }
+
+    [Fact]
+    public void PromptEnrichment_IsDefaultOnAndProjectConventionCanDisableIt()
+    {
+        var step = PipelineCatalogue.Standard.Pre.Single(candidate =>
+            candidate.Id == PipelineCatalogue.PromptEnrichmentStepId);
+
+        Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        Assert.True(PipelineStepConfigResolver.CanDisable(step));
+
+        var disabled = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.PromptEnrichmentStepId] = new() { Enabled = false },
+            },
+        };
+
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabled, step));
     }
 
     [Fact]
@@ -734,11 +755,12 @@ public class PipelineCatalogueTests
         // The core agent run and all Pre steps are not git steps, so they remain.
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
-        Assert.Equal(4, ro.Pre.Count);
+        Assert.Equal(5, ro.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.ModelQualificationStepId, ro.Pre[1].Id);
-        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[2].Id);
-        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PromptEnrichmentStepId, ro.Pre[2].Id);
+        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[4].Id);
 
         // Every git step was removed from Post.
         var standardPostGitSteps = standard.Post.Count(s => PipelineCatalogue.GitStepIds.Contains(s.Id));

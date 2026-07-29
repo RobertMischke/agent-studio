@@ -122,6 +122,8 @@ Each job folder uses this structure:
 <job-name>/
   job.json          # Metadata owned by the application
   prompt.md         # Task description for the CLI agent
+  enrichment-report.json
+                    # Optional: latest pre-spawn prompt-enrichment audit
   status.md         # Generated review protocol
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
   post-processing-outcomes.jsonl
@@ -130,6 +132,9 @@ Each job folder uses this structure:
                     # Optional: .metadata/prompts.jsonl (raw step-call prompts)
                     # Optional: .metadata/spawned-tasks.jsonl (task-spawner dedup ledger, AGT-2028)
   attachments/      # Input files supplied with the task
+  intake/
+    enriched-context.md
+                    # Exact labelled context appended to the launch prompt
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)
   logs/             # CLI output, including logs/cli-output.log
@@ -347,6 +352,18 @@ Build feature X.
 - Work on the selected task only.
 - Put review evidence under the job folder's results/ directory when needed.
 ```
+
+`prompt.md` remains the operator-authored source and is never overwritten by
+preprocessing. Before a fresh CLI dispatch, `PromptEnrichmentService` writes the
+exact additive block to `intake/enriched-context.md`, then atomically writes
+`enrichment-report.json` as the dispatch commit marker. The report records the
+status (`enriched`, `unchanged`, `fallback-unenriched`, or `blocked`), original
+and enriched hashes, policy/catalog identity, detected candidates and every
+selection decision, exact appended blocks with source/revision/digest, token
+attribution, nullable cost estimates, timing, warnings, and errors. If the
+report cannot be persisted, the CLI must not spawn. The project can disable the
+step through its `pre-prompt-enrichment` pipeline-step override; the resulting
+`unchanged` decision is still reported.
 
 ### status.md
 

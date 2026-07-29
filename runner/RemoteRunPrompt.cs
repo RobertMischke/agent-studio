@@ -26,10 +26,15 @@ public static class RemoteRunPrompt
         "This is required, not optional. The orchestrator parses this token; " +
         "without it the run lands in review as missing-terminal-sentinel.";
 
-    public static string Build(string taskPrompt)
+    public static string Build(string taskPrompt, string? enrichmentContext = null)
     {
         ArgumentNullException.ThrowIfNull(taskPrompt);
-        return taskPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
+        var enrichedPrompt = string.IsNullOrWhiteSpace(enrichmentContext)
+            ? taskPrompt
+            : taskPrompt + (taskPrompt.EndsWith('\n') ? Environment.NewLine : Environment.NewLine + Environment.NewLine)
+              + "---" + Environment.NewLine + Environment.NewLine
+              + enrichmentContext.TrimEnd() + Environment.NewLine;
+        return enrichedPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
             + "---" + Environment.NewLine + Environment.NewLine
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;

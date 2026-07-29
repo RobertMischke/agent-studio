@@ -617,6 +617,7 @@ builder.Services.AddSingleton<ProjectDocsService>();
 // fingerprint change) with the fail-open semantic query-expansion layer.
 builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
+builder.Services.AddSingleton<PromptEnrichmentService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();

@@ -104,6 +104,7 @@ public class ProjectRunner
     private readonly AgentStudio.Pipeline.IConceptWorkbenchPublisher? _conceptWorkbenchPublisher;
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
+    private readonly PromptEnrichmentService? _promptEnrichment;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -433,7 +434,8 @@ public class ProjectRunner
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
         CliQuotaWaitPolicyService? quotaWaitPolicy = null,
-        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null)
+        AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
+        PromptEnrichmentService? promptEnrichment = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -477,6 +479,7 @@ public class ProjectRunner
         _modelQualification = modelQualification;
         _integrationPushQueue = integrationPushQueue;
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
+        _promptEnrichment = promptEnrichment;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -2275,6 +2278,28 @@ public class ProjectRunner
                     jobId, runModel ?? "<task-default>", runThinkingLevel ?? "<model-default>");
             }
 
+            // Resolve prompt-shaping pre-steps before acquiring the pickup lock
+            // or the in-memory run claim. The enrichment report is the durable
+            // admission record for the exact prompt that will be dispatched.
+            ReissueOpenItemsPreCheck.PreCheckDecision? reissueOpenItems = null;
+            if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
+            {
+                reissueOpenItems = EvaluateReissueOpenItems(info);
+                if (reissueOpenItems.Intervenes)
+                {
+                    plan = BuildReissueChangePlan(plan, reissueOpenItems, ProjectName, info.Id);
+                }
+            }
+
+            PromptEnrichmentPreparation? preparedPromptEnrichment = null;
+            if (_promptEnrichment is not null && ShouldForegroundIntakeEnrichment(plan))
+            {
+                preparedPromptEnrichment = _promptEnrichment.Prepare(
+                    info,
+                    ReadPromptText(promptPath),
+                    runModel);
+            }
+
             // Disk-backed pickup lock (ADR-0044). When the lock is configured
             // and an attempt to acquire it shows a foreign live owner, refuse
             // to spawn: another backend on the same workspace is already on
@@ -2534,26 +2559,16 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is { IsWorktreeRun: true } worktreeRun)
                 worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(worktreeRun.RepositoryRoot!);
 
-            // Reissue open-items pre-check (deterministic pre-pipeline step):
-            // when this run is an auto-review re-issue that still carries open
-            // items from the previous run, foreground those items at the head of
-            // the run prompt so the rerun resolves them first instead of
-            // restarting blind. Gated to fresh-start reruns (no user follow-up,
-            // not an epic planning run); the pure ReissueOpenItemsPreCheck owns
-            // the detection. The pipeline-step recording lands after spawn,
-            // alongside the loop guard.
-            ReissueOpenItemsPreCheck.PreCheckDecision? reissueOpenItems = null;
-            if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
+            if (reissueOpenItems is { Intervenes: true })
             {
-                reissueOpenItems = EvaluateReissueOpenItems(info);
-                if (reissueOpenItems.Intervenes)
-                {
-                    plan = BuildReissueChangePlan(plan, reissueOpenItems, ProjectName, info.Id);
-                    var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
+                var interventionKind =
+                    reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
                         ? OrchestratorMessageKind.Steer
                         : OrchestratorMessageKind.SoftIntervention;
-                    _chatLog.Append(info, interventionKind, $"[reissue-open-items] {reissueOpenItems.Note}");
-                }
+                _chatLog.Append(
+                    info,
+                    interventionKind,
+                    $"[reissue-open-items] {reissueOpenItems.Note}");
             }
 
             // Resolve context before rendering the prompt because Codex resume
@@ -2580,7 +2595,7 @@ public class ProjectRunner
                     plan, promptPath, info.FolderPath, followupPrompt, reason);
             }
 
-            var prompt = RenderPrompt(plan, info, runWorkingDir);
+            var prompt = RenderPrompt(plan, info, runWorkingDir, preparedPromptEnrichment);
             if (_activeRuns.Get(jobId) is { IsUiIterationPipeline: true } uiRun)
             {
                 prompt += UiIterationGate.BuildAgentInstructions(
@@ -7123,7 +7138,11 @@ public class ProjectRunner
         return true;
     }
 
-    private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
+    private string RenderPrompt(
+        RunPlan plan,
+        TaskInfo info,
+        string runWorkingDir,
+        PromptEnrichmentPreparation? preparedPromptEnrichment = null)
     {
         var worktreeCheckout = _activeRuns.Get(info.Id)?.WorktreePath;
         if (string.IsNullOrWhiteSpace(worktreeCheckout) && IsWorktreePath(runWorkingDir))
@@ -7145,7 +7164,10 @@ public class ProjectRunner
         var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? worktreeCheckout : repositoryPath;
         var promptText = ReadPromptText(promptPath);
         if (ShouldForegroundIntakeEnrichment(plan))
-            promptText = PrependIntakeEnrichment(info.FolderPath, promptText);
+        {
+            promptText = preparedPromptEnrichment?.LaunchPrompt
+                         ?? PrependIntakeEnrichment(info.FolderPath, promptText);
+        }
 
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {

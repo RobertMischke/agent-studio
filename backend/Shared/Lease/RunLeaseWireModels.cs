@@ -171,7 +171,10 @@ public sealed record RunnerClaimResponse(
     string? RegistrationFingerprint = null,
     // T0b: additive execution spec. Placed last so every existing positional
     // construction keeps compiling and every older runner keeps deserialising.
-    RunSpecDto? RunSpec = null);
+    RunSpecDto? RunSpec = null,
+    // Exact server-materialized block for this claim. Keeping it on the claim
+    // prevents a remote runner from rereading mutable sidecar state later.
+    string? PromptEnrichmentContext = null);
 
 /// <summary>Fenced request for the server-rendered Epic decomposition prompt.</summary>
 public sealed record RemoteEpicPlanningPromptRequest(
