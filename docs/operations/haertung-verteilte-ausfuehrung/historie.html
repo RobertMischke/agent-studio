@@ -114,7 +114,9 @@
       deliverables.md, status.md, Lifecycle-Terminalisierung, Timeline-Aktor <code>external</code>,
       „extern erledigt“-Badge); Eskalationstext nennt vorhandene Partial-Results.</dd>
     <dt>Status</dt><dd><span class="pill done">shipped</span></dd>
-    <dt>Referenzen</dt><dd><code>docs/concepts/out-of-band-task-completion.md</code>, <code>ExternalCompletionService</code></dd>
+    <dt>Referenzen</dt><dd><code>docs/concepts/out-of-band-task-completion.md</code>,
+      <code>ExternalCompletionService</code>,
+      <a href="../../../tools/remote-test-suite/scenarios/external-completion-cycle.json">external-completion-cycle replay</a></dd>
   </dl>
 </div>
 
@@ -215,7 +217,8 @@
     <dt>Status</dt><dd><span class="pill done">Reconciliation erledigt</span>
       <span class="pill queued">Struktur: Phase 1 gequeued</span></dd>
     <dt>Referenzen</dt><dd>Vollzugsprotokoll <code>salvage-reconciliation-2026-07-17.md</code> (devspace/artifacts) ·
-      AGT-2108/2133/2152/2156/2159/2160/2162/2163/2167/2177/2178/2180/2181/2188/2190/2191/2192/2193/2195</dd>
+      AGT-2108/2133/2152/2156/2159/2160/2162/2163/2167/2177/2178/2180/2181/2188/2190/2191/2192/2193/2195 ·
+      <a href="../../../tools/remote-test-suite/scenarios/divergent-salvage-lineage.json">divergent-salvage-lineage replay</a></dd>
   </dl>
 </div>
 
@@ -265,6 +268,9 @@
       (<code>worktree add … &lt;sha&gt;</code>); Divergenz → deterministische Collision-Refs, nie Force-Push.</dd>
     <dt>Status</dt><dd><span class="pill done">gelöst</span>: Seit 11.07. wurde keine neue
       Kreuzkontamination beobachtet; alte Salvage-Branches werden beim Re-Cut bereinigt.</dd>
+    <dt>Regression</dt><dd><a href="../../../tools/remote-test-suite/scenarios/divergent-salvage-lineage.json">divergent-salvage-lineage replay</a>
+      preserves the raw host tip, reconstructs the task range from its immutable base SHA,
+      and rejects contaminated and stale review scopes before exact-SHA review.</dd>
   </dl>
 </div>
 
@@ -462,7 +468,8 @@
       Branch-Rekonstruktion nach 2177-Muster.</dd>
     <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
       <span class="pill open">strukturell offen</span> — kein automatischer Zombie-Worktree-Check.</dd>
-    <dt>Referenzen</dt><dd>AGT-2155 · Bezug AGT-1917 (External-Completion), AGT-2177 (Rekonstruktionsmuster)</dd>
+    <dt>Referenzen</dt><dd>AGT-2155 · Bezug AGT-1917 (External-Completion), AGT-2177 (Rekonstruktionsmuster) ·
+      <a href="../../../tools/remote-test-suite/scenarios/external-completion-cycle.json">external-completion-cycle replay</a></dd>
   </dl>
 </div>
 
@@ -499,7 +506,8 @@
       dead-attempt release are covered by Runner and Task Server regression tests; memory profiling and
       crash visibility remain separate follow-up work.</dd>
     <dt>Referenzen</dt><dd>AGT-2182/2194/2198/2232 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
-      (Attempt-Fencing)</dd>
+      (Attempt-Fencing) ·
+      <a href="../../../tools/remote-test-suite/scenarios/lease-adoption-restart.json">lease-adoption-restart replay</a></dd>
   </dl>
 </div>
 

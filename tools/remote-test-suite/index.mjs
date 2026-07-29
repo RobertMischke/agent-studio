@@ -12,11 +12,13 @@ import {
   resetRunRoot,
   resourcePlan,
   runCommand,
+  scenarioAssertions,
   setupWithRollback,
   sha256,
   validateManifest
 } from './core.mjs';
 import { spawn } from 'node:child_process';
+import { executeHistoricalReplay } from './replay-scenarios.mjs';
 
 class Api {
   constructor(baseUrl, runId) {
@@ -33,14 +35,23 @@ class Api {
   async post(route, body) { return await this.request('POST', route, body); }
   async put(route, body) { return await this.request('PUT', route, body); }
   async request(method, route, body) {
+    const result = await this.attempt(method, route, body);
+    if (!result.ok) throw new Error(`${method} ${route} failed (${result.status}): ${result.text}`);
+    return result.value;
+  }
+  async attempt(method, route, body) {
     const response = await fetch(`${this.baseUrl}${route}`, {
       method,
       headers: this.headers,
       body: body === undefined ? undefined : JSON.stringify(body)
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`${method} ${route} failed (${response.status}): ${text}`);
-    return text ? JSON.parse(text) : null;
+    let value = null;
+    if (text) {
+      try { value = JSON.parse(text); }
+      catch { value = text; }
+    }
+    return { ok: response.ok, status: response.status, text, value };
   }
 }
 
@@ -86,6 +97,7 @@ try {
     await cleanupRunRoot(plan.root, baseRoot);
   });
   const result = await executeScenario({ manifest, root: plan.root, serverUrl, seed: args.seed, runId: args.runId });
+  await writeFile(path.join(plan.root, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
   completed = true;
   console.log(JSON.stringify(result, null, 2));
 } finally {
@@ -209,6 +221,18 @@ async function executeScenario(context) {
       });
     }
   };
+
+  if (manifest.name !== 'reference-change') {
+    return await executeHistoricalReplay({
+      ...context,
+      api,
+      hook,
+      suiteRoot,
+      repoRoot,
+      register
+    });
+  }
+  const checks = scenarioAssertions(manifest);
 
   await api.post('/api/v1/workspaces', { name: `Remote Test ${runId}`, workspaceId: ids.workspaceId });
   await api.post('/api/v1/projects', {
@@ -442,7 +466,7 @@ async function executeScenario(context) {
   await runCommand(['git', 'push', 'origin', manifest.fixture.defaultBranch], { cwd: integrationRepo });
   const integratedTree = (await runCommand(['git', 'rev-parse', 'HEAD^{tree}'], { cwd: integrationRepo })).stdout.trim();
   const currentTask = await api.get(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`);
-  await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
+  const terminalTask = await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
     title: null,
     body: null,
     state: '6-completed',
@@ -451,11 +475,18 @@ async function executeScenario(context) {
   await hook('integration', 'after', { status: 'integrated', resultSha, semanticTree: integratedTree });
 
   const phaseEvents = (await readFile(phaseFile, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+  checks.check(
+    'reference-change-accepted',
+    terminalTask.state === '6-completed'
+      && resultSha === fetched
+      && phaseEvents.filter(event => event.point === 'after').length === expectedPhases.length,
+    `exact result ${resultSha} reached ${terminalTask.state} through all five phases`);
   return {
     scenario: manifest.name,
     seed,
     runId,
     accepted: true,
+    ...checks.finish(terminalTask.state, 0),
     resultSha,
     semanticTree: integratedTree,
     phaseSequence: phaseEvents.filter(event => event.point === 'after').map(event => event.phase),

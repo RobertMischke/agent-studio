@@ -26,5 +26,16 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
+  "contract": {
+    "chronicleLinks": [],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 0
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
   "hooks": {}
 }

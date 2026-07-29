@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-29
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -150,12 +150,14 @@ state.
   Expired Engine leases return the same run to `pending`; a replacement Engine
   receives a higher fence and stale settlement is rejected.
 - `tools/remote-test-suite/`: repository-owned, isolated Remote Run
-  infrastructure scenarios. The `reference-change` manifest drives the public
-  v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
-  review, and reviewed fixture integration with stable-seed semantic
-  acceptance. Phase hooks observe claim, run, gate, review, and integration
-  without adding scheduler-only branches. It never targets stable or the
-  managed task workspace.
+  infrastructure scenarios. In addition to the `reference-change` protocol
+  reference, first-class historical replays cover divergent salvage lineage,
+  lease adoption across a real Runner daemon restart, and the external
+  completion cycle. Every manifest binds chronicle incidents to an expected
+  durable terminal, bounded recovery budget, and complete machine-assertion
+  set. Phase hooks observe claim, run, gate, review, and integration without
+  adding scheduler-only branches. It never targets stable or the managed task
+  workspace.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -266,6 +268,8 @@ state.
   the `Process.Start`-to-slot-save handoff window. The replacement renews
   authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
   persisted worktree, then follows JSONL output and completes the same attempt.
+  Reattachment also reopens the durable outbox with the original persisted
+  attempt instance, never the replacement daemon's process identity.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
@@ -281,6 +285,11 @@ state.
   Host-level probe and one-shot fallback URLs never flow into project clones.
   A project without a registry URL stays Ready, is reported as not
   remote-capable, and creates no clone.
+- The separated v1 Task Server resource contract does not yet carry project
+  repository registration on a claim. In that isolated compatibility profile
+  only, the claim adapter binds the configured `--git-remote` to its stable
+  repository identity and configured base branch. This does not relax the
+  registry-owned repository boundary for product project claims.
 - Before the first card for one host/project pair is leased, the claim endpoint
   returns an unleased preflight offer containing the registered repository and
   a registration fingerprint. The host creates or refreshes the exact shared
