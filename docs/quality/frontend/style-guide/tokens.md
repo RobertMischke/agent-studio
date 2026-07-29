@@ -38,6 +38,18 @@ Density is a separate axis from the spacing scale. Surfaces pick a density varia
 
 A surface that wants `default` or `cozy` overrides these four vars in its own scope (`:host { --studio-row-pad-block: var(--studio-row-pad-block-default); }`). Density and the spacing scale do not compete — density is for row geometry, spacing is for inset and gap.
 
+### Action geometry
+
+Sibling compact text actions read one shared geometry contract:
+
+| Token | Default | Used by |
+|---|---|---|
+| `--studio-action-height-sm` | 28px | Compact text-button groups |
+| `--studio-action-radius-sm` | 6px | Compact text-button groups |
+
+Button intent changes color and emphasis, not these dimensions. The role
+contract lives in [buttons.md](./buttons.md).
+
 ## Modal padding
 
 Single knob the operator can dial without touching every consumer.

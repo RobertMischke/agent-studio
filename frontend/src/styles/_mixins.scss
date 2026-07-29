@@ -181,3 +181,44 @@
   color: var(--studio-accent-3);
   background: color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
 }
+
+/* ---------------------------------------------------------------------
+ * type-label
+ *
+ * The only shared opt-in for uppercase UI typography. Use it for short
+ * eyebrows, compact section labels, and machine status codes. Buttons,
+ * titles, tabs, descriptions, badges, and ordinary state labels stay in
+ * sentence case.
+ * ------------------------------------------------------------------- */
+@mixin type-label {
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------
+ * Deck-Panel v1
+ *
+ * Outer-shell contract for Deck sections. Apply exactly one panel mixin to
+ * an existing shell; never introduce a redundant wrapper. Status is carried
+ * by the full surface and border, never by a colored left edge.
+ * ------------------------------------------------------------------- */
+@mixin deck-panel {
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-card-border);
+  border-radius: 10px;
+  background: var(--studio-card-bg);
+}
+
+@mixin deck-panel-muted {
+  border-color: var(--studio-card-muted-border);
+  background: var(--studio-card-muted-bg);
+}
+
+@mixin deck-panel-attention {
+  border-color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-card-border));
+  background: color-mix(in srgb, var(--studio-error) 8%, var(--studio-card-bg));
+}

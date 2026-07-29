@@ -112,11 +112,17 @@ Used in dialog footers and the few inline forms with explicit submit / cancel pa
 
 | Class            | Use it for                                                      |
 | ---------------- | --------------------------------------------------------------- |
-| `.btn`           | Default action; neutral surface, no accent                      |
-| `.btn--primary`  | Primary action in a confirm / form dialog (accent-orange fill)  |
-| `.btn--danger`   | Destructive action (red fill)                                   |
-| `.btn--ghost`    | Tertiary / cancel; transparent background, dim foreground       |
+| `.btn`           | Secondary action; safe neutral alternative in the same context  |
+| `.btn--primary`  | The single preferred action in its group (accent fill)          |
+| `.btn--danger`   | Destructive action such as abort, delete, discard, or revoke    |
+| `.btn--ghost`    | Tertiary reveal, cancel, or dismiss action                       |
 | `.btn--create`   | One-off "Create task" purple variant in the top header          |
+
+Sibling text buttons share one height, inset, radius, type size, focus ring,
+and disabled treatment. A group has at most one primary. Danger communicates
+impact, not general importance. A static label beside the group does not use
+any of these classes; follow the
+[living label contract](./living-rules.md#labels-are-not-buttons).
 
 **Don't** introduce a new variant (e.g. `.btn--my-feature`) inline. If the new shape is reusable, propose it here; if it is a one-off, the answer is almost always "use `.btn--ghost` instead and let the icon / position carry the per-feature meaning".
 

@@ -355,6 +355,44 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveText('Continue (reissue)');
     await expect(panel.getByTestId('escalation-action-accept-escalated')).toHaveText('Accept as-is');
     await expect(panel.getByTestId('escalation-action-discard-escalated')).toHaveText('Abort');
+    const recommendation = panel.getByTestId('escalation-recommendation');
+    await expect(recommendation).toHaveText('Needs decision');
+    await expect(recommendation).toHaveAttribute('data-label-kind', 'status');
+
+    const decisionContract = await panel.evaluate((element) => {
+      const read = (testId: string) => {
+        const node = element.querySelector<HTMLElement>(`[data-testid="${testId}"]`)!;
+        const style = getComputedStyle(node);
+        return {
+          tag: node.tagName,
+          height: node.getBoundingClientRect().height,
+          radius: style.borderRadius,
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          background: style.backgroundColor,
+          borderTop: style.borderTopWidth,
+          transform: style.textTransform,
+        };
+      };
+      return {
+        label: read('escalation-recommendation'),
+        primary: read('escalation-action-reissue-escalated'),
+        secondary: read('escalation-action-accept-escalated'),
+        danger: read('escalation-action-discard-escalated'),
+      };
+    });
+    expect(decisionContract.label).toMatchObject({
+      tag: 'SPAN',
+      borderTop: '0px',
+      transform: 'none',
+    });
+    expect(decisionContract.label.background).toBe('rgba(0, 0, 0, 0)');
+    expect(decisionContract.primary.height).toBe(decisionContract.secondary.height);
+    expect(decisionContract.primary.height).toBe(decisionContract.danger.height);
+    expect(decisionContract.primary.radius).toBe(decisionContract.secondary.radius);
+    expect(decisionContract.primary.radius).toBe(decisionContract.danger.radius);
+    expect(decisionContract.primary.fontSize).toBe(decisionContract.secondary.fontSize);
+    expect(decisionContract.primary.fontWeight).toBe(decisionContract.secondary.fontWeight);
     await dismissAppErrorDialog(page);
     await shootBothThemes(page, testInfo, 'escalation-5e-open');
   });

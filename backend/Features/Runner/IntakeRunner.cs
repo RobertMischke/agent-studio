@@ -595,7 +595,7 @@ public sealed class IntakeRunner
     [
         ("backend", ["backend", ".cs", "c#", ".net", "dotnet", "api", "endpoint", "service", "controller"]),
         ("runner", ["runner", "pickup", "cli", "agent", "orchestrator", "intake", "pre-step", "pipeline", "watchdog", "sentinel"]),
-        ("frontend", ["frontend", "angular", ".ts", ".scss", "css", "component", "ui", "design", "token", "layout", "button", "lane", "card", "visual"]),
+        ("frontend", ["frontend", "angular", ".ts", ".scss", "css", "style", "styling", "component", "ui", "design", "token", "layout", "button", "lane", "card", "visual"]),
         ("git", ["git", "commit", "push", "merge", "branch", "worktree", "workspace artifact", "auto-commit", "pull request"]),
         ("filesystem", ["job folder", "task folder", "job.json", "task.json", "lane", "state", "move", "reorder", "archive", ".orchestrator", "workspace"]),
         ("refactor", ["refactor", "split", "extract", "rename", "namespace", "move file", "decompose"])
