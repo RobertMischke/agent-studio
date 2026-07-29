@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>task-server</AssemblyName>
     <RootNamespace>AgentStudio.TaskServer</RootNamespace>
-    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <Target Name="StampTaskServerBuildIdentity" BeforeTargets="GenerateAssemblyInfo">

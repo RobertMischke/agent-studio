@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <AgentStudioVersionFile>$(MSBuildThisFileDirectory)VERSION</AgentStudioVersionFile>
+    <AgentStudioVersion>$([System.IO.File]::ReadAllText('$(AgentStudioVersionFile)').Trim())</AgentStudioVersion>
+    <Version>$(AgentStudioVersion)</Version>
+  </PropertyGroup>
+
+  <Target Name="ValidateAgentStudioVersion" BeforeTargets="PrepareForBuild">
+    <Error
+      Condition="'$(Version)' != '$(AgentStudioVersion)'"
+      Text="Project version $(Version) does not match the repository version $(AgentStudioVersion) from VERSION." />
+  </Target>
+</Project>

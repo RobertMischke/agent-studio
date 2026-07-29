@@ -15,8 +15,9 @@ it, and coordinate disclosure and remediation there.
 
 ## Supported versions
 
-Agent Studio is currently at development version `0.1.0` and has not published
-its first tagged release. Until then, security fixes target the default branch.
-After tagged releases begin, only the latest release line and the default
-branch will receive security fixes. Older release lines are unsupported unless
-a release notice explicitly says otherwise.
+Agent Studio's current development version is declared in [`VERSION`](VERSION),
+the repository's single version source. The project has not published its first
+tagged release. Until then, security fixes target the default branch. After
+tagged releases begin, only the latest release line and the default branch will
+receive security fixes. Older release lines are unsupported unless a release
+notice explicitly says otherwise.

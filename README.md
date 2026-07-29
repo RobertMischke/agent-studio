@@ -1,6 +1,5 @@
 # agent-orchestrator
 
-[![Release build](https://github.com/agent-orc/agent-studio/actions/workflows/release.yml/badge.svg)](https://github.com/agent-orc/agent-studio/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/agent-orc/agent-studio)](LICENSE)
 
 **Management layers on top of coding work.** Agents (Claude Code, Codex, GitHub Copilot, Gemini) write the code; this repository is the Studio: a task board, agent pipelines, and project wikis that assign, gate, review, and account for it.
@@ -45,7 +44,10 @@ new-user installation path. It requires at least 8 GB of free disk space; no
 host .NET or Node.js install, local settings file, maintainer switch, or
 neighbouring repository is required. See the
 [setup guide](./docs/operations/setup/getting-started.md) for prerequisites,
-persistence, and troubleshooting. Source contributors use the separate
+persistence, and troubleshooting. To add execution capacity after the Studio
+is running, follow the
+[Agent Host guide](./docs/operations/setup/linux-runner-host.md). Source
+contributors use the separate
 [contributor setup](./docs/operations/setup/contributor-setup.md).
 
 ## More

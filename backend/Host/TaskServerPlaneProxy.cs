@@ -44,8 +44,8 @@ public static class TaskServerPlaneProxy
                 TaskServerProtocol.Current.ToString());
             client.DefaultRequestHeaders.Add(
                 TaskServerProtocol.ClientVersionHeaderName,
-                typeof(TaskServerPlaneProxy).Assembly.GetName().Version?.ToString()
-                ?? "0.0.0");
+                typeof(TaskServerPlaneProxy).Assembly.GetName().Version?.ToString(3)
+                ?? "unknown");
             var token = ReadServiceToken(configuration);
             if (token is not null)
                 client.DefaultRequestHeaders.Authorization =
