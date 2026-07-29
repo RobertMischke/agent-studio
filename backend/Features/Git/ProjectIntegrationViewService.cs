@@ -150,7 +150,9 @@ public sealed class ProjectIntegrationViewService
                 else
                 {
                     var attributed = TaskIntegrationStatusService.AttributedCommits(task);
-                    if (attributed.Count > 0 && attributed.All(integrationAncestors.Contains))
+                    if (attributed.Count > 0
+                        && attributed.All(sha =>
+                            TaskIntegrationStatusService.AncestorSetContains(integrationAncestors, sha)))
                         proof = attributed[^1];
                 }
             }

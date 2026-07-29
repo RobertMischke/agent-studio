@@ -22,11 +22,13 @@ namespace AgentStudio.Tasks;
 /// </para>
 ///
 /// <para>
-/// The verdict's <b>anchor is the attributed <c>commits[]</c> list</b> - exactly
-/// the commits the card's commit widget renders - so the badge and the widget can
-/// NEVER contradict each other (AGT-2171: the widget showed the attributed commits
-/// on develop while the badge, keying off the branch <em>tip</em> WIP snapshot,
-/// claimed "not integrated"). The signals are collapsed into the five
+/// The verdict's <b>anchor is the integrable subset of the attributed
+/// <c>commits[]</c> list</b>. Zero-file runner lifecycle markers are not delivery
+/// expectations; every commit that carries changed files remains an anchor. This
+/// keeps the badge aligned with delivered work (AGT-2171: the widget showed the
+/// attributed commits on develop while the badge, keying off the branch
+/// <em>tip</em> WIP snapshot, claimed "not integrated"). The signals are collapsed
+/// into the five
 /// <see cref="IntegrationStatuses"/> states:
 /// <list type="number">
 /// <item>a curated <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit
@@ -230,15 +232,15 @@ public sealed class TaskIntegrationStatusService
         if (recordedMerge is { Length: > 0 })
             return Integrated(Short(recordedMerge), branchName, "recorded-merge");
 
-        // Anchor = the attributed commits[] list the card's commit widget renders.
-        // Badge and widget MUST speak from the same source.
+        // Anchor = integrable entries in the attributed commits[] list. Zero-file
+        // runner lifecycle markers are metadata, not delivery expectations.
         var attributed = AttributedCommits(job);
         if (attributed.Count == 0)
             return ClassifyNotIntegrated(job, branchName, repoResolved: true);
 
         var missing = new List<string>();
         foreach (var sha in attributed)
-            if (!reach.DevelopAncestors.Contains(sha)) missing.Add(sha);
+            if (!AncestorSetContains(reach.DevelopAncestors, sha)) missing.Add(sha);
 
         // NONE of the attributed commits landed → conflict-skipped / pending
         // (no-branch is impossible here: there IS attributed work).
@@ -252,7 +254,7 @@ public sealed class TaskIntegrationStatusService
         if (missing.Count == 0)
         {
             var branchTip = RecordedBranchTip(job);
-            if (branchTip != null && !reach.DevelopAncestors.Contains(branchTip))
+            if (branchTip != null && !AncestorSetContains(reach.DevelopAncestors, branchTip))
             {
                 var wip = CountUnintegratedTipCommits(root, reach, branchTip);
                 var detail = wip > 0
@@ -367,16 +369,17 @@ public sealed class TaskIntegrationStatusService
     /// </summary>
     internal static string? AnchorFor(TaskInfo job)
     {
-        var last = job.Commits.Count > 0 ? job.Commits[^1].Sha : job.Commit?.Sha;
-        return string.IsNullOrWhiteSpace(last) ? null : last;
+        var attributed = AttributedCommits(job);
+        return attributed.Count == 0 ? null : attributed[^1];
     }
 
     /// <summary>
     /// The attributed commit SHAs the card's commit widget renders (oldest →
-    /// newest), read entirely from the persisted board payload (no git spawn). This
-    /// is the single source both the badge and the widget speak from. Falls back to
-    /// the legacy single <see cref="TaskInfo.Commit"/> when the list is empty, and
-    /// drops blank SHAs. Empty when the card committed nothing.
+    /// newest), read entirely from the persisted board payload (no git spawn).
+    /// Falls back to the legacy single <see cref="TaskInfo.Commit"/> when the list
+    /// is empty, and drops blank SHAs plus zero-file platform lifecycle markers.
+    /// A marker-shaped commit with changed files remains integrable work. Empty
+    /// when the card committed nothing.
     /// </summary>
     internal static IReadOnlyList<string> AttributedCommits(TaskInfo job)
     {
@@ -384,13 +387,46 @@ public sealed class TaskIntegrationStatusService
         if (job.Commits.Count > 0)
         {
             foreach (var c in job.Commits)
-                if (!string.IsNullOrWhiteSpace(c.Sha)) result.Add(c.Sha);
+                if (!string.IsNullOrWhiteSpace(c.Sha) && !IsZeroFileLifecycleMarker(c))
+                    result.Add(c.Sha);
         }
-        else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha))
+        else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha)
+                 && !IsZeroFileLifecycleMarker(job.Commit!))
         {
             result.Add(job.Commit!.Sha);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Membership check for persisted task SHAs. Older task records can contain
+    /// the seven-character display SHA rather than the full object id returned by
+    /// <c>rev-list</c>. Treat a valid abbreviated SHA as landed when it prefixes a
+    /// reachable full SHA; full SHAs still use exact membership.
+    /// </summary>
+    internal static bool AncestorSetContains(IReadOnlySet<string> ancestors, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        var candidate = sha.Trim();
+        if (ancestors.Contains(candidate)) return true;
+        if (candidate.Length is < 7 or >= 40 || !candidate.All(Uri.IsHexDigit))
+            return false;
+
+        return ancestors.Any(ancestor =>
+            ancestor.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsZeroFileLifecycleMarker(TaskCommitInfo commit)
+    {
+        if (commit.FilesChanged != 0 || commit.Files.Count != 0)
+            return false;
+
+        var subject = commit.Message
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()
+            ?.Trim() ?? "";
+        return subject.StartsWith("wip(runner): salvage before teardown", StringComparison.OrdinalIgnoreCase)
+               || subject.StartsWith("chore: snapshot for review", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

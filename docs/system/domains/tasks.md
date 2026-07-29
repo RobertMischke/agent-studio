@@ -96,6 +96,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
+- Integration status accepts persisted abbreviated Git SHAs of at least seven
+  hexadecimal characters when they match a reachable full SHA by prefix.
+  Zero-file lifecycle entries whose subjects start with
+  `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
+  visible attribution metadata but are not delivery expectations. A matching
+  subject with changed files remains a real integration expectation.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
