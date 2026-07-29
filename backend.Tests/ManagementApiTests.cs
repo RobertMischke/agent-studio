@@ -34,7 +34,9 @@ public sealed class ManagementApiTests : IDisposable
         client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
         var status = await client.GetFromJsonAsync<JsonElement>("/api/v1/management/status");
         Assert.Equal("healthy", status.GetProperty("health").GetProperty("state").GetString());
-        Assert.Equal(1, status.GetProperty("store").GetProperty("eventCount").GetInt64());
+        Assert.True(
+            status.GetProperty("store").GetProperty("eventCount").GetInt64() >= 1,
+            "The seeded server evidence event must remain visible when startup emits additional runtime events.");
 
         const string key = "maintenance-test-key";
         var request = new { kind = "maintenance-enter", dryRun = false, confirmation = "maintenance-enter", idempotencyKey = key, reason = "test rehearsal" };

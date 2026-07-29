@@ -37,7 +37,8 @@ public sealed record CompletionAcceptanceRecord
         string recentLog,
         int? exitCode,
         bool runStatusCompleted,
-        bool hasResultsArtifacts)
+        bool hasResultsArtifacts,
+        bool parsedDoneSignal = false)
     {
         var matches = SentinelRegex.Matches(recentLog ?? string.Empty);
         var terminal = matches.Count == 0 ? null : matches[^1];
@@ -46,13 +47,18 @@ public sealed record CompletionAcceptanceRecord
         // Reaching Post Processing with a parsed terminal is itself a durable
         // completed-turn signal. Older/remote runs may not have the synthetic
         // CLI-exit log line even though PendingDecisionScanner parsed TASK_DONE.
-        var turnComplete = terminal is not null || exitCode == 0 || runStatusCompleted;
-        var implementationComplete = turnComplete && terminalKind is "DONE" or "NOOP";
+        var turnComplete = terminal is not null || parsedDoneSignal || exitCode == 0 || runStatusCompleted;
+        var implementationComplete = turnComplete
+            && (terminalKind is "DONE" or "NOOP" || parsedDoneSignal);
 
         var evidence = new List<CompletionEvidenceItem>
         {
-            new("terminal-sentinel", "logs/cli-output.log", terminalKind is "DONE" or "NOOP",
-                terminalKind is null ? "No structured task terminal was recorded." : $"Latest structured terminal is TASK_{terminalKind}."),
+            new("terminal-sentinel", "logs/cli-output.log", terminalKind is "DONE" or "NOOP" || parsedDoneSignal,
+                terminalKind is not null
+                    ? $"Latest structured terminal is TASK_{terminalKind}."
+                    : parsedDoneSignal
+                        ? "The pending decision scanner supplied a parsed TASK_DONE signal for the current subject."
+                        : "No structured task terminal was recorded."),
             new("process-terminal", "logs/cli-output.log", turnComplete,
                 exitCode is not null
                     ? $"Latest CLI exit code is {exitCode}."

@@ -2116,7 +2116,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             recentLog,
             CompletionGate.ExtractLatestExitCode(recentLog),
             CompletionGate.ExtractLatestRunCompleted(recentLog),
-            HasResultsArtifacts(current.FolderPath));
+            HasResultsArtifacts(current.FolderPath),
+            parsedDoneSignal: pending.Kind == ReviewSignalKind.Done);
         CompletionAcceptanceRecord.Write(current.FolderPath, acceptance, _logger);
         var gate = CompletionGate.EvaluateStructured(
             acceptance,

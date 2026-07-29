@@ -212,7 +212,7 @@ Deliver exactly one primary document at `results/report.html`. Make it a self-co
 
     <section class="panel rollout" id="result-viewer">
       <h2>Result viewer rollout boundary</h2>
-      <p>The delivery contract is fixed here. The current Result pane still derives its main body from <code>status.md</code>; top-level HTML is already sandbox-rendered in the Files surface, but automatic <code>results/report.html</code> selection is owned by AGT-2409. AGT-2417 forwards that exact integration gap and does not duplicate the viewer implementation.</p>
+      <p>The delivery contract is fixed here. Verification on 2026-07-29 found that the current Result pane still derives its main body from <code>status.md</code>, the results endpoint is read-only, and HTML results fall back to <code>application/octet-stream</code>. Top-level HTML is already sandbox-rendered in the Files surface, but automatic discovery and sandbox rendering of <code>results/report.html</code> is still missing. AGT-2417 appended this exact follow-up to AGT-2409 through the Task API and does not duplicate the viewer implementation.</p>
     </section>
   </main>
 
