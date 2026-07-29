@@ -165,17 +165,39 @@ public sealed class GitWorkspaceTests : IDisposable
         await SeedOriginAsync();
         var workspace = CreateWorkspace();
         await workspace.PrepareAsync(CancellationToken.None);
+        var authoritativeMain = (await GitAsync(
+            _origin, "rev-parse", "refs/heads/main")).StdOut;
         await File.WriteAllTextAsync(Path.Combine(workspace.RepoPath, "work.txt"), "valuable work");
 
         var result = await workspace.TeardownAsync("Unknown", CancellationToken.None);
 
         Assert.True(result.SecuredWork);
         Assert.Equal("runner/runner-test/AGT-2147", result.Branch);
+        Assert.Equal(authoritativeMain, (await GitAsync(
+            _origin, "rev-parse", "refs/heads/main")).StdOut);
         Assert.False(Directory.Exists(workspace.RepoPath));
         Assert.Equal("valuable work", (await GitAsync(_origin,
             "show", $"refs/heads/{result.Branch}:work.txt")).StdOut);
         Assert.Equal("wip(runner): salvage before teardown - outcome Unknown",
             (await GitAsync(_origin, "log", "-1", "--format=%s", $"refs/heads/{result.Branch}")).StdOut);
+    }
+
+    [Theory]
+    [InlineData("runner/runner-test/AGT-2147", true)]
+    [InlineData("runner/runner-test/AGT-2147-collision-local-remote", true)]
+    [InlineData("main", false)]
+    [InlineData("develop", false)]
+    [InlineData("refs/heads/main", false)]
+    [InlineData("runner/runner-test/AGT-9999", false)]
+    public void Salvage_target_policy_allows_only_the_card_branch_and_its_collision_refs(
+        string targetBranch,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            GitWorkspace.IsCardScopedSalvageTarget(
+                "runner/runner-test/AGT-2147",
+                targetBranch));
     }
 
     [Fact]

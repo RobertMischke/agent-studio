@@ -518,6 +518,12 @@ state.
   an exhausted or genuinely unrecoverable git failure retains the worktree and
   uses the existing `worktree-blocked` escalation with the preserved tips and
   next safe action (AGT-2177).
+- Every moving salvage push passes a final card-scope allowlist at the Git
+  mutation boundary. The only accepted targets are the exact
+  `runner/<runner-id>/<task-key>` branch and collision refs derived from that
+  branch. An integration or authoritative-base branch such as `main` or
+  `develop`, a fully qualified base ref, and another card's runner ref all fail
+  closed before `git push`; the worktree remains recoverable (AGT-2423).
 - Worktree preparation records the actual repository base line as a full ref,
   such as `refs/heads/main` or `refs/heads/develop`. Completion persists that
   ref on the task and review subject. Integration status, review planning,
