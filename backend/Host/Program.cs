@@ -580,18 +580,18 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
-// Accepted integration is a two-stage background chain. Accept stamps the
-// durable integration-pending fact and enqueues merge + gate here. The accepted
-// worker releases successful results to the existing integration-push queue.
-// Both queues are latency optimizations; the two backstops recover from durable
-// lane and pipeline facts after restart.
+// Accepted integration is a transactional two-stage background chain. Accept
+// keeps the card in Human Review with phase=integrating and enqueues merge +
+// gate here. Only successful integration moves it to Completed; failures return
+// it to ordinary Human Review with durable evidence. Both queues are latency
+// optimizations; the backstops recover from phase and pipeline facts.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
-// The channel is intentionally in-memory. Durable pipeline facts recover both
-// a lane-move/process crash before the merge and a successful merge whose queued
-// origin push was dropped by restart.
+// The channel is intentionally in-memory. Durable phase and pipeline facts
+// recover both an interrupted accept transaction and a successful merge whose
+// queued origin push was dropped by restart.
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or

@@ -1003,7 +1003,8 @@ export type PhaseBadgeTone =
   | 'steer-pending'
   | 'post-processing-running'
   | 'post-processing-blocked'
-  | 'awaiting-review';
+  | 'awaiting-review'
+  | 'integrating';
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 export interface QuotaWaitBadge { label: string; minutesLeft: number; tooltip: string; }
@@ -1061,6 +1062,8 @@ const PHASE_PILL: Partial<Record<string, { tone: PhaseBadgeTone; tooltip: string
     tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' },
   'awaiting-review': { tone: 'awaiting-review',
     tooltip: 'Post-processing finished and the task is waiting for the review transition.' },
+  'integrating': { tone: 'integrating',
+    tooltip: 'Acceptance is integrating the reviewed delivery. The task stays in Review until integration succeeds.' },
 };
 
 /** The two intentional-wait phases whose pill carries a live "since m:ss" timer. */
@@ -1079,7 +1082,7 @@ export function buildPhaseBadge(
   nowMs?: number,
   state?: string,
 ): PhaseBadge | null {
-  if (state && HISTORY_PRESENTATION_LANES.has(state)) return null;
+  if (state && HISTORY_PRESENTATION_LANES.has(state) && phase !== 'integrating') return null;
   if (!phase) return null;
   const pill = PHASE_PILL[phase];
   if (!pill) return null;

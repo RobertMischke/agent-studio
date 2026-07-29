@@ -1732,6 +1732,12 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     expect(buildPhaseBadge('post-processing-blocked', null, undefined, '5-human-review')).toBeNull();
   });
 
+  it('shows transactional integration while the task remains in Review', () => {
+    const badge = buildPhaseBadge('integrating', null, undefined, '5-human-review');
+    expect(badge?.label).toBe('Integrating');
+    expect(badge?.tone).toBe('integrating');
+  });
+
   it('surfaces post-processing substates separately from the lane label', () => {
     const running = buildPhaseBadge('post-processing-running');
     expect(running?.label).toBe('Post processing');

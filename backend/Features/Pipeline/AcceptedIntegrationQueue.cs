@@ -12,13 +12,17 @@ public sealed record AcceptedIntegrationRequest(
     string JobFolderPath,
     string? WatchPath,
     string IntegrationBranch,
-    string IntegrationStrategy);
+    string IntegrationStrategy,
+    int? CompletedLaneIndex = null,
+    string? Cause = null,
+    string? Reason = null);
 
 /// <summary>
-/// Volatile latency hand-off for accepted delivery integration. The completed
-/// lane move, the pending pipeline step, and the <c>integrationpending</c> tag
-/// are the durable facts; <see cref="AcceptedIntegrationBackstopHostedService"/>
-/// reconstructs work after a restart.
+/// Volatile latency hand-off for transactional acceptance integration. Human
+/// Review plus the integrating phase, pending pipeline step, and
+/// <c>integrationpending</c> tag are the durable facts;
+/// <see cref="AcceptedIntegrationBackstopHostedService"/> reconstructs work
+/// after a restart.
 ///
 /// <para>
 /// One reader preserves acceptance order and complements

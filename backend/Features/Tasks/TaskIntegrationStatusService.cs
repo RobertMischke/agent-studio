@@ -350,6 +350,8 @@ public sealed class TaskIntegrationStatusService
             // card must read as not-integrated with the gate's reason attached.
             if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
                 return step.Reason ?? "The build gate blocked the merge into develop; not merged.";
+            if (string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
+                return step.Reason ?? "The delivery ref could not be resolved or fetched; not merged.";
             if (step.Status == PipelineStepStatus.Failed
                 && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
                 return step.Reason ?? "Merge into develop failed; not merged.";

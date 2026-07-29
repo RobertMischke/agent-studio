@@ -156,6 +156,21 @@ public static class TimelineEventKinds
     /// <summary>A human review verdict was recorded.</summary>
     public const string HumanReviewDecided = "human_review_decided";
     /// <summary>
+    /// Human acceptance started the transactional delivery integration while
+    /// the task remained in Human Review.
+    /// </summary>
+    public const string IntegrationStarted = "integration_started";
+    /// <summary>
+    /// The acceptance integration reached Merged/AlreadyMerged and the task
+    /// became eligible for Completed.
+    /// </summary>
+    public const string IntegrationSucceeded = "integration_succeeded";
+    /// <summary>
+    /// The acceptance integration failed. The task remains in Human Review and
+    /// the pipeline record carries the concrete outcome and evidence.
+    /// </summary>
+    public const string IntegrationFailed = "integration_failed";
+    /// <summary>
     /// A human deliberately moved a task out of human review or escalation,
     /// opening a fresh review-attempt epoch. Details carry the operator reason,
     /// new epoch, and rotated artefact count.
