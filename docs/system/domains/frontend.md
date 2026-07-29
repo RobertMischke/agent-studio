@@ -89,6 +89,10 @@ boundary, route map, and visual ownership diagram are in
   backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+  The middle inspector uses the fixed `Task | Activity | Result` order. Task
+  renders `prompt.md` and the read-only refinement projection from run/log and
+  steering-history evidence; Activity and Result retain their existing live
+  and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, places the primary
   reissue, accept-as-is, and abort decisions beside the recommendation, lists

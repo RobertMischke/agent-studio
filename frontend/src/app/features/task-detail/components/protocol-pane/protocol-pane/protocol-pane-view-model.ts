@@ -8,7 +8,7 @@ import {
 } from '../../../../../services/format.util';
 
 /**
- * Builds the inspector tab strip (Protocol / Activity) for the shared
+ * Builds the inspector tab strip (Task / Activity / Result) for the shared
  * pane-tabs component. Pure function so the protocol pane controller
  * stays compact and the tab catalogue is unit-testable in isolation.
  */
@@ -27,24 +27,31 @@ export function buildInspectorTabs(args: {
     !args.isHumanReview;
   return [
     {
+      id: 'task',
+      label: 'Task',
+      icon: 'file',
+      testid: 'inspector-tab-task',
+      modifier: 'task',
+    },
+    {
+      id: 'activity',
+      label: 'Activity',
+      icon: 'activity',
+      testid: 'inspector-tab-activity',
+      indicator: args.isRunning ? 'live' : undefined,
+      modifier: 'activity',
+    },
+    {
       // The user-facing area was renamed Protocol -> Result. The tab `id`
       // and `testid` stay `protocol` so the many inputs/specs keyed on them
       // keep working; only the visible label/emoji change.
       id: 'protocol',
       label: 'Result',
-      emoji: '📋',
+      icon: 'check',
       testid: 'inspector-tab-protocol',
       disabled: protocolDisabled,
       indicator: args.summaryStatus === 'generating' ? 'spinner' : undefined,
       modifier: 'protocol',
-    },
-    {
-      id: 'activity',
-      label: 'Activity',
-      emoji: '⚡',
-      testid: 'inspector-tab-activity',
-      indicator: args.isRunning ? 'live' : undefined,
-      modifier: 'activity',
     },
   ];
 }

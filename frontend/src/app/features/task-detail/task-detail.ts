@@ -130,7 +130,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly lanePeers = input<TaskInfo[]>([]);
   readonly selectedSubTaskId = input<string | null>(null);
   readonly routeDetailTab = input<PromptPaneTabId | null>(null);
-  readonly routeInspectorTab = input<'protocol' | 'activity' | null>(null);
+  readonly routeInspectorTab = input<'task' | 'activity' | 'protocol' | null>(null);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -182,7 +182,7 @@ export class TaskDetailComponent implements OnDestroy {
   /** Walk to the previous peer in the current lane (k / ↑ / ← / Prev button). */
   readonly prevInLaneRequested = output<void>();
   readonly detailTabChange = output<PromptPaneTabId>();
-  readonly inspectorTabChange = output<'protocol' | 'activity'>();
+  readonly inspectorTabChange = output<'task' | 'activity' | 'protocol'>();
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
   private readonly jobSelection = inject(TaskSelectionService);
@@ -319,7 +319,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly cliTestResult = signal<CliSettings | null>(null);
   readonly cliTesting = signal(false);
   readonly showLogOverlay = signal(false);
-  readonly activeInspectorTab = signal<'protocol' | 'activity'>('protocol');
+  readonly activeInspectorTab = signal<'task' | 'activity' | 'protocol'>('protocol');
   /** When true while a run is active, the user has manually expanded the
    *  setup bar and we keep it expanded until the run ends or they toggle it
    *  off. Reset on job switch and when the run ends so the next run starts
@@ -1278,7 +1278,7 @@ export class TaskDetailComponent implements OnDestroy {
    * manually picked a tab so the auto-switch from "activity → protocol on
    * summary ready" doesn't override their explicit choice.
    */
-  onInspectorTabChange(tab: 'protocol' | 'activity') {
+  onInspectorTabChange(tab: 'task' | 'activity' | 'protocol') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
     this.inspectorTabChange.emit(tab);

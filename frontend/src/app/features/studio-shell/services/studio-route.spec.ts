@@ -121,4 +121,14 @@ describe('Studio route contract', () => {
       inspector: 'activity',
     });
   });
+
+  it('round-trips the Task inspector tab', () => {
+    const parsed = parseStudioRoute('#/tasks/AGT-2408?view=overview%3Atask');
+    expect(parsed).toEqual({
+      kind: 'task',
+      reference: 'AGT-2408',
+      tab: 'overview',
+      inspector: 'task',
+    });
+  });
 });

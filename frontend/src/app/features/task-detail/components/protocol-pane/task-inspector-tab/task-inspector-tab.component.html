@@ -1,0 +1,45 @@
+<section class="task-tab" data-testid="task-tab-content">
+  <div class="task-tab__prompt" data-testid="task-tab-prompt">
+    @if (promptMarkdown().trim()) {
+      <cac-markdown
+        [source]="promptMarkdown()"
+        [resolveImageSrc]="imageResolver()" />
+    } @else {
+      <p class="task-tab__empty">No task description is available.</p>
+    }
+  </div>
+
+  @if (refinements().length > 0) {
+    <section class="refinements" data-testid="task-refinement-history">
+      <header class="refinements__head">
+        <h3>Refinement history</h3>
+        <p>Follow-up instructions that expanded or redirected the task.</p>
+      </header>
+
+      <ol class="refinements__list">
+        @for (entry of refinements(); track entry.id) {
+          <li class="refinement" data-testid="task-refinement-entry">
+            <header class="refinement__meta">
+              <time
+                [attr.datetime]="entry.at"
+                [attr.title]="formatDateTime(entry.at)">
+                {{ formatClock(entry.at) }}
+              </time>
+              <span aria-hidden="true">·</span>
+              <span>{{ actorLabel(entry.actor) }}</span>
+              @if (entry.reason) {
+                <span aria-hidden="true">·</span>
+                <span class="refinement__reason">{{ entry.reason }}</span>
+              }
+            </header>
+            <cac-markdown
+              class="refinement__body"
+              [source]="entry.markdown"
+              [dense]="true"
+              [resolveImageSrc]="imageResolver()" />
+          </li>
+        }
+      </ol>
+    </section>
+  }
+</section>

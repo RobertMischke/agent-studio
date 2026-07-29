@@ -10,7 +10,7 @@ export const TASK_DETAIL_TABS = [
 ] as const;
 
 export type TaskDetailRouteTab = typeof TASK_DETAIL_TABS[number];
-export type TaskInspectorRouteTab = 'protocol' | 'activity';
+export type TaskInspectorRouteTab = 'task' | 'activity' | 'protocol';
 
 export type StudioRoute =
   | { kind: 'board'; projectSlug: string | null }
@@ -189,7 +189,7 @@ export function isTaskDetailTab(value: string | null): value is TaskDetailRouteT
 }
 
 export function isTaskInspectorTab(value: string | null): value is TaskInspectorRouteTab {
-  return value === 'protocol' || value === 'activity';
+  return value === 'task' || value === 'activity' || value === 'protocol';
 }
 
 function sameRouteBase(current: string | null, target: string): boolean {
