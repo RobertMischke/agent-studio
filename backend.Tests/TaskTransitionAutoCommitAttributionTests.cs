@@ -360,17 +360,18 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
             "refs/agent-studio/results/settled-run-recovery/attempt-1",
             null,
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
-        var settled = deps.Authority.SettleRun(
-            new AttemptWriteReference(
+        var settled = deps.Authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 acquired.AttemptId,
                 acquired.LastFence,
                 acquired.AuthorityEpoch,
                 "completion-1"),
-            "done",
-            resultSha,
-            reason: null,
-            resultEnvelope: envelope,
-            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+            Outcome = "done",
+            ResultSha = resultSha,
+            ResultEnvelope = envelope,
+            ResultEnvelopeDigest = AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope),
+        });
         Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
 
         var outcome = await deps.Transitions.MoveAsync(

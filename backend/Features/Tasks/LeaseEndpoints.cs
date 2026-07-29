@@ -1031,17 +1031,23 @@ public static class LeaseEndpoints
                     !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest),
                     leasedRun is not null);
             }
-            var settled = authority.SettleRun(
-                new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
-                outcome,
-                resultSha,
-                req.Reason,
-                req.RunnerId,
-                req.LeaseId,
-                req.TaskKey,
-                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"),
-                resultEnvelope: resultEnvelope,
-                resultEnvelopeDigest: resultEnvelopeDigest);
+            var settled = authority.SettleRun(new SettleRunAttemptRequest
+            {
+                Write = new AttemptWriteReference(
+                    attemptId,
+                    req.FencingToken,
+                    epoch,
+                    completionKey),
+                Outcome = outcome,
+                ResultSha = resultSha,
+                Reason = req.Reason,
+                ExecutorId = req.RunnerId,
+                LeaseId = req.LeaseId,
+                ExpectedTaskKey = req.TaskKey,
+                RequireResultSha = !isEpicPlanning && outcome is ("done" or "noop"),
+                ResultEnvelope = resultEnvelope,
+                ResultEnvelopeDigest = resultEnvelopeDigest,
+            });
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(

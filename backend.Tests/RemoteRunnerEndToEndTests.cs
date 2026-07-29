@@ -1820,16 +1820,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 RepositoryUrl: repositoryUrl)
             : null;
-        var settled = authority.SettleRun(
-            new AttemptWriteReference(
+        var settled = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 run.AttemptId,
                 run.LastFence,
                 run.AuthorityEpoch,
                 "seed-review-completion"),
-            "done",
-            resultSha,
-            null,
-            resultEnvelope: envelope);
+            Outcome = "done",
+            ResultSha = resultSha,
+            ResultEnvelope = envelope,
+        });
         Assert.True(settled.Accepted);
         var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
             TaskKey,
@@ -2145,16 +2146,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "coding-host",
             120,
             "post-acceptance-run").RunAttempt!;
-        authority.SettleRun(
-            new AttemptWriteReference(
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 run.AttemptId,
                 run.LastFence,
                 run.AuthorityEpoch,
                 "post-acceptance-run-complete"),
-            "done",
-            resultSha,
-            null,
-            resultEnvelope: new Contract.ImmutableResultEnvelope(
+            Outcome = "done",
+            ResultSha = resultSha,
+            ResultEnvelope = new Contract.ImmutableResultEnvelope(
                 repositoryId,
                 run.AttemptId,
                 resultSha,
@@ -2162,7 +2163,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "refs/heads/agent-studio/results/post-acceptance",
                 null,
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                RepositoryUrl: repositoryUrl));
+                RepositoryUrl: repositoryUrl),
+        });
         var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
             TaskKey,
             repositoryId,
