@@ -29,6 +29,24 @@ public sealed class TaskTransitionService
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
 
+    private sealed record TransitionContext
+    {
+        public required TaskInfo Original { get; init; }
+        public required ProjectSettings Settings { get; init; }
+        public required string JobId { get; init; }
+        public required string TargetState { get; init; }
+        public string? WatchPath { get; init; }
+        public string? Cause { get; init; }
+        public string? Reason { get; init; }
+        public required string AutoPushStrategy { get; init; }
+        public required bool IsReadOnly { get; init; }
+        public required bool SuppressProductExecution { get; init; }
+        public CancellationToken CancellationToken { get; init; }
+
+        public string FromState => Original.State;
+        public string ProjectName => Original.ProjectName;
+    }
+
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
     /// the job id, the source state (the lane the job was in before the move),
@@ -142,7 +160,6 @@ public sealed class TaskTransitionService
         }
 
         var fromState = info.State;
-        var projectName = info.ProjectName;
 
         if (fromState == TaskStates.Escalated
             && targetState == TaskStates.Completed
@@ -163,188 +180,224 @@ public sealed class TaskTransitionService
             authorityWrite,
             expectedSourceState,
             reason);
-        var operatorRequeue = outcome.Status == MoveJobStatus.Success
-            && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
-        if (operatorRequeue && _operatorReviewRequeue != null)
+        var context = new TransitionContext
         {
-            var movedFolder = outcome.NewFolderPath
-                ?? _scanner.FindJob(jobId, watchPath)?.FolderPath
-                ?? info.FolderPath;
-            _operatorReviewRequeue.Apply(
-                movedFolder,
-                jobId,
-                projectName,
-                fromState,
-                targetState,
-                reason,
-                cause!);
-            _scanner.InvalidateCache();
-        }
-        if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
-        {
-            var moved = _scanner.FindJob(jobId, watchPath);
-            if (moved != null)
-            {
-                _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
-                if (autoPushStrategy == AutoPushStrategies.AlwaysImmediate && _pushQueue != null)
-                {
-                    var stamped = _scanner.FindJob(jobId, watchPath) ?? moved;
-                    if (!_pushQueue.Enqueue(new CompletedPushRequest(
-                            stamped,
-                            autoPushStrategy,
-                            RequireCompletedState: false)))
-                    {
-                        _logger.LogWarning(
-                            "Immediate auto-push enqueue failed for {JobId}; completion backstop will retry",
-                            jobId);
-                    }
-                }
-            }
-        }
-
-        // Deterministic commit-attribution post-step (ADR "Commit-Attribution-Regel").
-        // Runs on every 3-progress -> 4-auto-review transition, after the
-        // auto-commit stamp, so the task's commit set is pinned to its own
-        // work and noise that landed in its run windows (crash-recovery for
-        // another task, update-stable bumps, merges) is excluded before the
-        // review lane renders it. No LLM, no tokens; same git + windows in,
-        // same result out, so re-running is a no-op.
-        if (outcome.Status == MoveJobStatus.Success
-            && targetState == TaskStates.AutoReview
-            && (info.State == TaskStates.Progress || operatorRequeue)
-            && !suppressProductExecution)
-        {
-            var attributed = _scanner.FindJob(jobId, watchPath);
-            if (attributed != null) EnterPostProcessingPhase(attributed);
-            // Commit-attribution is a git step; skip it for read-only runs (they
-            // produce no commits to attribute). Drift below is not a git step and
-            // self-gates, so it still runs.
-            if (attributed != null && !isReadOnly && info.State == TaskStates.Progress)
-                RunCommitAttribution(attributed, watchPath);
-
-            // DRIFT Nachtrag: fire the enabled drift dimensions as automatic
-            // post-steps once the task has settled into auto-review. Fire-and-
-            // forget and fully guarded - a drift failure (or the absence of any
-            // enabled dimension; the runner self-gates default-OFF) must never
-            // affect the lane transition that already completed above.
-            if (attributed != null && _driftRunner != null)
-            {
-                TriggerDriftPostSteps(attributed, settings);
-            }
-
-            if (attributed != null)
-            {
-                EnqueueAutoReviewPostProcessing(attributed);
-            }
-        }
-
-        // Drag-and-drop carries a desired slot in the target lane. Without
-        // it the moved folder keeps its source-lane order value, so the
-        // card snaps to whatever position that value sorts to in the new
-        // lane - not where the user dropped it. Apply the slot after the
-        // folder is on disk so the lane scan sees the moved job in its
-        // new state when it rewrites every sibling's order field.
-        if (outcome.Status == MoveJobStatus.Success && targetIndex.HasValue && fromState != targetState)
-        {
-            _states.SetOrderInLane(jobId, watchPath, targetIndex.Value);
-        }
-
+            Original = info,
+            Settings = settings,
+            JobId = jobId,
+            TargetState = targetState,
+            WatchPath = watchPath,
+            Cause = cause,
+            Reason = reason,
+            AutoPushStrategy = autoPushStrategy,
+            IsReadOnly = isReadOnly,
+            SuppressProductExecution = suppressProductExecution,
+            CancellationToken = ct,
+        };
+        var operatorRequeue = ApplyOperatorRequeue(outcome, context);
+        StampAutoCommitAfterMove(outcome, context, commitToStamp);
+        HandleAutoReviewTransition(outcome, context, operatorRequeue);
+        ApplyTargetLaneOrder(outcome, context, targetIndex);
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
-        {
-            if (TaskModes.IsConcept(info.Mode)
-                && fromState == TaskStates.HumanReview
-                && targetState == TaskStates.Completed)
-            {
-                RecordConceptSightReviewCompletion(info, watchPath, cause);
-            }
-
-            // ASS-1724: the ONE commit-provenance recording hook. Anchor the
-            // task/<id> tip + integration head at this lane crossing so the board
-            // can graph "where does this work live" historically. Best-effort and
-            // fully guarded inside the service - it runs after the move has landed,
-            // so it can never undo the transition. Re-find post-move so the record
-            // is written to the folder's new location with fresh provenance.
-            if (_provenance != null && !suppressProductExecution)
-            {
-                var anchored = _scanner.FindJob(jobId, watchPath);
-                if (anchored != null) _provenance.RecordTransition(anchored, targetState);
-            }
-
-            if (targetState == TaskStates.Completed && autoPushStrategy != AutoPushStrategies.Never && !isReadOnly)
-            {
-                var moved = _scanner.FindJob(jobId, watchPath);
-                if (moved != null)
-                {
-                    // Offload the network push (git fetch + git push, ~2-3 s)
-                    // to the background worker so the move-to-complete request
-                    // returns immediately. The SHAs are immutable, so the
-                    // deferred push is always still correct; the periodic
-                    // backstop covers anything dropped on shutdown. When no
-                    // queue is wired (unit-test fixtures) we fall back to the
-                    // synchronous push so the behaviour is still exercised.
-                    if (_pushQueue != null)
-                        _pushQueue.Enqueue(new CompletedPushRequest(moved, autoPushStrategy));
-                    else
-                        await PushCompletedJobCommitsAsync(moved, autoPushStrategy, ct);
-                }
-            }
-
-            var integrationRunsInBackground = _acceptedIntegrationQueue != null;
-
-            // Stamp the durable pending fact before the volatile hand-off. A
-            // pending status is the normal state while the worker waits and is
-            // therefore deliberately quiet. Only a failed hand-off or a decided
-            // inline merge failure emits the accept-without-merge warning.
-            if (targetState == TaskStates.Completed
-                && !isReadOnly
-                && integrationRunsInBackground)
-            {
-                var acceptedJob = _scanner.FindJob(jobId, watchPath);
-                if (acceptedJob != null)
-                    FlagIntegrationOnAccept(acceptedJob, warnIfNotIntegrated: false);
-            }
-
-            // Deferred "Merge into Develop" post-step. Production hands the
-            // accepted delivery to a background worker so merge + cold build
-            // gate never occupy the accept HTTP request. The completed lane,
-            // pending pipeline step, and integrationpending marker are durable;
-            // AcceptedIntegrationBackstop recovers a dropped in-memory item.
-            if (targetState == TaskStates.Completed
-                && !isReadOnly
-                && (_acceptedIntegrationQueue != null || _mergeRunner != null))
-            {
-                var mergeJob = _scanner.FindJob(jobId, watchPath);
-                if (mergeJob != null)
-                    await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
-            }
-
-            // AGT-2202: compatibility fixtures without the production queue still
-            // run the merge inline. In that path, derive visibility after the
-            // merge so existing synchronous callers retain their historical
-            // result. If work is NOT in develop, make it loud - a Warn timeline
-            // event plus an
-            // integrationpending tag the completed-lane audit can list - WITHOUT
-            // blocking the acceptance that already landed (Robert wants visibility,
-            // not a new brake). Fully guarded and read-only.
-            if (targetState == TaskStates.Completed
-                && !isReadOnly
-                && !integrationRunsInBackground)
-            {
-                var acceptedJob = _scanner.FindJob(jobId, watchPath);
-                if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
-            }
-
-            try
-            {
-                OnJobMoved?.Invoke(projectName, jobId, fromState, targetState);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "OnJobMoved subscriber threw for {JobId} ({From} -> {To})", jobId, fromState, targetState);
-            }
-        }
+            await HandleLaneChangeAsync(context);
 
         return outcome;
+    }
+
+    private bool ApplyOperatorRequeue(
+        MoveJobOutcome outcome,
+        TransitionContext context)
+    {
+        var operatorRequeue = outcome.Status == MoveJobStatus.Success
+            && OperatorReviewRequeueService.IsOperatorRequeue(
+                context.FromState,
+                context.TargetState,
+                context.Cause);
+        if (!operatorRequeue || _operatorReviewRequeue == null)
+            return operatorRequeue;
+
+        var movedFolder = outcome.NewFolderPath
+            ?? _scanner.FindJob(context.JobId, context.WatchPath)?.FolderPath
+            ?? context.Original.FolderPath;
+        _operatorReviewRequeue.Apply(
+            movedFolder,
+            context.JobId,
+            context.ProjectName,
+            context.FromState,
+            context.TargetState,
+            context.Reason,
+            context.Cause!);
+        _scanner.InvalidateCache();
+        return true;
+    }
+
+    private void StampAutoCommitAfterMove(
+        MoveJobOutcome outcome,
+        TransitionContext context,
+        TaskCommitInfo? commitToStamp)
+    {
+        if (outcome.Status != MoveJobStatus.Success || commitToStamp == null)
+            return;
+
+        var moved = _scanner.FindJob(context.JobId, context.WatchPath);
+        if (moved == null) return;
+
+        _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
+        if (context.AutoPushStrategy != AutoPushStrategies.AlwaysImmediate
+            || _pushQueue == null)
+        {
+            return;
+        }
+
+        var stamped = _scanner.FindJob(context.JobId, context.WatchPath) ?? moved;
+        if (!_pushQueue.Enqueue(new CompletedPushRequest(
+                stamped,
+                context.AutoPushStrategy,
+                RequireCompletedState: false)))
+        {
+            _logger.LogWarning(
+                "Immediate auto-push enqueue failed for {JobId}; completion backstop will retry",
+                context.JobId);
+        }
+    }
+
+    private void HandleAutoReviewTransition(
+        MoveJobOutcome outcome,
+        TransitionContext context,
+        bool operatorRequeue)
+    {
+        if (outcome.Status != MoveJobStatus.Success
+            || context.TargetState != TaskStates.AutoReview
+            || (context.FromState != TaskStates.Progress && !operatorRequeue)
+            || context.SuppressProductExecution)
+        {
+            return;
+        }
+
+        var attributed = _scanner.FindJob(context.JobId, context.WatchPath);
+        if (attributed == null) return;
+
+        EnterPostProcessingPhase(attributed);
+        if (!context.IsReadOnly && context.FromState == TaskStates.Progress)
+            RunCommitAttribution(attributed, context.WatchPath);
+        if (_driftRunner != null)
+            TriggerDriftPostSteps(attributed, context.Settings);
+        EnqueueAutoReviewPostProcessing(attributed);
+    }
+
+    private void ApplyTargetLaneOrder(
+        MoveJobOutcome outcome,
+        TransitionContext context,
+        int? targetIndex)
+    {
+        if (outcome.Status == MoveJobStatus.Success
+            && targetIndex.HasValue
+            && context.FromState != context.TargetState)
+        {
+            _states.SetOrderInLane(
+                context.JobId,
+                context.WatchPath,
+                targetIndex.Value);
+        }
+    }
+
+    private async Task HandleLaneChangeAsync(TransitionContext context)
+    {
+        if (TaskModes.IsConcept(context.Original.Mode)
+            && context.FromState == TaskStates.HumanReview
+            && context.TargetState == TaskStates.Completed)
+        {
+            RecordConceptSightReviewCompletion(
+                context.Original,
+                context.WatchPath,
+                context.Cause);
+        }
+
+        if (_provenance != null && !context.SuppressProductExecution)
+        {
+            var anchored = _scanner.FindJob(context.JobId, context.WatchPath);
+            if (anchored != null)
+                _provenance.RecordTransition(anchored, context.TargetState);
+        }
+
+        await HandleCompletedPushAsync(context);
+        await HandleAcceptedIntegrationAsync(context);
+        NotifyJobMoved(context);
+    }
+
+    private async Task HandleCompletedPushAsync(TransitionContext context)
+    {
+        if (context.TargetState != TaskStates.Completed
+            || context.AutoPushStrategy == AutoPushStrategies.Never
+            || context.IsReadOnly)
+        {
+            return;
+        }
+
+        var moved = _scanner.FindJob(context.JobId, context.WatchPath);
+        if (moved == null) return;
+
+        if (_pushQueue != null)
+            _pushQueue.Enqueue(new CompletedPushRequest(moved, context.AutoPushStrategy));
+        else
+            await PushCompletedJobCommitsAsync(
+                moved,
+                context.AutoPushStrategy,
+                context.CancellationToken);
+    }
+
+    private async Task HandleAcceptedIntegrationAsync(TransitionContext context)
+    {
+        if (context.TargetState != TaskStates.Completed || context.IsReadOnly)
+            return;
+
+        var integrationRunsInBackground = _acceptedIntegrationQueue != null;
+        if (integrationRunsInBackground)
+        {
+            var acceptedJob = _scanner.FindJob(context.JobId, context.WatchPath);
+            if (acceptedJob != null)
+                FlagIntegrationOnAccept(acceptedJob, warnIfNotIntegrated: false);
+        }
+
+        if (_acceptedIntegrationQueue != null || _mergeRunner != null)
+        {
+            var mergeJob = _scanner.FindJob(context.JobId, context.WatchPath);
+            if (mergeJob != null)
+            {
+                await TriggerMergeIntoDevelopAsync(
+                    mergeJob,
+                    context.Settings,
+                    context.CancellationToken);
+            }
+        }
+
+        if (!integrationRunsInBackground)
+        {
+            var acceptedJob = _scanner.FindJob(context.JobId, context.WatchPath);
+            if (acceptedJob != null)
+                FlagIntegrationOnAccept(acceptedJob);
+        }
+    }
+
+    private void NotifyJobMoved(TransitionContext context)
+    {
+        try
+        {
+            OnJobMoved?.Invoke(
+                context.ProjectName,
+                context.JobId,
+                context.FromState,
+                context.TargetState);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "OnJobMoved subscriber threw for {JobId} ({From} -> {To})",
+                context.JobId,
+                context.FromState,
+                context.TargetState);
+        }
     }
 
     private void RecordConceptSightReviewCompletion(
@@ -625,10 +678,10 @@ public sealed class TaskTransitionService
     /// <summary>
     /// Triggers the deferred "Merge into Develop" post-step
     /// (<see cref="AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
-    /// on task acceptance. Production enqueues the real
-    /// <c>task/&lt;id&gt; -&gt; develop</c> merge and records the outcome into the
-    /// pipeline view on a background worker. The synchronous runner fallback is
-    /// retained only for isolated fixtures that do not wire hosted services.
+    /// on task acceptance. Production enqueues the resolved local or fenced
+    /// remote delivery and records the integration outcome into the pipeline
+    /// view on a background worker. The synchronous runner fallback is retained
+    /// only for isolated fixtures that do not wire hosted services.
     /// </summary>
     private async Task TriggerMergeIntoDevelopAsync(
         TaskInfo moved,
@@ -681,7 +734,7 @@ public sealed class TaskTransitionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "merge-into-develop trigger failed for {JobId}", moved.Id);
+            _logger.LogError(ex, "merge-into-develop trigger failed for {JobId}", moved.Id);
         }
     }
 
