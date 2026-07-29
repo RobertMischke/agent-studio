@@ -96,8 +96,11 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
-- Integration status accepts persisted abbreviated Git SHAs of at least seven
-  hexadecimal characters when they match a reachable full SHA by prefix.
+- Integration status first checks the immutable reviewed `ResultSha` from
+  `review-subject.json` against the recorded integration branch. It then falls
+  back to curated/recorded merge evidence and attributed commits. Persisted
+  abbreviated Git SHAs of at least seven hexadecimal characters match a
+  reachable full SHA by prefix.
   Zero-file lifecycle entries whose subjects start with
   `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
   visible attribution metadata but are not delivery expectations. A matching

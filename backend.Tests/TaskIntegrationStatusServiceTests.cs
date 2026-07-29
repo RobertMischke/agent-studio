@@ -119,6 +119,45 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_ReviewedResultOnDevelop_OverridesStaleAttributedCommit()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "reviewed-result.txt"), "reviewed delivery");
+        Commit(repo, "feat: reviewed remote delivery");
+        var resultSha = RunGit(repo, "rev-parse develop").Out.Trim();
+        const string staleAttributedSha = "1111111111111111111111111111111111111111";
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "reviewed-result",
+            "AGT-2301",
+            project,
+            repo,
+            log,
+            commits: [Commit(staleAttributedSha)]);
+        ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-2301",
+            Project = project,
+            Repository = repo,
+            ResultSha = resultSha,
+            ResultRef = "runner/agent-runner-01/AGT-2301",
+            AttemptChainId = "attempt-reviewed-result",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-reviewed-result",
+            FencingToken = 1,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(resultSha[..7], status.Sha);
+        Assert.Equal("reviewed-result", status.Detail);
+    }
+
+    [Fact]
     public void BuildLookup_AbbreviatedAttributedShaOnDevelop_IsIntegrated()
     {
         var repo = SeedDevelopMainRepo();

@@ -31,6 +31,8 @@ namespace AgentStudio.Tasks;
 /// into the five
 /// <see cref="IntegrationStatuses"/> states:
 /// <list type="number">
+/// <item>the immutable result SHA from <c>review-subject.json</c> is an ancestor
+///   of the integration branch → <c>integrated</c>;</item>
 /// <item>a curated <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit
 ///   in the develop log, or the recorded develop-merge fact - either forces
 ///   <c>integrated</c> (authoritative for the curated integrator);</item>
@@ -204,6 +206,68 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
+    /// Resolves the durable accepted-integration recovery action from the same
+    /// current status used by the board. Git presence is authoritative; the
+    /// latest merge step is diagnostic and controls only whether an unfinished
+    /// hand-off should be replayed. This prevents the backstop from maintaining
+    /// a second status model in which a stale Passed step can overrule Git.
+    /// </summary>
+    internal AcceptedIntegrationRecoveryDecision ResolveAcceptedIntegrationRecovery(
+        TaskInfo job,
+        TaskIntegrationStatus status)
+    {
+        var lastMerge = ReadLatestMergeStep(job);
+        var hasPendingTag = (job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag);
+
+        if (status.Status == IntegrationStatuses.Integrated)
+        {
+            if (lastMerge?.Status == PipelineStepStatus.Passed
+                || IsDecidedIntegrationAttempt(lastMerge, job))
+            {
+                return new AcceptedIntegrationRecoveryDecision(
+                    hasPendingTag
+                        ? AcceptedIntegrationRecoveryAction.ClearPendingMarker
+                        : AcceptedIntegrationRecoveryAction.None,
+                    "Git proves the delivery is integrated; the recorded attempt is historical.",
+                    lastMerge);
+            }
+
+            // A fenced result already present with no terminal merge fact is the
+            // crash window after the local merge and before Record()/push enqueue.
+            // Replay the idempotent runner so both durable facts are restored.
+            if (IsFencedDeliveryIntegrated(job))
+            {
+                return new AcceptedIntegrationRecoveryDecision(
+                    AcceptedIntegrationRecoveryAction.Retry,
+                    "The fenced result is integrated but its terminal merge/push hand-off is missing.",
+                    lastMerge);
+            }
+
+            return new AcceptedIntegrationRecoveryDecision(
+                hasPendingTag
+                    ? AcceptedIntegrationRecoveryAction.ClearPendingMarker
+                    : AcceptedIntegrationRecoveryAction.None,
+                "Git proves a curated or locally attributed integration.",
+                lastMerge);
+        }
+
+        if (IsDecidedIntegrationAttempt(lastMerge, job))
+        {
+            return new AcceptedIntegrationRecoveryDecision(
+                AcceptedIntegrationRecoveryAction.None,
+                "The latest integration attempt requires an operator or steer round.",
+                lastMerge);
+        }
+
+        return new AcceptedIntegrationRecoveryDecision(
+            AcceptedIntegrationRecoveryAction.Retry,
+            lastMerge?.Status == PipelineStepStatus.Passed
+                ? "The Passed step contradicts current Git truth and must be revalidated."
+                : "The accepted integration has no terminal recovery decision.",
+            lastMerge);
+    }
+
+    /// <summary>
     /// The verdict for one card given its repo's cached integration facts. A
     /// curated / recorded merge forces <c>integrated</c>; otherwise the verdict is
     /// derived ENTIRELY from the develop-ancestry of the card's attributed
@@ -217,7 +281,17 @@ public sealed class TaskIntegrationStatusService
     {
         var branchName = reach.IntegrationBranch;
 
-        // (a) Curated integrator merge commit for this key on develop. The
+        // (a) The exact immutable result reviewed for this delivery. This is the
+        // primary truth for remote execution and self-heals stale merge-step or
+        // attribution records after an out-of-band integration.
+        var reviewSubject = ReviewSubjectStore.Read(job.FolderPath);
+        if (reviewSubject is not null
+            && AncestorSetContains(reach.DevelopAncestors, reviewSubject.ResultSha))
+        {
+            return Integrated(Short(reviewSubject.ResultSha), branchName, "reviewed-result");
+        }
+
+        // (b) Curated integrator merge commit for this key on develop. The
         // authoritative signal a rewritten/curated merge leaves behind - it forces
         // integrated even when the task's own SHAs are not ancestors.
         if (!string.IsNullOrWhiteSpace(job.Key)
@@ -226,7 +300,7 @@ public sealed class TaskIntegrationStatusService
             return Integrated(Short(curatedSha), branchName, "curated-merge");
         }
 
-        // (b) Recorded develop-merge fact (append-only, written by the merge
+        // (c) Recorded develop-merge fact (append-only, written by the merge
         // post-step). Zero-cost and authoritative once present.
         var recordedMerge = job.Provenance?.Merge?.MergeCommit;
         if (recordedMerge is { Length: > 0 })
@@ -330,36 +404,63 @@ public sealed class TaskIntegrationStatusService
     /// </summary>
     private string? ReadMergeConflict(TaskInfo job)
     {
+        var step = ReadLatestMergeStep(job);
+        if (step is null) return null;
+        if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
+        {
+            var evidence = step.VerdictSummary ?? step.Reason ?? "Merge into develop hit a conflict; not merged.";
+            var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
+                ?? WorktreeTaskLifecycle.BranchFor(job.Id);
+            return $"{evidence} Start the integration recovery action to run a steer round: "
+                   + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job)}', "
+                   + "resolve the conflicts, and deliver the updated branch.";
+        }
+        // The pre-develop build gate found the merge result red and rolled the
+        // integration branch back: the work is genuinely not in develop, so the
+        // card must read as not-integrated with the gate's reason attached.
+        if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
+            return step.Reason ?? "The build gate blocked the merge into develop; not merged.";
+        if (step.Status == PipelineStepStatus.Failed
+            && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
+            return step.Reason ?? "Merge into develop failed; not merged.";
+        return null;
+    }
+
+    private PipelineStepExecution? ReadLatestMergeStep(TaskInfo job)
+    {
         try
         {
-            var record = _pipelineLog.Read(job.FolderPath);
-            var step = record?.Steps.LastOrDefault(s =>
-                string.Equals(s.StepId, PipelineCatalogue.MergeIntoDevelopStepId, StringComparison.Ordinal));
-            if (step is null) return null;
-            if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
-            {
-                var evidence = step.VerdictSummary ?? step.Reason ?? "Merge into develop hit a conflict; not merged.";
-                var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
-                    ?? WorktreeTaskLifecycle.BranchFor(job.Id);
-                return $"{evidence} Start the integration recovery action to run a steer round: "
-                       + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job)}', "
-                       + "resolve the conflicts, and deliver the updated branch.";
-            }
-            // The pre-develop build gate found the merge result red and rolled the
-            // integration branch back: the work is genuinely not in develop, so the
-            // card must read as not-integrated with the gate's reason attached.
-            if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
-                return step.Reason ?? "The build gate blocked the merge into develop; not merged.";
-            if (step.Status == PipelineStepStatus.Failed
-                && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
-                return step.Reason ?? "Merge into develop failed; not merged.";
-            return null;
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopStepId,
+                    StringComparison.Ordinal));
         }
         catch (Exception ex)
         {
-            SilentCatch.Note(ex, "TaskIntegrationStatusService: pipeline read is best-effort");
+            _logger.LogWarning(
+                ex,
+                "integration-status pipeline read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
             return null;
         }
+    }
+
+    private static bool IsDecidedIntegrationAttempt(
+        PipelineStepExecution? step,
+        TaskInfo job)
+    {
+        if (step is null) return false;
+        if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(step.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
+               && ReviewSubjectStore.Read(job.FolderPath) is null;
     }
 
     /// <summary>
@@ -514,3 +615,15 @@ public sealed class TaskIntegrationStatusService
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }
+
+internal enum AcceptedIntegrationRecoveryAction
+{
+    None,
+    ClearPendingMarker,
+    Retry,
+}
+
+internal sealed record AcceptedIntegrationRecoveryDecision(
+    AcceptedIntegrationRecoveryAction Action,
+    string Reason,
+    PipelineStepExecution? LastMergeAttempt);

@@ -13,7 +13,6 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly ProjectSettingsService _settings;
     private readonly MergeIntoDevelopRunner _runner;
-    private readonly PipelineExecutionLog _pipeline;
     private readonly TaskIntegrationStatusService _integrationStatus;
     private readonly TaskMutationService _mutations;
     private readonly IConfiguration _configuration;
@@ -23,7 +22,6 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         TaskScannerService scanner,
         ProjectSettingsService settings,
         MergeIntoDevelopRunner runner,
-        PipelineExecutionLog pipeline,
         TaskIntegrationStatusService integrationStatus,
         TaskMutationService mutations,
         IConfiguration configuration,
@@ -32,7 +30,6 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _scanner = scanner;
         _settings = settings;
         _runner = runner;
-        _pipeline = pipeline;
         _integrationStatus = integrationStatus;
         _mutations = mutations;
         _configuration = configuration;
@@ -41,67 +38,67 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 
     public int RunOnce()
     {
-        var candidates = _scanner.ScanAllJobsWithArchive()
+        var acceptedJobs = _scanner.ScanAllJobsWithArchive()
             .Where(job => job.State is TaskStates.Completed or TaskStates.Archive)
             .Where(job => !TaskModes.IsReadOnly(job.Mode))
-            .Where(RequiresSweep)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (candidates.Count == 0) return 0;
+        if (acceptedJobs.Count == 0) return 0;
 
-        var statusByKey = _integrationStatus.BuildLookup(candidates);
+        var statusByKey = _integrationStatus.BuildLookup(acceptedJobs);
         var integrated = 0;
-        foreach (var job in candidates)
+        foreach (var job in acceptedJobs)
         {
-            statusByKey.TryGetValue(job.TaskKey, out var status);
-            var lastMerge = LastMergeStep(job.FolderPath);
-            if (lastMerge?.Status == PipelineStepStatus.Passed)
+            try
             {
-                ClearPendingTag(job);
-                continue;
-            }
+                if (!statusByKey.TryGetValue(job.TaskKey, out var status))
+                {
+                    _logger.LogWarning(
+                        "accepted-integration-backstop has no status for project={Project} job={JobId}",
+                        job.ProjectName,
+                        job.Id);
+                    continue;
+                }
 
-            // A curated manual rebase can be truthfully integrated without
-            // retaining the original delivery SHA. Do not replay that old ref.
-            // Conversely, when the exact fenced SHA is already contained but the
-            // durable merge step is absent, the backend died after the local
-            // merge and before Record()/queue enqueue. Re-run the idempotent
-            // runner so it records AlreadyMerged and restores the push fact.
-            if (status?.Status == IntegrationStatuses.Integrated
-                && !_integrationStatus.IsFencedDeliveryIntegrated(job))
-            {
-                ClearPendingTag(job);
-                continue;
-            }
+                var decision = _integrationStatus.ResolveAcceptedIntegrationRecovery(job, status);
+                if (decision.Action == AcceptedIntegrationRecoveryAction.None)
+                    continue;
+                if (decision.Action == AcceptedIntegrationRecoveryAction.ClearPendingMarker)
+                {
+                    ClearPendingTag(job);
+                    continue;
+                }
 
-            // A conflict, a deliberate PR hand-off, and a red build gate are all
-            // decided states that need a human / a steer round. Replaying them
-            // every sweep would only re-merge, re-build and roll back again.
-            if (string.Equals(lastMerge?.Verdict, "conflict", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(lastMerge?.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(lastMerge?.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase)
-                // A local delivery with no task branch is a decided no-op. The
-                // legacy replay exception applies only when a fenced remote
-                // subject proves that the old lookup used the wrong ref.
-                || (string.Equals(lastMerge?.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
-                    && ReviewSubjectStore.Read(job.FolderPath) is null))
-            {
-                continue;
+                var settings = _settings.Get(job.ProjectName);
+                var result = _runner.Run(
+                    job.ProjectName,
+                    job.Id,
+                    job.FolderPath,
+                    job.WatchPath,
+                    TaskIntegrationBranch.Resolve(job, settings.IntegrationBranch),
+                    settings.IntegrationStrategy);
+                if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
+                {
+                    ClearPendingTag(job);
+                    integrated++;
+                }
+                else if (result.Outcome == MergeIntoIntegrationOutcome.Error)
+                {
+                    _logger.LogWarning(
+                        "accepted-integration-backstop integration failed project={Project} job={JobId} error={Error}",
+                        job.ProjectName,
+                        job.Id,
+                        result.Error ?? "unknown error");
+                }
             }
-
-            var settings = _settings.Get(job.ProjectName);
-            var result = _runner.Run(
-                job.ProjectName,
-                job.Id,
-                job.FolderPath,
-                job.WatchPath,
-                TaskIntegrationBranch.Resolve(job, settings.IntegrationBranch),
-                settings.IntegrationStrategy);
-            if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
+            catch (Exception ex)
             {
-                ClearPendingTag(job);
-                integrated++;
+                _logger.LogError(
+                    ex,
+                    "accepted-integration-backstop item failed project={Project} job={JobId}",
+                    job.ProjectName,
+                    job.Id);
             }
         }
 
@@ -141,30 +138,6 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 break;
             }
         }
-    }
-
-    private PipelineStepExecution? LastMergeStep(string jobFolderPath)
-    {
-        try
-        {
-            return _pipeline.Read(jobFolderPath)?.Steps.LastOrDefault(
-                step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
-        }
-        catch (Exception ex)
-        {
-            SilentCatch.Note(ex, "AcceptedIntegrationBackstop: pipeline read is best-effort");
-            return null;
-        }
-    }
-
-    private bool RequiresSweep(TaskInfo job)
-    {
-        if ((job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag))
-        {
-            return true;
-        }
-
-        return LastMergeStep(job.FolderPath)?.Status != PipelineStepStatus.Passed;
     }
 
     private void ClearPendingTag(TaskInfo job)

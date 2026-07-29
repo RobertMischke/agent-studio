@@ -111,8 +111,13 @@ pipeline view.
   and local deliveries after a backend restart when the durable lane move
   landed but the queued merge did not complete. The accepted-integration
   channel is only a latency optimization; the Completed lane, pending tag, and
-  pipeline step are the durability boundary. The backstop also repairs the
-  legacy remote `no-branch` outcome caused by looking only for `task/<slug>`.
+  pipeline step are the durability boundary. Recovery uses the same
+  `TaskIntegrationStatusService` verdict as the board: exact reviewed
+  `ResultSha` ancestry is the primary truth, while the last merge step is
+  diagnostic. A stale Passed step therefore cannot overrule missing Git
+  presence, and an out-of-band integration self-heals an older failed attempt.
+  The backstop also repairs the legacy remote `no-branch` outcome caused by
+  looking only for `task/<slug>`.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
