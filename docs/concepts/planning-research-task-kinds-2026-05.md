@@ -1,5 +1,14 @@
 # Planning and Research task kinds - design exploration (2026-05)
 
+> **Sections outdated since `7650e92e5` (2026-06-03) and the July 2026
+> read-only pipeline deliveries:** the text still presents the mode model,
+> promotion flow, and parts of containment as future work. The original
+> taxonomy and rationale remain valid. See
+> [Planning task lifecycle](planning-task-lifecycle.md), the
+> [Pipeline domain map](../system/domains/pipeline.md), and
+> [Planning & Research Task Type](planning-research-task-type.html) for current
+> behavior and remaining decisions.
+
 Status: reconciled with ADR-0052 (2026-05-31). No code change. Captures
 user intent from the `planning-task-task-differenzierung` brainstorm.
 The parallelism *mechanics* this note originally had to argue for now

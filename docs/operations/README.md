@@ -23,6 +23,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [runtime/](runtime/) | Product runtime observability and log-capture contracts. |
 | [git/](git/) | Commit, push, and attribution doctrine. |
 | [testing/](testing/) | Dedicated test workspace and probe contracts. |
+| [doku-inventur-2026-07/](doku-inventur-2026-07/README.md) | Per-document July 2026 inventory, sampled code checks, archive decisions, and the Phase 2 structure sketch. |
 | [decision-surface/](decision-surface/README.md) | Ownership, artifact, action, and lifecycle contract for operator decisions on escalated tasks. |
 | [remote-hosts.md](remote-hosts.md) | Add, connect, drain, retire, revive, and permanently remove remote runner hosts. |
 | [remote-task-server-local-studio.md](remote-task-server-local-studio.md) | Phase A architecture, security, migration, and sub-15-minute rollback plan for a private Hetzner Task Server with Robert's Angular Studio kept local. |

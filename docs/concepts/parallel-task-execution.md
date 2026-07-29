@@ -1,5 +1,13 @@
 # Concept — Parallel Task Execution: worktrees, branch model (`develop`), git as pre/post pipeline steps, merge/PR
 
+> **Sections outdated since `05e2bb180` (2026-06-10):** the status paragraph,
+> §0's claim that `maxParallelism` is not implemented, and the single-slot
+> foundation in §1 describe the pre-delivery state. The design history and
+> slicing rationale remain useful. See the
+> [current task integration workflow](task-integration-and-merge-workflow.md)
+> and the [Runner domain map](../system/domains/runner.md) for implemented
+> behavior.
+
 **Status.** Concept (sharpened design + slicing plan). This is the "full design" home that [ADR-0052](../system/architecture/decisions/adr-archive.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) points to. It is a design deliverable, not an implementation. Implementation is sliced in §8 and is gated on the crash-safe-pickup task.
 
 **Source card.** `konzept-parallele-task-verarbeitung---worktrees-branch-modell-develop-git-als-prepost-agent-steps-mergepr` (ASS-589). Discussion with the operator on 2026-05-31.

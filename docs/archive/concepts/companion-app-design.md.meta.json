@@ -1,26 +1,26 @@
 {
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Docs Structure Migration",
+  "title": "Companion App Design (V1)",
   "source": {
-    "path": "docs/concepts/docs-structure-migration.md",
+    "path": "docs/archive/concepts/companion-app-design.md",
     "type": "markdown",
     "fingerprint": {
       "algorithm": "sha256",
-      "hash": "546ad5cb59c2b0206ec33fac0a810db1b8c7ffe95c3c93aff9e55609a43d0856",
-      "sizeBytes": 9045,
-      "lineCount": 243,
-      "capturedAt": "2026-07-18T18:45:50.427Z"
+      "hash": "797b01ebb16fad02e78ad2cda60cc512017e421a29856ecd22f4d534406ddc6d",
+      "sizeBytes": 8964,
+      "lineCount": 160,
+      "capturedAt": "2026-07-29T20:35:44Z"
     }
   },
   "classification": {
-    "owner": "concepts",
+    "owner": "product",
     "documentMode": "documentation",
-    "temporalState": "past",
+    "temporalState": "unknown",
     "implementationState": "unknown",
-    "status": "veraltet",
+    "status": "archived",
     "supersededBy": null,
-    "type": "analyse",
+    "type": "konzept",
     "analyzedAt": "2026-07-18"
   }
 }

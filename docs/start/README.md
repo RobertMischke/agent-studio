@@ -21,6 +21,7 @@ Use this page as the first stop when you need the right document quickly.
 | [operations/](../operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
 | [reports/](../system/reports/README.md) | Report contracts, HTML visual reports, and screenshot-backed visual documentation. |
 | [concepts/](../concepts/README.md) | Architecture concepts that have not become a domain or ADR yet, plus hand-maintained living concept/knowledge pages with running knowledge logs, dated deep dives, mockups, and proposals. |
+| [archive/](../archive/README.md) | Quiet historical pages retained by explicit inventory passes, with pointers from their former current locations. |
 | [common-problems/](../operations/common-problems/README.md) | Known recurring problems with root-cause analysis, occurrence logs, and workarounds. Search here first on a familiar symptom. |
 | [learnings/](../operations/learnings/README.md) | Per-task run learnings auto-distilled by the opt-in `post-wiki-learnings` pipeline step. Do not edit by hand. |
 | [mockups/](../concepts/mockups/) | Locked design references and click-dummies (under `concepts/`). |
@@ -146,6 +147,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Runner stability & incident chronicle (incidents, invariants, sessions; supersedes the retired runner-stability / overnight / claude-termination pages) | [workbenches/haertung-verteilte-ausfuehrung/historie.html](../operations/haertung-verteilte-ausfuehrung/historie.html) |
 | Agent fencing (platform-owned Git history, trust-graded oversight, real incidents, open proof point) | [operations/haertung-verteilte-ausfuehrung/agent-fencing.html](../operations/haertung-verteilte-ausfuehrung/agent-fencing.html) · [separate AHP-style diagram](../operations/haertung-verteilte-ausfuehrung/agent-fencing-diagram.html) |
 | Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](../concepts/process-termination-scenarios.html) |
+| Documentation inventory and cleanup (July 2026) | [inventory](../operations/doku-inventur-2026-07/README.md) · [archive convention](../archive/README.md) |
 | Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |
 
 ## Organization Rules
