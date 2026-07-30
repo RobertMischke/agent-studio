@@ -17,6 +17,9 @@ public class CodexCliServiceTests
     [Fact]
     public void CanResume_CleanContextRejectsEvenWhenSharedRolloutExists()
     {
+        // A clean run never sees the operator's shared sessions/ dir, so a
+        // rollout that exists only in the SHARED home proves nothing. Without
+        // a live per-task clean home there is nothing to resume.
         var home = CreateCodexHomeWithRollout("019dee65-7a9b-7843-bfd9-06e555fff02b");
         try
         {
@@ -24,6 +27,25 @@ public class CodexCliServiceTests
                 "019dee65-7a9b-7843-bfd9-06e555fff02b", "clean", home));
         }
         finally { Directory.Delete(home, recursive: true); }
+    }
+
+    [Fact]
+    public void CanResume_CleanContextAcceptsRolloutInPersistentCleanHome()
+    {
+        // MKT-8 / WEB-14 session-stability fix: attempts of one task share one
+        // clean home, so a resume is viable exactly when THAT home carries the
+        // rollout a previous attempt wrote - and stays non-viable when it does
+        // not (first attempt / evicted home).
+        const string id = "019dee65-7a9b-7843-bfd9-06e555fff02b";
+        var cleanHome = CreateCodexHomeWithRollout(id);
+        try
+        {
+            Assert.True(CodexRolloutStore.CanResume(id, "clean", sharedHome: null, cleanHome: cleanHome));
+            Assert.False(CodexRolloutStore.CanResume(
+                "11111111-2222-4333-8444-555555555555", "clean", sharedHome: null, cleanHome: cleanHome));
+            Assert.False(CodexRolloutStore.CanResume(id, "clean", sharedHome: null, cleanHome: null));
+        }
+        finally { Directory.Delete(cleanHome, recursive: true); }
     }
 
     [Fact]

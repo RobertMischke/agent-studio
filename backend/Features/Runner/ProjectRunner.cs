@@ -2557,19 +2557,24 @@ public class ProjectRunner
             }
 
             // Resolve context before rendering the prompt because Codex resume
-            // viability depends on the effective CODEX_HOME. A clean run gets a
-            // brand-new home with no sessions by contract; a shared run must
-            // have the referenced rollout on disk. Falling back here (rather
+            // viability depends on the effective CODEX_HOME. A clean run reuses
+            // the task's persistent clean home (session-stable across attempts;
+            // MKT-8 / WEB-14), so its resume is viable when THAT home carries
+            // the rollout from a previous attempt; a shared run must have the
+            // referenced rollout in the shared home. Falling back here (rather
             // than after spawn) lets the recovery template carry prompt.md,
             // job-folder evidence, and the user follow-up in full.
             var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
             if (plan.ResumeFlag
                 && string.Equals(cli.CliType, CliTypes.Codex, StringComparison.OrdinalIgnoreCase)
-                && !CodexRolloutStore.CanResume(plan.SessionToResume, contextMode))
+                && !CodexRolloutStore.CanResume(
+                    plan.SessionToResume, contextMode,
+                    sharedHome: null,
+                    cleanHome: cli.GetPersistentCleanContextHome(GetJobKey(jobId))))
             {
                 var missingSession = plan.SessionToResume;
                 var reason = CliContextModes.Normalize(contextMode) == CliContextModes.Clean
-                    ? "Codex rollout is absent from the new clean-context CODEX_HOME"
+                    ? "Codex rollout is absent from the task's clean-context CODEX_HOME"
                     : "Codex rollout is absent from the current CODEX_HOME";
                 _logger.LogInformation(
                     "codex_resume_precondition_fallback job={JobId} session={SessionId} contextMode={ContextMode} reason=no-rollout; starting full-context fresh run",
