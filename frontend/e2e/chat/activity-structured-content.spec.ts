@@ -1,7 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2407');
+const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2433');
 const TARGET = {
   id: 'activity-structured-content-fixture',
   watchPath: 'C:/fixtures/activity-structured-content',
@@ -51,11 +51,43 @@ function outputBuffer(): OutLine[] {
     {
       timestamp: at(19),
       stream: 'stderr',
-      text: 'The concept and its navigation entry are ready for review.',
+      text: 'I will inspect the Wiki concept document before wrapping up.',
     },
-    { timestamp: at(20), stream: 'stderr', text: '[[TASK_DONE]]' },
+    { timestamp: at(20), stream: 'stderr', text: 'read_file' },
     {
       timestamp: at(21),
+      stream: 'stderr',
+      text: 'docs/concepts/wiki-concept.html',
+    },
+    { timestamp: at(22), stream: 'stderr', text: ' succeeded in 12ms:' },
+    { timestamp: at(23), stream: 'stderr', text: '<!doctype html>' },
+    { timestamp: at(24), stream: 'stderr', text: '<html lang="en">' },
+    { timestamp: at(25), stream: 'stderr', text: '<head>' },
+    { timestamp: at(26), stream: 'stderr', text: '  <meta charset="utf-8">' },
+    { timestamp: at(27), stream: 'stderr', text: '  <style>' },
+    { timestamp: at(28), stream: 'stderr', text: '    .concept-grid {' },
+    { timestamp: at(29), stream: 'stderr', text: '      display: grid;' },
+    { timestamp: at(30), stream: 'stderr', text: '      grid-template-columns: 1fr 1fr;' },
+    { timestamp: at(31), stream: 'stderr', text: '    }' },
+    { timestamp: at(32), stream: 'stderr', text: '  </style>' },
+    { timestamp: at(33), stream: 'stderr', text: '</head>' },
+    { timestamp: at(34), stream: 'stderr', text: '<body>' },
+    {
+      timestamp: at(35),
+      stream: 'stderr',
+      text: '  <p class="lead">The concept remains readable as source.</p>',
+    },
+    { timestamp: at(36), stream: 'stderr', text: '</body>' },
+    { timestamp: at(37), stream: 'stderr', text: '</html>' },
+    { timestamp: at(38), stream: 'stderr', text: 'codex' },
+    {
+      timestamp: at(39),
+      stream: 'stderr',
+      text: 'The concept and its navigation entry are ready for review.',
+    },
+    { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
+    {
+      timestamp: at(41),
       stream: 'system',
       text: '[runner] CLI exited 0; typedOutcome=ExplicitAgentDone classifier=execution-outcome/v1',
     },
@@ -239,18 +271,29 @@ test('Activity renders structured tool payloads and runner events quietly', asyn
   }
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
 
-  const tool = panel.getByTestId('tool-burst-chip');
-  await expect(tool).toBeVisible();
-  await tool.getByTestId('tool-burst-row').click();
-  const output = tool.getByTestId('tool-burst-command-output');
-  await expect(output).toContainText('diff --git a/docs/start/README.md');
-  await expect(output).toContainText('"title": "Apply Robert\'s selected Deck icon"');
-  expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
-    .not.toContain('diff --git');
-  await panel.screenshot({
-    path: path.join(SHOTS_DIR, 'activity-renderer-after.png'),
-  });
+  const tools = panel.getByTestId('tool-burst-chip');
+  await expect(tools).toHaveCount(2);
+  const diffTool = tools.nth(0);
+  await diffTool.getByTestId('tool-burst-row').click();
+  const diffOutput = diffTool.getByTestId('tool-burst-command-output');
+  await expect(diffOutput).toContainText('diff --git a/docs/start/README.md');
+  await expect(diffOutput).toContainText('"title": "Apply Robert\'s selected Deck icon"');
 
+  const markupTool = tools.nth(1);
+  await expect(markupTool.getByTestId('tool-burst-row')).toHaveAttribute('aria-expanded', 'false');
+  await markupTool.getByTestId('tool-burst-row').click();
+  const markupOutput = markupTool.getByTestId('tool-burst-command-output');
+  await expect(markupOutput).toContainText('<meta charset="utf-8">');
+  await expect(markupOutput).toContainText('<p class="lead">');
+  await expect(markupTool.getByTestId('tool-burst-files')).toContainText(
+    'docs/concepts/wiki-concept.html',
+  );
+  await expect(markupOutput.locator('li')).toHaveCount(0);
+  expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
+    .not.toContain('<meta charset=');
+  await panel.screenshot({
+    path: path.join(SHOTS_DIR, 'activity-html-after.png'),
+  });
   const runnerRows = panel.locator('[data-testid="conversation-system-status"][data-category="runner"]');
   await expect(runnerRows).toHaveCount(3);
   await expect(runnerRows.first()).not.toContainText('[runner]');
