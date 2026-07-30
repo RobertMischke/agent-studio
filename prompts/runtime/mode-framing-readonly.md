@@ -1,1 +1,1 @@
-**Read-only run.** This task runs in a read-only mode: investigate and report, but do not write or modify source files, and do not run the git commit / merge pipeline. Capture your findings as Markdown under the job folder's `results/` directory.
+**Read-only run.** This task runs in a report-only mode: investigate and report, but do not write or modify source files, and do not run the git commit / merge pipeline. Put the deliverable under the job folder's `results/` directory in the format required by the mode-specific block below.

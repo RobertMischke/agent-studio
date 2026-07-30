@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Research task delivery convention</title>
+  <style>
+    :root {
+      --page: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #eef2f8;
+      --text: #172033;
+      --muted: #5c667a;
+      --border: #d7deea;
+      --brand: #3057c8;
+      --brand-soft: #e8edff;
+      --ok: #176448;
+      --ok-soft: #e3f5ed;
+      --warn: #7a4d00;
+      --warn-soft: #fff1d2;
+      --shadow: 0 12px 34px rgba(27, 39, 68, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0d111a;
+        --surface: #151b27;
+        --surface-soft: #1c2433;
+        --text: #edf1fa;
+        --muted: #aeb8cb;
+        --border: #334055;
+        --brand: #9db3ff;
+        --brand-soft: #26345e;
+        --ok: #7dd6b2;
+        --ok-soft: #173c31;
+        --warn: #ffd27b;
+        --warn-soft: #463612;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--page);
+      font: 16px/1.62 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header, main, footer { width: 100%; }
+    header {
+      padding: clamp(2rem, 6vw, 5rem) clamp(1rem, 5vw, 5rem);
+      background: linear-gradient(135deg, var(--surface), var(--brand-soft));
+      border-bottom: 1px solid var(--border);
+    }
+    main {
+      display: grid;
+      gap: 1.25rem;
+      padding: clamp(1rem, 4vw, 3.5rem) clamp(1rem, 5vw, 5rem);
+    }
+    footer {
+      padding: 1.5rem clamp(1rem, 5vw, 5rem) 3rem;
+      color: var(--muted);
+    }
+    h1, h2, h3 { line-height: 1.18; margin-top: 0; }
+    h1 { max-width: 20ch; font-size: clamp(2.1rem, 5vw, 4.5rem); margin-bottom: 1rem; }
+    h2 { font-size: clamp(1.35rem, 2.5vw, 2rem); }
+    h3 { font-size: 1.05rem; }
+    p { max-width: 82ch; }
+    a { color: var(--brand); text-underline-offset: 0.18em; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code {
+      padding: 0.08rem 0.35rem;
+      border-radius: 0.3rem;
+      background: var(--surface-soft);
+    }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+    }
+    pre code { padding: 0; background: transparent; }
+    .eyebrow {
+      margin: 0 0 0.65rem;
+      color: var(--brand);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 72ch; color: var(--muted); font-size: 1.15rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+    .panel {
+      min-width: 0;
+      padding: clamp(1rem, 2vw, 1.5rem);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      box-shadow: var(--shadow);
+    }
+    .contract { background: var(--ok-soft); }
+    .rollout { background: var(--warn-soft); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-size: 0.8rem;
+      font-weight: 750;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.35rem; }
+    .steps { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; list-style: none; }
+    .steps li { padding: 0.4rem 0.65rem; background: var(--surface-soft); border-radius: 999px; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Operator convention</p>
+    <h1>Research tasks deliver one primary HTML report</h1>
+    <p class="lede">A research card is a report workflow, not a code workflow. Its one primary document is easy to find, supporting evidence stays navigable from that document, and the pipeline performs only the checks needed for a document handoff.</p>
+    <span class="badge">Effective 2026-07-28</span>
+  </header>
+
+  <main>
+    <section class="panel contract" id="contract">
+      <h2>Delivery contract</h2>
+      <ol>
+        <li>Write exactly one primary document at <code>results/report.html</code>.</li>
+        <li>Use the operations-document house style: self-contained HTML, inline CSS, light and dark themes, no external runtime dependency, and a problem/solution-first structure.</li>
+        <li>Sources, raw data, and detailed analyses may be separate companion files. Link every companion from the primary report. Do not present loose siblings as the result.</li>
+        <li>If the task also publishes to the Wiki, the Wiki HTML is the publication form of the same primary report. The managed delivery flow owns publication.</li>
+        <li>The card Result tab presents <code>report.html</code> as the primary result in a sandboxed HTML viewer.</li>
+      </ol>
+    </section>
+
+    <section class="grid" id="routing">
+      <article class="panel">
+        <h2>How research is recognized</h2>
+        <table>
+          <thead><tr><th>Signal</th><th>Contract</th></tr></thead>
+          <tbody>
+            <tr><td>Canonical</td><td><code>mode=research</code> in task metadata. This is separate from the structural <code>taskType</code>.</td></tr>
+            <tr><td>Visible card cue</td><td>The Research mode pill on the card.</td></tr>
+            <tr><td>Prompt cue</td><td>The effective prompt contains a visible <code>Research:</code> heading and the delivery block below.</td></tr>
+            <tr><td>Settings dimension</td><td><code>PipelineTypes.Resolve(taskType, mode)</code> maps Research to the AGT-2301 <code>planning</code> dimension, so coding-type overrides cannot leak into the report flow.</td></tr>
+            <tr><td>Pipeline</td><td><code>read-only-task-pipeline</code>, displayed as Lightweight report pipeline.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="panel">
+        <h2>What runs</h2>
+        <ul class="steps">
+          <li>Loop guard</li>
+          <li>Model qualification</li>
+          <li>Optional preparation</li>
+          <li>Reissue open-items check</li>
+          <li>Research authoring</li>
+          <li>Primary-report validation</li>
+          <li>Human-review handoff</li>
+        </ul>
+        <h3>What does not run</h3>
+        <p>Worktree, commit, merge, build, automated tests, Stylelint, code-review aspects, code-quality grade, regression radar, Wiki automation, and drift checks are excluded.</p>
+      </article>
+    </section>
+
+    <section class="panel" id="prompt-block">
+      <h2>Copy-paste block for Research prompts</h2>
+      <p>The runtime injects this block through the same mode-framing mechanism as the other context blocks. Prompt authors can also paste it into a card when the deliverable must be explicit before execution.</p>
+      <pre><code>Research: This is a research run. Keep the task prompt and primary report visibly headed `Research:`.
+
+Deliver exactly one primary document at `results/report.html`. Make it a self-contained HTML document in the operations-document house style, with inline CSS, light and dark themes, no external runtime dependencies, and a problem/solution-first structure. Supporting sources, raw data, and detailed analyses may be separate files under `results/`, but link every supporting document from the primary report. Do not leave an unstructured sibling list as the result. If the task names a Wiki destination, use the same HTML as the publication source; the managed delivery process owns publication. The card Result tab must present `report.html` as the primary result.</code></pre>
+    </section>
+
+    <section class="grid" id="proof">
+      <article class="panel">
+        <h2>Card creation checklist</h2>
+        <ul>
+          <li>Select Research mode. Do not encode research only in <code>taskType</code> or free text.</li>
+          <li>Start the title or task prompt with <code>Research:</code>.</li>
+          <li>Name the Wiki destination when publication is required.</li>
+          <li>Name any expected companion data, but keep the main-report link list authoritative.</li>
+          <li>Accept only when the Result tab opens the primary HTML and the pipeline contains no code gates.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h2>Proof slice</h2>
+        <p>AGT-2380 applies this convention without changing its research findings.</p>
+        <ul>
+          <li><a href="../../research/reissue-prompt-konvergenz.html">Primary AGT-2380 HTML report</a></li>
+          <li><a href="../../quality/reissue-prompt-convergence/index.html">Observational convergence workbench companion</a></li>
+          <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment.md">Randomized experiment companion</a></li>
+          <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md">Randomized experiment analysis companion</a></li>
+          <li><a href="../../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.json">Machine-readable experiment companion</a></li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel rollout" id="result-viewer">
+      <h2>Result viewer rollout boundary</h2>
+      <p>The delivery contract is fixed here. Verification on 2026-07-29 found that the current Result pane still derives its main body from <code>status.md</code>, the results endpoint is read-only, and HTML results fall back to <code>application/octet-stream</code>. Top-level HTML is already sandbox-rendered in the Files surface, but automatic discovery and sandbox rendering of <code>results/report.html</code> is still missing. AGT-2417 appended this exact follow-up to AGT-2409 through the Task API and does not duplicate the viewer implementation.</p>
+    </section>
+  </main>
+
+  <footer>
+    Source of truth: Research task delivery convention. Related system maps:
+    <a href="../../system/domains/tasks.md">Tasks</a> and
+    <a href="../../system/domains/pipeline.md">Pipeline</a>.
+  </footer>
+</body>
+</html>

@@ -469,6 +469,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
                     if (pending.Kind == ReviewSignalKind.Done)
                     {
+                        if (TaskModes.IsReportOnly(pending.Job.Mode))
+                        {
+                            _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
+                            try
+                            {
+                                await ProcessReportOnlyDoneAsync(
+                                    workspace, entry, pending, cliBinary, ct);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex,
+                                    "ReviewDecisionOrchestrator failed to process lightweight report {Project}/{JobId}",
+                                    entry.Name, pending.Job.Id);
+                            }
+                            finally
+                            {
+                                _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
+                            }
+                            continue;
+                        }
+
                         // Defer to the read-only parallel pool. The cheap
                         // enabled-checks happen here so a disabled/no-aspect
                         // project never occupies a slot.
@@ -720,6 +741,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 if (TaskModes.IsConcept(pending.Job.Mode))
                 {
                     await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
+                if (TaskModes.IsReportOnly(pending.Job.Mode))
+                {
+                    await ProcessReportOnlyDoneAsync(workspace, entry, pending, cliBinary, ct);
                     return;
                 }
                 var aspects = ResolveAspectRunners();
@@ -1911,6 +1937,97 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "ReviewDecisionOrchestrator: stale-with-verdict backfill moved {Project}/{JobId} ({Verdict}) to {TargetState}",
             entry.Name, current.Id, verdict, targetState);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Completes a planning or research report without entering the code-review
+    /// fan-out. Research has one strict primary artifact:
+    /// <c>results/report.html</c>. Planning retains compatibility with existing
+    /// result formats but still uses the same lightweight pipeline. A missing
+    /// primary result enters the shared bounded completion-gate reissue path.
+    /// </summary>
+    private async Task ProcessReportOnlyDoneAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string cliBinary,
+        CancellationToken ct)
+    {
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var projectSettings = _projectSettings?.Get(entry.Name);
+        var pipelineRecord = _pipelineLog?.EnsureRun(
+            current.FolderPath,
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
+            entry.Name,
+            current.Id);
+        using var pipelineAttempt = pipelineRecord == null
+            ? null
+            : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
+
+        var isResearch = TaskModes.Normalize(current.Mode) == TaskModes.Research;
+        var primaryReport = Path.Combine(current.FolderPath, "results", "report.html");
+        var hasPrimaryResult = isResearch
+            ? HasPrimaryResearchHtml(primaryReport)
+            : HasResultsArtifacts(current.FolderPath);
+
+        if (!hasPrimaryResult)
+        {
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            var maxReissues = ConfiguredMaxReissues();
+            var requiredArtifact = isResearch
+                ? "a valid HTML document at results/report.html"
+                : "a primary artifact under results/";
+            var gate = new CompletionGate.Decision
+            {
+                Action = priorReissues >= maxReissues
+                    ? CompletionGate.CompletionGateAction.Escalate
+                    : CompletionGate.CompletionGateAction.Reissue,
+                Findings = [$"Required report artifact is missing: {requiredArtifact}."],
+                Reason = priorReissues >= maxReissues
+                    ? $"The lightweight report pipeline still has no primary result after {priorReissues} prior orchestrator reissue(s)."
+                    : $"The lightweight report pipeline requires {requiredArtifact} before handoff.",
+            };
+            await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
+            return;
+        }
+
+        var resultRef = isResearch ? "results/report.html" : "results/";
+        var reason = $"Primary report is ready at {resultRef}; code gates are not applicable.";
+        RecordOrchestratorReviewStep(
+            current.FolderPath, PipelineStepStatus.Passed, ReviewVerdictComplete, reason);
+        RecordOrchestratorDecisionStep(
+            current.FolderPath, PipelineStepStatus.Passed, DecisionVerdictAccept, reason);
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not applicable to a lightweight report run.");
+
+        HandleAcceptAsDone(
+            workspace,
+            entry,
+            pending,
+            "(deterministic lightweight report validation)",
+            resultRef,
+            new OrchestratorDecisionVerdict(OrchestratorDecisionAction.AcceptAsDone, reason),
+            cliBinary);
+        _statusSnapshot.RecordAccept();
+        await Task.CompletedTask;
+    }
+
+    private static bool HasPrimaryResearchHtml(string path)
+    {
+        if (!File.Exists(path)) return false;
+        try
+        {
+            var content = File.ReadAllText(path);
+            return content.Contains("<html", StringComparison.OrdinalIgnoreCase)
+                && content.Contains("</html>", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task ProcessDoneAsync(

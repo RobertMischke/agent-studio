@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-28
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -10,8 +10,14 @@ or commit attribution.
 ## Execution modes
 
 - `coding` is the default source-mutating mode.
-- `planning` and `research` are report-only modes. They run without git
-  mutation steps and must finish with a clean product checkout.
+- `planning` and `research` are report-only modes. They run the lightweight
+  report pipeline without git, build, test, Stylelint, aspect, or code-quality
+  steps and must finish with a clean product checkout.
+- Research is recognized by canonical task metadata `mode=research`, shown as a
+  Research pill, and reinforced by the effective prompt heading `Research:`.
+  Its primary artifact is `results/report.html`; every optional companion is
+  linked from that HTML. See the
+  [Research task delivery convention](../../operations/research-deliverables/index.html).
 - `concept` is document-first. It uses an isolated worktree but may change only
   one `docs/operations/<topic>/` Workbench. The published document, not
   `status.md`, is the promotion source.

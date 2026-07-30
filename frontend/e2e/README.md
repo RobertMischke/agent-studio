@@ -516,7 +516,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `watchdog-notification-operator-copy.spec.ts` | watchdog Suspicious notification reads in operator-friendly English |
 | `workspace-banner-long-message.spec.ts` | workspace banner clamps long auto-review verdict and keeps project below body |
 
-### `task-detail/` - 91 specs
+### `task-detail/` - 92 specs
 
 | Spec | Summary |
 |------|---------|
@@ -592,6 +592,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `references-in-overview.spec.ts` | Cross-references - compact inside Overview |
 | `regression-radar-info-button.spec.ts` | Regression radar info-button |
 | `repository-hygiene-strip.spec.ts` | Repository hygiene - review/completed strip |
+| `research-lightweight-pipeline.spec.ts` | Research lightweight pipeline @billable |
 | `review-evidence-panel.spec.ts` | Review evidence panel |
 | `review-evidence-thumbnails.spec.ts` | AGT-1992: review-evidence image thumbnails |
 | `row-spacing-compact-density-capture.spec.ts` | Row density - overview screenshots |
