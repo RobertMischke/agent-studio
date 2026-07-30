@@ -130,7 +130,13 @@ public sealed class RemoteTaskRunner
     public async Task<bool> ReleaseDeadAsync(PersistedRunnerSlot slot, string reason)
     {
         _log($"releasing dead persisted attempt task={slot.TaskKey} attempt={slot.AttemptId}: {reason}");
-        if (await ReleaseAsync(slot.Lease, CancellationToken.None))
+        var outcome = string.Equals(
+            slot.Phase,
+            "authority-deadline-exhausted",
+            StringComparison.Ordinal)
+            ? "authority-deadline-exhausted"
+            : "runner-process-missing";
+        if (await ReleaseAsync(slot.Lease, CancellationToken.None, outcome))
         {
             _state.Delete(slot);
             return true;
@@ -163,18 +169,32 @@ public sealed class RemoteTaskRunner
             : null;
         using var activeOutbox = outbox?.MarkActive();
         using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
+        var authority = _client.UsesDurableTaskServer
+            ? DurableLeaseAuthority.Open(
+                slot.WorkerDirectory,
+                lease.ExpiresAt,
+                TimeSpan.FromSeconds(Math.Max(5, _options.HeartbeatSeconds)),
+                initiallyConfirmed: !reattach)
+            : null;
         var heartbeat = new LeaseHeartbeat(
             _client,
             _options,
             lease,
             _log,
-            inventory: _inventory);
+            inventory: _inventory,
+            authority: authority);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
         outbox?.Enqueue("status", JsonSerializer.Serialize(
             new { phase = "claimed", taskKey },
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        var shipper = new LogShipper(_client, taskKey, lease, _log, outbox);
+        var shipper = new LogShipper(
+            _client,
+            taskKey,
+            lease,
+            _log,
+            outbox,
+            authority);
         var shipperTask = shipper.RunAsync(TimeSpan.FromSeconds(5), stopRun.Token);
 
         var outcome = new RunOutcome(RunOutcomeKind.Unknown, "Runner ended before a terminal outcome was recorded.");
@@ -197,8 +217,12 @@ public sealed class RemoteTaskRunner
             outcome = execution.Outcome;
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
-            await shipper.FlushAsync(shutdown);
-            artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
+            await shipper.FlushAsync(stopRun.Token);
+            artifactManifest = await UploadResultsAsync(
+                taskKey,
+                lease,
+                outbox,
+                stopRun.Token);
 
             if (heartbeat.LeaseLost)
             {
@@ -226,7 +250,7 @@ public sealed class RemoteTaskRunner
                     workspace,
                     outcome,
                     outbox,
-                    shutdown);
+                    stopRun.Token);
                 var dependencyIdentities = await workspace.ReadDependencyIdentitiesAsync(shutdown);
                 var repositoryId = !string.IsNullOrWhiteSpace(slot.ProjectId)
                     ? slot.ProjectId
@@ -262,14 +286,18 @@ public sealed class RemoteTaskRunner
                     JsonSerializer.Serialize(
                         envelope,
                         new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-                await ReplayBeforeAsync(outbox, finalItem.Sequence, shutdown);
+                await authority!.WaitForConfirmedAsync(stopRun.Token);
+                await ReplayBeforeAsync(
+                    outbox,
+                    finalItem.Sequence,
+                    stopRun.Token);
                 handoffAcknowledgement = await _client.AcknowledgeResultHandoffAsync(
                     outbox.Authority,
                     finalItem,
                     envelope,
-                    shutdown);
+                    stopRun.Token);
                 outbox.RecordHandoffAcknowledgement(handoffAcknowledgement);
-                await ReportOutboxSafeAsync(outbox, shutdown);
+                await ReportOutboxSafeAsync(outbox, stopRun.Token);
                 await workspace.TeardownAfterHandoffAsync(
                     teardown,
                     outbox.HandoffAcknowledgement
@@ -298,10 +326,14 @@ public sealed class RemoteTaskRunner
                             envelopeDigest,
                             outcomeDecision),
                         new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-                await _client.SendOutboxItemAsync(outbox.Authority, completion, shutdown);
+                await authority!.WaitForConfirmedAsync(stopRun.Token);
+                await _client.SendOutboxItemAsync(
+                    outbox.Authority,
+                    completion,
+                    stopRun.Token);
                 outbox.Acknowledge(completion.Sequence);
                 outbox.RecordHandoffState("completed", envelopeDigest);
-                await ReportOutboxSafeAsync(outbox, shutdown);
+                await ReportOutboxSafeAsync(outbox, stopRun.Token);
             }
             else
             {
@@ -365,6 +397,39 @@ public sealed class RemoteTaskRunner
             await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
             handedBack = true;
             return 1;
+        }
+        catch (OperationCanceledException) when (heartbeat.LeaseLost)
+        {
+            var phase = authority?.Snapshot.Detail?.Contains(
+                "deadline exhausted",
+                StringComparison.OrdinalIgnoreCase) == true
+                ? "authority-deadline-exhausted"
+                : "lease-authority-rejected";
+            var latestSlot = _state.LoadAll().FirstOrDefault(item =>
+                                 string.Equals(
+                                     item.AttemptId,
+                                     slot.AttemptId,
+                                     StringComparison.Ordinal))
+                             ?? slot;
+            _state.Save(latestSlot with { Phase = phase });
+            if (outbox is not null
+                && !outbox.Items.Any(item => item.Kind == "terminal"))
+            {
+                outbox.Enqueue(
+                    "terminal",
+                    JsonSerializer.Serialize(
+                        new DurableTerminalPayload(
+                            "LeaseLoss",
+                            phase == "authority-deadline-exhausted"
+                                ? "Local autonomy deadline exhausted; contained process generation death was proven."
+                                : "Task Server rejected the fenced lease; contained process generation death was proven."),
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                outbox.RecordHandoffState(phase);
+            }
+            _log(
+                $"lease-loss terminal journaled task={taskKey} phase={phase}; " +
+                "no replacement starts from this execution path");
+            return 3;
         }
         finally
         {
@@ -521,8 +586,10 @@ public sealed class RemoteTaskRunner
         {
         var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
                          ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
-            prompt = RemoteRunPrompt.Build(taskPrompt);
-        shipper.Add("system", "[runner] remote-completion-protocol appended to task prompt");
+            prompt = RemoteRunPrompt.Build(taskPrompt, runSpec?.ModeFraming, ResultsDir(taskKey));
+        shipper.Add("system", string.IsNullOrWhiteSpace(runSpec?.ModeFraming)
+            ? "[runner] results-dir context + remote-completion-protocol appended to task prompt"
+            : "[runner] server-rendered mode framing + results-dir context + remote-completion-protocol appended to task prompt");
         }
 
         var resultsDir = ResultsDir(taskKey);
@@ -603,7 +670,8 @@ public sealed class RemoteTaskRunner
                 }
                 if (lines.Count > 0 || shipper.PendingCount > 0)
                 {
-                    if (await shipper.FlushAsync(stopRun))
+                    var flushed = await shipper.FlushAsync(stopRun);
+                    if (outbox is not null || flushed)
                         slot = _state.Save(slot with { LastOutputSequence = sequence });
                 }
 
@@ -614,7 +682,8 @@ public sealed class RemoteTaskRunner
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
                     if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
                     {
-                        var provider = RunnerCapabilityProbe.Provider(_options.CliBin);
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
@@ -712,6 +781,10 @@ public sealed class RemoteTaskRunner
         catch (OperationCanceledException)
         {
             process.Kill();
+            await WorktreeProcessReaper.ReapAsync(
+                workspace.RepoPath,
+                _log,
+                CancellationToken.None);
             throw;
         }
     }
@@ -824,10 +897,8 @@ public sealed class RemoteTaskRunner
         if (outbox is not null)
         {
             outbox.Enqueue("artifact-manifest", artifactManifest.Json);
-            await outbox.ReplayAsync(
-                (item, token) => _client.SendOutboxItemAsync(outbox.Authority, item, token),
-                ct);
-            _log($"durably uploaded {manifest.Count} artifact(s) from outbox");
+            _log(
+                $"durably journaled {manifest.Count} artifact(s) for fenced outbox replay");
         }
         else
         {
@@ -1144,14 +1215,18 @@ public sealed class RemoteTaskRunner
                $"{refs}; failure={failure}. No ref was overwritten. Recovery recipe: {remediation}";
     }
 
-    private async Task<bool> ReleaseAsync(RunLeaseInfoDto lease, CancellationToken ct)
+    private async Task<bool> ReleaseAsync(
+        RunLeaseInfoDto lease,
+        CancellationToken ct,
+        string outcome = "runner-process-missing")
     {
         try
         {
             var resp = await _client.ReleaseLeaseAsync(new RunLeaseReleaseRequest(
                 lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
                 lease.AttemptId, lease.AuthorityEpoch,
-                $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
+                $"release:{lease.AttemptId}:{lease.LeaseId}",
+                outcome), ct);
             _log($"lease released: {resp.Outcome}");
             return string.Equals(resp.Outcome, "Released", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(resp.Outcome, "NotHeld", StringComparison.OrdinalIgnoreCase)

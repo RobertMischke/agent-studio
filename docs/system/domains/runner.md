@@ -38,6 +38,10 @@ state.
   start, stop, continue, and mode surface.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
+- `backend/Features/Runner/RunTimelineEventFactory.cs`: canonical projection of
+  run execution context and terminal run facts into timeline events. Execution
+  context preserves model, thinking level, source origin, and exact source
+  members; zero MCP counts and the permanent permission mode are omitted.
 - `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
   whether a run must be worktree-isolated, the main-checkout guard condition, and
   the cwd-keyed session-resume gate (see ADR-0057). Every source-mutating run,
@@ -67,6 +71,14 @@ state.
   project's dedicated chat checkout from its normal git cache, starts Codex
   there, and completes with the observed hostname, repository path, branch,
   and HEAD revision.
+- Coding hosts advertise fresh `cli-execution:<cliType>` and
+  `provider-auth:<cliType>` capabilities for every card CLI binary they can
+  invoke. `LeaseEndpoints` adds the candidate card's normalized CLI keys to the
+  existing required-capability set before repository preflight or lease
+  acquisition. An incompatible card stays Ready. Fenced idempotent claim replay
+  is evaluated first and always describes the already claimed run. Capability
+  matching never rewrites the card's model or thinking selection; those remain
+  governed by [the model-routing policy](model-routing-policy.md).
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -109,6 +121,12 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `task-server/RemoteRunResultCollector.cs`,
+  `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
+  [the remote run result contract](../contracts/remote-run-result.md): additive
+  infrastructure-test evidence collection. Final Task Server authority is
+  combined with Runner observations into one create-once scenario result. The
+  collector owns no outcome, retry, lease, or task transition decision.
 - `scripts/remote-runner-onboard.sh` and
   `scripts/agent-host-resource-governance.sh`: the current agent-host Linux
   install/update path and its role-specific systemd resource renderer. The
@@ -159,20 +177,36 @@ state.
   infrastructure scenarios. The `reference-change` manifest drives the public
   v1 claim and attempt authority, durable immutable-result handoff, exact-SHA
   review, and reviewed fixture integration with stable-seed semantic
-  acceptance. Phase hooks observe claim, run, gate, review, and integration
-  without adding scheduler-only branches. Its harness-only fault catalog covers
+  acceptance. Its explicit `remote-integration` Compose profile adds the
+  disposable Task Server, deterministic Agent Runner protocol process,
+  production Studio UI, and two-link fault proxy used for remote-host rolling
+  replacement and partition evidence. Phase hooks observe claim, run, gate,
+  review, and integration without adding scheduler-only branches. It never
+  targets stable or the managed task workspace. The `parallel-harness.mjs`
+  workload adds two twelve-task passes over separate coding, gate, and review
+  worker pools. It records slot admission, queue and execution timings, system
+  pressure, exact-SHA proofs, idempotent delivery, deterministic integration
+  collision decisions, and one controlled four-slot gate-worker loss with
+  bounded redistribution. Its harness-only fault catalog covers
   bounded Task Server disconnects, gate watchdog timeouts, occupied worktree
   targets, and lost or interrupted terminal markers. Fault activation requires
   a checked-in manifest, an explicit enable flag, a run/root-bound
   acknowledgement, an unchanged safety marker, and a harness-owned isolated
   Task Server. Fault runs assert lane, lease/fence, process, worktree, outbox,
-  Result-SHA, and incident terminals. In addition, first-class historical
-  replays cover divergent salvage lineage, lease adoption across a real Runner
-  daemon restart, and the external completion cycle; each replay manifest binds
-  chronicle incidents to an expected durable terminal, bounded recovery budget,
-  and complete machine-assertion set via its `contract`. Neither catalog is
-  referenced by production binaries and nothing here targets stable or the
-  managed task workspace.
+  Result-SHA, and incident terminals. The catalog is not referenced by
+  production binaries and never targets stable or the managed task workspace.
+  First-class historical replays also cover divergent salvage lineage,
+  lease adoption across a real Runner daemon restart, and the external
+  completion cycle. Every manifest binds chronicle incidents to an expected
+  durable terminal, bounded recovery budget, and complete machine-assertion
+  set.
+  The acceptance run first holds two already-claimed slots through a
+  configurable real Task Server partition,
+  records useful-work and durable-outbox timelines, reconciles each exact fence
+  before replay, and proves exact-once terminal delivery. The card-safe harness
+  uses a 25-second outage by default; the release suite owns the separately
+  marked MachineBound ten-minute invocation. Runner replacement and Task Server
+  replacement remain separate later checks.
 - `backend/Features/Runner/OrchestrationExecutionMode.cs`: transition switch
   for the legacy host. `Orchestration:ExecutionMode` accepts exactly
   `Monolith` or `Engine`; Engine mode omits the legacy review/post-processing
@@ -312,12 +346,19 @@ state.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
-- A failed lease renewal consumes the last server-issued authority window.
-  The standalone Runner stops before the known expiry minus one renewal
-  interval, cancels the CLI process tree, and does not turn transport loss into
-  autonomous authority. Task Server restart records `process-unknown`; only
-  positive containment or infrastructure-fencing proof permits a higher-fence
-  replacement.
+- A failed lease renewal consumes the last server-issued authority window. The
+  default requested window is 15 minutes, with a durable stop-before boundary
+  one renewal interval before expiry. The standalone Runner persists that
+  boundary in the worker directory, continues the already-fenced process while
+  time remains, and journals output and terminal evidence locally. It admits no
+  new work and replays no event, artifact, result handoff, terminal report, or
+  completion while authority is uncertain. Only a successful renewal of the
+  exact lease and fence advances the boundary and opens replay. At stop-before,
+  the Runner reaps and verifies the entire worktree process generation and
+  retains an honest `authority-deadline-exhausted` record. A daemon restart
+  applies the same persisted deadline before it can register or adopt work.
+  Task Server restart records `process-unknown`; only positive containment or
+  infrastructure-fencing proof permits a higher-fence replacement.
 - A remote project clone is eligible only when the project registry contains a
   repository URL. On every new clone and refresh, the standalone runner sets
   both fetch and push URLs to that registry value and logs the effective pair.
@@ -515,11 +556,22 @@ state.
   an exhausted or genuinely unrecoverable git failure retains the worktree and
   uses the existing `worktree-blocked` escalation with the preserved tips and
   next safe action (AGT-2177).
+- Every moving salvage push passes a final card-scope allowlist at the Git
+  mutation boundary. The only accepted targets are the exact
+  `runner/<runner-id>/<task-key>` branch and collision refs derived from that
+  branch. An integration or authoritative-base branch such as `main` or
+  `develop`, a fully qualified base ref, and another card's runner ref all fail
+  closed before `git push`; the worktree remains recoverable (AGT-2423).
 - Worktree preparation records the actual repository base line as a full ref,
   such as `refs/heads/main` or `refs/heads/develop`. Completion persists that
   ref on the task and review subject. Integration status, review planning,
   merge, push, recovery, and provenance consume the recorded ref instead of
   reapplying a project-level branch assumption after the run.
+- Acceptance resolves the delivery source from persisted card truth, never from
+  the task folder slug alone. Resolution order is immutable result ref,
+  attributed `commits[].branch`, fenced `runner/<runner-id>/<task-key>`, then the
+  legacy local `task/<slug>` fallback. Remote sources remain fenced to the
+  reviewed result SHA.
 - Epic planning is the deliberate exception: its detached checkout is checked
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only
@@ -562,6 +614,9 @@ Run-start session events capture the execution projection so finished run
 history keeps its stable runner-id attribution with `historical: true` and renders
 quietly. The wire contract is
 [task-execution-location.schema.json](../schemas/task-execution-location.schema.json).
+Run timeline context events retain exact source members so count disclosures
+are inspectable. Terminal run events retain status and duration as structured
+details; the frontend owns their compact, non-redundant sentence projection.
 
 ## Verification
 

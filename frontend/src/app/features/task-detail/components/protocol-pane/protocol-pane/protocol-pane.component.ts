@@ -43,7 +43,7 @@ import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-de
 import { TaskService } from '../../../../../services/task.service';
 import type { ConversationEvent, RawLineRange } from 'coding-agent-chat/core';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import { projectConversation } from 'coding-agent-chat/core';
+import { mergeByTimestamp, projectConversation } from 'coding-agent-chat/core';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
@@ -64,6 +64,9 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
+import { projectStructuredActivityContent } from '../structured-activity-projection';
+import { TaskInspectorTabComponent } from '../task-inspector-tab/task-inspector-tab.component';
+import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -72,7 +75,7 @@ import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.c
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
-export type InspectorTab = 'protocol' | 'activity';
+export type InspectorTab = 'task' | 'activity' | 'protocol';
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
@@ -122,6 +125,8 @@ interface InterimSummaryState {
     PaneHeaderComponent,
     PaneTabsComponent,
     RunnerReplayMetadataComponent,
+    TaskInspectorTabComponent,
+    DecisionSurfaceComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -139,6 +144,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly chatSendLabel = input<string>('Send');
   readonly chatError = input<string | null>(null);
   readonly queuedFollowUp = input<boolean>(false);
+  readonly mutationsBlocked = input(false);
 
   readonly regenerating = input(false);
   readonly runOutcome = input<ProtocolVerdict | null>(null);
@@ -156,6 +162,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
   readonly regenerateSummary = output<void>();
+  readonly decisionApplied = output<void>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);
@@ -473,12 +480,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       : 'Message this task. Ctrl+Enter to send.';
   }
 
-  // While the job is in 3-progress, the live Activity feed is what the user
-  // came here to see — surface it as the leftmost tab. Outside that state we
-  // keep the historical Protocol-first order so the summary stays primary.
-  readonly inProgress = computed(() => this.detail().info.state === TaskState.Progress);
-
-  /** Protocol / Activity tab strip for the shared pane-tabs component. */
+  /** Task / Activity / Result tab strip for the shared pane-tabs component. */
   readonly protocolTabs = computed(() =>
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
@@ -493,7 +495,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Bridge from the generic pane-tabs change event to the parent. */
   onInspectorTabChange(id: string): void {
-    if (id === 'protocol' || id === 'activity') {
+    if (id === 'task' || id === 'activity' || id === 'protocol') {
       this.activeInspectorTabChange.emit(id);
     }
   }
@@ -767,12 +769,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }));
     const replay = this.runnerReplay();
     const typedLifecycle = this.runnerEvents().some(event => event.kind === 'turn.completed');
+    const structured = projectStructuredActivityContent(filtered, info.id);
     const projected = projectConversation({
       source: info.id,
-      // Guard the next-gen projection the same way the legacy path is guarded:
-      // strip raw stream-json transport frames before the library classifies
-      // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
-      lines: sanitizeProjectionLines(stripLegacyCompletionLines(filtered, typedLifecycle)),
+      // Strip transport frames before the library classifies them. See sanitizeProjectionLines.
+      lines: sanitizeProjectionLines(stripLegacyCompletionLines(structured.projectionLines, typedLifecycle)),
       task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,
@@ -786,7 +787,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     const presented = presentActivityEvents(projected, info.id, info.watchPath, {
       typedTurnCompletions: typedLifecycle,
     });
-    return mergeReplayEvents(presented, replay.timelineEvents);
+    return mergeReplayEvents(mergeByTimestamp(presented, structured.events), replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {

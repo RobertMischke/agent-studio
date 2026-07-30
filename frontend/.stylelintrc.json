@@ -234,6 +234,7 @@
         "src/app/features/remote-hosts/components/host-telemetry-history/host-telemetry-history.scss",
         "src/app/features/remote-hosts/components/runtime-capacity-editor/runtime-capacity-editor.scss",
         "src/app/features/task-detail/components/protocol-pane/runner-replay-metadata/runner-replay-metadata.scss",
+        "src/app/features/task-detail/components/protocol-pane/task-inspector-tab/task-inspector-tab.component.scss",
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",
         "src/app/features/studio-shell/components/explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component.scss",
@@ -242,6 +243,7 @@
         "src/app/features/studio-shell/components/studio-welcome/studio-welcome.component.scss",
         "src/app/features/task-detail/components/prompt-pane/files-pane/document-details-menu/document-details-menu.component.scss",
         "src/app/features/task-detail/components/detail-load-error/detail-load-error.component.scss",
+        "src/app/features/task-detail/components/decision-surface/decision-surface.component.scss",
         "src/app/features/task-detail/components/escalation-summary/_escalation-summary-actions.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
         "src/app/features/task-detail/components/prompt-pane/overview-failure/overview-failure.component.scss",
@@ -278,6 +280,15 @@
             "severity": "error"
           }
         ]
+      }
+    },
+    {
+      "comment": "Living styling-guide proof slice: raw hex colors are an error on the Task Detail decision actions.",
+      "files": [
+        "src/app/features/task-detail/components/escalation-summary/_escalation-summary-actions.scss"
+      ],
+      "rules": {
+        "color-no-hex": true
       }
     }
   ],

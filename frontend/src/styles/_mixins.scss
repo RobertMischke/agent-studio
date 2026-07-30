@@ -211,6 +211,23 @@
   box-shadow: none;
 }
 
+/* ---------------------------------------------------------------------
+ * type-label
+ *
+ * The only shared opt-in for uppercase UI typography. Use it for short
+ * eyebrows, compact section labels, and machine status codes. Buttons,
+ * titles, tabs, descriptions, badges, and ordinary state labels stay in
+ * sentence case.
+ * ------------------------------------------------------------------- */
+@mixin type-label {
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 /* Read-only guidance, inherited values, settled history. */
 @mixin deck-panel-muted {
   border-color: var(--studio-card-muted-border);

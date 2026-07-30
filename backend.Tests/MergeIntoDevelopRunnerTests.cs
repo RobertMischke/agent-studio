@@ -160,6 +160,177 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MainTarget_DocsOnlyDelivery_SkipsFullSuiteAndRebaseRequirement()
+    {
+        // AGT-2417 docs rule: a delivery whose whole diff is documentation
+        // integrates through the light gate - no full suite, no
+        // rebased-onto-main requirement - via a conflict-checked merge.
+        var repo = SeedRepo("runner-main-docs-only");
+        RunGit(repo, "checkout -q -b task/docs");
+        Directory.CreateDirectory(Path.Combine(repo, "docs"));
+        File.WriteAllText(Path.Combine(repo, "docs", "note.md"), "docs-only delivery");
+        Commit(repo, "docs: research note");
+        var taskSha = RunGit(repo, "rev-parse task/docs").Out.Trim();
+        // main advances AFTER the branch was cut, so the delivery is NOT
+        // rebased onto main - the strict path would refuse it.
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "mainline.txt"), "independent mainline work");
+        Commit(repo, "feat: mainline moved on");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile
+        {
+            TestCmds = [TagMarker("pre-main-suite-ran")],
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(new BuildTestGateRunner(
+                NullLogger<BuildTestGateRunner>.Instance)),
+            preMainTimeout: TimeSpan.FromSeconds(30));
+        var jobFolder = BeginRun(log, repo, jobId: "docs");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "docs",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.False(HasTag(repo, "pre-main-suite-ran"),
+            "a docs-only delivery must not run the full suite");
+        // The docs delivery landed on main as a merge commit.
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify main^2").Code);
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {taskSha} main").Code);
+
+        var evidencePath = Assert.Single(
+            Directory.GetFiles(Path.Combine(jobFolder, "post-steps"), "pre-main-test-gate-*.log"));
+        var evidence = File.ReadAllText(evidencePath);
+        Assert.Contains("verdict=Skipped", evidence);
+        Assert.Contains("Docs-only delivery", evidence);
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+    }
+
+    [Fact]
+    public async Task RunAsync_MainTarget_DocsOnlyClassification_FailsClosedForCodePaths()
+    {
+        // One code file in the diff keeps the delivery on the strict release
+        // path: not rebased onto main -> refused, nothing merged.
+        var repo = SeedRepo("runner-main-docs-and-code");
+        RunGit(repo, "checkout -q -b task/mixed");
+        Directory.CreateDirectory(Path.Combine(repo, "docs"));
+        File.WriteAllText(Path.Combine(repo, "docs", "note.md"), "docs part");
+        File.WriteAllText(Path.Combine(repo, "logic.cs"), "// code part");
+        Commit(repo, "feat: docs + code");
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "mainline.txt"), "independent mainline work");
+        Commit(repo, "feat: mainline moved on");
+        var mainSha = RunGit(repo, "rev-parse main").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile
+        {
+            TestCmds = [TagMarker("pre-main-suite-ran")],
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(new BuildTestGateRunner(
+                NullLogger<BuildTestGateRunner>.Instance)),
+            preMainTimeout: TimeSpan.FromSeconds(30));
+        var jobFolder = BeginRun(log, repo, jobId: "mixed");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "mixed",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("must be rebased onto", outcome.Error, StringComparison.Ordinal);
+        Assert.Equal(mainSha, RunGit(repo, "rev-parse main").Out.Trim());
+    }
+
+    [Fact]
+    public async Task RunAsync_MainTarget_FetchesImmutableRemoteDeliveryWithoutTaskBranch()
+    {
+        var (repo, _) = SeedRepoWithOrigin("runner-main-remote-ref");
+        const string deliveryRef = "agent-studio/results/run-remote-main/result";
+        RunGit(repo, $"checkout -q -b {deliveryRef} main");
+        File.WriteAllText(Path.Combine(repo, "remote-main.txt"), "remote release work");
+        Commit(repo, "feat: remote release work");
+        var resultSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, $"push -q origin {deliveryRef}:{deliveryRef}");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, $"branch -D {deliveryRef}");
+        RunGit(repo, $"update-ref -d refs/remotes/origin/{deliveryRef}");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "full suite passed",
+            true,
+            false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.Full,
+                FullSuiteRequired = true,
+                FullSuiteRan = true,
+            },
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "remote-main");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-REMOTE-MAIN",
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = resultSha,
+            AttemptChainId = "attempt-remote-main",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-remote-main",
+            FencingToken = 1,
+            ImmutableResultRef = deliveryRef,
+            IntegrationBranch = "refs/heads/main",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "remote-main",
+            jobFolder,
+            repo,
+            "develop",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(resultSha, outcome.MergedSha);
+        Assert.Equal(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.False(git.BranchExists(repo, WorktreeTaskLifecycle.BranchFor("remote-main")));
+        Assert.Equal(resultSha, gateRunner.Request!.ExpectedSha);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_RedFullSuiteLeavesMainUnchanged()
     {
         var repo = SeedRepo("runner-main-red");

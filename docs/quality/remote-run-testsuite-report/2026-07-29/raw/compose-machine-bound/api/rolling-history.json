@@ -1,0 +1,303 @@
+{
+  "task": {
+    "taskId": "tsk-autonomy-canary-machine-10m-3",
+    "projectId": "prj-autonomy-canary-machine-10m",
+    "taskKey": "AUTO-3",
+    "title": "Autonomy canary slot 3",
+    "state": "2-ready",
+    "version": 5,
+    "createdAt": "2026-07-29T02:10:13.1480586Z",
+    "updatedAt": "2026-07-29T02:20:51.6793501Z",
+    "body": "Infrastructure-only deterministic useful work."
+  },
+  "runs": [
+    {
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "status": "interrupted",
+      "runnerId": "agt2394-rts-canary-machine-10m-runner",
+      "fence": 1,
+      "createdAt": "2026-07-29T02:20:17.2940566Z",
+      "startedAt": "2026-07-29T02:20:17.2940566Z",
+      "finishedAt": "2026-07-29T02:20:51.6112492Z",
+      "resultSha": null,
+      "repositoryId": null
+    },
+    {
+      "runId": "run_3a9978749d3847a4bbef714990156ec8",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "status": "remote-harness-release",
+      "runnerId": "agt2394-rts-canary-machine-10m-runner",
+      "fence": 2,
+      "createdAt": "2026-07-29T02:20:51.6455376Z",
+      "startedAt": "2026-07-29T02:20:51.6455376Z",
+      "finishedAt": "2026-07-29T02:20:51.6793501Z",
+      "resultSha": null,
+      "repositoryId": null
+    }
+  ],
+  "events": [
+    {
+      "cursor": 130,
+      "eventId": "evt_95d4da1746fa4862e704bbc23f104ee8",
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "kind": "runner.useful-work",
+      "payloadJson": "{\"workUnit\":1,\"generationId\":\"run_5156027ddcd4478893512704a35a0aeb:1\",\"detail\":\"deterministic infrastructure work unit 1\"}",
+      "idempotencyKey": "run_5156027ddcd4478893512704a35a0aeb:1",
+      "fence": 1,
+      "occurredAt": "2026-07-29T02:20:26.268Z",
+      "sequence": 1
+    },
+    {
+      "cursor": 131,
+      "eventId": "evt_unavailable_run_5156027ddcd4478893512704a35a0aeb_6ef1d121066548b6846a7f5625e4f7c8",
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "kind": "lifecycle.task-server-unavailable",
+      "payloadJson": "{\"failure\":\"task-server-unavailable\",\"authority\":\"fail-closed\",\"replacementAdmission\":\"positive-no-overlap-evidence-required\"}",
+      "idempotencyKey": "task-server-unavailable:run_5156027ddcd4478893512704a35a0aeb:6ef1d121066548b6846a7f5625e4f7c8",
+      "fence": 1,
+      "occurredAt": "2026-07-29T02:20:39.981763Z",
+      "sequence": null
+    },
+    {
+      "cursor": 132,
+      "eventId": "evt_restart_run_5156027ddcd4478893512704a35a0aeb_6ef1d121066548b6846a7f5625e4f7c8",
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "kind": "lifecycle.process-unknown",
+      "payloadJson": "{\"failure\":\"task-server-unavailable\",\"authority\":\"fail-closed\",\"replacementAdmission\":\"positive-no-overlap-evidence-required\"}",
+      "idempotencyKey": "task-server-restart:run_5156027ddcd4478893512704a35a0aeb:6ef1d121066548b6846a7f5625e4f7c8",
+      "fence": 1,
+      "occurredAt": "2026-07-29T02:20:39.981763Z",
+      "sequence": null
+    },
+    {
+      "cursor": 133,
+      "eventId": "evt_1f6c6ff1e3f949e6a1d87ab60228c912",
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "kind": "lifecycle.runner-unavailable",
+      "payloadJson": "{\"runnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"instanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"ContainmentProof\":\"Compose removed container 213d708ee11ce6e6b2c2a7de3b416376ca8a40f9bb14b010e864f1fd0aeaefc4; replacement f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea has a distinct container identity\",\"observation\":\"The previous Runner generation is positively unavailable.\"}",
+      "idempotencyKey": "task-server:run_5156027ddcd4478893512704a35a0aeb:lifecycle.runner-unavailable",
+      "fence": 1,
+      "occurredAt": "2026-07-29T02:20:51.6126053Z",
+      "sequence": null
+    },
+    {
+      "cursor": 134,
+      "eventId": "evt_5824018b422040e0a8fefc9b10431202",
+      "runId": "run_5156027ddcd4478893512704a35a0aeb",
+      "taskId": "tsk-autonomy-canary-machine-10m-3",
+      "kind": "lifecycle.no-overlap-proven",
+      "payloadJson": "{\"ContainmentProof\":\"Compose removed container 213d708ee11ce6e6b2c2a7de3b416376ca8a40f9bb14b010e864f1fd0aeaefc4; replacement f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea has a distinct container identity\",\"Resolution\":\"requeue\",\"targetState\":\"2-ready\",\"previousState\":\"process-unknown\"}",
+      "idempotencyKey": "task-server:run_5156027ddcd4478893512704a35a0aeb:lifecycle.no-overlap-proven",
+      "fence": 1,
+      "occurredAt": "2026-07-29T02:20:51.6132124Z",
+      "sequence": null
+    }
+  ],
+  "artifacts": [],
+  "audit": [
+    {
+      "sequence": 22,
+      "occurredAt": "2026-07-29T02:10:13.1481462Z",
+      "actorId": "remote-compose-harness:canary-machine-10m",
+      "action": "task.created",
+      "targetType": "task",
+      "targetId": "tsk-autonomy-canary-machine-10m-3",
+      "detailJson": "{\"projectId\":\"prj-autonomy-canary-machine-10m\",\"taskKey\":\"AUTO-3\",\"State\":\"2-ready\"}"
+    },
+    {
+      "sequence": 161,
+      "occurredAt": "2026-07-29T02:20:17.2941559Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "run.claimed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-3\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":1}"
+    },
+    {
+      "sequence": 162,
+      "occurredAt": "2026-07-29T02:20:18.1232093Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:18.1231792Z\"}"
+    },
+    {
+      "sequence": 164,
+      "occurredAt": "2026-07-29T02:20:19.1491378Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:19.1490872Z\"}"
+    },
+    {
+      "sequence": 166,
+      "occurredAt": "2026-07-29T02:20:21.8673968Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:21.8673662Z\"}"
+    },
+    {
+      "sequence": 168,
+      "occurredAt": "2026-07-29T02:20:22.9027551Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:22.9027232Z\"}"
+    },
+    {
+      "sequence": 170,
+      "occurredAt": "2026-07-29T02:20:23.9274947Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:23.92746Z\"}"
+    },
+    {
+      "sequence": 172,
+      "occurredAt": "2026-07-29T02:20:24.9536071Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:24.9535678Z\"}"
+    },
+    {
+      "sequence": 174,
+      "occurredAt": "2026-07-29T02:20:25.9820182Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:25.9819501Z\"}"
+    },
+    {
+      "sequence": 176,
+      "occurredAt": "2026-07-29T02:20:27.0083987Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:27.0083354Z\"}"
+    },
+    {
+      "sequence": 177,
+      "occurredAt": "2026-07-29T02:20:27.0432016Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "event.ingested",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"EventId\":\"evt_95d4da1746fa4862e704bbc23f104ee8\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_5156027ddcd4478893512704a35a0aeb:1\",\"Fence\":1}"
+    },
+    {
+      "sequence": 179,
+      "occurredAt": "2026-07-29T02:20:29.0809226Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:29.0808561Z\"}"
+    },
+    {
+      "sequence": 181,
+      "occurredAt": "2026-07-29T02:20:31.1220901Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:31.1219853Z\"}"
+    },
+    {
+      "sequence": 183,
+      "occurredAt": "2026-07-29T02:20:32.1540021Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:32.1539622Z\"}"
+    },
+    {
+      "sequence": 186,
+      "occurredAt": "2026-07-29T02:20:34.5048929Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:34.5048539Z\"}"
+    },
+    {
+      "sequence": 188,
+      "occurredAt": "2026-07-29T02:20:35.5358685Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:35.5358114Z\"}"
+    },
+    {
+      "sequence": 190,
+      "occurredAt": "2026-07-29T02:20:36.5663584Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:36.5663225Z\"}"
+    },
+    {
+      "sequence": 192,
+      "occurredAt": "2026-07-29T02:20:37.6002373Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:37.6000918Z\"}"
+    },
+    {
+      "sequence": 194,
+      "occurredAt": "2026-07-29T02:20:38.63897Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.renewed",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:38.638929Z\"}"
+    },
+    {
+      "sequence": 203,
+      "occurredAt": "2026-07-29T02:20:51.6141428Z",
+      "actorId": "remote-compose-harness:canary-machine-10m",
+      "action": "attempt.unknown.resolved",
+      "targetType": "run",
+      "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+      "detailJson": "{\"ContainmentProof\":\"Compose removed container 213d708ee11ce6e6b2c2a7de3b416376ca8a40f9bb14b010e864f1fd0aeaefc4; replacement f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea has a distinct container identity\",\"Resolution\":\"requeue\",\"Fence\":1}"
+    },
+    {
+      "sequence": 204,
+      "occurredAt": "2026-07-29T02:20:51.6470502Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "run.claimed",
+      "targetType": "run",
+      "targetId": "run_3a9978749d3847a4bbef714990156ec8",
+      "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-3\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":2}"
+    },
+    {
+      "sequence": 205,
+      "occurredAt": "2026-07-29T02:20:51.6803851Z",
+      "actorId": "agt2394-rts-canary-machine-10m-runner",
+      "action": "lease.released",
+      "targetType": "run",
+      "targetId": "run_3a9978749d3847a4bbef714990156ec8",
+      "detailJson": "{\"Fence\":2,\"Outcome\":\"remote-harness-release\"}"
+    }
+  ],
+  "lastCursor": 134
+}

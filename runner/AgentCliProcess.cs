@@ -97,7 +97,7 @@ public sealed class AgentCliProcess
         RunSpecDto? runSpec,
         IReadOnlyList<string>? argsOverride = null)
     {
-        var configuredType = LooksLikeCodex(options.CliBin) ? CodexCli : ClaudeCli;
+        var configuredType = ConfiguredCliType(options);
         var requestedType = NormalizeCliType(runSpec?.CliType);
 
         var cliType = configuredType;
@@ -178,6 +178,9 @@ public sealed class AgentCliProcess
 
     public const string ClaudeCli = "claude";
     public const string CodexCli = "codex";
+
+    public static string ConfiguredCliType(RunnerOptions options)
+        => LooksLikeCodex(options.CliBin) ? CodexCli : ClaudeCli;
 
     /// <summary>
     /// Canonical CLI id, or null when the spec names something this runner has no

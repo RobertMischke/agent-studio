@@ -320,6 +320,98 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void TaskRefinements_MergeOperatorAndSystemSourcesChronologically()
+    {
+        var jobFolder = Path.Combine(Path.GetTempPath(), $"task-refinements-{Guid.NewGuid():N}");
+        var historyFolder = Path.Combine(jobFolder, "orchestrator-follow-up-history");
+        Directory.CreateDirectory(historyFolder);
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(historyFolder, "20260503-100700-000-review-gap.md"),
+                """
+                # Orchestrator steering step
+
+                ## Context
+                - timestamp: 2026-05-03T10:07:00.0000000Z
+                - cause: review-gap
+                - reason: Missing regression coverage
+
+                ## Steering prompt (verbatim)
+
+                Add the missing browser regression.
+                """);
+
+            var result = TaskRefinementTimelineBuilder.Build(
+                jobFolder,
+                [
+                    new RunRecord
+                    {
+                        Index = 2,
+                        Intent = "continue",
+                        StartedAt = T0.AddMinutes(5),
+                        Reason = "mode=steer",
+                        UserFollowup = "Keep the layout calm."
+                    },
+                    new RunRecord
+                    {
+                        Index = 3,
+                        Intent = "continue",
+                        StartedAt = T0.AddMinutes(10),
+                        UserFollowup = "Add the acceptance screenshot."
+                    }
+                ],
+                [
+                    new TaskPromptHistoryEntry
+                    {
+                        Index = 1,
+                        FileName = "prompt-1.md",
+                        Markdown = "Keep the layout calm.",
+                        WrittenAt = T0.AddMinutes(4)
+                    }
+                ]);
+
+            Assert.Equal(3, result.Count);
+            Assert.Equal("prompt-history", result[0].Source);
+            Assert.Equal("operator", result[0].Actor);
+            Assert.Equal("Task extended", result[0].Reason);
+            Assert.Equal("orchestrator-history", result[1].Source);
+            Assert.Equal("system", result[1].Actor);
+            Assert.Equal("Missing regression coverage", result[1].Reason);
+            Assert.Equal("Add the missing browser regression.", result[1].Markdown);
+            Assert.Equal("run-log", result[2].Source);
+            Assert.Equal(3, result[2].RunIndex);
+        }
+        finally
+        {
+            Directory.Delete(jobFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TaskRefinements_UsesRunReasonForSteerFollowup()
+    {
+        var result = TaskRefinementTimelineBuilder.Build(
+            Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}"),
+            [
+                new RunRecord
+                {
+                    Index = 2,
+                    Intent = "continue",
+                    StartedAt = T0,
+                    Reason = "mode=steer",
+                    UserFollowup = "Change direction."
+                }
+            ],
+            []);
+
+        var entry = Assert.Single(result);
+        Assert.Equal("operator", entry.Actor);
+        Assert.Equal("steer follow-up", entry.Reason);
+        Assert.Equal("Change direction.", entry.Markdown);
+    }
+
+    [Fact]
     public void ReviewAttemptCycles_ProjectCurrentEpochAndClosedOperatorHistory()
     {
         var firstRun = T0;

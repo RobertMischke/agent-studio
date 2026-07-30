@@ -2638,6 +2638,28 @@ public class GitService
     }
 
     /// <summary>
+    /// Changed paths of a delivery relative to its merge base with the target
+    /// (<c>git diff --name-only target...source</c>). Returns null when the
+    /// diff could not be computed (unknown refs, no merge base, git failure) -
+    /// callers must then take their conservative path and never assume a
+    /// docs-only delivery.
+    /// </summary>
+    public IReadOnlyList<string>? ChangedPathsAgainstMergeBase(string repoRoot, string targetRef, string sourceRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(targetRef) || !IsLikelyBranchName(sourceRef)) return null;
+
+        var (output, _, code) = RunGitArgs(
+            repoRoot, "diff", "--name-only", $"{targetRef}...{sourceRef}");
+        if (code != 0) return null;
+
+        return output.Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
     /// Fast-forwards the branch checked out at <paramref name="repoRoot"/> to
     /// <paramref name="sourceRef"/> (<c>git merge --ff-only &lt;sourceRef&gt;</c>).
     /// After a successful <see cref="RebaseOnto"/> the task branch is a linear
@@ -3007,6 +3029,27 @@ public class GitService
         if (code != 0) return null;
         var sha = output.Trim();
         return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    /// <summary>
+    /// Returns the first parent of a commit. A newly created integration merge
+    /// uses this as its exact rollback anchor when the configured branch had to
+    /// be recreated from <c>origin/&lt;branch&gt;</c> during the merge and therefore
+    /// had no local tip before the merge primitive ran.
+    /// </summary>
+    public string? GetFirstParent(string repoRoot, string commit)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!ReviewSubjectStore.IsValidResultSha(commit)) return null;
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            $"{commit}^1");
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return ReviewSubjectStore.IsValidResultSha(sha) ? sha : null;
     }
 
     /// <summary>
@@ -5192,52 +5235,6 @@ public class GitService
             if (parts.Length > 0) graph[parts[0]] = parts.Skip(1).ToArray();
         }
         return graph;
-    }
-
-    /// <summary>
-    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
-    /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
-    /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
-    /// repo (the grep pre-filters to only the curated integrator merges, so the
-    /// output is O(accepted tasks), not O(history)). This is the authoritative
-    /// integration signal that anchor-ancestry cannot see: the async curated
-    /// integrator rewrites commits, so a task's own SHAs are frequently NOT
-    /// ancestors of develop even though its work landed under a curated merge
-    /// commit. Read-only; empty on any failure. When several merges reference the
-    /// same key the newest (first in <c>git log</c> order) wins.
-    /// </summary>
-    public Dictionary<string, string> GetIntegrationMergeShaByKey(string repoRoot, string integrationRef)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return map;
-        if (!IsLikelyBranchName(integrationRef)) return map;
-
-        // Extended-regexp grep: match a subject that starts with merge( or
-        // merge-recut( followed by a task key. --grep is ORed across the two
-        // patterns; -E makes the alternation / groups work.
-        var (output, _, code) = RunGitArgs(
-            repoRoot,
-            "log",
-            "--no-color",
-            "-E",
-            "--grep=^merge(-recut)?\\(",
-            "--format=%H%x1f%s",
-            integrationRef);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return map;
-
-        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var sep = line.IndexOf('\x1f');
-            if (sep <= 0) continue;
-            var sha = line[..sep].Trim();
-            var subject = line[(sep + 1)..];
-            var key = ParseIntegrationMergeKey(subject);
-            if (sha.Length == 0 || key == null) continue;
-            // git log is newest-first; keep the first (newest) merge per key.
-            map.TryAdd(key, sha);
-        }
-        return map;
     }
 
     /// <summary>

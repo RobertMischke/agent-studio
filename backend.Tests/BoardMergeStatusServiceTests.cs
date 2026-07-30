@@ -54,9 +54,8 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         var commitOnly = Job("c", commits: new[] { Commit("oldc"), Commit("newc") });
         Assert.Equal("newc", BoardMergeStatusService.AnchorFor(commitOnly));
 
-        // A recorded merge fact WITHOUT any task commit does NOT manufacture an
-        // anchor: no task commit means no signal (the develop segment is still
-        // proven by the merge fact in BuildLookup, but only for an anchored card).
+        // A recorded merge fact without any task commit does not manufacture an
+        // anchor or prove integration.
         var mergeButNoCommit = Job("m", prov: Prov(merge: "mergesha"));
         Assert.Null(BoardMergeStatusService.AnchorFor(mergeButNoCommit));
 
@@ -123,6 +122,31 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_RecordedMergeAttemptWithoutCommitPresence_DoesNotLightDevelop()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/stale-attempt");
+        File.WriteAllText(Path.Combine(repo, "stale.txt"), "not merged");
+        Commit(repo, "feat: stale attempt");
+        var tip = RunGit(repo, "rev-parse task/stale-attempt").Out.Trim();
+        var rememberedMerge = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project);
+        var job = Job(
+            "stale-attempt",
+            project: project,
+            repo: repo,
+            commits: [Commit(tip)],
+            prov: Prov(branch: "task/stale-attempt", merge: rememberedMerge));
+
+        var signal = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.False(signal.InIntegration);
+        Assert.Null(signal.IntegrationSha);
+    }
+
+    [Fact]
     public void BuildLookup_MergedToDevelopNotMain_LightsDevelopOnly()
     {
         var repo = SeedDevelopMainRepo(out _, out _);
@@ -148,8 +172,9 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
 
         Assert.True(signal.InIntegration);
         Assert.False(signal.InRelease);
-        // The develop segment is proven by the recorded merge commit.
-        Assert.Equal(mergeSha[..7], signal.IntegrationSha);
+        // The attributed commit itself proves membership. The remembered merge
+        // commit is not a status input.
+        Assert.Equal(tip[..7], signal.IntegrationSha);
     }
 
     [Fact]

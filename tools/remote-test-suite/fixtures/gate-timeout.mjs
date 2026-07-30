@@ -23,4 +23,3 @@ await writeFile(marker, `${JSON.stringify({
 })}\n`);
 
 await new Promise(resolve => setTimeout(resolve, delayMs));
-

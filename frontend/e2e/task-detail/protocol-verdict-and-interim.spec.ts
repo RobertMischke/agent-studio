@@ -2,6 +2,8 @@ import { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/dev-backend';
 import { api, BACKEND } from '../helpers/api';
 import { createJob, listJobs } from '../helpers/jobs';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 interface WatchPathEntry { path: string; name: string }
 
@@ -162,7 +164,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     });
   });
 
-  test('watchdog failure is the only primary outcome across Result and Pipeline', async ({ page, devBackend }, testInfo) => {
+  test('pipeline failure is the only primary outcome across Result and Pipeline', async ({ page, devBackend }, testInfo) => {
     test.setTimeout(60_000);
     void devBackend;
     await page.setViewportSize({ width: 1600, height: 1100 });
@@ -181,13 +183,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     });
     const target = { id: 'QS-26-outcome-conflict', watchPath: '/e2e/outcome-conflict' };
     const detail = buildCompletedJobDetail(target.id, target.watchPath, '# Status\n- Result: Partial');
-    Object.assign(detail.info, {
-      outcomeIssue: {
-        kind: 'watchdog-timeout', label: 'Watchdog timeout', severity: 'High',
-        summary: 'The run will finalize as failed.', lastSeenAt: '2026-07-22T10:02:00Z',
-      },
-      orchestratorVerdict: 'accept',
-    });
+    Object.assign(detail.info, { orchestratorVerdict: 'escalate' });
     await installCompletedJobMocks(page, target, detail.statusMarkdown!, detail);
     await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/pipeline?**`, async (route) => {
       await route.fulfill({
@@ -201,24 +197,29 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
           execution: {
             pipelineId: 'standard', pipelineVersion: 1, jobId: target.id, project: 'fixture',
             startedAt: '2026-07-22T10:00:00Z', completedAt: '2026-07-22T10:02:00Z',
-            steps: [{ stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept' }],
+            steps: [{ stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'failed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'escalate', reason: 'environment preparation failed: not a git repository' }],
           },
           cost: null, config: {}, resultFiles: {}, onDemand: null,
         }),
+      });
+    });
+    await page.route('**/api/crash-recovery/pending', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pending: [] }),
       });
     });
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
 
     const banner = page.getByTestId('protocol-run-outcome');
-    await expect(banner.first()).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toHaveCount(1);
-    const primary = banner.getByRole('status');
-    await expect(primary).toHaveAttribute('role', 'status');
-    await expect(primary).toHaveAttribute('data-status', 'failed');
-    await expect(primary).toContainText('Watchdog timeout');
+    await expect(page.getByTestId('result-case-badge')).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toHaveCount(0);
     await expect(page.getByTestId('result-case-badge')).toHaveAttribute('data-outcome', 'failed');
-    await expect(page.getByTestId('result-case-badge')).toContainText('Watchdog timeout');
+    await expect(page.getByTestId('result-case-badge')).toContainText('Pipeline failure');
+    await expect(page.getByTestId('result-metric-verdict')).toHaveCount(0);
+    await expect(page.getByTestId('pane-protocol').getByText('Pipeline failure', { exact: true })).toHaveCount(1);
     await expect(page.getByTestId('overview-failure-reason')).toHaveCount(0);
     await expect(page.getByTestId('protocol-outcome-issue-chip')).toHaveCount(0);
     const decisionPhase = page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]');
@@ -227,13 +228,13 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     }
     const pipelineVerdict = page.getByTestId('overview-pipeline-step-decision');
     await expect(pipelineVerdict).toHaveAttribute('data-verdict', 'failed');
-    await expect(pipelineVerdict).toContainText('Watchdog timeout');
+    await expect(pipelineVerdict).toContainText('Pipeline failure');
 
-    await page.getByTestId('protocol-verdict-signals-toggle')
-      .evaluate((element: HTMLButtonElement) => element.click());
-    const why = page.getByTestId('protocol-verdict-signals-list');
-    await expect(why).toContainText('Review accepted');
-    await expect(why).toContainText('Partial');
+    const evidenceDir = resolve(process.env.JOB_RESULTS_DIR ?? join('..', 'results', 'AGT-2425'));
+    mkdirSync(evidenceDir, { recursive: true });
+    await page.getByTestId('pane-protocol').screenshot({
+      path: join(evidenceDir, 'card-detail-after-single-pipeline-failure.png'),
+    });
 
     await testInfo.attach('authoritative-run-outcome', {
       body: await page.screenshot({ fullPage: false }),

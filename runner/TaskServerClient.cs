@@ -29,6 +29,7 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease, string InstanceId)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
+    private bool _supportsCapabilityAdvertisement;
     private readonly bool _usesServiceCredential;
     private int? _centralHostMaxParallelism;
     private DateTime? _centralHostMaxParallelismAppliedAt;
@@ -63,7 +64,7 @@ public sealed class TaskServerClient : IDisposable
         // credential in the networked profile.
         SetClientId(options.ClientId ?? options.RunnerId);
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
-        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0");
+        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown");
     }
 
     /// <summary>
@@ -89,6 +90,7 @@ public sealed class TaskServerClient : IDisposable
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
         SetClientId(configuredClientId ?? runnerId);
         _useV1 = usesDurableTaskServer;
+        _supportsCapabilityAdvertisement = usesDurableTaskServer;
     }
 
     /// <summary>
@@ -99,7 +101,7 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task EnsureCompatibleAsync(CancellationToken ct)
     {
-        var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+        var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown";
         using var response = await _http.PostAsJsonAsync(
             "/api/v1/protocol/compatibility",
             new Contract.ProtocolCompatibilityRequest("runner", clientVersion, RunnerOptions.ProtocolVersion),
@@ -108,6 +110,7 @@ public sealed class TaskServerClient : IDisposable
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _useV1 = false;
+            _supportsCapabilityAdvertisement = false;
             return;
         }
 
@@ -117,7 +120,13 @@ public sealed class TaskServerClient : IDisposable
         var compatibility = JsonSerializer.Deserialize<Contract.ProtocolCompatibilityResponse>(detail, Json);
         if (compatibility?.Supported != true)
             throw new TaskServerException(426, compatibility?.Reason ?? "Task Server protocol is not compatible.");
-        _useV1 = true;
+        var serverCapabilities = compatibility.Server.Capabilities ?? [];
+        _supportsCapabilityAdvertisement =
+            serverCapabilities.Contains("capability-advertisement", StringComparer.Ordinal)
+            || serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
+        _useV1 = _options?.Role == "review"
+            ? serverCapabilities.Contains("review-plane", StringComparer.Ordinal)
+            : serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -129,7 +138,7 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
     {
-        if (_useV1)
+        if (_useV1 || _supportsCapabilityAdvertisement)
         {
             var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
             var runnerId = options.RunnerId;
@@ -157,7 +166,7 @@ public sealed class TaskServerClient : IDisposable
                 displayName,
                 options.Hostname,
                 RunnerInstanceId,
-                typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
+                typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown",
                 RunnerOptions.ProtocolVersion,
                 capabilities,
                 BootstrapMaxParallelism: options.HostMaxParallelism);
@@ -170,15 +179,15 @@ public sealed class TaskServerClient : IDisposable
                     ct);
                 AdoptRuntimeCapacity(registered?.RuntimeCapacity);
                 SetClientId(runnerId);
-                return runnerId;
+                if (_useV1)
+                    return runnerId;
             }
             catch (TaskServerException ex) when (ex.StatusCode == 409 && options.Role != "review")
             {
-                // Coding-fallback-guard: the monolith V1 mount admits only the
-                // review-executor identity ("runner-role-conflict"). A coding
-                // runner that negotiated V1 (the protocol endpoint exists in the
-                // monolith) must fall back to the legacy claim plane instead of
-                // crash-looping on the role conflict. Review runners keep V1.
+                // Compatibility guard for an older monolith that advertises the
+                // V1 review plane but still rejects coding registration. Current
+                // monoliths register coding identities for capability admission
+                // while keeping their claims on the legacy card-selection route.
                 _useV1 = false;
                 // fall through to the legacy registration path below.
             }
@@ -332,6 +341,10 @@ public sealed class TaskServerClient : IDisposable
                 EffectiveMaxParallelismAppliedAt =
                     req.EffectiveMaxParallelismAppliedAt ?? _centralHostMaxParallelismAppliedAt,
                 BootstrapMaxParallelism = req.BootstrapMaxParallelism ?? _options?.HostMaxParallelism,
+                CapabilityInstanceId = RunnerInstanceId,
+                RequiredCapabilities = _options is null
+                    ? req.RequiredCapabilities
+                    : RunnerCapabilityProbe.CodingHostRequirements(_options),
             };
             var legacy = await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>(
                              "/api/runner/claim", stamped, ct)
@@ -558,7 +571,7 @@ public sealed class TaskServerClient : IDisposable
         long generation,
         CancellationToken ct)
     {
-        if (!_useV1) return;
+        if (!_useV1 && !_supportsCapabilityAdvertisement) return;
         var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
         var request = new Contract.CapabilityAdvertisementRequest(
             options.RunnerId,
@@ -586,7 +599,7 @@ public sealed class TaskServerClient : IDisposable
         long? fence,
         CancellationToken ct)
     {
-        if (!_useV1) return;
+        if (!_useV1 && !_supportsCapabilityAdvertisement) return;
         var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
         var request = new Contract.CapabilityFailureRequest(
             options.RunnerId,
@@ -646,6 +659,40 @@ public sealed class TaskServerClient : IDisposable
             FromContract(response?.ReconciliationActions));
     }
 
+    public async Task<Contract.LeaseDto> ReconcileOutboxAuthorityAsync(
+        RunOutboxAuthority authority,
+        int requestedTtlSeconds,
+        CancellationToken ct)
+    {
+        if (!_useV1)
+            throw new InvalidOperationException(
+                "Durable outbox reconciliation requires the versioned Task Server.");
+        var response = await PostJsonAsync<Contract.LeaseRenewRequest, Contract.LeaseResponse>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/renew",
+            new Contract.LeaseRenewRequest(
+                authority.RunnerId,
+                authority.InstanceId,
+                authority.LeaseId,
+                authority.Fence,
+                requestedTtlSeconds),
+            ct);
+        var lease = response?.Lease
+                    ?? throw new TaskServerException(
+                        409,
+                        response?.Message
+                        ?? "Task Server did not confirm durable outbox authority.");
+        if (!string.Equals(lease.RunId, authority.RunId, StringComparison.Ordinal)
+            || !string.Equals(lease.RunnerId, authority.RunnerId, StringComparison.Ordinal)
+            || !string.Equals(lease.InstanceId, authority.InstanceId, StringComparison.Ordinal)
+            || !string.Equals(lease.LeaseId, authority.LeaseId, StringComparison.Ordinal)
+            || lease.Fence != authority.Fence)
+        {
+            throw new InvalidDataException(
+                $"Task Server renewed mismatched outbox authority for run '{authority.RunId}'.");
+        }
+        return lease;
+    }
+
     private static Contract.RunnerProcessInventory? ToContract(RunnerProcessInventory? inventory)
         => inventory is null
             ? null
@@ -692,7 +739,12 @@ public sealed class TaskServerClient : IDisposable
         var authority = cached;
         var response = await PostJsonAsync<Contract.LeaseReleaseRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/release",
-            new Contract.LeaseReleaseRequest(req.RunnerId, authority.InstanceId, req.LeaseId, req.FencingToken, "runner-process-missing"),
+            new Contract.LeaseReleaseRequest(
+                req.RunnerId,
+                authority.InstanceId,
+                req.LeaseId,
+                req.FencingToken,
+                req.Outcome ?? "runner-process-missing"),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);

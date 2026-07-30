@@ -210,6 +210,30 @@ public sealed class HumanReviewEscalationTests : IDisposable
         Assert.Contains("clone failed: 403 agent-orc/website", status);
     }
 
+    [Fact]
+    public async Task EscalateAsync_RemoteEnvironmentGap_WritesResultScaffold()
+    {
+        const string jobId = "environment-gap";
+        const string reason = "environment preparation failed: not a git repository";
+        WriteJob(TaskStates.Progress, jobId);
+
+        var outcome = await BuildFunnel().EscalateAsync(
+            jobId,
+            _watchPath,
+            ProjectName,
+            HumanReviewEscalationCategories.RemoteClaimEnvironment,
+            reason);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var parked = Path.Combine(_watchPath, TaskStates.Escalated, jobId);
+        var statusPath = Path.Combine(parked, "status.md");
+        Assert.True(File.Exists(statusPath), "the escalation path must always carry a Result scaffold");
+        var status = File.ReadAllText(statusPath);
+        Assert.Contains("- Result: Escalated to human decision", status);
+        Assert.Contains(HumanReviewEscalationCategories.RemoteClaimEnvironment, status);
+        Assert.Contains(reason, status);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);

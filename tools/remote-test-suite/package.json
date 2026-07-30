@@ -3,6 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "report": "node report.mjs",
+    "report:fixture": "node report.mjs --input fixtures/report/validated-runs.json --output ../../docs/quality/remote-run-testsuite-report/index.html",
+    "publish:acceptance-canary": "node publish-acceptance-canary.mjs",
+    "test": "node --test test/*.test.mjs",
+    "compose:inspect": "node compose-harness.mjs inspect",
+    "compose:run": "node compose-harness.mjs run",
+    "parallel:inspect": "node parallel-harness.mjs --dry-run --run-id inspect",
+    "parallel:run": "node parallel-harness.mjs",
+    "test:compose": "REMOTE_TEST_COMPOSE_INTEGRATION=1 node --test test/compose-harness.integration.test.mjs",
+    "test:machine-bound:autonomy": "REMOTE_TEST_COMPOSE_MACHINE_BOUND=1 node --test test/compose-harness.integration.test.mjs"
   }
 }

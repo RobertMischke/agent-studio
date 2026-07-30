@@ -1,0 +1,5 @@
+{"phase":"claim","status":"pass","queueMs":420,"executionMs":180}
+{"phase":"run","status":"pass","queueMs":0,"executionMs":9820}
+{"phase":"gate","status":"pass","queueMs":610,"executionMs":2360}
+{"phase":"review","status":"pass","queueMs":840,"executionMs":3190}
+{"phase":"integration","status":"pass","queueMs":0,"executionMs":1000}

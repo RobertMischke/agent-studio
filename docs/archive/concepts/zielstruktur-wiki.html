@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zielstruktur des Agent-Studio-Wikis — Konzept</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --accent: #2a78d6;       /* Ziel-Struktur / kuratiert */
+    --theme-a: #eb6834;      /* Themenfaden: Remote/Runner */
+    --theme-b: #4a3aa7;      /* Themenfaden: Mockups/Design/Frontend */
+    --theme-c: #b58500;      /* Themenfaden: generierte Masse */
+    --ok: #008300;           /* Status gut (immer mit Icon+Text) */
+    --bad: #c93736;          /* Status Problem (immer mit Icon+Text) */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --accent: #3987e5;
+      --theme-a: #e5723f;
+      --theme-b: #9085e9;
+      --theme-c: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--accent); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; fill: none; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .badge-acc  { fill: var(--accent-soft); stroke: var(--accent); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .t-acc  { fill: var(--accent); font: 600 12px system-ui, sans-serif; }
+  .chip-a { fill: var(--theme-a); }
+  .chip-b { fill: var(--theme-b); }
+  .chip-c { fill: var(--theme-c); }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept · Agent-Studio-Wiki</p>
+  <h1>Zielstruktur des Wikis</h1>
+  <div class="box">
+    <p><b>Archived on 2026-07-29.</b> This proposal is retained as decision
+    history. Use the
+    <a href="../../system/contracts/wiki-tree.md">Wiki tree contract</a> for
+    current behavior and the
+    <a href="../../operations/doku-inventur-2026-07/README.md">July
+    inventory</a> for the next structure decision.</p>
+  </div>
+  <p class="lede">Die heutige Struktur ist zu verteilt: 21 Top-Ordner, dieselben Themen an drei bis vier
+  Orten, generierte Masse zwischen Hand-Kuriertem. Dieses Konzept schlägt einen konsolidierten Schnitt
+  aus acht Wissens-Ordnern vor — sortiert nach Leser-Fragen statt nach Entstehungsart.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 18.07.2026</span>
+    <span><b>Anlass:</b> Roberts Auftrag — „Die jetzige Struktur ist zu verteilt. Ich hätte gerne ein Konzept.“</span>
+    <span><b>Grundlage:</b> <code>docs/start/konsolidierung-analyse-2026-07-18.md</code> (474 Seiten inventarisiert)</span>
+  </div>
+  <div class="box" style="border-left:4px solid var(--accent);background:var(--accent-soft);margin-top:16px">
+    <p style="margin:0"><b>Nachtrag (angenommen &amp; umgesetzt).</b> Dieses Konzept wurde beschlossen und
+    ausgeführt. Zwei Punkte gingen dabei über den ursprünglichen Vorschlag hinaus: die unten noch als
+    <b>Dauer-Ausnahmen</b> geführten Ordner <code>in-app-help/</code> und <code>system/schemas/</code>
+    wurden <b>beide unter <code>docs/app/</code> verschoben</b> (<code>docs/app/help/</code> bzw.
+    <code>docs/app/schemas/</code>) — der Backend-Serving-Pfad wurde mit umgestellt. Damit sind die unten
+    stehende „Ausnahme“-Kennzeichnung und die offene <b>Frage&nbsp;4</b> gegenstandslos. Der übrige Text
+    bleibt als Planungsstand vom 18.07. erhalten.</p>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">TL;DR — der Schnitt in fünf Sätzen</a></li>
+    <li><a href="#diagnose">§1 Problemdiagnose kompakt</a></li>
+    <li><a href="#prinzipien">§2 Leitprinzipien</a></li>
+    <li><a href="#ziel">§3 Ziel-Top-Struktur (8 Ordner)</a></li>
+    <li><a href="#mapping">§4 Mapping alt → neu (alle Top-Ordner)</a></li>
+    <li><a href="#themenfluss">§5 Themen-Fluss: wo lebt Remote/Runner-Wissen?</a></li>
+    <li><a href="#migration">§6 Migrationsplan in drei Phasen</a></li>
+    <li><a href="#risiken">§7 Risiken &amp; Ausnahmen</a></li>
+    <li><a href="#entscheidung">§8 Entscheidungsblock für Robert</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>TL;DR — der Schnitt in fünf Sätzen</h4>
+  <ul>
+    <li><b>Acht Wissens-Ordner statt 21:</b> <code>start/</code>, <code>konzepte/</code>, <code>system/</code>,
+        <code>betrieb/</code>, <code>qualitaet/</code>, <code>werkbaenke/</code>, <code>maschine/</code>,
+        <code>archiv/</code> — jeder beantwortet genau eine Leser-Frage.</li>
+    <li><b>Generiert und kuratiert werden strikt getrennt:</b> die ~290 generierten/uniformen Seiten
+        (common-problems, proposals, workstream, learnings) ziehen unter <code>maschine/</code>; die
+        ~180 Hand-Seiten bleiben die sichtbare Kurationsmasse.</li>
+    <li><b>Historisches wird archiviert, nicht gelöscht:</b> research-Postmortems, Mai-Mockup-Familien und
+        überholte Incident-Analysen ziehen mit Herkunfts-Unterordnern nach <code>archiv/</code>.</li>
+    <li><b>Ein kanonischer Ort pro Thema:</b> Remote/Runner-Wissen z. B. verteilt sich heute über
+        mindestens vier Ordner — nachher hat jede Frage dazu genau eine Adresse (§5).</li>
+    <li><b>Drei Phasen, kein Big Bang:</b> Banner + Sidecars (läuft bereits), dann Moves per
+        <code>git mv</code> mit Referenz-Umschreibung in Wellen, dann Nachlauf (home.json, .drift, Links).
+        Zwei Ausnahmen bleiben stehen, bis Code angepasst ist: <code>in-app-help/</code> (App-served)
+        und ggf. <code>quality/</code> (prompt-injected).</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="diagnose"><span class="no">§1</span>Problemdiagnose kompakt</h2>
+<p class="dim">Zahlen aus der Konsolidierungsanalyse vom 18.07. (jede der 474 Seiten mindestens per
+Digest erfasst, Änderungsstände aus <code>git log</code>).</p>
+
+<ul>
+  <li><b>21 Top-Ordner, 474 Seiten</b> (412 md, 62 html; nach der <code>wiki/</code>-Auflösung vom 18.07.
+      real 22 Verzeichnisse inkl. <code>assets/</code>). Kein Ordner sagt dem Leser, <i>welche Frage</i> er
+      beantwortet — die Ordner spiegeln Entstehungsart (concepts, research, reports, proposals …), nicht Nutzung.</li>
+  <li><b>Themen sind über 3–4 Orte verstreut.</b> Remote/Runner-Stabilität liegt in vier Generationen über
+      <code>research/</code> (Mai-Postmortems), <code>concepts/</code> (Juni-Incident-HTMLs, teils ohne
+      Überholt-Banner), <code>operations/</code> (Runbooks) und <code>workbenches/</code> (kanonische
+      Härtungs-Workbench). Mockups, Design-Regeln und Frontend-Guides verteilen sich auf
+      <code>mockups/</code>, <code>design/</code>, <code>frontend/</code>, <code>quality/</code> und
+      <code>concepts/mockups/</code>.</li>
+  <li><b>Generierte Masse vermischt sich mit Hand-Kuriertem:</b> ~290 der 474 Seiten sind
+      generiert/uniform (110 common-problems-Dateien, 66 Survey-Proposals mit 33 inhaltsgleichen
+      Duplikat-Paaren, 13 Lane-Guides, 11 Visual-Feature-Seiten, 6 Workstream-Landing-Pages). Die
+      eigentliche Kurationsmasse — ~180 Hand-Seiten — ist dazwischen schwer zu finden.</li>
+  <li><b>Selbstreferenz-Wildwuchs:</b> 10+ Seiten „Wiki über das Wiki“ (Pulse, Grading, Classification,
+      Editing-Flow, wiki-tree, meta/*) ohne gemeinsame Einstiegsseite; <code>meta/documents/</code> ist
+      Alt-Evidenz von vor der Sidecar-Migration.</li>
+  <li><b>Wissen liegt außerhalb:</b> Vollzugsprotokolle und Handoffs (Salvage 17.07., Org-Migration,
+      Pipeline-UI) leben nur im Devspace und sind aus dem Wiki nicht erreichbar.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 1040 480" role="img" aria-label="Vorher: 22 Top-Ordner als Raster, drei Themenfäden verteilen sich quer über viele Ordner">
+  <text class="s-label" x="20" y="30">Heute: 21 Top-Ordner (real 22 inkl. assets) — drei Themenfäden als Farbchips markiert</text>
+
+  <!-- Reihe 1 -->
+  <g>
+    <rect class="s-node" x="20" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="32" y="72">architecture/</text><text class="s-tiny" x="32" y="90">24 S. · ADRs, Bus</text>
+    <rect class="s-node" x="190" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="202" y="72">assets/</text><text class="s-tiny" x="202" y="90">Bilder</text>
+    <rect class="s-node" x="360" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="372" y="72">cli/</text><text class="s-tiny" x="372" y="90">10 S. · Contracts, Skills</text>
+    <rect class="s-node" x="530" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="542" y="72">common-problems/</text><text class="s-tiny" x="542" y="90">110 Dateien, generiert</text>
+    <rect class="chip-a" x="542" y="97" width="22" height="5" rx="2"/><rect class="chip-c" x="570" y="97" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="700" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="712" y="72">concepts/</text><text class="s-tiny" x="712" y="90">33 S. + Mockups</text>
+    <rect class="chip-a" x="712" y="97" width="22" height="5" rx="2"/><rect class="chip-b" x="740" y="97" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="870" y="50" width="155" height="62" rx="8"/>
+    <text class="s-label" x="882" y="72">contracts/</text><text class="s-tiny" x="882" y="90">10 S. · kanonisch</text>
+  </g>
+
+  <!-- Reihe 2 -->
+  <g>
+    <rect class="s-node" x="20" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="32" y="152">design/</text><text class="s-tiny" x="32" y="170">5 S. · Hard Rules</text>
+    <rect class="chip-b" x="32" y="177" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="190" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="202" y="152">domains/</text><text class="s-tiny" x="202" y="170">9 S. · System of record</text>
+    <rect class="chip-a" x="202" y="177" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="360" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="372" y="152" style="font-size:11.5px">engineering-workstream/</text><text class="s-tiny" x="372" y="170">6 S., generiert</text>
+    <rect class="chip-c" x="372" y="177" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="530" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="542" y="152">frontend/</text><text class="s-tiny" x="542" y="170">27 S. · Design-System</text>
+    <rect class="chip-b" x="542" y="177" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="700" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="712" y="152">in-app-help/</text><text class="s-tiny" x="712" y="170">14 S. · App liest sie!</text>
+    <rect class="s-node" x="870" y="130" width="155" height="62" rx="8"/>
+    <text class="s-label" x="882" y="152">learnings/</text><text class="s-tiny" x="882" y="170">leer (Step nie gelaufen)</text>
+    <rect class="chip-c" x="882" y="177" width="22" height="5" rx="2"/>
+  </g>
+
+  <!-- Reihe 3 -->
+  <g>
+    <rect class="s-node" x="20" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="32" y="232">meta/</text><text class="s-tiny" x="32" y="250">5 S. + Alt-Evidenz</text>
+    <rect class="chip-c" x="32" y="257" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="190" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="202" y="232">mockups/</text><text class="s-tiny" x="202" y="250">42 S. · 11 Familien</text>
+    <rect class="chip-a" x="202" y="257" width="22" height="5" rx="2"/><rect class="chip-b" x="230" y="257" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="360" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="372" y="232">operations/</text><text class="s-tiny" x="372" y="250">21 S. · Runbooks</text>
+    <rect class="chip-a" x="372" y="257" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="530" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="542" y="232">product/</text><text class="s-tiny" x="542" y="250">10 S. · Produktkonzepte</text>
+    <rect class="s-node" x="700" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="712" y="232">proposals/</text><text class="s-tiny" x="712" y="250">67 S. · 33 Duplikat-Paare</text>
+    <rect class="chip-c" x="712" y="257" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="870" y="210" width="155" height="62" rx="8"/>
+    <text class="s-label" x="882" y="232">quality/</text><text class="s-tiny" x="882" y="250">4 S. · prompt-injected</text>
+    <rect class="chip-b" x="882" y="257" width="22" height="5" rx="2"/>
+  </g>
+
+  <!-- Reihe 4 -->
+  <g>
+    <rect class="s-node" x="20" y="290" width="155" height="62" rx="8"/>
+    <text class="s-label" x="32" y="312">reports/</text><text class="s-tiny" x="32" y="330">20 S. · Verträge + Alt-HTML</text>
+    <rect class="s-node" x="190" y="290" width="155" height="62" rx="8"/>
+    <text class="s-label" x="202" y="312">research/</text><text class="s-tiny" x="202" y="330">23 S. · datiert, Mai–Juli</text>
+    <rect class="chip-a" x="202" y="337" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="360" y="290" width="155" height="62" rx="8"/>
+    <text class="s-label" x="372" y="312">schemas/</text><text class="s-tiny" x="372" y="330">1 S. + 12 JSON</text>
+    <rect class="s-node" x="530" y="290" width="155" height="62" rx="8"/>
+    <text class="s-label" x="542" y="312">workbenches/</text><text class="s-tiny" x="542" y="330">Härtung (kanonisch, de)</text>
+    <rect class="chip-a" x="542" y="337" width="22" height="5" rx="2"/>
+    <rect class="s-node" x="700" y="290" width="155" height="62" rx="8"/>
+    <text class="s-label" x="712" y="312">docs/ (Root)</text><text class="s-tiny" x="712" y="330">README, README-aus-wiki</text>
+    <rect class="s-node2" x="870" y="290" width="155" height="62" rx="8"/>
+    <text class="s-sub" x="882" y="312">+ Sidecars/.drift</text><text class="s-tiny" x="882" y="330">49 meta.json, 17 report.html</text>
+  </g>
+
+  <!-- Befund -->
+  <rect class="badge-bad" x="20" y="380" width="1005" height="76" rx="10" stroke-width="1.5"/>
+  <text class="t-bad" x="40" y="408">✗ Befund: kein Ordner beantwortet eine Leser-Frage.</text>
+  <text class="s-sub" x="40" y="430">Der Remote-Faden (orange) läuft durch 6 Ordner, der Design-Faden (violett) durch 5, die generierte Masse (gelb) liegt in 5 Ordnern</text>
+  <text class="s-sub" x="40" y="448">zwischen Hand-Kuriertem. Wer „Wie härten wir Remote?“ fragt, muss vier Generationen an vier Orten kennen.</text>
+</svg>
+<figcaption><b>Abb. 1 — Vorher-Baum.</b> Das heutige Raster mit den drei größten Themenfäden als
+Farbchips. Seitenzahlen aus der Analyse (S. = Seiten ohne Sidecars).</figcaption>
+</figure>
+<div class="legend">
+  <span style="--c: var(--theme-a)">Remote/Runner/Härtung</span>
+  <span style="--c: var(--theme-b)">Mockups/Design/Frontend</span>
+  <span style="--c: var(--theme-c)">generierte Masse</span>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="prinzipien"><span class="no">§2</span>Leitprinzipien</h2>
+<p class="dim">Fünf Regeln, aus denen der Schnitt in §3 mechanisch folgt. Jede spätere
+Einsortier-Entscheidung soll sich auf genau eine dieser Regeln berufen können.</p>
+
+<table>
+  <thead><tr><th>#</th><th>Prinzip</th><th>Konsequenz</th></tr></thead>
+  <tbody>
+    <tr><td><b>P1</b></td><td><b>Ordner nach Leser-Fragen, nicht nach Entstehungsart.</b></td>
+        <td>Wenige Top-Ordner, jeder mit einer klaren Frage im Titel („Wie betreibe ich es?“ statt
+        „das war mal Research“). Entstehungsart (Analyse, Mockup, Report) wird Metadatum, nicht Ort.</td></tr>
+    <tr><td><b>P2</b></td><td><b>Generiert und kuratiert strikt trennen.</b></td>
+        <td>Alles, was ein Step/Hub/Generator schreibt, lebt unter einem Dach (<code>maschine/</code>).
+        Hand-Seiten konkurrieren nie wieder mit 110 uniformen Dateien um Aufmerksamkeit.</td></tr>
+    <tr><td><b>P3</b></td><td><b>Historisches archivieren, nicht löschen.</b></td>
+        <td>Überholte Generationen (Mai-Postmortems, Juni-Incidents, Alt-Mockups) ziehen nach
+        <code>archiv/</code> mit Herkunfts-Unterordner — Forensik und Design-Geschichte bleiben zitierbar.</td></tr>
+    <tr><td><b>P4</b></td><td><b>Ein kanonischer Ort pro Thema.</b></td>
+        <td>Pro Thema genau eine Pflegestelle (z. B. Vorfalls-Chronik nur in der Härtungs-Workbench);
+        alle anderen Seiten verweisen oder tragen Überholt-Banner. Kein Duplizieren von Spec-Text.</td></tr>
+    <tr><td><b>P5</b></td><td><b>Navigation ist eine eigene Ebene — sie existiert bereits.</b></td>
+        <td>Klassifikations-Sidecars (<code>*.meta.json</code>) und die kuratierte Startseite
+        (<code>home.json</code>) ordnen Status/Richtung pro Seite. Die Ordnerstruktur muss deshalb nur
+        noch grob stimmen — Feinheit übernimmt die Sidecar-Ebene, nicht ein 22. Ordner.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="ziel"><span class="no">§3</span>Ziel-Top-Struktur: 8 Wissens-Ordner</h2>
+<p>Der Schnitt folgt aus den Prinzipien und den realen Mengen der Analyse: vier Ordner für lebendes
+Wissen (Frage-orientiert), einer für laufende Arbeit, einer für Maschinen-Ausstoß, einer für
+Geschichte, einer als Einstieg. Dazu eine kleine technische Ebene, die kein Wissens-Ordner ist.</p>
+
+<figure>
+<svg viewBox="0 0 1040 470" role="img" aria-label="Nachher: acht Zielordner in zwei Reihen plus technische Ebene">
+  <text class="s-label" x="20" y="30">Nachher: 8 Wissens-Ordner, jeder beantwortet eine Frage</text>
+
+  <!-- Reihe 1 -->
+  <g>
+    <rect class="badge-acc" x="20" y="50" width="240" height="150" rx="10" stroke-width="1.5"/>
+    <text class="s-label" x="38" y="76">start/</text>
+    <text class="t-acc" x="38" y="96">„Wo fange ich an?“</text>
+    <text class="s-sub" x="38" y="118">Index + kuratierte Startseite</text>
+    <text class="s-sub" x="38" y="136">Einstiege pro Rolle/Thema</text>
+    <text class="s-sub" x="38" y="154">Wiki-System-Übersicht (Pulse,</text>
+    <text class="s-sub" x="38" y="172">Grading, Klassifikation, Editing)</text>
+  </g>
+  <g>
+    <rect class="s-node" x="280" y="50" width="240" height="150" rx="10"/>
+    <text class="s-label" x="298" y="76">konzepte/</text>
+    <text class="t-acc" x="298" y="96">„Wohin wollen wir?“</text>
+    <text class="s-sub" x="298" y="118">lebende Zielbilder + Analysen</text>
+    <text class="s-sub" x="298" y="136">(distributed-…, release-semantics,</text>
+    <text class="s-sub" x="298" y="154">multichat, drive-to-conclusion …)</text>
+    <text class="s-sub" x="298" y="172">+ Produktkonzepte (ex product/)</text>
+  </g>
+  <g>
+    <rect class="s-node" x="540" y="50" width="240" height="150" rx="10"/>
+    <text class="s-label" x="558" y="76">system/</text>
+    <text class="t-acc" x="558" y="96">„Wie funktioniert es heute?“</text>
+    <text class="s-sub" x="558" y="118">domains/ (System of record)</text>
+    <text class="s-sub" x="558" y="136">contracts/ + schemas/ + reports-</text>
+    <text class="s-sub" x="558" y="154">Verträge · architecture/ + ADRs</text>
+    <text class="s-sub" x="558" y="172">cli/ (Contracts, Skills)</text>
+  </g>
+  <g>
+    <rect class="s-node" x="800" y="50" width="220" height="150" rx="10"/>
+    <text class="s-label" x="818" y="76">betrieb/</text>
+    <text class="t-acc" x="818" y="96">„Wie betreibe ich es?“</text>
+    <text class="s-sub" x="818" y="118">setup/ (getting-started,</text>
+    <text class="s-sub" x="818" y="136">linux-runner-host) · git-Doktrin</text>
+    <text class="s-sub" x="818" y="154">remote-hosts · security · testing</text>
+    <text class="s-tiny" x="818" y="176">(+ in-app-help logisch, s. Ausnahme)</text>
+  </g>
+
+  <!-- Reihe 2 -->
+  <g>
+    <rect class="s-node" x="20" y="220" width="240" height="150" rx="10"/>
+    <text class="s-label" x="38" y="246">qualitaet/</text>
+    <text class="t-acc" x="38" y="266">„Wie bauen wir gut?“</text>
+    <text class="s-sub" x="38" y="288">Engineering-Guides (ex quality/)</text>
+    <text class="s-sub" x="38" y="306">Design Hard Rules (ex design/)</text>
+    <text class="s-sub" x="38" y="324">Design-System + Style-Guide</text>
+    <text class="s-sub" x="38" y="342">(ex frontend/)</text>
+  </g>
+  <g>
+    <rect class="s-node" x="280" y="220" width="240" height="150" rx="10"/>
+    <text class="s-label" x="298" y="246">werkbaenke/</text>
+    <text class="t-acc" x="298" y="266">„Woran arbeiten wir gerade?“</text>
+    <text class="s-sub" x="298" y="288">Konzept-Workbenches (Härtung,</text>
+    <text class="s-sub" x="298" y="306">architecture-quality-layer)</text>
+    <text class="s-sub" x="298" y="324">aktive Mockup-Familien (project-</text>
+    <text class="s-sub" x="298" y="342">urls, dashboard, pipeline-UI)</text>
+  </g>
+  <g>
+    <rect class="badge-warn" x="540" y="220" width="240" height="150" rx="10" stroke-width="1.5"/>
+    <text class="s-label" x="558" y="246">maschine/</text>
+    <text class="t-warn" x="558" y="266">„Was hat das System erzeugt?“</text>
+    <text class="s-sub" x="558" y="288">common-problems (110 Dateien)</text>
+    <text class="s-sub" x="558" y="306">proposals (Survey-Generationen)</text>
+    <text class="s-sub" x="558" y="324">engineering-workstream · learnings</text>
+    <text class="s-sub" x="558" y="342">meta-Reports/Usage</text>
+  </g>
+  <g>
+    <rect class="s-node2" x="800" y="220" width="220" height="150" rx="10"/>
+    <text class="s-label" x="818" y="246">archiv/</text>
+    <text class="t-acc" x="818" y="266">„Wie kam es dazu?“</text>
+    <text class="s-sub" x="818" y="288">research/ (datierte Analysen)</text>
+    <text class="s-sub" x="818" y="306">überholte Incident-HTMLs</text>
+    <text class="s-sub" x="818" y="324">Mai-Mockup-Familien</text>
+    <text class="s-sub" x="818" y="342">Alt-Reports, Alt-Evidenz</text>
+  </g>
+
+  <!-- technische Ebene -->
+  <rect class="s-node" x="20" y="395" width="1000" height="52" rx="10"/>
+  <text class="s-label" x="40" y="418">Technische Ebene (keine Wissens-Ordner)</text>
+  <text class="s-sub" x="40" y="438">assets/ · in-app-help/ (App-served — bleibt bis Code-Anpassung am alten Pfad) · *.meta.json-Sidecars und .drift/ wandern immer mit ihrer Quelldatei</text>
+</svg>
+<figcaption><b>Abb. 2 — Nachher-Baum.</b> Acht Ordner, jeder mit Frage. <code>start/</code> ist die
+kuratierte Tür (blau), <code>maschine/</code> die einzige Zone für Generator-Ausstoß (gelb),
+<code>archiv/</code> bewusst gedimmt. Die Sidecar-/Startseiten-Ebene (P5) liegt quer darüber und ist
+bereits im Bau.</figcaption>
+</figure>
+
+<h3>Begründung des Schnitts</h3>
+<ul>
+  <li><b>Warum 8 und nicht 5?</b> <code>qualitaet/</code>, <code>werkbaenke/</code> und
+      <code>maschine/</code> könnten theoretisch in <code>system/</code> bzw. <code>konzepte/</code>
+      aufgehen — aber die Analyse zeigt drei klar getrennte Nutzungsmuster: Guides werden beim Bauen
+      nachgeschlagen (teils prompt-injected), Werkbänke werden aktiv beschrieben, Maschinen-Ausstoß wird
+      nur konsumiert/ausgedünnt. Zusammenlegen würde P1 und P2 verletzen.</li>
+  <li><b>Warum <code>system/</code> als Sammelort für domains + contracts + schemas + architecture?</b>
+      Diese vier beantworten dieselbe Leser-Frage („Wie ist es wirklich?“), sind durchweg aktuell und
+      kanonisch (Analyse: alle vier „aktuell“), und verweisen dicht aufeinander. Die Report-<i>Verträge</i>
+      aus <code>reports/</code> gehören dazu; die zwei historischen Report-HTMLs nicht (→ archiv).</li>
+  <li><b>Warum Mockups splitten?</b> Von 11 Familien sind laut Analyse 3–4 aktiv (project-urls,
+      project-overview-dashboard, task-processing-pipeline, dazu task-detail-header-state-actions);
+      der Rest ist Mai-Design-Geschichte. Aktive Familien sind Arbeit → <code>werkbaenke/</code>,
+      gelockte Specs und Geschichte → <code>archiv/</code>. Ein gemeinsamer „mockups“-Ordner war genau
+      die Vermischung, die Robert stört.</li>
+  <li><b>Warum ein eigenes <code>start/</code>?</b> Die Analyse nennt als Sofortmaßnahme die kuratierte
+      Startseite (Kurations-Seeds liegen vor) und moniert die Wiki-über-Wiki-Streuung. Beides ist
+      dieselbe Aufgabe: eine Tür. Dorthin ziehen auch <code>README-aus-wiki.md</code> (dedupliziert)
+      und die lebenden Wiki-System-Seiten.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="mapping"><span class="no">§4</span>Mapping alt → neu</h2>
+<p class="dim">Alle bestehenden Top-Ordner (Stand 18.07., nach der <code>wiki/</code>-Auflösung), sortiert
+nach Zielort. „Split“ = Ordner wird nach lebend/historisch getrennt — die Splits sind die eigentliche
+Kurationsarbeit, alles andere ist mechanisch.</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Alt (heute)</th><th>Neu</th><th>Bemerkung</th></tr></thead>
+  <tbody>
+    <tr><td><code>docs/</code> Root (README, README-aus-wiki)</td><td><code>start/</code></td>
+        <td>README.md bleibt zusätzlich als Root-Index (Verweis auf start/); README-aus-wiki wird dedupliziert eingearbeitet</td></tr>
+    <tr><td><code>concepts/</code> (33 S.)</td><td><b>Split:</b> <code>konzepte/</code> + <code>archiv/konzepte/</code></td>
+        <td>lebende Konzepte + designated topics → konzepte/; überholte Juni-Incident-HTMLs (overnight, claude-termination, runner-stability-incidents) und gebannerte Drafts → archiv/; concepts/mockups je Familie → werkbaenke/ oder archiv/</td></tr>
+    <tr><td><code>product/</code> (10 S.)</td><td><code>konzepte/produkt/</code></td>
+        <td>Produktkonzepte sind Zielbilder — gleiche Leser-Frage wie konzepte/</td></tr>
+    <tr><td><code>architecture/</code> (24 S.)</td><td><code>system/architecture/</code></td>
+        <td>inkl. ADR-Archiv; <code>bus/implementation-state.md</code> vorher als Snapshot bannern (Analyse)</td></tr>
+    <tr><td><code>domains/</code> (9 S.)</td><td><code>system/domains/</code></td><td>unverändert, System of record</td></tr>
+    <tr><td><code>contracts/</code> (10 S.)</td><td><code>system/contracts/</code></td><td>unverändert, kanonisch</td></tr>
+    <tr><td><code>schemas/</code> (1 S. + 12 JSON)</td><td><code>system/schemas/</code></td><td>JSON-Schemas: Konsumenten-Pfade prüfen (§7)</td></tr>
+    <tr><td><code>cli/</code> (10 S.)</td><td><code>system/cli/</code></td><td>Lücke <code>skills/cli-copilot.md</code> vorher schließen oder Referenzen bereinigen</td></tr>
+    <tr><td><code>reports/</code> (20 S.)</td><td><b>Split:</b> <code>system/reports/</code> + <code>archiv/reports/</code></td>
+        <td>Report-Verträge + Visual-Doku → system/; die zwei historischen HTML-Reports (Stand 05-11) → archiv/</td></tr>
+    <tr><td><code>operations/</code> (21 S.)</td><td><code>betrieb/</code></td><td>komplette Übernahme (setup/, git/, runtime/, security/, testing/)</td></tr>
+    <tr><td><code>in-app-help/</code> (14 S.)</td><td><b>Ausnahme:</b> bleibt <code>in-app-help/</code></td>
+        <td>die App serviert diese Seiten — Verschieben nur zusammen mit Code-Anpassung (§7); logisch gehört es zu betrieb/</td></tr>
+    <tr><td><code>quality/</code> (4 S.)</td><td><code>qualitaet/</code></td>
+        <td>prompt-injected — Injection-Pfade müssen im selben Zug umgestellt werden (§7)</td></tr>
+    <tr><td><code>design/</code> (5 S.)</td><td><code>qualitaet/design/</code></td><td>Hard Rules + datierte Survey-Snapshots (19-MB-Evidenz bleibt beim Dokument)</td></tr>
+    <tr><td><code>frontend/</code> (27 S.)</td><td><code>qualitaet/frontend/</code></td>
+        <td>Design-System, Style-Guide; die 5 datierten Audits optional → archiv/audits/ (Phase 3)</td></tr>
+    <tr><td><code>workbenches/</code></td><td><code>werkbaenke/</code></td><td>Härtungs-Workbench = kanonischer Vorfalls-/Härtungsort, zieht 1:1 um</td></tr>
+    <tr><td><code>mockups/</code> (42 S., 11 Familien)</td><td><b>Split:</b> <code>werkbaenke/mockups/</code> + <code>archiv/mockups/</code></td>
+        <td>aktive Familien (project-urls, project-overview-dashboard, task-processing-pipeline, task-detail-header-state-actions) → werkbaenke/; Mai-Familien (chat-window-next-gen, kanban, vscode-layout, meta-cycle, prep-and-autonomy, task-progress, quality-system) → archiv/</td></tr>
+    <tr><td><code>common-problems/</code> (110 Dateien)</td><td><code>maschine/common-problems/</code></td>
+        <td>generiert nach Konvention; Schreib-Konvention (README-aus-wiki) im selben Zug umstellen</td></tr>
+    <tr><td><code>proposals/</code> (67 S.)</td><td><code>maschine/proposals/</code></td>
+        <td>vorher Duplikat-Paare über Hub-Funktionen ausdünnen, nie per Hand im Baum (Analyse H)</td></tr>
+    <tr><td><code>engineering-workstream/</code> (6 S.)</td><td><code>maschine/engineering-workstream/</code></td>
+        <td>Generator-Frame — Producer-Pfad prüfen, sonst wie in-app-help als Ausnahme stehen lassen</td></tr>
+    <tr><td><code>learnings/</code> (leer)</td><td><code>maschine/learnings/</code></td>
+        <td>oder Step aktivieren bzw. Ordner mit Erklärung versehen (Analyse: verwaist)</td></tr>
+    <tr><td><code>meta/</code> (5 S. + Alt-JSON)</td><td><b>Split:</b> <code>maschine/meta/</code> + <code>archiv/meta/</code></td>
+        <td>lebende Reports-/Usage-Konzepte → maschine/; <code>documents/</code> + <code>reports/documents/</code> (Vor-Sidecar-Alt-Evidenz) → archiv/ oder löschen (Frage 3, §8)</td></tr>
+    <tr><td><code>research/</code> (23 S.)</td><td><code>archiv/research/</code></td>
+        <td>bewusst historisches Archiv — zieht komplett, datierte Namen bleiben; 3 Seiten vorher „überholt durch“-bannern</td></tr>
+    <tr><td><code>assets/</code></td><td><code>assets/</code></td><td>technisch, bleibt; Bild-Referenzen wandern mit den Seiten</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="themenfluss"><span class="no">§5</span>Themen-Fluss: wo lebt „Remote/Runner-Wissen“ nachher?</h2>
+<p>Die Probe aufs Exempel mit dem am stärksten verstreuten Thema. Heute: vier Generationen in sechs
+Ordnern. Nachher beantwortet jede Leser-Frage genau ein Ort — und die Orte verweisen aufeinander,
+statt sich zu wiederholen.</p>
+
+<figure>
+<svg viewBox="0 0 1040 400" role="img" aria-label="Leser-Fragen zu Remote/Runner und ihr jeweils einziger Zielort">
+  <text class="s-label" x="20" y="30">Leser-Frage</text>
+  <text class="s-label" x="600" y="30">Der eine Ort danach</text>
+
+  <g>
+    <rect class="s-node" x="20" y="45" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="72">„Wohin will das verteilte System?“ (Zielbild, Entscheidungen)</text>
+    <rect class="badge-acc" x="600" y="45" width="420" height="44" rx="8" stroke-width="1.2"/>
+    <text class="s-label" x="616" y="72">konzepte/ · distributed-agent-studio-target-architecture</text>
+    <path class="s-flow" d="M500 67 H600" marker-end="url(#arr)"/>
+  </g>
+  <g>
+    <rect class="s-node" x="20" y="101" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="128">„Was ist vorgefallen, was härten wir gerade?“ (Chronik, Programm)</text>
+    <rect class="badge-acc" x="600" y="101" width="420" height="44" rx="8" stroke-width="1.2"/>
+    <text class="s-label" x="616" y="128">werkbaenke/ · haertung-verteilte-ausfuehrung (+ historie)</text>
+    <path class="s-flow" d="M500 123 H600" marker-end="url(#arr)"/>
+  </g>
+  <g>
+    <rect class="s-node" x="20" y="157" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="184">„Wie setze ich einen Runner-Host auf / betreibe Remote?“</text>
+    <rect class="badge-acc" x="600" y="157" width="420" height="44" rx="8" stroke-width="1.2"/>
+    <text class="s-label" x="616" y="184">betrieb/ · remote-hosts + setup/linux-runner-host</text>
+    <path class="s-flow" d="M500 179 H600" marker-end="url(#arr)"/>
+  </g>
+  <g>
+    <rect class="s-node" x="20" y="213" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="240">„Wie funktionieren Pickup, Outcome, Recovery heute wirklich?“</text>
+    <rect class="badge-acc" x="600" y="213" width="420" height="44" rx="8" stroke-width="1.2"/>
+    <text class="s-label" x="616" y="240">system/ · domains/runner + contracts/run-outcome</text>
+    <path class="s-flow" d="M500 235 H600" marker-end="url(#arr)"/>
+  </g>
+  <g>
+    <rect class="s-node" x="20" y="269" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="296">„Ich sehe ein bekanntes Symptom — was ist das?“</text>
+    <rect class="badge-warn" x="600" y="269" width="420" height="44" rx="8" stroke-width="1.2"/>
+    <text class="s-label" x="616" y="296">maschine/ · common-problems (18 Muster)</text>
+    <path class="s-flow" d="M500 291 H600" marker-end="url(#arr)"/>
+  </g>
+  <g>
+    <rect class="s-node" x="20" y="325" width="480" height="44" rx="8"/>
+    <text class="s-sub" x="36" y="352">„Wie kam es historisch dazu?“ (Postmortems Mai, Incidents Juni)</text>
+    <rect class="s-node2" x="600" y="325" width="420" height="44" rx="8"/>
+    <text class="s-label" x="616" y="352">archiv/ · research/ + konzepte/ (gebannert)</text>
+    <path class="s-flow" d="M500 347 H600" marker-end="url(#arr)"/>
+  </g>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 3 — Themen-Fluss Remote/Runner.</b> Sechs Fragen, sechs eindeutige Adressen.
+Die Kanonik entspricht exakt der Analyse (Cluster A): Zielbild = distributed-…, Chronik-Monopol =
+Härtungs-Workbench, Ist-Zustand = Domain-Maps, Betrieb = Runbooks, Geschichte = Archiv.
+Dasselbe Muster trägt für die anderen Cluster (Merge/Git → konzepte + betrieb/git; Style-Guides →
+qualitaet; Wiki-System → start).</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="migration"><span class="no">§6</span>Migrationsplan in drei Phasen</h2>
+
+<h3>Phase 1 — Bannern &amp; kuratieren <span class="pill done">läuft bereits</span></h3>
+<ul>
+  <li>„Überholt durch“-Banner auf die in der Analyse markierten Seiten (Juni-Incident-HTMLs,
+      wsl2-Entscheidung, Alt-Mockup remote-hosts-ux, bus-implementation-state, Alt-Reports).</li>
+  <li>Klassifikations-Sidecars vervollständigen und kuratierte Startseite aus den Kurations-Seeds
+      bauen (paralleler Arbeitsstrang Sidecars/Tree — dieser Plan setzt darauf auf).</li>
+  <li><b>Kein einziger Move.</b> Danach ist das Wiki inhaltlich ehrlich, auch wenn die Ordner noch alt sind.</li>
+  <li><b>Aufwand:</b> Restarbeit ~0,5 Agent-Tage. <b>Risiko:</b> minimal (nur Text-Präfixe und Sidecars).</li>
+</ul>
+
+<h3>Phase 2 — Moves per <code>git mv</code> in vier Wellen <span class="pill queued">nach Roberts Freigabe</span></h3>
+<ul>
+  <li>Muster existiert: die <code>wiki/</code>-Hochhebung vom 18.07. (Move + Referenz-Umschreibung in
+      einem Commit) hat gezeigt, dass Moves mit gleichzeitigem Umschreiben aller relativen Links sauber
+      durchgehen.</li>
+  <li><b>Welle 1 (risikoarm):</b> <code>archiv/</code> anlegen und befüllen (research, Alt-Reports,
+      Mai-Mockups, Alt-Evidenz) — dorthin zeigt kaum etwas Produktives.</li>
+  <li><b>Welle 2:</b> <code>system/</code> (architecture, domains, contracts, schemas, cli, Report-Verträge)
+      und <code>betrieb/</code> (operations) — reine Umbenennungen/Verschachtelungen, viele eingehende
+      Links, daher mit vollständiger Referenz-Umschreibung.</li>
+  <li><b>Welle 3:</b> die Splits — <code>concepts/</code> → konzepte/+archiv, <code>mockups/</code> →
+      werkbaenke/+archiv, <code>reports/</code>, <code>meta/</code>. Hier steckt Kurationsentscheidung
+      drin (Entscheidungsblock §8), deshalb nach den mechanischen Wellen.</li>
+  <li><b>Welle 4 (producer-gekoppelt):</b> <code>maschine/</code> — common-problems, proposals,
+      engineering-workstream, learnings. Nur zusammen mit den Producer-Anpassungen (Schreib-Konventionen,
+      Hub-Pfade, Generator-Frames); bis dahin bleiben diese Ordner am alten Ort funktionsfähig.</li>
+  <li><b>Aufwand:</b> ~1–2 Agent-Tage über die Wellen + Review pro Welle. Jede Welle ist ein eigener
+      Commit und einzeln rückrollbar.</li>
+</ul>
+
+<h3>Phase 3 — Nachlauf <span class="pill new">nach den Moves</span></h3>
+<ul>
+  <li><code>home.json</code>-relPaths der kuratierten Startseite auf die neuen Orte umstellen;
+      Wiki-Tree/Order-Konfiguration und Suche gegen den neuen Baum prüfen.</li>
+  <li><code>.drift/</code>-Keys und <code>*.meta.json</code>-Sidecars verifizieren (müssen mit den
+      Quelldateien mitgewandert sein — Sidecar ohne Quelle = Fehler).</li>
+  <li>Root-<code>README.md</code> als schlanker Index über die 8 Ordner neu schreiben;
+      Link-Check über den gesamten Baum (interne relative Links, Devspace-Verweise, Memory-Einträge).</li>
+  <li><b>Aufwand:</b> ~0,5–1 Agent-Tag. <b>Risiko:</b> gering, aber der Link-Check ist Pflicht, nicht Kür.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="risiken"><span class="no">§7</span>Risiken &amp; Ausnahmen</h2>
+
+<div class="box warn">
+  <h4>⚠ Zwei Ordner sind code-gelesen — nicht verschieben ohne Code-Anpassung</h4>
+  <ul>
+    <li><b><code>in-app-help/</code>:</b> die App serviert diese Seiten (Lane-Guides). Der Ordner bleibt
+        als markierte Ausnahme am alten Pfad, bis eine Karte die Server-Pfade mitzieht. Er wird im
+        Zielbild-Index unter betrieb/ <i>verlinkt</i>, aber physisch nicht bewegt.</li>
+    <li><b><code>quality/</code>:</b> die Engineering-Guides sind prompt-injected. Move nur im selben
+        Commit wie die Umstellung der Injection-Pfade — sonst laufen alle Karten mit totem Guide-Pfad.</li>
+  </ul>
+</div>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Risiko</th><th>Wirkung</th><th>Gegenmaßnahme</th></tr></thead>
+  <tbody>
+    <tr><td><b>Interne relative Links</b></td><td>tote Verweise nach Moves</td>
+        <td>Referenz-Umschreibung im selben Commit wie der Move (Muster wiki/-Hochhebung); Link-Check in Phase 3</td></tr>
+    <tr><td><b><code>*.meta.json</code>-Sidecars &amp; <code>.drift/</code>-Keys</b></td><td>Klassifikation/Drift-Zuordnung verliert ihre Quelle</td>
+        <td>Sidecars wandern atomar mit der Quelldatei; pfadbasierte Keys in .drift/ im Move-Commit umschreiben. <b>Koordination mit dem parallel laufenden Sidecar-/Tree-Strang zwingend</b> — Phase 2 startet erst, wenn dessen Stand eingecheckt ist.</td></tr>
+    <tr><td><b><code>home.json</code>-relPaths</b></td><td>kuratierte Startseite zeigt ins Leere</td>
+        <td>Phase-3-Schritt; bis dahin Startseite auf alte Pfade lassen (Banner-Phase braucht keine Moves)</td></tr>
+    <tr><td><b>Producer-Pfade</b> (common-problems-Konvention, Survey-Hub → proposals, Workstream-Generator, Schema-Konsumenten)</td>
+        <td>Generatoren schreiben in tote Ordner</td>
+        <td>Welle 4 nur zusammen mit Producer-Anpassung; vorher pro Producer den Schreibpfad im Code verifizieren</td></tr>
+    <tr><td><b>Externe Verweise</b> (Devspace-Handoffs, Memory, Karten-Texte)</td><td>alte Pfade in laufenden Tasks</td>
+        <td>Wellen-Commits mit Kurzprotokoll alt→neu; kritische Alt-Pfade eine Übergangszeit als Stub-README belassen</td></tr>
+    <tr><td><b>Laufende Karten/Gates während der Moves</b></td><td>Merge-Konflikte in docs/**</td>
+        <td>Wellen in ruhigen Fenstern fahren; pro Welle ein Commit, schnell mergen</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="entscheidung"><span class="no">§8</span>Entscheidungsblock für Robert</h2>
+<p class="dim">Vier Fragen, die das Konzept bewusst offen lässt. Alles andere ist aus der Analyse
+ableitbar und kann nach Freigabe mechanisch umgesetzt werden.</p>
+
+<div class="box">
+  <h4>Frage 1 — Sprachpolicy &amp; Ordnernamen</h4>
+  <p>AGENTS.md verlangt Englisch; der neue kanonische Härtungs-Ort und dieses Konzept sind Deutsch.
+  Vorschlag der Analyse: <b>Englisch bleibt Default</b>, Operator-Workbenches dürfen Deutsch sein
+  (mit EN-Kopfzeile); historische DE-Seiten nur bannern, nicht übersetzen. Daran hängt direkt die
+  Namensfrage: die Zielordner heißen in diesem Konzept deutsch (<code>betrieb/</code>,
+  <code>qualitaet/</code>, <code>werkbaenke/</code> …) — alternativ englisch
+  (<code>operations/</code>, <code>quality/</code>, <code>workbenches/</code>,
+  <code>machine/</code>, <code>archive/</code>, <code>start/</code>, <code>concepts/</code>,
+  <code>system/</code>), was drei Ordnern den heutigen Namen ließe und die Public-Repo-Konvention
+  wahrt. <b>Empfehlung: englische Ordnernamen, deutsche Inhalte nur wo die Ausnahme gilt.</b></p>
+</div>
+
+<div class="box">
+  <h4>Frage 2 — Archiv-Tiefe</h4>
+  <p>Variante A (dieses Konzept): echtes <code>archiv/</code> mit Herkunfts-Unterordnern — klare
+  Trennung, aber Moves mit Link-Risiko. Variante B (Minimalvariante der Analyse): nur Banner +
+  Sidecar-Status, keine Moves — kein Link-Risiko, aber die 21-Ordner-Streuung bleibt sichtbar.
+  <b>Empfehlung: A für research/Alt-Mockups/Alt-Evidenz (kaum eingehende Links), B übergangsweise für
+  einzelne viel-verlinkte Seiten.</b></p>
+</div>
+
+<div class="box">
+  <h4>Frage 3 — proposals/ behalten?</h4>
+  <p>67 generierte Seiten, davon 33 inhaltsgleiche Duplikat-Paare aus der Generation 2026-07-11.
+  Optionen: (a) über die Hub-Funktionen ausdünnen und als <code>maschine/proposals/</code> behalten,
+  (b) verwertete Generationen nach Abschluss komplett löschen (der Hub kann neue erzeugen),
+  (c) nur die je besten Findings als Karten übernehmen und den Rest löschen.
+  <b>Empfehlung: (a) jetzt, (b) als stehende Regel für künftige Generationen.</b>
+  Gleiche Entscheidung im Kleinen: <code>meta/documents/</code>-Alt-Evidenz archivieren oder löschen?</p>
+</div>
+
+<div class="box">
+  <h4>Frage 4 — in-app-help: Dauer-Ausnahme oder Code-Karte?</h4>
+  <p>Bleibt <code>in-app-help/</code> dauerhaft eine markierte Root-Ausnahme (billig, aber ein neunter
+  sichtbarer Ordner), oder wird eine Karte eingeplant, die App-Pfade und Ordner gemeinsam nach
+  <code>betrieb/in-app-help/</code> zieht (sauber, aber Produktcode-Änderung im Stable)?
+  <b>Empfehlung: Dauer-Ausnahme, solange die Lane-Guides App-served sind — Produktcode nicht für
+  Doku-Ästhetik anfassen.</b></p>
+</div>
+
+<p class="dim" style="margin-top: 40px;">Quellen: <code>docs/start/konsolidierung-analyse-2026-07-18.md</code>
+(Bestandsaufnahme, Cluster, Empfehlungen) · realer <code>docs/</code>-Baum, Stand 18.07.2026 ·
+Stil-Vorbild: <code>docs/operations/haertung-verteilte-ausfuehrung/index.html</code>.
+Dieses Konzept verändert nichts — es ist die Entscheidungsvorlage für Roberts Freigabe.</p>
+
+</main>
+</body>
+</html>

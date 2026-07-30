@@ -22,6 +22,10 @@ const ALL = [REVIEW, ESCALATED];
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
   await page.route('**/api/tasks/grouped**', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({
@@ -69,9 +73,9 @@ function card(page: Page, title: string) {
   return page.getByTestId('task-card').filter({ hasText: title }).first();
 }
 
-test.describe('historical reissue and abort chips', () => {
+test.describe('review event history stays off status cards', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`history is quiet in review and acute in 5e (${theme})`, async ({ page }) => {
+    test(`event tags stay absent in Review and Escalated (${theme})`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 1000 });
       await boot(page);
       await setTheme(page, theme);
@@ -81,19 +85,9 @@ test.describe('historical reissue and abort chips', () => {
       await expect(review).toBeVisible();
       await expect(escalated).toBeVisible();
 
-      const quiet = review.locator('[data-tag-id="reissue:autoreview"]');
-      const acute = escalated.locator('[data-tag-id="reissue:autoreview"]');
-      await expect(quiet).toHaveAttribute('data-history', 'true');
-      await expect(quiet).toHaveClass(/task-card__tag-chip--historical/);
-      await expect(quiet).toContainText('↺');
-      await expect(acute).not.toHaveAttribute('data-history', 'true');
-      await expect(acute).not.toHaveClass(/task-card__tag-chip--historical/);
-
-      const [quietBorder, acuteBorder] = await Promise.all([
-        quiet.evaluate((element) => getComputedStyle(element).borderColor),
-        acute.evaluate((element) => getComputedStyle(element).borderColor),
-      ]);
-      expect(quietBorder).not.toBe(acuteBorder);
+      await expect(review.locator('[data-tag-id="reissue:autoreview"]')).toHaveCount(0);
+      await expect(escalated.locator('[data-tag-id="reissue:autoreview"]')).toHaveCount(0);
+      await expect(escalated.getByTestId('task-card-human-review')).toContainText('Escalated');
 
       const resultDir = process.env.HISTORY_CHIPS_RESULTS_DIR;
       if (resultDir) {

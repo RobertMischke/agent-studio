@@ -14,6 +14,7 @@ import {
   resetRunRoot,
   resourcePlan,
   runCommand,
+  scenarioAssertions,
   setupWithRollback,
   sha256,
   validateManifest
@@ -31,7 +32,7 @@ import { spawn } from 'node:child_process';
 import { executeHistoricalReplay } from './replay-scenarios.mjs';
 
 class Api {
-  constructor(baseUrl, runId, faults) {
+  constructor(baseUrl, runId, faults, authToken = null) {
     this.baseUrl = baseUrl;
     this.faults = faults;
     this.attempts = new Map();
@@ -42,6 +43,7 @@ class Api {
       'X-Task-Protocol-Version': '2',
       'X-Task-Client-Version': 'remote-test-suite/1'
     };
+    if (authToken) this.headers.Authorization = `Bearer ${authToken}`;
   }
   async get(route, options) { return await this.request('GET', route, undefined, options); }
   async post(route, body, options) { return await this.request('POST', route, body, options); }
@@ -68,22 +70,15 @@ class Api {
     throw lastError;
   }
   async send(method, route, body) {
-    const response = await fetch(`${this.baseUrl}${route}`, {
-      method,
-      headers: this.headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      const error = new Error(`${method} ${route} failed (${response.status}): ${text}`);
-      error.status = response.status;
-      error.body = text;
+    const result = await this.attempt(method, route, body);
+    if (!result.ok) {
+      const error = new Error(`${method} ${route} failed (${result.status}): ${result.text}`);
+      error.status = result.status;
+      error.body = result.text;
       throw error;
     }
-    return text ? JSON.parse(text) : null;
+    return result.value;
   }
-  // Non-throwing single attempt used by the historical replay scenarios to
-  // assert expected rejections (e.g. stale-writer 409s) without try/catch.
   async attempt(method, route, body) {
     const response = await fetch(`${this.baseUrl}${route}`, {
       method,
@@ -106,6 +101,7 @@ class Api {
 const suiteRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(suiteRoot, '..', '..');
 const args = parseArgs(process.argv.slice(2));
+const authToken = await readAuthToken(args.authTokenFile);
 const manifestPath = path.join(suiteRoot, 'scenarios', `${args.scenario}.json`);
 const manifest = validateManifest(await readJson(manifestPath));
 if (manifest.name !== args.scenario) {
@@ -206,8 +202,10 @@ try {
     serverUrl,
     seed: args.seed,
     runId: args.runId,
-    faults
+    faults,
+    authToken
   });
+  await writeFile(path.join(plan.root, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
   completed = true;
   console.log(JSON.stringify(result, null, 2));
 } finally {
@@ -243,7 +241,7 @@ function parseArgs(values) {
     }
   }
   if (!result.scenario || !result.seed || !result.runId) {
-    throw new Error('Usage: node tools/remote-test-suite/index.mjs --scenario NAME --seed SEED --run-id UNIQUE_ID [--dry-run] [--cleanup|--keep] [--enable-faults --fault-ack TOKEN]');
+    throw new Error('Usage: node tools/remote-test-suite/index.mjs --scenario NAME --seed SEED --run-id UNIQUE_ID [--auth-token-file PATH] [--dry-run] [--cleanup|--keep] [--enable-faults --fault-ack TOKEN]');
   }
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(result.seed) || !/^[A-Za-z0-9._-]{1,80}$/.test(result.runId)) {
     throw new Error('Seed and run id must use only letters, digits, dot, underscore, or hyphen.');
@@ -263,6 +261,14 @@ async function availablePort() {
       server.close(() => resolve(address.port));
     });
   });
+}
+
+async function readAuthToken(file) {
+  if (!file) return null;
+  const resolved = path.resolve(file);
+  const token = (await readFile(resolved, 'utf8')).trim();
+  if (token.length < 32) throw new Error('The authentication token file must contain at least 32 characters.');
+  return token;
 }
 
 async function seedFixture(root, manifest, seed) {
@@ -342,19 +348,32 @@ async function stopChild(child) {
 }
 
 async function executeScenario(context) {
-  const { manifest, root, serverUrl, seed, runId, faults } = context;
+  const { manifest, root, serverUrl, seed, runId, faults, authToken } = context;
   const variables = { suiteRoot, repoRoot, seed, runId };
   const phaseFile = path.join(root, 'phases.jsonl');
   const outboxFile = path.join(root, 'outbox.jsonl');
   const origin = path.join(root, 'fixture-origin.git');
   const incidentEvidence = [];
   const processEvidence = [];
+  const scenarioStartedAt = new Date().toISOString();
+  const scenarioStartedMonotonic = process.hrtime.bigint();
+  let phaseEventSequence = 0;
   const ids = Object.fromEntries(Object.entries(manifest.resources)
     .map(([key, value]) => [key, interpolate(value, variables)]));
-  const api = new Api(serverUrl, runId, faults);
+  const api = new Api(serverUrl, runId, faults, authToken);
 
   const hook = async (phase, point, detail = {}) => {
-    await appendJsonl(phaseFile, { phase, point, ...detail });
+    const monotonicMs = Number(
+      (process.hrtime.bigint() - scenarioStartedMonotonic) / 1_000_000n);
+    await appendJsonl(phaseFile, {
+      sequence: ++phaseEventSequence,
+      phase,
+      point,
+      recordedAt: new Date().toISOString(),
+      monotonicMs,
+      scenarioStartedAt,
+      ...detail
+    });
     const command = manifest.hooks?.[phase];
     if (command) {
       await runCommand(command.map(value => interpolate(value, { ...variables, phase, point })), {
@@ -369,10 +388,11 @@ async function executeScenario(context) {
     }
   };
 
-  // Historical replay scenarios declare a chronicle contract; everything else
-  // (reference-change and the fault-injection manifests) runs the standard
-  // engine below.
-  if (manifest.contract) {
+  if ([
+    'divergent-salvage-lineage',
+    'lease-adoption-restart',
+    'external-completion-cycle'
+  ].includes(manifest.name)) {
     return await executeHistoricalReplay({
       ...context,
       api,
@@ -382,6 +402,7 @@ async function executeScenario(context) {
       register
     });
   }
+  const checks = scenarioAssertions(manifest);
 
   await api.post('/api/v1/workspaces', { name: `Remote Test ${runId}`, workspaceId: ids.workspaceId });
   await api.post('/api/v1/projects', {
@@ -478,7 +499,7 @@ async function executeScenario(context) {
       outcome: 'worktree-blocked'
     });
     const readyTask = await api.get(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`);
-    await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
+    const humanTask = await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
       title: null,
       body: null,
       state: '5-human-review',
@@ -489,7 +510,14 @@ async function executeScenario(context) {
       busyPath: worktree,
       attempts: preparation.attempts
     });
-    return await finishScenario({
+    checks.check(
+      'worktree-collision-contained',
+      humanTask.state === '5-human-review'
+        && preparation.attempts === 5
+        && preparation.foreignPreserved
+        && preparation.foreignRegistered,
+      `foreign worktree remained registered and unchanged after ${preparation.attempts} bounded attempts`);
+    const report = await finishScenario({
       manifest,
       root,
       seed,
@@ -520,6 +548,10 @@ async function executeScenario(context) {
         foreignHead: preparation.foreignHead
       }
     });
+    return {
+      ...report,
+      ...checks.finish(humanTask.state, 0)
+    };
   }
   await runCommand(['git', 'config', 'user.name', 'Remote Coding Executor'], { cwd: worktree });
   await runCommand(['git', 'config', 'user.email', 'remote-coding@invalid.local'], { cwd: worktree });
@@ -686,13 +718,19 @@ async function executeScenario(context) {
 
   if (!terminalFacts.proofComplete) {
     const reviewTask = await api.get(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`);
-    await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
+    const humanTask = await api.put(`/api/v1/projects/${ids.projectId}/tasks/${task.taskId}`, {
       title: null,
       body: null,
       state: '5-human-review',
       expectedVersion: reviewTask.version
     });
-    return await finishScenario({
+    checks.check(
+      'inconclusive-terminal-contained',
+      humanTask.state === '5-human-review'
+        && terminalFacts.proofComplete === false
+        && resultSha !== null,
+      `incomplete terminal proof retained Result-SHA ${resultSha} in ${humanTask.state}`);
+    const report = await finishScenario({
       manifest,
       root,
       seed,
@@ -723,6 +761,10 @@ async function executeScenario(context) {
         foreignPreserved: true
       }
     });
+    return {
+      ...report,
+      ...checks.finish(humanTask.state, 0)
+    };
   }
 
   await hook('review', 'before');
@@ -860,7 +902,18 @@ async function executeScenario(context) {
   });
   await hook('integration', 'after', { status: 'integrated', resultSha, semanticTree: integratedTree });
 
-  return await finishScenario({
+  const phaseEvents = (await readFile(phaseFile, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+  checks.check(
+    'reference-change-accepted',
+    terminalTask.state === '6-completed'
+      && resultSha === fetched
+      && phaseEvents.filter(event => event.point === 'after').length === expectedPhases.length,
+    `exact result ${resultSha} reached ${terminalTask.state} through all five phases`);
+  const recoveryUsed = Object.values(api.snapshot())
+    .reduce((sum, count) => sum + Math.max(0, count - 1), 0)
+    + (gateResult.recovered ? 1 : 0);
+  const contract = checks.finish(terminalTask.state, recoveryUsed);
+  const report = await finishScenario({
     manifest,
     root,
     seed,
@@ -889,6 +942,10 @@ async function executeScenario(context) {
       foreignPreserved: true
     }
   });
+  return {
+    ...report,
+    ...contract
+  };
 }
 
 async function prepareWorktree({

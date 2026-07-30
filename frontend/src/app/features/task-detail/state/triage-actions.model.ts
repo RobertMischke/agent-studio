@@ -175,6 +175,18 @@ export function needsPlanningAcceptWarning(info: TaskInfo, targetState: string):
   return !spawn.contractSatisfied;
 }
 
+/**
+ * Temporary archive guard while the Status Workbench is still being decided.
+ * Only the Delivered -> Archive transition is covered. An unknown integration
+ * projection is treated as not integrated because archiving would otherwise
+ * hide the unresolved delivery state without operator acknowledgement.
+ */
+export function needsUnintegratedArchiveWarning(info: TaskInfo, targetState: string): boolean {
+  return info.state === TaskState.Completed
+    && targetState === TaskState.Archive
+    && info.integration?.status !== 'integrated';
+}
+
 export function laneActionsFor(state: string): TriageButton[] {
   return LANE_ACTIONS[state] ?? [];
 }
@@ -221,10 +233,9 @@ function shortMergeSha(sha: string | null | undefined): string | null {
 
 /**
  * Resolve how the human-review acceptance primary should read for `info`. The
- * persisted `provenance.merge.mergeCommit` is the ground-truth "folded into
- * develop" fact; the optional `landedStateHint` is the richer live-derived
- * position (it can be more advanced, e.g. `released-to-main`). A stale
- * `on-branch-only` hint never masks a recorded merge fact.
+ * computed integration field is the only proof that attributed commits are
+ * present on the target branch. The optional live landed-state hint may refine
+ * an integrated result to released-to-main, but cannot prove integration.
  */
 export function mergeAcceptViewFor(
   info: TaskInfo,
@@ -234,12 +245,8 @@ export function mergeAcceptViewFor(
   // mergeable deliverable. A branch/base without one is a planning, docs,
   // results-only, or no-op outcome, even when its base is in the git graph.
   const hasTaskCommits = (info.commits?.length ?? 0) > 0 || !!info.commit;
-  const mergeSha = shortMergeSha(info.provenance?.merge?.mergeCommit);
-  const landedByMerge = mergeSha !== null;
-  const landedByMergeSignal = info.mergeSignal?.inIntegration === true;
-  const hintLanded =
-    landedStateHint === 'merged-to-develop' || landedStateHint === 'released-to-main';
-  const landed = landedByMerge || landedByMergeSignal || hintLanded;
+  const mergeSha = shortMergeSha(info.integration?.sha);
+  const landed = info.integration?.status === 'integrated';
 
   if (!hasTaskCommits) {
     return {

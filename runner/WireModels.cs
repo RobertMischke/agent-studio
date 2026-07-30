@@ -66,7 +66,8 @@ public sealed record RunLeaseReleaseRequest(
     string RunnerId,
     string? AttemptId = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    string? Outcome = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(
@@ -118,7 +119,9 @@ public sealed record RunnerClaimRequest(
     int? EffectiveMaxParallelism = null,
     DateTime? EffectiveMaxParallelismAppliedAt = null,
     // RUNNER_MAX_PARALLELISM. Seeds the central host ceiling on first contact.
-    int? BootstrapMaxParallelism = null);
+    int? BootstrapMaxParallelism = null,
+    string? CapabilityInstanceId = null,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,
@@ -201,7 +204,12 @@ public sealed record RunSpecDto(
     string? Model = null,
     string? ThinkingLevel = null,
     string? PermissionMode = null,
-    string? ContextMode = null);
+    string? ContextMode = null,
+    // Server-rendered per-mode framing block (read-only / research / concept /
+    // web contracts). Appended to the fetched task prompt at this runner's
+    // execution boundary, mirroring the local runner's {{mode_framing}} slot.
+    // Null from an older server keeps the previous verbatim-prompt behaviour.
+    string? ModeFraming = null);
 
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,

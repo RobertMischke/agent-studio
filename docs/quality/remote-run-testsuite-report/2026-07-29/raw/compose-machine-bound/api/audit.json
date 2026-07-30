@@ -1,0 +1,1865 @@
+[
+  {
+    "sequence": 1,
+    "occurredAt": "2026-07-29T02:10:05.9943408Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.registered",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"HostId\":\"agt2394-rts-canary-machine-10m-host\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"RunnerVersion\":\"remote-compose-harness/2\",\"ProtocolVersion\":2}"
+  },
+  {
+    "sequence": 2,
+    "occurredAt": "2026-07-29T02:10:12.1917126Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "workspace.created",
+    "targetType": "workspace",
+    "targetId": "wsp-canary-machine-10m-reference",
+    "detailJson": "{\"Name\":\"Remote Test canary-machine-10m-reference\"}"
+  },
+  {
+    "sequence": 3,
+    "occurredAt": "2026-07-29T02:10:12.2137519Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "project.created",
+    "targetType": "project",
+    "targetId": "prj-canary-machine-10m-reference",
+    "detailJson": "{\"WorkspaceId\":\"wsp-canary-machine-10m-reference\",\"Name\":\"Remote Test canary-machine-10m-reference\",\"taskKeyPrefix\":\"RTS\"}"
+  },
+  {
+    "sequence": 4,
+    "occurredAt": "2026-07-29T02:10:12.2331919Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "task.created",
+    "targetType": "task",
+    "targetId": "tsk-canary-machine-10m-reference",
+    "detailJson": "{\"projectId\":\"prj-canary-machine-10m-reference\",\"taskKey\":\"RTS-1\",\"State\":\"2-ready\"}"
+  },
+  {
+    "sequence": 5,
+    "occurredAt": "2026-07-29T02:10:12.2456498Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "runner.registered",
+    "targetType": "runner",
+    "targetId": "coding-canary-machine-10m-reference",
+    "detailJson": "{\"HostId\":\"coding-host\",\"InstanceId\":\"coding-instance-canary-machine-10m-reference\",\"RunnerVersion\":\"remote-test-suite/1\",\"ProtocolVersion\":2}"
+  },
+  {
+    "sequence": 6,
+    "occurredAt": "2026-07-29T02:10:12.2763982Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "run.claimed",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"TaskId\":\"tsk-canary-machine-10m-reference\",\"RunnerId\":\"coding-canary-machine-10m-reference\",\"InstanceId\":\"coding-instance-canary-machine-10m-reference\",\"fence\":1}"
+  },
+  {
+    "sequence": 7,
+    "occurredAt": "2026-07-29T02:10:12.3105571Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:12:12.3095774Z\"}"
+  },
+  {
+    "sequence": 8,
+    "occurredAt": "2026-07-29T02:10:12.5227059Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"EventId\":\"evt-canary-machine-10m-reference-terminal-fact\",\"Kind\":\"runner.terminal-fact\",\"IdempotencyKey\":\"canary-machine-10m-reference:terminal-fact\",\"Fence\":1}"
+  },
+  {
+    "sequence": 9,
+    "occurredAt": "2026-07-29T02:10:12.5509711Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "artifact.ingested",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"ArtifactId\":\"art-canary-machine-10m-reference-terminal-evidence\",\"Name\":\"terminal-evidence.json\",\"sha256\":\"85077129e20c6711f0e574a75503eccfc06dc9f383bc62eb54634a19b5419239\",\"Fence\":1}"
+  },
+  {
+    "sequence": 10,
+    "occurredAt": "2026-07-29T02:10:12.5805792Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "result-handoff.acknowledged",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"Sequence\":3,\"envelopeDigest\":\"4c8a5f80123b3252cf7fb246e1c356bebc1cf6b5f8b59f976c0c7fe5b791a1f1\",\"RepositoryId\":\"repo_eacd2d24b089ad33f2bb0a1b7dd11c6f98d2a58a06b95a6f73969db0fa52221c\",\"ResultSha\":\"a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"ImmutableRemoteRef\":\"refs/heads/agent-studio/results/run_480fbcbf5f98489899f288c9f6d36d34/a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"SourceBundleDigest\":null,\"retainUntil\":\"2026-08-28T02:10:12.5790017Z\"}"
+  },
+  {
+    "sequence": 11,
+    "occurredAt": "2026-07-29T02:10:12.6175033Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "run.completed",
+    "targetType": "run",
+    "targetId": "run_480fbcbf5f98489899f288c9f6d36d34",
+    "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Deterministic reference change completed with durable terminal and Result-SHA proof.\",\"ResultEnvelopeDigest\":\"4c8a5f80123b3252cf7fb246e1c356bebc1cf6b5f8b59f976c0c7fe5b791a1f1\",\"Sequence\":4,\"IdempotencyKey\":\"canary-machine-10m-reference:completion\",\"classifierVersion\":null,\"recoveryAction\":null}"
+  },
+  {
+    "sequence": 12,
+    "occurredAt": "2026-07-29T02:10:12.6536192Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "review.subject-created",
+    "targetType": "review-subject",
+    "targetId": "rsub_9f74450f81e94f7dab59a6ac6829e5cc",
+    "detailJson": "{\"TaskId\":\"tsk-canary-machine-10m-reference\",\"SourceRunId\":\"run_480fbcbf5f98489899f288c9f6d36d34\",\"RepositoryId\":\"repo_eacd2d24b089ad33f2bb0a1b7dd11c6f98d2a58a06b95a6f73969db0fa52221c\",\"ExpectedResultSha\":\"a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"attemptId\":\"rat_f41792c78569440eab539fbf4a1181ac\"}"
+  },
+  {
+    "sequence": 13,
+    "occurredAt": "2026-07-29T02:10:12.6716166Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "runner.registered",
+    "targetType": "runner",
+    "targetId": "review-canary-machine-10m-reference",
+    "detailJson": "{\"HostId\":\"review-host\",\"InstanceId\":\"review-instance-canary-machine-10m-reference\",\"RunnerVersion\":\"remote-test-suite/1\",\"ProtocolVersion\":2}"
+  },
+  {
+    "sequence": 14,
+    "occurredAt": "2026-07-29T02:10:12.6955732Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "review.claimed",
+    "targetType": "review-attempt",
+    "targetId": "rat_f41792c78569440eab539fbf4a1181ac",
+    "detailJson": "{\"SubjectId\":\"rsub_9f74450f81e94f7dab59a6ac6829e5cc\",\"ExpectedResultSha\":\"a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"ExecutorId\":\"review-canary-machine-10m-reference\",\"InstanceId\":\"review-instance-canary-machine-10m-reference\",\"HostId\":\"review-host\",\"fence\":1,\"resourceNamespace\":\"review-rat-f41792c78569440eab539fbf4a1181ac-f1\"}"
+  },
+  {
+    "sequence": 15,
+    "occurredAt": "2026-07-29T02:10:12.8523898Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "review.reported",
+    "targetType": "review-attempt",
+    "targetId": "rat_f41792c78569440eab539fbf4a1181ac",
+    "detailJson": "{\"SubjectId\":\"rsub_9f74450f81e94f7dab59a6ac6829e5cc\",\"RepositoryId\":\"repo_eacd2d24b089ad33f2bb0a1b7dd11c6f98d2a58a06b95a6f73969db0fa52221c\",\"ExpectedResultSha\":\"a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"ActualHead\":\"a703ee085baee8d4edb33c85001a0b2cf611dd52\",\"TreeHash\":\"1c903baf39449db19baa7158702dc7fa7e4f7452\",\"DirtyBefore\":false,\"DirtyAfter\":false,\"Outcome\":\"ReviewInfra\",\"Classification\":\"ContainmentMismatch\",\"reportId\":\"rrpt_124c07ada6b14545993028fa0cc72069\",\"payloadHash\":\"96938235829397c9f683d61168e0a1ffc361fd27f0f324d6c60ba052369601d7\",\"retry\":true}"
+  },
+  {
+    "sequence": 16,
+    "occurredAt": "2026-07-29T02:10:12.8778587Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "review.cleaned",
+    "targetType": "review-attempt",
+    "targetId": "rat_f41792c78569440eab539fbf4a1181ac",
+    "detailJson": "{\"WorkspaceRemoved\":true,\"retry\":false,\"FailureClassification\":null}"
+  },
+  {
+    "sequence": 17,
+    "occurredAt": "2026-07-29T02:10:13.0416933Z",
+    "actorId": "remote-test-suite:canary-machine-10m-reference",
+    "action": "task.updated",
+    "targetType": "task",
+    "targetId": "tsk-canary-machine-10m-reference",
+    "detailJson": "{\"ExpectedVersion\":4,\"Version\":5,\"State\":\"6-completed\"}"
+  },
+  {
+    "sequence": 18,
+    "occurredAt": "2026-07-29T02:10:13.1041713Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "workspace.created",
+    "targetType": "workspace",
+    "targetId": "wsp-autonomy-canary-machine-10m",
+    "detailJson": "{\"Name\":\"Compose autonomy canary-machine-10m\"}"
+  },
+  {
+    "sequence": 19,
+    "occurredAt": "2026-07-29T02:10:13.1181683Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "project.created",
+    "targetType": "project",
+    "targetId": "prj-autonomy-canary-machine-10m",
+    "detailJson": "{\"WorkspaceId\":\"wsp-autonomy-canary-machine-10m\",\"Name\":\"Compose autonomy canary-machine-10m\",\"taskKeyPrefix\":\"AUTO\"}"
+  },
+  {
+    "sequence": 20,
+    "occurredAt": "2026-07-29T02:10:13.128272Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "task.created",
+    "targetType": "task",
+    "targetId": "tsk-autonomy-canary-machine-10m-1",
+    "detailJson": "{\"projectId\":\"prj-autonomy-canary-machine-10m\",\"taskKey\":\"AUTO-1\",\"State\":\"2-ready\"}"
+  },
+  {
+    "sequence": 21,
+    "occurredAt": "2026-07-29T02:10:13.137612Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "task.created",
+    "targetType": "task",
+    "targetId": "tsk-autonomy-canary-machine-10m-2",
+    "detailJson": "{\"projectId\":\"prj-autonomy-canary-machine-10m\",\"taskKey\":\"AUTO-2\",\"State\":\"2-ready\"}"
+  },
+  {
+    "sequence": 22,
+    "occurredAt": "2026-07-29T02:10:13.1481462Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "task.created",
+    "targetType": "task",
+    "targetId": "tsk-autonomy-canary-machine-10m-3",
+    "detailJson": "{\"projectId\":\"prj-autonomy-canary-machine-10m\",\"taskKey\":\"AUTO-3\",\"State\":\"2-ready\"}"
+  },
+  {
+    "sequence": 23,
+    "occurredAt": "2026-07-29T02:10:13.1645994Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.claimed",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-1\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":1}"
+  },
+  {
+    "sequence": 24,
+    "occurredAt": "2026-07-29T02:10:13.1846896Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.claimed",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-2\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":1}"
+  },
+  {
+    "sequence": 25,
+    "occurredAt": "2026-07-29T02:10:14.0316706Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:25:14.0316244Z\"}"
+  },
+  {
+    "sequence": 26,
+    "occurredAt": "2026-07-29T02:10:14.0515572Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_abfa8f77c31247bda96f65559f79fd89\"}"
+  },
+  {
+    "sequence": 27,
+    "occurredAt": "2026-07-29T02:10:14.0657471Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:25:14.0657025Z\"}"
+  },
+  {
+    "sequence": 28,
+    "occurredAt": "2026-07-29T02:10:14.0774959Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_6d0cfede08f4402ca71406fe5680f380\"}"
+  },
+  {
+    "sequence": 29,
+    "occurredAt": "2026-07-29T02:20:15.0641129Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:15.0640815Z\"}"
+  },
+  {
+    "sequence": 30,
+    "occurredAt": "2026-07-29T02:20:15.0850706Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_58cb594b18e8fbf3e7097b2b25cda964\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:1\",\"Fence\":1}"
+  },
+  {
+    "sequence": 31,
+    "occurredAt": "2026-07-29T02:20:15.1007333Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_ed88255cb9bc41cac5170b5c73470fcf\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:2\",\"Fence\":1}"
+  },
+  {
+    "sequence": 32,
+    "occurredAt": "2026-07-29T02:20:15.1190302Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_415fbc86e8acda4379ea18e63b42a599\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:3\",\"Fence\":1}"
+  },
+  {
+    "sequence": 33,
+    "occurredAt": "2026-07-29T02:20:15.1333611Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_fa4bb994ba090f258ac69a2659eda34b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:4\",\"Fence\":1}"
+  },
+  {
+    "sequence": 34,
+    "occurredAt": "2026-07-29T02:20:15.1486395Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_8419386b63abf521379e0bc0eec022a6\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:5\",\"Fence\":1}"
+  },
+  {
+    "sequence": 35,
+    "occurredAt": "2026-07-29T02:20:15.1658574Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_92703222dac8d41dc05aad4ad2f9b387\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:6\",\"Fence\":1}"
+  },
+  {
+    "sequence": 36,
+    "occurredAt": "2026-07-29T02:20:15.1811237Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_246cf73abfc6a8400b7a384f40cde1ed\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:7\",\"Fence\":1}"
+  },
+  {
+    "sequence": 37,
+    "occurredAt": "2026-07-29T02:20:15.2044547Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_ed7cc7455be1e68ce662f0d8211d9d46\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:8\",\"Fence\":1}"
+  },
+  {
+    "sequence": 38,
+    "occurredAt": "2026-07-29T02:20:15.2193968Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_e2ee32bfe6e6b524e60479011f106515\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:9\",\"Fence\":1}"
+  },
+  {
+    "sequence": 39,
+    "occurredAt": "2026-07-29T02:20:15.235091Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_f4deb0f50d02f4b9e665da916999d062\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:10\",\"Fence\":1}"
+  },
+  {
+    "sequence": 40,
+    "occurredAt": "2026-07-29T02:20:15.2530283Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_83ce72b14f59404e57dbe4501bd9bcd7\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:11\",\"Fence\":1}"
+  },
+  {
+    "sequence": 41,
+    "occurredAt": "2026-07-29T02:20:15.2687332Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_d2034dea6de9a15f1836b90888928ad3\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:12\",\"Fence\":1}"
+  },
+  {
+    "sequence": 42,
+    "occurredAt": "2026-07-29T02:20:15.288462Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_d45ca693b04dd7528a0844021c928c00\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:13\",\"Fence\":1}"
+  },
+  {
+    "sequence": 43,
+    "occurredAt": "2026-07-29T02:20:15.3065345Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_fd99d9120990856c30cd7a4edeaa48f7\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:14\",\"Fence\":1}"
+  },
+  {
+    "sequence": 44,
+    "occurredAt": "2026-07-29T02:20:15.3207592Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_8ded776a26230c2f97e6a1916b66fd9a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:15\",\"Fence\":1}"
+  },
+  {
+    "sequence": 45,
+    "occurredAt": "2026-07-29T02:20:15.3387815Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_6cd0db2bdd0ce383ace9e0ecc50705c2\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:16\",\"Fence\":1}"
+  },
+  {
+    "sequence": 46,
+    "occurredAt": "2026-07-29T02:20:15.3550269Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_ae4432469e87735a8bb1c85498c13ade\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:17\",\"Fence\":1}"
+  },
+  {
+    "sequence": 47,
+    "occurredAt": "2026-07-29T02:20:15.3685345Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_b66ff8682a9840ee7dc5f449d3a34677\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:18\",\"Fence\":1}"
+  },
+  {
+    "sequence": 48,
+    "occurredAt": "2026-07-29T02:20:15.3846292Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_9265b2bcccd3405bdb7087defb7eec76\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:19\",\"Fence\":1}"
+  },
+  {
+    "sequence": 49,
+    "occurredAt": "2026-07-29T02:20:15.3972813Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_313a1afe9c1d926c7b59f2204e856ec2\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:20\",\"Fence\":1}"
+  },
+  {
+    "sequence": 50,
+    "occurredAt": "2026-07-29T02:20:15.411497Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_6be1a862fa4cc9b66a2899ee2ecb937b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:21\",\"Fence\":1}"
+  },
+  {
+    "sequence": 51,
+    "occurredAt": "2026-07-29T02:20:15.4280749Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_47ac7f88dc6354ec9a02c894b3150ef3\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:22\",\"Fence\":1}"
+  },
+  {
+    "sequence": 52,
+    "occurredAt": "2026-07-29T02:20:15.4406665Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_929260a15c5f6f3a9492789d513f7394\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:23\",\"Fence\":1}"
+  },
+  {
+    "sequence": 53,
+    "occurredAt": "2026-07-29T02:20:15.4574774Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_8ad03c2ae64a6e0db4c0f1ed956f1cd9\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:24\",\"Fence\":1}"
+  },
+  {
+    "sequence": 54,
+    "occurredAt": "2026-07-29T02:20:15.4735329Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_0c4718315723586def8f2d36e8256ecc\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:25\",\"Fence\":1}"
+  },
+  {
+    "sequence": 55,
+    "occurredAt": "2026-07-29T02:20:15.4881659Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_01526082fd53b5dc9acb04f55f103f81\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:26\",\"Fence\":1}"
+  },
+  {
+    "sequence": 56,
+    "occurredAt": "2026-07-29T02:20:15.50494Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_4293705b64768f0e8be292dc4834d9af\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:27\",\"Fence\":1}"
+  },
+  {
+    "sequence": 57,
+    "occurredAt": "2026-07-29T02:20:15.5213142Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_7af3736b486cf0de5339c411fad2636d\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:28\",\"Fence\":1}"
+  },
+  {
+    "sequence": 58,
+    "occurredAt": "2026-07-29T02:20:15.5353662Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_da725647f5688a9ed30aa0a5e2d0d2fa\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:29\",\"Fence\":1}"
+  },
+  {
+    "sequence": 59,
+    "occurredAt": "2026-07-29T02:20:15.5578945Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_c045090e4be0b68c990c1a410a5bc6bd\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:30\",\"Fence\":1}"
+  },
+  {
+    "sequence": 60,
+    "occurredAt": "2026-07-29T02:20:15.5757728Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_f6cb60cc29f6c1f5a51ede22a23303fe\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:31\",\"Fence\":1}"
+  },
+  {
+    "sequence": 61,
+    "occurredAt": "2026-07-29T02:20:15.595786Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_a070edf38c473b086ee5777e44159e23\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:32\",\"Fence\":1}"
+  },
+  {
+    "sequence": 62,
+    "occurredAt": "2026-07-29T02:20:15.6088268Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_55bd5d37f5bdfcc7e24d31cbf273a932\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:33\",\"Fence\":1}"
+  },
+  {
+    "sequence": 63,
+    "occurredAt": "2026-07-29T02:20:15.6253696Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_35b6b3f6aac171c1265a60b1874ef6e5\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:34\",\"Fence\":1}"
+  },
+  {
+    "sequence": 64,
+    "occurredAt": "2026-07-29T02:20:15.6467018Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_70c84c2c09dafdfc8e80e38c0b696ea6\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:35\",\"Fence\":1}"
+  },
+  {
+    "sequence": 65,
+    "occurredAt": "2026-07-29T02:20:15.6615185Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_f709654bd4ae7eca1484217b26238df7\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:36\",\"Fence\":1}"
+  },
+  {
+    "sequence": 66,
+    "occurredAt": "2026-07-29T02:20:15.6774718Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_30e736455fe20c222d6cc442e02569c6\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:37\",\"Fence\":1}"
+  },
+  {
+    "sequence": 67,
+    "occurredAt": "2026-07-29T02:20:15.6935575Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_9cb8338f2fc6edca95f1bae4aa8597c7\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:38\",\"Fence\":1}"
+  },
+  {
+    "sequence": 68,
+    "occurredAt": "2026-07-29T02:20:15.7064483Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_8858d497c33f1d5d97ffdd0ba3bd00ea\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:39\",\"Fence\":1}"
+  },
+  {
+    "sequence": 69,
+    "occurredAt": "2026-07-29T02:20:15.7227699Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_1909e3adc9987f31df8a8ca60ab35ccd\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:40\",\"Fence\":1}"
+  },
+  {
+    "sequence": 70,
+    "occurredAt": "2026-07-29T02:20:15.7352009Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_6fea113da367550bffd7b6716c5043ff\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:41\",\"Fence\":1}"
+  },
+  {
+    "sequence": 71,
+    "occurredAt": "2026-07-29T02:20:15.7479832Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_3827b396acb2e3cf397c9231b0145b9a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:42\",\"Fence\":1}"
+  },
+  {
+    "sequence": 72,
+    "occurredAt": "2026-07-29T02:20:15.7659213Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_fe41eccfa4fff9bed389fef65e62edae\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:43\",\"Fence\":1}"
+  },
+  {
+    "sequence": 73,
+    "occurredAt": "2026-07-29T02:20:15.7783035Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_f50039b49d4dcb92faaa1bfa2be06d04\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:44\",\"Fence\":1}"
+  },
+  {
+    "sequence": 74,
+    "occurredAt": "2026-07-29T02:20:15.7957202Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_c34f7a3a1857d6852a0f2b7d35f5732a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:45\",\"Fence\":1}"
+  },
+  {
+    "sequence": 75,
+    "occurredAt": "2026-07-29T02:20:15.8114707Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_4367da7c5ca616e4f80895d1a43258fc\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:46\",\"Fence\":1}"
+  },
+  {
+    "sequence": 76,
+    "occurredAt": "2026-07-29T02:20:15.8244754Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_0daf5f882d120aba3b8f8c4b11168dad\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:47\",\"Fence\":1}"
+  },
+  {
+    "sequence": 77,
+    "occurredAt": "2026-07-29T02:20:15.8410312Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_ea17d40fc95e9d85382b1410af3a0779\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:48\",\"Fence\":1}"
+  },
+  {
+    "sequence": 78,
+    "occurredAt": "2026-07-29T02:20:15.8566984Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_d51fdf6a52b337a1c17be6339523a152\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:49\",\"Fence\":1}"
+  },
+  {
+    "sequence": 79,
+    "occurredAt": "2026-07-29T02:20:15.8698051Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_c0253310ab89d54884b313454d92e6f8\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:50\",\"Fence\":1}"
+  },
+  {
+    "sequence": 80,
+    "occurredAt": "2026-07-29T02:20:15.8873659Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_a62ed87acc67f9b7267b82077ed6eefb\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:51\",\"Fence\":1}"
+  },
+  {
+    "sequence": 81,
+    "occurredAt": "2026-07-29T02:20:15.9006594Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_097a7c6b726d15e65c3099cbf38bdc1b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:52\",\"Fence\":1}"
+  },
+  {
+    "sequence": 82,
+    "occurredAt": "2026-07-29T02:20:15.9165107Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_3e667a63df82a916e352994e059f4893\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:53\",\"Fence\":1}"
+  },
+  {
+    "sequence": 83,
+    "occurredAt": "2026-07-29T02:20:15.9342518Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_52739bbdf81a05d1accfca18edca33ab\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:54\",\"Fence\":1}"
+  },
+  {
+    "sequence": 84,
+    "occurredAt": "2026-07-29T02:20:15.9493027Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_a22cd342f3d470632ff6ccbe1d2ef398\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:55\",\"Fence\":1}"
+  },
+  {
+    "sequence": 85,
+    "occurredAt": "2026-07-29T02:20:15.9689424Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_fcb0a08afd4de19b1e23bca14c368ebe\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:56\",\"Fence\":1}"
+  },
+  {
+    "sequence": 86,
+    "occurredAt": "2026-07-29T02:20:15.9872765Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_0ceadf8d14bbf9dd8ac9ca395ed74d2b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:57\",\"Fence\":1}"
+  },
+  {
+    "sequence": 87,
+    "occurredAt": "2026-07-29T02:20:16.0009153Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_157b5f4f2d12b7f94b2a783341b50233\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:58\",\"Fence\":1}"
+  },
+  {
+    "sequence": 88,
+    "occurredAt": "2026-07-29T02:20:16.0156505Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_99bc46f6e7220bb8975ccf912ee48599\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:59\",\"Fence\":1}"
+  },
+  {
+    "sequence": 89,
+    "occurredAt": "2026-07-29T02:20:16.0320376Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_33b309c2df8f4377f59aa79938079b34\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:60\",\"Fence\":1}"
+  },
+  {
+    "sequence": 90,
+    "occurredAt": "2026-07-29T02:20:16.0452122Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"EventId\":\"evt_479340114f38250e7b95faf2d031a692\",\"Kind\":\"runner.terminal\",\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:61\",\"Fence\":1}"
+  },
+  {
+    "sequence": 91,
+    "occurredAt": "2026-07-29T02:20:16.062725Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "artifact.ingested",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"ArtifactId\":\"art_b86f7081e1a8387f59b255f7088a9838\",\"Name\":\"results/autonomy-AUTO-1.json\",\"sha256\":\"d61491041b4a646151ef4138b21f631d331af08166105be792378aae9ad654bc\",\"Fence\":1}"
+  },
+  {
+    "sequence": 92,
+    "occurredAt": "2026-07-29T02:20:16.0747524Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "result-handoff.acknowledged",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"Sequence\":63,\"envelopeDigest\":\"6979a93556eeea6a59b2e6212fe7f9f1a8695dd688e7b2546fb7fcfe021ac5d4\",\"RepositoryId\":\"prj-autonomy-canary-machine-10m\",\"ResultSha\":\"c1f714fafb06521015ecb291e3af76bbce46304e\",\"ImmutableRemoteRef\":null,\"SourceBundleDigest\":\"54216395ccb33095f249b024da8cd36a9dcd0f918b03543f385006cd4df7f0ca\",\"retainUntil\":\"2026-08-28T02:20:16.0746267Z\"}"
+  },
+  {
+    "sequence": 93,
+    "occurredAt": "2026-07-29T02:20:16.0897833Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.completed",
+    "targetType": "run",
+    "targetId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Autonomy canary completed 60 useful work units.\",\"ResultEnvelopeDigest\":\"6979a93556eeea6a59b2e6212fe7f9f1a8695dd688e7b2546fb7fcfe021ac5d4\",\"Sequence\":64,\"IdempotencyKey\":\"run_abfa8f77c31247bda96f65559f79fd89:64\",\"classifierVersion\":null,\"recoveryAction\":null}"
+  },
+  {
+    "sequence": 94,
+    "occurredAt": "2026-07-29T02:20:16.1059184Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"completed\",\"RunId\":\"run_abfa8f77c31247bda96f65559f79fd89\"}"
+  },
+  {
+    "sequence": 95,
+    "occurredAt": "2026-07-29T02:20:16.1156445Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:16.1156095Z\"}"
+  },
+  {
+    "sequence": 96,
+    "occurredAt": "2026-07-29T02:20:16.1270914Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_109649c5ad0ae743f01c70ee04db1251\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:1\",\"Fence\":1}"
+  },
+  {
+    "sequence": 97,
+    "occurredAt": "2026-07-29T02:20:16.142424Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_f1a64825b634ca4538dcfc71bd81f4f7\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:2\",\"Fence\":1}"
+  },
+  {
+    "sequence": 98,
+    "occurredAt": "2026-07-29T02:20:16.1548686Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_068af9f4de0a2af866aa6d5098abdb8d\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:3\",\"Fence\":1}"
+  },
+  {
+    "sequence": 99,
+    "occurredAt": "2026-07-29T02:20:16.167648Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_aa3c25ccfc3ffa6caa514c416d10255a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:4\",\"Fence\":1}"
+  },
+  {
+    "sequence": 100,
+    "occurredAt": "2026-07-29T02:20:16.182605Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_53b5dfc8fb3a17d43661de7d82a632f5\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:5\",\"Fence\":1}"
+  },
+  {
+    "sequence": 101,
+    "occurredAt": "2026-07-29T02:20:16.1957385Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_c9688c8bd0a74f17c9d723f3ce032abf\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:6\",\"Fence\":1}"
+  },
+  {
+    "sequence": 102,
+    "occurredAt": "2026-07-29T02:20:16.2137768Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_6cb062044a5e2706eb6a2ad2c5b87a35\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:7\",\"Fence\":1}"
+  },
+  {
+    "sequence": 103,
+    "occurredAt": "2026-07-29T02:20:16.2262736Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_82cbf857309278ca8ed8925c91171475\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:8\",\"Fence\":1}"
+  },
+  {
+    "sequence": 104,
+    "occurredAt": "2026-07-29T02:20:16.240601Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_63dd26eb4afacf7a92df91db93a29252\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:9\",\"Fence\":1}"
+  },
+  {
+    "sequence": 105,
+    "occurredAt": "2026-07-29T02:20:16.256596Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_bad9b0ab872ef2c2039f97b749d850fc\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:10\",\"Fence\":1}"
+  },
+  {
+    "sequence": 106,
+    "occurredAt": "2026-07-29T02:20:16.2710496Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_aa89fe4f6bcb0fc662b2a040a857732f\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:11\",\"Fence\":1}"
+  },
+  {
+    "sequence": 107,
+    "occurredAt": "2026-07-29T02:20:16.2862208Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_28ad028ff907c6a55bcb0af09ee522f8\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:12\",\"Fence\":1}"
+  },
+  {
+    "sequence": 108,
+    "occurredAt": "2026-07-29T02:20:16.3022265Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_e3c75ff8f513e64c930a9af569f04bdc\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:13\",\"Fence\":1}"
+  },
+  {
+    "sequence": 109,
+    "occurredAt": "2026-07-29T02:20:16.3187211Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_5f1e25d8d64ffa9d4a3683bb2d3f5b36\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:14\",\"Fence\":1}"
+  },
+  {
+    "sequence": 110,
+    "occurredAt": "2026-07-29T02:20:16.3323106Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_12583918ab902ea0e54d8d5fe6aa12cf\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:15\",\"Fence\":1}"
+  },
+  {
+    "sequence": 111,
+    "occurredAt": "2026-07-29T02:20:16.3506054Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_bd3f657b003ea122b9705dc7decaffff\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:16\",\"Fence\":1}"
+  },
+  {
+    "sequence": 112,
+    "occurredAt": "2026-07-29T02:20:16.3672145Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_43fe358ba9041675bb46fbb9beb6df6b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:17\",\"Fence\":1}"
+  },
+  {
+    "sequence": 113,
+    "occurredAt": "2026-07-29T02:20:16.3813442Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_45a53c5cab5b2d9ec468857b2c1243b2\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:18\",\"Fence\":1}"
+  },
+  {
+    "sequence": 114,
+    "occurredAt": "2026-07-29T02:20:16.3968236Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_1b1ff4b4d0c4cc3e5298e10aae1b5b78\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:19\",\"Fence\":1}"
+  },
+  {
+    "sequence": 115,
+    "occurredAt": "2026-07-29T02:20:16.4092776Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_5c43a8096434ac3f48b6af1af8160e10\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:20\",\"Fence\":1}"
+  },
+  {
+    "sequence": 116,
+    "occurredAt": "2026-07-29T02:20:16.4242974Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_53972141f57edf653917c8df31e5e421\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:21\",\"Fence\":1}"
+  },
+  {
+    "sequence": 117,
+    "occurredAt": "2026-07-29T02:20:16.4387117Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_f7720f4b9743abfd6d41658f0147c7e3\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:22\",\"Fence\":1}"
+  },
+  {
+    "sequence": 118,
+    "occurredAt": "2026-07-29T02:20:16.4559404Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_4e7d708351848dadfca61fdc96f5a4ae\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:23\",\"Fence\":1}"
+  },
+  {
+    "sequence": 119,
+    "occurredAt": "2026-07-29T02:20:16.4723859Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_8dd70e56f4f1428d491c1c0bd89cf510\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:24\",\"Fence\":1}"
+  },
+  {
+    "sequence": 120,
+    "occurredAt": "2026-07-29T02:20:16.4850587Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_73e8adf6acb585cae2599fed16b6fcc1\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:25\",\"Fence\":1}"
+  },
+  {
+    "sequence": 121,
+    "occurredAt": "2026-07-29T02:20:16.5004442Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_2f06516743e9c0d1f6f627907cb48678\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:26\",\"Fence\":1}"
+  },
+  {
+    "sequence": 122,
+    "occurredAt": "2026-07-29T02:20:16.5154986Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_65cf9e1d8fff842111a13a7a4b0be603\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:27\",\"Fence\":1}"
+  },
+  {
+    "sequence": 123,
+    "occurredAt": "2026-07-29T02:20:16.5310868Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_4691f9c64001085a36feca76ecb9058f\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:28\",\"Fence\":1}"
+  },
+  {
+    "sequence": 124,
+    "occurredAt": "2026-07-29T02:20:16.5444912Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_e9df4182405a0cb494917aa40832c54a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:29\",\"Fence\":1}"
+  },
+  {
+    "sequence": 125,
+    "occurredAt": "2026-07-29T02:20:16.5574137Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_b0c641efa4035f801b529fc92d48b323\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:30\",\"Fence\":1}"
+  },
+  {
+    "sequence": 126,
+    "occurredAt": "2026-07-29T02:20:16.5729978Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_8336f6b95f896c94d9d037389798480e\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:31\",\"Fence\":1}"
+  },
+  {
+    "sequence": 127,
+    "occurredAt": "2026-07-29T02:20:16.5902452Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_ba76c389b09e30a94d941cb11ed35590\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:32\",\"Fence\":1}"
+  },
+  {
+    "sequence": 128,
+    "occurredAt": "2026-07-29T02:20:16.6023994Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_1669803120d87aa247de78eb10dc862a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:33\",\"Fence\":1}"
+  },
+  {
+    "sequence": 129,
+    "occurredAt": "2026-07-29T02:20:16.617861Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_1a68a3495ca208b338ca8ca0364b96f6\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:34\",\"Fence\":1}"
+  },
+  {
+    "sequence": 130,
+    "occurredAt": "2026-07-29T02:20:16.6330926Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_8f2f87203ad1820b901adc5b29f2e41b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:35\",\"Fence\":1}"
+  },
+  {
+    "sequence": 131,
+    "occurredAt": "2026-07-29T02:20:16.6457486Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_12afaa96fcfa03b4b564d942f2adbd4a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:36\",\"Fence\":1}"
+  },
+  {
+    "sequence": 132,
+    "occurredAt": "2026-07-29T02:20:16.6613237Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_459524c2438ac34d07eaf347c15c265f\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:37\",\"Fence\":1}"
+  },
+  {
+    "sequence": 133,
+    "occurredAt": "2026-07-29T02:20:16.6761069Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_daf39fd629ae899398d41b25ebd4f3ee\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:38\",\"Fence\":1}"
+  },
+  {
+    "sequence": 134,
+    "occurredAt": "2026-07-29T02:20:16.6918888Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_86da2c4eb8813771e34e07c478b4f239\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:39\",\"Fence\":1}"
+  },
+  {
+    "sequence": 135,
+    "occurredAt": "2026-07-29T02:20:16.7070896Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_8fc2c1c69798bc643d1780fc9d81786e\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:40\",\"Fence\":1}"
+  },
+  {
+    "sequence": 136,
+    "occurredAt": "2026-07-29T02:20:16.7195637Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_ef5d85f7501836906266764c83797c11\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:41\",\"Fence\":1}"
+  },
+  {
+    "sequence": 137,
+    "occurredAt": "2026-07-29T02:20:16.7361219Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_f2309bd4dccbf0ac045ca0685e2fb12a\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:42\",\"Fence\":1}"
+  },
+  {
+    "sequence": 138,
+    "occurredAt": "2026-07-29T02:20:16.7552468Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_4e342171111f27a7dd1f689d65148b66\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:43\",\"Fence\":1}"
+  },
+  {
+    "sequence": 139,
+    "occurredAt": "2026-07-29T02:20:16.7690904Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_8abcb440cc88bf6b5a0beb334c13fd86\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:44\",\"Fence\":1}"
+  },
+  {
+    "sequence": 140,
+    "occurredAt": "2026-07-29T02:20:16.792685Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_65d43faa0892b9e2aab81cd7bb6b9733\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:45\",\"Fence\":1}"
+  },
+  {
+    "sequence": 141,
+    "occurredAt": "2026-07-29T02:20:16.8100257Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_d1528aa2368e58f97d1941216b68b388\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:46\",\"Fence\":1}"
+  },
+  {
+    "sequence": 142,
+    "occurredAt": "2026-07-29T02:20:16.8261581Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_5692b26e067c9b907253ca635b24be50\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:47\",\"Fence\":1}"
+  },
+  {
+    "sequence": 143,
+    "occurredAt": "2026-07-29T02:20:16.8428173Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_955a972eea557dca201e29a1c2116518\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:48\",\"Fence\":1}"
+  },
+  {
+    "sequence": 144,
+    "occurredAt": "2026-07-29T02:20:16.8575861Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_c8cc8c070b6eb0b810004c4b9c0cbe2b\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:49\",\"Fence\":1}"
+  },
+  {
+    "sequence": 145,
+    "occurredAt": "2026-07-29T02:20:16.8720093Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_0b6095018207df1062724780a23175a2\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:50\",\"Fence\":1}"
+  },
+  {
+    "sequence": 146,
+    "occurredAt": "2026-07-29T02:20:16.8888853Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_2fbd8eef48360e15328517f0efd47983\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:51\",\"Fence\":1}"
+  },
+  {
+    "sequence": 147,
+    "occurredAt": "2026-07-29T02:20:16.9054781Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_3797f8b1644532dd1eb1d30778745865\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:52\",\"Fence\":1}"
+  },
+  {
+    "sequence": 148,
+    "occurredAt": "2026-07-29T02:20:16.9183894Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_a6f304c568849c925ac3b3cc463e5325\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:53\",\"Fence\":1}"
+  },
+  {
+    "sequence": 149,
+    "occurredAt": "2026-07-29T02:20:16.9343119Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_4aeee51cf82e82eeab7421685dd8d28c\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:54\",\"Fence\":1}"
+  },
+  {
+    "sequence": 150,
+    "occurredAt": "2026-07-29T02:20:16.951002Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_ad834ac7b27e7102aa7c05152efae92d\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:55\",\"Fence\":1}"
+  },
+  {
+    "sequence": 151,
+    "occurredAt": "2026-07-29T02:20:16.9653045Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_9677e38d766a4417499e4119d26f2fb1\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:56\",\"Fence\":1}"
+  },
+  {
+    "sequence": 152,
+    "occurredAt": "2026-07-29T02:20:16.9825552Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_bb61f3f30d3f5fb4fcdda77bcaf2a578\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:57\",\"Fence\":1}"
+  },
+  {
+    "sequence": 153,
+    "occurredAt": "2026-07-29T02:20:16.9978799Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_2fe2c3038e68a33a027481b84dd45682\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:58\",\"Fence\":1}"
+  },
+  {
+    "sequence": 154,
+    "occurredAt": "2026-07-29T02:20:17.0143013Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_0139cbd3d4fc413cb5b1469addb07f2e\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:59\",\"Fence\":1}"
+  },
+  {
+    "sequence": 155,
+    "occurredAt": "2026-07-29T02:20:17.0299884Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_bac7dec0a132f0196c1a1afb3fc016af\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:60\",\"Fence\":1}"
+  },
+  {
+    "sequence": 156,
+    "occurredAt": "2026-07-29T02:20:17.0439526Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"EventId\":\"evt_dfe032e83baf49be293e612c74cae60b\",\"Kind\":\"runner.terminal\",\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:61\",\"Fence\":1}"
+  },
+  {
+    "sequence": 157,
+    "occurredAt": "2026-07-29T02:20:17.0624641Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "artifact.ingested",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"ArtifactId\":\"art_5c45b680601a384746e0a6db51f6cd3a\",\"Name\":\"results/autonomy-AUTO-2.json\",\"sha256\":\"997b746aad20c1702c40514c266f9acde097fc5c551a5fd8512dd13c0944bf94\",\"Fence\":1}"
+  },
+  {
+    "sequence": 158,
+    "occurredAt": "2026-07-29T02:20:17.0770583Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "result-handoff.acknowledged",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"Sequence\":63,\"envelopeDigest\":\"03d4a301fb12725bcc639508fbc2e15ef91462ef111c0bc45c4186e4ae16c1ed\",\"RepositoryId\":\"prj-autonomy-canary-machine-10m\",\"ResultSha\":\"7bc11102a95014a775bab501255cab8aaff2e12e\",\"ImmutableRemoteRef\":null,\"SourceBundleDigest\":\"0196daacaf4596f7fe56ea4911f7d43368d1abd6ae2172b9b87fe403725a5149\",\"retainUntil\":\"2026-08-28T02:20:17.0769338Z\"}"
+  },
+  {
+    "sequence": 159,
+    "occurredAt": "2026-07-29T02:20:17.0909882Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.completed",
+    "targetType": "run",
+    "targetId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "detailJson": "{\"Fence\":1,\"Outcome\":\"Done\",\"Summary\":\"Autonomy canary completed 60 useful work units.\",\"ResultEnvelopeDigest\":\"03d4a301fb12725bcc639508fbc2e15ef91462ef111c0bc45c4186e4ae16c1ed\",\"Sequence\":64,\"IdempotencyKey\":\"run_6d0cfede08f4402ca71406fe5680f380:64\",\"classifierVersion\":null,\"recoveryAction\":null}"
+  },
+  {
+    "sequence": 160,
+    "occurredAt": "2026-07-29T02:20:17.1122389Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"completed\",\"RunId\":\"run_6d0cfede08f4402ca71406fe5680f380\"}"
+  },
+  {
+    "sequence": 161,
+    "occurredAt": "2026-07-29T02:20:17.2941559Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.claimed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-3\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":1}"
+  },
+  {
+    "sequence": 162,
+    "occurredAt": "2026-07-29T02:20:18.1232093Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:18.1231792Z\"}"
+  },
+  {
+    "sequence": 163,
+    "occurredAt": "2026-07-29T02:20:18.1354132Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 164,
+    "occurredAt": "2026-07-29T02:20:19.1491378Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:19.1490872Z\"}"
+  },
+  {
+    "sequence": 165,
+    "occurredAt": "2026-07-29T02:20:19.7541885Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 166,
+    "occurredAt": "2026-07-29T02:20:21.8673968Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:21.8673662Z\"}"
+  },
+  {
+    "sequence": 167,
+    "occurredAt": "2026-07-29T02:20:21.8898607Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 168,
+    "occurredAt": "2026-07-29T02:20:22.9027551Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:22.9027232Z\"}"
+  },
+  {
+    "sequence": 169,
+    "occurredAt": "2026-07-29T02:20:22.9175652Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 170,
+    "occurredAt": "2026-07-29T02:20:23.9274947Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:23.92746Z\"}"
+  },
+  {
+    "sequence": 171,
+    "occurredAt": "2026-07-29T02:20:23.9438578Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 172,
+    "occurredAt": "2026-07-29T02:20:24.9536071Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:24.9535678Z\"}"
+  },
+  {
+    "sequence": 173,
+    "occurredAt": "2026-07-29T02:20:24.9667941Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 174,
+    "occurredAt": "2026-07-29T02:20:25.9820182Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:25.9819501Z\"}"
+  },
+  {
+    "sequence": 175,
+    "occurredAt": "2026-07-29T02:20:25.9988413Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 176,
+    "occurredAt": "2026-07-29T02:20:27.0083987Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:27.0083354Z\"}"
+  },
+  {
+    "sequence": 177,
+    "occurredAt": "2026-07-29T02:20:27.0432016Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "event.ingested",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"EventId\":\"evt_95d4da1746fa4862e704bbc23f104ee8\",\"Kind\":\"runner.useful-work\",\"IdempotencyKey\":\"run_5156027ddcd4478893512704a35a0aeb:1\",\"Fence\":1}"
+  },
+  {
+    "sequence": 178,
+    "occurredAt": "2026-07-29T02:20:27.0612091Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 179,
+    "occurredAt": "2026-07-29T02:20:29.0809226Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:29.0808561Z\"}"
+  },
+  {
+    "sequence": 180,
+    "occurredAt": "2026-07-29T02:20:29.1001805Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 181,
+    "occurredAt": "2026-07-29T02:20:31.1220901Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:31.1219853Z\"}"
+  },
+  {
+    "sequence": 182,
+    "occurredAt": "2026-07-29T02:20:31.1413962Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 183,
+    "occurredAt": "2026-07-29T02:20:32.1540021Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:32.1539622Z\"}"
+  },
+  {
+    "sequence": 184,
+    "occurredAt": "2026-07-29T02:20:32.8133812Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 185,
+    "occurredAt": "2026-07-29T02:20:33.4805886Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.registered",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"HostId\":\"agt2394-rts-canary-machine-10m-host\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"RunnerVersion\":\"remote-compose-harness/2\",\"ProtocolVersion\":2}"
+  },
+  {
+    "sequence": 186,
+    "occurredAt": "2026-07-29T02:20:34.5048929Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:34.5048539Z\"}"
+  },
+  {
+    "sequence": 187,
+    "occurredAt": "2026-07-29T02:20:34.5245712Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 188,
+    "occurredAt": "2026-07-29T02:20:35.5358685Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:35.5358114Z\"}"
+  },
+  {
+    "sequence": 189,
+    "occurredAt": "2026-07-29T02:20:35.5497817Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 190,
+    "occurredAt": "2026-07-29T02:20:36.5663584Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:36.5663225Z\"}"
+  },
+  {
+    "sequence": 191,
+    "occurredAt": "2026-07-29T02:20:36.5813031Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 192,
+    "occurredAt": "2026-07-29T02:20:37.6002373Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:37.6000918Z\"}"
+  },
+  {
+    "sequence": 193,
+    "occurredAt": "2026-07-29T02:20:37.6233448Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 194,
+    "occurredAt": "2026-07-29T02:20:38.63897Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.renewed",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"Fence\":1,\"expiresAt\":\"2026-07-29T02:35:38.638929Z\"}"
+  },
+  {
+    "sequence": 195,
+    "occurredAt": "2026-07-29T02:20:38.6529138Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.outbox.observed",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"BacklogCount\":0,\"OldestUnacknowledgedSequence\":null,\"FinalHandoffState\":\"working\",\"RunId\":\"run_5156027ddcd4478893512704a35a0aeb\"}"
+  },
+  {
+    "sequence": 196,
+    "occurredAt": "2026-07-29T02:20:38.9187975Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.mode.changed",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"from\":0,\"to\":1,\"Reason\":\"remote Compose harness Task Server rolling update\"}"
+  },
+  {
+    "sequence": 197,
+    "occurredAt": "2026-07-29T02:20:38.9360535Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.shutdown.deferred",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"Reason\":\"remote Compose harness active-authority update proof\",\"unresolved\":1}"
+  },
+  {
+    "sequence": 198,
+    "occurredAt": "2026-07-29T02:20:39.0850711Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.mode.changed",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"from\":1,\"to\":1,\"Reason\":\"remote Compose harness bounded unit operation\"}"
+  },
+  {
+    "sequence": 199,
+    "occurredAt": "2026-07-29T02:20:39.096001Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.shutdown.deferred",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"Reason\":\"remote Compose harness bounded unit operation\",\"unresolved\":1}"
+  },
+  {
+    "sequence": 200,
+    "occurredAt": "2026-07-29T02:20:45.2999728Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.mode.changed",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"from\":1,\"to\":0,\"Reason\":\"remote Compose harness unit operation completed\"}"
+  },
+  {
+    "sequence": 201,
+    "occurredAt": "2026-07-29T02:20:45.3898006Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.mode.changed",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"from\":0,\"to\":0,\"Reason\":\"remote Compose harness recovery inspection\"}"
+  },
+  {
+    "sequence": 202,
+    "occurredAt": "2026-07-29T02:20:46.182151Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "runner.registered",
+    "targetType": "runner",
+    "targetId": "agt2394-rts-canary-machine-10m-runner",
+    "detailJson": "{\"HostId\":\"agt2394-rts-canary-machine-10m-host\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"RunnerVersion\":\"remote-compose-harness/2\",\"ProtocolVersion\":2}"
+  },
+  {
+    "sequence": 203,
+    "occurredAt": "2026-07-29T02:20:51.6141428Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "attempt.unknown.resolved",
+    "targetType": "run",
+    "targetId": "run_5156027ddcd4478893512704a35a0aeb",
+    "detailJson": "{\"ContainmentProof\":\"Compose removed container 213d708ee11ce6e6b2c2a7de3b416376ca8a40f9bb14b010e864f1fd0aeaefc4; replacement f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea has a distinct container identity\",\"Resolution\":\"requeue\",\"Fence\":1}"
+  },
+  {
+    "sequence": 204,
+    "occurredAt": "2026-07-29T02:20:51.6470502Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "run.claimed",
+    "targetType": "run",
+    "targetId": "run_3a9978749d3847a4bbef714990156ec8",
+    "detailJson": "{\"TaskId\":\"tsk-autonomy-canary-machine-10m-3\",\"RunnerId\":\"agt2394-rts-canary-machine-10m-runner\",\"InstanceId\":\"agt2394-rts-canary-machine-10m-instance\",\"fence\":2}"
+  },
+  {
+    "sequence": 205,
+    "occurredAt": "2026-07-29T02:20:51.6803851Z",
+    "actorId": "agt2394-rts-canary-machine-10m-runner",
+    "action": "lease.released",
+    "targetType": "run",
+    "targetId": "run_3a9978749d3847a4bbef714990156ec8",
+    "detailJson": "{\"Fence\":2,\"Outcome\":\"remote-harness-release\"}"
+  },
+  {
+    "sequence": 206,
+    "occurredAt": "2026-07-29T02:20:51.699162Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.mode.changed",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"from\":0,\"to\":1,\"Reason\":\"remote Compose harness final authority check\"}"
+  },
+  {
+    "sequence": 207,
+    "occurredAt": "2026-07-29T02:20:51.7292612Z",
+    "actorId": "remote-compose-harness:canary-machine-10m",
+    "action": "server.shutdown.prepared",
+    "targetType": "server",
+    "targetId": "srv_f15ec870fd1f4e928d7321da13a98709",
+    "detailJson": "{\"Reason\":\"remote Compose harness final authority check\"}"
+  }
+]

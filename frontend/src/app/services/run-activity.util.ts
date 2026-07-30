@@ -25,6 +25,63 @@ export interface StalledTaskState {
   tooltip: string;
 }
 
+export interface ActiveTaskRun {
+  kind: 'local' | 'remote';
+  runnerId: string | null;
+  hostDisplayName: string | null;
+  startedAt: string | null;
+  lastHeartbeat: string | null;
+}
+
+/**
+ * Canonical active-run projection shared by board cards, liveness copy, and
+ * aggregate counters. When the backend supplied an execution location it wins:
+ * a disconnected or recovering remote lease must not be resurrected by the
+ * compatibility runner badge. Older payloads can still prove a live run from
+ * the active lease or local execution fields.
+ */
+export function deriveActiveTaskRun(job: TaskInfo): ActiveTaskRun | null {
+  if (job.state !== TaskState.Progress) return null;
+
+  const location = job.executionLocation;
+  if (location) {
+    const connected = location.connectionState === 'connected';
+    if (connected && (location.state === 'remote-running' || location.state === 'local-running')) {
+      return {
+        kind: location.state === 'remote-running' ? 'remote' : 'local',
+        runnerId: location.runnerId ?? null,
+        hostDisplayName: location.hostDisplayName ?? location.runnerId ?? null,
+        startedAt: location.startedAt ?? null,
+        lastHeartbeat: location.lastHeartbeat ?? null,
+      };
+    }
+    return null;
+  }
+
+  const runner = job.runner;
+  if (runner?.leaseId) {
+    return {
+      kind: runner.isRemote ? 'remote' : 'local',
+      runnerId: runner.runnerId || null,
+      hostDisplayName: runner.runnerName || runner.hostname || runner.runnerId || null,
+      startedAt: runner.acquiredAt || null,
+      lastHeartbeat: null,
+    };
+  }
+
+  if (job.execution?.status === 'running' || job.runActivity?.kind === 'active') {
+    return {
+      kind: 'local',
+      runnerId: null,
+      hostDisplayName: 'Local',
+      startedAt: job.execution?.startedAt ?? null,
+      lastHeartbeat: null,
+    };
+  }
+
+  return null;
+}
+
 function latestActivityMs(job: TaskInfo): number | null {
   const instants = [
     job.enteredLaneAt,

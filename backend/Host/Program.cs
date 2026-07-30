@@ -587,16 +587,18 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
-// AGT-1999: the "Merge into Develop" post-step pushes the integration branch to
-// origin after a successful merge, off the accept-transition request path.
-// MergeIntoDevelopRunner enqueues here (instant); IntegrationPushWorker drains and
-// performs the git push with the AGT-1944 environmental retry. Same offload shape
-// as the completed-job workspace push above.
+// Accepted integration is a transactional two-stage background chain. Accept
+// keeps the card in Human Review with phase=integrating and enqueues merge +
+// gate here. Only successful integration moves it to Completed; failures return
+// it to ordinary Human Review with durable evidence. Both queues are latency
+// optimizations; the backstops recover from phase and pipeline facts.
+builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
-// The channel is intentionally in-memory. Durable pipeline facts recover both
-// a lane-move/process crash before the merge and a successful merge whose queued
-// origin push was dropped by restart.
+// The channel is intentionally in-memory. Durable phase and pipeline facts
+// recover both an interrupted accept transaction and a successful merge whose
+// queued origin push was dropped by restart.
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
@@ -838,6 +840,20 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("RemoteDeliveryBackfill", ex);
+}
+
+// AGT-2438: one-time, idempotent repair for accepted legacy cards whose
+// status.md is missing. The same TaskTransitionService owns the live invariant
+// and this backfill, so both paths synthesize exactly the same honest Result
+// scaffold. Repaired files carry an operator-backfill marker; later boots are
+// no-ops because existing non-empty Result documents are never overwritten.
+try
+{
+    app.Services.GetRequiredService<TaskTransitionService>().BackfillMissingResultDocuments();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("ResultDocumentBackfill", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

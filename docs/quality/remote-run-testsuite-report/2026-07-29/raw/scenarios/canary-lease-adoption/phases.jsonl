@@ -1,0 +1,10 @@
+{"sequence":1,"phase":"claim","point":"before","recordedAt":"2026-07-29T02:08:21.384Z","monotonicMs":1374,"scenarioStartedAt":"2026-07-29T02:08:20.009Z"}
+{"sequence":2,"phase":"claim","point":"after","recordedAt":"2026-07-29T02:08:21.903Z","monotonicMs":1893,"scenarioStartedAt":"2026-07-29T02:08:20.009Z","taskKey":"RTS-21","runAttemptId":"run_e48483cbe13f476582a5892124c0a597","fence":1}
+{"sequence":3,"phase":"run","point":"before","recordedAt":"2026-07-29T02:08:21.907Z","monotonicMs":1897,"scenarioStartedAt":"2026-07-29T02:08:20.009Z"}
+{"sequence":4,"phase":"run","point":"after","recordedAt":"2026-07-29T02:08:23.080Z","monotonicMs":3070,"scenarioStartedAt":"2026-07-29T02:08:20.009Z","pid":1530647,"authorityEpoch":0,"fence":1,"taskState":"4-auto-review"}
+{"sequence":5,"phase":"gate","point":"before","recordedAt":"2026-07-29T02:08:23.084Z","monotonicMs":3074,"scenarioStartedAt":"2026-07-29T02:08:20.009Z"}
+{"sequence":6,"phase":"gate","point":"after","recordedAt":"2026-07-29T02:08:24.505Z","monotonicMs":4495,"scenarioStartedAt":"2026-07-29T02:08:20.009Z","taskState":"2-ready","staleWriterStatuses":[409,409,409,409]}
+{"sequence":7,"phase":"review","point":"before","recordedAt":"2026-07-29T02:08:24.508Z","monotonicMs":4498,"scenarioStartedAt":"2026-07-29T02:08:20.009Z"}
+{"sequence":8,"phase":"review","point":"after","recordedAt":"2026-07-29T02:08:25.885Z","monotonicMs":5875,"scenarioStartedAt":"2026-07-29T02:08:20.009Z","taskState":"2-ready","staleWriterStatuses":[409,409,409,409]}
+{"sequence":9,"phase":"integration","point":"before","recordedAt":"2026-07-29T02:08:25.890Z","monotonicMs":5880,"scenarioStartedAt":"2026-07-29T02:08:20.009Z"}
+{"sequence":10,"phase":"integration","point":"after","recordedAt":"2026-07-29T02:08:25.904Z","monotonicMs":5894,"scenarioStartedAt":"2026-07-29T02:08:20.009Z","status":"primary-generation-delivered","taskState":"4-auto-review","deadTaskState":"2-ready","mismatchedTaskState":"2-ready"}

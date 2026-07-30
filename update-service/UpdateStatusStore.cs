@@ -28,7 +28,7 @@ public sealed class UpdateStatusStore
         _historyFile = historyFile;
         _logger = logger;
         _readProductVersion = readProductVersion;
-        _serviceVersion = typeof(UpdateStatusStore).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        _serviceVersion = typeof(UpdateStatusStore).Assembly.GetName().Version?.ToString(3) ?? "unknown";
         _status = new UpdateStatus(
             Phase: "idle",
             PhaseLabel: null,

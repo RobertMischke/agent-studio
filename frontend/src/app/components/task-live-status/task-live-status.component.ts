@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import type { TaskInfo } from '../../models/task.model';
 import { TaskState } from '../../models/task.model';
 import { NowTickService } from '../../services/now-tick.service';
-import { isTaskRunActive } from '../../services/run-activity.util';
+import { deriveActiveTaskRun, isTaskRunActive } from '../../services/run-activity.util';
 
 export type TaskLiveStatusVariant = 'card' | 'detail';
 type LiveTone = 'active' | 'waiting' | 'idle' | 'stalled';
@@ -58,6 +58,20 @@ export class TaskLiveStatusComponent {
         tone: 'active',
         headline: `${stepPrefix(active.kind)}${active.displayName}`,
         detail: runtime.length > 0 ? runtime.join(' · ') : null,
+        next,
+        attempt: status.attempt,
+      };
+    }
+
+    const activeRun = deriveActiveTaskRun(task);
+    if (activeRun?.kind === 'remote') {
+      const startedAt = timestamp(activeRun.startedAt);
+      const duration = startedAt === null ? null : elapsed(this.now() - startedAt);
+      const host = activeRun.hostDisplayName || activeRun.runnerId || 'remote host';
+      return {
+        tone: 'active',
+        headline: `Running remote on ${host}`,
+        detail: duration ? `Active for ${duration}` : null,
         next,
         attempt: status.attempt,
       };

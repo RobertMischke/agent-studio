@@ -1,0 +1,112 @@
+{
+  "scenario": "fault-gate-timeout",
+  "seed": "agt2200-gate-v1",
+  "runId": "canary-gate-timeout",
+  "accepted": true,
+  "resultSha": "2973894fdef57c052261782b4e2a6accbc048423",
+  "semanticTree": "06d4fa5b56afad6f2369c23212059823f9ae9f79",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "gate-timeout-recovered",
+  "assertions": {
+    "lane": {
+      "actual": "6-completed",
+      "expected": "6-completed",
+      "passed": true
+    },
+    "lease": {
+      "runAttemptId": "run_ad9acc74e771401394112a5d420da367",
+      "fence": 1,
+      "status": "completed",
+      "runStatus": "Done",
+      "attempts": 1,
+      "noDuplicateClaim": true
+    },
+    "process": {
+      "active": 0,
+      "observations": [
+        {
+          "operation": "gate-command",
+          "parentPid": 1529565,
+          "childPid": 1529572,
+          "reaped": true
+        }
+      ],
+      "allReaped": true
+    },
+    "worktree": {
+      "path": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout/coding/worktree",
+      "isolated": true,
+      "ready": true,
+      "busyPathReported": null,
+      "prepareAttempts": 1,
+      "foreignPreserved": true
+    },
+    "outbox": {
+      "logicalItems": 4,
+      "acknowledgedItems": 4,
+      "backlog": 0,
+      "monotonic": true,
+      "serverEvents": 3,
+      "serverArtifacts": 1,
+      "terminalFactCopies": 1,
+      "terminalArtifactCopies": 1,
+      "apiAttempts": {
+        "claim": 1,
+        "heartbeat": 1,
+        "event-report": 1,
+        "artifact-report": 1,
+        "completion-report": 1
+      }
+    },
+    "sha": {
+      "resultSha": "2973894fdef57c052261782b4e2a6accbc048423",
+      "handoffResultSha": "2973894fdef57c052261782b4e2a6accbc048423",
+      "originHead": "1341b33978839b628e3dcb0767bdef394641f921",
+      "integrated": true,
+      "phantomSuccessPrevented": true
+    },
+    "incident": {
+      "selectedFaults": [
+        "gate-watchdog-timeout"
+      ],
+      "outcome": "gate-timeout-recovered",
+      "expected": "gate-timeout-recovered",
+      "evidence": [
+        {
+          "incidentClass": "gate-timeout",
+          "outcome": "gate-timeout-recovered",
+          "classification": "infrastructure-timeout",
+          "productTestFailure": false,
+          "watchdogMs": 350,
+          "recoveryAttempts": 1,
+          "processTreeReaped": true
+        }
+      ]
+    }
+  },
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "gate-watchdog-timeout"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 1,
+    "consumed": 1
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout"
+}

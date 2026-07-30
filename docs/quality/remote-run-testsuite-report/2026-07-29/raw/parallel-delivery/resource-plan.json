@@ -1,0 +1,27 @@
+{
+  "runId": "canary-parallel-12",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12",
+  "config": {
+    "taskCount": 12,
+    "codingWorkers": 3,
+    "gateWorkers": 3,
+    "reviewWorkers": 3,
+    "slotsPerWorker": 4
+  },
+  "scenarios": [
+    "baseline",
+    "worker-loss"
+  ],
+  "evidenceRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/evidence",
+  "neverTouches": [
+    "agent-taskboard-stable/",
+    "agent-taskboard-workspace/projects/",
+    "agent-taskboard-workspace/.metadata/"
+  ],
+  "workerCapacity": {
+    "coding": 12,
+    "gate": 12,
+    "review": 12
+  },
+  "serverUrl": "http://127.0.0.1:34673"
+}

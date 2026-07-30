@@ -1,0 +1,91 @@
+{
+  "scenario": "reference-change",
+  "seed": "compose-reference-v1",
+  "runId": "canary-machine-10m-reference",
+  "accepted": true,
+  "resultSha": "a703ee085baee8d4edb33c85001a0b2cf611dd52",
+  "semanticTree": "1c903baf39449db19baa7158702dc7fa7e4f7452",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "none",
+  "assertions": {
+    "lane": {
+      "actual": "6-completed",
+      "expected": "6-completed",
+      "passed": true
+    },
+    "lease": {
+      "runAttemptId": "run_480fbcbf5f98489899f288c9f6d36d34",
+      "fence": 1,
+      "status": "completed",
+      "runStatus": "Done",
+      "attempts": 1,
+      "noDuplicateClaim": true
+    },
+    "process": {
+      "active": 0,
+      "observations": [],
+      "allReaped": true
+    },
+    "worktree": {
+      "path": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/scenarios/reference-change/canary-machine-10m-reference/coding/worktree",
+      "isolated": true,
+      "ready": true,
+      "busyPathReported": null,
+      "prepareAttempts": 1,
+      "foreignPreserved": true
+    },
+    "outbox": {
+      "logicalItems": 4,
+      "acknowledgedItems": 4,
+      "backlog": 0,
+      "monotonic": true,
+      "serverEvents": 3,
+      "serverArtifacts": 1,
+      "terminalFactCopies": 1,
+      "terminalArtifactCopies": 1,
+      "apiAttempts": {
+        "claim": 1,
+        "heartbeat": 1,
+        "event-report": 1,
+        "artifact-report": 1,
+        "completion-report": 1
+      }
+    },
+    "sha": {
+      "resultSha": "a703ee085baee8d4edb33c85001a0b2cf611dd52",
+      "handoffResultSha": "a703ee085baee8d4edb33c85001a0b2cf611dd52",
+      "originHead": "cdf1a21c86b98bbf357b551f7275a85143f09f24",
+      "integrated": true,
+      "phantomSuccessPrevented": true
+    },
+    "incident": {
+      "selectedFaults": [],
+      "outcome": "none",
+      "expected": "none",
+      "evidence": []
+    }
+  },
+  "faultSchedule": {
+    "enabled": false,
+    "selected": [],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 0,
+    "consumed": 0
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/scenarios/reference-change/canary-machine-10m-reference"
+}

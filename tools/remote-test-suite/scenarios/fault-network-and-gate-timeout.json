@@ -20,6 +20,22 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-gate-timeout",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates"
+    ],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 6
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
   "hooks": {},
   "faults": ["task-server-network-blips", "gate-watchdog-timeout"],
   "expected": {

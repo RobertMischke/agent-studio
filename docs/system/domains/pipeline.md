@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-28
+Version: 2026-07-30
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -58,6 +58,12 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Features/Pipeline/RemotePipelineExecutionProjection.cs`: read-time
+  bridge for remote cards. It overlays the remote claim and completion facts
+  from session/timeline data, the latest Review Plane grade, and canonical
+  token-ledger calls onto the normal pipeline catalogue while preserving
+  locally recorded integration gates. It never writes
+  `pipeline-execution.json` or another lifecycle state.
 - `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
   `task-server/TaskServerOrchestrationStore.cs`, and
   `orchestrator-engine/`: the separated flow boundary. Project flow
@@ -73,12 +79,18 @@ pipeline view.
   step telemetry.
 - `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
-  delivery merge when the operator accepts a done-green task (the
-  `HumanReview -> Completed` transition wired in `TaskTransitionService`).
-  Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
-  `ResultSha` from `logs/review-subject.json`, fetch that exact
-  `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
-  mismatch. The configured integration ref is fetched and fast-forwarded
+  delivery merge when the operator accepts a done-green task.
+  `TaskTransitionService` keeps the card in Human Review with phase
+  `integrating`, stamps the internal `integrationpending` recovery marker, and
+  enqueues `AcceptedIntegrationQueue`; `AcceptedIntegrationWorker` performs the
+  serialized merge, pre-develop build gate, rollback, and push hand-off outside
+  the HTTP request. Only `Merged` or `AlreadyMerged` moves the card to Completed.
+  Failures clear the phase, retain the card in Human Review, and append a hard
+  integration-failed journal event.
+  `DeliveryRefResolver` chooses the immutable result ref first, then an
+  attributed commit branch, then `runner/<runner>/<task-key>`, with
+  `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
+  from origin and fenced to `ResultSha`. The configured integration ref is fetched and fast-forwarded
   before the merge; a missing local branch is created from origin and a
   divergent one fails visibly. The outcome is recorded so the pending step
   flips to passed / failed / skipped in place. After a successful merge it
@@ -103,9 +115,11 @@ pipeline view.
   results are single-flight cached by repository, baseline SHA, and command
   hash. Only failures still new after one subject retry block the review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
-  deliveries after a backend restart when the durable lane move landed but the
-  merge did not. It also repairs the legacy `no-branch` outcome caused by
-  looking only for `task/<slug>`.
+  and local deliveries after a backend restart when the durable Human Review
+  `integrating` phase landed but the queued merge did not complete. The channel
+  is only a latency optimization; phase, pending marker, pipeline record, and
+  timeline are the durability boundary. The backstop finalizes Completed only
+  after successful integration and returns decided failures to Human Review.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
@@ -229,6 +243,14 @@ pipeline view.
   they currently share the standard catalogue defaults. Planning and research
   use the lightweight planning chain and never inherit migrated coding
   overrides. Concept retains its dedicated document-first catalogue.
+- The task pipeline endpoint projects local and remote lifecycle facts at read
+  time. A remote claim/completion becomes CORE work, a Review Plane grade
+  becomes the DECISION verdict, and recorded integration gates remain TOOL
+  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
+  structurally omits are `Skipped` with an explicit remote/not-applicable
+  reason. `Not run` is reserved for a step the current attempt genuinely never
+  reached. Remote token totals, historical list-price estimates, and call
+  counts come from the same token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
@@ -464,6 +486,11 @@ operator changes cause the step to fail before its writer runs.
   remain `Pending`, catalogue stubs remain `Planned`, and unknown extension rows
   are preserved. `PipelineExecutionLog.Read` applies the same projection purely
   to legacy current and previous attempts without rewriting their JSON files.
+- Task detail renders pending, non-deferred rows as `Not run` when a settled
+  attempt used a lightweight path or escalated before the full pipeline ran.
+  Deferred rows remain `Pending`. The Result view has one verdict badge, and
+  every human-review escalation writes a minimal Result scaffold before moving
+  the task so preparation failures retain durable evidence.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
   fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect
@@ -528,13 +555,18 @@ operator changes cause the step to fail before its writer runs.
   runs only on an external operator trigger, not automatically in the
   post-bracket. It is distinct from a `Stub`: a stub has no implementation and
   renders "planned", a deferred step renders "pending" until triggered. The
-  merge into develop is best-effort and runs only after the lane move has
-  already landed, so it can never block the transition; a conflict is a visible
-  `Failed` outcome (conflicted files in the verdict summary) and the working
-  tree is left clean, never silently resolved. The paired
+  merge into develop runs on `AcceptedIntegrationWorker` while the card remains
+  in Human Review with phase `integrating`. It is the acceptance transaction's
+  gate: only `Merged` or `AlreadyMerged` commits the move to Completed. A
+  conflict is a visible `Failed` outcome with conflicted files in the verdict
+  summary; the phase clears, the card remains in Review, and the working tree is
+  left clean. Once merge/gate/rollback starts, host cancellation
+  does not interrupt that consistency boundary. `/healthz/drain` reports
+  `gate-busy` while the boundary is active so the external stable restart
+  watcher can wait for a bounded drain window. The paired
   `post-merge-into-develop-push` step (AGT-1999) pushes the integration branch to
   `origin` after a successful merge; it is offloaded off the request path and
-  never force-pushes, so it too can never block the transition, and a push
+  never force-pushes. A push
   failure is a visible step outcome (`environmental` after the AGT-1944 retry
   budget is spent, or `remote-rejected` on a diverged remote) rather than a
   silent drop. The optional AGT-2009 counterpart - auto-cleanup of merged

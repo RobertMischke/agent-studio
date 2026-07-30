@@ -89,6 +89,10 @@ boundary, route map, and visual ownership diagram are in
   backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+  The middle inspector uses the fixed `Task | Activity | Result` order. Task
+  renders `prompt.md` and the read-only refinement projection from run/log and
+  steering-history evidence; Activity and Result retain their existing live
+  and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, places the primary
   reissue, accept-as-is, and abort decisions beside the recommendation, lists
@@ -99,11 +103,14 @@ boundary, route map, and visual ownership diagram are in
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
-  Timeline and steering text is ANSI-sanitised before rendering. Code Review
-  keeps the last available grade visible with its date when it belongs to an
-  older delivery. The task-detail Docs tab presents rendered result documents
-  before prompt and raw artifacts, with per-document anchors and technical file
-  metadata disclosed from the document details menu.
+  Timeline and steering text is ANSI-sanitised before rendering. Timeline rows
+  project each fact once across title, summary, and badges, omit permanent
+  defaults and zero counts, and disclose the exact members behind source counts.
+  Execution-context rows keep model and thinking level visible without repeating
+  the implied CLI. Code Review keeps the last available grade visible with its
+  date when it belongs to an older delivery. The task-detail Docs tab presents
+  rendered result documents before prompt and raw artifacts, with per-document
+  anchors and technical file metadata disclosed from the document details menu.
   Each review row also shows its council reaction, including
   per-finding rulings and the linked follow-up round. Reviews without a reaction
   sidecar expose that audit gap explicitly.
@@ -170,7 +177,12 @@ boundary, route map, and visual ownership diagram are in
   `develop`, toolchain, and no-op readiness from the host registry snapshot.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
-  cannot be confused. The historical target is the ordered, immutable route
+  cannot be confused. A fresh connected remote lease also drives the card's
+  CURRENT running copy and the status bar's separate local / remote totals;
+  a disconnected, expired, or recovering location remains an acute orphan
+  candidate. These consumers reuse the grouped-board and execution-location
+  snapshots and do not add another polling path. The historical target is the
+  ordered, immutable route
   defined by [Runner provenance and host handoff](../../concepts/completion-review-and-remote-runner-stability.html#provenance):
   task Overview and run/pipeline detail show actual placement per agent run and
   executed step, preserve A → B → A returns, and label missing legacy data as

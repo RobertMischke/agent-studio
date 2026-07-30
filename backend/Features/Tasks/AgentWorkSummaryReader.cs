@@ -27,17 +27,34 @@ internal static class AgentWorkSummaryReader
         AllowTrailingCommas = true,
     };
 
-    public static AgentWorkSummary Read(TaskInfo info)
+    public static AgentWorkSummary Read(TaskInfo info, TaskTokenSummary? tokenSummary = null)
     {
         var sessionPath = TaskPaths.SessionEventsLog(info.FolderPath);
         var toolPath = ToolCallsLogPath(info.FolderPath);
 
-        var (callCount, recovered, sessionStartedAt, sessionLastAt) = FoldSessionEvents(sessionPath);
+        var (sessionCalls, recovered, sessionStartedAt, sessionLastAt, remote) =
+            FoldSessionEvents(sessionPath);
         var (toolCalls, toolCounts, toolLastAt) = FoldToolCalls(toolPath);
+        var callCount = remote && tokenSummary is not null
+            ? Math.Max(sessionCalls, tokenSummary.Calls)
+            : sessionCalls;
+        var ledgerStartedAt = remote
+            ? tokenSummary?.Entries.Where(call => call.Ts != default).Select(call => (DateTime?)call.Ts).Min()
+            : null;
+        if (ledgerStartedAt.HasValue
+            && (!sessionStartedAt.HasValue || ledgerStartedAt.Value < sessionStartedAt.Value))
+        {
+            sessionStartedAt = ledgerStartedAt;
+        }
 
         DateTime? lastTouch = sessionLastAt;
         if (toolLastAt is { } t && (lastTouch is null || t > lastTouch.Value))
             lastTouch = t;
+        if (remote && tokenSummary?.LastUpdate is { } tokenLast
+            && (lastTouch is null || tokenLast > lastTouch.Value))
+        {
+            lastTouch = tokenLast;
+        }
 
         return new AgentWorkSummary
         {
@@ -136,11 +153,12 @@ internal static class AgentWorkSummaryReader
     private static string ToolCallsLogPath(string jobFolder)
         => Path.Combine(TaskPaths.LogsDir(jobFolder), "tool-calls.jsonl");
 
-    private static (int calls, bool recovered, DateTime? startedAt, DateTime? lastAt) FoldSessionEvents(string path)
+    private static (int calls, bool recovered, DateTime? startedAt, DateTime? lastAt, bool remote) FoldSessionEvents(string path)
     {
-        if (!File.Exists(path)) return (0, false, null, null);
+        if (!File.Exists(path)) return (0, false, null, null, false);
         int calls = 0;
         bool recovered = false;
+        bool remote = false;
         DateTime? earliest = null;
         DateTime? latest = null;
         foreach (var raw in ReadAllLinesSafe(path))
@@ -151,6 +169,8 @@ internal static class AgentWorkSummaryReader
             if (evt == null) continue;
             calls++;
             if (string.Equals(evt.Kind, "recovery", StringComparison.OrdinalIgnoreCase)) recovered = true;
+            remote = string.Equals(evt.Cli, "remote-runner", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(evt.ExecutionLocation?.ExecutionKind, "remote", StringComparison.OrdinalIgnoreCase);
             var ts = evt.Ts;
             if (ts != default)
             {
@@ -158,7 +178,7 @@ internal static class AgentWorkSummaryReader
                 if (latest is null || ts > latest.Value) latest = ts;
             }
         }
-        return (calls, recovered, earliest, latest);
+        return (calls, recovered, earliest, latest, remote);
     }
 
     private static (int total, List<AgentWorkToolCount> counts, DateTime? lastAt) FoldToolCalls(string path)

@@ -4,7 +4,7 @@
  * A {@link ResultDocument} is a single, presentation-ready projection of a
  * finished run that the Result view renders in three layers, top to bottom:
  *
- *   1. a **metric head** (verdict, code-review grade, duration, tokens, commits)
+ *   1. a **metric head** (code-review grade, duration, tokens, commits)
  *   2. an **overview** ("problem -> solution", the shareable one-liner)
  *   3. the **detail** markdown (What Was Done / Open Items / Notes / Images)
  *
@@ -30,7 +30,7 @@ export interface ResultMetric {
   label: string;
   value: string;
   tooltip?: string;
-  /** Semantic tone for value-carrying chips (grade, verdict). */
+  /** Semantic tone for value-carrying chips (grade, tests). */
   tone?: 'ok' | 'warn' | 'problem' | 'neutral';
 }
 
@@ -238,15 +238,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   const metrics: ResultMetric[] = [];
   const info = detail.info;
 
-  metrics.push({
-    id: 'verdict',
-    icon: verdict.emoji,
-    label: 'Verdict',
-    value: verdict.label,
-    tooltip: verdict.detail,
-    tone: verdict.kind === 'ok' ? 'ok' : verdict.kind === 'problem' ? 'problem' : 'warn',
-  });
-
   const grade = codeReviewGradeFromTags(info.tags);
   if (grade) {
     const meta = GRADE_META[grade] ?? { tone: 'neutral' as const, tooltip: `Code review grade ${grade}.` };
@@ -322,9 +313,9 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
 
 /**
  * Build the {@link ResultDocument} for a finished run from its detail payload
- * and the already-derived head verdict. `verdict` is passed in (rather than
- * re-derived) so the metric head and the protocol-pane's verdict banner can
- * never disagree.
+ * and the already-derived head verdict. `verdict` is passed in so the single
+ * Result case badge is authoritative; it is deliberately not repeated as a
+ * metric chip beside itself.
  */
 export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict): ResultDocument {
   const markdown = detail.statusMarkdown ?? '';

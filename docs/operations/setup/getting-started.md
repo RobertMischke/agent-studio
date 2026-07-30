@@ -1,9 +1,23 @@
 # Getting started
 
-Docker Compose is the single supported path for a new Agent Studio installation.
+Docker Compose is the primary path for a new Agent Studio installation.
 It gives the application a consistent Linux runtime on Windows, macOS, and
 Linux, and keeps .NET, Node.js, local configuration files, maintainer switches,
 and repository-neighbour assumptions out of the first run.
+
+As an alternative for release installs on Linux x64, the guided self-contained
+`agent-orchestrator-setup` executable needs no source checkout and no .NET
+installation:
+
+```sh
+curl -fLO https://github.com/agent-orc/agent-studio/releases/latest/download/agent-orchestrator-setup
+chmod +x agent-orchestrator-setup
+sudo ./agent-orchestrator-setup
+```
+
+It offers Demo, Single Machine, Multi-machine Control Plane, and Agent Host
+join paths; see [multi-machine.md](./multi-machine.md) for the distributed
+flow. The rest of this page describes the Docker Compose path.
 
 The default stack starts the Studio UI and its API. It deliberately does not
 start an Agent Host or install coding-agent CLIs. Those execution credentials

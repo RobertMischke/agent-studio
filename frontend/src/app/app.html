@@ -763,7 +763,7 @@
                       [title]="lane.title"
                       [icon]="lane.icon"
                       [state]="lane.state"
-                      [jobs]="lane.jobs"
+                      [jobs]="lane.jobs" [allBoardJobs]="epicBoardTasks()"
                       [collapsed]="isLaneCollapsed(lane.state)"
                       [compact]="effectiveCompactCards()"
                       [archiving]="archivingInProgress()"

@@ -1,5 +1,6 @@
 using AgentStudio.Pipeline;
 using System.Text;
+using CapabilityProtocol = AgentStudio.TaskServer.Contracts.CapabilityProtocol;
 
 namespace AgentStudio.Tasks;
 
@@ -146,6 +147,8 @@ public static class LeaseEndpoints
             AgentStudio.Clients.HostTelemetryStore telemetry,
             AccessSecurityStore accessSecurity,
             HumanReviewEscalation humanReviewEscalation,
+            AgentStudio.Runner.V1ReviewExecutorRegistry capabilityRegistry,
+            AgentStudio.Prompts.RuntimePromptService prompts,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
@@ -330,7 +333,7 @@ public static class LeaseEndpoints
                             TaskKind: replayedTask.Kind,
                             // A replay must describe the same run as the original
                             // claim, so it resolves the spec from the same card.
-                            RunSpec: BuildRunSpec(replayedTask, settings))));
+                            RunSpec: BuildRunSpec(replayedTask, settings, prompts))));
                     }
                 }
 
@@ -483,8 +486,42 @@ public static class LeaseEndpoints
                 RemoteProjectRepository? failedPreflightRepository = null;
                 RunnerProjectPreflight? failedProjectPreflight = null;
                 string? nonRemoteCapableProject = null;
+                string? capabilityMismatch = null;
+                var readOnlyCodingSkipped = false;
                 foreach (var task in eligible)
                 {
+                    if (client is not null
+                        && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
+                        && !TaskKinds.IsEpic(task.Kind))
+                    {
+                        readOnlyCodingSkipped = true;
+                        logger.LogWarning(
+                            "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
+                            req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
+                        continue;
+                    }
+                    var cliType = CliTypes.Normalize(task.CliType);
+                    var requiredCapabilities = (req.RequiredCapabilities ?? [])
+                        .Append(CapabilityProtocol.CodingExecutor)
+                        .Append(CapabilityProtocol.CliExecution(cliType))
+                        .Append(CapabilityProtocol.ProviderAuthentication(cliType))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    var capabilityAdmission = capabilityRegistry.EvaluateCodingAdmission(
+                        req.RunnerId.Trim(),
+                        req.CapabilityInstanceId,
+                        requiredCapabilities);
+                    if (!capabilityAdmission.Eligible)
+                    {
+                        capabilityMismatch ??= capabilityAdmission.Message;
+                        logger.LogInformation(
+                            "remote-runner-coding-claim-skipped-capability runner={Runner} task={TaskKey} cli={CliType} reason={Reason}",
+                            req.RunnerName,
+                            task.Key ?? task.TaskKey ?? task.Id,
+                            cliType,
+                            capabilityAdmission.Message);
+                        continue;
+                    }
                     var registryProject = projects.FindByStorageLocation(task.WatchPath)
                                           ?? projects.FindByIdOrDisplayName(task.ProjectName);
                     var targetBranch = settings.Get(task.ProjectName).IntegrationBranch;
@@ -562,9 +599,11 @@ public static class LeaseEndpoints
                 if (candidate is null || repository is null)
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
-                        Message: nonRemoteCapableProject is not null
-                            ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                            : null)));
+                        Message: readOnlyCodingSkipped
+                            ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
+                            : nonRemoteCapableProject is not null
+                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                                : capabilityMismatch)));
 
                 if (string.IsNullOrWhiteSpace(clientId))
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
@@ -740,7 +779,7 @@ public static class LeaseEndpoints
                         InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                         acquire.Lease.FencingToken));
                 }
-                var runSpec = BuildRunSpec(candidate, settings);
+                var runSpec = BuildRunSpec(candidate, settings, prompts);
                 logger.LogInformation(
                     "remote-runner-run-spec task={TaskKey} cli={CliType} model={Model} thinking={ThinkingLevel} permission={PermissionMode} context={ContextMode}",
                     taskKey,
@@ -948,7 +987,10 @@ public static class LeaseEndpoints
                     : Results.Conflict(response);
             }
 
-            var deliveryBranch = req.SalvageBranch ?? req.ImmutableResultRef;
+            // The immutable ResultEnvelope ref is the reviewed delivery. A
+            // salvage branch is recovery evidence only and must never outrank
+            // the immutable result when both are present.
+            var deliveryBranch = req.ImmutableResultRef ?? req.SalvageBranch;
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
@@ -1008,7 +1050,15 @@ public static class LeaseEndpoints
             }
 
             ReviewAttemptDto? reviewAttempt = null;
-            if (!isEpicPlanning && outcome is ("done" or "noop"))
+            // Report-only modes (planning / research) deliver a document into the
+            // task folder on THIS server; there is no code subject to materialize
+            // on a review-executor host. Their completion is validated
+            // deterministically by the lightweight report pipeline
+            // (ReviewDecisionOrchestrator.ProcessReportOnlyDoneAsync), so no
+            // remote ReviewAttempt is minted for them.
+            if (!isEpicPlanning
+                && outcome is ("done" or "noop")
+                && !TaskModes.IsReportOnly(task.Mode))
             {
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
@@ -1045,6 +1095,7 @@ public static class LeaseEndpoints
                     Executor = req.RunnerId,
                     LeaseId = req.LeaseId,
                     FencingToken = req.FencingToken,
+                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
                     ResultRef = deliveryBranch,
                     IntegrationBranch = deliveryRange?.IntegrationBranch
                                         ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
@@ -1285,10 +1336,14 @@ public static class LeaseEndpoints
                 // shared idempotent decomposition lifecycle.
                 if (!string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
-                    var planningMove = states.MoveJob(
-                        task.Id, TaskStates.AutoReview, task.WatchPath,
+                    var planningMove = await transitions.MoveAsync(
+                        task.Id,
+                        TaskStates.AutoReview,
+                        task.WatchPath,
+                        ct,
                         cause: $"remote-epic-planning-completion:{source}",
-                        authorityWrite: laneWrite);
+                        authorityWrite: laneWrite,
+                        suppressProductExecution: true);
                     if (planningMove.Status != MoveJobStatus.Success)
                         return Results.Conflict(new RemoteRunCompletionResponse(
                             req.TaskKey, reportedOutcome, task.State,
@@ -1548,7 +1603,10 @@ public static class LeaseEndpoints
     /// for; the CLI's own default applies remotely, as it does today.
     /// </para>
     /// </summary>
-    private static RunSpecDto BuildRunSpec(TaskInfo task, ProjectSettingsService settings)
+    private static RunSpecDto BuildRunSpec(
+        TaskInfo task,
+        ProjectSettingsService settings,
+        AgentStudio.Prompts.RuntimePromptService prompts)
     {
         var cliType = CliTypes.Normalize(task.CliType);
         var projectSettings = settings.Get(task.ProjectName);
@@ -1569,12 +1627,27 @@ public static class LeaseEndpoints
             ? null
             : CliThinkingLevels.Normalize(cliType, model, thinkingLevel);
 
+        // The standalone runner fetches prompt.md verbatim, so the per-mode
+        // contract (read-only / research / concept / web) must travel with the
+        // claim. Best-effort: a framing render failure must never block a claim.
+        string? modeFraming = null;
+        try
+        {
+            var framing = prompts.RenderModeFraming(task.Mode, task.AllowWebAccess);
+            modeFraming = string.IsNullOrWhiteSpace(framing) ? null : framing;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "BuildRunSpec: mode framing is best-effort");
+        }
+
         return new RunSpecDto(
             cliType,
             model,
             thinkingLevel,
             settings.ResolveCliMode(task.ProjectName, cliType).Mode,
-            settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode);
+            settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode,
+            modeFraming);
     }
 
     private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)

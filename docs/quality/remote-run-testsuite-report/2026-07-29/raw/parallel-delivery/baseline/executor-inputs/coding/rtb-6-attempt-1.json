@@ -1,0 +1,13 @@
+{
+  "role": "coding",
+  "workerId": "canary-parallel-12-baseline-coding-worker-3",
+  "hostId": "canary-parallel-12-baseline-coding-worker-3-host",
+  "slot": 2,
+  "workspace": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/baseline/coding/canary-parallel-12-baseline-coding-worker-3/worktrees/rtb-6",
+  "branch": "runner/canary-parallel-12-baseline-coding-worker-3/rtb-6",
+  "taskKey": "RTB-6",
+  "ordinal": 6,
+  "seed": "agt2200-parallel-v1-baseline-6",
+  "commitDate": "2029-03-10T19:03:45.000Z",
+  "runAttemptId": "run_4b29d154c0904d2896bd80d0acf8e9f8"
+}

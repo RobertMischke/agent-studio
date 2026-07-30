@@ -28,11 +28,14 @@ public static class TaskIntegrationRecoveryEndpoints
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var job = scanner.FindJob(jobId, watchPath);
             if (job is null) return Results.NotFound(new { error = "Task not found." });
-            if (job.State is not (TaskStates.Completed or TaskStates.Archive))
+            if (job.State is not (
+                    TaskStates.HumanReview
+                    or TaskStates.Completed
+                    or TaskStates.Archive))
             {
                 return Results.Conflict(new
                 {
-                    error = $"Integration recovery requires an accepted task in {TaskStates.Completed} or {TaskStates.Archive}.",
+                    error = $"Integration recovery requires a task in {TaskStates.HumanReview}, {TaskStates.Completed}, or {TaskStates.Archive}.",
                 });
             }
 

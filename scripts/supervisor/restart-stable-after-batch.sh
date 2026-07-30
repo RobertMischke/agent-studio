@@ -34,6 +34,10 @@
 #   ATP_STABLE_API           stable API base URL (default: http://127.0.0.1:5031)
 #   ATP_RESTART_THRESHOLD    new-job count that triggers a restart (default: 3)
 #   ATP_UPDATE_SCRIPT        update script path (default: <devspace>/update-stable.sh)
+#   ATP_GATE_DRAIN_TIMEOUT_SECONDS
+#                            max wait for an active merge gate (default: 120)
+#   ATP_GATE_DRAIN_POLL_SECONDS
+#                            merge-gate poll interval (default: 2)
 #
 # Exit codes:
 #   0  decision tick handled (no-op or successful restart)
@@ -59,6 +63,8 @@ STABLE="${ATP_STABLE_CHECKOUT:-$DEVSPACE_DIR/agent-taskboard-stable}"
 STABLE_API="${ATP_STABLE_API:-http://127.0.0.1:5031}"
 THRESHOLD="${ATP_RESTART_THRESHOLD:-3}"
 UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$DEVSPACE_DIR/update-stable.sh}"
+GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
+GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
 
 LANE_DIR="$WORKSPACE/projects/$PROJECT/${ATP_RESTART_LANE:-4-auto-review}"
 LOG_DIR="$WORKSPACE/logs"
@@ -99,6 +105,49 @@ stable_active_state() {
   return 1
 }
 
+# Return 0 while merge/gate/rollback is active, 1 when idle, and 2 when the
+# endpoint is unavailable (for example while updating an older stable build).
+stable_merge_gate_state() {
+  body="$(curl -fsS --max-time 5 "$STABLE_API/healthz/drain" 2>/dev/null || true)"
+  body="$(printf '%s' "$body" | tr -d '[:space:]')"
+  case "$body" in
+    gate-busy) return 0 ;;
+    idle) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+wait_for_merge_gate() {
+  started="$(date -u +%s)"
+  while :; do
+    if stable_merge_gate_state; then
+      now="$(date -u +%s)"
+      elapsed=$((now - started))
+      if [ "$elapsed" -ge "$GATE_DRAIN_TIMEOUT" ]; then
+        log "merge gate remained busy for ${elapsed}s; drain window exhausted, continuing with hard restart"
+        return 0
+      fi
+      log "merge gate busy; waiting up to ${GATE_DRAIN_TIMEOUT}s before hard restart (${elapsed}s elapsed)"
+      sleep "$GATE_DRAIN_POLL"
+      continue
+    else
+      gate_state=$?
+      case "$gate_state" in
+        1)
+          log "merge gate idle; restart may proceed"
+          return 0
+          ;;
+        2)
+          # Rolling-upgrade compatibility: an older stable process does not have
+          # this endpoint yet. The existing runner-idle guard still applies.
+          log "merge-gate drain endpoint unavailable; proceeding with runner-idle restart"
+          return 0
+          ;;
+      esac
+    fi
+  done
+}
+
 stable_head() {
   git -C "$STABLE" rev-parse --short HEAD 2>/dev/null || printf 'unknown'
 }
@@ -117,6 +166,16 @@ if [ ! -x "$UPDATE_SCRIPT" ]; then
 fi
 if [ ! -d "$STABLE" ]; then
   log "ERROR: stable checkout missing: $STABLE"
+  exit 2
+fi
+case "$GATE_DRAIN_TIMEOUT:$GATE_DRAIN_POLL" in
+  *[!0-9:]*|:*|*:)
+    log "ERROR: gate drain timeout and poll interval must be non-negative integer seconds"
+    exit 2
+    ;;
+esac
+if [ "$GATE_DRAIN_POLL" -eq 0 ]; then
+  log "ERROR: gate drain poll interval must be at least one second"
   exit 2
 fi
 
@@ -150,6 +209,8 @@ case "$state" in
   0) log "new=$new_count >= $THRESHOLD but stable has an active job — skipping"; exit 0 ;;
   2) log "new=$new_count >= $THRESHOLD but stable API unreachable at $STABLE_API — skipping"; exit 0 ;;
 esac
+
+wait_for_merge_gate
 
 log "new=$new_count >= $THRESHOLD and stable is idle — calling $UPDATE_SCRIPT"
 

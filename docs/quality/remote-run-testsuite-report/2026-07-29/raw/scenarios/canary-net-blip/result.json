@@ -1,0 +1,53 @@
+{
+  "scenario": "fault-task-server-network-blips",
+  "seed": "agt2200-network-v1",
+  "runId": "canary-net-blip",
+  "accepted": true,
+  "resultSha": "10a95dcf6cbb966fa1d8de0102582a66f542ff2a",
+  "semanticTree": "5110add244ad60309223242a9e2dccff31f870dd",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "network-blips-replayed",
+  "assertions": [
+    {
+      "id": "reference-change-accepted",
+      "passed": true,
+      "detail": "exact result 10a95dcf6cbb966fa1d8de0102582a66f542ff2a reached 6-completed through all five phases"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "task-server-network-blips"
+    ],
+    "encounters": {
+      "claim": 2,
+      "heartbeat": 2,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 2,
+      "artifact-report": 2,
+      "completion-report": 2
+    },
+    "scheduled": 5,
+    "consumed": 5
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip",
+  "expectedTerminal": "6-completed",
+  "actualTerminal": "6-completed",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 5,
+    "used": 5
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"
+  ]
+}

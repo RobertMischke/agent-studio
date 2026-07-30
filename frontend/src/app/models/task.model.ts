@@ -396,9 +396,9 @@ export interface TaskInfo {
    * (5-human-review / 6-completed / 7-archive): is the work actually in develop?
    * Mirrors backend `TaskInfo.Integration`; one of integrated / pending /
    * conflict-skipped / no-branch. Resolves the "Accept != Merge" blind spot -
-   * unlike `mergeSignal` it also reads the curated `merge(<KEY>)` develop-log
-   * commit, so it survives commit rewriting by the async curated integrator. Null
-   * on cards not in an accepted lane.
+   * it reads attributed-commit membership at the current target HEAD and ignores
+   * lane state, provenance, and remembered merge attempts. Null on cards not in
+   * an accepted lane.
    */
   integration?: TaskIntegrationStatus | null;
 

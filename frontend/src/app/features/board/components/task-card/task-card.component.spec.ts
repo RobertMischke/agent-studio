@@ -11,6 +11,7 @@ import {
   buildEffectiveModelChip,
   buildDecisionDamBadge,
   buildModeBadge,
+  buildOutcomeIssueBadge,
   buildTagChips,
   buildReviewBadge,
   buildHumanReviewBadge,
@@ -22,6 +23,7 @@ import {
   buildPipelineDots,
   buildTokenBubble,
   buildExternalDoneBadge,
+  currentIntegrationStatus,
 } from './task-card-view-model';
 
 /**
@@ -407,7 +409,7 @@ describe('TaskCardComponent (smoke)', () => {
 
     const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', makeJob({
-      state: '5-human-review',
+      state: '5e-escalated',
       orchestratorVerdict: 'escalate',
     }));
     fixture.detectChanges();
@@ -475,7 +477,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill).toBeNull();
   });
 
-  it('stays quiet for an undecided human-review card and for completed cards', async () => {
+  it('stays quiet for Review and Completed cards carrying a stale escalate verdict', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -488,13 +490,11 @@ describe('TaskCardComponent (smoke)', () => {
 
     const fixture = TestBed.createComponent(TaskCardComponent);
 
-    // Human review with no verdict yet → no pill, no attention.
-    fixture.componentRef.setInput('job', makeJob({ state: '5-human-review', orchestratorVerdict: null }));
+    fixture.componentRef.setInput('job', makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
     fixture.detectChanges();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]')).toBeNull();
 
-    // Completed lane is out of scope even if a stale verdict rides along.
     fixture.componentRef.setInput('job', makeJob({ state: '6-completed', orchestratorVerdict: 'escalate' }));
     fixture.detectChanges();
     expect(fixture.componentInstance.needsAttention()).toBe(false);
@@ -528,7 +528,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 
-  it('renders an older outcome issue as history after a later accepted run', async () => {
+  it('moves an older outcome issue off the card after a later accepted run', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -545,10 +545,7 @@ describe('TaskCardComponent (smoke)', () => {
     }));
     fixture.detectChanges();
 
-    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement;
-    expect(pill.className).toContain('task-card__issue-pill--historical');
-    expect(pill.className).not.toContain('task-card__issue-pill--high');
-    expect(pill.textContent).toContain('↺');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]')).toBeNull();
   });
 
   it('renders an unpushed task branch as a warning outcome issue', async () => {
@@ -931,6 +928,12 @@ describe('TaskCardComponent (smoke)', () => {
         releaseBranch: 'main',
         integrationSha: 'a1b2c3d',
         releaseSha: null,
+      },
+      integration: {
+        status: 'integrated',
+        sha: 'a1b2c3d',
+        integrationBranch: 'develop',
+        detail: 'Every attributed commit is present in develop.',
       },
     }));
 
@@ -1590,36 +1593,26 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
     expect(chips.map((c) => c.label)).toEqual(['Architecture', 'Security']);
   });
 
-  it('renders the auto-review reissue marker as a readable tag', () => {
+  it('keeps auto-review reissue history off cards before Review too', () => {
     const chips = buildTagChips(['reissue:autoreview'], new Map(), '2-ready');
-    expect(chips).toEqual([expect.objectContaining({
-      id: 'reissue:autoreview',
-      label: 'Reissue',
-      ghost: false,
-    })]);
+    expect(chips).toEqual([]);
   });
 
-  it('renders reissue and abort markers as quiet history in human review', () => {
+  it('keeps reissue and abort event history off human-review cards', () => {
     const abort = tag('abort-review:watchdog', 'Abort: watchdog');
     abort.color = '#ef4444';
     abort.description = 'The run stopped after a watchdog timeout';
     const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5-human-review');
 
-    expect(chips).toEqual([
-      expect.objectContaining({ id: 'reissue:autoreview', historical: true, historyGlyph: '↺' }),
-      expect.objectContaining({ id: abort.id, historical: true, historyGlyph: '↺' }),
-    ]);
-    expect(chips[0].tooltip).toContain('Recorded occurrences: 1 tag');
-    expect(chips[1].tooltip).toContain('watchdog timeout');
+    expect(chips).toEqual([]);
   });
 
-  it('keeps reissue and abort markers alarm-coloured in 5e-escalated', () => {
+  it('keeps reissue and abort history off Escalated cards', () => {
     const abort = tag('abort-review:watchdog', 'Abort: watchdog');
     abort.color = '#ef4444';
     const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5e-escalated');
 
-    expect(chips[0]).toEqual(expect.objectContaining({ historical: false, color: '#f59e0b' }));
-    expect(chips[1]).toEqual(expect.objectContaining({ historical: false, color: '#ef4444' }));
+    expect(chips).toEqual([]);
   });
 
   it('does not suppress a lane-name tag in an unrelated lane', () => {
@@ -1646,6 +1639,16 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
       '5-human-review',
     );
     expect(chips).toEqual([]);
+  });
+
+  it('suppresses the internal integrationpending marker in favor of computed status', () => {
+    const chips = buildTagChips(
+      ['integrationpending', 'architecture'],
+      registry(tag('integrationpending', 'Integration pending'), tag('architecture', 'Architecture')),
+      '5-human-review',
+    );
+
+    expect(chips.map((chip) => chip.id)).toEqual(['architecture']);
   });
 });
 
@@ -1686,24 +1689,75 @@ describe('buildReviewBadge — active review status only', () => {
   });
 });
 
-describe('buildHumanReviewBadge — action-required verdicts only', () => {
-  it('stays quiet for an accepted card', () => {
-    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'accept' }));
+describe('buildHumanReviewBadge — current lane only', () => {
+  it('ignores stale verdicts in Review', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
     expect(badge).toBeNull();
   });
 
-  it('keeps the escalate verdict — it is not derivable from the lane', () => {
-    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
+  it('derives Escalated from the acute lane even when the journal verdict is missing', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5e-escalated', orchestratorVerdict: null }));
     expect(badge?.label).toBe('Escalated');
   });
 
-  it('keeps the reissue verdict — it is an action signal', () => {
-    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'reissue' }));
-    expect(badge?.label).toBe('Needs rework');
+  it('stays quiet for completed cards carrying stale history', () => {
+    expect(buildHumanReviewBadge(makeJob({ state: '6-completed', orchestratorVerdict: 'escalate' }))).toBeNull();
+  });
+});
+
+describe('current card-status reconciliation', () => {
+  const integration = {
+    status: 'integrated' as const,
+    sha: '2d8d201',
+    integrationBranch: 'develop',
+    detail: null,
+  };
+  const integrationError = {
+    kind: 'integration-error',
+    label: 'Integration error',
+    severity: 'High',
+    summary: 'Transient failure',
+    lastSeenAt: '2026-07-28T08:03:00Z',
+  };
+
+  it('keeps integration truth only on accepted lanes', () => {
+    expect(currentIntegrationStatus(makeJob({ state: '5-human-review', integration }))).toEqual(integration);
+    expect(currentIntegrationStatus(makeJob({ state: '3-progress', integration }))).toBeNull();
   });
 
-  it('stays quiet for an undecided human-review card (no lane mirror)', () => {
-    expect(buildHumanReviewBadge(makeJob({ state: '5-human-review' }))).toBeNull();
+  it('never combines integrated with an integration-error issue', () => {
+    const badge = buildOutcomeIssueBadge(makeJob({
+      state: '5e-escalated',
+      integration,
+      outcomeIssue: integrationError,
+      execution: { jobId: 'task-1', taskKey: 'test::task-1', processId: 0,
+        startedAt: '', status: 'failed', exitCode: 1, durationSeconds: 1, model: null, runOutcome: 'failed' },
+    }));
+    expect(badge).toBeNull();
+  });
+
+  it('suppresses any issue in Review and any issue superseded by a successful last run', () => {
+    expect(buildOutcomeIssueBadge(makeJob({
+      state: '5-human-review',
+      outcomeIssue: integrationError,
+    }))).toBeNull();
+    expect(buildOutcomeIssueBadge(makeJob({
+      state: '5e-escalated',
+      outcomeIssue: integrationError,
+      execution: { jobId: 'task-1', taskKey: 'test::task-1', processId: 0,
+        startedAt: '', status: 'completed', exitCode: 0, durationSeconds: 1, model: null, runOutcome: 'success' },
+    }))).toBeNull();
+  });
+
+  it('keeps the latest failed outcome acute in Escalated', () => {
+    const badge = buildOutcomeIssueBadge(makeJob({
+      state: '5e-escalated',
+      outcomeIssue: { ...integrationError, kind: 'watchdog-timeout', label: 'Watchdog timeout' },
+      execution: { jobId: 'task-1', taskKey: 'test::task-1', processId: 0,
+        startedAt: '', status: 'failed', exitCode: 1, durationSeconds: 1, model: null, runOutcome: 'failed' },
+    }));
+    expect(badge?.label).toBe('Watchdog timeout');
+    expect(badge?.tone).toBe('high');
   });
 });
 
@@ -1717,14 +1771,14 @@ describe('buildDecisionDamBadge', () => {
     expect(badge?.tooltip).toContain('AGT-2201, AGT-2202, AGT-2203');
   });
 
-  it('does not hide an action-required review verdict', () => {
+  it('shows dam impact without reviving a stale review verdict', () => {
     const job = makeJob({
       state: '5-human-review',
       orchestratorVerdict: 'escalate',
       transitiveWaiters: { count: 1, keys: ['AGT-2201'] },
     });
     expect(buildDecisionDamBadge(job)?.label).toBe('Dams 1 card');
-    expect(buildHumanReviewBadge(job)?.label).toBe('Escalated');
+    expect(buildHumanReviewBadge(job)).toBeNull();
   });
 });
 
@@ -1735,6 +1789,16 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
 
   it('still surfaces non-lane intake substates', () => {
     expect(buildPhaseBadge('intake-blocked')?.label).toBe('Intake blocked');
+  });
+
+  it('suppresses a persisted phase after the task reaches Review', () => {
+    expect(buildPhaseBadge('post-processing-blocked', null, undefined, '5-human-review')).toBeNull();
+  });
+
+  it('shows transactional integration while the task remains in Review', () => {
+    const badge = buildPhaseBadge('integrating', null, undefined, '5-human-review');
+    expect(badge?.label).toBe('Integrating');
+    expect(badge?.tone).toBe('integrating');
   });
 
   it('surfaces post-processing substates separately from the lane label', () => {

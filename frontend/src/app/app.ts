@@ -91,7 +91,7 @@ import {
   StudioPanelStateService,
   studioTabKey,
   parseStudioRoute,
-  replaceStudioRoute,
+  navigateStudioRoute,
   replaceTaskViewRoute,
   studioProjectSlug,
   studioRouteForTab,
@@ -1005,12 +1005,7 @@ export class App implements OnInit, OnDestroy {
       if (project === undefined) return;
       untracked(() => {
         if (project === null) {
-          this.boardFilters.activeProjects.set(new Set<string>());
-          try {
-            localStorage.setItem('activeProjects', JSON.stringify([]));
-          } catch {
-            /* storage may be blocked */
-          }
+          this.boardFilters.clearProjectScope();
         } else {
           this.boardFilters.setSoleProject(project);
         }
@@ -1131,7 +1126,7 @@ export class App implements OnInit, OnDestroy {
       const inspectorTab = this.routeInspectorTab()
         ?? (selected?.info.state === TaskState.Progress ? 'activity' : 'protocol');
       untracked(() => {
-        replaceStudioRoute(route);
+        navigateStudioRoute(route);
         if (tab.kind === 'task') replaceTaskViewRoute(detailTab, inspectorTab);
       });
     });
@@ -1371,9 +1366,8 @@ export class App implements OnInit, OnDestroy {
    * State-dependent presentation for the studio Human Review acceptance primary
    * (`mark-done`). Null for every other primary. When the work has already
    * landed it carries the landed-status pill text and relabels "Merge into
-   * Develop" to "Accept"; the live `landedState` (graph-derived) upgrades the
-   * wording to "Released to main" when known, with the persisted merge fact as
-   * the synchronous fallback.
+   * Develop" to "Accept"; the computed `integration` field is the only
+   * target-membership proof. A live released-to-main hint can refine the wording.
    */
   readonly studioMergeAcceptView = computed<MergeAcceptView | null>(() => {
     const sel = this.selectedJob();

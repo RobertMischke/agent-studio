@@ -1,0 +1,322 @@
+[
+    {
+        "Id": "7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6",
+        "Created": "2026-07-29T02:20:18.524124367Z",
+        "Path": "caddy",
+        "Args": [
+            "run",
+            "--config",
+            "/etc/caddy/Caddyfile",
+            "--adapter",
+            "caddyfile"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1569935,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-29T02:20:21.914820224Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-07-29T04:20:43.441436836+02:00",
+                        "End": "2026-07-29T04:20:43.494786432+02:00",
+                        "ExitCode": 0,
+                        "Output": "<!doctype html>\n<html lang=\"en\" data-beasties-container>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Agent Studio</title>\n    <base href=\"/\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <meta name=\"theme-color\" content=\"#181825\">\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"icons/icon.svg\">\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">\n    <link rel=\"manifest\" href=\"manifest.webmanifest\">\n  <style>:root{--color-orange-100:#fde9dc;--color-orange-200:#f5cdb8;--color-orange-300:#ecaf95;--color-orange-400:#e29076;--color-orange-500:#d97757;--color-orange-600:#b65f44;--color-orange-700:#8d5a3d;--color-orange-800:#6a4530;--color-orange-900:#a8472d;--color-slate-50:#f8fafc;--color-slate-100:#f1f5f9;--color-slate-200:#e2e8f0;--color-slate-300:#cbd5e1;--color-slate-400:#94a3b8;--color-slate-500:#64748b;--color-slate-600:#475569;--color-slate-700:#334155;--color-slate-800:#1e293b;--color-slate-900:#0f172a;--color-mocha-base:#1e1e2e;--color-mocha-mantle:#181825;--color-mocha-crust:#11111b;--color-mocha-surface0:#313244;--color-mocha-surface1:#45475a;--color-mocha-surface2:#585b70;--color-mocha-overlay0:#6c7086;--color-mocha-overlay1:#7f849c;--color-mocha-overlay2:#9399b2;--color-mocha-subtext0:#a6adc8;--color-mocha-subtext1:#bac2de;--color-mocha-text:#cdd6f4;--color-mocha-rosewater:#f5e0dc;--color-mocha-flamingo:#f2cdcd;--color-mocha-pink:#f5c2e7;--color-mocha-mauve:#cba6f7;--color-mocha-red:#f38ba8;--color-mocha-peach:#fab387;--color-mocha-yellow:#f9e2af;--color-mocha-green:#a6e3a1;--color-mocha-teal:#94e2d5;--color-mocha-sky:#89dceb;--color-mocha-sapphire:#74c7ec;--color-mocha-blue:#89b4fa;--color-mocha-lavender:#b4befe;--color-mocha-base-0:#0f0f1a;--color-mocha-base-3:#252537;--color-grey-50:#ffffff;--color-grey-100:#f8f8f8;--color-grey-150:#f3f3f3;--color-grey-200:#ececec;--color-grey-300:#e1e1e1;--color-grey-400:#d4d4d4;--color-grey-500:#b4b4b4;--color-grey-600:#888888;--color-grey-700:#6e6e6e;--color-grey-800:#555555;--color-grey-850:#4a4a4a;--color-grey-900:#333333;--color-grey-950:#1a1a1a;--color-green-100:#dcfce7;--color-green-200:#bbf7d0;--color-green-300:#86efac;--color-green-400:#4ade80;--color-green-500:#22c55e;--color-green-600:#16a34a;--color-green-700:#15803d;--color-green-900:#14532d;--color-green-vscode:#4ec9b0;--color-teal-700:#0f766e;--color-red-100:#fee2e2;--color-red-200:#fecaca;--color-red-300:#fda4af;--color-red-400:#f87171;--color-red-500:#ef4444;--color-red-600:#dc2626;--color-red-700:#b91c1c;--color-red-800:#be123c;--color-red-900:#7f1d1d;--color-rose-500:#f43f5e;--color-blue-300:#93c5fd;--color-blue-400:#569cd6;--color-blue-500:#3b82f6;--color-blue-700:#1d4ed8;--color-blue-800:#1e40af;--color-sky-100:#e0f2fe;--color-sky-800:#075985;--color-sky-cppc:#89dceb;--color-yellow-200:#f9e2af;--color-yellow-300:#fcd34d;--color-yellow-700:#a16207;--color-yellow-vscode:#cca700;--color-amber-700:#b45309;--color-violet-300:#c4b5fd;--color-violet-700:#6d28d9;--color-purple-vscode:#c586c0;--color-indigo-500:#818cf8;--color-sapphire:#74c7ec;--alpha-black-04:rgba(0, 0, 0, .04);--alpha-black-05:rgba(0, 0, 0, .05);--alpha-black-06:rgba(0, 0, 0, .06);--alpha-black-08:rgba(0, 0, 0, .08);--alpha-black-10:rgba(0, 0, 0, .1);--alpha-black-12:rgba(0, 0, 0, .12);--alpha-black-16:rgba(0, 0, 0, .16);--alpha-black-18:rgba(0, 0, 0, .18);--alpha-black-20:rgba(0, 0, 0, .2);--alpha-black-24:rgba(0, 0, 0, .24);--alpha-black-30:rgba(0, 0, 0, .3);--alpha-black-32:rgba(0, 0, 0, .32);--alpha-black-40:rgba(0, 0, 0, .4);--alpha-black-50:rgba(0, 0, 0, .5);--alpha-white-04:rgba(255, 255, 255, .04);--alpha-white-06:rgba(255, 255, 255, .06);--alpha-white-08:rgba(255, 255, 255, .08);--alpha-white-10:rgba(255, 255, 255, .1);--alpha-white-12:rgba(255, 255, 255, .12);--alpha-white-20:rgba(255, 255, 255, .2);--shadow-100:0 1px 2px rgba(0, 0, 0, .2);--shadow-200:0 2px 6px rgba(0, 0, 0, .3);--shadow-300:0 4px 16px rgba(0, 0, 0, .5);--shadow-400:0 12px 32px rgba(0, 0, 0, .32);--shadow-500:0 24px 64px rgba(0, 0, 0, .55);--shadow-100-light:0 1px 2px rgba(0, 0, 0, .06);--shadow-200-light:0 4px 14px rgba(0, ..."
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:45.495653963+02:00",
+                        "End": "2026-07-29T04:20:45.539995042+02:00",
+                        "ExitCode": 0,
+                        "Output": "<!doctype html>\n<html lang=\"en\" data-beasties-container>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Agent Studio</title>\n    <base href=\"/\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <meta name=\"theme-color\" content=\"#181825\">\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"icons/icon.svg\">\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">\n    <link rel=\"manifest\" href=\"manifest.webmanifest\">\n  <style>:root{--color-orange-100:#fde9dc;--color-orange-200:#f5cdb8;--color-orange-300:#ecaf95;--color-orange-400:#e29076;--color-orange-500:#d97757;--color-orange-600:#b65f44;--color-orange-700:#8d5a3d;--color-orange-800:#6a4530;--color-orange-900:#a8472d;--color-slate-50:#f8fafc;--color-slate-100:#f1f5f9;--color-slate-200:#e2e8f0;--color-slate-300:#cbd5e1;--color-slate-400:#94a3b8;--color-slate-500:#64748b;--color-slate-600:#475569;--color-slate-700:#334155;--color-slate-800:#1e293b;--color-slate-900:#0f172a;--color-mocha-base:#1e1e2e;--color-mocha-mantle:#181825;--color-mocha-crust:#11111b;--color-mocha-surface0:#313244;--color-mocha-surface1:#45475a;--color-mocha-surface2:#585b70;--color-mocha-overlay0:#6c7086;--color-mocha-overlay1:#7f849c;--color-mocha-overlay2:#9399b2;--color-mocha-subtext0:#a6adc8;--color-mocha-subtext1:#bac2de;--color-mocha-text:#cdd6f4;--color-mocha-rosewater:#f5e0dc;--color-mocha-flamingo:#f2cdcd;--color-mocha-pink:#f5c2e7;--color-mocha-mauve:#cba6f7;--color-mocha-red:#f38ba8;--color-mocha-peach:#fab387;--color-mocha-yellow:#f9e2af;--color-mocha-green:#a6e3a1;--color-mocha-teal:#94e2d5;--color-mocha-sky:#89dceb;--color-mocha-sapphire:#74c7ec;--color-mocha-blue:#89b4fa;--color-mocha-lavender:#b4befe;--color-mocha-base-0:#0f0f1a;--color-mocha-base-3:#252537;--color-grey-50:#ffffff;--color-grey-100:#f8f8f8;--color-grey-150:#f3f3f3;--color-grey-200:#ececec;--color-grey-300:#e1e1e1;--color-grey-400:#d4d4d4;--color-grey-500:#b4b4b4;--color-grey-600:#888888;--color-grey-700:#6e6e6e;--color-grey-800:#555555;--color-grey-850:#4a4a4a;--color-grey-900:#333333;--color-grey-950:#1a1a1a;--color-green-100:#dcfce7;--color-green-200:#bbf7d0;--color-green-300:#86efac;--color-green-400:#4ade80;--color-green-500:#22c55e;--color-green-600:#16a34a;--color-green-700:#15803d;--color-green-900:#14532d;--color-green-vscode:#4ec9b0;--color-teal-700:#0f766e;--color-red-100:#fee2e2;--color-red-200:#fecaca;--color-red-300:#fda4af;--color-red-400:#f87171;--color-red-500:#ef4444;--color-red-600:#dc2626;--color-red-700:#b91c1c;--color-red-800:#be123c;--color-red-900:#7f1d1d;--color-rose-500:#f43f5e;--color-blue-300:#93c5fd;--color-blue-400:#569cd6;--color-blue-500:#3b82f6;--color-blue-700:#1d4ed8;--color-blue-800:#1e40af;--color-sky-100:#e0f2fe;--color-sky-800:#075985;--color-sky-cppc:#89dceb;--color-yellow-200:#f9e2af;--color-yellow-300:#fcd34d;--color-yellow-700:#a16207;--color-yellow-vscode:#cca700;--color-amber-700:#b45309;--color-violet-300:#c4b5fd;--color-violet-700:#6d28d9;--color-purple-vscode:#c586c0;--color-indigo-500:#818cf8;--color-sapphire:#74c7ec;--alpha-black-04:rgba(0, 0, 0, .04);--alpha-black-05:rgba(0, 0, 0, .05);--alpha-black-06:rgba(0, 0, 0, .06);--alpha-black-08:rgba(0, 0, 0, .08);--alpha-black-10:rgba(0, 0, 0, .1);--alpha-black-12:rgba(0, 0, 0, .12);--alpha-black-16:rgba(0, 0, 0, .16);--alpha-black-18:rgba(0, 0, 0, .18);--alpha-black-20:rgba(0, 0, 0, .2);--alpha-black-24:rgba(0, 0, 0, .24);--alpha-black-30:rgba(0, 0, 0, .3);--alpha-black-32:rgba(0, 0, 0, .32);--alpha-black-40:rgba(0, 0, 0, .4);--alpha-black-50:rgba(0, 0, 0, .5);--alpha-white-04:rgba(255, 255, 255, .04);--alpha-white-06:rgba(255, 255, 255, .06);--alpha-white-08:rgba(255, 255, 255, .08);--alpha-white-10:rgba(255, 255, 255, .1);--alpha-white-12:rgba(255, 255, 255, .12);--alpha-white-20:rgba(255, 255, 255, .2);--shadow-100:0 1px 2px rgba(0, 0, 0, .2);--shadow-200:0 2px 6px rgba(0, 0, 0, .3);--shadow-300:0 4px 16px rgba(0, 0, 0, .5);--shadow-400:0 12px 32px rgba(0, 0, 0, .32);--shadow-500:0 24px 64px rgba(0, 0, 0, .55);--shadow-100-light:0 1px 2px rgba(0, 0, 0, .06);--shadow-200-light:0 4px 14px rgba(0, ..."
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:47.540870156+02:00",
+                        "End": "2026-07-29T04:20:47.589944575+02:00",
+                        "ExitCode": 0,
+                        "Output": "<!doctype html>\n<html lang=\"en\" data-beasties-container>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Agent Studio</title>\n    <base href=\"/\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <meta name=\"theme-color\" content=\"#181825\">\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"icons/icon.svg\">\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">\n    <link rel=\"manifest\" href=\"manifest.webmanifest\">\n  <style>:root{--color-orange-100:#fde9dc;--color-orange-200:#f5cdb8;--color-orange-300:#ecaf95;--color-orange-400:#e29076;--color-orange-500:#d97757;--color-orange-600:#b65f44;--color-orange-700:#8d5a3d;--color-orange-800:#6a4530;--color-orange-900:#a8472d;--color-slate-50:#f8fafc;--color-slate-100:#f1f5f9;--color-slate-200:#e2e8f0;--color-slate-300:#cbd5e1;--color-slate-400:#94a3b8;--color-slate-500:#64748b;--color-slate-600:#475569;--color-slate-700:#334155;--color-slate-800:#1e293b;--color-slate-900:#0f172a;--color-mocha-base:#1e1e2e;--color-mocha-mantle:#181825;--color-mocha-crust:#11111b;--color-mocha-surface0:#313244;--color-mocha-surface1:#45475a;--color-mocha-surface2:#585b70;--color-mocha-overlay0:#6c7086;--color-mocha-overlay1:#7f849c;--color-mocha-overlay2:#9399b2;--color-mocha-subtext0:#a6adc8;--color-mocha-subtext1:#bac2de;--color-mocha-text:#cdd6f4;--color-mocha-rosewater:#f5e0dc;--color-mocha-flamingo:#f2cdcd;--color-mocha-pink:#f5c2e7;--color-mocha-mauve:#cba6f7;--color-mocha-red:#f38ba8;--color-mocha-peach:#fab387;--color-mocha-yellow:#f9e2af;--color-mocha-green:#a6e3a1;--color-mocha-teal:#94e2d5;--color-mocha-sky:#89dceb;--color-mocha-sapphire:#74c7ec;--color-mocha-blue:#89b4fa;--color-mocha-lavender:#b4befe;--color-mocha-base-0:#0f0f1a;--color-mocha-base-3:#252537;--color-grey-50:#ffffff;--color-grey-100:#f8f8f8;--color-grey-150:#f3f3f3;--color-grey-200:#ececec;--color-grey-300:#e1e1e1;--color-grey-400:#d4d4d4;--color-grey-500:#b4b4b4;--color-grey-600:#888888;--color-grey-700:#6e6e6e;--color-grey-800:#555555;--color-grey-850:#4a4a4a;--color-grey-900:#333333;--color-grey-950:#1a1a1a;--color-green-100:#dcfce7;--color-green-200:#bbf7d0;--color-green-300:#86efac;--color-green-400:#4ade80;--color-green-500:#22c55e;--color-green-600:#16a34a;--color-green-700:#15803d;--color-green-900:#14532d;--color-green-vscode:#4ec9b0;--color-teal-700:#0f766e;--color-red-100:#fee2e2;--color-red-200:#fecaca;--color-red-300:#fda4af;--color-red-400:#f87171;--color-red-500:#ef4444;--color-red-600:#dc2626;--color-red-700:#b91c1c;--color-red-800:#be123c;--color-red-900:#7f1d1d;--color-rose-500:#f43f5e;--color-blue-300:#93c5fd;--color-blue-400:#569cd6;--color-blue-500:#3b82f6;--color-blue-700:#1d4ed8;--color-blue-800:#1e40af;--color-sky-100:#e0f2fe;--color-sky-800:#075985;--color-sky-cppc:#89dceb;--color-yellow-200:#f9e2af;--color-yellow-300:#fcd34d;--color-yellow-700:#a16207;--color-yellow-vscode:#cca700;--color-amber-700:#b45309;--color-violet-300:#c4b5fd;--color-violet-700:#6d28d9;--color-purple-vscode:#c586c0;--color-indigo-500:#818cf8;--color-sapphire:#74c7ec;--alpha-black-04:rgba(0, 0, 0, .04);--alpha-black-05:rgba(0, 0, 0, .05);--alpha-black-06:rgba(0, 0, 0, .06);--alpha-black-08:rgba(0, 0, 0, .08);--alpha-black-10:rgba(0, 0, 0, .1);--alpha-black-12:rgba(0, 0, 0, .12);--alpha-black-16:rgba(0, 0, 0, .16);--alpha-black-18:rgba(0, 0, 0, .18);--alpha-black-20:rgba(0, 0, 0, .2);--alpha-black-24:rgba(0, 0, 0, .24);--alpha-black-30:rgba(0, 0, 0, .3);--alpha-black-32:rgba(0, 0, 0, .32);--alpha-black-40:rgba(0, 0, 0, .4);--alpha-black-50:rgba(0, 0, 0, .5);--alpha-white-04:rgba(255, 255, 255, .04);--alpha-white-06:rgba(255, 255, 255, .06);--alpha-white-08:rgba(255, 255, 255, .08);--alpha-white-10:rgba(255, 255, 255, .1);--alpha-white-12:rgba(255, 255, 255, .12);--alpha-white-20:rgba(255, 255, 255, .2);--shadow-100:0 1px 2px rgba(0, 0, 0, .2);--shadow-200:0 2px 6px rgba(0, 0, 0, .3);--shadow-300:0 4px 16px rgba(0, 0, 0, .5);--shadow-400:0 12px 32px rgba(0, 0, 0, .32);--shadow-500:0 24px 64px rgba(0, 0, 0, .55);--shadow-100-light:0 1px 2px rgba(0, 0, 0, .06);--shadow-200-light:0 4px 14px rgba(0, ..."
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:49.591152969+02:00",
+                        "End": "2026-07-29T04:20:49.630632845+02:00",
+                        "ExitCode": 0,
+                        "Output": "<!doctype html>\n<html lang=\"en\" data-beasties-container>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Agent Studio</title>\n    <base href=\"/\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <meta name=\"theme-color\" content=\"#181825\">\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"icons/icon.svg\">\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">\n    <link rel=\"manifest\" href=\"manifest.webmanifest\">\n  <style>:root{--color-orange-100:#fde9dc;--color-orange-200:#f5cdb8;--color-orange-300:#ecaf95;--color-orange-400:#e29076;--color-orange-500:#d97757;--color-orange-600:#b65f44;--color-orange-700:#8d5a3d;--color-orange-800:#6a4530;--color-orange-900:#a8472d;--color-slate-50:#f8fafc;--color-slate-100:#f1f5f9;--color-slate-200:#e2e8f0;--color-slate-300:#cbd5e1;--color-slate-400:#94a3b8;--color-slate-500:#64748b;--color-slate-600:#475569;--color-slate-700:#334155;--color-slate-800:#1e293b;--color-slate-900:#0f172a;--color-mocha-base:#1e1e2e;--color-mocha-mantle:#181825;--color-mocha-crust:#11111b;--color-mocha-surface0:#313244;--color-mocha-surface1:#45475a;--color-mocha-surface2:#585b70;--color-mocha-overlay0:#6c7086;--color-mocha-overlay1:#7f849c;--color-mocha-overlay2:#9399b2;--color-mocha-subtext0:#a6adc8;--color-mocha-subtext1:#bac2de;--color-mocha-text:#cdd6f4;--color-mocha-rosewater:#f5e0dc;--color-mocha-flamingo:#f2cdcd;--color-mocha-pink:#f5c2e7;--color-mocha-mauve:#cba6f7;--color-mocha-red:#f38ba8;--color-mocha-peach:#fab387;--color-mocha-yellow:#f9e2af;--color-mocha-green:#a6e3a1;--color-mocha-teal:#94e2d5;--color-mocha-sky:#89dceb;--color-mocha-sapphire:#74c7ec;--color-mocha-blue:#89b4fa;--color-mocha-lavender:#b4befe;--color-mocha-base-0:#0f0f1a;--color-mocha-base-3:#252537;--color-grey-50:#ffffff;--color-grey-100:#f8f8f8;--color-grey-150:#f3f3f3;--color-grey-200:#ececec;--color-grey-300:#e1e1e1;--color-grey-400:#d4d4d4;--color-grey-500:#b4b4b4;--color-grey-600:#888888;--color-grey-700:#6e6e6e;--color-grey-800:#555555;--color-grey-850:#4a4a4a;--color-grey-900:#333333;--color-grey-950:#1a1a1a;--color-green-100:#dcfce7;--color-green-200:#bbf7d0;--color-green-300:#86efac;--color-green-400:#4ade80;--color-green-500:#22c55e;--color-green-600:#16a34a;--color-green-700:#15803d;--color-green-900:#14532d;--color-green-vscode:#4ec9b0;--color-teal-700:#0f766e;--color-red-100:#fee2e2;--color-red-200:#fecaca;--color-red-300:#fda4af;--color-red-400:#f87171;--color-red-500:#ef4444;--color-red-600:#dc2626;--color-red-700:#b91c1c;--color-red-800:#be123c;--color-red-900:#7f1d1d;--color-rose-500:#f43f5e;--color-blue-300:#93c5fd;--color-blue-400:#569cd6;--color-blue-500:#3b82f6;--color-blue-700:#1d4ed8;--color-blue-800:#1e40af;--color-sky-100:#e0f2fe;--color-sky-800:#075985;--color-sky-cppc:#89dceb;--color-yellow-200:#f9e2af;--color-yellow-300:#fcd34d;--color-yellow-700:#a16207;--color-yellow-vscode:#cca700;--color-amber-700:#b45309;--color-violet-300:#c4b5fd;--color-violet-700:#6d28d9;--color-purple-vscode:#c586c0;--color-indigo-500:#818cf8;--color-sapphire:#74c7ec;--alpha-black-04:rgba(0, 0, 0, .04);--alpha-black-05:rgba(0, 0, 0, .05);--alpha-black-06:rgba(0, 0, 0, .06);--alpha-black-08:rgba(0, 0, 0, .08);--alpha-black-10:rgba(0, 0, 0, .1);--alpha-black-12:rgba(0, 0, 0, .12);--alpha-black-16:rgba(0, 0, 0, .16);--alpha-black-18:rgba(0, 0, 0, .18);--alpha-black-20:rgba(0, 0, 0, .2);--alpha-black-24:rgba(0, 0, 0, .24);--alpha-black-30:rgba(0, 0, 0, .3);--alpha-black-32:rgba(0, 0, 0, .32);--alpha-black-40:rgba(0, 0, 0, .4);--alpha-black-50:rgba(0, 0, 0, .5);--alpha-white-04:rgba(255, 255, 255, .04);--alpha-white-06:rgba(255, 255, 255, .06);--alpha-white-08:rgba(255, 255, 255, .08);--alpha-white-10:rgba(255, 255, 255, .1);--alpha-white-12:rgba(255, 255, 255, .12);--alpha-white-20:rgba(255, 255, 255, .2);--shadow-100:0 1px 2px rgba(0, 0, 0, .2);--shadow-200:0 2px 6px rgba(0, 0, 0, .3);--shadow-300:0 4px 16px rgba(0, 0, 0, .5);--shadow-400:0 12px 32px rgba(0, 0, 0, .32);--shadow-500:0 24px 64px rgba(0, 0, 0, .55);--shadow-100-light:0 1px 2px rgba(0, 0, 0, .06);--shadow-200-light:0 4px 14px rgba(0, ..."
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:51.639520648+02:00",
+                        "End": "2026-07-29T04:20:51.6729201+02:00",
+                        "ExitCode": 0,
+                        "Output": "<!doctype html>\n<html lang=\"en\" data-beasties-container>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Agent Studio</title>\n    <base href=\"/\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <meta name=\"theme-color\" content=\"#181825\">\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"icons/icon.svg\">\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">\n    <link rel=\"manifest\" href=\"manifest.webmanifest\">\n  <style>:root{--color-orange-100:#fde9dc;--color-orange-200:#f5cdb8;--color-orange-300:#ecaf95;--color-orange-400:#e29076;--color-orange-500:#d97757;--color-orange-600:#b65f44;--color-orange-700:#8d5a3d;--color-orange-800:#6a4530;--color-orange-900:#a8472d;--color-slate-50:#f8fafc;--color-slate-100:#f1f5f9;--color-slate-200:#e2e8f0;--color-slate-300:#cbd5e1;--color-slate-400:#94a3b8;--color-slate-500:#64748b;--color-slate-600:#475569;--color-slate-700:#334155;--color-slate-800:#1e293b;--color-slate-900:#0f172a;--color-mocha-base:#1e1e2e;--color-mocha-mantle:#181825;--color-mocha-crust:#11111b;--color-mocha-surface0:#313244;--color-mocha-surface1:#45475a;--color-mocha-surface2:#585b70;--color-mocha-overlay0:#6c7086;--color-mocha-overlay1:#7f849c;--color-mocha-overlay2:#9399b2;--color-mocha-subtext0:#a6adc8;--color-mocha-subtext1:#bac2de;--color-mocha-text:#cdd6f4;--color-mocha-rosewater:#f5e0dc;--color-mocha-flamingo:#f2cdcd;--color-mocha-pink:#f5c2e7;--color-mocha-mauve:#cba6f7;--color-mocha-red:#f38ba8;--color-mocha-peach:#fab387;--color-mocha-yellow:#f9e2af;--color-mocha-green:#a6e3a1;--color-mocha-teal:#94e2d5;--color-mocha-sky:#89dceb;--color-mocha-sapphire:#74c7ec;--color-mocha-blue:#89b4fa;--color-mocha-lavender:#b4befe;--color-mocha-base-0:#0f0f1a;--color-mocha-base-3:#252537;--color-grey-50:#ffffff;--color-grey-100:#f8f8f8;--color-grey-150:#f3f3f3;--color-grey-200:#ececec;--color-grey-300:#e1e1e1;--color-grey-400:#d4d4d4;--color-grey-500:#b4b4b4;--color-grey-600:#888888;--color-grey-700:#6e6e6e;--color-grey-800:#555555;--color-grey-850:#4a4a4a;--color-grey-900:#333333;--color-grey-950:#1a1a1a;--color-green-100:#dcfce7;--color-green-200:#bbf7d0;--color-green-300:#86efac;--color-green-400:#4ade80;--color-green-500:#22c55e;--color-green-600:#16a34a;--color-green-700:#15803d;--color-green-900:#14532d;--color-green-vscode:#4ec9b0;--color-teal-700:#0f766e;--color-red-100:#fee2e2;--color-red-200:#fecaca;--color-red-300:#fda4af;--color-red-400:#f87171;--color-red-500:#ef4444;--color-red-600:#dc2626;--color-red-700:#b91c1c;--color-red-800:#be123c;--color-red-900:#7f1d1d;--color-rose-500:#f43f5e;--color-blue-300:#93c5fd;--color-blue-400:#569cd6;--color-blue-500:#3b82f6;--color-blue-700:#1d4ed8;--color-blue-800:#1e40af;--color-sky-100:#e0f2fe;--color-sky-800:#075985;--color-sky-cppc:#89dceb;--color-yellow-200:#f9e2af;--color-yellow-300:#fcd34d;--color-yellow-700:#a16207;--color-yellow-vscode:#cca700;--color-amber-700:#b45309;--color-violet-300:#c4b5fd;--color-violet-700:#6d28d9;--color-purple-vscode:#c586c0;--color-indigo-500:#818cf8;--color-sapphire:#74c7ec;--alpha-black-04:rgba(0, 0, 0, .04);--alpha-black-05:rgba(0, 0, 0, .05);--alpha-black-06:rgba(0, 0, 0, .06);--alpha-black-08:rgba(0, 0, 0, .08);--alpha-black-10:rgba(0, 0, 0, .1);--alpha-black-12:rgba(0, 0, 0, .12);--alpha-black-16:rgba(0, 0, 0, .16);--alpha-black-18:rgba(0, 0, 0, .18);--alpha-black-20:rgba(0, 0, 0, .2);--alpha-black-24:rgba(0, 0, 0, .24);--alpha-black-30:rgba(0, 0, 0, .3);--alpha-black-32:rgba(0, 0, 0, .32);--alpha-black-40:rgba(0, 0, 0, .4);--alpha-black-50:rgba(0, 0, 0, .5);--alpha-white-04:rgba(255, 255, 255, .04);--alpha-white-06:rgba(255, 255, 255, .06);--alpha-white-08:rgba(255, 255, 255, .08);--alpha-white-10:rgba(255, 255, 255, .1);--alpha-white-12:rgba(255, 255, 255, .12);--alpha-white-20:rgba(255, 255, 255, .2);--shadow-100:0 1px 2px rgba(0, 0, 0, .2);--shadow-200:0 2px 6px rgba(0, 0, 0, .3);--shadow-300:0 4px 16px rgba(0, 0, 0, .5);--shadow-400:0 12px 32px rgba(0, 0, 0, .32);--shadow-500:0 24px 64px rgba(0, 0, 0, .55);--shadow-100-light:0 1px 2px rgba(0, 0, 0, .06);--shadow-200-light:0 4px 14px rgba(0, ..."
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:6ad851e92f88c37d26aa96abba7063cf76ae259c638afac1372a8cf9e36a0ded",
+        "ResolvConfPath": "/var/lib/docker/containers/7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6/hostname",
+        "HostsPath": "/var/lib/docker/containers/7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6/hosts",
+        "LogPath": "/var/lib/docker/containers/7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6/7e1197ae489156308a78207a6c35882126f18b514be5844d87aa1b5bb7695be6-json.log",
+        "Name": "/agt2394-rts-canary-machine-10m-studio-1",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "agt2394-rts-canary-machine-10m-network",
+            "PortBindings": {
+                "80/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19742"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "7e1197ae4891",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "2019/tcp": {},
+                "443/tcp": {},
+                "443/udp": {},
+                "80/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "REMOTE_HARNESS_AUTH_TOKEN=[REDACTED]",
+                "REMOTE_HARNESS_TASK_SERVER_UPSTREAM=fault-proxy:7071",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "CADDY_VERSION=v2.11.4",
+                "XDG_CONFIG_HOME=/config",
+                "XDG_DATA_HOME=/data"
+            ],
+            "Cmd": [
+                "caddy",
+                "run",
+                "--config",
+                "/etc/caddy/Caddyfile",
+                "--adapter",
+                "caddyfile"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "wget",
+                    "--quiet",
+                    "--output-document=-",
+                    "http://127.0.0.1/"
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "StartPeriod": 3000000000,
+                "Retries": 20
+            },
+            "Image": "agt2394-rts-canary-machine-10m-studio:local",
+            "Volumes": null,
+            "WorkingDir": "/srv",
+            "Entrypoint": null,
+            "Labels": {
+                "com.agentstudio.remote-harness.disposable": "true",
+                "com.agentstudio.remote-harness.identity": "agt2394-rts-canary-machine-10m",
+                "com.agentstudio.remote-harness.run-id": "canary-machine-10m",
+                "com.docker.compose.config-hash": "dd7bd95220a64fb13b7e2fdc5f48c4efd8d1e1086c9f9a4fb622fbff2df0af3e",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:6ad851e92f88c37d26aa96abba7063cf76ae259c638afac1372a8cf9e36a0ded",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "agt2394-rts-canary-machine-10m",
+                "com.docker.compose.project.config_files": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite/compose.yaml",
+                "com.docker.compose.project.environment_file": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/compose.env",
+                "com.docker.compose.project.working_dir": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite",
+                "com.docker.compose.replace": "studio-1",
+                "com.docker.compose.service": "studio",
+                "com.docker.compose.version": "2.40.3",
+                "org.opencontainers.image.description": "a powerful, enterprise-ready, open source web server with automatic HTTPS written in Go",
+                "org.opencontainers.image.documentation": "https://caddyserver.com/docs",
+                "org.opencontainers.image.licenses": "Apache-2.0",
+                "org.opencontainers.image.revision": "afee6f812080dbb2dfeac15be4f651552422f275",
+                "org.opencontainers.image.source": "https://github.com/caddyserver/caddy-docker",
+                "org.opencontainers.image.title": "Caddy",
+                "org.opencontainers.image.url": "https://caddyserver.com",
+                "org.opencontainers.image.vendor": "Light Code Labs",
+                "org.opencontainers.image.version": "v2.11.4"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "95606f46e20115464ba273172c64db44ba3950ec6e37e36b9049db6af56a5e96",
+            "SandboxKey": "/var/run/docker/netns/95606f46e201",
+            "Ports": {
+                "2019/tcp": null,
+                "443/tcp": null,
+                "443/udp": null,
+                "80/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19742"
+                    }
+                ]
+            },
+            "Networks": {
+                "agt2394-rts-canary-machine-10m-network": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "agt2394-rts-canary-machine-10m-studio-1",
+                        "studio"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "21681b62ede945ff1f835337eea4273eb5ceedee27a1f2d28788f067d1ea722a",
+                    "EndpointID": "e0051b5a95cf5bbb92cb445b448b22913fa560321b7ddedb87a81eb294575dd3",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.4",
+                    "MacAddress": "6e:2b:65:61:72:42",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "agt2394-rts-canary-machine-10m-studio-1",
+                        "studio",
+                        "7e1197ae4891"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:febcfc2a9a3c0896a9f5887a17590a4e95650a68c521bfc41fb4243b445a04c1",
+            "size": 1622,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

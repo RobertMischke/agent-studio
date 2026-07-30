@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "accepted": true,
+  "verifiedAt": "2026-07-29T02:29:17.430Z",
+  "removed": [
+    {
+      "path": ".tmp/remote-test-suite/canary-20260729",
+      "absent": true
+    },
+    {
+      "path": ".tmp/remote-test-suite/compose/canary-machine-10m",
+      "absent": true
+    },
+    {
+      "path": ".tmp/remote-test-suite/parallel-delivery/canary-parallel-12",
+      "absent": true
+    }
+  ],
+  "dockerIdentity": "agt2394-rts-canary-machine-10m",
+  "dockerBefore": {
+    "containers": 0,
+    "networks": 0,
+    "volumes": 0,
+    "images": 0
+  },
+  "dockerAfter": {
+    "containers": 0,
+    "networks": 0,
+    "volumes": 0,
+    "images": 0
+  },
+  "fixtureState": {
+    "branches": "removed with fixture bare repositories",
+    "worktrees": "removed with exact disposable roots",
+    "leases": "servers stopped; SQLite authority stores removed with exact disposable roots",
+    "fixtureTasks": "SQLite fixture task stores removed with exact disposable roots"
+  },
+  "retainedEvidence": {
+    "path": "docs/quality/remote-run-testsuite-report/2026-07-29",
+    "reason": "dated review package"
+  },
+  "protectedResources": [
+    "agent-taskboard-stable/",
+    "agent-taskboard-workspace/projects/",
+    "agent-taskboard-workspace/.metadata/",
+    "agent-studio_projects",
+    "agent-studio_workspace"
+  ]
+}

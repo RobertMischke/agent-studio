@@ -721,6 +721,12 @@ public sealed class GitWorkspace
 
     private async Task PushAndVerifyAsync(string branch, string expectedHead, CancellationToken ct)
     {
+        if (!IsCardScopedSalvageTarget(_workBranch, branch))
+        {
+            throw new InvalidOperationException(
+                $"Refusing salvage push to non-card branch '{branch}'. " +
+                $"Allowed targets are '{_workBranch}' and its collision refs.");
+        }
         _log($"worktree-salvage-push-started branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
         await Git(["push", "origin", $"HEAD:refs/heads/{branch}"], RepoPath, ct);
         var published = await RemoteBranchHeadAsync(branch, ct);
@@ -729,6 +735,19 @@ public sealed class GitWorkspace
                 $"Registered project repository ref 'refs/heads/{branch}' resolved to " +
                 $"'{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
+    }
+
+    internal static bool IsCardScopedSalvageTarget(string cardBranch, string targetBranch)
+    {
+        var segments = cardBranch.Split('/');
+        if (segments.Length != 3
+            || !string.Equals(segments[0], "runner", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(segments[1])
+            || string.IsNullOrWhiteSpace(segments[2]))
+            return false;
+
+        return string.Equals(targetBranch, cardBranch, StringComparison.Ordinal)
+            || targetBranch.StartsWith(cardBranch + "-collision-", StringComparison.Ordinal);
     }
 
     private async Task PushImmutableResultAndVerifyAsync(

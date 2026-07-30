@@ -1,0 +1,128 @@
+@if (hasArtifact()) {
+  <section class="decision-surface" data-testid="decision-surface" aria-labelledby="decision-surface-title">
+    <header class="decision-surface__header">
+      <div class="decision-surface__identity">
+        <span class="decision-surface__eyebrow">
+          <span class="decision-surface__dot" aria-hidden="true"></span>
+          Decision required
+        </span>
+        <h3 id="decision-surface-title" data-testid="decision-surface-title">
+          {{ document()?.title || 'Operator decision context' }}
+        </h3>
+        @if (document()?.question; as question) {
+          <p class="decision-surface__question" data-testid="decision-surface-question">{{ question }}</p>
+        }
+      </div>
+      <span class="decision-surface__artifact" data-testid="decision-surface-artifact">
+        {{ artifactLabel() }}
+      </span>
+    </header>
+
+    @if (document()?.context; as context) {
+      <p class="decision-surface__context" data-testid="decision-surface-context">{{ context }}</p>
+    }
+
+    @if (html() !== null) {
+      <iframe
+        #decisionFrame
+        class="decision-surface__frame"
+        data-testid="decision-surface-frame"
+        title="Isolated decision explanation"
+        sandbox="allow-scripts"
+        referrerpolicy="no-referrer"></iframe>
+    }
+
+    @if (contractError(); as error) {
+      <div class="decision-surface__error" role="alert" data-testid="decision-surface-error">
+        <strong>Decision contract could not be used.</strong>
+        <span>{{ error }} The generic escalation actions remain available.</span>
+      </div>
+    } @else if (document(); as decision) {
+      @if (actionError(); as error) {
+        <div class="decision-surface__error" role="alert" data-testid="decision-action-error">
+          <strong>Decision was not applied.</strong>
+          <span>{{ error }}</span>
+        </div>
+      }
+      @if (decision.recommendation; as recommendation) {
+        <div class="decision-surface__recommendation" data-testid="decision-surface-recommendation">
+          <span class="decision-surface__recommendation-label">Recommended</span>
+          <strong>{{ recommendation.reason }}</strong>
+        </div>
+      }
+
+      <fieldset class="decision-surface__options" data-testid="decision-surface-options">
+        <legend>Choose one option</legend>
+        @for (option of decision.options; track option.id) {
+          <label
+            class="decision-option"
+            [class.decision-option--selected]="selectedOptionId() === option.id"
+            [class.decision-option--recommended]="decision.recommendation?.optionId === option.id"
+            [attr.data-testid]="'decision-option-' + option.id">
+            <input
+              type="radio"
+              name="decision-option"
+              [value]="option.id"
+              [checked]="selectedOptionId() === option.id"
+              [disabled]="mutationsBlocked() || pendingOptionId() !== null"
+              (change)="selectOption(option.id)" />
+            <span class="decision-option__body">
+              <span class="decision-option__head">
+                <strong>{{ option.label }}</strong>
+                @if (decision.recommendation?.optionId === option.id) {
+                  <span class="decision-option__badge">Recommended</span>
+                }
+              </span>
+              <span class="decision-option__summary">{{ option.summary }}</span>
+              <span class="decision-option__consequence-label">Consequences</span>
+              <ul>
+                @for (consequence of option.consequences; track consequence) {
+                  <li>{{ consequence }}</li>
+                }
+              </ul>
+            </span>
+          </label>
+        }
+      </fieldset>
+
+      <label class="decision-surface__steer">
+        <span>
+          {{ decision.steer.label }}
+          @if (!decision.steer.required) {
+            <small>Optional</small>
+          }
+        </span>
+        <textarea
+          rows="3"
+          maxlength="4000"
+          data-testid="decision-steer"
+          [required]="decision.steer.required"
+          [placeholder]="decision.steer.placeholder"
+          [value]="freeSteer()"
+          [disabled]="mutationsBlocked() || pendingOptionId() !== null"
+          (input)="updateSteer($event)"></textarea>
+      </label>
+
+      <footer class="decision-surface__footer">
+        <span class="decision-surface__record-note">
+          Selection and guidance are recorded through the existing task action.
+        </span>
+        <button
+          type="button"
+          class="decision-surface__submit"
+          data-testid="decision-submit"
+          [disabled]="!canSubmit()"
+          [appPendingButton]="pendingOptionId() !== null"
+          [pendingLabel]="'Applying decision…'"
+          (click)="submit()">
+          {{ submitLabel() }}
+        </button>
+      </footer>
+    } @else {
+      <p class="decision-surface__no-contract" data-testid="decision-surface-no-contract">
+        This HTML explains the decision but does not contain a
+        <code>decision-surface/v1</code> action contract. Use the generic escalation actions.
+      </p>
+    }
+  </section>
+}

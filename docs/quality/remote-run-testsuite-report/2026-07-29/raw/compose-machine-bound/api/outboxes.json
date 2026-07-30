@@ -1,0 +1,38 @@
+[
+  {
+    "runnerId": "agt2394-rts-canary-machine-10m-runner",
+    "instanceId": "agt2394-rts-canary-machine-10m-instance",
+    "lastSequence": 1,
+    "lastAcknowledgedSequence": 1,
+    "backlogCount": 0,
+    "oldestUnacknowledgedSequence": null,
+    "finalHandoffState": "working",
+    "runId": "run_5156027ddcd4478893512704a35a0aeb",
+    "envelopeDigest": null,
+    "observedAt": "2026-07-29T02:20:38.651Z"
+  },
+  {
+    "runnerId": "agt2394-rts-canary-machine-10m-runner",
+    "instanceId": "agt2394-rts-canary-machine-10m-instance",
+    "lastSequence": 64,
+    "lastAcknowledgedSequence": 64,
+    "backlogCount": 0,
+    "oldestUnacknowledgedSequence": null,
+    "finalHandoffState": "completed",
+    "runId": "run_6d0cfede08f4402ca71406fe5680f380",
+    "envelopeDigest": "03d4a301fb12725bcc639508fbc2e15ef91462ef111c0bc45c4186e4ae16c1ed",
+    "observedAt": "2026-07-29T02:20:17.11Z"
+  },
+  {
+    "runnerId": "agt2394-rts-canary-machine-10m-runner",
+    "instanceId": "agt2394-rts-canary-machine-10m-instance",
+    "lastSequence": 64,
+    "lastAcknowledgedSequence": 64,
+    "backlogCount": 0,
+    "oldestUnacknowledgedSequence": null,
+    "finalHandoffState": "completed",
+    "runId": "run_abfa8f77c31247bda96f65559f79fd89",
+    "envelopeDigest": "6979a93556eeea6a59b2e6212fe7f9f1a8695dd688e7b2546fb7fcfe021ac5d4",
+    "observedAt": "2026-07-29T02:20:16.104Z"
+  }
+]

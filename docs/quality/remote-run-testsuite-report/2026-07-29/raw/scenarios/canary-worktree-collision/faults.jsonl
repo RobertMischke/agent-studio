@@ -1,0 +1,5 @@
+{"faultId":"worktree-target-collision","incidentClass":"worktree-collision","operation":"worktree-prepare","occurrence":1,"action":"occupy-target","parameters":{"maxPrepareAttempts":5}}
+{"faultId":"worktree-target-collision","incidentClass":"worktree-collision","operation":"worktree-prepare","occurrence":2,"action":"occupy-target","parameters":{"maxPrepareAttempts":5}}
+{"faultId":"worktree-target-collision","incidentClass":"worktree-collision","operation":"worktree-prepare","occurrence":3,"action":"occupy-target","parameters":{"maxPrepareAttempts":5}}
+{"faultId":"worktree-target-collision","incidentClass":"worktree-collision","operation":"worktree-prepare","occurrence":4,"action":"occupy-target","parameters":{"maxPrepareAttempts":5}}
+{"faultId":"worktree-target-collision","incidentClass":"worktree-collision","operation":"worktree-prepare","occurrence":5,"action":"occupy-target","parameters":{"maxPrepareAttempts":5}}

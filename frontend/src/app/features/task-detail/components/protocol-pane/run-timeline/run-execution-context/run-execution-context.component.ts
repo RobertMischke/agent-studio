@@ -18,6 +18,7 @@ export class RunExecutionContextComponent {
     return !!context && (
       context.sources.length > 0 ||
       !!context.model ||
+      !!context.thinkingLevel ||
       !!context.permissionMode ||
       !!context.cwd
     );

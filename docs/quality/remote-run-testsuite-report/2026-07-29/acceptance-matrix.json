@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "sourceTask": "AGT-2200",
+  "publishingTask": "AGT-2399",
+  "generatedAt": "2026-07-29T02:29:17.431Z",
+  "accepted": true,
+  "sourceState": {
+    "repositoryRevision": "afee6f812080dbb2dfeac15be4f651552422f275",
+    "runtimeImageRevision": "afee6f812080dbb2dfeac15be4f651552422f275",
+    "workingTreePatchSha256": "4d8f6efe17640983e29859036388e22682335330688eedff6e93cb141a9fe229",
+    "workingTreePatchBytes": 474690,
+    "dirty": true
+  },
+  "criteria": [
+    {
+      "id": "AGT-2200-1",
+      "criterion": "Clean deterministic reference run is reproducible",
+      "status": "pass",
+      "detail": "Two clean executions from one seed produced the same Result-SHA and semantic tree.",
+      "evidenceHrefs": [
+        "./raw/scenarios/canary-ref-a/result.json",
+        "./raw/scenarios/canary-ref-b/result.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-2",
+      "criterion": "Four declared infrastructure incidents are injected and linked",
+      "status": "pass",
+      "detail": "Network blip, gate timeout, worktree collision, and sentinel-loss contracts reached their declared terminals with chronicle links.",
+      "evidenceHrefs": [
+        "./validated-runs.json#canary-net-blip",
+        "./contracts/fault-catalog.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-3",
+      "criterion": "Historical salvage, lease adoption, and external completion scenarios are replayed",
+      "status": "pass",
+      "detail": "All three historical scenarios reached bounded declared terminals with their machine assertions passing.",
+      "evidenceHrefs": [
+        "./validated-runs.json#canary-salvage-lineage"
+      ]
+    },
+    {
+      "id": "AGT-2200-4",
+      "criterion": "Parallel remote tasks execute through gates and reviews",
+      "status": "pass",
+      "detail": "Twelve-card baseline and worker-loss variants used separate coding, gate, and review worker pools.",
+      "evidenceHrefs": [
+        "./raw/parallel-delivery/acceptance.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-5",
+      "criterion": "Structured wall and phase timing with per-run token telemetry",
+      "status": "pass",
+      "detail": "Every report run has validated wall and phase timing. Token fields are typed unavailable because this infrastructure harness invokes no model or CLI.",
+      "evidenceHrefs": [
+        "./validated-runs.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-6",
+      "criterion": "Clickable HTML report is published",
+      "status": "pass",
+      "detail": "The dated offline HTML report was generated only after report-schema validation.",
+      "evidenceHrefs": [
+        "./index.html"
+      ]
+    },
+    {
+      "id": "AGT-2200-7",
+      "criterion": "Model and CLI comparison dimensions",
+      "status": "not-applicable",
+      "detail": "The July scope transfer and AGT-2399 boundary explicitly move model and CLI comparison work out of this infrastructure canary.",
+      "evidenceHrefs": [
+        "./acceptance-matrix.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-8",
+      "criterion": "Hardening chronicle links are retained",
+      "status": "pass",
+      "detail": "Every fault and historical incident record links to a stable chronicle anchor.",
+      "evidenceHrefs": [
+        "../../../operations/haertung-verteilte-ausfuehrung/historie.html"
+      ]
+    },
+    {
+      "id": "AGT-2200-X1",
+      "criterion": "Horizontal remote post-processing reaches ten or more cards",
+      "status": "pass",
+      "detail": "12 and 12 cards were active or post-processing in the two variants.",
+      "evidenceHrefs": [
+        "./raw/parallel-delivery/acceptance.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-X2",
+      "criterion": "Studio, Task Server, and Runner update independently",
+      "status": "pass",
+      "detail": "Each component received an independent replacement while active authority was checked.",
+      "evidenceHrefs": [
+        "./raw/compose-machine-bound/acceptance.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-X3",
+      "criterion": "Runner remains autonomous for a real ten-minute Task Server outage",
+      "status": "pass",
+      "detail": "600013 ms elapsed with two active slots, 60 useful work units each, and exact-fence replay.",
+      "evidenceHrefs": [
+        "./raw/compose-machine-bound/autonomy-canary.json"
+      ]
+    },
+    {
+      "id": "AGT-2200-X4",
+      "criterion": "Docker canary runs on agent-runner-01",
+      "status": "pass",
+      "detail": "RUNNER_ID=agent-runner-01, RUNNER_CLIENT_ID=agent-runner-01, OS hostname=agent-studio-runner; Docker 29.1.3.",
+      "evidenceHrefs": [
+        "./component-versions.json"
+      ]
+    }
+  ],
+  "canaryGuards": [
+    {
+      "id": "missing-phase-timing",
+      "status": "pass"
+    },
+    {
+      "id": "missing-incident-link",
+      "status": "pass"
+    },
+    {
+      "id": "stale-authority",
+      "status": "pass"
+    },
+    {
+      "id": "lost-work",
+      "status": "pass"
+    },
+    {
+      "id": "phantom-delivery",
+      "status": "pass"
+    },
+    {
+      "id": "unsafe-cleanup",
+      "status": "pass"
+    },
+    {
+      "id": "report-schema-drift",
+      "status": "pass"
+    }
+  ],
+  "environmentalLimitations": [],
+  "typedTelemetryLimitations": [
+    {
+      "type": "not-applicable",
+      "code": "model-token-telemetry-not-produced",
+      "detail": "No model or CLI is invoked by the deterministic infrastructure harness, so token counts are not fabricated or compared."
+    }
+  ]
+}

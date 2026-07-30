@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "name": "parallel-baseline",
+  "runId": "canary-parallel-12",
+  "seed": "agt2200-parallel-v1",
+  "taskCount": 12,
+  "controlledWorkerLoss": {
+    "injected": false,
+    "retries": 0,
+    "redistributed": 0,
+    "maxRetryCount": 0,
+    "healthyWorkersContinued": true,
+    "capacityBefore": 12,
+    "capacityAfter": 12
+  }
+}

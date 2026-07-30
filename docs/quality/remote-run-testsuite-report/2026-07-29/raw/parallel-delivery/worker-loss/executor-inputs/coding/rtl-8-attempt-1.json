@@ -1,0 +1,13 @@
+{
+  "role": "coding",
+  "workerId": "canary-parallel-12-worker-loss-coding-worker-2",
+  "hostId": "canary-parallel-12-worker-loss-coding-worker-2-host",
+  "slot": 3,
+  "workspace": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/coding/canary-parallel-12-worker-loss-coding-worker-2/worktrees/rtl-8",
+  "branch": "runner/canary-parallel-12-worker-loss-coding-worker-2/rtl-8",
+  "taskKey": "RTL-8",
+  "ordinal": 8,
+  "seed": "agt2200-parallel-v1-worker-loss-8",
+  "commitDate": "2020-03-17T02:08:58.000Z",
+  "runAttemptId": "run_6c38f9c605ef46cba3e4f4596c2e7562"
+}

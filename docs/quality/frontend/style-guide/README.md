@@ -29,6 +29,7 @@ contract; the Workbench makes that vocabulary visible and reviewable.
 
 This folder is the **second-look** for any visual or styling change. The first stop is still [`docs/quality/frontend/design-system.md`](../design-system.md) (the "why" of the shell: Material 3 mapping, color philosophy, type ramp, motion grammar). The style guide is the **"what to grab"** for a concrete change:
 
+- "Which rules are mandatory for this styling card?" → [living rules](./living-rules.md) + [compact prompt context](../../frontend-styling.md)
 - "I need a small button" → [buttons.md](./buttons.md)
 - "I need predictable actions in a repository page head" → [page action Workbench](../../visual-styleguide-workbench-wiki/index.html)
 - "I need a pill / badge / chip" → [pills.md](./pills.md)
@@ -46,7 +47,7 @@ If the canonical component fits, use it. If it does not fit, the audit pages lis
 Three layers, low-to-high. Lower layers are the source of truth; higher layers consume them.
 
 1. **Tokens** — `--studio-spacing-*`, `--studio-bg-*`, `--studio-fg-*`, `--studio-accent`, `--studio-modal-padding`, `--studio-modal-padding-*`, `--elevation-*`, `--shadow-*`. Declared in [`frontend/src/styles/_tokens-primitives.scss`](../../../../frontend/src/styles/_tokens-primitives.scss) (Tier 1, raw palette) and [`frontend/src/styles/_tokens-semantic.scss`](../../../../frontend/src/styles/_tokens-semantic.scss) (Tier 2, semantic aliases that flip per theme). See [tokens.md](./tokens.md) for the full list with use cases.
-2. **Primitives** — small reusable shapes the components compose. Today: SCSS mixins in [`frontend/src/styles/_mixins.scss`](../../../../frontend/src/styles/_mixins.scss) (`icon-button`, `chip`, `empty-state`, `thin-scroll`).
+2. **Primitives** — small reusable shapes the components compose. Today: SCSS mixins in [`frontend/src/styles/_mixins.scss`](../../../../frontend/src/styles/_mixins.scss) (`icon-button`, `chip`, `empty-state`, `thin-scroll`, `type-label`, and the `deck-panel*` family).
 3. **Components** — the standalone Angular components callers reach for. See the canonical-component table below.
 
 A change at layer N must not duplicate a fact at layer N-1. A button never hardcodes its radius; the radius comes from the shape scale. The shape scale never hardcodes a hex; the hex lives in the primitives. The primitives never live in two files. **Tokens > Primitives > Components.**

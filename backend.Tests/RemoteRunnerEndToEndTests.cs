@@ -420,7 +420,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/website.git");
 
@@ -485,7 +485,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/website.git");
         var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
@@ -523,7 +523,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/cli-environment.git");
         var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
@@ -828,7 +828,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
 
         var assignment = await http.PutAsJsonAsync(
             $"/api/projects/{ProjectName}/execution-runner",
@@ -885,6 +885,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("gpt-5.6-sol", sessionEvent.Model);
         Assert.Equal("xhigh", sessionEvent.ThinkingLevel);
 
+        await AdvertiseCodingCapabilitiesAsync(
+            http,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["claude"] = "unavailable",
+            });
         var replay = await client.ClaimAsync(request, CancellationToken.None);
         Assert.Equal(RClaimStatus.Claimed, replay.Status);
         Assert.Equal(claim.TaskKey, replay.TaskKey);
@@ -924,6 +930,148 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             completedProjection!.CurrentReviewSubject!.RepositoryId);
     }
 
+    [Fact]
+    public async Task Codex_only_runner_leaves_claude_card_ready_until_claude_is_advertised()
+    {
+        SeedTask(
+            TaskStates.Ready,
+            "AGT-CLI-CLAUDE",
+            "Claude-only card",
+            "Prompt.",
+            cliType: "claude");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(
+            client,
+            http,
+            cliStatuses: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["codex"] = "ready",
+            });
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        var request = new RClaim(
+            RunnerId,
+            ProjectName,
+            "hetzner-test",
+            4242,
+            "remote-runner",
+            IdempotencyKey: "cli-capability-claude");
+        var incompatible = await client.ClaimAsync(request, CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, incompatible.Status);
+        Assert.Contains("cli-execution:claude", incompatible.Message);
+        Assert.True(Directory.Exists(Path.Combine(
+            _watchPath,
+            TaskStates.Ready,
+            "AGT-CLI-CLAUDE")));
+        Assert.Null(factory.Services.GetRequiredService<RunLeaseService>().Peek("AGT-CLI-CLAUDE").Lease);
+
+        await AdvertiseCodingCapabilitiesAsync(
+            http,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["claude"] = "ready",
+            });
+        var claimed = await ClaimWithSuccessfulPreflightAsync(client, request);
+
+        Assert.Equal(RClaimStatus.Claimed, claimed.Status);
+        Assert.Equal("AGT-CLI-CLAUDE", claimed.JobId);
+    }
+
+    [Fact]
+    public async Task Mixed_runner_claims_cards_for_each_advertised_cli()
+    {
+        SeedTask(
+            TaskStates.Ready,
+            "AGT-CLI-MIXED-CLAUDE",
+            "Claude card",
+            "Prompt.",
+            cliType: "claude",
+            order: 1);
+        SeedTask(
+            TaskStates.Ready,
+            "AGT-CLI-MIXED-CODEX",
+            "Codex card",
+            "Prompt.",
+            cliType: "codex",
+            order: 2);
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        var claude = await ClaimWithSuccessfulPreflightAsync(
+            client,
+            new RClaim(
+                RunnerId,
+                ProjectName,
+                "hetzner-test",
+                4242,
+                "remote-runner",
+                IdempotencyKey: "cli-mixed-claude"));
+        var codex = await client.ClaimAsync(
+            new RClaim(
+                RunnerId,
+                ProjectName,
+                "hetzner-test",
+                4242,
+                "remote-runner",
+                IdempotencyKey: "cli-mixed-codex"),
+            CancellationToken.None);
+
+        Assert.Equal("claude", claude.RunSpec!.CliType);
+        Assert.Equal("codex", codex.RunSpec!.CliType);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Unavailable_or_stale_cli_capability_leaves_card_unclaimed(bool stale)
+    {
+        SeedTask(
+            TaskStates.Ready,
+            "AGT-CLI-BLOCKED",
+            "Capability-blocked card",
+            "Prompt.",
+            cliType: "claude");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(
+            client,
+            http,
+            cliStatuses: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["claude"] = stale ? "ready" : "unavailable",
+            },
+            advertisedAt: stale ? DateTime.UtcNow.AddMinutes(-10) : null);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        var claim = await client.ClaimAsync(
+            new RClaim(
+                RunnerId,
+                ProjectName,
+                "hetzner-test",
+                4242,
+                "remote-runner",
+                IdempotencyKey: $"cli-blocked-{stale}"),
+            CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        Assert.Contains(stale ? "stale" : "unavailable", claim.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(Path.Combine(
+            _watchPath,
+            TaskStates.Ready,
+            "AGT-CLI-BLOCKED")));
+        Assert.Null(factory.Services.GetRequiredService<RunLeaseService>().Peek("AGT-CLI-BLOCKED").Lease);
+    }
+
     /// <summary>
     /// T0b (CAR migration plan §3 T0b / §7 AP3): the claim carries the card's
     /// execution specification, and the runner turns it into the CLI invocation.
@@ -949,7 +1097,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
 
@@ -1011,7 +1159,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/remote-epic-contract.git");
 
@@ -1031,6 +1179,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             StateDir = Path.Combine(runnerWork, ".runner-state"),
             BaseBranch = "main",
             CliBin = cli,
+            CodexCliBin = cli,
             CliArgs = "",
             TtlSeconds = 120,
             HeartbeatSeconds = 30,
@@ -1041,7 +1190,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var taskRunner = new RTaskRunner(options, client, _ => { });
         var exit = await taskRunner.RunClaimedAsync(
             claim.TaskKey!, claim.Lease!, CancellationToken.None,
-            claim.ProjectId, origin, "main", claim.TaskKind);
+            claim.ProjectId, origin, "main", claim.TaskKind,
+            claim.RunId, claim.LeaseInstanceId, claim.RunSpec);
 
         Assert.Equal(0, exit);
         var epicFolder = Path.Combine(_watchPath, TaskStates.AutoReview, epicKey);
@@ -1082,7 +1232,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
         var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
@@ -1110,7 +1260,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
         var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
@@ -1143,7 +1293,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory(remoteRequeueGraceSeconds: 1);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
         var first = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
@@ -1188,7 +1338,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        var clientId = await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        var clientId = await RegisterCodingRunnerAsync(client, http);
 
         var assignment = await http.PutAsJsonAsync(
             $"/api/projects/{ProjectName}/execution-runner",
@@ -1216,7 +1366,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/read-only-project.git");
 
@@ -1472,7 +1622,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/writable-project.git");
 
@@ -1520,7 +1670,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
 
         var assignment = await http.PutAsJsonAsync(
             $"/api/projects/{ProjectName}/execution-runner",
@@ -1552,7 +1702,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
 
         var assignment = await http.PutAsJsonAsync(
             $"/api/projects/{ProjectName}/execution-runner",
@@ -1785,6 +1935,79 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "clone/fetch URLs match registration; write probe succeeded",
                 DateTime.UtcNow, offered.RepositoryUrl!, offered.RepositoryUrl!),
         }, CancellationToken.None);
+    }
+
+    private static async Task<string> RegisterCodingRunnerAsync(
+        RClient client,
+        HttpClient http,
+        CancellationToken ct = default,
+        IReadOnlyDictionary<string, string>? cliStatuses = null,
+        DateTime? advertisedAt = null)
+    {
+        var clientId = await client.RegisterAsync(ProjectName, "service", ct);
+        var instanceId = $"{Environment.MachineName}:{Environment.ProcessId}";
+        var registration = await http.PutAsJsonAsync(
+            $"/api/v1/runners/{RunnerId}",
+            new Contract.RegisterRunnerRequest(
+                ProjectName,
+                "test-host",
+                instanceId,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.CodingExecutor]),
+            ct);
+        registration.EnsureSuccessStatusCode();
+        await AdvertiseCodingCapabilitiesAsync(
+            http,
+            cliStatuses
+            ?? new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["claude"] = "ready",
+                ["codex"] = "ready",
+            },
+            advertisedAt,
+            ct);
+        return clientId;
+    }
+
+    private static async Task AdvertiseCodingCapabilitiesAsync(
+        HttpClient http,
+        IReadOnlyDictionary<string, string> cliStatuses,
+        DateTime? advertisedAt = null,
+        CancellationToken ct = default)
+    {
+        var capabilities = new List<Contract.AdvertisedCapabilityDto>
+        {
+            new(Contract.CapabilityProtocol.CodingExecutor, "executor"),
+            new(Contract.CapabilityProtocol.GitFetch, "source"),
+            new(Contract.CapabilityProtocol.GitPush, "source"),
+            new(Contract.CapabilityProtocol.RepositoryAccess, "source"),
+            new(Contract.CapabilityProtocol.Disk, "foundation"),
+            new(Contract.CapabilityProtocol.TaskServerConnectivity, "foundation"),
+        };
+        foreach (var (cliType, status) in cliStatuses)
+        {
+            capabilities.Add(new Contract.AdvertisedCapabilityDto(
+                Contract.CapabilityProtocol.CliExecution(cliType),
+                "cli-execution",
+                status));
+            capabilities.Add(new Contract.AdvertisedCapabilityDto(
+                Contract.CapabilityProtocol.ProviderAuthentication(cliType),
+                "provider-auth",
+                status));
+        }
+        var response = await http.PutAsJsonAsync(
+            $"/api/v1/runners/{RunnerId}/capabilities",
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                $"{Environment.MachineName}:{Environment.ProcessId}",
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                advertisedAt ?? DateTime.UtcNow,
+                180,
+                DateTime.UtcNow.Ticks,
+                capabilities),
+            ct);
+        response.EnsureSuccessStatusCode();
     }
 
     private static JsonSerializerOptions CreateApiJson()

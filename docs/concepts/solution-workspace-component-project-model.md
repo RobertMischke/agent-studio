@@ -1,11 +1,19 @@
 # Solution Workspace And Component Project Model
 
+> **Sections partly outdated since the project-registry deliveries through
+> `053a86a0a` (2026-07-22):** the migration-state statements and the retired
+> Project Relationship Model source no longer describe the current registry.
+> The target cardinality and component-project decision remain active. See the
+> [Tasks domain map](../system/domains/tasks.md) and
+> [distributed target architecture](distributed-agent-studio-target-architecture.md)
+> for current implementation boundaries.
+
 > **Status:** target design and delivery decomposition, 2026-07-13. This page
 > describes intended behavior. Current behavior is called out explicitly where
 > it matters for migration and compatibility.
 >
-> This design refines the repository cardinality in
-> [Project Relationship Model And Branch-Aware Wiki](project-relationship-model.md).
+> This design refines the repository cardinality from the retired historical
+> “Project Relationship Model And Branch-Aware Wiki” page.
 > It keeps that concept's branch and revision provenance, but makes project
 > identity independent from repository identity.
 

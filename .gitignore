@@ -27,6 +27,8 @@ tools/*
 !tools/SilentCatchAnalyzer/**
 
 .test-output
+# Remote Run harness workspaces, credentials, and exported local evidence.
+/.tmp/remote-test-suite/
 
 # .NET 10 Artifacts Output Layout (replaces per-project bin/ and obj/)
 artifacts/

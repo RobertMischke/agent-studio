@@ -9,7 +9,7 @@ export function validateManifest(manifest) {
   const errors = [];
   rejectUnknown(manifest, [
     '$schema', 'version', 'name', 'description', 'task', 'fixture', 'phases', 'resources', 'hooks',
-    'faults', 'expected', 'contract'
+    'contract', 'faults', 'expected'
   ], 'manifest', errors);
   if (manifest?.version !== 1) errors.push('version must be 1');
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(manifest?.name ?? '')) errors.push('name is invalid');
@@ -24,37 +24,37 @@ export function validateManifest(manifest) {
     if (!manifest?.resources?.[field]?.trim()) errors.push(`resources.${field} is required`);
   }
   rejectUnknown(manifest?.resources, ['workspaceId', 'projectId', 'taskId'], 'resources', errors);
-  // A chronicle contract marks a historical replay scenario; the standard
-  // reference-change and fault-injection manifests carry none.
-  if (manifest?.contract !== undefined) {
-    rejectUnknown(
-      manifest.contract,
-      ['chronicleLinks', 'expectedTerminal', 'recoveryBudget', 'assertions'],
-      'contract',
-      errors);
-    const chronicleLinks = manifest.contract?.chronicleLinks;
-    if (!Array.isArray(chronicleLinks)
-        || new Set(chronicleLinks).size !== chronicleLinks.length
-        || chronicleLinks.some(link =>
-          !/^docs\/operations\/haertung-verteilte-ausfuehrung\/historie\.html#incident-[a-z0-9-]+$/.test(link))) {
-      errors.push('contract.chronicleLinks must contain unique hardening-chronicle incident links');
-    }
-    if (!/^[0-9]+-[a-z0-9-]+$/.test(manifest.contract?.expectedTerminal ?? '')) {
-      errors.push('contract.expectedTerminal must be a durable lane state');
-    }
-    rejectUnknown(manifest.contract?.recoveryBudget, ['unit', 'maximum'], 'contract.recoveryBudget', errors);
-    if (!/^[a-z0-9][a-z0-9-]+$/.test(manifest.contract?.recoveryBudget?.unit ?? '')
-        || !Number.isInteger(manifest.contract?.recoveryBudget?.maximum)
-        || manifest.contract.recoveryBudget.maximum < 0) {
-      errors.push('contract.recoveryBudget must declare a unit and non-negative maximum');
-    }
-    const assertions = manifest.contract?.assertions;
-    if (!Array.isArray(assertions)
-        || assertions.length === 0
-        || new Set(assertions).size !== assertions.length
-        || assertions.some(assertion => !/^[a-z0-9][a-z0-9-]+$/.test(assertion))) {
-      errors.push('contract.assertions must contain unique machine assertion ids');
-    }
+  rejectUnknown(
+    manifest?.contract,
+    ['chronicleLinks', 'expectedTerminal', 'recoveryBudget', 'assertions'],
+    'contract',
+    errors);
+  const chronicleLinks = manifest?.contract?.chronicleLinks;
+  if (!Array.isArray(chronicleLinks)
+      || new Set(chronicleLinks).size !== chronicleLinks.length
+      || chronicleLinks.some(link =>
+        !/^docs\/operations\/haertung-verteilte-ausfuehrung\/historie\.html#incident-[a-z0-9-]+$/.test(link))) {
+    errors.push('contract.chronicleLinks must contain unique hardening-chronicle incident links');
+  }
+  if (!/^[0-9]+-[a-z0-9-]+$/.test(manifest?.contract?.expectedTerminal ?? '')) {
+    errors.push('contract.expectedTerminal must be a durable lane state');
+  }
+  rejectUnknown(
+    manifest?.contract?.recoveryBudget,
+    ['unit', 'maximum'],
+    'contract.recoveryBudget',
+    errors);
+  if (!/^[a-z0-9][a-z0-9-]+$/.test(manifest?.contract?.recoveryBudget?.unit ?? '')
+      || !Number.isInteger(manifest?.contract?.recoveryBudget?.maximum)
+      || manifest.contract.recoveryBudget.maximum < 0) {
+    errors.push('contract.recoveryBudget must declare a unit and non-negative maximum');
+  }
+  const assertions = manifest?.contract?.assertions;
+  if (!Array.isArray(assertions)
+      || assertions.length === 0
+      || new Set(assertions).size !== assertions.length
+      || assertions.some(assertion => !/^[a-z0-9][a-z0-9-]+$/.test(assertion))) {
+    errors.push('contract.assertions must contain unique machine assertion ids');
   }
   rejectUnknown(manifest?.fixture, [
     'defaultBranch', 'changeCommand', 'acceptanceCommand', 'expectedChangedFiles'
@@ -189,6 +189,7 @@ export function resourcePlan({
     `${root}/outbox.jsonl`,
     `${root}/phases.jsonl`,
     `${root}/assertions.json`,
+    `${root}/result.json`,
     `API workspace/project/task scoped to ${runId}`
   ];
   if (faults.length > 0) {

@@ -65,6 +65,8 @@ public record TaskTransitionRequest
     public string JobId { get; init; } = "";
     public string? WatchPath { get; init; }
     public string TargetLane { get; init; } = "";
+    public string? Cause { get; init; }
+    public string? Reason { get; init; }
     public TaskAccessVersion? ExpectedVersion { get; init; }
 }
 

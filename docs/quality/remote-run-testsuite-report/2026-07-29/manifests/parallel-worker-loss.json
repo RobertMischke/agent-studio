@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "parallel-worker-loss",
+  "runId": "canary-parallel-12",
+  "seed": "agt2200-parallel-v1",
+  "taskCount": 12,
+  "controlledWorkerLoss": {
+    "injected": true,
+    "workerId": "canary-parallel-12-worker-loss-gate-worker-1",
+    "lostAt": "2026-07-29T02:08:47.108Z",
+    "classification": "environmental-worker-loss",
+    "retries": 4,
+    "redistributed": 4,
+    "maxRetryCount": 1,
+    "healthyWorkersContinued": true,
+    "capacityBefore": 12,
+    "capacityAfter": 8
+  }
+}

@@ -62,6 +62,14 @@ outcomes render quietly. A finished run, an archived item, or a past warning mus
 not keep shouting. This is the AGT-2049 rule: acute treatment for acute states,
 history stays calm.
 
+Status badges on task cards are a projection of current truth only: current
+lane, current integration status, and the latest run outcome. Decision-journal
+entries, earlier run failures, reissue tags, and other events belong in the
+timeline and do not remain as quiet or acute card badges. Contradictory pairs
+are invalid by construction: `integrated` / `merged` excludes `Integration
+error`, and the Review lane excludes `Escalated`. This is the AGT-2410 Living
+Style Guide card-status contract.
+
 ### R5 - Both themes, always; respect reduced motion
 
 Every visual change works in **both** light and dark themes. Light is the daily

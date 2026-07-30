@@ -1,0 +1,18 @@
+:80 {
+	encode zstd gzip
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy {$REMOTE_HARNESS_TASK_SERVER_UPSTREAM} {
+			header_up Authorization "Bearer {$REMOTE_HARNESS_AUTH_TOKEN}"
+			header_up X-Task-Protocol-Version "2"
+			header_up X-Task-Client-Version "remote-compose-harness/1"
+		}
+	}
+
+	handle {
+		root * /srv/studio
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -29,6 +29,8 @@ export interface PipelineStep {
   timeoutMs?: number | null;
   idempotent: boolean;
   stub: boolean;
+  /** Implemented step that waits for an explicit operator trigger. */
+  deferred?: boolean;
 }
 
 /** The full static pipeline definition this job targets. */

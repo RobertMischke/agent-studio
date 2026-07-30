@@ -20,6 +20,21 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-run-wedge",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+    ],
+    "expectedTerminal": "5-human-review",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 0
+    },
+    "assertions": [
+      "inconclusive-terminal-contained"
+    ]
+  },
   "hooks": {},
   "faults": ["interrupted-terminal-marker"],
   "expected": {

@@ -1,0 +1,310 @@
+[
+    {
+        "Id": "f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea",
+        "Created": "2026-07-29T02:20:45.607959969Z",
+        "Path": "node",
+        "Args": [
+            "/harness/compose-agent.mjs"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1571987,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-29T02:20:45.898598776Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-07-29T04:20:51.033504519+02:00",
+                        "End": "2026-07-29T04:20:51.360406685+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:257e48bf94cce9a00a7445a9dd56b556b0586556dd2d94d0e43eb72bf6d85a32",
+        "ResolvConfPath": "/var/lib/docker/containers/f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea/hostname",
+        "HostsPath": "/var/lib/docker/containers/f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea/hosts",
+        "LogPath": "/var/lib/docker/containers/f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea/f813fd4b8295579cb2a48817456988c854ea6e0a89ae99296c6da701d70858ea-json.log",
+        "Name": "/agt2394-rts-canary-machine-10m-agent-runner-1",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "agt2394-rts-canary-machine-10m-runner-workspace:/var/lib/remote-harness-runner:rw"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "agt2394-rts-canary-machine-10m-network",
+            "PortBindings": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19744"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ],
+            "Init": true
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "agt2394-rts-canary-machine-10m-runner-workspace",
+                "Source": "/var/lib/docker/volumes/agt2394-rts-canary-machine-10m-runner-workspace/_data",
+                "Destination": "/var/lib/remote-harness-runner",
+                "Driver": "local",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "f813fd4b8295",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "8080/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "REMOTE_HARNESS_CONTROL_PORT=8080",
+                "REMOTE_HARNESS_AUTH_TOKEN=[REDACTED]",
+                "REMOTE_HARNESS_MAX_SLOTS=2",
+                "REMOTE_HARNESS_RUNNER_INSTANCE=agt2394-rts-canary-machine-10m-instance",
+                "REMOTE_HARNESS_RUNNER_HEARTBEAT_MS=1000",
+                "REMOTE_HARNESS_WORK_INTERVAL_MS=10000",
+                "REMOTE_HARNESS_RUNNER_STATE=/var/lib/remote-harness-runner/claim.json",
+                "REMOTE_HARNESS_SERVER_URL=http://fault-proxy:6071",
+                "REMOTE_HARNESS_RUNNER_TTL_SECONDS=900",
+                "REMOTE_HARNESS_AUTHORITY_SAFETY_MARGIN_MS=30000",
+                "REMOTE_HARNESS_RUNNER_ID=agt2394-rts-canary-machine-10m-runner",
+                "REMOTE_HARNESS_RUNNER_HOST=agt2394-rts-canary-machine-10m-host",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "APP_UID=1654",
+                "ASPNETCORE_HTTP_PORTS=8080",
+                "DOTNET_RUNNING_IN_CONTAINER=true",
+                "DOTNET_VERSION=10.0.10",
+                "ASPNET_VERSION=10.0.10",
+                "DOTNET_GENERATE_ASPNET_CERTIFICATE=false",
+                "DOTNET_NOLOGO=true",
+                "DOTNET_SDK_VERSION=10.0.302",
+                "DOTNET_USE_POLLING_FILE_WATCHER=true",
+                "NUGET_XMLDOC_MODE=skip",
+                "POWERSHELL_DISTRIBUTION_CHANNEL=PSDocker-DotnetSDK-Ubuntu-24.04"
+            ],
+            "Cmd": [
+                "/harness/compose-agent.mjs"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "node",
+                    "-e",
+                    "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "StartPeriod": 2000000000,
+                "Retries": 20
+            },
+            "Image": "agt2394-rts-canary-machine-10m-agent-runner:local",
+            "Volumes": null,
+            "WorkingDir": "/harness",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.agentstudio.remote-harness.disposable": "true",
+                "com.agentstudio.remote-harness.identity": "agt2394-rts-canary-machine-10m",
+                "com.agentstudio.remote-harness.run-id": "canary-machine-10m",
+                "com.docker.compose.config-hash": "7270c05dcd834bd67643137ee52e9410c1590bc8c808cefcb9dd10d3998dc26c",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:257e48bf94cce9a00a7445a9dd56b556b0586556dd2d94d0e43eb72bf6d85a32",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "agt2394-rts-canary-machine-10m",
+                "com.docker.compose.project.config_files": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite/compose.yaml",
+                "com.docker.compose.project.environment_file": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/compose.env",
+                "com.docker.compose.project.working_dir": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite",
+                "com.docker.compose.replace": "agent-runner-1",
+                "com.docker.compose.service": "agent-runner",
+                "com.docker.compose.version": "2.40.3",
+                "org.opencontainers.image.revision": "afee6f812080dbb2dfeac15be4f651552422f275",
+                "org.opencontainers.image.version": "24.04"
+            },
+            "StopTimeout": 10
+        },
+        "NetworkSettings": {
+            "SandboxID": "eee9958a7096458d2850ee123a4c758e649690b26aa424cc45c140f577f9b293",
+            "SandboxKey": "/var/run/docker/netns/eee9958a7096",
+            "Ports": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19744"
+                    }
+                ]
+            },
+            "Networks": {
+                "agt2394-rts-canary-machine-10m-network": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "agt2394-rts-canary-machine-10m-agent-runner-1",
+                        "agent-runner"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "21681b62ede945ff1f835337eea4273eb5ceedee27a1f2d28788f067d1ea722a",
+                    "EndpointID": "759addbb072531cde58e36aae692863d76158fbda85962b8c33ae9cc86a7631a",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.5",
+                    "MacAddress": "b6:7e:e2:8c:ad:9a",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "agt2394-rts-canary-machine-10m-agent-runner-1",
+                        "agent-runner",
+                        "f813fd4b8295"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:1291d5ecba1f87769777acc7ff3f7c33406a9e42c63e094ccc02a7863a256017",
+            "size": 2966,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

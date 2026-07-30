@@ -35,6 +35,35 @@ public sealed class RemoteCommitAttributionGuardTests
     }
 
     [Fact]
+    public void Attribute_ImmutableResultEnvelopeRef_IsAcceptedAsTaskNeutral()
+    {
+        // The envelope ref carries the run id + result SHA, never the task key.
+        // Its identity is the fenced result SHA the caller verified, so the
+        // task-key suffix rule must not reject it (AGT-2434/AGT-2445: every
+        // canonical remote card lost its attributed commits).
+        var result = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2445",
+            "refs/heads/agent-studio/results/run_26f460aab3b64600837bd8a54745bd37/3cd7da14403e934f1fc00a4782a24bb799a398a1",
+            [Commit("3cd7da14403e934f1fc00a4782a24bb799a398a1", "docs: link research convention")]);
+
+        Assert.True(result.Accepted, result.Warning);
+        Assert.Single(result.Commits);
+        Assert.Equal(CommitAttributionKinds.Automatic, result.Commits[0].Attribution);
+    }
+
+    [Fact]
+    public void Attribute_ImmutableResultEnvelopeRef_StillRejectsForeignTaskSubjects()
+    {
+        var result = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2445",
+            "agent-studio/results/run_26f460aab3b64600837bd8a54745bd37/3cd7da14403e934f1fc00a4782a24bb799a398a1",
+            [Commit("1111111111111111111111111111111111111111", "fix(AGT-9999): foreign change")]);
+
+        Assert.False(result.Accepted);
+        Assert.Contains("AGT-9999", result.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Attribute_ForeignTaskKeyInAnySubject_RejectsTheWholeRange()
     {
         var result = RemoteCommitAttributionGuard.Attribute(

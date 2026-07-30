@@ -20,6 +20,21 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave"
+    ],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 5
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
   "hooks": {},
   "faults": ["task-server-network-blips", "lost-completion-sentinel"],
   "expected": {

@@ -105,7 +105,7 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.rowTone(TIMELINE_KIND.orchestratorEscalated)).toBe('danger');
     expect(c.rowTone(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('danger');
     expect(c.verdictLabel('escalated')).toBe('Escalated to human');
-    expect(c.kindLabel(TIMELINE_KIND.qualityLoopReopened)).toBe('Re-opened (go again)');
+    expect(c.kindLabel(TIMELINE_KIND.qualityLoopReopened)).toBe('Re-opened');
     expect(c.kindLabel(TIMELINE_KIND.runnerSlotAdmission)).toBe('Slot admitted');
     expect(c.kindLabel(TIMELINE_KIND.epicDecomposed)).toBe('Epic decomposed');
     expect(c.kindLabel(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('Containment violation');
@@ -154,7 +154,7 @@ describe('TaskTimelinePaneComponent', () => {
     const rows = html.querySelectorAll('[data-testid="timeline-event"]');
     expect(rows.length).toBe(1);
     expect(rows[0].getAttribute('data-kind')).toBe(TIMELINE_KIND.externalCompletion);
-    expect(html.textContent).toContain('Completed externally by operator-chat');
+    expect(html.textContent).toContain('Completed externally · operator-chat');
   });
 
   it('renders run-summary rows when a legacy card has run records but no ledger run events', async () => {
@@ -181,12 +181,13 @@ describe('TaskTimelinePaneComponent', () => {
       TIMELINE_KIND.promptCreated,
       TIMELINE_KIND.agentRunFinished,
     ]);
-    expect(c.displayEvents()[1].summary).toContain('Run #2 completed');
+    expect(c.displayEvents()[1].summary).toBe('');
     expect(c.displayEvents()[1].details?.['userFollowup']).toContain('Finish the original task');
 
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelectorAll('[data-testid="timeline-event"]').length).toBe(2);
-    expect(html.textContent).toContain('Run #2 completed');
+    expect(html.textContent).toContain('Run finished · 600s');
+    expect(html.textContent).toContain('#2');
   });
 
   it('does not synthesize duplicate run rows when timeline already carries agent run events', async () => {
@@ -236,6 +237,48 @@ describe('TaskTimelinePaneComponent', () => {
       ts: '', kind: TIMELINE_KIND.qualityLoopReopened, actor: 'quality-loop', summary: '',
       details: { gap: 'g', reason: 'r', attempt: '2', maxAttempts: '3', cause: 'noop-recovery' },
     });
-    expect(entries).toEqual([{ key: 'cause', value: 'noop-recovery' }]);
+    expect(entries).toEqual([{ key: 'cause', label: 'Cause', value: 'noop-recovery' }]);
+  });
+
+  it('renders model, thinking level, and expandable source names without permanent defaults', async () => {
+    const fixture = await build(
+      [{
+        ts: '2026-05-30T10:10:00Z',
+        kind: TIMELINE_KIND.executionContext,
+        actor: 'system',
+        runId: 'session-42',
+        summary: 'codex context: 2 sources, model gpt-5.6-sol, YOLO',
+        details: { cli: 'codex', source: 'convention', sources: '2', mcp: '0' },
+      }],
+      [runRecord({
+        inputSessionId: 'session-42',
+        executionContext: {
+          cli: 'codex',
+          model: 'gpt-5.6-sol',
+          thinkingLevel: 'medium',
+          permissionMode: 'yolo',
+          cwd: '/repo',
+          contextMode: 'shared',
+          capturedAt: '2026-05-30T10:10:00Z',
+          source: 'convention',
+          sources: [
+            { kind: 'memory', label: 'AGENTS.md', path: '/repo/AGENTS.md', exists: true, detail: null },
+            { kind: 'global-config', label: 'Codex config', path: '/home/.codex/config.toml', exists: true, detail: null },
+          ],
+        },
+      })],
+    );
+    const html = fixture.nativeElement as HTMLElement;
+    const row = html.querySelector<HTMLElement>('[data-kind="execution_context"]');
+
+    expect(row?.textContent).toContain('gpt-5.6-sol');
+    expect(row?.textContent).toContain('medium');
+    expect(row?.textContent).not.toContain('YOLO');
+    expect(row?.textContent).not.toContain('mcp 0');
+    const disclosure = row?.querySelector<HTMLDetailsElement>('[data-testid="timeline-event-sources"]');
+    expect(disclosure?.textContent).toContain('2 sources');
+    expect(disclosure?.textContent).toContain('Codex config conventions');
+    expect(disclosure?.textContent).toContain('AGENTS.md');
+    expect(disclosure?.textContent).toContain('Codex config');
   });
 });

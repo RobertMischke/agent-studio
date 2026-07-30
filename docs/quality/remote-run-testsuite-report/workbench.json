@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "remote-run-testsuite-report",
+  "title": "Remote Run Infrastructure Test Report",
+  "summary": "Clickable offline acceptance matrix, phase timelines, injected incidents, recovery outcomes, exact revisions, and raw evidence from deterministic validated run-result fixtures.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "validated",
+  "updatedAt": "2026-07-29T08:00:00Z",
+  "sourceTaskKeys": ["AGT-2200", "AGT-2398"]
+}

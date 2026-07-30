@@ -1,7 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 const PROJECT = 'remote-operations';
 const WATCH_PATH = 'C:/fixtures/remote-operations';
+const RESULTS_DIR = process.env['JOB_RESULTS_DIR'] ?? '../results/AGT-2415';
+mkdirSync(RESULTS_DIR, { recursive: true });
+const ACQUIRED_AT = new Date(Date.now() - 2 * 60_000).toISOString();
+const HEARTBEAT_AT = new Date().toISOString();
 
 const REMOTE_TASK = {
   id: 'AGT-2134-remote-proof',
@@ -12,11 +18,11 @@ const REMOTE_TASK = {
   order: 1,
   agent: 'codex',
   cliType: 'codex',
-  createdAt: '2026-07-11T13:45:00Z',
+  createdAt: ACQUIRED_AT,
   watchPath: WATCH_PATH,
   projectName: PROJECT,
   folderPath: `${WATCH_PATH}/3-progress/AGT-2134-remote-proof`,
-  lastActivity: '2026-07-11T13:46:00Z',
+  lastActivity: HEARTBEAT_AT,
   sessionName: null,
   model: 'gpt-5.6-codex',
   execution: null,
@@ -28,7 +34,33 @@ const REMOTE_TASK = {
     isRemote: true,
     leaseId: 'lease-remote-proof',
     fencingToken: 11,
-    acquiredAt: '2026-07-11T13:45:00Z',
+    acquiredAt: ACQUIRED_AT,
+  },
+  executionLocation: {
+    state: 'remote-running',
+    executionKind: 'remote',
+    runnerId: 'agent-runner-01@linux-host',
+    clientId: 'agent-runner-01@linux-host',
+    hostDisplayName: 'agent-runner-01',
+    configuredRunnerId: 'agent-runner-01@linux-host',
+    startedAt: ACQUIRED_AT,
+    lastHeartbeat: HEARTBEAT_AT,
+    lastActivityAt: HEARTBEAT_AT,
+    processId: 4242,
+    sessionId: null,
+    branch: 'task/AGT-2134',
+    worktreePath: '/worktrees/AGT-2134',
+    connectionState: 'connected',
+    leaseState: 'active',
+    trustReason: 'The task server currently holds a fenced run lease with a recent heartbeat.',
+  },
+  runActivity: { kind: 'no-active-run', attempt: 0 },
+  liveStatus: {
+    attempt: 1,
+    activeStep: null,
+    nextSteps: [{ stepId: 'core-agent-run', displayName: 'Agent run' }],
+    queue: null,
+    latestEventAt: HEARTBEAT_AT,
   },
   commit: null,
   commits: [],
@@ -36,15 +68,41 @@ const REMOTE_TASK = {
   tags: [],
 };
 
+const REMOTE_TASKS = Array.from({ length: 8 }, (_, index) => ({
+  ...REMOTE_TASK,
+  id: `AGT-${2410 - index}-remote-proof`,
+  key: `AGT-${2410 - index}`,
+  taskKey: `${WATCH_PATH}::AGT-${2410 - index}-remote-proof`,
+  title: index === 0 ? REMOTE_TASK.title : `Remote worker ${index + 1}`,
+  order: index + 1,
+  folderPath: `${WATCH_PATH}/3-progress/AGT-${2410 - index}-remote-proof`,
+  runner: {
+    ...REMOTE_TASK.runner,
+    leaseId: `lease-remote-proof-${index + 1}`,
+    fencingToken: 11 + index,
+  },
+}));
+
 const GROUPED = {
   backlog: [], preparation: [], orchestratorPrep: [], ready: [],
-  progress: [REMOTE_TASK], failedPickup: [], review: [], autoReview: [],
+  progress: REMOTE_TASKS, failedPickup: [], review: [], autoReview: [],
   humanReview: [], completed: [], archive: [],
 };
 
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
   await page.route('**/api/watch-paths**', (route) =>
@@ -115,9 +173,16 @@ test.describe('Remote lease drives the board running state', () => {
       await expect(card).toBeVisible();
       await expect(card).toHaveAttribute('data-running', 'true');
 
-      const runner = card.getByTestId('task-card-runner');
-      await expect(runner).toHaveAttribute('data-runner-kind', 'remote');
-      await expect(runner).toContainText('remote · agent-runner-01');
+      const runner = card.getByTestId('execution-location-badge');
+      await expect(runner).toHaveAttribute('data-execution-state', 'remote-running');
+      await expect(runner).toContainText('Host · agent-runner-01');
+      const current = card.getByTestId('task-live-current');
+      await expect(current).toContainText('Running remote on agent-runner-01');
+      await expect(card.getByTestId('task-live-status')).toHaveAttribute('data-live-tone', 'active');
+      await expect(card.getByTestId('task-live-status')).toContainText(/Active for 2m\d{2}s/);
+      await expect(card.getByTestId('task-live-status')).not.toContainText('No active run');
+      await expect(card.getByTestId('task-card-stalled')).toHaveCount(0);
+      await expect(page.getByTestId('status-bar-running')).toContainText('0 local · 8 remote');
 
       // Background feeds outside this fixture's board scope may surface a
       // generic error dialog. It is unrelated to the card projection and must
@@ -128,14 +193,11 @@ test.describe('Remote lease drives the board running state', () => {
         document.querySelectorAll('app-error-dialog, vite-error-overlay').forEach((node) => node.remove());
       });
 
-      const screenshot = await page.screenshot({ fullPage: false });
-      await testInfo.attach(`remote-running-board-${theme}.png`, { body: screenshot, contentType: 'image/png' });
-      if (process.env.JOB_RESULTS_DIR) {
-        await page.screenshot({
-          path: `${process.env.JOB_RESULTS_DIR}/remote-running-board-${theme}.png`,
-          fullPage: false,
-        });
-      }
+      const screenshot = await page.screenshot({
+        path: join(RESULTS_DIR, `remote-wave-after-${theme}.png`),
+        fullPage: false,
+      });
+      await testInfo.attach(`remote-wave-after-${theme}.png`, { body: screenshot, contentType: 'image/png' });
     });
   }
 });

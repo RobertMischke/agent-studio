@@ -12,7 +12,7 @@ builder.Services.AddHttpClient("task-server", client =>
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
     client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, TaskServerProtocol.Current.ToString());
     client.DefaultRequestHeaders.Add(TaskServerProtocol.ClientVersionHeaderName,
-        typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0");
+        typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown");
 })
 .ConfigurePrimaryHttpMessageHandler(() =>
 {

@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/remote-run-result.schema.json",
+  "title": "RemoteRunResultV1",
+  "description": "Immutable infrastructure-verification result assembled from authoritative Task Server state and fenced Runner evidence. It is not a model benchmark record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "scenarioId", "runId", "seed", "startedAt", "finishedAt",
+    "wallClockDurationMs", "components", "host", "runner", "phases", "tokens",
+    "incident", "outcome", "assertions", "chronicleLinks", "task", "attempts",
+    "artifacts", "evidenceAuthority", "collectedAt", "contentSha256"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "remote-run-result/v1", "description": "Versioned result contract discriminator." },
+    "scenarioId": { "type": "string", "minLength": 1, "description": "Stable infrastructure scenario identifier." },
+    "runId": { "type": "string", "minLength": 1, "description": "Unique scenario-run identifier, equal to the authoritative Task Server run id." },
+    "seed": { "type": "integer", "minimum": 0, "description": "Deterministic scenario seed." },
+    "startedAt": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "UTC start timestamp." },
+    "finishedAt": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "UTC finish timestamp." },
+    "wallClockDurationMs": { "type": "integer", "minimum": 0, "description": "Scenario duration, derived from monotonic measurement when available and checked against UTC timestamps." },
+    "components": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "image": { "type": ["string", "null"], "minLength": 1 },
+          "commit": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{7,64}$" }
+        },
+        "anyOf": [{ "required": ["image"] }, { "required": ["commit"] }]
+      }
+    },
+    "host": { "$ref": "#/$defs/identity" },
+    "runner": { "$ref": "#/$defs/identity" },
+    "phases": {
+      "type": "array", "minItems": 4,
+      "description": "Exactly one timing record for Claim, Run, Gate, and Review, plus optional Integration.",
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "tokens": { "$ref": "#/$defs/tokenTelemetry" },
+    "incident": {
+      "type": "object", "additionalProperties": false, "required": ["id", "faultSchedule"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "faultSchedule": {
+          "type": "array",
+          "description": "Ordered injected faults. An empty array explicitly means none were injected.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["faultId", "atPhase", "offsetMs", "action"],
+            "properties": {
+              "faultId": { "type": "string", "minLength": 1 },
+              "atPhase": { "enum": ["Claim", "Run", "Gate", "Review", "Integration"] },
+              "offsetMs": { "type": "integer", "minimum": 0 },
+              "action": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object", "additionalProperties": false, "required": ["expected", "actual"],
+      "properties": {
+        "expected": { "type": "string", "minLength": 1 },
+        "actual": { "enum": ["expected-healed", "recovered", "lost"] }
+      }
+    },
+    "assertions": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["assertionId", "passed", "evidenceRefs"],
+        "properties": {
+          "assertionId": { "type": "string", "minLength": 1 },
+          "passed": { "type": "boolean" },
+          "detail": { "type": ["string", "null"] },
+          "evidenceRefs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "chronicleLinks": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^docs/operations/haertung-verteilte-ausfuehrung/historie\\.html#[A-Za-z0-9_-]+$"
+      }
+    },
+    "task": {
+      "type": "object", "additionalProperties": false,
+      "required": ["taskKey", "baseSha", "resultSha", "reviewedSha", "finalLane"],
+      "properties": {
+        "taskKey": { "type": "string", "minLength": 1 },
+        "baseSha": { "$ref": "#/$defs/sha" },
+        "resultSha": { "$ref": "#/$defs/sha" },
+        "reviewedSha": { "$ref": "#/$defs/sha" },
+        "finalLane": { "type": "string", "minLength": 1 }
+      }
+    },
+    "attempts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["kind", "attemptId", "leaseFence", "authorityEpoch"],
+        "properties": {
+          "kind": { "enum": ["Run", "Review"] },
+          "attemptId": { "type": "string", "minLength": 1 },
+          "leaseFence": { "type": "integer", "minimum": 0 },
+          "authorityEpoch": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["evidenceId", "source", "uri", "sha256"],
+        "properties": {
+          "evidenceId": { "type": "string", "minLength": 1 },
+          "source": { "enum": ["TaskServer", "Runner"] },
+          "uri": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "evidenceAuthority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authorityEpoch", "maxLeaseFence"],
+      "properties": {
+        "authorityEpoch": { "type": "integer", "minimum": 0 },
+        "maxLeaseFence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "collectedAt": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "UTC collector timestamp." },
+    "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 over canonical JSON with this field omitted." }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-fA-F]{40,64}$" },
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "phase": {
+      "type": "object", "additionalProperties": false,
+      "required": ["phase", "status", "queuedAt", "startedAt", "finishedAt", "queueDurationMs", "executionDurationMs", "durationSource"],
+      "properties": {
+        "phase": { "enum": ["Claim", "Run", "Gate", "Review", "Integration"] },
+        "status": { "enum": ["Executed", "Skipped", "Failed"] },
+        "queuedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+        "startedAt": { "type": ["string", "null"], "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+        "queueDurationMs": { "type": "integer", "minimum": 0 },
+        "executionDurationMs": { "type": "integer", "minimum": 0 },
+        "durationSource": { "enum": ["Monotonic", "UtcWallClock"] },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "tokenValue": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["status", "value"],
+          "properties": {
+            "status": { "const": "Available" },
+            "value": { "type": "integer", "minimum": 0 },
+            "unavailableReason": { "type": ["string", "null"] }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["status", "unavailableReason"],
+          "properties": {
+            "status": { "const": "Unavailable" },
+            "value": { "type": ["integer", "null"], "minimum": 0 },
+            "unavailableReason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "tokenTelemetry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["input", "output", "cached", "total", "byPhase"],
+      "properties": {
+        "input": { "$ref": "#/$defs/tokenValue" },
+        "output": { "$ref": "#/$defs/tokenValue" },
+        "cached": { "$ref": "#/$defs/tokenValue" },
+        "total": { "$ref": "#/$defs/tokenValue" },
+        "byPhase": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["phase", "input", "output", "cached", "total"],
+            "properties": {
+              "phase": { "enum": ["Claim", "Run", "Gate", "Review", "Integration"] },
+              "input": { "$ref": "#/$defs/tokenValue" },
+              "output": { "$ref": "#/$defs/tokenValue" },
+              "cached": { "$ref": "#/$defs/tokenValue" },
+              "total": { "$ref": "#/$defs/tokenValue" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

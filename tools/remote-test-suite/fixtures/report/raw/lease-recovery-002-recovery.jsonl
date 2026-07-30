@@ -1,0 +1,3 @@
+{"event":"daemon-stopped","attemptId":"run_01JRECOVERY0002","processAlive":true}
+{"event":"attempt-reconciled","attemptId":"run_01JRECOVERY0002","fence":18}
+{"event":"process-reattached","attemptId":"run_01JRECOVERY0002","duplicateClaims":0}

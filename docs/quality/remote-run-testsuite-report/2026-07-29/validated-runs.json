@@ -1,0 +1,1650 @@
+{
+  "$schema": "./contracts/run-result.schema.json",
+  "schemaVersion": 1,
+  "suite": {
+    "name": "AGT-2200 remote-run infrastructure acceptance canary",
+    "sourceTaskKey": "AGT-2200",
+    "sourceTaskHref": "./acceptance-matrix.json#AGT-2200",
+    "chronicleHref": "../../../operations/haertung-verteilte-ausfuehrung/historie.html"
+  },
+  "generatedAt": "2026-07-29T02:29:16.993Z",
+  "runs": [
+    {
+      "runId": "canary-ref-a",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-ref-a/result.json",
+      "attemptId": "run_43806fcc8e2d4f7cb18cab256bba8afb",
+      "attemptHref": "./raw/scenarios/canary-ref-a/result.json#attempt",
+      "scenario": {
+        "id": "reference-change",
+        "manifestHref": "./manifests/reference-change.json"
+      },
+      "outcome": "baseline",
+      "accepted": true,
+      "wallMs": 909,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 95,
+          "executionMs": 38
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 25,
+          "executionMs": 88
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 11,
+          "executionMs": 93
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 127,
+          "executionMs": 243
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 5,
+          "executionMs": 184
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "880bbcd089593d3447cbe47575532a63f2a870ba",
+      "resultSha": "ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71",
+      "rawArtifactHref": "./raw/scenarios/canary-ref-a/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "6-completed matched 6-completed; recovery 0/0 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/reference-change/canary-ref-a.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71 is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-ref-a/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-ref-b",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-ref-b/result.json",
+      "attemptId": "run_8fabbe9d82a44230a101dad02a6301cc",
+      "attemptHref": "./raw/scenarios/canary-ref-b/result.json#attempt",
+      "scenario": {
+        "id": "reference-change",
+        "manifestHref": "./manifests/reference-change.json"
+      },
+      "outcome": "baseline",
+      "accepted": true,
+      "wallMs": 1021,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 102,
+          "executionMs": 35
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 26,
+          "executionMs": 119
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 12,
+          "executionMs": 99
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 133,
+          "executionMs": 266
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 225
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "880bbcd089593d3447cbe47575532a63f2a870ba",
+      "resultSha": "ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71",
+      "rawArtifactHref": "./raw/scenarios/canary-ref-b/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "6-completed matched 6-completed; recovery 0/0 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/reference-change/canary-ref-b.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71 is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-ref-b/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-net-blip",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-net-blip/result.json",
+      "attemptId": "run_9d298802f1db4a7ba64cd305cdf80806",
+      "attemptHref": "./raw/scenarios/canary-net-blip/result.json#attempt",
+      "scenario": {
+        "id": "fault-task-server-network-blips",
+        "manifestHref": "./manifests/fault-task-server-network-blips.json"
+      },
+      "outcome": "healed",
+      "accepted": true,
+      "wallMs": 949,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 97,
+          "executionMs": 42
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 25,
+          "executionMs": 88
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 13,
+          "executionMs": 101
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 152,
+          "executionMs": 258
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 2,
+          "executionMs": 171
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "8cabb3f2ed794bb89fb2a3236baab55beff6dc28",
+      "resultSha": "10a95dcf6cbb966fa1d8de0102582a66f542ff2a",
+      "rawArtifactHref": "./raw/scenarios/canary-net-blip/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "6-completed matched 6-completed; recovery 5/5 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA 10a95dcf6cbb966fa1d8de0102582a66f542ff2a is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "2 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "task-server-network",
+          "label": "Bounded request loss during claim and heartbeat plus response loss after durable event, artifact, and completion commits.",
+          "chronicleAnchor": "incident-attempt-authority",
+          "injected": true,
+          "recoveryOutcome": "network-blips-replayed"
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-net-blip/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-gate-timeout",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-gate-timeout/result.json",
+      "attemptId": "run_ad9acc74e771401394112a5d420da367",
+      "attemptHref": "./raw/scenarios/canary-gate-timeout/result.json#attempt",
+      "scenario": {
+        "id": "fault-gate-timeout",
+        "manifestHref": "./manifests/fault-gate-timeout.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 1385,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 104,
+          "executionMs": 39
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 23,
+          "executionMs": 99
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 14,
+          "executionMs": 454
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 135,
+          "executionMs": 302
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 211
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "8510db030ed3c07e23b32656339cfec13f2836b6",
+      "resultSha": "2973894fdef57c052261782b4e2a6accbc048423",
+      "rawArtifactHref": "./raw/scenarios/canary-gate-timeout/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "6-completed matched 6-completed; recovery 1/1 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA 2973894fdef57c052261782b4e2a6accbc048423 is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "2 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "gate-timeout",
+          "label": "A deterministic fixture command exceeds the harness watchdog once and its complete process group is reaped before one bounded retry.",
+          "chronicleAnchor": "incident-gate-timeout",
+          "injected": true,
+          "recoveryOutcome": "gate-timeout-recovered"
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-gate-timeout/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-worktree-collision",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-worktree-collision/result.json",
+      "attemptId": "run_3f8a28f3b06042f4abc5abccaef9219f",
+      "attemptHref": "./raw/scenarios/canary-worktree-collision/result.json#attempt",
+      "scenario": {
+        "id": "fault-worktree-collision",
+        "manifestHref": "./manifests/fault-worktree-collision.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 292,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 100,
+          "executionMs": 36
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 27,
+          "executionMs": 129
+        },
+        {
+          "name": "gate",
+          "status": "skipped",
+          "queueMs": 0,
+          "executionMs": 0
+        },
+        {
+          "name": "review",
+          "status": "skipped",
+          "queueMs": 0,
+          "executionMs": 0
+        },
+        {
+          "name": "integration",
+          "status": "skipped",
+          "queueMs": 0,
+          "executionMs": 0
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "a5acc3d68dd4ab4bae9111b2f2d6acfc01536d8a",
+      "resultSha": null,
+      "rawArtifactHref": "./raw/scenarios/canary-worktree-collision/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "5-human-review matched 5-human-review; recovery 0/0 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "2 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "The declared fail-closed terminal published no Result-SHA, preventing phantom delivery.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "2 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "worktree-collision",
+          "label": "A fixture-owned foreign occupant holds the intended target through all five bounded preparation attempts.",
+          "chronicleAnchor": "incident-worktree-collision",
+          "injected": true,
+          "recoveryOutcome": "worktree-blocked"
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-worktree-collision/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-sentinel-loss",
+      "taskKey": "RTS-1",
+      "taskHref": "./raw/scenarios/canary-sentinel-loss/result.json",
+      "attemptId": "run_ae746f453ce04b29871f88605ceae26d",
+      "attemptHref": "./raw/scenarios/canary-sentinel-loss/result.json#attempt",
+      "scenario": {
+        "id": "fault-lost-completion-sentinel",
+        "manifestHref": "./manifests/fault-lost-completion-sentinel.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 921,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 105,
+          "executionMs": 36
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 28,
+          "executionMs": 89
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 12,
+          "executionMs": 98
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 130,
+          "executionMs": 257
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 2,
+          "executionMs": 164
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "98afdb0c2908a032e3fe3ae3bb4d4cacece96be2",
+      "resultSha": "10b6a209eac95b5d5a798e7a2083df24abf67020",
+      "rawArtifactHref": "./raw/scenarios/canary-sentinel-loss/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "6-completed matched 6-completed; recovery 0/0 recovery-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA 10b6a209eac95b5d5a798e7a2083df24abf67020 is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "2 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "terminal-marker-loss",
+          "label": "The final sentinel is lost while provider completion, exit, outbox, and immutable Result-SHA proof remain durable.",
+          "chronicleAnchor": "incident-phantom-wave",
+          "injected": true,
+          "recoveryOutcome": "lost-terminal-marker-recovered"
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-sentinel-loss/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-salvage-lineage",
+      "taskKey": "RTS-11",
+      "taskHref": "./raw/scenarios/canary-salvage-lineage/result.json",
+      "attemptId": "canary-salvage-lineage:contract",
+      "attemptHref": "./raw/scenarios/canary-salvage-lineage/result.json#attempt",
+      "scenario": {
+        "id": "divergent-salvage-lineage",
+        "manifestHref": "./manifests/divergent-salvage-lineage.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 808,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 80,
+          "executionMs": 55
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 170
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 13,
+          "executionMs": 98
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 59,
+          "executionMs": 297
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 3,
+          "executionMs": 29
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "155ed4c8f766e243643db87c651357c9db354f0b",
+      "resultSha": "580d2c653da7f8a2697b613260be7961dcab434e",
+      "rawArtifactHref": "./raw/scenarios/canary-salvage-lineage/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "5-human-review matched 5-human-review; recovery 3/3 review-attempts.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/divergent-salvage-lineage/canary-salvage-lineage.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA 580d2c653da7f8a2697b613260be7961dcab434e is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "2 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "divergent-salvage-lineage",
+          "label": "Historical replay: divergent-salvage-lineage",
+          "chronicleAnchor": "incident-grade-d",
+          "injected": false,
+          "recoveryOutcome": "5-human-review reached within 3/3 review-attempts."
+        },
+        {
+          "class": "divergent-salvage-lineage",
+          "label": "Historical replay: divergent-salvage-lineage",
+          "chronicleAnchor": "incident-cross-contamination",
+          "injected": false,
+          "recoveryOutcome": "5-human-review reached within 3/3 review-attempts."
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-salvage-lineage/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-lease-adoption",
+      "taskKey": "RTS-21",
+      "taskHref": "./raw/scenarios/canary-lease-adoption/result.json",
+      "attemptId": "run_e48483cbe13f476582a5892124c0a597",
+      "attemptHref": "./raw/scenarios/canary-lease-adoption/result.json#attempt",
+      "scenario": {
+        "id": "lease-adoption-restart",
+        "manifestHref": "./manifests/lease-adoption-restart.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 5894,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 1374,
+          "executionMs": 519
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 1173
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 1421
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 3,
+          "executionMs": 1377
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 5,
+          "executionMs": 14
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "67f05926fdab76a5752306ca870658783a804655",
+      "resultSha": null,
+      "rawArtifactHref": "./raw/scenarios/canary-lease-adoption/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "4-auto-review matched 4-auto-review; recovery 1/1 live-generation-adoptions.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/lease-adoption-restart/canary-lease-adoption.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "The declared fail-closed terminal published no Result-SHA, preventing phantom delivery.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "1 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "lease-adoption-restart",
+          "label": "Historical replay: lease-adoption-restart",
+          "chronicleAnchor": "incident-zombie-leases",
+          "injected": false,
+          "recoveryOutcome": "4-auto-review reached within 1/1 live-generation-adoptions."
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-lease-adoption/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-external-cycle",
+      "taskKey": "RTS-31",
+      "taskHref": "./raw/scenarios/canary-external-cycle/result.json",
+      "attemptId": "run_7793e40d2f9049c9b8b58e8869fce010",
+      "attemptHref": "./raw/scenarios/canary-external-cycle/result.json#attempt",
+      "scenario": {
+        "id": "external-completion-cycle",
+        "manifestHref": "./manifests/external-completion-cycle.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 705,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 78,
+          "executionMs": 56
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 3,
+          "executionMs": 74
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 12,
+          "executionMs": 164
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 3,
+          "executionMs": 54
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 4,
+          "executionMs": 257
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "4be99a0da913f6cd7fd439f5590d782dbfb07c80",
+      "resultSha": "c8df7538cf36568745bea48d27ca53f781e66237",
+      "rawArtifactHref": "./raw/scenarios/canary-external-cycle/result.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "2-ready matched 2-ready; recovery 1/1 post-completion-requeues.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "5 executed phases have paired UTC and monotonic boundaries; remaining phases are explicitly skipped.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Fixture workspace, branches, Task Server data, and worktrees were contained under .tmp/remote-test-suite/canary-20260729/external-completion-cycle/canary-external-cycle.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "No duplicate claim or unacknowledged outbox item remained in scenario evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Exact Result-SHA c8df7538cf36568745bea48d27ca53f781e66237 is retained in raw evidence.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "1 chronicle link(s) are declared by the scenario contract.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "external-completion-cycle",
+          "label": "Historical replay: external-completion-cycle",
+          "chronicleAnchor": "incident-external-completion",
+          "injected": false,
+          "recoveryOutcome": "2-ready reached within 1/1 post-completion-requeues."
+        }
+      ],
+      "links": [
+        {
+          "label": "Phase journal",
+          "href": "./raw/scenarios/canary-external-cycle/phases.jsonl"
+        },
+        {
+          "label": "Acceptance matrix",
+          "href": "./acceptance-matrix.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-machine-10m",
+      "taskKey": "AUTO-1",
+      "taskHref": "./raw/compose-machine-bound/acceptance.json",
+      "attemptId": "run_abfa8f77c31247bda96f65559f79fd89",
+      "attemptHref": "./raw/compose-machine-bound/acceptance.json#autonomy",
+      "scenario": {
+        "id": "compose-machine-bound",
+        "manifestHref": "./manifests/compose-machine-bound.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 639668,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 89,
+          "executionMs": 40
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 26,
+          "executionMs": 600101
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 8,
+          "executionMs": 93
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 126,
+          "executionMs": 255
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 3,
+          "executionMs": 163
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "2df61404f350edf2cc74b903bffc6b4b877c8a74",
+      "resultSha": "a703ee085baee8d4edb33c85001a0b2cf611dd52",
+      "rawArtifactHref": "./raw/compose-machine-bound/acceptance.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "All 19 Compose acceptance assertions passed.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "The continuous Task Server outage lasted 600013 ms and is included in Run execution time.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Docker project agt2394-rts-canary-machine-10m used one explicit disposable identity.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "Both active slots reconciled their original fences before replay; recovery advanced fence 1 to 2.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Autonomy events, artifacts, handoffs, and completions were delivered once; final outboxes and authority were empty.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "The outage and rolling-restart authority incidents link to the hardening chronicle.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "task-server-outage",
+          "label": "Ten-minute Task Server outage",
+          "chronicleAnchor": "incident-attempt-authority",
+          "injected": true,
+          "recoveryOutcome": "600013 ms outage, two slots, exact-fence reconciliation, zero backlog."
+        },
+        {
+          "class": "rolling-authority-restart",
+          "label": "Independent component rolling updates",
+          "chronicleAnchor": "incident-zombie-leases",
+          "injected": true,
+          "recoveryOutcome": "Studio, Runner, and Task Server were replaced independently; stale completion was rejected."
+        }
+      ],
+      "links": [
+        {
+          "label": "Autonomy evidence",
+          "href": "./raw/compose-machine-bound/autonomy-canary.json"
+        },
+        {
+          "label": "Rolling history",
+          "href": "./raw/compose-machine-bound/api/rolling-history.json"
+        },
+        {
+          "label": "Teardown proof",
+          "href": "./cleanup-verification.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-parallel-12-baseline",
+      "taskKey": "RTB-1",
+      "taskHref": "./raw/parallel-delivery/baseline/scenario.json",
+      "attemptId": "run_4165bc0f1b324392a516fa4fa13c5ac3",
+      "attemptHref": "./raw/parallel-delivery/baseline/scenario.json#tasks",
+      "scenario": {
+        "id": "parallel-baseline",
+        "manifestHref": "./manifests/parallel-baseline.json"
+      },
+      "outcome": "baseline",
+      "accepted": true,
+      "wallMs": 7110,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 883,
+          "executionMs": 0
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 295
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 1055
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 1107
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 3770
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "005ade9eaf3aeb02c212bc66dbfb3fe6ee6d7222",
+      "resultSha": "1453e0a4a10c07b8453fd33f5d42d64ace0ea642",
+      "rawArtifactHref": "./raw/parallel-delivery/baseline/scenario.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "12 cards reached deterministic integration order with 15 applicable assertions passing.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "Claim, Run, Gate, Review, and Integration critical-path boundaries are derived from per-task UTC timing records.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Coding workspaces were unique; disposable gate and review roots were removed after exact-SHA execution.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "12 cards were active or post-processing together; queues and authority actions drained.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Every gate and review ran at its declared Result-SHA, and delivery/report replays remained idempotent.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [],
+      "links": [
+        {
+          "label": "Concurrency report",
+          "href": "./raw/parallel-delivery/concurrency-report.md"
+        },
+        {
+          "label": "Timeline",
+          "href": "./raw/parallel-delivery/baseline/timeline.jsonl"
+        },
+        {
+          "label": "Task histories",
+          "href": "./raw/parallel-delivery/baseline/task-histories.json"
+        }
+      ]
+    },
+    {
+      "runId": "canary-parallel-12-worker-loss",
+      "taskKey": "RTL-1",
+      "taskHref": "./raw/parallel-delivery/worker-loss/scenario.json",
+      "attemptId": "run_ef03135ab54446e2926ec3f67e071351",
+      "attemptHref": "./raw/parallel-delivery/worker-loss/scenario.json#tasks",
+      "scenario": {
+        "id": "parallel-worker-loss",
+        "manifestHref": "./manifests/parallel-worker-loss.json"
+      },
+      "outcome": "recovered",
+      "accepted": true,
+      "wallMs": 9871,
+      "phases": [
+        {
+          "name": "claim",
+          "status": "pass",
+          "queueMs": 858,
+          "executionMs": 0
+        },
+        {
+          "name": "run",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 287
+        },
+        {
+          "name": "gate",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 3994
+        },
+        {
+          "name": "review",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 992
+        },
+        {
+          "name": "integration",
+          "status": "pass",
+          "queueMs": 0,
+          "executionMs": 3740
+        }
+      ],
+      "tokens": {
+        "available": false,
+        "reason": "Infrastructure-only deterministic harness; no model or CLI invocation occurred."
+      },
+      "baseSha": "5107f0b621a07f4f0e19e38456b5ebce1f25f89c",
+      "resultSha": "2fb404e02d36f580f5442188e5015fd436e20e1c",
+      "rawArtifactHref": "./raw/parallel-delivery/worker-loss/scenario.json",
+      "components": [
+        {
+          "name": "source",
+          "version": "afee6f812080dbb2dfeac15be4f651552422f275+patch.4d8f6efe1764"
+        },
+        {
+          "name": "Task Server",
+          "version": "task-server 1.0.0+sha.unknown"
+        },
+        {
+          "name": "Agent Runner",
+          "version": "agent-host 0.1.0+sha.unknown"
+        },
+        {
+          "name": "Studio",
+          "version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0="
+        },
+        {
+          "name": "Docker Engine",
+          "version": "29.1.3"
+        }
+      ],
+      "assertions": [
+        {
+          "id": "declared-terminal",
+          "label": "Declared terminal reached",
+          "status": "pass",
+          "detail": "12 cards reached deterministic integration order with 18 applicable assertions passing.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "phase-timing-present",
+          "label": "Phase timing present",
+          "status": "pass",
+          "detail": "Claim, Run, Gate, Review, and Integration critical-path boundaries are derived from per-task UTC timing records.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "scope-contained",
+          "label": "Resources remained scoped",
+          "status": "pass",
+          "detail": "Coding workspaces were unique; disposable gate and review roots were removed after exact-SHA execution.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "authority-clean",
+          "label": "Authority and queues reconciled",
+          "status": "pass",
+          "detail": "12 cards were active or post-processing together; queues and authority actions drained.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "exact-result-or-nondelivery",
+          "label": "Exact result or expected non-delivery",
+          "status": "pass",
+          "detail": "Every gate and review ran at its declared Result-SHA, and delivery/report replays remained idempotent.",
+          "evidenceHref": "./acceptance-matrix.json"
+        },
+        {
+          "id": "incident-linked",
+          "label": "Incident linked to chronicle",
+          "status": "pass",
+          "detail": "Controlled gate-worker loss is linked to the remote-gates chronicle incident.",
+          "evidenceHref": "./acceptance-matrix.json"
+        }
+      ],
+      "incidents": [
+        {
+          "class": "gate-worker-loss",
+          "label": "Controlled gate worker loss",
+          "chronicleAnchor": "incident-remote-gates",
+          "injected": true,
+          "recoveryOutcome": "undefined retry operations redistributed across the surviving gate pool."
+        }
+      ],
+      "links": [
+        {
+          "label": "Concurrency report",
+          "href": "./raw/parallel-delivery/concurrency-report.md"
+        },
+        {
+          "label": "Timeline",
+          "href": "./raw/parallel-delivery/worker-loss/timeline.jsonl"
+        },
+        {
+          "label": "Task histories",
+          "href": "./raw/parallel-delivery/worker-loss/task-histories.json"
+        }
+      ]
+    }
+  ]
+}

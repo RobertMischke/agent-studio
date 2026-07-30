@@ -20,16 +20,29 @@ public static partial class RemoteCommitAttributionGuard
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex TaskKeyPattern();
 
+    // Immutable ResultEnvelope refs are task-neutral by design:
+    // <project>/results/run_<id>/<result-sha>. Their identity is not the ref
+    // name but the fenced result SHA the caller already verified against the
+    // branch tip (InspectRemoteDeliveryCommitRange), so the task-key suffix
+    // rule must not apply to them - it rejected EVERY envelope delivery and
+    // left canonical remote cards without attributed commits ("kein Branch"
+    // on reviewed cards, AGT-2434/AGT-2445).
+    [GeneratedRegex(@"(^|/)results/run_[0-9a-f]{32}/[0-9a-f]{40}$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex ImmutableResultRefPattern();
+
     public static RemoteCommitAttributionResult Attribute(
         string taskKey,
         string deliveryBranch,
         IReadOnlyList<GitCommitInfo> commits)
     {
         var expected = taskKey.Trim();
-        var branchTaskKey = TaskIntegrationBranch.Name(deliveryBranch)
+        var normalizedBranch = TaskIntegrationBranch.Name(deliveryBranch);
+        var branchTaskKey = normalizedBranch
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .LastOrDefault();
-        if (!string.Equals(branchTaskKey, expected, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(branchTaskKey, expected, StringComparison.OrdinalIgnoreCase)
+            && !ImmutableResultRefPattern().IsMatch(normalizedBranch))
         {
             return Rejected(
                 $"Remote commit attribution rejected: branch '{deliveryBranch}' does not belong to task '{expected}'.");
@@ -52,6 +65,7 @@ public static partial class RemoteCommitAttributionGuard
             Sha = commit.Sha,
             ShortSha = commit.ShortSha,
             Message = commit.Subject,
+            Branch = TaskIntegrationBranch.Name(deliveryBranch),
             FilesChanged = commit.FilesChanged,
             At = commit.AuthorDateUtc,
             Attribution = CommitAttributionKinds.Automatic,

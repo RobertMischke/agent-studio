@@ -2563,19 +2563,24 @@ public class ProjectRunner
             }
 
             // Resolve context before rendering the prompt because Codex resume
-            // viability depends on the effective CODEX_HOME. A clean run gets a
-            // brand-new home with no sessions by contract; a shared run must
-            // have the referenced rollout on disk. Falling back here (rather
+            // viability depends on the effective CODEX_HOME. A clean run reuses
+            // the task's persistent clean home (session-stable across attempts;
+            // MKT-8 / WEB-14), so its resume is viable when THAT home carries
+            // the rollout from a previous attempt; a shared run must have the
+            // referenced rollout in the shared home. Falling back here (rather
             // than after spawn) lets the recovery template carry prompt.md,
             // job-folder evidence, and the user follow-up in full.
             var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
             if (plan.ResumeFlag
                 && string.Equals(cli.CliType, CliTypes.Codex, StringComparison.OrdinalIgnoreCase)
-                && !CodexRolloutStore.CanResume(plan.SessionToResume, contextMode))
+                && !CodexRolloutStore.CanResume(
+                    plan.SessionToResume, contextMode,
+                    sharedHome: null,
+                    cleanHome: cli.GetPersistentCleanContextHome(GetJobKey(jobId))))
             {
                 var missingSession = plan.SessionToResume;
                 var reason = CliContextModes.Normalize(contextMode) == CliContextModes.Clean
-                    ? "Codex rollout is absent from the new clean-context CODEX_HOME"
+                    ? "Codex rollout is absent from the task's clean-context CODEX_HOME"
                     : "Codex rollout is absent from the current CODEX_HOME";
                 _logger.LogInformation(
                     "codex_resume_precondition_fallback job={JobId} session={SessionId} contextMode={ContextMode} reason=no-rollout; starting full-context fresh run",
@@ -5179,16 +5184,9 @@ public class ProjectRunner
             {
                 _timeline?.Append(
                     finishedInfo.FolderPath,
-                    TimelineEventKinds.AgentRunFinished,
-                    TimelineActors.Agent,
-                    summary: $"{cliType} run {execution.Status ?? "unknown"}" +
-                             (execution.DurationSeconds is double d ? $" after {d:F1}s" : ""),
-                    runId: planSnapshot?.EventInputSessionId,
-                    details: new()
-                    {
-                        ["cli"] = cliType ?? string.Empty,
-                        ["status"] = execution.Status ?? "unknown",
-                    });
+                    RunTimelineEventFactory.AgentRunFinished(
+                        execution,
+                        planSnapshot?.EventInputSessionId));
 
                 // Containment, not trust: a planning / research run is supposed
                 // to produce only a report. If it left a non-empty working-tree
@@ -5215,28 +5213,16 @@ public class ProjectRunner
             // a write failure never affects the run's outcome.
             try
             {
-                if (cli.DescribeContextSources(jobKey) is { } execContext)
+                if (cli.DescribeContextSources(jobKey) is { } describedContext)
                 {
+                    var (execContext, timelineEvent) = RunTimelineEventFactory.ExecutionContext(
+                        cliType,
+                        execution,
+                        describedContext,
+                        planSnapshot?.EventInputSessionId);
                     _sessions.BackfillLatestSessionEventExecutionContext(jobId, execContext, Entry.Path);
                     if (finishedInfo != null)
-                    {
-                        var mcpCount = execContext.Sources.Count(s => s.Kind == AgentStudio.Shared.CliContextSourceKinds.Mcp);
-                        _timeline?.Append(
-                            finishedInfo.FolderPath,
-                            TimelineEventKinds.ExecutionContext,
-                            TimelineActors.System,
-                            summary: $"{cliType} context: {execContext.Sources.Count} sources" +
-                                     (string.IsNullOrWhiteSpace(execContext.Model) ? "" : $", model {execContext.Model}") +
-                                     (string.IsNullOrWhiteSpace(execContext.PermissionMode) ? "" : $", {execContext.PermissionMode}"),
-                            runId: planSnapshot?.EventInputSessionId,
-                            details: new()
-                            {
-                                ["cli"] = cliType ?? string.Empty,
-                                ["source"] = execContext.Source,
-                                ["sources"] = execContext.Sources.Count.ToString(),
-                                ["mcp"] = mcpCount.ToString(),
-                            });
-                    }
+                        _timeline?.Append(finishedInfo.FolderPath, timelineEvent);
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Execution-context capture failed for {JobId}", jobId); }

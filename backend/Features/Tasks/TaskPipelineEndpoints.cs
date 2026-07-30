@@ -32,28 +32,41 @@ public static class TaskPipelineEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             ProjectSettingsService projectSettings,
             PipelineExecutionLog pipelineLog,
+            TaskSessionLog sessions,
+            TimelineLog timeline,
+            ITokenAggregator tokens,
             OnDemandPostStepService onDemand) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
-            var record = pipelineLog.Read(info.FolderPath);
-            // Cost is derived from the raw recorded tokens; enrich a copy
-            // with per-aspect concern detail for the response so the
-            // Overview pipeline can tooltip the CONCERNS pill.
-            var cost = PipelineCostCalculator.Summarize(record);
+            var rawSettings = string.IsNullOrWhiteSpace(info.ProjectName)
+                ? null
+                : projectSettings.Get(info.ProjectName);
+            var settings = PipelineTypeSettings.ForTask(rawSettings, info);
+            var pipeline = ProjectPipelineOrder.Apply(UiTaskPipelineRouter.Select(info, settings), settings);
+            var taskTokens = FindTaskTokens(
+                tokens.WorkspacePerJob(info.ProjectName, info.WatchPath),
+                info);
+            var projected = RemotePipelineExecutionProjection.Project(
+                pipelineLog.Read(info.FolderPath),
+                pipeline,
+                info,
+                sessions.ReadSessionEvents(info.Id, info.WatchPath),
+                timeline.ReadAll(info.FolderPath),
+                taskTokens);
+            var record = projected.Execution;
+            // Remote rows use canonical ledger calls; unchanged local rows
+            // retain their recorded step usage. Enrich only the response copy
+            // with per-aspect concern detail for the Overview tooltip.
+            var cost = PipelineCostCalculator.SummarizeWithLedger(record, projected.LedgerCalls);
             // Per-model tokens, per run plus a grand total over all runs, off
             // the raw record (includes previousAttempts) for the Overview
             // "RUNS - tokens by model" surface.
             var tokensByModel = PipelineCostCalculator.SummarizeByModel(record);
             var execution = AspectConcernReader.Enrich(record, info.FolderPath);
 
-            var rawSettings = string.IsNullOrWhiteSpace(info.ProjectName)
-                ? null
-                : projectSettings.Get(info.ProjectName);
-            var settings = PipelineTypeSettings.ForTask(rawSettings, info);
-            var pipeline = ProjectPipelineOrder.Apply(UiTaskPipelineRouter.Select(info, settings), settings);
             var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var step in pipeline.AllSteps)
             {
@@ -164,6 +177,18 @@ public static class TaskPipelineEndpoints
             var prompts = promptLog.ReadForJob(info.FolderPath);
             return Results.Ok(new { prompts });
         });
+    }
+
+    private static TaskTokenSummary? FindTaskTokens(
+        IReadOnlyDictionary<string, TaskTokenSummary> lookup,
+        TaskInfo task)
+    {
+        foreach (var key in new[] { task.TaskKey, task.Id, task.Key })
+        {
+            if (!string.IsNullOrWhiteSpace(key) && lookup.TryGetValue(key, out var summary))
+                return TokenSummaryService.WithModelFallback(summary, task.Model);
+        }
+        return null;
     }
 }
 

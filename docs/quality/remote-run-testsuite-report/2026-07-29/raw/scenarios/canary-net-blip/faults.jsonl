@@ -1,0 +1,5 @@
+{"faultId":"task-server-network-blips","incidentClass":"task-server-network","operation":"claim","occurrence":1,"action":"disconnect-before-send","parameters":{}}
+{"faultId":"task-server-network-blips","incidentClass":"task-server-network","operation":"heartbeat","occurrence":1,"action":"disconnect-before-send","parameters":{}}
+{"faultId":"task-server-network-blips","incidentClass":"task-server-network","operation":"event-report","occurrence":1,"action":"disconnect-after-commit","parameters":{}}
+{"faultId":"task-server-network-blips","incidentClass":"task-server-network","operation":"artifact-report","occurrence":1,"action":"disconnect-after-commit","parameters":{}}
+{"faultId":"task-server-network-blips","incidentClass":"task-server-network","operation":"completion-report","occurrence":1,"action":"disconnect-after-commit","parameters":{}}

@@ -1,0 +1,102 @@
+{
+  "scenario": "fault-lost-completion-sentinel",
+  "seed": "agt2200-sentinel-v1",
+  "runId": "canary-sentinel-loss",
+  "accepted": true,
+  "resultSha": "10b6a209eac95b5d5a798e7a2083df24abf67020",
+  "semanticTree": "f9ad6f96bff090a9c6e33f04541cb932fd503356",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "lost-terminal-marker-recovered",
+  "assertions": {
+    "lane": {
+      "actual": "6-completed",
+      "expected": "6-completed",
+      "passed": true
+    },
+    "lease": {
+      "runAttemptId": "run_ae746f453ce04b29871f88605ceae26d",
+      "fence": 1,
+      "status": "completed",
+      "runStatus": "Done",
+      "attempts": 1,
+      "noDuplicateClaim": true
+    },
+    "process": {
+      "active": 0,
+      "observations": [],
+      "allReaped": true
+    },
+    "worktree": {
+      "path": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss/coding/worktree",
+      "isolated": true,
+      "ready": true,
+      "busyPathReported": null,
+      "prepareAttempts": 1,
+      "foreignPreserved": true
+    },
+    "outbox": {
+      "logicalItems": 4,
+      "acknowledgedItems": 4,
+      "backlog": 0,
+      "monotonic": true,
+      "serverEvents": 3,
+      "serverArtifacts": 1,
+      "terminalFactCopies": 1,
+      "terminalArtifactCopies": 1,
+      "apiAttempts": {
+        "claim": 1,
+        "heartbeat": 1,
+        "event-report": 1,
+        "artifact-report": 1,
+        "completion-report": 1
+      }
+    },
+    "sha": {
+      "resultSha": "10b6a209eac95b5d5a798e7a2083df24abf67020",
+      "handoffResultSha": "10b6a209eac95b5d5a798e7a2083df24abf67020",
+      "originHead": "ae8da0eadf274a8b2e270efcc169e12cde71145c",
+      "integrated": true,
+      "phantomSuccessPrevented": true
+    },
+    "incident": {
+      "selectedFaults": [
+        "lost-completion-sentinel"
+      ],
+      "outcome": "lost-terminal-marker-recovered",
+      "expected": "lost-terminal-marker-recovered",
+      "evidence": [
+        {
+          "incidentClass": "terminal-marker-loss",
+          "action": "drop-sentinel",
+          "outcome": "lost-terminal-marker-recovered",
+          "proofComplete": true
+        }
+      ]
+    }
+  },
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "lost-completion-sentinel"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 1,
+    "consumed": 1
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss"
+}

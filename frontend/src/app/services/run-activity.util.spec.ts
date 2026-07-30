@@ -280,6 +280,41 @@ describe('deriveStalledTaskState', () => {
       NOW,
     )).toBeNull();
   });
+
+  it('does not let a retained runner badge hide a disconnected remote orphan', () => {
+    const staleAt = new Date(NOW - STALLED_IDLE_THRESHOLD_MS - 1).toISOString();
+    const job = makeJob(
+      { kind: 'no-active-run', attempt: 0 },
+      {
+        enteredLaneAt: staleAt,
+        lastActivity: '',
+        runner: {
+          runnerId: 'runner-1',
+          runnerName: 'Runner 1',
+          hostname: 'remote-host',
+          backendName: 'remote',
+          isRemote: true,
+          leaseId: 'retained-lease',
+          fencingToken: 3,
+          acquiredAt: staleAt,
+        },
+        executionLocation: {
+          state: 'remote-disconnected',
+          executionKind: 'remote',
+          runnerId: 'runner-1',
+          hostDisplayName: 'Runner 1',
+          startedAt: staleAt,
+          lastHeartbeat: staleAt,
+          lastActivityAt: staleAt,
+          connectionState: 'disconnected',
+          leaseState: 'expired',
+          trustReason: 'The retained lease heartbeat is stale.',
+        },
+      },
+    );
+
+    expect(deriveStalledTaskState(job, NOW)).toMatchObject({ reason: 'idle', label: 'Stalled' });
+  });
 });
 
 /**

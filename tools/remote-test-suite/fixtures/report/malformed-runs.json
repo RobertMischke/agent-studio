@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "suite": {
+    "name": "Broken fixture"
+  },
+  "generatedAt": "not-a-date",
+  "runs": [
+    {
+      "runId": "broken run id",
+      "accepted": true
+    }
+  ]
+}

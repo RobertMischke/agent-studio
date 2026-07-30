@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-07-28T20:47:55.377Z",
+  "specs": {
+    "runner-events-recorded-replay": {
+      "status": "✓",
+      "specFile": "e2e/task-detail/runner-events-recorded-replay.spec.ts",
+      "tests": [
+        "recorded run renders typed replay metadata, trace diagnostics, and a stable pinned bottom"
+      ],
+      "files": []
+    }
+  }
+}

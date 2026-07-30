@@ -200,6 +200,60 @@ public static class CompletionGate
         @"(?ix)\b(?:no|without)\s+(?:remaining\s+)?(?:unfinished|incomplete|pending)\s+(?:work|items?|evidence)\b",
         RegexOptions.Compiled);
 
+    // The gate's OWN verdict echoed back at it (MKT-8 escalation loop): the
+    // reissue follow-up, the supervisor's escalate line, and the agent's
+    // narration of / investigation into a prior verdict all contain the gate's
+    // vocabulary ("unfinished", "completion gate found unfinished-work
+    // evidence", "auto-review flagged ... as \"unfinished\""). Treating that
+    // meta-text as fresh unfinished-work evidence makes the verdict
+    // self-sustaining: every round re-reads its own previous verdict, finds
+    // "unfinished", and reissues/escalates a run that terminated clean - the
+    // old evidence can never be cleared. Lines that (a) name the completion
+    // gate / unfinished-work evidence, or (b) narrate that something was
+    // "flagged ... as unfinished/incomplete" are verdict echoes, never a run's
+    // own first-person claim of open work.
+    private static readonly Regex GateVerdictEchoRegex = new(
+        @"(?ix)
+        completion[-\s]?gate\b.{0,160}\b(?:found|flagged|interpret\w*|unresolved|verdict|evidence|clear\w*|reissu\w*|escalat\w*)\b |
+        \[completion-gate-unresolved\] |
+        \bunfinished-work\s+evidence\b |
+        \bauto[-\s]?review\b.{0,100}\bflagged\b |
+        \bflagged\b.{0,120}\bas\b\s*[""„“'']?\s*(?:unfinished|incomplete)\b",
+        RegexOptions.Compiled);
+
+    // A Codex command-invocation echo ("● Run \"...powershell.exe\" -Command
+    // \"rg -n -i \\\"unfinish...\""): the run investigating a prior verdict
+    // greps for the gate's vocabulary, and the echoed COMMAND LINE then matches
+    // the vocabulary itself. A command echo is tool traffic, never the run's
+    // own close-out claim. Anchored to the ● bullet the CLI prints for
+    // command items (after optional bracketed log prefixes).
+    private static readonly Regex ToolInvocationEchoRegex = new(
+        @"^(?:\[[^\]]*\]\s*)*●\s*(?:Run|Ran)\b",
+        RegexOptions.Compiled);
+
+    // An open item that defers to explicit operator/user approval ("Release
+    // gate: remains locked pending explicit approval of ..."). Like the
+    // platform-owned commit boundary, the agent can NEVER close such an item -
+    // approval is the operator's move by definition - so counting it as
+    // unfinished work reissues/escalates a deliberately approval-gated
+    // deliverable forever (MKT-8). Precise: the deferral must say "explicit
+    // approval" or name the approver (operator/user/human), so a genuine
+    // actionable item like "Get approval from the design team, then wire the
+    // header" is NOT suppressed.
+    private static readonly Regex OperatorApprovalGateItemRegex = new(
+        @"(?ix)
+        \b(?:pending|await(?:s|ing)?|blocked\s+on|requires?)\s+explicit\s+(?:\w+\s+)?approval\b |
+        \b(?:pending|await(?:s|ing)?|blocked\s+on|requires?)\s+(?:the\s+)?(?:operator|user|human)(?:'s)?\s+(?:approval|sign[-\s]?off|go[-\s]?ahead)\b |
+        \bremains?\s+locked\s+pending\b",
+        RegexOptions.Compiled);
+
+    // "[taskboard] Started <cli> CLI (PID ...)" - the engine's synthetic
+    // run-start marker. Together with CliExitRegex it brackets one attempt's
+    // window in the accumulated log.
+    private static readonly Regex CliStartedRegex = new(
+        @"\[taskboard\]\s+Started\s+\S+\s+CLI\s+\(PID",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -391,7 +445,14 @@ public static class CompletionGate
         }
 
         var status = statusMarkdown ?? string.Empty;
-        var logTail = TailLines(recentLog ?? string.Empty, 80);
+        // Evidence is judged PER RUN: when the accumulated log's latest CLI
+        // exit is a clean terminal (status=completed, exitCode=0), only the
+        // latest run's window is scanned. A clean terminal run that came AFTER
+        // older failure lines (a recovered apply_patch error, a prior attempt's
+        // build break) supersedes them - without this, old-run evidence latches
+        // and a task whose final pass verified the fix is reissued/escalated
+        // forever (MKT-8).
+        var logTail = TailLines(ScopeToLatestRunWindow(recentLog ?? string.Empty), 80);
         var result = ResultLineRegex.Match(status);
         string? resultToken = result.Success ? result.Groups["result"].Value.Trim() : null;
         if (resultToken is not null &&
@@ -480,6 +541,44 @@ public static class CompletionGate
         return null;
     }
 
+    /// <summary>
+    /// Scope the accumulated multi-run log to the LATEST run's window when that
+    /// run terminated clean (exit marker <c>status=completed, exitCode=0</c>).
+    /// The window opens at the run's own <c>[taskboard] Started ... CLI</c>
+    /// marker (fallback: after the previous run's exit marker) and extends to
+    /// the end of the log, so post-exit orchestrator lines remain visible.
+    /// When the latest exit is not clean - or no exit marker exists - the full
+    /// log is returned unchanged: historical failure evidence stays in force
+    /// until a clean terminal run supersedes it.
+    /// </summary>
+    internal static string ScopeToLatestRunWindow(string recentLog)
+    {
+        if (string.IsNullOrWhiteSpace(recentLog)) return recentLog;
+        if (ExtractLatestExitCode(recentLog) != 0 || !ExtractLatestRunCompleted(recentLog))
+            return recentLog;
+
+        var lines = recentLog.Replace("\r\n", "\n").Split('\n');
+        var lastExitIdx = -1;
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            if (CliExitRegex.IsMatch(lines[i])) { lastExitIdx = i; break; }
+        }
+        if (lastExitIdx < 0) return recentLog;
+
+        // Preferred boundary: the latest run's own Started marker.
+        for (var i = lastExitIdx - 1; i >= 0; i--)
+        {
+            if (CliStartedRegex.IsMatch(lines[i]))
+                return string.Join('\n', lines[i..]);
+            // Fallback boundary: the previous run's exit marker - everything
+            // before it belongs to older runs.
+            if (CliExitRegex.IsMatch(lines[i]))
+                return string.Join('\n', lines[(i + 1)..]);
+        }
+        // No earlier boundary: the whole log already IS the latest run.
+        return recentLog;
+    }
+
     private static IEnumerable<string> EvidenceLines(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) yield break;
@@ -492,6 +591,16 @@ public static class CompletionGate
             // are identifiers/comments in printed source, not the run's own
             // close-out claims. See ToolSourceEchoRegex.
             if (ToolSourceEchoRegex.IsMatch(line)) continue;
+            // Drop echoed command invocations ("● Run \"...\" -Command \"rg -n
+            // unfinish...\""): a run investigating a prior verdict must not
+            // re-trigger it with its own search terms.
+            if (ToolInvocationEchoRegex.IsMatch(line)) continue;
+            // Drop echoes / narrations of the gate's own prior verdict - the
+            // self-sustaining "unfinished-work evidence" loop (MKT-8).
+            if (GateVerdictEchoRegex.IsMatch(line)) continue;
+            // Drop explicitly approval-gated deliverable notes: waiting for the
+            // operator's explicit approval is a designed stop, not open work.
+            if (OperatorApprovalGateItemRegex.IsMatch(line)) continue;
             // Drop items the run explicitly disclaimed as pre-existing /
             // out-of-scope: they are not unfinished work this change owns
             // (AGT-1986). See PreExistingOutOfScopeRegex.
@@ -538,6 +647,15 @@ public static class CompletionGate
         // owns, so they can never be "closed" by the run - treat them as no-op so
         // the gate does not escalate a fully-merged run over them (AGT-1986).
         if (PreExistingOutOfScopeRegex.IsMatch(text)) return true;
+        // An item that merely narrates the gate's own prior verdict
+        // ("Auto-review flagged one unfinished close-out item; awaiting
+        // resolution") is meta-text about the review loop, not work the agent
+        // can do - counting it re-feeds the verdict to itself (MKT-8).
+        if (GateVerdictEchoRegex.IsMatch(text)) return true;
+        // An approval-gated deliverable ("remains locked pending explicit
+        // approval") waits on the operator by design; the agent can never
+        // close it, so it must not count as unfinished work (MKT-8).
+        if (OperatorApprovalGateItemRegex.IsMatch(text)) return true;
         // Non-actionable commit/push delegation: the platform owns the commit
         // boundary, so the agent can never close such an item. Scanned over the
         // full text (the delegation clause may be the second sentence).

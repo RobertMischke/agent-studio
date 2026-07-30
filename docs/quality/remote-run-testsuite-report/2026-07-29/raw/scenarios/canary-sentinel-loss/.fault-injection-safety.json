@@ -1,0 +1,11 @@
+{
+  "harness": "remote-test-suite",
+  "version": 1,
+  "scenario": "fault-lost-completion-sentinel",
+  "runId": "canary-sentinel-loss",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss",
+  "acknowledgement": "rts-fi-be9d1fe4e84743db2bf024bc4670be44a03e780834c5c864c7b05e00c746b021",
+  "faults": [
+    "lost-completion-sentinel"
+  ]
+}

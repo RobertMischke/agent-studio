@@ -134,7 +134,7 @@
                 (click)="collapseToggle.emit()">‹</button>
       </div>
       @if (state() === '5-human-review') {
-        <app-decision-backlog-hint [tasks]="jobs()" (taskClick)="jobClick.emit($event)" />
+        <app-decision-backlog-hint [tasks]="jobs()" [allTasks]="allBoardJobs()" (taskClick)="jobClick.emit($event)" />
       }
       <div class="column__body">
         @if (isArchive()) {

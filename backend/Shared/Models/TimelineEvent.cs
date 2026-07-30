@@ -156,6 +156,21 @@ public static class TimelineEventKinds
     /// <summary>A human review verdict was recorded.</summary>
     public const string HumanReviewDecided = "human_review_decided";
     /// <summary>
+    /// Human acceptance started the transactional delivery integration while
+    /// the task remained in Human Review.
+    /// </summary>
+    public const string IntegrationStarted = "integration_started";
+    /// <summary>
+    /// The acceptance integration reached Merged/AlreadyMerged and the task
+    /// became eligible for Completed.
+    /// </summary>
+    public const string IntegrationSucceeded = "integration_succeeded";
+    /// <summary>
+    /// The acceptance integration failed. The task remains in Human Review and
+    /// the pipeline record carries the concrete outcome and evidence.
+    /// </summary>
+    public const string IntegrationFailed = "integration_failed";
+    /// <summary>
     /// A human deliberately moved a task out of human review or escalation,
     /// opening a fresh review-attempt epoch. Details carry the operator reason,
     /// new epoch, and rotated artefact count.
@@ -230,14 +245,11 @@ public static class TimelineEventKinds
     /// </summary>
     public const string ExternalCompletion = "external_completion";
     /// <summary>
-    /// AGT-2202: a card was accepted (moved into 6-completed) while its work was
-    /// NOT yet integrated into develop - the "Accept != Merge" blind spot made
-    /// loud. Emitted by <c>TaskTransitionService</c> on the accept transition when
-    /// the git-derived <see cref="TaskIntegrationStatus"/> is not
-    /// <see cref="IntegrationStatuses.Integrated"/>; the card is also tagged
-    /// <c>integration:pending</c> so the completed-lane audit can list it.
-    /// <see cref="TimelineEvent.Summary"/> carries the verdict; NOT a hard block -
-    /// the acceptance still lands, this only makes the state visible.
+    /// AGT-2202 compatibility event for a non-transactional caller that observed
+    /// accepted work outside the integration branch. Transactional acceptance
+    /// instead emits <see cref="IntegrationStarted"/>,
+    /// <see cref="IntegrationSucceeded"/>, or <see cref="IntegrationFailed"/>
+    /// while the task remains in Human Review until success.
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";
     /// <summary>

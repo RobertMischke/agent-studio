@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StudioTab } from '../studio-shell.types';
 import {
   parseStudioRoute,
-  replaceStudioRoute,
+  navigateStudioRoute,
   replaceStudioRouteQuery,
   replaceTaskViewRoute,
   studioRouteForTab,
@@ -92,18 +92,49 @@ describe('Studio route contract', () => {
     }
   });
 
-  it('uses replaceState and preserves route-local query on the same surface', () => {
+  it('preserves route-local query on the same surface', () => {
     history.replaceState(null, '', '/#/projects/agent-studio/wiki?page=concepts%2Frouting.md&filters=x');
     const replace = vi.spyOn(history, 'replaceState');
+    const push = vi.spyOn(history, 'pushState');
 
-    replaceStudioRoute('/projects/agent-studio/wiki');
+    navigateStudioRoute('/projects/agent-studio/wiki');
 
     expect(replace).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
     expect(location.hash).toContain('page=concepts%2Frouting.md');
 
     replaceStudioRouteQuery({ page: 'README.md', folder: null });
     expect(replace).toHaveBeenCalledTimes(1);
     expect(location.hash).toBe('#/projects/agent-studio/wiki?page=README.md&filters=x');
+  });
+
+  it('adds history entries between project and All Projects boards', () => {
+    history.replaceState(null, '', '/#/projects/agent-studio/board&filters=x');
+    const replace = vi.spyOn(history, 'replaceState');
+    const push = vi.spyOn(history, 'pushState');
+
+    navigateStudioRoute('/board');
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
+    expect(location.hash).toBe('#/board&filters=x');
+
+    navigateStudioRoute('/projects/agent-studio/board');
+
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(location.hash).toBe('#/projects/agent-studio/board&filters=x');
+  });
+
+  it('canonicalizes a route-less cold boot without adding a history entry', () => {
+    history.replaceState(null, '', '/');
+    const replace = vi.spyOn(history, 'replaceState');
+    const push = vi.spyOn(history, 'pushState');
+
+    navigateStudioRoute('/board');
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(location.hash).toBe('#/board');
   });
 
   it('round-trips Task detail and inspector tab state without adding history', () => {
@@ -119,6 +150,16 @@ describe('Studio route contract', () => {
       reference: 'AGT-2291',
       tab: 'code-review',
       inspector: 'activity',
+    });
+  });
+
+  it('round-trips the Task inspector tab', () => {
+    const parsed = parseStudioRoute('#/tasks/AGT-2408?view=overview%3Atask');
+    expect(parsed).toEqual({
+      kind: 'task',
+      reference: 'AGT-2408',
+      tab: 'overview',
+      inspector: 'task',
     });
   });
 });

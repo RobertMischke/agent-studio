@@ -1,0 +1,97 @@
+{
+  "scenario": "fault-worktree-collision",
+  "seed": "agt2200-worktree-v1",
+  "runId": "canary-worktree-collision",
+  "accepted": false,
+  "resultSha": null,
+  "semanticTree": null,
+  "phaseSequence": [
+    "claim",
+    "run"
+  ],
+  "incidentOutcome": "worktree-blocked",
+  "assertions": {
+    "lane": {
+      "actual": "5-human-review",
+      "expected": "5-human-review",
+      "passed": true
+    },
+    "lease": {
+      "runAttemptId": "run_3f8a28f3b06042f4abc5abccaef9219f",
+      "fence": 1,
+      "status": "released",
+      "runStatus": "worktree-blocked",
+      "attempts": 1,
+      "noDuplicateClaim": true
+    },
+    "process": {
+      "active": 0,
+      "observations": [],
+      "allReaped": true
+    },
+    "worktree": {
+      "path": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision/coding/worktree",
+      "isolated": true,
+      "ready": false,
+      "busyPathReported": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision/coding/worktree",
+      "prepareAttempts": 5,
+      "foreignPreserved": true,
+      "foreignRegistered": true,
+      "foreignHead": "a5acc3d68dd4ab4bae9111b2f2d6acfc01536d8a"
+    },
+    "outbox": {
+      "logicalItems": 1,
+      "acknowledgedItems": 1,
+      "backlog": 0,
+      "monotonic": true,
+      "serverEvents": 1,
+      "serverArtifacts": 0,
+      "terminalFactCopies": 0,
+      "terminalArtifactCopies": 0,
+      "apiAttempts": {
+        "claim": 1,
+        "heartbeat": 1
+      }
+    },
+    "sha": {
+      "resultSha": null,
+      "handoffResultSha": null,
+      "originHead": "a5acc3d68dd4ab4bae9111b2f2d6acfc01536d8a",
+      "integrated": false,
+      "phantomSuccessPrevented": true
+    },
+    "incident": {
+      "selectedFaults": [
+        "worktree-target-collision"
+      ],
+      "outcome": "worktree-blocked",
+      "expected": "worktree-blocked",
+      "evidence": [
+        {
+          "incidentClass": "worktree-collision",
+          "outcome": "worktree-blocked",
+          "busyPath": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision/coding/worktree",
+          "attempts": 5,
+          "foreignMarkerSha256": "7d89372041432782bd557ca6d9c5f73342c4e851679deb16eec3062de3fdb4e1",
+          "foreignPreserved": true,
+          "foreignRegistered": true,
+          "foreignHead": "a5acc3d68dd4ab4bae9111b2f2d6acfc01536d8a"
+        }
+      ]
+    }
+  },
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "worktree-target-collision"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 5
+    },
+    "scheduled": 5,
+    "consumed": 5
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision"
+}

@@ -1,0 +1,66 @@
+{
+  "scenario": "external-completion-cycle",
+  "seed": "historical-agt-2155",
+  "runId": "canary-external-cycle",
+  "accepted": true,
+  "expectedTerminal": "2-ready",
+  "actualTerminal": "2-ready",
+  "recoveryBudget": {
+    "unit": "post-completion-requeues",
+    "maximum": 1,
+    "used": 1
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-external-completion"
+  ],
+  "assertions": [
+    {
+      "id": "external-result-reconciled-once",
+      "passed": true,
+      "detail": "completion canary-external-cycle:external-completion produced one durable transition"
+    },
+    {
+      "id": "exact-result-evidence-retained",
+      "passed": true,
+      "detail": "retained envelope b2b6450abee37f8ff9ae52949b5bf6a56027d9aeba3b0c403a208881db4ed259 binds 4be99a0da913f6cd7fd439f5590d782dbfb07c80..c8df7538cf36568745bea48d27ca53f781e66237"
+    },
+    {
+      "id": "completion-replay-does-not-move-requeued-task",
+      "passed": true,
+      "detail": "idempotent old completion left operator-requeued task in 2-ready"
+    },
+    {
+      "id": "failed-salvage-not-delivered",
+      "passed": true,
+      "detail": "failed salvage completion returned 409: {\"code\":\"result-handoff-required\",\"message\":\"Successful coding completion requires an acknowledged immutable result envelope.\",\"detail\":null}"
+    },
+    {
+      "id": "stranded-worktree-preserved",
+      "passed": true,
+      "detail": "local d148fc8de763b45aa6215735eefcb4ca7d6e4fc1 remains at /home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/external-completion-cycle/canary-external-cycle/external/stranded-worktree; no immutable result ref exists"
+    },
+    {
+      "id": "external-completion-loop-bounded",
+      "passed": true,
+      "detail": "runs=2, completions=1, failed-salvage releases=1, terminal=2-ready"
+    }
+  ],
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "evidence": {
+    "sourceRunAttemptId": "run_7793e40d2f9049c9b8b58e8869fce010",
+    "retryRunAttemptId": "run_cd728e2462c640acbbd33badac3d4310",
+    "baseSha": "4be99a0da913f6cd7fd439f5590d782dbfb07c80",
+    "resultSha": "c8df7538cf36568745bea48d27ca53f781e66237",
+    "resultRef": "refs/heads/agent-studio/results/run_7793e40d2f9049c9b8b58e8869fce010/c8df7538cf36568745bea48d27ca53f781e66237",
+    "envelopeDigest": "b2b6450abee37f8ff9ae52949b5bf6a56027d9aeba3b0c403a208881db4ed259",
+    "strandedSha": "d148fc8de763b45aa6215735eefcb4ca7d6e4fc1",
+    "strandedWorktree": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/external-completion-cycle/canary-external-cycle/external/stranded-worktree"
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/external-completion-cycle/canary-external-cycle"
+}

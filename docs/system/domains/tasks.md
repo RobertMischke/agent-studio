@@ -102,6 +102,23 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
+- Integration status accepts persisted abbreviated Git SHAs of at least seven
+  hexadecimal characters when they match a reachable full SHA by prefix.
+  Zero-file lifecycle entries whose subjects start with
+  `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
+  visible attribution metadata but are not delivery expectations. A matching
+  subject with changed files remains a real integration expectation.
+- Accepted-card `integration.status` is a read-time projection of attributed
+  commit membership in the configured target branch, cached against that
+  branch's current HEAD. Lane state, provenance merge records, pipeline success,
+  and curated merge subjects do not force `integrated`; an out-of-band merge is
+  detected on the next read.
+- Human acceptance is transactional. A coding card remains in
+  `5-human-review` with phase `integrating` until the delivery reaches `Merged`
+  or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
+  to ordinary Human Review with an Integration failed badge and timeline
+  evidence. The `integrationpending` tag is an internal recovery marker, not a
+  second UI status.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
@@ -125,7 +142,7 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
   blocks, or starts a new attempt.
 - [../concepts/task-integration-and-merge-workflow.md](../../concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
-  `5-human-review -> 6-completed` accept trigger).
+  transactional Human Review accept trigger).
 - [../concepts/task-integration-merge-config-analysis.html](../../concepts/task-integration-merge-config-analysis.html):
   why integration semantics should not depend on `maxParallelism`.
 - [../concepts/auto-review-evidence-gate-analysis.html](../../concepts/auto-review-evidence-gate-analysis.html):
@@ -147,6 +164,38 @@ of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
+
+## Result transition invariant
+
+`TaskTransitionService` is the single enforcement point for Result availability.
+Every successful move into `4-auto-review`, `5-human-review`, `5e-escalated`,
+or `6-completed` carries a non-empty `status.md`. When no generated protocol is
+available, the service writes a marked, evidence-only scaffold before the
+folder move and enriches its own scaffold after the move with the computed
+integration projection. It never replaces a real Result. Backend startup runs
+the same idempotent repair over missing Results in `5-human-review`,
+`6-completed`, and `7-archive`; repaired files are marked as operator
+backfills.
+
+## Task-tab refinement projection
+
+The task-detail inspector orders its tabs as `Task | Activity | Result`.
+`Task` renders the current `prompt.md`, followed by a quiet chronological
+refinement history. `GET /api/tasks/{id}/runs` derives that history at read
+time from existing evidence:
+
+- `prompt-N.md` supplies full multiline operator refinements created through
+  Extend mode.
+- The run timeline supplies other operator follow-ups from the `[user]` rows
+  in `logs/cli-output.log`; the paired run start is the displayed time and the
+  session-event reason supplies the reason when present.
+- `orchestrator-follow-up-history/*.md` supplies system reissues, including
+  their recorded timestamp, reason or cause, and verbatim steering prompt.
+
+The projection de-duplicates an Extend prompt when the nearby run-log
+follow-up contains the same normalized text. It adds no task files and no
+write-side contract. Legacy follow-ups that exist only as `[user]` log rows
+therefore remain visible without inventing a second persistence mechanism.
 
 ## Project proposals
 
@@ -230,6 +279,9 @@ cannot erase an operator decision.
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
+- Moving a task from `6-completed` to `7-archive` in task detail requires a
+  second confirmation while `integration.status` is anything other than
+  `integrated`. This is an operator warning, not a server-side hard block.
 - Only `2-ready` and `3-progress` tasks can be started. A `2-ready` card is
   additionally held back from auto-pickup while its `references.dependsOn`
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in

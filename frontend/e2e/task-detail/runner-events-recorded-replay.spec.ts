@@ -4,8 +4,8 @@ import * as path from 'path';
 
 interface RecordedReplay {
   target: { id: string; watchPath: string };
-  output: Array<{ timestamp: string; stream: string; text: string }>;
-  runnerEvents: Array<Record<string, unknown>>;
+  output: { timestamp: string; stream: string; text: string }[];
+  runnerEvents: Record<string, unknown>[];
 }
 
 const RECORDED = JSON.parse(fs.readFileSync(
@@ -163,7 +163,7 @@ async function installRoutes(page: Page): Promise<void> {
 }
 
 test('recorded run renders typed replay metadata, trace diagnostics, and a stable pinned bottom', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 520 });
   await page.addInitScript(() => {
     localStorage.setItem('atp.flag.nextGenChat', '1');
     localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
@@ -199,17 +199,22 @@ test('recorded run renders typed replay metadata, trace diagnostics, and a stabl
   await expect(metrics.filter({ hasText: 'turn' })).toContainText('83k tok');
 
   const scrollSamples = await conversation.evaluate(async element => {
-    element.scrollTop = element.scrollHeight;
+    let scroller: HTMLElement | null = element as HTMLElement;
+    while (scroller && !/auto|scroll|overlay/.test(getComputedStyle(scroller).overflowY)) {
+      scroller = scroller.parentElement;
+    }
+    if (!scroller) throw new Error('No Activity transcript scroller found');
+    scroller.scrollTop = scroller.scrollHeight;
     const values: number[] = [];
     for (let frame = 0; frame < 12; frame += 1) {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      values.push(element.scrollTop);
+      values.push(scroller.scrollTop);
     }
     return {
       values,
       stuck: element.getAttribute('data-stuck'),
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
+      clientHeight: scroller.clientHeight,
+      scrollHeight: scroller.scrollHeight,
     };
   });
   expect(scrollSamples.scrollHeight).toBeGreaterThan(scrollSamples.clientHeight);

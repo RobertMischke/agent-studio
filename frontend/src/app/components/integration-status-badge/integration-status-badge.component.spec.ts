@@ -68,10 +68,10 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(fixture.componentInstance.tooltip()).toContain('beef123');
   });
 
-  it('renders conflict-skipped as a red conflict badge', () => {
+  it('renders conflict-skipped as a hard red integration-failed badge', () => {
     const fixture = render(integration('conflict-skipped', { detail: 'Conflicted: a.txt' }));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('Konflikt');
+    expect(badge.textContent).toContain('Integration failed');
     expect(badge.dataset['kind']).toBe('conflict');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
     expect(fixture.componentInstance.tooltip()).toContain('Conflicted: a.txt');

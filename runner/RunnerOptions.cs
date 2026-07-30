@@ -116,7 +116,12 @@ public sealed class RunnerOptions
     /// </summary>
     public string? CliResumeArgs { get; init; }
 
-    /// <summary>Lease TTL requested on acquire/renew; the server clamps to its own bounds.</summary>
+    /// <summary>
+    /// Lease TTL requested on acquire/renew; the server clamps to its own
+    /// bounds. The 15-minute default leaves ten complete wall-clock minutes
+    /// after the normal heartbeat safety margin without granting unbounded
+    /// offline authority.
+    /// </summary>
     public int TtlSeconds { get; init; }
 
     /// <summary>Heartbeat cadence; kept well under the TTL so a slow network still renews in time.</summary>
@@ -263,7 +268,7 @@ public sealed class RunnerOptions
             CliResumeArgs = Val("cli-resume-args", "RUNNER_CLI_RESUME_ARGS").Trim() is { Length: > 0 } resumeArgs
                 ? resumeArgs
                 : null,
-            TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 120),
+            TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 900),
             HeartbeatSeconds = EnvInt("RUNNER_HEARTBEAT_SECONDS", 30),
             RunTimeoutSeconds = EnvInt("RUNNER_RUN_TIMEOUT_SECONDS", 3600),
             HostMaxParallelism = overrides.TryGetValue("max-parallelism", out var max) && int.TryParse(max, out var maxV) && maxV > 0

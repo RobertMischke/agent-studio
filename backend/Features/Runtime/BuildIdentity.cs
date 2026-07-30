@@ -48,8 +48,9 @@ public sealed record BuildIdentity(
         var commit = Environment.GetEnvironmentVariable("ATP_DEPLOY_SHA")
             ?? informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0]
             ?? "unknown";
+        var version = assembly.GetName().Version?.ToString(3) ?? "unknown";
         return new BuildIdentity(
-            1, "Agent Studio", "untagged", "0.0.0-migration", commit, true, null,
+            1, "Agent Studio", "untagged", version, commit, true, null,
             "unverified", Missing("CodingAgentRunner"), Missing("coding-agent-chat"), Legacy: true);
     }
 

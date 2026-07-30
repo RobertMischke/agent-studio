@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "validatedAt": "2026-07-29T02:29:17.466Z",
+  "accepted": true,
+  "validators": [
+    {
+      "name": "remote-run-result-v1",
+      "schema": "./contracts/run-result.schema.json",
+      "status": "pass",
+      "records": 12
+    },
+    {
+      "name": "scenario-manifest-v1",
+      "schema": "./contracts/scenario.schema.json",
+      "status": "pass",
+      "records": 9
+    },
+    {
+      "name": "acceptance-matrix-cross-field",
+      "status": "pass",
+      "criteria": 12,
+      "guards": 7
+    },
+    {
+      "name": "raw-evidence-sha256",
+      "status": "pass",
+      "records": 196
+    }
+  ]
+}

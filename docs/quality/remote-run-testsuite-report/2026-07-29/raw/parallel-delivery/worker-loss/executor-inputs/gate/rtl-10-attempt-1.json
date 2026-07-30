@@ -1,0 +1,13 @@
+{
+  "role": "gate",
+  "workerId": "canary-parallel-12-worker-loss-gate-worker-1",
+  "hostId": "canary-parallel-12-worker-loss-gate-worker-1-host",
+  "slot": 4,
+  "origin": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/fixture-origin.git",
+  "workspace": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/worker-loss/gate/canary-parallel-12-worker-loss-gate-worker-1/rtl-10-attempt-1",
+  "taskKey": "RTL-10",
+  "ordinal": 10,
+  "resultRef": "refs/heads/agent-studio/results/run_513830c9e9704b39bd6952cc75d285cb/5d0a9c3ada0061a0b3c9cbfdf4d71d595d8a17b2",
+  "expectedResultSha": "5d0a9c3ada0061a0b3c9cbfdf4d71d595d8a17b2",
+  "holdMs": 500
+}

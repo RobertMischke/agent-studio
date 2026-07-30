@@ -12,6 +12,7 @@ that origin.
 | View | Canonical relative URL | Stable identity |
 |---|---|---|
 | Task or epic card | `/?task=AGT-1234` | Public task key |
+| All Projects Board | `/#/board` | Global workspace scope |
 | Project Hub overview | `/#/projects/PROJ-002` | Immutable project registry id |
 | Project Hub rail | `/#/projects/PROJ-002/<rail-key>` | Project id plus documented rail key |
 | Project Wiki page | `/#/projects/PROJ-002/wiki?page=concepts%2Foverview.md` | Project id plus repository-relative page path |

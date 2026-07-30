@@ -1,0 +1,48 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "lease-adoption-restart",
+  "description": "Replays runner restart adoption with durable PID generation, worktree, fence, and authority epoch proof, then releases dead and mismatched generations and rejects their stale writes.",
+  "task": {
+    "title": "Replay live lease adoption after runner restart",
+    "body": "Hold a detached worker across a runner restart, adopt only the proven generation, and fail closed for dead or mismatched persisted attempts.",
+    "key": "RTS-21"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": [
+      "README.md",
+      "package.json",
+      "src/index.mjs",
+      "src/shipping.mjs",
+      "test/shipping.test.mjs"
+    ]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"
+    ],
+    "expectedTerminal": "4-auto-review",
+    "recoveryBudget": {
+      "unit": "live-generation-adoptions",
+      "maximum": 1
+    },
+    "assertions": [
+      "attempt-authority-four-tuple-persisted",
+      "proven-live-generation-adopted",
+      "adopted-generation-completed-once",
+      "dead-generation-released-to-ready",
+      "mismatched-generation-released-to-ready",
+      "all-stale-writers-rejected"
+    ]
+  },
+  "hooks": {}
+}

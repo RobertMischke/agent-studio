@@ -106,6 +106,8 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.LoopWaiting));
         Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.SteerPending));
         Assert.False(LifecyclePhases.IsAllowed(TaskStates.AutoReview, LifecyclePhases.LoopWaiting));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.HumanReview, LifecyclePhases.Integrating));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.Completed, LifecyclePhases.Integrating));
     }
 
     [Fact]

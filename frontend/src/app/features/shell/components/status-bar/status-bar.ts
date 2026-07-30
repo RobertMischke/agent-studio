@@ -87,6 +87,10 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
   readonly runningCount = computed(() => this.runningTruth().total);
+  readonly runningLabel = computed(() => {
+    const truth = this.runningTruth();
+    return `${truth.local} local · ${truth.remote} remote`;
+  });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
   readonly runningSourcesDiverge = computed(() => {
