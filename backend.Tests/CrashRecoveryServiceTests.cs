@@ -256,6 +256,20 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         Assert.Contains("operator dismissed pending orphan recovery", jsonl);
     }
 
+    [Theory]
+    [InlineData(null, new[] { "docs/runner.md.meta.json", "docs/chat.md.meta.json" }, CrashRecoveryClassifications.Trivial)]
+    [InlineData("", new[] { "DOCS/README.MD.META.JSON" }, CrashRecoveryClassifications.Trivial)]
+    [InlineData("AGT-2435", new[] { "docs/runner.md.meta.json" }, CrashRecoveryClassifications.ReviewRequired)]
+    [InlineData(null, new[] { "docs/runner.md.meta.json", "frontend/src/app.ts" }, CrashRecoveryClassifications.ReviewRequired)]
+    [InlineData(null, new string[0], CrashRecoveryClassifications.ReviewRequired)]
+    public void PendingRecovery_Classification_RequiresOnlyUnattributedMetadataSidecars(
+        string? jobId,
+        string[] files,
+        string expected)
+    {
+        Assert.Equal(expected, CrashRecoveryClassifications.Classify(jobId, files));
+    }
+
     [Fact]
     public async Task RecoverAsync_UnknownDirectCheckout_CannotWidenAfterOperatorReview()
     {

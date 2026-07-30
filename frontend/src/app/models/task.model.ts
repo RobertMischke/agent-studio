@@ -1619,6 +1619,7 @@ export interface CrashRecoveryPending {
   files: string[];
   message: string;
   reason: string;
+  classification: 'trivial' | 'review-required';
 }
 
 export interface CrashRecoveryActionResult {
