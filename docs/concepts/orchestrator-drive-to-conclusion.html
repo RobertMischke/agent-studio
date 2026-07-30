@@ -1340,6 +1340,27 @@
             <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-30</td>
+          <td><code>AGT-2428</code><br><span class="small">detached worker exited while replacement inspected its terminal result</span></td>
+          <td>
+            Remote review exposed a failure in the replacement-daemon test. A worker could atomically publish
+            <code>result.json</code> and exit after startup or the attached-process poll had observed no result
+            but before it checked PID liveness. The replacement could then report the worker missing instead of
+            consuming its terminal result.
+          </td>
+          <td>
+            Startup discovery and <code>RemoteTaskRunner</code> independently combined a result-file read with
+            <code>VerifyLive</code>. The two facts had no shared resolver, and a negative PID result did not
+            re-check the durable terminal fact written concurrently with process exit.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> <code>DurableAgentProcess.InspectForReattach</code> is now the
+            shared verdict for startup and the attached-process poll. It reads the result, verifies PID generation
+            plus worktree, and reads the result again before declaring the worker lost. A deterministic regression
+            pins the exact interleaving, and the complete Runner test project passes.
+          </td>
+        </tr>
       </tbody>
     </table>
 

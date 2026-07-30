@@ -535,7 +535,10 @@ start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
 and follows the worker's JSONL output file from the persisted sequence. A
 worker that finished during the short restart window is finalized from its
-atomically written result file. The slot enters `launching` before
+atomically written result file. The same inspection resolves both startup and
+the attached-process poll. If the PID exits while that inspection is running,
+the daemon re-reads the terminal result before it can classify the worker as
+missing. The slot enters `launching` before
 `Process.Start`, and the worker writes its own atomic `worker.json` identity
 before starting the CLI. Startup briefly waits for that identity, closing the
 child-start-to-slot-save handoff window without trusting an unverified PID. A
