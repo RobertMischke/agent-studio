@@ -52,6 +52,36 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
     }
 
     [Fact]
+    public void Repository_origin_head_is_the_fallback_when_no_branch_is_configured()
+    {
+        var git = Path.Combine(_root, ".git");
+        Directory.CreateDirectory(Path.Combine(git, "refs", "remotes", "origin"));
+        File.WriteAllText(
+            Path.Combine(git, "refs", "remotes", "origin", "HEAD"),
+            "ref: refs/remotes/origin/trunk\n");
+
+        var result = RemoteProjectRepositoryResolver.Resolve(new ProjectRecord
+        {
+            Id = "PROJ-007",
+            DisplayName = "Agent Taskboard",
+            StorageLocation = Path.Combine(_root, "tasks"),
+            RepositoryPath = _root,
+            Urls =
+            [
+                new ProjectUrlRecord
+                {
+                    Id = "repo",
+                    Label = "Repository",
+                    Url = "https://github.com/agent-orc/quality-studio.git",
+                },
+            ],
+        }, configuredDefaultBranch: null);
+
+        Assert.NotNull(result);
+        Assert.Equal("trunk", result!.DefaultBranch);
+    }
+
+    [Fact]
     public void Repository_path_origin_is_not_used_when_registry_url_is_missing()
     {
         var git = Path.Combine(_root, ".git");
