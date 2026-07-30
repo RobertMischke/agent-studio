@@ -60,6 +60,7 @@ import { ExplorerSectionsService } from './services/explorer-sections.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
 import { GlobalSearchComponent } from './components/global-search/global-search.component';
+import { OrchestratorFeedStore } from '../orchestrator';
 
 /** Canonicalise project storage paths so titlebar workspace lookup survives
  * slash style, trailing separator, and case differences. */
@@ -141,6 +142,7 @@ export class StudioShellComponent {
   private readonly projectLookup = inject(ProjectLookupService);
   private readonly themeService = inject(ThemeService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly orchestratorFeed = inject(OrchestratorFeedStore);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -616,10 +618,22 @@ export class StudioShellComponent {
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
     filters: this.filterBadgeCount()
       ?? this.boardFilters.activeFilterCount(),
+    activity: this.orchestratorFeed.freshAlertCount(),
   }));
+
+  private readonly feedSeenFx = effect(() => {
+    this.orchestratorFeed.freshAlertCount();
+    if (this.activeTab()?.kind !== 'feed') return;
+    untracked(() => this.orchestratorFeed.markAlertsSeen());
+  });
 
   openBoard(projectName: string): void {
     this.tabState.open({ kind: 'board', projectName });
+  }
+
+  openFeed(): void {
+    this.orchestratorFeed.markAlertsSeen();
+    this.tabState.open({ kind: 'feed' });
   }
 
   /**
@@ -968,6 +982,10 @@ export class StudioShellComponent {
       this.toggleWorkspaceSettingsTab();
       return;
     }
+    if (panel === 'activity') {
+      this.openFeed();
+      return;
+    }
     this.panelState.toggle(panel);
   }
 
@@ -1075,6 +1093,8 @@ export class StudioShellComponent {
     switch (tab.kind) {
       case 'board':
         return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
+      case 'feed':
+        return 'Activity across projects';
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {

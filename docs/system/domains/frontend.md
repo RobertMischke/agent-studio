@@ -64,6 +64,15 @@ screenshot routes remain migration inputs. The full schema, transient-state
 boundary, route map, and visual ownership diagram are in
 [Studio Route Restoration](../../concepts/studio-route-restoration.md).
 
+The workspace Activity Feed is the embedded `#/feed` main view and is opened
+by the Activity icon. Its 500-event backend snapshot is rendered through a
+bounded, variable-height history window based on the Activity scroll fix, so
+live prepends preserve the operator's reading position without FixedSize
+virtual-scroll assumptions. Only fresh `alert` events contribute to the icon
+badge. The older project-scoped modal remains a quick-access compatibility
+surface and shares the same live feed store. Its bounded panes use Deck-Panel
+v1, and alert treatment follows the AGT-2410 acute-only status contract.
+
 ## Key Code
 
 - `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,

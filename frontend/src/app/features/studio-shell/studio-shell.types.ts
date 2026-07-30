@@ -9,13 +9,16 @@
  */
 
 /** Discrete tab kinds the editor area can host. */
-export type StudioTabKind = 'board' | 'epics' | 'epic' | 'task' | 'hub' | 'workbench' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
+export type StudioTabKind = 'board' | 'feed' | 'epics' | 'epic' | 'task' | 'hub' | 'workbench' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'settings';
 
 /** Board tab - one per project; key `board:<projectName>` or `board:__all__`. */
 export interface BoardTab { kind: 'board'; projectName: string; }
+
+/** Workspace-wide orchestrator Feed; singleton key `feed`. */
+export interface FeedTab { kind: 'feed'; }
 
 /** Epic overview tab - project-scoped or workspace-wide; key `epics:<projectName|__all__>`. */
 export interface EpicsTab { kind: 'epics'; projectName: string | null; }
@@ -58,12 +61,13 @@ export interface WorkspaceSettingsTab { kind: 'workspace-settings'; }
 /** Welcome screen — no real tab, no key. */
 export interface WelcomeTab { kind: 'welcome'; }
 
-export type StudioTab = BoardTab | EpicsTab | EpicTab | TaskTab | HubTab | WorkbenchTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
+export type StudioTab = BoardTab | FeedTab | EpicsTab | EpicTab | TaskTab | HubTab | WorkbenchTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
 
 /** Build the stable string key for a tab; used for selection + persistence. */
 export function studioTabKey(tab: StudioTab): string {
   switch (tab.kind) {
     case 'board':    return `board:${tab.projectName}`;
+    case 'feed':     return 'feed';
     case 'epics':    return `epics:${tab.projectName ?? '__all__'}`;
     case 'epic':     return `epic:${tab.epicKey}`;
     case 'task':     return `task:${tab.taskKey}`;
