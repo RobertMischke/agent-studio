@@ -36,6 +36,14 @@ interface TaskFixture {
     evidenceState: string;
     awaitingEvidence: boolean;
     summary: string;
+    sources?: Array<{
+      kind: string;
+      id: string;
+      commit: string;
+      result: string;
+      observedAt: string;
+      summary: string;
+    }>;
   };
 }
 
@@ -110,8 +118,6 @@ const GROUPED = {
   archive: [task('archived', '7-archive', 1)],
 };
 
-const ALL_TASKS = [...READY, ...PROGRESS, ...HUMAN_REVIEW, ...GROUPED.archive];
-
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
     status: 200,
@@ -120,17 +126,21 @@ function json(route: Route, body: unknown): Promise<void> {
   });
 }
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(page: Page, grouped: () => typeof GROUPED = () => GROUPED): Promise<void> {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
     if (url.includes('/api/auth/status')) {
       return json(route, { profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
     }
     if (url.includes('/api/tasks/grouped') || url.includes('/api/tasks/grouped')) {
-      return json(route, GROUPED);
+      return json(route, grouped());
+    }
+    if (url.includes('/api/tasks/archive')) {
+      return json(route, { items: [], total: 0, offset: 0, limit: 50 });
     }
     if (/\/api\/(?:tasks|jobs)(\?|$)/.test(url)) {
-      return json(route, ALL_TASKS);
+      const snapshot = grouped();
+      return json(route, Object.values(snapshot).flat());
     }
     if (url.includes('/api/watch-paths')) {
       return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
@@ -184,7 +194,7 @@ async function installRoutes(page: Page): Promise<void> {
   });
 }
 
-async function boot(page: Page): Promise<void> {
+async function boot(page: Page, grouped: () => typeof GROUPED = () => GROUPED): Promise<void> {
   await page.addInitScript((project) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
       v: 1,
@@ -194,7 +204,7 @@ async function boot(page: Page): Promise<void> {
     localStorage.setItem('atp.studio.explorer.expanded', JSON.stringify([project]));
     localStorage.removeItem('atp.studio.explorerSections');
   }, PROJECT);
-  await installRoutes(page);
+  await installRoutes(page, grouped);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 15_000 });
@@ -271,9 +281,99 @@ test('cards show exact, later-containing, and unassigned test-run evidence', asy
   await expect(evidence.filter({ hasText: '10 commit(s) after, diff included' })).toHaveAttribute('data-match-quality', 'contains-diff');
   const unassigned = evidence.filter({ hasText: 'No matching test run' });
   await expect(unassigned).toHaveAttribute('data-evidence-state', 'unassigned');
-  await expect(unassigned).toContainText('No run is allowed to imply green evidence');
+  await expect(unassigned).toContainText('No SHA-linked project run');
 
   const boardShot = test.info().outputPath('task-card-test-run-evidence.png');
   await page.getByTestId('studio-board').screenshot({ path: boardShot });
   await test.info().attach('task-card-test-run-evidence', { path: boardShot, contentType: 'image/png' });
+});
+
+test('archived-card evidence incident renders honest before and SHA-linked after states', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1300 });
+  let linked = false;
+  const examples = [
+    ['AGT-2416', '3aa5ad85', 'review_05aa90204763466abc2627c9be2eedc8'],
+    ['AGT-2399', '67d3039c', 'review_b916bab377404c1f9457f6cf075c58f1'],
+    ['AGT-2426', 'd1649ce9', 'review_8017590a9dd34619b1480e0fdbb5938e'],
+  ] as const;
+  const grouped = (): typeof GROUPED => ({
+    backlog: [],
+    preparation: [],
+    orchestratorPrep: [],
+    ready: [],
+    progress: [],
+    failedPickup: [],
+    codeNotComplete: [],
+    review: [],
+    autoReview: [],
+    humanReview: examples.map(([id, sha, reviewId], index) => task(
+      id,
+      '5-human-review',
+      index + 1,
+      linked
+        ? {
+            runId: null,
+            runCommit: null,
+            runState: null,
+            runResult: null,
+            matchQuality: 'perfect',
+            direction: 'exact',
+            distance: 0,
+            diffContained: true,
+            evidenceState: 'proven',
+            awaitingEvidence: false,
+            summary: `Review build-tests Pass at ${sha}`,
+            sources: [{
+              kind: 'review-build-tests',
+              id: reviewId,
+              commit: sha,
+              result: 'passed',
+              observedAt: '2026-07-29T20:41:22Z',
+              summary: `Review build-tests Pass at ${sha}`,
+            }],
+          }
+        : {
+            runId: null,
+            runCommit: null,
+            runState: null,
+            runResult: null,
+            matchQuality: 'none',
+            direction: 'none',
+            distance: null,
+            diffContained: false,
+            evidenceState: 'unassigned',
+            awaitingEvidence: true,
+            summary: 'Evidence pending: No test run assigned',
+          },
+    )),
+    escalated: [],
+    completed: [],
+    archive: [],
+  });
+
+  await boot(page, grouped);
+  const evidence = page.getByTestId('task-card-test-evidence');
+  await expect(evidence).toHaveCount(3);
+  await expect(evidence).toContainText([
+    'Evidence pending: No test run assigned',
+    'Evidence pending: No test run assigned',
+    'Evidence pending: No test run assigned',
+  ]);
+  const reviewLane = page.getByTestId('lane-5-human-review');
+  const before = test.info().outputPath('evidence-pending-before.png');
+  await reviewLane.screenshot({ path: before });
+  await test.info().attach('evidence-pending-before', { path: before, contentType: 'image/png' });
+
+  linked = true;
+  await page.reload();
+  await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 15_000 });
+  await expect(evidence).toHaveCount(3);
+  for (const [, sha] of examples) {
+    await expect(evidence.filter({ hasText: `Review build-tests Pass at ${sha}` }))
+      .toHaveAttribute('data-evidence-state', 'proven');
+  }
+  await expect(evidence.filter({ hasText: 'Evidence pending' })).toHaveCount(0);
+  const after = test.info().outputPath('evidence-linked-after.png');
+  await reviewLane.screenshot({ path: after });
+  await test.info().attach('evidence-linked-after', { path: after, contentType: 'image/png' });
 });

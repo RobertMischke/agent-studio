@@ -142,6 +142,46 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
 - [../concepts/auto-review-evidence-gate-analysis.html](../../concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
 
+## Card test evidence projection
+
+The board's test-evidence block is a read-time projection, not one persisted
+test status on `task.json`. `TestRunService` reconciles these evidence classes:
+
+| Evidence class | Durable source | Reaches the card | Matching rule |
+|---|---|---|---|
+| Project Test Quality run | `<TaskRepository>/.metadata/test-runs/<projectId>.json` | Yes | Exact task commit, a later run that contains the task commit, or a qualifying integration recut found through Git ancestry |
+| Remote Review `build-tests` grade | `remote-review-grade-<attemptId>.md` in the task folder | Yes | The grade must contain a `build-tests` verdict and its immutable result SHA must equal or contain the current card anchor |
+| Post-processing build/test gate | `post-steps/build-test-gate-*.log` | Yes | The tested SHA must equal or contain the current card anchor |
+| Pre-develop build gate and pre-main test gate | `post-steps/pre-develop-build-gate-*.log` and `pre-main-test-gate-*.log` | Yes | The tested merge SHA must equal or contain the current card anchor |
+| Review aspect `tests-and-evidence` | `aspect-tests-and-evidence.json` or Markdown twin | No green claim | This is an LLM review verdict, not proof that deterministic commands passed |
+| Build profile readiness | Project settings `buildProfile.status` | No | It controls pickup readiness. Evidence exists only after configured commands execute in a gate or recorded project test run |
+| Agent-authored test output and Playwright screenshots | `status.md`, run logs, and `results/` | No automatic green claim | They remain inspectable task artifacts until a structured SHA-bound producer records them |
+
+A project test run is assigned only when the project Test Quality API has a
+recorded run and Git ancestry links its commit to the card. Gate execution does
+not create a project test-run record. Gate logs and Remote Review reports are
+separate task-owned evidence sources and are reconciled alongside project runs.
+A source for an older card commit is deliberately ignored after the card gains
+a newer commit.
+
+The 2026-07-29 archived-card incident demonstrated the former gap:
+
+| Card | Former card projection | Evidence that actually existed |
+|---|---|---|
+| AGT-2416 | `Evidence pending: No test run assigned` | Remote Review `review_05aa90204763466abc2627c9be2eedc8`: `Pass`, `build-tests: pass`, exact SHA `3aa5ad85` |
+| AGT-2399 | `Evidence pending: No test run assigned` | Remote Review `review_b916bab377404c1f9457f6cf075c58f1`: `Pass`, `build-tests: pass`, exact SHA `67d3039c` |
+| AGT-2426 | `Evidence pending: No test run assigned` | Remote Review `review_8017590a9dd34619b1480e0fdbb5938e`: `Pass`, `build-tests: pass`, exact SHA `d1649ce9` |
+
+All three reports also recorded an immutable materialized HEAD equal to the
+card commit. The old projection queried only the project Test Quality store,
+which had no runs for these cards, and never inspected their task-owned report
+files. The corrected card copy names the source and SHA, for example
+`Review build-tests Pass at d1649ce9` or
+`Build/test gate green at <sha>`. Truly unassigned cards use
+`No test evidence assigned` and say that no SHA-linked project run, build gate,
+or review grade is recorded. Only a matched planned or running project test
+run uses `Evidence pending`.
+
 ## Files-tab document projection
 
 `GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
@@ -235,9 +275,10 @@ cannot erase an operator decision.
 - `backend/Services/Tasks/LaneMutexRegistry.cs`: per-project lane serialization.
 - `backend/Services/Tasks/CommitAttributionService.cs` and
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
-- `backend/Features/TestRuns/TestRunService.cs`: project-wide test-run
-  lifecycle plus the read-time card evidence projection derived from the
-  latest task-owned commit and Git ancestry.
+- `backend/Features/TestRuns/TestRunService.cs` and
+  `TaskScopedTestEvidenceReader.cs`: project-wide test-run lifecycle plus the
+  read-time card evidence projection derived from the latest task-owned commit,
+  Git ancestry, Remote Review build-tests grades, and deterministic gate logs.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
 - `backend/Features/Registry/WorkspaceSettingsService.cs` and
@@ -285,11 +326,13 @@ cannot erase an operator decision.
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
-- Test evidence is never persisted on a task. A successful run proves a card
-  only when its commit equals the card commit or contains its change. Direct
-  ancestry proves ordinary commits; a reachable curated `merge(KEY)` or
-  `merge-recut(KEY)` integration anchor proves rewritten task commits only when
-  that integration postdates the card's current attributed commit.
+- The combined test-evidence projection is never persisted on `task.json`.
+  Project runs remain project-scoped objects; task-owned Remote Review grades
+  and gate logs remain immutable files in the task folder. A successful source
+  proves a card only when its commit equals the card commit or contains its
+  change. Direct ancestry proves ordinary commits; a reachable curated
+  `merge(KEY)` or `merge-recut(KEY)` integration anchor proves rewritten task
+  commits only when that integration postdates the card's current attributed commit.
   Missing commit timestamps disable this fallback rather than reusing historical
   key-only evidence. Planned and running matches are pending evidence; an older
   green run remains visible as `diff not included` and never turns the card green.

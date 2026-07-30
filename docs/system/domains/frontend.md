@@ -166,8 +166,11 @@ boundary, route map, and visual ownership diagram are in
   the Test Quality run pipeline. It shows planned, running, and completed
   commit-bound runs in product order, including scope, host, duration, result,
   and cards attached by the backend ancestry projection. Board cards render the
-  same projection as perfect, diff included, diff not included, pending, or no
-  assigned run.
+  same project-run projection as perfect, diff included, diff not included,
+  pending, or no assigned run. The card evidence block also renders SHA-linked
+  task-owned Remote Review build-tests grades and build/test gate logs supplied
+  by the backend. It names their source and tested SHA instead of showing the
+  project-run default when task-owned evidence exists.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
