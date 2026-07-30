@@ -52,6 +52,8 @@ export class BeautifulResultsComponent {
 
   /** Emitted when the operator clicks a detected source reference. */
   readonly openSource = output<{ path: string; line: number | null }>();
+  readonly openWiki = output<string>();
+  readonly openTask = output<string>();
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -154,6 +156,20 @@ export class BeautifulResultsComponent {
       const rawLine = sourceBtn.getAttribute('data-results-line');
       const line = rawLine ? Number.parseInt(rawLine, 10) : NaN;
       this.openSource.emit({ path, line: Number.isFinite(line) ? line : null });
+      return;
+    }
+    const wikiBtn = target.closest<HTMLElement>('[data-results-wiki]');
+    if (wikiBtn) {
+      event.preventDefault();
+      const path = wikiBtn.getAttribute('data-results-wiki');
+      if (path) this.openWiki.emit(path);
+      return;
+    }
+    const taskBtn = target.closest<HTMLElement>('[data-results-task-key]');
+    if (taskBtn) {
+      event.preventDefault();
+      const taskKey = taskBtn.getAttribute('data-results-task-key');
+      if (taskKey) this.openTask.emit(taskKey);
     }
   }
 

@@ -129,7 +129,9 @@
                                    [markdown]="s.markdown"
                                    [jobId]="detail().info.id"
                                    [watchPath]="detail().info.watchPath"
-                                   (openSource)="openSource($event)" />
+                                   (openSource)="openSource($event)"
+                                   (openWiki)="openWiki($event)"
+                                   (openTask)="openTask($event)" />
           } @else if (s.status === 'failed') {
             <pre class="interim-summary__body interim-summary__body--error"
                  data-testid="protocol-interim-error">{{ s.error || 'Unknown error.' }}</pre>
@@ -257,7 +259,9 @@
                                  (navigateMetric)="onResultMetricNavigate($event)"
                                  (copyRequested)="copyProtocolMarkdown()"
                                  (moreActions)="openProtocolMenu($event)"
-                                 (openSource)="openSource($event)" />
+                                 (openSource)="openSource($event)"
+                                 (openWiki)="openWiki($event)"
+                                 (openTask)="openTask($event)" />
               }
             }
           </section>

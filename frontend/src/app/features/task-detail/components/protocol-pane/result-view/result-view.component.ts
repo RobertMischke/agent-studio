@@ -44,6 +44,8 @@ export class ResultViewComponent {
 
   /** Bubbled up from the detail body so the host opens the source viewer. */
   readonly openSource = output<{ path: string; line: number | null }>();
+  readonly openWiki = output<string>();
+  readonly openTask = output<string>();
   readonly navigateMetric = output<string>();
   readonly copyRequested = output<void>();
   readonly moreActions = output<MouseEvent>();

@@ -88,10 +88,15 @@ export function projectStructuredActivityContent(
     const line = lines[index];
     const runner = runnerEvent(line, index, source);
     if (runner !== undefined) {
-      if (runner) events.push(runner);
       if (isRunnerExit(line.text)) {
+        const finalBlockStart = events.length;
         finishBlock();
+        if (runner && !mergeTerminalResultWithExit(events, runner, line.text, finalBlockStart)) {
+          events.push(runner);
+        }
         mode = 'outside';
+      } else if (runner) {
+        events.push(runner);
       }
       continue;
     }
@@ -260,6 +265,44 @@ function terminalLabel(kind: string): string {
     case 'NEEDS_INPUT': return 'Input needed';
     default: return 'Task finished';
   }
+}
+
+/**
+ * A terminal sentinel and the immediately following runner exit describe one
+ * outcome. Keep one calm status row, extend its trace range through the exit,
+ * and retain only the operator-useful typed outcome and exit code.
+ */
+function mergeTerminalResultWithExit(
+  events: ConversationEvent[],
+  runner: SystemStatusEvent,
+  rawExit: string,
+  finalBlockStart: number,
+): boolean {
+  let terminalIndex = -1;
+  for (let index = events.length - 1; index >= finalBlockStart; index -= 1) {
+    const event = events[index];
+    if (event.kind === 'system.status' && event.category === 'result') {
+      terminalIndex = index;
+      break;
+    }
+  }
+  if (terminalIndex < 0) return false;
+
+  const terminal = events[terminalIndex] as SystemStatusEvent;
+  const exit = /\bCLI exited\s+(?<code>-?\d+)\b/i.exec(rawExit)?.groups?.['code'] ?? 'unknown';
+  const typed = /\btypedOutcome=(?<outcome>[^\s;]+)/i.exec(rawExit)?.groups?.['outcome'] ?? 'unknown';
+  const detail = terminal.explanation.trim();
+  events[terminalIndex] = {
+    ...terminal,
+    timestamp: runner.timestamp,
+    rawRange: {
+      source: terminal.rawRange.source,
+      start: terminal.rawRange.start,
+      end: runner.rawRange.end,
+    },
+    explanation: [detail, `Outcome ${typed}`, `Exit ${exit}`].filter(Boolean).join(' · '),
+  };
+  return true;
 }
 
 function toolFamily(header: string): ToolFamily {
