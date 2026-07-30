@@ -444,9 +444,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.sanitizer.bypassSecurityTrustHtml(buildIsolatedHtmlSrcdoc(this.displayContent())));
 
   readonly trustedReportHtml = computed<SafeHtml>(() =>
-    this.sanitizer.bypassSecurityTrustHtml(buildIsolatedHtmlSrcdoc(this.reportHtmlForAnchor(
-      this.reportContent(),
-      this.reportAnchor()))));
+    this.sanitizer.bypassSecurityTrustHtml(this.reportHtmlForAnchor(
+      buildIsolatedHtmlSrcdoc(this.reportContent()),
+      this.reportAnchor())));
 
   /** Pretty JSON preview for metadata files; invalid JSON falls back to source. */
   readonly displayJson = computed(() => this.formatJson(this.displayContent()));
