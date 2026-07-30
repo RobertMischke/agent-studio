@@ -815,6 +815,20 @@ catch (Exception ex)
     crashRecorder.Record("RemoteDeliveryBackfill", ex);
 }
 
+// AGT-2438: one-time, idempotent repair for accepted legacy cards whose
+// status.md is missing. The same TaskTransitionService owns the live invariant
+// and this backfill, so both paths synthesize exactly the same honest Result
+// scaffold. Repaired files carry an operator-backfill marker; later boots are
+// no-ops because existing non-empty Result documents are never overwritten.
+try
+{
+    app.Services.GetRequiredService<TaskTransitionService>().BackfillMissingResultDocuments();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("ResultDocumentBackfill", ex);
+}
+
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
 // surviving completion-marker.json finishes its 3-progress -> 4-review move
 // here, and any orphan working-tree changes are queued for operator

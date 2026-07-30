@@ -631,6 +631,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     {
         var deliverySha = PublishDelivery("transactional-restart.txt", "durable integrating phase\n");
         var deps = Build(deliverySha, backgroundIntegration: true);
+        var initial = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.False(File.Exists(Path.Combine(initial.FolderPath, "status.md")));
 
         var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
 
@@ -666,6 +668,10 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Contains(
             deps.Timeline.ReadAll(completed.FolderPath),
             entry => entry.Kind == TimelineEventKinds.IntegrationSucceeded);
+        var status = File.ReadAllText(Path.Combine(completed.FolderPath, "status.md"));
+        Assert.Contains("<!-- agent-studio:result-scaffold -->", status);
+        Assert.Contains("- Result: Success", status);
+        Assert.Contains("- Integration: `integrated`", status);
     }
 
     [Fact]

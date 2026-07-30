@@ -11,14 +11,14 @@ A finished job exposes two views of what happened:
 | Artefact | Audience | Generator | File |
 |----------|----------|-----------|------|
 | **Activity Log** | Live observer / debugger | Streamed by the CLI driver, parsed by the frontend | `logs/cli-output.log` (raw) |
-| **Protocol** | Reviewer ("what did the agent do?") | Haiku one-shot summary of the log tail | `status.md` |
+| **Protocol** | Reviewer ("what did the agent do?") | Haiku one-shot summary of the log tail, with a deterministic transition scaffold when that summary is missing | `status.md` |
 
 Keep the boundary clean:
 
 - The Activity Log is **mechanical**. Every tool call, every command, every diff snippet. Do not curate it.
 - The Protocol is **editorial**. 5 to 10 bullet points the reviewer can scan in 30 seconds. It is regenerated from the log on demand and overwritten on the next run, so do not hand-edit it.
 
-> ⚠ Agents must **never write `status.md` themselves.** It is owned by [`SummaryGenerationService`](../../backend/Services/SummaryGenerationService.cs) and rewritten on each run from the CLI output. Anything written by hand is lost.
+> ⚠ Agents must **never write `status.md` themselves.** It is application-owned. [`SummaryGenerationService`](../../../backend/Features/Review/SummaryGenerationService.cs) rewrites it from CLI output, while `TaskTransitionService` may create a marked fallback scaffold at a review or terminal transition. Anything written by hand can be lost.
 
 ---
 
@@ -92,6 +92,18 @@ The `Case` and `## Overview` block feed the case-based, overview-first **Result*
 
 The optional `- Files:` and `- Tests:` header lines feed the two quality-head metric chips (files changed, tests passed). They are honest-or-absent: the summarizer emits a line only when the run log proves a real count (a `git diff`/`--stat` file count, a test-runner tally); a missing line renders no chip. Never hand-write a number the log does not support.
 
+`TaskTransitionService` enforces the fallback invariant for every move into
+`4-auto-review`, `5-human-review`, `5e-escalated`, or `6-completed`. Before the
+folder move it creates `status.md` when the file is absent or empty; an
+unwritable Result refuses the transition. The fallback is identified by
+`<!-- agent-studio:result-scaffold -->` and states only facts available from the
+run outcome, grade tag/artifact, `results/deliverables.md`, task metadata, and
+the computed integration projection. A post-move refresh may enrich that marked
+scaffold with the target-lane integration status. A real generated protocol is
+never overwritten. The startup repair applies the same scaffold once to
+missing Results in `5-human-review`, `6-completed`, and `7-archive`, adding
+`<!-- agent-studio:operator-result-backfill -->` for provenance.
+
 Hard rules:
 
 - No `# Status` is omitted. No extra `H1`s are added (`## Overview` is an H2 and leads the body).
@@ -109,7 +121,7 @@ If you change the prompt, mirror the change here and bump the example.
 
 - The reviewer always sees a fresh summary of the **most recent** run, not stale text from a previous attempt.
 - The "Regenerate" button in the protocol pane re-runs Haiku against the same `cli-output.log`. This is useful when the first summary missed a detail.
-- This means hand-writing into `status.md` is destructive: the next regen erases it. The model name for this rule is "the log is the truth, the protocol is the projection."
+- This means hand-writing into `status.md` is destructive: the next regeneration erases it. A marked transition scaffold is also replaceable by the generated protocol. The model name for this rule is "the log is the truth, the protocol is the projection."
 
 ---
 

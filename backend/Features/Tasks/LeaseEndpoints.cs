@@ -1178,10 +1178,14 @@ public static class LeaseEndpoints
                 // shared idempotent decomposition lifecycle.
                 if (!string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
-                    var planningMove = states.MoveJob(
-                        task.Id, TaskStates.AutoReview, task.WatchPath,
+                    var planningMove = await transitions.MoveAsync(
+                        task.Id,
+                        TaskStates.AutoReview,
+                        task.WatchPath,
+                        ct,
                         cause: $"remote-epic-planning-completion:{source}",
-                        authorityWrite: laneWrite);
+                        authorityWrite: laneWrite,
+                        suppressProductExecution: true);
                     if (planningMove.Status != MoveJobStatus.Success)
                         return Results.Conflict(new RemoteRunCompletionResponse(
                             req.TaskKey, reportedOutcome, task.State,
