@@ -586,10 +586,10 @@ public sealed class RemoteTaskRunner
         {
         var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
                          ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
-            prompt = RemoteRunPrompt.Build(taskPrompt, runSpec?.ModeFraming);
+            prompt = RemoteRunPrompt.Build(taskPrompt, runSpec?.ModeFraming, ResultsDir(taskKey));
         shipper.Add("system", string.IsNullOrWhiteSpace(runSpec?.ModeFraming)
-            ? "[runner] remote-completion-protocol appended to task prompt"
-            : "[runner] server-rendered mode framing + remote-completion-protocol appended to task prompt");
+            ? "[runner] results-dir context + remote-completion-protocol appended to task prompt"
+            : "[runner] server-rendered mode framing + results-dir context + remote-completion-protocol appended to task prompt");
         }
 
         var resultsDir = ResultsDir(taskKey);
