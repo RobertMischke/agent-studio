@@ -38,6 +38,7 @@ review-admission, accept, archive, or lane-routing guards.
 | CQ-14 | Integration vocabulary | Naming | Medium | `MergeIntoDevelopRunner` can target `main` or another configured branch. `NoTaskBranch` is also used for a missing remote delivery, and `ConflictSkipped` collapses several decided failure states in the board projection. | Open. Rename the runner and expand result vocabulary together with R6 so API and UI labels do not drift again. |
 | CQ-15 | Verdict backfill | Correctness, testability | Medium | Verdict backfill treats a failed per-project decision-journal read as an empty record set. That can turn an observability failure into a retroactive `unknown-legacy` escalation. | Follow-up with an injected journal reader and a failing-read regression test. This is outside R4 and was not changed without that test seam. |
 | CQ-16 | Pull-request integration | Correctness, naming | High | `PushedForReview` is a skipped merge outcome, but the lane model does not yet define whether PR approval precedes Human Review or Human Review acts as the merge gate. | Open for status workbench R2/E3. |
+| CQ-17 | Durable Runner reattach | Correctness, coupling, testability | High | Startup discovery and the attached-process poll separately read the terminal result and PID liveness. A worker could write its atomic result and exit between those reads, causing the replacement daemon to classify a completed attempt as a missing process. | Fixed. `DurableAgentProcess.InspectForReattach` owns the verdict and re-reads the result after a negative liveness check. A deterministic injected-interleaving test pins the race. |
 
 ## Commits
 
@@ -50,6 +51,7 @@ Each improvement is isolated:
 - `d81c88832` `fix(integration): fence remote release delivery`
 - `ac8299963` `fix(integration): surface terminal processing errors`
 - `96672f01d` `refactor(tasks): split transition side effects`
+- `528cf3c20` `fix(runner): preserve terminal result across reattach race`
 
 ## Sister-card compatibility
 
@@ -76,3 +78,23 @@ temporary worktree was removed after verification.
 - Restore/build retains the existing AngleSharp `NU1902` advisory and existing
   compiler/analyzer warnings. No new compile warning was introduced by the
   changed files.
+
+## Review-fix addendum, 2026-07-30
+
+The Remote Review report classified
+`DurableAgentProcessTests.Replacement_daemon_reattaches_live_fake_job_and_reads_its_terminal_result`
+as a new product failure against baseline `77fd3f1f1`. The task diff from that
+exact baseline contained no changes under `runner/` or `runner.Tests/`, and the
+reported assertion was not retained in the review projection. Local repetition
+showed the named test passing, but code inspection found the real adjacent race
+recorded as CQ-17. The correction is deliberately limited to that recovery
+contract.
+
+Verification after `528cf3c20`:
+
+- Durable process and remote restart subset: 11 passed, 0 failed.
+- Complete `AgentRunner.Tests` project: 243 passed, 0 failed.
+- The reported Windows timing failure in
+  `AcceptanceIntegrationRoundTripTests.AcceptHttp_ReturnsWithinTwoSeconds_WhileColdGateFinishesAsGateFailed`
+  was not investigated or changed, as directed.
+- `git diff --check`: passed.
