@@ -106,6 +106,10 @@ interface PipelineRowVm {
   statusTooltip: StructuredTooltip | null;
   /** Small causal note for the designed skip cascade after an early escalate. */
   skipHint: string | null;
+  /** This local step is structurally absent from the remote execution route. */
+  remoteNotApplicable: boolean;
+  /** Remote Review Plane explanation when this is its projected decision row. */
+  remoteReviewDetail: string | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
@@ -919,6 +923,8 @@ export class OverviewPaneComponent {
         ?? (status === 'not-run'
           ? 'This attempt used a lightweight pipeline or escalated before this step ran.'
           : null);
+      const remoteNotApplicable =
+        status === 'skipped' && e?.reason?.startsWith('Executed remotely;') === true;
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
       const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -946,9 +952,15 @@ export class OverviewPaneComponent {
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
         skipHint: status === 'not-run'
           ? 'not run: lightweight pipeline or escalation'
+          : remoteNotApplicable
+            ? 'executed remotely · not applicable'
           : status === 'skipped' && chainEndedByEarlyEscalate
             ? 'skipped: chain ended by early escalate'
             : null,
+        remoteNotApplicable,
+        remoteReviewDetail: e?.reason?.startsWith('Remote Review Plane verdict')
+          ? e.reason
+          : null,
         model,
         thinkingLevel,
         cliType,
@@ -1236,6 +1248,30 @@ export class OverviewPaneComponent {
   decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
     if (!row.isFinalVerdict) return null;
     const authoritative = this.authoritativeDecisionBadge();
+    if (row.remoteReviewDetail && row.verdict) {
+      const reviewPassed = row.verdict.toLowerCase() === 'pass';
+      const reviewInfrastructure = row.verdict.toLowerCase() === 'review-infra';
+      const tone: DecisionBadgeVm['tone'] = reviewPassed
+        ? 'ok'
+        : reviewInfrastructure ? 'warn' : 'danger';
+      const severity: TooltipSeverity = reviewPassed
+        ? 'success'
+        : reviewInfrastructure ? 'warn' : 'error';
+      const label = reviewPassed
+        ? 'Review Pass'
+        : reviewInfrastructure ? 'Review infrastructure' : 'Review product failure';
+      const resultLine = authoritative ? `\n\nTask result: ${authoritative.label}.` : '';
+      return {
+        verdict: row.verdict,
+        label,
+        tone,
+        severity,
+        tooltip: {
+          title: `Remote Review Plane · ${label.replace('Review ', '')}`,
+          body: `${row.remoteReviewDetail}${resultLine}`,
+        },
+      };
+    }
     if (authoritative) return authoritative;
     const info = this.latestSteeringInfo();
     if (info == null) return null;

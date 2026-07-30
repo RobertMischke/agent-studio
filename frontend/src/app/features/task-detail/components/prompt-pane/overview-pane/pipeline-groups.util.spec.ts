@@ -55,6 +55,15 @@ describe('groupTone', () => {
     expect(groupTone([row({ phaseKey: 'core', status: 'not-run' })])).toBe('not-run');
   });
 
+  it('is not-applicable when remote execution structurally omits the local section', () => {
+    expect(
+      groupTone([
+        row({ phaseKey: 'aspect', status: 'skipped', remoteNotApplicable: true }),
+        row({ phaseKey: 'aspect', status: 'skipped', remoteNotApplicable: true }),
+      ]),
+    ).toBe('not-applicable');
+  });
+
   it('is neutral when nothing has run yet', () => {
     expect(groupTone([row({ phaseKey: 'tool', status: 'pending' })])).toBe('neutral');
   });
@@ -90,6 +99,7 @@ describe('groupToneLabel', () => {
     expect(groupToneLabel('concern')).toBe('Concerns');
     expect(groupToneLabel('danger')).toBe('Attention');
     expect(groupToneLabel('muted')).toBe('Disabled');
+    expect(groupToneLabel('not-applicable')).toBe('Not applicable');
     expect(groupToneLabel('not-run')).toBe('Not run');
     expect(groupToneLabel('neutral')).toBe('Pending');
   });

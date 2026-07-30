@@ -14,7 +14,15 @@
  */
 
 /** Aggregate section state, mapped to a subtle border/header tint in the template. */
-export type PipelineGroupTone = 'ok' | 'danger' | 'warn' | 'concern' | 'muted' | 'not-run' | 'neutral';
+export type PipelineGroupTone =
+  | 'ok'
+  | 'danger'
+  | 'warn'
+  | 'concern'
+  | 'muted'
+  | 'not-applicable'
+  | 'not-run'
+  | 'neutral';
 
 /** The subset of the effective display status a row can carry. */
 export type PipelineRowStatusLike =
@@ -39,6 +47,8 @@ export interface PipelineGroupRowLike {
   status: PipelineRowStatusLike;
   verdict: string | null;
   totalTokens: number;
+  /** True for local pipeline work deliberately omitted by a remote lifecycle. */
+  remoteNotApplicable?: boolean;
 }
 
 /** One collapsible pipeline section, carrying its rows and aggregate counters. */
@@ -78,6 +88,7 @@ export function groupToneLabel(tone: PipelineGroupTone): string {
     case 'warn':   return 'Running';
     case 'concern': return 'Concerns';
     case 'muted':  return 'Disabled';
+    case 'not-applicable': return 'Not applicable';
     case 'not-run': return 'Not run';
     default:       return 'Pending';
   }
@@ -163,6 +174,7 @@ export function groupTone(rows: readonly PipelineGroupRowLike[]): PipelineGroupT
   );
   if (executable.length > 0 && executable.every(r => r.status === 'passed')) return 'ok';
   if (executable.length === 0 && rows.some(r => r.status === 'not-run')) return 'not-run';
+  if (executable.length === 0 && rows.some(r => r.remoteNotApplicable)) return 'not-applicable';
   if (executable.length === 0) return 'muted';
   return 'neutral';
 }
