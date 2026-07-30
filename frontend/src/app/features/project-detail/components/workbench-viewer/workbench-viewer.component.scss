@@ -26,6 +26,31 @@
 }
 
 .workbench-viewer__identity { min-width: 0; }
+.workbench-viewer__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.workbench-viewer__wiki-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  min-height: 28px;
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.workbench-viewer__wiki-link:hover { background: var(--studio-bg-hover); }
+.workbench-viewer__wiki-link:focus-visible,
+.workbench-viewer__maximize:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 2px;
+}
 .workbench-viewer__eyebrow {
   display: block;
   color: var(--studio-fg-muted);
@@ -62,6 +87,37 @@
   overflow: hidden;
 }
 .workbench-viewer__provenance code { overflow: hidden; text-overflow: ellipsis; color: var(--studio-fg); }
+.workbench-viewer__frame-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--studio-bg-elevated);
+}
+.workbench-viewer__frame-shell--maximized {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100vh;
+}
+.workbench-viewer__maximize {
+  position: absolute;
+  top: var(--studio-spacing-3);
+  right: var(--studio-spacing-3);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-bg-elevated) 88%, transparent);
+  color: var(--studio-fg);
+  cursor: pointer;
+}
+.workbench-viewer__maximize:hover { background: var(--studio-bg-hover); }
 .workbench-viewer__frame { width: 100%; height: 100%; min-height: 0; border: 0; background: var(--studio-bg-elevated); }
 .workbench-viewer__state { padding: var(--studio-spacing-5); color: var(--studio-fg-muted); }
 .workbench-viewer__state--error { color: var(--studio-error); }

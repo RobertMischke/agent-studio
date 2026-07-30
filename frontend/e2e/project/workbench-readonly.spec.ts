@@ -12,7 +12,7 @@ function evidencePath(testInfo: TestInfo, fileName: string): string {
   return path.join(resultsDir, fileName);
 }
 
-async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
+async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false): Promise<void> {
   await page.route('**/healthz', route => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
@@ -36,8 +36,73 @@ async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
     if (url.pathname.endsWith('/wiki/tree'))
       return json({
         exists: true,
-        root: [{ type: 'md', name: 'README.md', title: 'Readme', relPath: 'README.md', children: [] }],
+        root: [
+          { type: 'md', name: 'README.md', title: 'Readme', relPath: 'README.md', children: [] },
+          {
+            type: 'folder', name: 'operations', title: 'operations', relPath: 'operations', children: [
+              {
+                type: 'folder', name: 'nordstern', title: 'nordstern', relPath: 'operations/nordstern', children: [
+                  { type: 'html', name: 'index.html', title: 'Nordstern', relPath: 'operations/nordstern/index.html', children: [] },
+                ],
+              },
+              {
+                type: 'folder', name: 'umsetzungsplan-zielbild', title: 'umsetzungsplan-zielbild',
+                relPath: 'operations/umsetzungsplan-zielbild', children: [
+                  {
+                    type: 'html', name: 'index.html', title: 'Umsetzungsplan Richtung Zielbild',
+                    relPath: 'operations/umsetzungsplan-zielbild/index.html', children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       });
+    if (mockWikiPulse && url.pathname.endsWith('/wiki/pulse'))
+      return json({
+        projectName: 'Workbench navigation',
+        baseDir: '/repo/docs',
+        exists: true,
+        generatedAtUtc: '2026-07-29T12:00:00Z',
+        feed: { available: true, reason: null, items: [] },
+        inbox: { available: true, reason: null, count: 0, items: [] },
+        drift: {
+          available: true, reason: null, overallGrade: 'Empty', areas: [],
+          counts: { fresh: 0, aging: 0, stale: 0, graded: 0 },
+        },
+        critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+        lifecycle: { available: true, reason: null, count: 0, items: [] },
+        workbenches: null,
+      });
+    if (mockWikiPulse && url.pathname.endsWith('/wiki/home'))
+      return json({ sections: [] });
+    if (mockWikiPulse && url.pathname === '/api/cli/maintenance-model')
+      return json({ cliType: 'claude', model: '', thinkingLevel: null });
+    if (mockWikiPulse && url.pathname.endsWith('/wiki/grading/status'))
+      return json({ status: null });
+    if (mockWikiPulse && url.pathname.includes('/wiki/files/')) {
+      const relPath = url.pathname.split('/wiki/files/')[1]
+        .split('/')
+        .map(segment => decodeURIComponent(segment))
+        .join('/');
+      const content = fs.readFileSync(path.resolve(process.cwd(), '..', 'docs', relPath), 'utf8');
+      return json({ relPath, content });
+    }
+    if (mockWikiPulse && url.pathname.includes('/wiki/history/')) {
+      const relPath = url.pathname.split('/wiki/history/')[1]
+        .split('/')
+        .map(segment => decodeURIComponent(segment))
+        .join('/');
+      return json({
+        relPath,
+        model: null,
+        metadata: {
+          model: null, updatedAt: null, reason: null, taskKey: null,
+          status: null, runCount: null, hasFrontmatter: false,
+        },
+        commits: [],
+      });
+    }
     const response = await route.fetch({
       url: `${baseUrl}${url.pathname}${url.search}`,
       timeout: 30_000,
@@ -213,4 +278,69 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
       method: 'DELETE', headers: { 'X-Client-Id': clientId ?? '' },
     });
   }
+});
+
+test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', async ({ page, devBackend }, testInfo) => {
+  test.setTimeout(120_000);
+  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+  expect(pathsResponse.ok).toBe(true);
+  const paths = await pathsResponse.json() as { name: string }[];
+  let projectName: string | null = null;
+  for (const candidate of paths) {
+    const response = await fetch(
+      `${devBackend.baseUrl}/api/projects/${encodeURIComponent(candidate.name)}/workbenches`,
+    );
+    if (!response.ok) continue;
+    const catalogue = await response.json() as { items?: { id: string }[] };
+    if (catalogue.items?.some(item => item.id === 'nordstern')) {
+      projectName = candidate.name;
+      break;
+    }
+  }
+  expect(projectName, 'The real backend must expose the Nordstern Workbench.').not.toBeNull();
+
+  await proxyBackend(page, devBackend.baseUrl, true);
+  await page.goto('/');
+  await page.addStyleTag({ content: '[data-testid="offline-banner"] { display: none !important; }' });
+  const projectRow = page.getByTestId(`studio-explorer-project-${projectName}`);
+  await expect(projectRow).toBeVisible();
+  if (await projectRow.getAttribute('aria-expanded') === 'false') await projectRow.click();
+  const workbenchesRow = page.getByTestId(`studio-explorer-project-workbenches-${projectName}`);
+  await expect(workbenchesRow).toBeVisible();
+  if (await workbenchesRow.getAttribute('aria-expanded') === 'false') await workbenchesRow.click();
+  await page.getByTestId(`studio-explorer-workbench-${projectName}-nordstern`).click();
+
+  await expect(page.getByTestId('workbench-viewer-open-wiki')).toBeVisible();
+  await expect(page.getByTestId('workbench-viewer-maximize')).toHaveAttribute('aria-label', 'Maximize');
+  const nordsternFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+  const landkarte = nordsternFrame.getByRole('heading', { name: /Landkarte/ });
+  await expect(landkarte).toBeVisible();
+  await landkarte.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: evidencePath(testInfo, 'nordstern-landkarte-after.png'),
+    fullPage: true,
+  });
+
+  await page.getByTestId('workbench-viewer-maximize').click();
+  await expect(page.getByTestId('workbench-viewer-frame-shell'))
+    .toHaveClass(/workbench-viewer__frame-shell--maximized/);
+  await expect(page.getByTestId('workbench-viewer-maximize')).toHaveAttribute('aria-label', 'Restore');
+  await page.getByTestId('workbench-viewer-maximize').click();
+  await expect(page.getByTestId('workbench-viewer-maximize')).toHaveAttribute('aria-label', 'Maximize');
+
+  await page.getByTestId('workbench-viewer-open-wiki').click();
+  await expect(page).toHaveURL(
+    /#\/projects\/[^/]+\/wiki\?page=operations%2Fnordstern%2Findex\.html/,
+  );
+  await expect(page.getByTestId('project-wiki-viewer-path'))
+    .toContainText('operations/nordstern/index.html');
+
+  await page.goBack();
+  await expect(page.getByTestId('workbench-viewer-frame')).toBeVisible();
+  await nordsternFrame.getByRole('link', { name: /Umsetzungsplan \(Detail\)/ }).click();
+  await expect(page).toHaveURL(
+    /#\/projects\/[^/]+\/wiki\?page=operations%2Fumsetzungsplan-zielbild%2Findex\.html/,
+  );
+  await expect(page.getByTestId('project-wiki-viewer-path'))
+    .toContainText('operations/umsetzungsplan-zielbild/index.html');
 });

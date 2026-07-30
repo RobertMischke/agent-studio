@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
 import { WikiStarsService } from './wiki-stars.service';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
+import { ISOLATED_HTML_LINK_MESSAGE } from '../../../../services/sandboxed-html.util';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -1294,7 +1295,7 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
 
     http.expectOne('/api/projects/Demo/wiki/files/concepts/page.html')
-      .flush({ relPath: 'concepts/page.html', content: '<h1>Sandboxed</h1><script>window.x=1</script>' });
+      .flush({ relPath: 'concepts/page.html', content: '<h1>Sandboxed</h1><a href="./overview.md">Overview</a><script>window.x=1</script>' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/page.html').flush({
       relPath: 'concepts/page.html', model: null,
       metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
@@ -1308,6 +1309,21 @@ describe('ProjectWikiSectionComponent', () => {
     expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
     expect(srcdoc).toContain('Sandboxed');
+    expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
+
+    fixture.componentInstance.onHtmlFrameMessage({
+      source: frame!.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: './overview.md' },
+    } as MessageEvent);
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Linked overview' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush({
+      relPath: 'concepts/overview.md', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
     http.verify();
   });
 

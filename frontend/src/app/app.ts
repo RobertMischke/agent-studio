@@ -2121,6 +2121,12 @@ export class App implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  onOpenWorkbenchWiki(projectName: string, relPath: string): void {
+    if (!this.projectHubUrls.openWikiPage(projectName, relPath)) {
+      this.notifications.error(`Could not open ${relPath} in the project Wiki.`, 'Wiki navigation');
+    }
+  }
+
   private pickOrchFeedProject(): string | null {
     const detail = this.selectedJob();
     if (detail?.info?.projectName) return detail.info.projectName;

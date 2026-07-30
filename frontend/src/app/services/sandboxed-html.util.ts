@@ -4,6 +4,12 @@ export const ISOLATED_HTML_CSP =
   "object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; " +
   "form-action 'none'; base-uri 'none'";
 
+export const ISOLATED_HTML_LINK_MESSAGE = 'agent-studio:isolated-html-link';
+
+export type IsolatedHtmlNavigation =
+  | { kind: 'wiki'; relPath: string }
+  | { kind: 'external'; url: string };
+
 /**
  * Wrap repository-authored HTML behind a policy-first document. DOMParser is
  * inert, so artifact scripts do not execute until the fixed wrapper reaches an
@@ -39,7 +45,9 @@ export function buildIsolatedHtmlSrcdoc(html: string): string {
     wrapper.body.append(wrapper.importNode(node, true));
 
   // `base=about:blank` also disables in-page anchors. Restore scrolling inside
-  // the frame while swallowing every external navigation.
+  // the frame and delegate every other link to the trusted host. The host
+  // verifies the sending iframe and resolves the raw href against the current
+  // repository path before it performs any navigation.
   const nav = wrapper.createElement('script');
   nav.textContent = `document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
@@ -50,11 +58,51 @@ export function buildIsolatedHtmlSrcdoc(html: string): string {
       var el = document.getElementById(href.slice(1))
         || document.querySelector('a[name="' + href.slice(1).replace(/"/g, '') + '"]');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
     }
+    parent.postMessage({ type: '${ISOLATED_HTML_LINK_MESSAGE}', href: href }, '*');
   }, true);`;
   wrapper.body.append(nav);
 
   return `<!doctype html>${wrapper.documentElement.outerHTML}`;
+}
+
+/**
+ * Resolve a link reported by an isolated HTML frame without granting that
+ * frame browser-navigation capability. Only repository-relative paths that
+ * remain under `docs/` may enter the Wiki; absolute HTTP(S) links are external.
+ */
+export function resolveIsolatedHtmlNavigation(
+  entryPath: string,
+  href: string,
+): IsolatedHtmlNavigation | null {
+  const target = href.trim();
+  if (!target || target.startsWith('#')) return null;
+
+  if (/^https?:\/\//i.test(target) || target.startsWith('//')) {
+    try {
+      const url = new URL(target, 'https://external.invalid/');
+      return url.protocol === 'http:' || url.protocol === 'https:'
+        ? { kind: 'external', url: url.href }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
+
+  const cleanEntryPath = entryPath.trim().replaceAll('\\', '/').replace(/^\/+/, '');
+  if (!cleanEntryPath.startsWith('docs/')) return null;
+  try {
+    const resolved = new URL(target.replaceAll('\\', '/'), `https://repository.invalid/${cleanEntryPath}`);
+    if (resolved.origin !== 'https://repository.invalid') return null;
+    const decodedPath = decodeURIComponent(resolved.pathname).replace(/^\/+/, '');
+    if (!decodedPath.startsWith('docs/')) return null;
+    const relPath = decodedPath.slice('docs/'.length);
+    return relPath ? { kind: 'wiki', relPath } : null;
+  } catch {
+    return null;
+  }
 }
 
 function copyAttributes(source: Element, target: Element): void {
@@ -70,4 +118,3 @@ function isArtifactSecurityControl(node: Node): boolean {
     || httpEquiv === 'content-security-policy-report-only'
     || httpEquiv === 'refresh';
 }
-

@@ -461,7 +461,10 @@
               }
             }
             @case ('workbench') { @if (studioTabState.activeTab(); as tab) { @if (tab.kind === 'workbench') {
-              <app-workbench-viewer [projectName]="tab.projectName" [workbenchId]="tab.workbenchId" />
+              <app-workbench-viewer
+                [projectName]="tab.projectName"
+                [workbenchId]="tab.workbenchId"
+                (openWiki)="onOpenWorkbenchWiki(tab.projectName, $event)" />
             } } }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
