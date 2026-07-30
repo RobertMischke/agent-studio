@@ -688,6 +688,12 @@ public sealed class TaskTransitionService
 
     private static string ResolveDeliverablesReference(TaskInfo task)
     {
+        // Research cards deliver one primary HTML report (AGT-2417 convention);
+        // the scaffold links it so the Result tab names the actual deliverable.
+        var report = Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "report.html");
+        if (TaskModes.IsReportOnly(task.Mode) && File.Exists(report))
+            return "[results/report.html](results/report.html)";
+
         var path = Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "deliverables.md");
         return File.Exists(path)
             ? "[results/deliverables.md](results/deliverables.md)"
