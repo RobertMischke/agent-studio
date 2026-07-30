@@ -165,6 +165,18 @@ read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
+## Result transition invariant
+
+`TaskTransitionService` is the single enforcement point for Result availability.
+Every successful move into `4-auto-review`, `5-human-review`, `5e-escalated`,
+or `6-completed` carries a non-empty `status.md`. When no generated protocol is
+available, the service writes a marked, evidence-only scaffold before the
+folder move and enriches its own scaffold after the move with the computed
+integration projection. It never replaces a real Result. Backend startup runs
+the same idempotent repair over missing Results in `5-human-review`,
+`6-completed`, and `7-archive`; repaired files are marked as operator
+backfills.
+
 ## Task-tab refinement projection
 
 The task-detail inspector orders its tabs as `Task | Activity | Result`.

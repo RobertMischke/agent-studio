@@ -320,12 +320,34 @@ public class OrchestratorIntakeTests : IDisposable
             "This rollup card is already implemented on main and merged. No work needed.");
         var (intake, scanner) = BuildIntake();
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "test",
+                ["WatchPaths:0:Path"] = _watchPath,
+            })
+            .Build();
+        var mutations = new TaskMutationService(
+            scanner,
+            new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
+        var settings = new ProjectSettingsService(
+            NullLogger<ProjectSettingsService>.Instance,
+            config);
+        var transitions = new TaskTransitionService(
+            scanner,
+            states,
+            mutations,
+            new GitService(NullLogger<GitService>.Instance, scanner, config),
+            settings,
+            NullLogger<TaskTransitionService>.Instance);
         // workspaceRoot=null: the decision-journal append is skipped (no
         // TaskRepository configured for this temp watch path) but the move +
-        // status.md stub still run, which is what this test pins. The sync
-        // Escalate path never touches the transition service, so null! is safe.
+        // status.md stub still run, which is what this test pins.
         var escalation = new HumanReviewEscalation(
-            states, null!, workspaceRoot: null, NullLogger<HumanReviewEscalation>.Instance);
+            states, transitions, workspaceRoot: null, NullLogger<HumanReviewEscalation>.Instance);
 
         var verdict = intake.RunForJob("done-card", _watchPath);
         Assert.Equal(IntakeOutcome.AlreadyDone, verdict.Outcome);

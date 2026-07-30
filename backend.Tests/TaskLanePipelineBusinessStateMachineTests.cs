@@ -48,12 +48,33 @@ public sealed class TaskLanePipelineBusinessStateMachineTests : IDisposable
             sourcePhase: LifecyclePhases.ExecutionRunning);
 
     [Fact]
-    public Task Progress_AgentDone_TaskMovesToAutoReview()
-        => MoveAndAssertAsync(
+    public async Task Progress_RunnerCompletion_TaskMovesToAutoReviewWithResult()
+    {
+        const string id = "runner-completion-result";
+        _fixture.SeedTask(
             TaskStates.Progress,
+            id,
+            LifecyclePhases.ExecutionRunning);
+
+        var outcome = await _fixture.Transitions.MoveAsync(
+            id,
             TaskStates.AutoReview,
-            sourcePhase: LifecyclePhases.ExecutionRunning,
-            expectedPhase: LifecyclePhases.PostProcessingRunning);
+            _fixture.WatchPath,
+            cause: "runner-completion");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        _fixture.AssertTaskTruth(
+            outcome.NewFolderPath!,
+            id,
+            TaskStates.AutoReview,
+            LifecyclePhases.PostProcessingRunning);
+        var status = File.ReadAllText(Path.Combine(outcome.NewFolderPath!, "status.md"));
+        Assert.Contains("<!-- agent-studio:result-scaffold -->", status);
+        Assert.Contains("- Result: Partial", status);
+        Assert.Contains("- Grade: Not recorded", status);
+        Assert.Contains("- Deliverables: Not recorded", status);
+        Assert.Contains($"entering `{TaskStates.AutoReview}`", status);
+    }
 
     [Fact]
     public async Task Progress_AgentBlocked_TaskMovesThroughEscalationFunnel()
@@ -77,6 +98,130 @@ public sealed class TaskLanePipelineBusinessStateMachineTests : IDisposable
             expectedPhase: null);
         var status = File.ReadAllText(Path.Combine(outcome.NewFolderPath!, "status.md"));
         Assert.Contains(HumanReviewEscalationCategories.AgentBlocked, status);
+    }
+
+    [Fact]
+    public async Task AutoReview_ApiMove_TaskMovesToHumanReviewWithArtifactReferences()
+    {
+        const string id = "api-move-result";
+        _fixture.SeedTask(
+            TaskStates.AutoReview,
+            id,
+            LifecyclePhases.AwaitingReview,
+            tags: [TaskLanePipelineFixture.ContractTag, "code-review:grade-b"]);
+        var source = _fixture.Scanner.FindJob(id, _fixture.WatchPath)!;
+        File.WriteAllText(
+            Path.Combine(source.FolderPath, "code-review-grade-2026-07-30.md"),
+            "# Code Review\n\nGrade: B\n");
+        Directory.CreateDirectory(TaskPaths.ResultsDir(source.FolderPath));
+        File.WriteAllText(
+            Path.Combine(TaskPaths.ResultsDir(source.FolderPath), "deliverables.md"),
+            "# Deliverables\n");
+        var transitions = _fixture.CreateTransitions(
+            integrationStatus: _fixture.CreateIntegrationStatus());
+
+        var outcome = await transitions.MoveAsync(
+            id,
+            TaskStates.HumanReview,
+            _fixture.WatchPath,
+            cause: "human:api",
+            reason: "Operator moved the reviewed task through the API.");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var status = File.ReadAllText(Path.Combine(outcome.NewFolderPath!, "status.md"));
+        Assert.Contains(
+            "- Grade: B ([code-review-grade-2026-07-30.md](code-review-grade-2026-07-30.md))",
+            status);
+        Assert.Contains(
+            "- Deliverables: [results/deliverables.md](results/deliverables.md)",
+            status);
+        Assert.Contains("- Integration: `pending`", status);
+    }
+
+    [Fact]
+    public void AcceptedCards_StartupBackfill_ReceiveOperatorMarkedResultOnce()
+    {
+        var states = new[]
+        {
+            TaskStates.HumanReview,
+            TaskStates.Completed,
+            TaskStates.Archive,
+        };
+        foreach (var state in states)
+        {
+            var id = "backfill-" + state;
+            _fixture.SeedTask(
+                state,
+                id,
+                tags: [TaskLanePipelineFixture.ContractTag, "code-review:grade-a"]);
+            var task = _fixture.Scanner.FindJob(id, _fixture.WatchPath)!;
+            File.WriteAllText(
+                Path.Combine(task.FolderPath, "code-review-grade.md"),
+                "# Code Review\n\nGrade: A\n");
+            Directory.CreateDirectory(TaskPaths.ResultsDir(task.FolderPath));
+            File.WriteAllText(
+                Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "deliverables.md"),
+                "# Deliverables\n");
+        }
+        _fixture.SeedTask(TaskStates.HumanReview, "backfill-preserves-existing");
+        var preserved = _fixture.Scanner.FindJob(
+            "backfill-preserves-existing",
+            _fixture.WatchPath)!;
+        File.WriteAllText(Path.Combine(preserved.FolderPath, "status.md"), "# Status\n\n- Result: Success\n");
+
+        var first = _fixture.Transitions.BackfillMissingResultDocuments(
+            new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc));
+        var second = _fixture.Transitions.BackfillMissingResultDocuments(
+            new DateTime(2026, 7, 30, 12, 1, 0, DateTimeKind.Utc));
+
+        Assert.Equal(4, first.Scanned);
+        Assert.Equal(3, first.Repaired);
+        Assert.Empty(first.Failures);
+        Assert.Equal(0, second.Repaired);
+        foreach (var state in states)
+        {
+            var task = _fixture.Scanner.FindJob("backfill-" + state, _fixture.WatchPath)!;
+            var status = File.ReadAllText(Path.Combine(task.FolderPath, "status.md"));
+            Assert.Contains("<!-- agent-studio:operator-result-backfill -->", status);
+            Assert.Contains(
+                "- Provenance: Operator backfill on 2026-07-30T12:00:00Z",
+                status);
+            Assert.Contains("- Grade: A ([code-review-grade.md](code-review-grade.md))", status);
+            Assert.Contains(
+                "- Deliverables: [results/deliverables.md](results/deliverables.md)",
+                status);
+        }
+        Assert.Equal(
+            "# Status\n\n- Result: Success\n",
+            File.ReadAllText(Path.Combine(preserved.FolderPath, "status.md")));
+    }
+
+    [Fact]
+    public async Task Progress_ResultCannotBeWritten_TaskStaysProgress()
+    {
+        const string id = "result-write-refused";
+        _fixture.SeedTask(
+            TaskStates.Progress,
+            id,
+            LifecyclePhases.ExecutionRunning);
+        var task = _fixture.Scanner.FindJob(id, _fixture.WatchPath)!;
+        Directory.CreateDirectory(Path.Combine(task.FolderPath, "status.md"));
+
+        var outcome = await _fixture.Transitions.MoveAsync(
+            id,
+            TaskStates.AutoReview,
+            _fixture.WatchPath,
+            cause: "runner-completion");
+
+        Assert.Equal(MoveJobStatus.Failure, outcome.Status);
+        Assert.Contains("status.md could not be ensured", outcome.Message);
+        var current = _fixture.Scanner.FindJob(id, _fixture.WatchPath);
+        Assert.NotNull(current);
+        _fixture.AssertTaskTruth(
+            current!.FolderPath,
+            id,
+            TaskStates.Progress,
+            LifecyclePhases.ExecutionRunning);
     }
 
     [Fact]
