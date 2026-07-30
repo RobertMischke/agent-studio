@@ -23,6 +23,13 @@ public static class ProjectUrlDiagnosisClasses
     public const string Running = "running";
 }
 
+public static class ProjectUrlStartupFailureReasons
+{
+    public const string ProcessExit = "process-exit";
+    public const string SilenceTimeout = "silence-timeout";
+    public const string StartupLimit = "startup-limit";
+}
+
 /// <summary>
 /// AGT-2180 — bounded, redacted evidence snapshot explaining why a preview is
 /// (not) ready. This is the actionable-diagnostics contract consumed by the
@@ -45,6 +52,8 @@ public sealed record ProjectUrlDiagnostic
     public bool PortReachable { get; init; }
     public int? HttpStatus { get; init; }
     public bool ContentReady { get; init; }
+    /// <summary>Terminal startup cause when readiness ended before the preview became usable.</summary>
+    public string? StartupFailureReason { get; init; }
     /// <summary>Browser embedding evidence when response headers or the iframe can decide it.</summary>
     public bool? IframeReady { get; init; }
     /// <summary>Bounded blocking X-Frame-Options/CSP evidence, when present.</summary>
@@ -69,8 +78,8 @@ public sealed class ProjectUrlProcessService : IDisposable
 {
     private const int MaxOutputLines = 1000;
     internal const int OutputTailLimit = 8_192;
-    /// <summary>Absolute upper bound on startup validation, regardless of ongoing output.</summary>
-    internal const int HardStartupCapSeconds = 300;
+    internal const int DefaultSilenceTimeoutSeconds = 30;
+    internal const int DefaultStartupTimeoutSeconds = 600;
     private static readonly Regex SecretRegex = new(
         @"(?im)(?<userinfo>https?://)[^/\s:@]+(?::[^/\s@]*)?@|(?<bearer>bearer\s+)[a-z0-9._~+/=-]+|(?<key>(?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)(?<value>(?:bearer\s+)?[^\s\r\n]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -93,7 +102,13 @@ public sealed class ProjectUrlProcessService : IDisposable
     /// command runs through the platform shell in the URL working directory,
     /// falling back to the project's repository path and then root path.
     /// </summary>
-    public ProjectUrlProcessSnapshot Start(ProjectRecord project, ProjectUrlRecord url)
+    public ProjectUrlProcessSnapshot Start(ProjectRecord project, ProjectUrlRecord url) =>
+        StartProcess(project, url, readinessPending: false);
+
+    private ProjectUrlProcessSnapshot StartProcess(
+        ProjectRecord project,
+        ProjectUrlRecord url,
+        bool readinessPending)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(project);
@@ -133,7 +148,7 @@ public sealed class ProjectUrlProcessService : IDisposable
 
                 lock (session.Gate)
                 {
-                    if (session.State == ProjectUrlProcessStates.Starting && !process.HasExited)
+                    if (!readinessPending && session.State == ProjectUrlProcessStates.Starting && !process.HasExited)
                         session.State = ProjectUrlProcessStates.Running;
                     AppendOutputLocked(session, $"[studio] Started process {session.ProcessId}.");
                 }
@@ -197,6 +212,7 @@ public sealed class ProjectUrlProcessService : IDisposable
             {
                 StopSession(session, "backend shutdown");
                 session.Process.Dispose();
+                session.StartupCancellation.Dispose();
             }
         }
     }
@@ -229,6 +245,10 @@ public sealed class ProjectUrlProcessService : IDisposable
                 StderrTail = Redact(stderrTail),
             };
         }
+        if (seed?.StartupFailureReason != null
+            || snapshot?.State == ProjectUrlProcessStates.Starting
+                && seed?.Classification == ProjectUrlDiagnosisClasses.Starting)
+            return Save(project.Id, url.Id, seed with { CheckedAt = DateTimeOffset.UtcNow });
         var evidence = await ProbeTargetAsync(url.StartRule, url.Url, seed, cancellationToken);
         return Save(project.Id, url.Id, evidence);
     }
@@ -242,27 +262,13 @@ public sealed class ProjectUrlProcessService : IDisposable
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(url);
-        var rule = url.StartRule;
-        if (rule == null || string.IsNullOrWhiteSpace(rule.Command))
-            return Save(project.Id, url.Id, InvalidDiagnostic(rule, url.Url, "A start command is required."));
-        if (!Uri.TryCreate(rule.HealthUrl ?? url.Url, UriKind.Absolute, out var target) ||
-            (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps) ||
-            rule.Port is <= 0 or > 65535)
-            return Save(project.Id, url.Id, InvalidDiagnostic(rule, url.Url, "The URL, health target, or port is invalid."));
-
-        var cwd = ResolveDiagnosticCwd(project, rule.Cwd);
-        if (cwd == null || !Directory.Exists(cwd))
-            return Save(project.Id, url.Id, new ProjectUrlDiagnostic
-            {
-                Classification = ProjectUrlDiagnosisClasses.InvalidCwd,
-                Summary = "The configured working directory does not exist.",
-                RecommendedAction = "Open Settings and choose an existing project folder.",
-                Command = Redact(rule.Command), Cwd = Redact(cwd ?? rule.Cwd), Url = Redact(url.Url), ConfiguredPort = rule.Port,
-            });
+        var invalid = ValidateStartConfiguration(project, url, out var rule, out var target, out var cwd);
+        if (invalid != null)
+            return Save(project.Id, url.Id, invalid);
 
         try
         {
-            Start(project, url with { StartRule = rule with { Cwd = cwd } });
+            StartProcess(project, url with { StartRule = rule! with { Cwd = cwd } }, readinessPending: true);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -275,10 +281,74 @@ public sealed class ProjectUrlProcessService : IDisposable
             });
         }
 
+        return await WaitForReadinessAsync(project, url, rule!, target!, cwd!, cancellationToken);
+    }
+
+    /// <summary>
+    /// Start Preview readiness under service ownership and return immediately.
+    /// The session remains <c>starting</c> while the activity-aware validation
+    /// runs, so callers can poll live output without holding an HTTP request
+    /// open for a multi-minute cold build.
+    /// </summary>
+    public ProjectUrlProcessSnapshot StartWithReadiness(ProjectRecord project, ProjectUrlRecord url)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(url);
+        var invalid = ValidateStartConfiguration(project, url, out var rule, out var target, out var cwd);
+        if (invalid != null)
+        {
+            Save(project.Id, url.Id, invalid);
+            throw new ArgumentException(invalid.Summary, nameof(url));
+        }
+
+        var snapshot = StartProcess(
+            project,
+            url with { StartRule = rule! with { Cwd = cwd } },
+            readinessPending: true);
+        if (!_sessions.TryGetValue(Key(project.Id, url.Id), out var session))
+            throw new InvalidOperationException("The preview process session could not be observed after start.");
+
+        _ = ObserveReadinessAsync(
+            session,
+            WaitForReadinessAsync(project, url, rule!, target!, cwd!, session.StartupCancellation.Token));
+        return snapshot;
+    }
+
+    private async Task ObserveReadinessAsync(Session session, Task<ProjectUrlDiagnostic> readiness)
+    {
+        try
+        {
+            await readiness;
+        }
+        catch (OperationCanceledException) when (session.StartupCancellation.IsCancellationRequested)
+        {
+            // Stop/restart/shutdown owns this cancellation and already settled
+            // the observable process state.
+            _logger.LogDebug(
+                "project-url-readiness-cancelled project={ProjectId} url={UrlId} pid={Pid}",
+                session.ProjectId, session.UrlId, session.ProcessId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "project-url-readiness-failed project={ProjectId} url={UrlId} pid={Pid}",
+                session.ProjectId, session.UrlId, session.ProcessId);
+            MarkReadinessFailed(session, "Startup validation failed unexpectedly.");
+        }
+    }
+
+    private async Task<ProjectUrlDiagnostic> WaitForReadinessAsync(
+        ProjectRecord project,
+        ProjectUrlRecord url,
+        ProjectUrlStartRule rule,
+        Uri target,
+        string cwd,
+        CancellationToken cancellationToken)
+    {
         Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
         {
             Classification = ProjectUrlDiagnosisClasses.Starting,
-            Summary = "The process is working — waiting for the URL to become reachable.",
+            Summary = "The process is working and console activity is extending the readiness wait.",
             RecommendedAction = "Wait while the command keeps producing output.",
             ProcessCreated = true,
         });
@@ -288,8 +358,15 @@ public sealed class ProjectUrlProcessService : IDisposable
         // than failing on a fixed wall-clock deadline, keep waiting as long as
         // the process is still emitting console output; only silence counts
         // against the readiness window. A hard cap bounds the wait regardless.
-        var idleWindow = TimeSpan.FromSeconds(Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120));
-        var hardCap = TimeSpan.FromSeconds(HardStartupCapSeconds);
+        var idleWindow = TimeSpan.FromSeconds(Math.Clamp(
+            rule.ReadinessTimeoutSeconds <= 0 ? DefaultSilenceTimeoutSeconds : rule.ReadinessTimeoutSeconds,
+            2,
+            300));
+        var startupLimitSeconds = Math.Clamp(
+            rule.StartupTimeoutSeconds <= 0 ? DefaultStartupTimeoutSeconds : rule.StartupTimeoutSeconds,
+            2,
+            3600);
+        var hardCap = TimeSpan.FromSeconds(startupLimitSeconds);
         var startedAt = DateTime.UtcNow;
         var everPortReachable = false;
         var hardCapReached = false;
@@ -305,14 +382,16 @@ public sealed class ProjectUrlProcessService : IDisposable
                     var unavailable = current?.ExitCode is 126 or 127
                         || stderrTail.Contains("not found", StringComparison.OrdinalIgnoreCase)
                         || stderrTail.Contains("not recognized", StringComparison.OrdinalIgnoreCase);
-                    return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+                    var exited = Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
                     {
                         Classification = unavailable ? ProjectUrlDiagnosisClasses.CommandUnavailable : ProjectUrlDiagnosisClasses.ProcessExited,
                         Summary = unavailable ? "The start command is not available in this environment." : "The service process exited before the preview became ready.",
                         RecommendedAction = unavailable ? "Install the command or correct the start command in Settings." : "Review the process output, correct the setup, then Retry.",
                         ProcessCreated = true, ExitCode = current?.ExitCode,
+                        StartupFailureReason = ProjectUrlStartupFailureReasons.ProcessExit,
                         StdoutTail = Redact(stdoutTail), StderrTail = Redact(stderrTail),
                     });
+                    return exited;
                 }
 
                 var port = rule.Port ?? target.Port;
@@ -328,7 +407,11 @@ public sealed class ProjectUrlProcessService : IDisposable
                     if (ready.Classification is ProjectUrlDiagnosisClasses.Running
                         or ProjectUrlDiagnosisClasses.HttpError
                         or ProjectUrlDiagnosisClasses.ContentNotRenderable)
-                        return Save(project.Id, url.Id, ready);
+                    {
+                        var settled = Save(project.Id, url.Id, ready);
+                        MarkReadinessReady(project.Id, url.Id);
+                        return settled;
+                    }
                 }
 
                 var now = DateTime.UtcNow;
@@ -360,26 +443,62 @@ public sealed class ProjectUrlProcessService : IDisposable
 
         var idleSeconds = (int)Math.Round(Math.Max(0, (DateTime.UtcNow - LastOutputAt(project.Id, url.Id)).TotalSeconds));
         var (finalStdout, finalStderr) = OutputTails(project.Id, url.Id);
-        return Save(project.Id, url.Id, StartupFailure(
-            rule, url.Url, cwd, hardCapReached, everPortReachable, idleSeconds,
-            Redact(finalStdout), Redact(finalStderr)));
+        var failure = StartupFailure(
+            rule, url.Url, cwd, hardCapReached, everPortReachable, idleSeconds, startupLimitSeconds,
+            Redact(finalStdout), Redact(finalStderr));
+        Save(project.Id, url.Id, failure);
+        if (_sessions.TryGetValue(Key(project.Id, url.Id), out var session))
+            MarkReadinessFailed(session, failure.Summary);
+        return failure;
+    }
+
+    private ProjectUrlDiagnostic? ValidateStartConfiguration(
+        ProjectRecord project,
+        ProjectUrlRecord url,
+        out ProjectUrlStartRule? rule,
+        out Uri? target,
+        out string? cwd)
+    {
+        rule = url.StartRule;
+        target = null;
+        cwd = null;
+        if (rule == null || string.IsNullOrWhiteSpace(rule.Command))
+            return InvalidDiagnostic(rule, url.Url, "A start command is required.");
+        if (!Uri.TryCreate(rule.HealthUrl ?? url.Url, UriKind.Absolute, out target) ||
+            (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps) ||
+            rule.Port is <= 0 or > 65535)
+            return InvalidDiagnostic(rule, url.Url, "The URL, health target, or port is invalid.");
+
+        cwd = ResolveDiagnosticCwd(project, rule.Cwd);
+        if (cwd == null || !Directory.Exists(cwd))
+            return new ProjectUrlDiagnostic
+            {
+                Classification = ProjectUrlDiagnosisClasses.InvalidCwd,
+                Summary = "The configured working directory does not exist.",
+                RecommendedAction = "Open Settings and choose an existing project folder.",
+                Command = Redact(rule.Command),
+                Cwd = Redact(cwd ?? rule.Cwd),
+                Url = Redact(url.Url),
+                ConfiguredPort = rule.Port,
+            };
+        return null;
     }
 
     /// <summary>
     /// Build the terminal diagnostic when startup validation gives up: either
-    /// the hard <see cref="HardStartupCapSeconds"/> cap was reached, or the
+    /// the configured startup cap was reached, or the
     /// process fell silent for the idle window while the URL stayed unreachable.
     /// </summary>
     internal static ProjectUrlDiagnostic StartupFailure(
         ProjectUrlStartRule? rule, string url, string? cwd,
         bool hardCapReached, bool everPortReachable, int idleSeconds,
-        string stdoutTail, string stderrTail)
+        int startupLimitSeconds, string stdoutTail, string stderrTail)
     {
-        var minutes = HardStartupCapSeconds / 60;
+        var startupLimit = FormatDuration(startupLimitSeconds);
         var summary = hardCapReached
             ? (everPortReachable
-                ? $"The port opened, but the preview did not become ready within the {minutes}-minute startup limit."
-                : $"The URL did not become reachable within the {minutes}-minute startup limit.")
+                ? $"The port opened, but the preview did not become ready within the {startupLimit} startup limit."
+                : $"The URL did not become reachable within the {startupLimit} startup limit.")
             : (everPortReachable
                 ? $"The port opened, but HTTP content did not become ready and the process produced no console output for {idleSeconds}s."
                 : $"The URL is not reachable and the process produced no console output for {idleSeconds}s.");
@@ -389,9 +508,15 @@ public sealed class ProjectUrlProcessService : IDisposable
             Summary = summary,
             RecommendedAction = "Verify the port, URL, and readiness target in Settings, then Retry.",
             ProcessCreated = true, TimedOut = true, PortReachable = everPortReachable,
+            StartupFailureReason = hardCapReached
+                ? ProjectUrlStartupFailureReasons.StartupLimit
+                : ProjectUrlStartupFailureReasons.SilenceTimeout,
             StdoutTail = stdoutTail, StderrTail = stderrTail,
         };
     }
+
+    private static string FormatDuration(int seconds) =>
+        seconds % 60 == 0 ? $"{seconds / 60}-minute" : $"{seconds}-second";
 
     /// <summary>
     /// Validate a candidate configuration for the Settings quick setup. The
@@ -623,15 +748,18 @@ public sealed class ProjectUrlProcessService : IDisposable
         if (!_sessions.TryRemove(key, out var previous)) return;
         StopSession(previous, "restarted");
         previous.Process.Dispose();
+        previous.StartupCancellation.Dispose();
     }
 
     private void StopSession(Session session, string reason)
     {
         lock (session.Gate)
         {
-            if (!ProjectUrlProcessStates.IsActive(session.State)) return;
+            if (session.State is ProjectUrlProcessStates.Stopped or ProjectUrlProcessStates.Exited)
+                return;
             try
             {
+                session.StartupCancellation.Cancel();
                 if (!session.Process.HasExited)
                     session.Process.Kill(entireProcessTree: true);
                 if (!session.Process.WaitForExit(5000))
@@ -661,7 +789,15 @@ public sealed class ProjectUrlProcessService : IDisposable
     {
         lock (session.Gate)
         {
-            if (!ProjectUrlProcessStates.IsActive(session.State)) return;
+            if (session.State is ProjectUrlProcessStates.Stopped or ProjectUrlProcessStates.Exited)
+                return;
+            if (session.State == ProjectUrlProcessStates.Failed)
+            {
+                session.ExitCode = TryGetExitCode(session.Process);
+                AppendOutputLocked(session,
+                    $"[studio] Process exited with code {session.ExitCode?.ToString() ?? "unknown"}.");
+                return;
+            }
             session.State = ProjectUrlProcessStates.Exited;
             session.FinishedAtUtc = DateTimeOffset.UtcNow;
             session.ExitCode = TryGetExitCode(session.Process);
@@ -670,6 +806,28 @@ public sealed class ProjectUrlProcessService : IDisposable
             _logger.LogInformation(
                 "project-url-exited project={ProjectId} url={UrlId} pid={Pid} exitCode={ExitCode}",
                 session.ProjectId, session.UrlId, session.ProcessId, session.ExitCode);
+        }
+    }
+
+    private void MarkReadinessReady(string projectId, string urlId)
+    {
+        if (!_sessions.TryGetValue(Key(projectId, urlId), out var session)) return;
+        lock (session.Gate)
+        {
+            if (session.State != ProjectUrlProcessStates.Starting || session.Process.HasExited) return;
+            session.State = ProjectUrlProcessStates.Running;
+            AppendOutputLocked(session, "[studio] Preview readiness confirmed.");
+        }
+    }
+
+    private static void MarkReadinessFailed(Session session, string summary)
+    {
+        lock (session.Gate)
+        {
+            if (session.State != ProjectUrlProcessStates.Starting || session.Process.HasExited) return;
+            session.State = ProjectUrlProcessStates.Failed;
+            session.FinishedAtUtc = DateTimeOffset.UtcNow;
+            AppendOutputLocked(session, $"[studio] Readiness failed: {summary}");
         }
     }
 
@@ -778,6 +936,7 @@ public sealed class ProjectUrlProcessService : IDisposable
         public string Command { get; } = command;
         public string Cwd { get; } = cwd;
         public Process Process { get; } = process;
+        public CancellationTokenSource StartupCancellation { get; } = new();
         public int ProcessId { get; set; }
         public DateTimeOffset StartedAtUtc { get; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? FinishedAtUtc { get; set; }

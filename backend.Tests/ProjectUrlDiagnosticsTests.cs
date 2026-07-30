@@ -92,6 +92,7 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
 
         Assert.Equal(ProjectUrlDiagnosisClasses.ProcessExited, result.Classification);
         Assert.Equal(7, result.ExitCode);
+        Assert.Equal(ProjectUrlStartupFailureReasons.ProcessExit, result.StartupFailureReason);
         Assert.False(result.ContentReady);
     }
 
@@ -181,24 +182,28 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.TimedOut);
         Assert.False(result.PortReachable);
         Assert.Contains("no console output", result.Summary);
+        Assert.Equal(ProjectUrlStartupFailureReasons.SilenceTimeout, result.StartupFailureReason);
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(30), "idle failure should trip long before the hard cap");
     }
 
     [Fact]
-    public void StartupFailure_HardCapMessageWinsOverIdleAndCapsAtFiveMinutes()
+    public void StartupFailure_HardCapMessageWinsOverIdleAndDefaultsToTenMinutes()
     {
         var rule = new ProjectUrlStartRule { Command = "npm start", Port = 4216 };
 
         var reachable = ProjectUrlProcessService.StartupFailure(
-            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: true, idleSeconds: 0, "", "");
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: true,
+            idleSeconds: 0, startupLimitSeconds: ProjectUrlProcessService.DefaultStartupTimeoutSeconds, "", "");
         var unreachable = ProjectUrlProcessService.StartupFailure(
-            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: false, idleSeconds: 0, "", "");
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: true, everPortReachable: false,
+            idleSeconds: 0, startupLimitSeconds: ProjectUrlProcessService.DefaultStartupTimeoutSeconds, "", "");
 
-        Assert.Equal(300, ProjectUrlProcessService.HardStartupCapSeconds);
-        Assert.Contains("5-minute", reachable.Summary);
-        Assert.Contains("5-minute", unreachable.Summary);
+        Assert.Equal(600, ProjectUrlProcessService.DefaultStartupTimeoutSeconds);
+        Assert.Contains("10-minute", reachable.Summary);
+        Assert.Contains("10-minute", unreachable.Summary);
         Assert.Equal(ProjectUrlDiagnosisClasses.Timeout, reachable.Classification);
         Assert.Equal(ProjectUrlDiagnosisClasses.PortNeverOpened, unreachable.Classification);
+        Assert.Equal(ProjectUrlStartupFailureReasons.StartupLimit, reachable.StartupFailureReason);
         Assert.True(reachable.TimedOut);
     }
 
@@ -208,11 +213,42 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         var rule = new ProjectUrlStartRule { Command = "npm start", Port = 4216 };
 
         var result = ProjectUrlProcessService.StartupFailure(
-            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: false, everPortReachable: false, idleSeconds: 23, "", "");
+            rule, "http://127.0.0.1:4216", "/cwd", hardCapReached: false, everPortReachable: false,
+            idleSeconds: 23, startupLimitSeconds: 600, "", "");
 
         Assert.Equal(ProjectUrlDiagnosisClasses.PortNeverOpened, result.Classification);
         Assert.Contains("no console output for 23s", result.Summary);
+        Assert.Equal(ProjectUrlStartupFailureReasons.SilenceTimeout, result.StartupFailureReason);
         Assert.True(result.TimedOut);
+    }
+
+    // MachineBound: starts a real child process which emits often enough to
+    // avoid the silence timeout, proving that only the independent startup cap
+    // ends an active cold build.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task StartAsync_ActiveConsoleFailsOnlyAtConfiguredStartupLimit()
+    {
+        var port = ReserveUnusedPort();
+        var command = OperatingSystem.IsWindows()
+            ? "for /l %i in (1,1,12) do @(echo building %i & ping -n 2 127.0.0.1 >nul)"
+            : "while true; do echo building; sleep 0.25; done";
+        var candidate = UrlAt(port) with
+        {
+            StartRule = new ProjectUrlStartRule
+            {
+                Command = command,
+                Port = port,
+                ReadinessTimeoutSeconds = 1,
+                StartupTimeoutSeconds = 2,
+            },
+        };
+
+        var result = await Service().TestAsync(Project(), candidate, CancellationToken.None);
+
+        Assert.True(result.TimedOut);
+        Assert.Equal(ProjectUrlStartupFailureReasons.StartupLimit, result.StartupFailureReason);
+        Assert.Contains("2-second startup limit", result.Summary);
     }
 
     // MachineBound 22.07.: startet einen echten Kindprozess und reserviert einen Port; timing-/lastabhaengig.

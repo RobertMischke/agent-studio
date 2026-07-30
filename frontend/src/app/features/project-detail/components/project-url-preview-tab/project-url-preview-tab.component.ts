@@ -102,8 +102,6 @@ export class ProjectUrlPreviewTabComponent {
 
   /** ~6s without `load` while reachable reads as "probably refuses embedding". */
   private readonly LOAD_TIMEOUT_MS = 6000;
-  private readonly START_READY_TIMEOUT_MS = 20_000;
-  private readonly START_POLL_MS = 750;
 
   readonly resolveState = signal<'resolving' | 'resolved' | 'not-found' | 'error'>('resolving');
   readonly projectId = signal<string | null>(null);
@@ -130,8 +128,6 @@ export class ProjectUrlPreviewTabComponent {
   private readonly frameRef = viewChild<ElementRef<HTMLIFrameElement>>('frame');
 
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
-  private startTimer: ReturnType<typeof setTimeout> | null = null;
-  private startDeadline = 0;
   /** De-dupes diagnostic fetches per (project, url, readiness-kind) tuple. */
   private lastDiagnosedKey: string | null = null;
 
@@ -185,6 +181,7 @@ export class ProjectUrlPreviewTabComponent {
   readonly statusPill = computed<PreviewPill>(() => {
     if (this.building()) return 'building';
     if (this.startFailure()) return 'failed';
+    if (this.diagnostic()?.startupFailureReason) return 'failed';
     if (this.resolveState() !== 'resolved') return 'checking';
     if (this.nav.overrideUrl()) return 'custom';
     if (this.frameState() === 'blocked') return 'blocked';
@@ -195,6 +192,7 @@ export class ProjectUrlPreviewTabComponent {
   readonly stateBadgeStatus = computed<PreviewPill>(() => {
     if (this.startFailure()) return 'failed';
     if (this.building()) return 'building';
+    if (this.diagnostic()?.startupFailureReason) return 'failed';
     if (this.readiness().kind === 'frame-blocked') return 'blocked';
     if (this.readiness().kind === 'http-error') return 'failed';
     return 'offline';
@@ -203,6 +201,8 @@ export class ProjectUrlPreviewTabComponent {
   readonly canReload = computed(() => this.resolveState() === 'resolved' && !this.building());
   /** While the console shows command/cwd below, the card skips its copy. */
   readonly consoleVisible = computed(() => this.process.consoleOpen() && this.process.session() !== null);
+  readonly consoleActive = computed(() =>
+    this.process.session()?.output.some(line => !line.startsWith('[studio]')) ?? false);
 
   readonly menuItems = computed<readonly MenuItem[]>(() => buildEmbedMenuItems({
     url: this.urlRecord(),
@@ -234,6 +234,30 @@ export class ProjectUrlPreviewTabComponent {
     // Trust embed-reported navigations only from the mounted preview iframe.
     effect(() => this.nav.attachFrame(this.frameRef()?.nativeElement ?? null));
 
+    // Backend readiness owns the long-running decision. The process snapshot
+    // stays "starting" while recent console activity extends the wait, then
+    // settles as running, exited, or failed (silence/startup limit).
+    effect(() => {
+      const session = this.process.session();
+      const projectId = this.projectId();
+      const url = this.urlRecord();
+      if (!session || !projectId || !url || session.urlId !== url.id) return;
+      if (session.state === 'starting') {
+        this.building.set(true);
+        return;
+      }
+      if (session.state === 'running') {
+        if (!this.building()) return;
+        this.building.set(false);
+        this.probe.refresh(projectId, url.id);
+        return;
+      }
+      if ((session.state === 'exited' || session.state === 'failed') && this.building()) {
+        this.building.set(false);
+        this.fetchDiagnostic(projectId, url.id);
+      }
+    });
+
     // AGT-2180: whenever the readiness probe settles on a failure kind, fetch
     // the full backend diagnosis (once per kind) so the offline card can show
     // classification, recommended action, and redacted evidence.
@@ -251,12 +275,10 @@ export class ProjectUrlPreviewTabComponent {
 
     inject(DestroyRef).onDestroy(() => {
       this.clearLoadTimer();
-      this.clearStartTimer();
     });
   }
 
   private resolveRecord(name: string, id: string): void {
-    this.clearStartTimer();
     this.process.reset();
     this.building.set(false);
     this.startFailure.set(null);
@@ -359,13 +381,12 @@ export class ProjectUrlPreviewTabComponent {
   }
 
   /** Start or restart the owned process, expose its output in place, and keep
-   * the existing bounded readiness/retry loop before mounting the iframe. */
+   * backend-owned activity readiness before mounting the iframe. */
   start(): void {
     const projId = this.projectId();
     const u = this.urlRecord();
     if (!projId || !u || !u.startRule || this.building() || this.process.stopping()) return;
     const rule = u.startRule;
-    this.clearStartTimer();
     this.startFailure.set(null);
     this.lastDiagnosedKey = null;
     this.building.set(true);
@@ -456,7 +477,6 @@ export class ProjectUrlPreviewTabComponent {
     const projectId = this.projectId();
     const url = this.urlRecord();
     if (!projectId || !url || this.process.stopping()) return;
-    this.clearStartTimer();
     this.building.set(false);
     this.startFailure.set(null);
     this.process.stop(projectId, url.id).subscribe({
@@ -496,36 +516,7 @@ export class ProjectUrlPreviewTabComponent {
   private afterStart(urlId: string): void {
     const projectId = this.projectId();
     if (!projectId) return;
-    this.startDeadline = Date.now() + this.START_READY_TIMEOUT_MS;
     this.probe.refresh(projectId, urlId);
-    this.startTimer = setTimeout(() => this.checkStartReadiness(projectId, urlId), this.START_POLL_MS);
-  }
-
-  private checkStartReadiness(projectId: string, urlId: string): void {
-    this.startTimer = null;
-    if (!this.building() || this.projectId() !== projectId || this.urlRecord()?.id !== urlId) return;
-
-    if (this.probe.signalFor(projectId, urlId)().kind === 'healthy') {
-      this.building.set(false);
-      this.frameState.set('loading');
-      this.reloadNonce.update(n => n + 1);
-      return;
-    }
-
-    if (Date.now() >= this.startDeadline) {
-      const rule = this.urlRecord()?.startRule;
-      this.startFailure.set({
-        explanation: 'The command started, but the URL did not become reachable within 20 seconds.',
-        command: rule?.command ?? 'Not configured',
-        cwd: this.effectiveCwd(),
-      });
-      this.building.set(false);
-      this.fetchDiagnostic(projectId, urlId);
-      return;
-    }
-
-    this.probe.refresh(projectId, urlId);
-    this.startTimer = setTimeout(() => this.checkStartReadiness(projectId, urlId), this.START_POLL_MS);
   }
 
   /** AGT-2180 — load the backend diagnosis and, when it points at a fixable
@@ -604,10 +595,4 @@ export class ProjectUrlPreviewTabComponent {
     }
   }
 
-  private clearStartTimer(): void {
-    if (this.startTimer) {
-      clearTimeout(this.startTimer);
-      this.startTimer = null;
-    }
-  }
 }

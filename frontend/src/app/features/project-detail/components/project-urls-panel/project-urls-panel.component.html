@@ -159,10 +159,15 @@
           <input id="project-urls-form-health" type="text" data-testid="project-urls-form-health"
                  placeholder="Defaults to the preview URL"
                  [ngModel]="formHealthUrl()" (ngModelChange)="formHealthUrl.set($event)" />
-          <label for="project-urls-form-timeout">Readiness timeout (seconds)</label>
+          <label for="project-urls-form-timeout">Console silence timeout (seconds)</label>
           <input id="project-urls-form-timeout" type="number" data-testid="project-urls-form-timeout"
-                 min="2" max="120"
+                 min="2" max="300"
                  [ngModel]="formTimeout()" (ngModelChange)="formTimeout.set($event)" />
+          <label for="project-urls-form-startup-timeout">Maximum startup time (seconds)</label>
+          <input id="project-urls-form-startup-timeout" type="number"
+                 data-testid="project-urls-form-startup-timeout"
+                 min="2" max="3600"
+                 [ngModel]="formStartupTimeout()" (ngModelChange)="formStartupTimeout.set($event)" />
           <p class="project-urls__add-hint" data-testid="project-urls-form-provenance">
             Configuration source: <b>{{ formSource() }}</b>
           </p>

@@ -115,6 +115,7 @@
         } @else {
           <div class="url-preview__state"
                [attr.data-diagnosis]="diagnostic()?.classification ?? 'not-started'"
+               [attr.data-failure-reason]="diagnostic()?.startupFailureReason ?? null"
                [attr.data-testid]="readiness().kind === 'http-error'
                  ? 'url-preview-http-error'
                  : readiness().kind === 'frame-blocked'
@@ -132,7 +133,13 @@
                     @if (startFailure()) {
                       Preview could not start
                     } @else if (building()) {
-                      Starting preview
+                      {{ consoleActive() ? 'Starting · console active' : 'Starting · waiting for output' }}
+                    } @else if (diagnostic()?.startupFailureReason === 'process-exit') {
+                      Preview process exited
+                    } @else if (diagnostic()?.startupFailureReason === 'silence-timeout') {
+                      Preview start went quiet
+                    } @else if (diagnostic()?.startupFailureReason === 'startup-limit') {
+                      Preview reached startup limit
                     } @else if (readiness().kind === 'http-error') {
                       Preview returned HTTP {{ readiness().statusCode }}
                     } @else if (readiness().kind === 'frame-blocked') {
@@ -149,7 +156,9 @@
                   @if (startFailure()) {
                     Failed
                   } @else if (building()) {
-                    Starting
+                    {{ consoleActive() ? 'Console active' : 'Waiting' }}
+                  } @else if (diagnostic()?.startupFailureReason) {
+                    Failed
                   } @else if (readiness().kind === 'frame-blocked') {
                     Blocked
                   } @else if (readiness().kind === 'http-error') {
@@ -160,7 +169,7 @@
                 </span>
               </header>
 
-              @if (!startFailure() && !building()) {
+              @if (!startFailure() && !building() && !diagnostic()?.startupFailureReason) {
                 <p class="url-preview__state-note url-preview__state-note--wide">
                   @if (readiness().kind === 'http-error') {
                     The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
@@ -184,7 +193,10 @@
               } @else if (building()) {
                 <div class="url-preview__progress" role="status" data-testid="url-preview-starting">
                   <span class="url-preview__spinner url-preview__spinner--small" aria-hidden="true"></span>
-                  <span>The process is working — waiting for <code>{{ urlRecord()?.url }}</code> to accept connections…</span>
+                  <span>
+                    {{ consoleActive() ? 'Console output is active.' : 'Waiting for console output.' }}
+                    Waiting for <code>{{ urlRecord()?.url }}</code> to accept connections…
+                  </span>
                 </div>
               }
 

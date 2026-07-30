@@ -21,12 +21,15 @@ export class ProjectUrlProcessConsoleComponent {
 
   readonly canStop = computed(() => {
     const state = this.session()?.state;
-    return state === 'starting' || state === 'running';
+    return state === 'starting' || state === 'running' || state === 'failed';
   });
 
-  statusLabel(state: ProjectUrlProcessSnapshot['state']): string {
-    switch (state) {
-      case 'starting': return 'Starting';
+  statusLabel(process: ProjectUrlProcessSnapshot): string {
+    switch (process.state) {
+      case 'starting':
+        return process.output.some(line => !line.startsWith('[studio]'))
+          ? 'Starting · console active'
+          : 'Starting · waiting for output';
       case 'running': return 'Running';
       case 'stopped': return 'Stopped';
       case 'exited': return 'Exited';

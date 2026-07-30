@@ -37,9 +37,16 @@ public record ProjectUrlStartRule
     /// Console-silence window for startup validation. Startup is abandoned only
     /// after this many seconds pass with no new process output <em>and</em> the
     /// URL is still unreachable; while the command keeps producing output the
-    /// wait continues (bounded by a hard 5-minute cap). Defaults to 20 seconds.
+    /// wait continues (bounded by <see cref="StartupTimeoutSeconds"/>).
+    /// Existing persisted values keep their numeric value and are interpreted
+    /// as this silence window. Defaults to 30 seconds.
     /// </summary>
-    public int ReadinessTimeoutSeconds { get; init; } = 20;
+    public int ReadinessTimeoutSeconds { get; init; } = 30;
+    /// <summary>
+    /// Absolute startup limit even while console output remains active.
+    /// Defaults to 10 minutes.
+    /// </summary>
+    public int StartupTimeoutSeconds { get; init; } = 600;
     /// <summary>Where the rule came from: <c>manual</c> | <c>package-json</c> | <c>readme</c>.</summary>
     public string Source { get; init; } = "manual";
 }

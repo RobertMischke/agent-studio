@@ -1,11 +1,17 @@
 import { expect, test } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 const PROJECT_NAME = 'Embed Demo';
 const PROJECT_ID = 'PROJ-995';
+const shots = process.env.JOB_RESULTS_DIR
+  ? join(process.env.JOB_RESULTS_DIR, 'url-preview')
+  : resolve('../results/AGT-2441/url-preview');
 
 test('keeps start, settings, live output, and stop in the embed in both themes', async ({ page }) => {
-  let processState: 'none' | 'running' | 'stopped' = 'none';
+  let processState: 'none' | 'starting' | 'running' | 'stopped' = 'none';
+  let releaseReadiness = false;
   let settingsSaved = false;
   const url = {
     id: 'website', label: 'Website', url: 'http://localhost:4202', sortOrder: 0,
@@ -23,8 +29,10 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     startedAtUtc: '2026-07-13T20:00:00Z',
     finishedAtUtc: processState === 'stopped' ? '2026-07-13T20:02:00Z' : null,
     exitCode: processState === 'stopped' ? -1 : null,
-    output: processState === 'running'
-      ? ['> vite --port 4202', 'Local: http://localhost:4202/', 'ready in 412 ms']
+    output: processState === 'starting'
+      ? ['> ng serve', 'Building application bundles...', 'Generating browser application bundles...']
+      : processState === 'running'
+        ? ['> ng serve', 'Building application bundles...', 'Local: http://localhost:4202/', 'ready in 92.4 s']
       : ['[studio] Process stopped by operator.'],
   });
 
@@ -45,6 +53,9 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     const json = (body: unknown, status = 200) => route.fulfill({
       status, contentType: 'application/json', body: JSON.stringify(body),
     });
+    if (pathname === '/api/auth/status') return json({
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    });
     if (pathname === '/api/watch-paths') return json([{
       name: PROJECT_NAME, path: '/mock/tasks/embed', rootPath: '/mock/repo/embed',
     }]);
@@ -63,16 +74,17 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
       ? { kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 3 }
       : { kind: 'offline', statusCode: null, framePolicy: 'unknown', detail: 'Connection refused.', durationMs: 3 });
     if (pathname.endsWith('/urls/website/start')) {
-      processState = 'running';
+      processState = 'starting';
       return json(snapshot());
     }
     if (pathname.endsWith('/urls/website/process') && request.method() === 'DELETE') {
       processState = 'stopped';
       return json(snapshot());
     }
-    if (pathname.endsWith('/urls/website/process')) return processState === 'none'
-      ? route.fulfill({ status: 204 })
-      : json(snapshot());
+    if (pathname.endsWith('/urls/website/process')) {
+      if (processState === 'starting' && releaseReadiness) processState = 'running';
+      return processState === 'none' ? route.fulfill({ status: 204 }) : json(snapshot());
+    }
     if (pathname.endsWith('/urls/website') && request.method() === 'PUT') {
       settingsSaved = true;
       return json(project);
@@ -81,6 +93,7 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   });
 
   await page.setViewportSize({ width: 1440, height: 900 });
+  mkdirSync(shots, { recursive: true });
   await page.goto('/#');
   const projectRow = page.getByTestId(`studio-explorer-project-${PROJECT_NAME}`);
   await expect(projectRow).toBeVisible();
@@ -120,7 +133,20 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await start.click();
   const console = page.getByTestId('url-preview-process-console');
   await expect(console).toBeVisible();
-  await expect(page.getByTestId('url-preview-process-output')).toContainText('ready in 412 ms');
+  await expect(page.getByTestId('url-preview-starting')).toContainText('Console output is active');
+  await expect(page.getByTestId('url-preview-process-status')).toContainText('Starting · console active');
+  await expect(page.getByTestId('url-preview-process-output')).toContainText('Generating browser application bundles');
+  await setTheme(page, 'light');
+  await page.getByTestId('url-preview-tab').screenshot({
+    path: join(shots, 'preview-starting-console-active-light.png'),
+  });
+  await setTheme(page, 'dark');
+  await page.getByTestId('url-preview-tab').screenshot({
+    path: join(shots, 'preview-starting-console-active-dark.png'),
+  });
+
+  releaseReadiness = true;
+  await expect(page.getByTestId('url-preview-process-output')).toContainText('ready in 92.4 s');
   await expect(page.getByTestId('url-preview-frame')).toBeAttached();
 
   // The address bar is a real input: its URL can be selected (copy) and a

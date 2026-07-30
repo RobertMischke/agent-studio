@@ -4,7 +4,7 @@
       <div class="process-console__identity">
         <span class="process-console__status" [attr.data-state]="process.state"
               data-testid="url-preview-process-status">
-          <span aria-hidden="true"></span>{{ statusLabel(process.state) }}
+          <span aria-hidden="true"></span>{{ statusLabel(process) }}
         </span>
         <strong>{{ label() }}</strong>
         <span class="process-console__guidance">Owned by Studio until stopped or the backend shuts down</span>

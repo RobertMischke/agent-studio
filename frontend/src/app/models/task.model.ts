@@ -1130,7 +1130,10 @@ export interface ProjectUrlStartRule {
   cwd: string | null;
   port: number | null;
   healthUrl?: string | null;
+  /** Console-silence window. Existing persisted values retain this field. */
   readinessTimeoutSeconds?: number;
+  /** Absolute startup ceiling even while console output remains active. */
+  startupTimeoutSeconds?: number;
   /** `manual` | `package-json` | `readme`. */
   source: string;
 }
@@ -1252,6 +1255,7 @@ export interface ProjectUrlDiagnostic {
   portReachable: boolean;
   httpStatus: number | null;
   contentReady: boolean;
+  startupFailureReason?: 'process-exit' | 'silence-timeout' | 'startup-limit' | null;
   /** Browser embedding evidence when response headers or the iframe can decide it. */
   iframeReady?: boolean | null;
   /** Bounded blocking X-Frame-Options/CSP evidence, when present. */
