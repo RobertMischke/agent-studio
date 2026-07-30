@@ -108,19 +108,18 @@ public sealed class RemoteRunnerDaemon
                 _log,
                 state,
                 inventory);
-            var completed = DurableAgentProcess.HasCompleted(slot);
-            var live = DurableAgentProcess.VerifyLive(slot, out var verification);
-            if (completed || live)
+            var observation = DurableAgentProcess.InspectForReattach(slot);
+            if (observation.Result is not null || observation.IsLive)
             {
                 _log($"persisted attempt accepted task={slot.TaskKey} attempt={slot.AttemptId} " +
-                     $"pid={slot.ProcessId} verification={(completed ? "durable result ready" : verification)}");
+                     $"pid={slot.ProcessId} verification={observation.Detail}");
                 active.Add(new ActiveSlot(
                     slot.TaskKey,
                     taskRunner.ReattachAsync(slot, CancellationToken.None)));
             }
             else
             {
-                if (!await taskRunner.ReleaseDeadAsync(slot, verification))
+                if (!await taskRunner.ReleaseDeadAsync(slot, observation.Detail))
                     throw new InvalidOperationException(
                         $"Dead attempt '{slot.AttemptId}' for task '{slot.TaskKey}' could not be released. " +
                         "Startup is fail-closed and retained the durable state for the next bounded systemd retry.");
@@ -472,7 +471,8 @@ public sealed class RemoteRunnerDaemon
         PersistedRunnerSlot slot,
         RunnerStateStore state)
     {
-        if (slot.ProcessId is not null || DurableAgentProcess.HasCompleted(slot))
+        if (slot.ProcessId is not null
+            || DurableAgentProcess.InspectForReattach(slot).Result is not null)
             return slot;
 
         // "launching" is persisted before Process.Start. The worker writes its
