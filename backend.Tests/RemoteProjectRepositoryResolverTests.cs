@@ -8,7 +8,7 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
         Path.GetTempPath(), "remote-project-repo-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Registry_url_is_authoritative_while_repository_path_supplies_default_branch()
+    public void Configured_integration_branch_wins_over_repository_origin_head()
     {
         var git = Path.Combine(_root, ".git");
         Directory.CreateDirectory(Path.Combine(git, "refs", "remotes", "origin"));
@@ -47,8 +47,40 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
                 "https://github.com/agent-orc/quality-studio.git"),
             result.RepositoryId);
         Assert.Equal("https://github.com/agent-orc/quality-studio.git", result.RepositoryUrl);
-        Assert.Equal("main", result.DefaultBranch);
+        // origin/HEAD of the registered checkout says main, but the configured
+        // integration branch is authoritative for where cards are cut from.
+        Assert.Equal("develop", result.DefaultBranch);
         Assert.Equal("registry-url", result.Source);
+    }
+
+    [Fact]
+    public void Repository_origin_head_is_the_fallback_when_no_branch_is_configured()
+    {
+        var git = Path.Combine(_root, ".git");
+        Directory.CreateDirectory(Path.Combine(git, "refs", "remotes", "origin"));
+        File.WriteAllText(
+            Path.Combine(git, "refs", "remotes", "origin", "HEAD"),
+            "ref: refs/remotes/origin/trunk\n");
+
+        var result = RemoteProjectRepositoryResolver.Resolve(new ProjectRecord
+        {
+            Id = "PROJ-007",
+            DisplayName = "Agent Taskboard",
+            StorageLocation = Path.Combine(_root, "tasks"),
+            RepositoryPath = _root,
+            Urls =
+            [
+                new ProjectUrlRecord
+                {
+                    Id = "repo",
+                    Label = "Repository",
+                    Url = "https://github.com/agent-orc/quality-studio.git",
+                },
+            ],
+        }, configuredDefaultBranch: null);
+
+        Assert.NotNull(result);
+        Assert.Equal("trunk", result!.DefaultBranch);
     }
 
     [Fact]
