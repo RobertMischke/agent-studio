@@ -228,6 +228,75 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MainTarget_AlreadyOnOriginWithStaleLocalMain_SkipsGate()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("runner-main-stale-local");
+        const string deliveryRef = "agent-studio/results/run-stale-main/result";
+        RunGit(repo, $"checkout -q -b {deliveryRef} main");
+        File.WriteAllText(Path.Combine(repo, "already-released.txt"), "released out of band");
+        Commit(repo, "feat: already released work");
+        var resultSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, $"push -q origin {deliveryRef}:{deliveryRef}");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, $"branch -D {deliveryRef}");
+        var staleMain = RunGit(repo, "rev-parse main").Out.Trim();
+
+        var integrator = Path.Combine(_tempDir, "runner-main-stale-integrator");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{integrator}\"");
+        RunGit(integrator, "checkout -q main");
+        RunGit(integrator, $"merge -q --ff-only origin/{deliveryRef}");
+        RunGit(integrator, "push -q origin main");
+        Assert.Equal(staleMain, RunGit(repo, "rev-parse origin/main").Out.Trim());
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "full suite passed",
+            true,
+            false));
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "stale-main");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-STALE-MAIN",
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = resultSha,
+            AttemptChainId = "attempt-stale-main",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-stale-main",
+            FencingToken = 1,
+            ImmutableResultRef = deliveryRef,
+            IntegrationBranch = "refs/heads/main",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "stale-main",
+            jobFolder,
+            repo,
+            "develop",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);
+        Assert.Equal(0, gateRunner.Invocations);
+        Assert.Equal(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.Equal(resultSha, RunGit(repo, "rev-parse origin/main").Out.Trim());
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal("already-merged", step!.Verdict);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_RedFullSuiteLeavesMainUnchanged()
     {
         var repo = SeedRepo("runner-main-red");

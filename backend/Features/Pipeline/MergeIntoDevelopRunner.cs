@@ -182,7 +182,14 @@ public sealed class MergeIntoDevelopRunner
             BuildTestGateResult? preMainResult = null;
             BuildTestGateResult? preDevelopResult = null;
             MergeIntoIntegrationResult result;
-            if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.Ordinal))
+            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch);
+            if (!synchronized.Success)
+            {
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: synchronized.Error);
+            }
+            else if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.Ordinal))
             {
                 result = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.PushedForReview,

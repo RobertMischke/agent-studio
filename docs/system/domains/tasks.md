@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-30
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -111,8 +111,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `5-human-review` with phase `integrating` until the delivery reaches `Merged`
   or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
   to ordinary Human Review with an Integration failed badge and timeline
-  evidence. The `integrationpending` tag is an internal recovery marker, not a
-  second UI status.
+  evidence. Before the already-integrated decision, acceptance fetches the
+  configured origin integration ref and evaluates refreshed local plus remote
+  ancestry. A remote-only out-of-band integration therefore skips the merge
+  queue and gate, while local/remote divergence becomes a failed integration
+  record instead of being overwritten. The `integrationpending` tag is an
+  internal recovery marker, not a second UI status.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

@@ -25,6 +25,26 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
 
+public enum IntegrationBranchSyncOutcome
+{
+    UpToDate,
+    FastForwarded,
+    RemoteAhead,
+    LocalAhead,
+    NoRemote,
+    Diverged,
+    Error,
+}
+
+public record IntegrationBranchSyncResult(
+    IntegrationBranchSyncOutcome Outcome,
+    string? Error = null)
+{
+    public bool Success => Outcome is not (
+        IntegrationBranchSyncOutcome.Diverged
+        or IntegrationBranchSyncOutcome.Error);
+}
+
 /// <summary>
 /// Result of a single-file content lookup that backs the git-pane's
 /// rendered md/html preview (AGT-2008). <paramref name="Content"/> is the
@@ -3196,15 +3216,60 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
-        return MergeRefIntoIntegration(
-            repoRoot, taskBranch, integrationBranch, SynchronizeRefForIntegration(repoRoot, integrationBranch));
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        if (!synchronized.Success)
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: synchronized.Error);
+        return MergeRefIntoIntegration(repoRoot, taskBranch, integrationBranch);
     }
 
     /// <summary>
-    /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and returns the
-    /// remote-tracking ref the merge should fast-forward onto first, or null when
-    /// there is nothing to synchronize against (no origin, branch not on origin,
-    /// origin unreachable).
+    /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and compares it with the
+    /// local integration branch without moving either branch. The transactional
+    /// accept path uses the refreshed remote-tracking ref as its ancestry truth,
+    /// so it does not wait behind a long-running merge gate or mutate the shared
+    /// checkout. Fetch failures and genuine divergence fail visibly.
+    /// </summary>
+    public IntegrationBranchSyncResult RefreshIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
+    {
+        var fetched = FetchIntegrationBranch(repoRoot, integrationBranch);
+        if (!fetched.Success) return fetched;
+        if (fetched.Outcome == IntegrationBranchSyncOutcome.NoRemote)
+            return fetched;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (!BranchExists(repoRoot, integrationBranch))
+            return new(IntegrationBranchSyncOutcome.RemoteAhead);
+
+        var localTip = GetBranchTip(repoRoot, integrationBranch);
+        var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef);
+        if (string.IsNullOrWhiteSpace(localTip) || string.IsNullOrWhiteSpace(remoteTip))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Could not resolve local and origin tips for integration branch '{integrationBranch}'.");
+        if (string.Equals(localTip, remoteTip, StringComparison.OrdinalIgnoreCase))
+            return new(IntegrationBranchSyncOutcome.UpToDate);
+        if (IsAncestor(repoRoot, remoteIntegrationRef, integrationBranch))
+            return new(IntegrationBranchSyncOutcome.LocalAhead);
+        if (IsAncestor(repoRoot, integrationBranch, remoteIntegrationRef))
+            return new(IntegrationBranchSyncOutcome.RemoteAhead);
+
+        var detail =
+            $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries.";
+        _logger.LogWarning(
+            "Integration branch {Integration} at {Path} diverged from origin; refusing to overwrite either tip",
+            integrationBranch,
+            repoRoot);
+        return new(IntegrationBranchSyncOutcome.Diverged, detail);
+    }
+
+    /// <summary>
+    /// Refreshes the remote-tracking ref and fast-forwards the local integration
+    /// branch before a delivery merge. A local-only repository remains valid,
+    /// and a local branch that is ahead of origin remains untouched.
     ///
     /// <para>The local task-branch merge used to skip this entirely - only the
     /// remote-delivery path synchronized - so a locally diverged integration
@@ -3213,21 +3278,98 @@ public class GitService
     /// synchronization is now symmetric; genuine divergence is surfaced by
     /// <see cref="MergeRefIntoIntegration"/> as an explicit error instead.</para>
     /// </summary>
-    private string? SynchronizeRefForIntegration(string repoRoot, string integrationBranch)
+    public IntegrationBranchSyncResult SynchronizeIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
     {
-        if (!HasRemote(repoRoot, "origin")) return null;
+        var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch);
+        if (!refreshed.Success
+            || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
+            return refreshed;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (!BranchExists(repoRoot, integrationBranch))
+        {
+            var (_, createError, createCode) = RunGitArgs(
+                repoRoot, "branch", integrationBranch, remoteIntegrationRef);
+            if (createCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
+            return new(IntegrationBranchSyncOutcome.FastForwarded);
+        }
+
+        var localTip = GetBranchTip(repoRoot, integrationBranch)!;
+        var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef)!;
+        if (RepoHasUncommittedChanges(repoRoot))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                "Integration working tree has uncommitted changes; refusing to fast-forward it from origin.");
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not check out '{integrationBranch}' for origin synchronization: {checkoutError.Trim()}");
+        }
+
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot, "merge", "--ff-only", remoteIntegrationRef);
+        if (mergeCode != 0)
+        {
+            _logger.LogWarning(
+                "Integration branch {Integration} at {Path} could not fast-forward to origin: {Error}",
+                integrationBranch,
+                repoRoot,
+                mergeError.Trim());
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Integration branch '{integrationBranch}' could not fast-forward to origin: {mergeError.Trim()}");
+        }
+
+        _logger.LogInformation(
+            "Integration branch {Integration} at {Path} fast-forwarded from {Before} to {After}",
+            integrationBranch,
+            repoRoot,
+            AbbreviateSha(localTip),
+            AbbreviateSha(remoteTip));
+        return new(IntegrationBranchSyncOutcome.FastForwarded);
+    }
+
+    private IntegrationBranchSyncResult FetchIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                "Could not resolve repository root for the integration branch sync.");
+        if (!IsLikelyBranchName(integrationBranch))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Invalid integration branch '{integrationBranch}'.");
+        if (!HasRemote(repoRoot, "origin"))
+            return new(IntegrationBranchSyncOutcome.NoRemote);
 
         var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
         var fetchTarget = $"+refs/heads/{integrationBranch}:{remoteIntegrationRef}";
         var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
-        if (fetchCode == 0) return remoteIntegrationRef;
-
-        // Branch not on origin yet, or origin is unreachable: merge locally as
-        // before rather than blocking the delivery on infrastructure.
-        _logger.LogInformation(
-            "Merge-into-develop: could not fetch origin/{Integration} at {Path}; merging without an origin sync: {Error}",
-            integrationBranch, repoRoot, fetchError.Trim());
-        return null;
+        if (fetchCode != 0)
+        {
+            var detail =
+                $"Integration branch '{integrationBranch}' could not be fetched from origin: {fetchError.Trim()}";
+            _logger.LogWarning(
+                "Integration branch sync failed for origin/{Integration} at {Path}: {Error}",
+                integrationBranch,
+                repoRoot,
+                fetchError.Trim());
+            return new(IntegrationBranchSyncOutcome.Error, detail);
+        }
+        return new(IntegrationBranchSyncOutcome.UpToDate);
     }
 
     /// <summary>
@@ -3254,19 +3396,13 @@ public class GitService
         if (!HasRemote(repoRoot, "origin"))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery cannot be fetched because origin is not configured.");
 
-        var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
-        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
-        var integrationFetchSource = $"refs/heads/{integrationBranch}";
-        var integrationFetchTarget = $"+{integrationFetchSource}:{remoteIntegrationRef}";
-        var (_, integrationFetchError, integrationFetchCode) = RunGitArgs(
-            repoRoot, "fetch", "--no-tags", "origin", integrationFetchTarget);
-        if (integrationFetchCode != 0)
-        {
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        if (!synchronized.Success)
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Integration branch '{integrationBranch}' could not be fetched from origin: {integrationFetchError.Trim()}");
-        }
+                error: synchronized.Error);
 
+        var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
         var fetchSource = $"refs/heads/{deliveryBranch}";
         var fetchTarget = $"+{fetchSource}:{remoteRef}";
         var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
@@ -3294,23 +3430,10 @@ public class GitService
                 error: $"Fenced delivery mismatch for '{deliveryBranch}': review expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(actualResultSha)}.");
         }
 
-        if (!BranchExists(repoRoot, integrationBranch))
-        {
-            var (_, createError, createCode) = RunGitArgs(
-                repoRoot, "branch", integrationBranch, remoteIntegrationRef);
-            if (createCode != 0)
-            {
-                return MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
-            }
-        }
-
         return MergeRefIntoIntegration(
             repoRoot,
             expectedResultSha,
-            integrationBranch,
-            remoteIntegrationRef);
+            integrationBranch);
     }
 
     private static string AbbreviateSha(string sha)
@@ -3319,8 +3442,7 @@ public class GitService
     private MergeIntoIntegrationResult MergeRefIntoIntegration(
         string repoRoot,
         string sourceRef,
-        string integrationBranch,
-        string? synchronizeFromRemoteRef = null)
+        string integrationBranch)
     {
         if (!BranchExists(repoRoot, integrationBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Integration branch '{integrationBranch}' does not exist.");
@@ -3339,21 +3461,6 @@ public class GitService
             {
                 _logger.LogWarning("Merge-into-develop: checkout of {Integration} at {Path} failed: {Error}", integrationBranch, repoRoot, coErr.Trim());
                 return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Could not check out '{integrationBranch}': {coErr.Trim()}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(synchronizeFromRemoteRef))
-        {
-            var (_, syncError, syncCode) = RunGitArgs(
-                repoRoot, "merge", "--ff-only", synchronizeFromRemoteRef);
-            if (syncCode != 0)
-            {
-                _logger.LogWarning(
-                    "Merge-into-develop: integration branch {Integration} at {Path} diverged from origin; refusing to merge onto a stale tip: {Error}",
-                    integrationBranch, repoRoot, syncError.Trim());
-                return MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries. ({syncError.Trim()})");
             }
         }
 
