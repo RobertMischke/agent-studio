@@ -892,7 +892,15 @@ public static class LeaseEndpoints
             }
 
             ReviewAttemptDto? reviewAttempt = null;
-            if (!isEpicPlanning && outcome is ("done" or "noop"))
+            // Report-only modes (planning / research) deliver a document into the
+            // task folder on THIS server; there is no code subject to materialize
+            // on a review-executor host. Their completion is validated
+            // deterministically by the lightweight report pipeline
+            // (ReviewDecisionOrchestrator.ProcessReportOnlyDoneAsync), so no
+            // remote ReviewAttempt is minted for them.
+            if (!isEpicPlanning
+                && outcome is ("done" or "noop")
+                && !TaskModes.IsReportOnly(task.Mode))
             {
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;

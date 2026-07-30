@@ -6459,7 +6459,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // Review is the fail-closed state. The legacy Task Server review
             // loop must not infer a subject from session-events or inspect its
             // own project checkout for a Remote result.
-            var authorityKey = _attemptAuthority is null
+            //
+            // Report-only modes (planning / research) are the exception: their
+            // deliverable is a document in the task folder on THIS server, no
+            // ReviewAttempt is minted for them at completion, and the
+            // lightweight report pipeline validates them deterministically
+            // right here - so they must not wait for a code-review executor
+            // that will never claim them.
+            var authorityKey = _attemptAuthority is null || TaskModes.IsReportOnly(info.Mode)
                 ? null
                 : new[] { info.Key, info.TaskKey, info.Id }
                     .Where(value => !string.IsNullOrWhiteSpace(value))
