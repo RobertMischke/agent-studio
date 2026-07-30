@@ -98,6 +98,46 @@ public class AgentWorkSummaryReaderTests
     }
 
     [Fact]
+    public void Read_RemoteSession_UsesTokenLedgerCallCountAndActivityWindow()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "agent-work-remote-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var info = MakeJob(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
+            File.WriteAllText(
+                Path.Combine(logsDir, TaskPaths.SessionEventsLogFileName),
+                "{\"Ts\":\"2026-07-30T08:00:00Z\",\"Kind\":\"start\",\"Cli\":\"remote-runner\"}\n",
+                Encoding.UTF8);
+            var tokens = new TaskTokenSummary
+            {
+                Calls = 4,
+                TotalTokens = 100,
+                LastUpdate = new DateTime(2026, 7, 30, 8, 25, 0, DateTimeKind.Utc),
+                Entries =
+                [
+                    new TaskTokenCall
+                    {
+                        Ts = new DateTime(2026, 7, 30, 7, 59, 0, DateTimeKind.Utc),
+                        InputTokens = 100,
+                    },
+                ],
+            };
+
+            var summary = AgentWorkSummaryReader.Read(info, tokens);
+
+            Assert.Equal(4, summary.Calls);
+            Assert.Equal(
+                new DateTime(2026, 7, 30, 7, 59, 0, DateTimeKind.Utc),
+                summary.StartedAt);
+            Assert.Equal(
+                new DateTime(2026, 7, 30, 8, 25, 0, DateTimeKind.Utc),
+                summary.LastTouchAt);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public void Read_TolerantToMalformedLines_AndBom()
     {
         var folder = Path.Combine(Path.GetTempPath(), "agent-work-tolerant-" + Guid.NewGuid().ToString("N"));

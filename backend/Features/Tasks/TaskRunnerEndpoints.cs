@@ -112,12 +112,28 @@ public static class TaskRunnerEndpoints
         // Drives the Overview tab's Agent Work block; replaces the inert
         // raw session-id row the operator flagged as no-value noise. The
         // current session id rides along for the debug tooltip only.
-        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/{jobId}/agent-work-summary", (
+            string jobId,
+            string? project,
+            string? watchPath,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            ITokenAggregator tokens) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
-            return Results.Ok(AgentWorkSummaryReader.Read(info));
+            var tokenLookup = tokens.WorkspacePerJob(info.ProjectName, info.WatchPath);
+            TaskTokenSummary? tokenSummary = null;
+            foreach (var key in new[] { info.TaskKey, info.Id, info.Key })
+            {
+                if (!string.IsNullOrWhiteSpace(key) && tokenLookup.TryGetValue(key, out var found))
+                {
+                    tokenSummary = TokenSummaryService.WithModelFallback(found, info.Model);
+                    break;
+                }
+            }
+            return Results.Ok(AgentWorkSummaryReader.Read(info, tokenSummary));
         });
 
         // Drill-down companion to agent-work-summary: the same tool-calls.jsonl
