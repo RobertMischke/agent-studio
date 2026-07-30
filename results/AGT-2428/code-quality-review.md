@@ -94,6 +94,8 @@ Verification after `528cf3c20`:
 
 - Durable process and remote restart subset: 11 passed, 0 failed.
 - Complete `AgentRunner.Tests` project: 243 passed, 0 failed.
+- Transition, integration, authority, escalation, backfill, and architecture
+  subset: 87 passed, 0 failed, with the named Windows timing case excluded.
 - The reported Windows timing failure in
   `AcceptanceIntegrationRoundTripTests.AcceptHttp_ReturnsWithinTwoSeconds_WhileColdGateFinishesAsGateFailed`
   was not investigated or changed, as directed.
