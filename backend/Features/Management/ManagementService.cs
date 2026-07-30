@@ -30,6 +30,7 @@ public sealed class ManagementService
     private readonly AccessSecurityStore _security;
     private readonly ProjectRegistry _projects;
     private readonly MigrationStateStore _migrations;
+    private readonly ReviewAttemptTaskLifecycleService? _reviewAttemptLifecycle;
     private readonly object _gate = new();
 
     public ManagementService(
@@ -39,7 +40,8 @@ public sealed class ManagementService
         ClientIdentityStore clients,
         AccessSecurityStore security,
         ProjectRegistry projects,
-        MigrationStateStore migrations)
+        MigrationStateStore migrations,
+        ReviewAttemptTaskLifecycleService? reviewAttemptLifecycle = null)
     {
         _configuration = configuration;
         _scanner = scanner;
@@ -48,6 +50,7 @@ public sealed class ManagementService
         _security = security;
         _projects = projects;
         _migrations = migrations;
+        _reviewAttemptLifecycle = reviewAttemptLifecycle;
     }
 
     private string Root => Path.GetFullPath(_configuration["TaskRepository"]
@@ -217,7 +220,20 @@ public sealed class ManagementService
         var affected = 0;
         if (!dry)
             foreach (var item in candidates)
-                if (_states.MoveJob(item.Id, TaskStates.Archive, item.WatchPath, "management-archive-sweep").Status == MoveJobStatus.Success) affected++;
+            {
+                MoveJobOutcome MoveCore() => _states.MoveJob(
+                    item.Id,
+                    TaskStates.Archive,
+                    item.WatchPath,
+                    "management-archive-sweep");
+                var moved = _reviewAttemptLifecycle is null
+                    ? MoveCore()
+                    : _reviewAttemptLifecycle.ExecuteTerminalTransition(
+                        item,
+                        TaskStates.Archive,
+                        MoveCore);
+                if (moved.Status == MoveJobStatus.Success) affected++;
+            }
         return Result("archive-sweep", dry, candidates.Length, affected,
             dry ? $"{candidates.Length} completed tasks would be archived." : $"Archived {affected} completed tasks.", actor, key);
     }

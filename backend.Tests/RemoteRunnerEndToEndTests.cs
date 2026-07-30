@@ -2156,6 +2156,106 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Monolith_v1_review_claim_supersedes_attempt_for_terminal_task_and_journals_guard()
+    {
+        const string reviewRunnerId = "review-runner-terminal";
+        const string reviewInstance = "review-terminal-host:4243";
+        SeedTask(TaskStates.Completed, TaskKey, "Already completed", "Do not review again.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        var stale = SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            CancellationToken.None);
+
+        Assert.Equal("empty", claim.Status);
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var superseded = authority.GetReview(stale.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Superseded, superseded.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, superseded.Outcome);
+        Assert.Contains(TaskStates.Completed, superseded.TerminalReason);
+        var task = factory.Services.GetRequiredService<TaskScannerService>()
+            .ScanAllJobsWithArchive()
+            .Single(item => item.Key == TaskKey || item.Id == TaskKey);
+        var journal = factory.Services.GetRequiredService<TimelineLog>().ReadAll(task.FolderPath);
+        var cleanup = Assert.Single(journal, item =>
+            item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+            && item.RunId == stale.AttemptId);
+        Assert.Equal("claim-guard", cleanup.Details!["source"]);
+        Assert.Equal(TaskStates.Completed, cleanup.Details["lane"]);
+    }
+
+    [Fact]
+    public async Task Monolith_attempt_addressed_review_claim_is_also_guarded_by_terminal_task_state()
+    {
+        SeedTask(TaskStates.Completed, TaskKey, "Already completed", "Do not review again.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        var stale = SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        using var client = new RClient(http, "review-worker");
+        await client.RegisterAsync("review-worker", "service", CancellationToken.None);
+
+        var response = await http.PostAsJsonAsync(
+            $"/api/attempts/reviews/{stale.AttemptId}/claim",
+            new ClaimReviewAttemptRequest(
+                stale.AttemptId,
+                "review-worker",
+                "review-host",
+                "claim-terminal-attempt",
+                60),
+            CancellationToken.None);
+
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, response.StatusCode);
+        var rejection = await response.Content.ReadFromJsonAsync<AttemptWriteResult>(ApiJson);
+        Assert.Equal(AttemptWriteStatus.Superseded, rejection!.Status);
+        var persisted = factory.Services.GetRequiredService<AttemptAuthorityService>()
+            .GetReview(stale.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Superseded, persisted.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, persisted.Outcome);
+    }
+
+    [Fact]
+    public void Monolith_boot_sweep_supersedes_existing_attempt_for_archived_task()
+    {
+        SeedTask(TaskStates.Archive, TaskKey, "Already archived", "Do not review again.");
+        string attemptId;
+        using (var firstProcess = BuildFactory())
+        {
+            _ = firstProcess.Services;
+            attemptId = SeedReviewAttempt(
+                firstProcess.Services,
+                includeResultEnvelope: true).AttemptId;
+            Assert.Equal(
+                AttemptLifecycleState.Pending,
+                firstProcess.Services.GetRequiredService<AttemptAuthorityService>()
+                    .GetReview(attemptId)!.State);
+        }
+
+        using var restarted = BuildFactory();
+        _ = restarted.Services;
+        var authority = restarted.Services.GetRequiredService<AttemptAuthorityService>();
+        var superseded = authority.GetReview(attemptId)!;
+
+        Assert.Equal(AttemptLifecycleState.Superseded, superseded.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, superseded.Outcome);
+        Assert.Contains(TaskStates.Archive, superseded.TerminalReason);
+        var task = restarted.Services.GetRequiredService<TaskScannerService>()
+            .ScanAllJobsWithArchive()
+            .Single(item => item.Key == TaskKey || item.Id == TaskKey);
+        var journal = restarted.Services.GetRequiredService<TimelineLog>().ReadAll(task.FolderPath);
+        var cleanup = Assert.Single(journal, item =>
+            item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+            && item.RunId == attemptId);
+        Assert.Equal("boot-sweep", cleanup.Details!["source"]);
+        Assert.Equal(TaskStates.Archive, cleanup.Details["lane"]);
+    }
+
+    [Fact]
     public async Task Monolith_v1_review_claim_leaves_an_envelope_less_subject_inside_the_grace_alone()
     {
         const string reviewRunnerId = "review-runner-grace";

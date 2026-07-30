@@ -191,6 +191,7 @@ public static class V1ReviewPlaneEndpoints
             Contract.ReviewClaimRequest request,
             V1ReviewExecutorRegistry registry,
             AttemptAuthorityService authority,
+            ReviewAttemptTaskLifecycleService reviewAttemptLifecycle,
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
@@ -222,6 +223,10 @@ public static class V1ReviewPlaneEndpoints
                     Message: $"Review executor is paused until {pause.CooldownUntil:O} after a "
                              + $"{pause.Classification} failure of {pause.CapabilityKey}: {pause.Reason}"));
 
+            // Card state owns admission. Revoke stale terminal-card attempts
+            // before the legacy-envelope sweep can classify them as an
+            // infrastructure failure instead of Superseded authority.
+            reviewAttemptLifecycle.SweepUnclaimableAttempts("claim-guard");
             foreach (var legacy in authority.TerminalizeLegacyReviewSubjectsWithoutResultEnvelope())
             {
                 var task = FindTask(scanner, legacy.TaskKey);
@@ -245,7 +250,7 @@ public static class V1ReviewPlaneEndpoints
                 }
             }
 
-            var claimed = authority.ClaimNextReview(
+            var claimed = reviewAttemptLifecycle.ClaimNextReview(
                 runnerId,
                 executor.HostId,
                 request.InstanceId,

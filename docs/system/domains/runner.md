@@ -211,6 +211,15 @@ state.
   boundary: the Task Server never substitutes its checkout or local
   `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
   authority continue through the established local compatibility path.
+- ReviewAttempt claimability is also bound to the current task lane. A
+  successful transition into `6-completed` or `7-archive` supersedes every open
+  ReviewAttempt for that task before another claim can cross the lifecycle
+  boundary. Each claim poll fails closed for attempts whose card is absent or
+  no longer in `4-auto-review`, and writes a durable supersession journal fact.
+  The compatibility store uses `review_attempt_superseded` in the task
+  timeline; the canonical Task Server uses `review.superseded` in its audit
+  journal. The startup sweep applies the same idempotent repair to authority
+  records left by older binaries.
 - `task-server.Tests/TopologyTests.cs`: release-blocking sibling-process
   harness for Studio detach, canonical history replay, renewal safety stop,
   Task Server restart quarantine, Runner replacement after positive
@@ -249,6 +258,10 @@ state.
   restart takeover changes both the durable fence and the containment namespace.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
+- A ReviewAttempt can be claimed only while its task resolves to
+  `4-auto-review`. Terminal lane transition, claim admission, and startup
+  recovery share one cleanup service; rejected attempts end with
+  `State=Superseded`, `Outcome=Superseded`, and a durable terminal reason.
 - Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
   daemon-local slot reduction. Coding and review services publish versioned,
   expiring health for provider authentication, Git fetch/push, repository

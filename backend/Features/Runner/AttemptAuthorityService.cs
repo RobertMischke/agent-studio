@@ -642,6 +642,50 @@ public sealed class AttemptAuthorityService
     }
 
     /// <summary>
+    /// Revokes every non-terminal ReviewAttempt whose owning task is no longer
+    /// eligible for Remote Review. The resolver returns <c>null</c> for an
+    /// eligible task and a durable terminal reason for a task that must be
+    /// rejected. A single authority-store write covers the whole sweep.
+    /// </summary>
+    public IReadOnlyList<ReviewAttemptDto> SupersedeOpenReviewAttempts(
+        Func<string, string?> rejectionReason)
+    {
+        ArgumentNullException.ThrowIfNull(rejectionReason);
+
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var changed = new List<ReviewAttemptRecord>();
+            foreach (var review in _state.ReviewAttempts.Where(review => !Terminal(review.State)))
+            {
+                var reason = NormalizeNull(rejectionReason(review.TaskKey));
+                if (reason is null)
+                    continue;
+
+                review.State = AttemptLifecycleState.Superseded;
+                review.Outcome = ReviewTerminalOutcome.Superseded;
+                review.TerminalAt = now;
+                review.TerminalReason = reason;
+                changed.Add(review);
+            }
+
+            if (changed.Count == 0)
+                return [];
+
+            PersistLocked();
+            foreach (var review in changed)
+            {
+                _logger.LogInformation(
+                    "review-attempt-superseded attempt={AttemptId} task={TaskKey} reason={Reason}",
+                    review.AttemptId,
+                    review.TaskKey,
+                    review.TerminalReason);
+            }
+            return changed.Select(ToDto).ToList();
+        }
+    }
+
+    /// <summary>
     /// True while a ReviewAttempt has no materializable subject (its source run
     /// carries no Result-Envelope) but is still young enough that the missing
     /// envelope may simply be an in-flight completion ingest. Caller must hold

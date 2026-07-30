@@ -181,6 +181,13 @@ public sealed partial class TaskServerStore
         {
             var executor = await ReadReviewExecutorAsync(
                 connection, transaction, request.ExecutorId, request.InstanceId, ct);
+            await SupersedeUnclaimableReviewAttemptsAsync(
+                connection,
+                transaction,
+                actorId,
+                "claim-guard",
+                taskId: null,
+                ct);
             var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
                 connection,
                 transaction,
@@ -213,11 +220,13 @@ public sealed partial class TaskServerStore
                        s.plan_json, s.created_at
                   FROM review_attempts a
                   JOIN review_subjects s ON s.id = a.subject_id
+                  JOIN tasks t ON t.id = a.task_id
                  WHERE (
                          a.status = 'queued'
                          OR a.status = 'process-unknown'
                          OR (a.status = 'leased' AND a.expires_at <= $now)
                        )
+                   AND t.state = '4-auto-review'
                    AND NOT (
                          json_extract(s.plan_json, '$.requireDifferentHostFailureDomain') = 1
                          AND s.coding_host_id = $host
@@ -338,6 +347,77 @@ public sealed partial class TaskServerStore
                 CanaryCapabilities: capabilityAdmission.Canaries);
         }, ct);
         return response!;
+    }
+
+    private async Task<int> SupersedeUnclaimableReviewAttemptsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string actorId,
+        string source,
+        string? taskId,
+        CancellationToken ct)
+    {
+        var stale = new List<(string AttemptId, string TaskId, string? State)>();
+        await using (var command = Command(connection, """
+            SELECT a.id, a.task_id, t.state
+              FROM review_attempts a
+              LEFT JOIN tasks t ON t.id = a.task_id
+             WHERE a.status IN ('queued', 'leased', 'process-unknown')
+               AND (t.id IS NULL OR t.state <> '4-auto-review')
+               AND ($task IS NULL OR a.task_id = $task)
+             ORDER BY a.created_at, a.attempt_number;
+            """, transaction, ("$task", taskId)))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                stale.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2)));
+            }
+        }
+
+        var superseded = 0;
+        foreach (var item in stale)
+        {
+            var lane = item.State ?? "missing";
+            var reason =
+                $"Task is in lane '{lane}', not '4-auto-review'; open ReviewAttempt authority was superseded by {source}.";
+            var affected = await ExecuteAsync(connection, """
+                UPDATE review_attempts
+                   SET status = 'superseded',
+                       outcome = 'Superseded',
+                       summary = $reason,
+                       reported_at = COALESCE(reported_at, $now)
+                 WHERE id = $attempt
+                   AND status IN ('queued', 'leased', 'process-unknown');
+                """, ct, transaction,
+                ("$reason", reason),
+                ("$now", Iso(UtcNow)),
+                ("$attempt", item.AttemptId));
+            if (affected == 0) continue;
+
+            superseded += affected;
+            await AuditAsync(
+                connection,
+                transaction,
+                actorId,
+                "review.superseded",
+                "review-attempt",
+                item.AttemptId,
+                JsonSerializer.Serialize(new
+                {
+                    item.TaskId,
+                    lane,
+                    source,
+                    authority = "Superseded",
+                    reason,
+                }),
+                ct);
+        }
+
+        return superseded;
     }
 
     private static IReadOnlyList<string>? RequiredReviewCapabilities(
