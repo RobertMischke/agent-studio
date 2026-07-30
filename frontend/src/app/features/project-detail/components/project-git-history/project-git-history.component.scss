@@ -36,7 +36,7 @@
   }
 
   &__readonly {
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     border: 1px solid var(--studio-border);
     border-radius: 4px;
     color: var(--studio-fg-dim);
@@ -81,9 +81,9 @@
     }
 
     circle {
-      fill: var(--studio-surface);
-      stroke: currentcolor;
-      stroke-width: 2;
+      fill: currentcolor;
+      stroke: var(--studio-surface);
+      stroke-width: 1.5;
       vector-effect: non-scaling-stroke;
     }
   }
@@ -91,7 +91,10 @@
   &__row--selected &__graph {
     color: var(--studio-accent);
 
-    circle { fill: var(--studio-accent); }
+    circle {
+      fill: var(--studio-accent);
+      stroke: var(--studio-surface);
+    }
   }
 
   &__summary {
@@ -140,7 +143,7 @@
   &__deploy,
   &__presence,
   &__task {
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     border: 1px solid var(--studio-border);
     border-radius: 4px;
     font: 700 9px/1.4 var(--font-mono);

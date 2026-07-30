@@ -59,7 +59,7 @@ public sealed partial class ProjectGitGraphService
         var history = inventory.History is null
             ? null
             : EnrichHistory(projectName, inventory.RepositoryPath, inventory.History, tasks, deployments);
-        var active = BuildActiveCheckouts(tasks, branches, worktrees);
+        var active = BuildActiveCheckouts(projectName, tasks, branches, worktrees);
 
         return inventory with
         {
@@ -74,7 +74,10 @@ public sealed partial class ProjectGitGraphService
     public GitHistoryPage BuildHistory(string projectName, int offset, int pageSize)
     {
         var page = _git.GetProjectHistory(projectName, offset, pageSize);
-        var root = _git.ResolveProjectRepoRoot(projectName);
+        // GetProjectHistory warmed the inventory cache. Reuse that canonical
+        // repository path instead of resolving the git toplevel a second time.
+        var inventory = _git.GetProjectInventory(projectName);
+        var root = inventory.IsRepo ? inventory.RepositoryPath : null;
         if (root is null || page.Commits.Count == 0) return page;
         return EnrichHistory(projectName, root, page, ProjectTasks(projectName), DeploymentMarkers());
     }
@@ -133,13 +136,14 @@ public sealed partial class ProjectGitGraphService
             .ToList();
 
     private IReadOnlyList<GitActiveCheckout> BuildActiveCheckouts(
+        string projectName,
         IReadOnlyList<TaskInfo> tasks,
         IReadOnlyList<GitBranchEntry> branches,
         IReadOnlyList<GitWorktreeEntry> worktrees)
     {
         var status = _runner.GetStatus();
         status.Projects.TryGetValue(
-            tasks.FirstOrDefault()?.ProjectName ?? "",
+            projectName,
             out var projectStatus);
         var active = new List<GitActiveCheckout>();
         foreach (var task in tasks.Where(task => task.State == TaskStates.Progress))

@@ -1,17 +1,41 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { ProjectGitPanelComponent } from './project-git-panel.component';
+import { TestBed } from '@angular/core/testing';
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { GitGraphCommit, GitProjectInventory } from '../../../git';
 import { loadDiff2Html } from '../../../../utils/diff2html-lazy';
-import type { GitProjectInventory } from '../../../git';
+import { ProjectGitPanelComponent } from './project-git-panel.component';
 
-// Warm the shared lazy diff2html module so <app-diff-content> renders
-// synchronously and no dynamic import resolves after the environment teardown.
 beforeAll(async () => {
   await loadDiff2Html();
 });
+
+const COMMIT_SHA = 'c'.repeat(40);
+
+function graphCommit(overrides: Partial<GitGraphCommit> = {}): GitGraphCommit {
+  return {
+    sha: COMMIT_SHA,
+    shortSha: 'ccccccc',
+    parentShas: ['a'.repeat(40)],
+    authorDateUtc: '2026-07-02T10:00:00Z',
+    author: 'dev',
+    subject: 'feat: add thing',
+    filesChanged: 1,
+    added: 3,
+    removed: 1,
+    refs: [{ name: 'task/1', kind: 'branch', isRemote: false }],
+    tasks: [{ taskKey: 'Demo::task-1', key: 'AGT-1', title: 'Add thing', lane: '3-progress' }],
+    presence: {
+      inIntegration: true,
+      inRelease: false,
+      integrationBranch: 'develop',
+      releaseBranch: 'main',
+    },
+    deployments: [{ target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' }],
+    ...overrides,
+  };
+}
 
 function inventoryFixture(overrides: Partial<GitProjectInventory> = {}): GitProjectInventory {
   return {
@@ -20,16 +44,66 @@ function inventoryFixture(overrides: Partial<GitProjectInventory> = {}): GitProj
     isRepo: true,
     currentBranch: 'main',
     worktrees: [
-      { path: 'C:/repo/demo', branch: 'main', headSha: 'a'.repeat(40), headShortSha: 'aaaaaaa', isPrimary: true, isDetached: false, isBare: false },
-      { path: 'C:/repo/demo-task-1', branch: 'task/1', headSha: 'b'.repeat(40), headShortSha: 'bbbbbbb', isPrimary: false, isDetached: false, isBare: false },
+      {
+        path: 'C:/repo/demo',
+        branch: 'main',
+        headSha: 'a'.repeat(40),
+        headShortSha: 'aaaaaaa',
+        isPrimary: true,
+        isDetached: false,
+        isBare: false,
+      },
     ],
     branches: [
-      { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: true, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'seed', lastCommitAtUtc: '2026-07-01T00:00:00Z', worktreePath: 'C:/repo/demo' },
-      { name: 'task/1', category: 'task', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: false, upstream: null, ahead: 2, behind: 0, lastCommitSubject: 'task work', lastCommitAtUtc: '2026-07-02T00:00:00Z', worktreePath: 'C:/repo/demo-task-1' },
+      {
+        name: 'main',
+        category: 'main',
+        tipSha: COMMIT_SHA,
+        tipShortSha: 'ccccccc',
+        isCurrent: true,
+        upstream: 'origin/main',
+        ahead: 0,
+        behind: 0,
+        lastCommitSubject: 'feat: add thing',
+        lastCommitAtUtc: '2026-07-02T10:00:00Z',
+        worktreePath: 'C:/repo/demo',
+        isLocal: true,
+        hasRemote: true,
+      },
+      {
+        name: 'task/1',
+        category: 'task',
+        tipSha: 'b'.repeat(40),
+        tipShortSha: 'bbbbbbb',
+        isCurrent: false,
+        upstream: null,
+        ahead: 2,
+        behind: 0,
+        lastCommitSubject: 'task work',
+        lastCommitAtUtc: '2026-07-02T00:00:00Z',
+        worktreePath: null,
+        isLocal: true,
+        hasRemote: false,
+      },
     ],
-    recentCommits: [
-      { sha: 'c'.repeat(40), shortSha: 'ccccccc', authorDateUtc: '2026-07-02T10:00:00Z', author: 'dev', subject: 'feat: add thing', filesChanged: 1, added: 3, removed: 1 },
-    ],
+    recentCommits: [],
+    history: {
+      offset: 0,
+      pageSize: 50,
+      nextOffset: 1,
+      hasMore: true,
+      commits: [graphCommit()],
+    },
+    activeCheckouts: [{
+      task: { taskKey: 'Demo::task-1', key: 'AGT-1', title: 'Add thing', lane: '3-progress' },
+      branch: 'task/1',
+      headSha: 'b'.repeat(40),
+      location: 'remote',
+      runner: 'agent-runner-01',
+      worktreePath: null,
+      activeSince: '2026-07-02T09:00:00Z',
+    }],
+    deployments: [{ target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' }],
     error: null,
     ...overrides,
   };
@@ -43,62 +117,97 @@ function setup() {
   const fixture = TestBed.createComponent(ProjectGitPanelComponent);
   fixture.componentRef.setInput('projectName', 'Demo');
   fixture.detectChanges();
-  const httpCtrl = TestBed.inject(HttpTestingController);
-  return { fixture, httpCtrl, root: fixture.nativeElement as HTMLElement };
+  return {
+    fixture,
+    http: TestBed.inject(HttpTestingController),
+    root: fixture.nativeElement as HTMLElement,
+  };
 }
 
 describe('ProjectGitPanelComponent', () => {
-  it('renders the branch/worktree/history tree and repository path', () => {
-    const { fixture, httpCtrl, root } = setup();
-    httpCtrl.expectOne(r => r.url === '/api/git/inventory' && r.params.get('project') === 'Demo').flush(inventoryFixture());
+  it('renders refs and active checkouts beside the enriched commit graph', () => {
+    const { fixture, http, root } = setup();
+    http.expectOne(request => request.url === '/api/git/inventory').flush(inventoryFixture());
     fixture.detectChanges();
 
     expect(root.querySelector('[data-testid="git-repo-path"]')?.textContent).toContain('C:/repo/demo');
+    expect(root.querySelector('[data-testid="git-tree-group-active"]')?.textContent).toContain('remote');
     expect(root.querySelector('[data-testid="git-tree-group-worktrees"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="git-tree-group-integration"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="git-tree-group-task"]')).toBeTruthy();
-    expect(root.querySelector('[data-testid="git-tree-group-history"]')).toBeTruthy();
-    expect(root.querySelectorAll('[data-testid="git-branch-row"]').length).toBe(2);
-    httpCtrl.verify();
+    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('feat: add thing');
+    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('deploy:runner');
+    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('✓ develop');
+    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('○ main');
+    expect(root.querySelector('[data-testid="git-cleanup"]')).toBeNull();
+    http.verify();
   });
 
-  it('loads files and a diff when a commit is selected', () => {
-    const { fixture, httpCtrl, root } = setup();
-    httpCtrl.expectOne(r => r.url === '/api/git/inventory').flush(inventoryFixture());
+  it('loads files and a diff only after the explicit changes action', () => {
+    const { fixture, http, root } = setup();
+    http.expectOne(request => request.url === '/api/git/inventory').flush(inventoryFixture());
+    fixture.detectChanges();
+    http.expectNone('/api/git/project-commit/files');
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="Inspect changes in ccccccc"]')!.click();
+    fixture.detectChanges();
+    http.expectOne(request =>
+      request.url === '/api/git/project-commit/files' && request.params.get('sha') === COMMIT_SHA,
+    ).flush({ sha: COMMIT_SHA, files: [{ status: 'M', path: 'src/thing.ts', added: 3, removed: 1 }] });
+    fixture.detectChanges();
+    http.expectOne(request =>
+      request.url === '/api/git/project-commit/diff' && request.params.get('path') === 'src/thing.ts',
+    ).flush({ diff: 'diff --git a/src/thing.ts b/src/thing.ts\n+added\n', hasDiff: true, emptyReason: null });
     fixture.detectChanges();
 
-    const commitRow = root.querySelector<HTMLButtonElement>('[data-testid="git-commit-row"]');
-    expect(commitRow).toBeTruthy();
-    commitRow!.click();
-    fixture.detectChanges();
-
-    const sha = 'c'.repeat(40);
-    httpCtrl.expectOne(r => r.url === '/api/git/project-commit/files' && r.params.get('sha') === sha)
-      .flush({ sha, files: [{ status: 'M', path: 'src/thing.ts', added: 3, removed: 1 }] });
-    fixture.detectChanges();
-
-    expect(root.querySelectorAll('[data-testid="git-file-row"]').length).toBe(1);
-
-    httpCtrl.expectOne(r => r.url === '/api/git/project-commit/diff' && r.params.get('path') === 'src/thing.ts')
-      .flush({ diff: 'diff --git a/src/thing.ts b/src/thing.ts\n+added\n', hasDiff: true, emptyReason: null });
-    fixture.detectChanges();
-
-    expect(root.querySelector('[data-testid="git-detail-card"]')?.textContent).toContain('feat: add thing');
-    expect(fixture.componentInstance.diffText()).toContain('+added');
-    httpCtrl.verify();
+    expect(root.querySelector('[data-testid="git-changes"]')?.textContent).toContain('feat: add thing');
+    expect(root.querySelectorAll('[data-testid="git-file-row"]')).toHaveLength(1);
+    expect(fixture.componentInstance.inspectedCommit()?.sha).toBe(COMMIT_SHA);
+    http.verify();
   });
 
-  it('shows the empty state when the project is not a git repository', () => {
-    const { fixture, httpCtrl, root } = setup();
-    httpCtrl.expectOne(r => r.url === '/api/git/inventory').flush(
-      inventoryFixture({ isRepo: false, repositoryPath: 'C:/repo/demo', currentBranch: null, worktrees: [], branches: [], recentCommits: [], error: 'Not a git repository: C:/repo/demo' }),
-    );
+  it('appends an older page without duplicating commits', () => {
+    const { fixture, http, root } = setup();
+    http.expectOne(request => request.url === '/api/git/inventory').flush(inventoryFixture());
     fixture.detectChanges();
 
-    const empty = root.querySelector('[data-testid="git-empty"]');
-    expect(empty).toBeTruthy();
-    expect(empty?.textContent).toContain('Not a git repository');
+    root.querySelector<HTMLButtonElement>('[data-testid="git-history-load-more"]')!.click();
+    fixture.detectChanges();
+    http.expectOne(request =>
+      request.url === '/api/git/history' && request.params.get('offset') === '1',
+    ).flush({
+      offset: 1,
+      pageSize: 50,
+      nextOffset: null,
+      hasMore: false,
+      commits: [
+        graphCommit(),
+        graphCommit({ sha: 'd'.repeat(40), shortSha: 'ddddddd', subject: 'older commit' }),
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(root.querySelectorAll('[data-testid="git-commit-row"]')).toHaveLength(2);
+    expect(root.textContent).toContain('older commit');
+    http.verify();
+  });
+
+  it('shows the project-level empty state for a non-repository', () => {
+    const { fixture, http, root } = setup();
+    http.expectOne(request => request.url === '/api/git/inventory').flush(inventoryFixture({
+      isRepo: false,
+      repositoryPath: 'C:/repo/demo',
+      currentBranch: null,
+      worktrees: [],
+      branches: [],
+      recentCommits: [],
+      history: null,
+      error: 'Not a git repository: C:/repo/demo',
+    }));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="git-empty"]')?.textContent).toContain('Not a git repository');
     expect(root.querySelector('[data-testid="git-tree"]')).toBeNull();
-    httpCtrl.verify();
+    http.verify();
   });
 });

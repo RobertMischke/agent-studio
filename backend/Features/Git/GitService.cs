@@ -196,13 +196,14 @@ public record GitWorktreeEntry(
     GitTaskBadge? Task = null);
 
 /// <summary>
-/// One local branch in the Project Hub Git View inventory. <see cref="Category"/>
+/// One logical branch in the Project Hub Git View inventory. It folds matching
+/// local and <c>origin/*</c> refs into one row while retaining their individual
+/// presence flags. <see cref="Category"/>
 /// is a coarse classification (<c>main</c> / <c>develop</c> / <c>feature</c> /
-/// <c>task</c> / <c>other</c>) the frontend groups the branch tree by, so the
-/// operator can see at a glance what is integration, what is a feature branch,
-/// and what is an open task branch. <see cref="WorktreePath"/> is non-null when
-/// the branch is currently checked out in one of the <see cref="GitWorktreeEntry"/>
-/// folders.
+/// <c>task</c> / <c>runner</c> / <c>other</c>) the frontend groups the branch
+/// tree by, so the operator can see at a glance what is integration, feature,
+/// task, or runner state. <see cref="WorktreePath"/> is non-null when the branch
+/// is currently checked out in one of the <see cref="GitWorktreeEntry"/> folders.
 /// </summary>
 public record GitBranchEntry(
     string Name,
@@ -310,11 +311,11 @@ public record GitIntegrationMergeCommit(
     string Subject);
 
 /// <summary>
-/// Read-only branch + worktree + recent-history inventory for a single
+/// Read-only branch + worktree + first graph-page inventory for a single
 /// project, returned by <see cref="GitService.GetProjectInventory"/> and
 /// surfaced on the Project Hub Git View. Deliberately project-scoped: it
 /// answers "what branches and checkouts does THIS project's repository have,
-/// and what changed recently", never a global git-client view. Carries an
+/// and how are its refs connected", never a global git-client view. Carries an
 /// <see cref="Error"/> (with <see cref="IsRepo"/> false) when the project has
 /// no configured repository or the folder is not a git working tree, so the
 /// frontend can render a clean empty/error state.
@@ -953,8 +954,8 @@ public class GitService
     private static readonly TimeSpan InventoryTtl = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// Branch / worktree / recent-history inventory for one project, backing the
-    /// Project Hub Git View. Read-only: it forks a handful of cheap plumbing
+    /// Branch / worktree / first graph-page inventory for one project, backing
+    /// the Project Hub Git View. Read-only: it forks a bounded set of plumbing
     /// commands (<c>worktree list</c>, <c>for-each-ref</c>, <c>log</c>) and never
     /// mutates the repository. Cached per project for ~3 s so a polling UI can
     /// call freely without forking N git processes per render. Returns a shape
@@ -1003,11 +1004,11 @@ public class GitService
         if (root == null)
             return EmptyInventory(projectName, configured, $"Not a git repository: {configured}");
 
-        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
-        var currentBranch = string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim();
-
         var (wtOut, _, wtCode) = RunGitArgs(root, "worktree", "list", "--porcelain");
         var worktrees = wtCode == 0 ? ParseWorktreePorcelain(wtOut) : [];
+        // The primary porcelain entry already carries the checked-out branch.
+        // Reusing it avoids a separate rev-parse spawn on every cold inventory.
+        var currentBranch = worktrees.FirstOrDefault(worktree => worktree.IsPrimary)?.Branch;
         var worktreeByBranch = worktrees
             .Where(w => !string.IsNullOrEmpty(w.Branch))
             .GroupBy(w => w.Branch!, StringComparer.Ordinal)
@@ -1041,10 +1042,10 @@ public class GitService
     {
         offset = Math.Max(0, offset);
         pageSize = Math.Clamp(pageSize, 10, 100);
-        var root = ResolveProjectRoot(projectName);
+        var inventory = GetProjectInventory(projectName);
+        var root = inventory.IsRepo ? inventory.RepositoryPath : null;
         if (root == null) return new GitHistoryPage(offset, pageSize, null, false, []);
 
-        var inventory = GetProjectInventory(projectName);
         var fingerprint = ReadOnlyGitRefFingerprint.Capture(
             root,
             inventory.Branches.Select(branch => branch.Name));
@@ -1409,11 +1410,8 @@ public class GitService
     /// </summary>
     private string? ResolveProjectRoot(string projectName)
     {
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-        if (entry == null) return null;
-        var configured = ResolveConfiguredRepositoryPath(entry);
-        if (string.IsNullOrWhiteSpace(configured)) return null;
-        return ResolveGitToplevel(configured);
+        var inventory = GetProjectInventory(projectName);
+        return inventory.IsRepo ? inventory.RepositoryPath : null;
     }
 
     /// <summary>

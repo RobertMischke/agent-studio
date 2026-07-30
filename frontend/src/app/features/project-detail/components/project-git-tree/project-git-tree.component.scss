@@ -88,7 +88,7 @@
   }
 
   &__type {
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     background: var(--studio-surface-muted);
     color: var(--studio-fg);
     text-transform: uppercase;
@@ -115,14 +115,14 @@
   }
 
   &__remote {
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     background: var(--studio-bg-elevated);
   }
 
   &__remote--local { background: transparent; }
 
   &__head {
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     background: var(--studio-accent-soft, var(--studio-bg-elevated));
     color: var(--studio-fg-strong);
     letter-spacing: 0.04em;
@@ -130,7 +130,7 @@
 
   &__task {
     margin-right: var(--studio-spacing-1);
-    padding: 1px var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-1);
     border: 1px solid var(--studio-border);
     background: var(--studio-bg-elevated);
     color: var(--studio-fg-strong);

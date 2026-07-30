@@ -11,15 +11,16 @@
     @for (row of rows(); track row.commit.sha) {
       <article class="history__row" role="listitem"
                [class.history__row--selected]="selectedSha() === row.commit.sha"
+               [attr.aria-current]="selectedSha() === row.commit.sha ? 'true' : null"
                data-testid="git-commit-row" [attr.data-sha]="row.commit.sha">
-        <svg class="history__graph" aria-hidden="true"
+        <svg class="history__graph" aria-hidden="true" data-testid="git-graph-lanes"
              [attr.viewBox]="'0 0 ' + row.width + ' 36'"
              [style.width.px]="row.width">
           @for (segment of row.segments; track segment.id) {
             <line [attr.x1]="segment.x1" [attr.y1]="segment.y1"
                   [attr.x2]="segment.x2" [attr.y2]="segment.y2"></line>
           }
-          <circle [attr.cx]="row.nodeX" cy="18" r="4"></circle>
+          <circle data-testid="git-graph-node" [attr.cx]="row.nodeX" cy="18" r="4"></circle>
         </svg>
 
         <button type="button" class="history__summary" (click)="commitSelected.emit(row.commit)">
@@ -60,7 +61,7 @@
 
         <button type="button" class="history__changes" (click)="changesRequested.emit(row.commit)"
                 [attr.aria-label]="'Inspect changes in ' + row.commit.shortSha">
-          {{ row.commit.filesChanged }} files
+          {{ row.commit.filesChanged }} {{ row.commit.filesChanged === 1 ? 'file' : 'files' }}
           @if (row.commit.added > 0) { <span class="history__added">+{{ row.commit.added }}</span> }
           @if (row.commit.removed > 0) { <span class="history__removed">-{{ row.commit.removed }}</span> }
         </button>

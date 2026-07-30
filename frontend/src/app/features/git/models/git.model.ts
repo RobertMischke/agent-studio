@@ -69,7 +69,7 @@ export interface GitWorktreeEntry {
   task?: GitTaskBadge | null;
 }
 
-/** One local branch in the Git View inventory. Mirrors backend `GitBranchEntry`. */
+/** One local, remote, or folded local-and-origin branch in the Git View inventory. */
 export interface GitBranchEntry {
   name: string;
   category: GitBranchCategory;
@@ -146,7 +146,7 @@ export interface GitActiveCheckout {
 }
 
 /**
- * Read-only branch / worktree / recent-history inventory for one project.
+ * Read-only branch / worktree / first graph-page inventory for one project.
  * Mirrors backend `GitProjectInventory`; fetched from
  * `GET /api/git/inventory?project=<name>` and consumed by the Project Hub Git
  * View. `isRepo === false` with a populated {@link error} is the empty/error

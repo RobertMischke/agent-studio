@@ -156,9 +156,9 @@ These behaviours are real today and being reviewed. See the configuration analys
 
 Over time a project repository accumulates dead refs: merged `task/*` branches
 (local and `origin/*`), operational `refs/backups/*` snapshots, and stale
-worktree registrations whose folders were removed out-of-band. The Project Hub
-Git View exposes an operator-driven cleanup that prunes only what has already
-landed.
+worktree registrations whose folders were removed out-of-band. Cleanup is an
+operator-driven maintenance action that prunes only what has already landed.
+It is separate from the Project Hub Git tree, which is strictly read-only.
 
 - Analysis is a read-only **dry-run plan** (`GitCleanupService.BuildPlan`, endpoint
   `GET /api/git/cleanup/plan?project=<name>`). It classifies every `task/*` branch
@@ -177,10 +177,10 @@ landed.
   first). The guard is server-side, so a stale or crafted request cannot drop
   unmerged work. `refs/backups/*` is dropped only when its commit is an ancestor of
   the integration branch.
-- UI: `app-project-git-cleanup` (a collapsible section inside `project-git-panel`)
-  renders the plan with per-row checkboxes (eligible pre-selected, ineligible
-  disabled with the reason), a two-step confirm before deletion, and the result
-  report. Coverage: `GitCleanupServiceTests` (backend, temp repo) and
+- The existing `app-project-git-cleanup` component can render the plan with
+  per-row checkboxes, a two-step confirmation, and a result report, but it is
+  not mounted in the Project Hub Git tree. The tree exposes no mutation action.
+  Coverage: `GitCleanupServiceTests` (backend, temp repo) and
   `project-git-cleanup.component.spec.ts` (frontend).
 - **Automation status**: cleanup is operator-triggered only. The optional
   "auto-cleanup after a successful merge step" hook (the counterpart to the

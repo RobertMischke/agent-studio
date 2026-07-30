@@ -1,0 +1,68 @@
+<section class="git" data-testid="project-git-panel">
+  <header class="git__head">
+    <div class="git__identity">
+      <div class="git__title-row">
+        <h1>Git tree</h1>
+        <span class="git__readonly">Read only</span>
+        @if (inventory()?.currentBranch; as branch) {
+          <span class="git__branch mono" data-testid="git-current-branch">HEAD {{ branch }}</span>
+        }
+      </div>
+      @if (inventory()?.repositoryPath; as repository) {
+        <code class="git__repo" data-testid="git-repo-path">{{ repository }}</code>
+      }
+    </div>
+    <button type="button" class="git__refresh" data-testid="git-refresh" (click)="refresh()">
+      Refresh
+    </button>
+  </header>
+
+  @if (inventoryState() === 'loading' && !inventory()) {
+    <div class="git__message" data-testid="git-loading">Loading repository graph...</div>
+  } @else if (showEmpty()) {
+    <div class="git__empty" data-testid="git-empty">
+      <h2>No git data for this project</h2>
+      <p>{{ inventoryError() || 'This project folder is not a git repository.' }}</p>
+      @if (inventory()?.repositoryPath; as repository) {
+        <code>{{ repository }}</code>
+      }
+    </div>
+  } @else {
+    <div class="git__workspace" [class.git__workspace--with-changes]="!!inspectedCommit()">
+      <app-project-git-tree
+        class="git__tree"
+        [groups]="tree()"
+        [selectedId]="selectedId()"
+        (branchSelected)="selectBranch($event)"
+        (worktreeSelected)="selectWorktree($event)"
+        (activeSelected)="selectActive($event)"
+      />
+
+      <div class="git__history">
+        <app-project-git-history
+          [commits]="commits()"
+          [selectedSha]="selectedCommitSha()"
+          [hasMore]="historyHasMore()"
+          [loadingMore]="historyLoading()"
+          (commitSelected)="selectCommit($event)"
+          (changesRequested)="inspectChanges($event)"
+          (loadMore)="loadOlder()"
+        />
+        @if (historyError()) {
+          <p class="git__history-error" role="alert" data-testid="git-history-error">
+            {{ historyError() }}
+          </p>
+        }
+      </div>
+
+      @if (inspectedCommit(); as commit) {
+        <app-project-git-changes
+          class="git__changes"
+          [projectName]="projectName()"
+          [commit]="commit"
+          (closed)="closeChanges()"
+        />
+      }
+    </div>
+  }
+</section>

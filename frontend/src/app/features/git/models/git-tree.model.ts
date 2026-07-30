@@ -2,7 +2,7 @@
  * Pure tree model for the Project Hub Git View. Transforms the flat backend
  * {@link GitProjectInventory} into the grouped, ordered node list the tree
  * browser renders on the left pane: worktrees first, then branches grouped by
- * category (integration / feature / task / other), then recent history.
+ * category (integration / feature / task / runner / other).
  *
  * Kept free of Angular so the grouping/ordering logic is unit-tested in
  * isolation and the component stays a thin renderer over `buildGitTree`.
