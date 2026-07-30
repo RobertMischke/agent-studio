@@ -225,10 +225,18 @@ public sealed class RunnerSlotWiringTests : IDisposable
         var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "fix-worktree-paths");
         Directory.CreateDirectory(jobFolder);
         var promptPath = Path.Combine(jobFolder, "prompt.md");
-        File.WriteAllText(promptPath,
-            $"Edit {_repoRoot}\\backend\\Services\\Tasks\\TaskStateMachine.cs and run git -C {_repoRoot} status.");
+        var authoredPrompt =
+            $"Edit {_repoRoot}\\backend\\Services\\Tasks\\TaskStateMachine.cs and run git -C {_repoRoot} status.";
+        File.WriteAllText(promptPath, authoredPrompt);
         var worktree = Path.Combine(_workspaceRoot, "worktrees", "fix-worktree-paths");
         Directory.CreateDirectory(worktree);
+        var enrichmentContext =
+            $"## Prompt enrichment\n\nInspect {_repoRoot}\\docs before changing the runner.";
+        var enrichment = new PromptEnrichmentPreparation(
+            authoredPrompt,
+            PromptEnrichmentService.AppendContext(authoredPrompt, enrichmentContext),
+            enrichmentContext,
+            new PromptEnrichmentReport());
         var info = new TaskInfo
         {
             Id = "fix-worktree-paths",
@@ -259,15 +267,22 @@ public sealed class RunnerSlotWiringTests : IDisposable
             PersistSessionName: null,
             ClearStaleSessionName: false);
 
-        var rendered = InvokeRenderPrompt(runner, plan, info, worktree);
+        var rendered = InvokeRenderPrompt(runner, plan, info, worktree, enrichment);
 
         Assert.Contains("## Worktree containment", rendered);
+        Assert.Contains("## Prompt enrichment", rendered);
         Assert.Contains(worktree, rendered);
         Assert.DoesNotContain($"git -C {_repoRoot} status", rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain($"Edit {_repoRoot}\\backend", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"Inspect {_repoRoot}\\docs", rendered, StringComparison.OrdinalIgnoreCase);
         Assert.Contains($"git -C {worktree} status", rendered);
+        Assert.Contains($"Inspect {worktree}\\docs", rendered);
         Assert.Contains($"Working directory: `{worktree}`", rendered);
         Assert.Contains($"Git repository for status/diff/commits: `{worktree}`", rendered);
+        var containmentIndex = rendered.IndexOf("## Worktree containment", StringComparison.Ordinal);
+        var authoredIndex = rendered.IndexOf("Edit ", StringComparison.Ordinal);
+        var enrichmentIndex = rendered.IndexOf("## Prompt enrichment", StringComparison.Ordinal);
+        Assert.True(containmentIndex == 0 && authoredIndex > containmentIndex && enrichmentIndex > authoredIndex);
     }
 
     [Fact]
@@ -430,10 +445,17 @@ public sealed class RunnerSlotWiringTests : IDisposable
         return (runner, settings);
     }
 
-    private static string InvokeRenderPrompt(ProjectRunner runner, RunPlan plan, TaskInfo info, string runWorkingDir)
+    private static string InvokeRenderPrompt(
+        ProjectRunner runner,
+        RunPlan plan,
+        TaskInfo info,
+        string runWorkingDir,
+        PromptEnrichmentPreparation? promptEnrichment = null)
     {
         var method = typeof(ProjectRunner).GetMethod("RenderPrompt", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingMethodException(nameof(ProjectRunner), "RenderPrompt");
-        return (string)method.Invoke(runner, new object[] { plan, info, runWorkingDir })!;
+        return (string)method.Invoke(
+            runner,
+            new object?[] { plan, info, runWorkingDir, promptEnrichment })!;
     }
 }
