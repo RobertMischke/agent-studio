@@ -26,11 +26,24 @@ public static class RemoteRunPrompt
         "This is required, not optional. The orchestrator parses this token; " +
         "without it the run lands in review as missing-terminal-sentinel.";
 
-    public static string Build(string taskPrompt)
+    public static string Build(string taskPrompt) => Build(taskPrompt, modeFraming: null);
+
+    /// <summary>
+    /// Builds the remote prompt with the server-rendered per-mode framing block
+    /// (read-only / research / concept / web contracts) between the task body and
+    /// the standing instructions - the same relative position the local runner
+    /// gives its <c>{{mode_framing}}</c> slot ("read after the task above").
+    /// A null/empty framing keeps the historical verbatim behaviour.
+    /// </summary>
+    public static string Build(string taskPrompt, string? modeFraming)
     {
         ArgumentNullException.ThrowIfNull(taskPrompt);
+        var framingBlock = string.IsNullOrWhiteSpace(modeFraming)
+            ? string.Empty
+            : modeFraming.Trim() + Environment.NewLine + Environment.NewLine;
         return taskPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
             + "---" + Environment.NewLine + Environment.NewLine
+            + framingBlock
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;
     }

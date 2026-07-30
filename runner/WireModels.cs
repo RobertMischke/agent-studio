@@ -198,7 +198,12 @@ public sealed record RunSpecDto(
     string? Model = null,
     string? ThinkingLevel = null,
     string? PermissionMode = null,
-    string? ContextMode = null);
+    string? ContextMode = null,
+    // Server-rendered per-mode framing block (read-only / research / concept /
+    // web contracts). Appended to the fetched task prompt at this runner's
+    // execution boundary, mirroring the local runner's {{mode_framing}} slot.
+    // Null from an older server keeps the previous verbatim-prompt behaviour.
+    string? ModeFraming = null);
 
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,

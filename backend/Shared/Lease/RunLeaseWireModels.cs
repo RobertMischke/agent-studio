@@ -151,12 +151,14 @@ public enum RunnerClaimStatus
 /// <param name="ThinkingLevel">Reasoning level, resolved against what the CLI + model actually support; null when the card pinned none.</param>
 /// <param name="PermissionMode">Resolved per-project permission posture. Transported for parity; the runner does not build flags from it yet (T1).</param>
 /// <param name="ContextMode">Resolved per-task / per-project context mode. Transported for parity; clean context on the runner waits for CAR-B.</param>
+/// <param name="ModeFraming">Server-rendered per-mode framing block (read-only / research / concept / web contracts). The local in-process runner injects the same block via <c>{{mode_framing}}</c>; a standalone runner appends it at its own execution boundary. Null/empty for a plain coding run.</param>
 public sealed record RunSpecDto(
     string? CliType = null,
     string? Model = null,
     string? ThinkingLevel = null,
     string? PermissionMode = null,
-    string? ContextMode = null);
+    string? ContextMode = null,
+    string? ModeFraming = null);
 
 /// <summary>Result of one daemon pickup poll.</summary>
 public sealed record RunnerClaimResponse(
