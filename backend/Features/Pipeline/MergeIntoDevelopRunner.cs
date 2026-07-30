@@ -497,6 +497,42 @@ public sealed class MergeIntoDevelopRunner
                     error: "Could not resolve the exact source and main SHAs for the pre-main gate."),
                 null);
         }
+
+        // AGT-2417 docs rule: a delivery whose whole diff (against the merge
+        // base) is documentation / task evidence cannot change any build or
+        // test signal. It skips the full-suite release gate AND the
+        // rebased-onto-main requirement and integrates through the same
+        // conflict-checked merge the non-release path uses; a real conflict
+        // still surfaces honestly. Unknown diffs stay on the strict path.
+        var changedPaths = _git.ChangedPathsAgainstMergeBase(repoRoot, releaseBranch, taskBranch);
+        if (DocsOnlyDeliveryPolicy.IsDocsOnly(changedPaths))
+        {
+            var lightGate = new BuildTestGateResult(
+                BuildTestGateVerdict.Skipped,
+                null,
+                0,
+                string.Empty,
+                $"Docs-only delivery ({changedPaths!.Count} changed path(s), all documentation/evidence); " +
+                "the full-suite release gate is not applicable and a conflict-checked merge probe integrates directly.",
+                false,
+                false)
+            {
+                ExpectedSha = sourceSha,
+            };
+            RecordGateEvidence(jobFolderPath, "pre-main-test-gate", lightGate);
+            _logger.LogInformation(
+                "merge-into-main docs-only light gate for project={Project} job={JobId} changedPaths={Count}",
+                project, jobId, changedPaths.Count);
+            var docsMerge = delivery.IsRemote
+                ? _git.MergeRemoteDeliveryIntoIntegration(
+                    repoRoot,
+                    delivery.Ref,
+                    delivery.ExpectedResultSha ?? string.Empty,
+                    releaseBranch)
+                : _git.MergeBranchIntoIntegration(repoRoot, taskBranch, releaseBranch);
+            return (docsMerge, lightGate);
+        }
+
         if (!_git.IsAncestor(repoRoot, releaseBranch, taskBranch))
         {
             return (

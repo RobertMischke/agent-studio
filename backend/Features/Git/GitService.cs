@@ -2638,6 +2638,28 @@ public class GitService
     }
 
     /// <summary>
+    /// Changed paths of a delivery relative to its merge base with the target
+    /// (<c>git diff --name-only target...source</c>). Returns null when the
+    /// diff could not be computed (unknown refs, no merge base, git failure) -
+    /// callers must then take their conservative path and never assume a
+    /// docs-only delivery.
+    /// </summary>
+    public IReadOnlyList<string>? ChangedPathsAgainstMergeBase(string repoRoot, string targetRef, string sourceRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(targetRef) || !IsLikelyBranchName(sourceRef)) return null;
+
+        var (output, _, code) = RunGitArgs(
+            repoRoot, "diff", "--name-only", $"{targetRef}...{sourceRef}");
+        if (code != 0) return null;
+
+        return output.Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
     /// Fast-forwards the branch checked out at <paramref name="repoRoot"/> to
     /// <paramref name="sourceRef"/> (<c>git merge --ff-only &lt;sourceRef&gt;</c>).
     /// After a successful <see cref="RebaseOnto"/> the task branch is a linear
