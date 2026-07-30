@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { DiffContentComponent } from '../../../../components/diff-content/diff-content.component';
 import { ProjectGitCleanupComponent } from '../project-git-cleanup/project-git-cleanup.component';
+import { ProjectGitHistoryComponent } from '../project-git-history/project-git-history.component';
+import { ProjectGitTreeComponent } from '../project-git-tree/project-git-tree.component';
 import { ProjectGitService } from '../../../../services/project-git.service';
 import { formatCompactDateTime } from '../../../../services/format.util';
 import { describeDiffSize, isLargeDiff } from '../../../../utils/large-diff-gate';
 import {
   buildGitTree,
-  branchCategoryLabel,
+  type GitActiveCheckout,
   type GitBranchEntry,
-  type GitCommitEntry,
   type GitFileChange,
+  type GitGraphCommit,
   type GitProjectInventory,
   type GitWorktreeEntry,
 } from '../../../git';
@@ -20,7 +22,8 @@ type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type GitSelection =
   | { kind: 'branch'; branch: GitBranchEntry }
   | { kind: 'worktree'; worktree: GitWorktreeEntry }
-  | { kind: 'commit'; commit: GitCommitEntry };
+  | { kind: 'active'; checkout: GitActiveCheckout }
+  | { kind: 'commit'; commit: GitGraphCommit };
 
 /**
  * Project Hub "Git View" panel. A project-scoped, read-only branch / worktree /
@@ -37,7 +40,12 @@ type GitSelection =
   selector: 'app-project-git-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DiffContentComponent, ProjectGitCleanupComponent],
+  imports: [
+    DiffContentComponent,
+    ProjectGitCleanupComponent,
+    ProjectGitHistoryComponent,
+    ProjectGitTreeComponent,
+  ],
   templateUrl: './project-git-panel.component.html',
   styleUrl: './project-git-panel.component.scss',
 })
@@ -49,8 +57,14 @@ export class ProjectGitPanelComponent {
   readonly inventory = signal<GitProjectInventory | null>(null);
   readonly inventoryState = signal<LoadState>('idle');
   readonly inventoryError = signal<string | null>(null);
+  readonly commits = signal<GitGraphCommit[]>([]);
+  readonly historyHasMore = signal(false);
+  readonly historyNextOffset = signal<number | null>(null);
+  readonly historyLoading = signal(false);
+  readonly historyError = signal<string | null>(null);
 
   readonly selection = signal<GitSelection | null>(null);
+  readonly changesOpen = signal(false);
 
   readonly files = signal<GitFileChange[]>([]);
   readonly filesState = signal<LoadState>('idle');
@@ -83,7 +97,8 @@ export class ProjectGitPanelComponent {
     if (!sel) return null;
     if (sel.kind === 'branch') return `branch:${sel.branch.name}`;
     if (sel.kind === 'worktree') return `wt:${sel.worktree.path}`;
-    return `commit:${sel.commit.sha}`;
+    if (sel.kind === 'active') return `active:${sel.checkout.task.taskKey}`;
+    return null;
   });
 
   /** The SHA whose files + diff the right pane loads for the current selection. */
@@ -92,8 +107,11 @@ export class ProjectGitPanelComponent {
     if (!sel) return null;
     if (sel.kind === 'branch') return sel.branch.tipSha;
     if (sel.kind === 'worktree') return sel.worktree.headSha;
+    if (sel.kind === 'active') return sel.checkout.headSha;
     return sel.commit.sha;
   });
+
+  readonly selectedCommitSha = computed<string | null>(() => this.activeSha());
 
   readonly selectedFile = computed<GitFileChange | null>(() => {
     const path = this.selectedPath();
@@ -118,21 +136,6 @@ export class ProjectGitPanelComponent {
       this.resetFiles();
       this.loadInventory(name);
     });
-
-    // Load the selected node's files whenever its SHA changes.
-    effect(() => {
-      const sha = this.activeSha();
-      const project = this.projectName();
-      if (!sha) {
-        this.filesLoadKey = '';
-        this.resetFiles();
-        return;
-      }
-      const key = `${project}|${sha}`;
-      if (key === this.filesLoadKey) return;
-      this.filesLoadKey = key;
-      this.loadFiles(project, sha, key);
-    });
   }
 
   refresh(): void {
@@ -145,6 +148,10 @@ export class ProjectGitPanelComponent {
     this.projectGit.getInventory(project).subscribe({
       next: inv => {
         this.inventory.set(inv);
+        this.commits.set(inv.history?.commits ?? []);
+        this.historyHasMore.set(inv.history?.hasMore ?? false);
+        this.historyNextOffset.set(inv.history?.nextOffset ?? null);
+        this.historyError.set(null);
         this.inventoryState.set('loaded');
         if (inv && !inv.isRepo) this.inventoryError.set(inv.error ?? 'This project has no git repository.');
       },
@@ -158,14 +165,54 @@ export class ProjectGitPanelComponent {
 
   selectBranch(branch: GitBranchEntry): void {
     this.selection.set({ kind: 'branch', branch });
+    this.closeChanges();
   }
 
   selectWorktree(worktree: GitWorktreeEntry): void {
     this.selection.set({ kind: 'worktree', worktree });
+    this.closeChanges();
   }
 
-  selectCommit(commit: GitCommitEntry): void {
+  selectActive(checkout: GitActiveCheckout): void {
+    this.selection.set({ kind: 'active', checkout });
+    this.closeChanges();
+  }
+
+  selectCommit(commit: GitGraphCommit): void {
     this.selection.set({ kind: 'commit', commit });
+    this.closeChanges();
+  }
+
+  inspectChanges(commit: GitGraphCommit): void {
+    this.selection.set({ kind: 'commit', commit });
+    this.changesOpen.set(true);
+    const key = `${this.projectName()}|${commit.sha}`;
+    if (key === this.filesLoadKey && this.filesState() === 'loaded') return;
+    this.filesLoadKey = key;
+    this.loadFiles(this.projectName(), commit.sha, key);
+  }
+
+  loadOlder(): void {
+    const offset = this.historyNextOffset();
+    if (offset === null || this.historyLoading()) return;
+    this.historyLoading.set(true);
+    this.historyError.set(null);
+    this.projectGit.getHistory(this.projectName(), offset).subscribe({
+      next: page => {
+        const known = new Set(this.commits().map(commit => commit.sha));
+        this.commits.update(current => [
+          ...current,
+          ...page.commits.filter(commit => !known.has(commit.sha)),
+        ]);
+        this.historyHasMore.set(page.hasMore);
+        this.historyNextOffset.set(page.nextOffset);
+        this.historyLoading.set(false);
+      },
+      error: err => {
+        this.historyError.set(this.describeError(err, 'Could not load older commits.'));
+        this.historyLoading.set(false);
+      },
+    });
   }
 
   selectFile(path: string): void {
@@ -244,10 +291,6 @@ export class ProjectGitPanelComponent {
 
   // ----- display helpers -----
 
-  categoryLabel(category: GitBranchEntry['category']): string {
-    return branchCategoryLabel(category);
-  }
-
   when(iso: string | null | undefined): string {
     return iso ? formatCompactDateTime(iso) : '';
   }
@@ -264,12 +307,14 @@ export class ProjectGitPanelComponent {
     return sha.length > 7 ? sha.slice(0, 7) : sha;
   }
 
-  trackId(_index: number, item: { id: string }): string {
-    return item.id;
-  }
-
   trackFile(_index: number, file: GitFileChange): string {
     return file.path;
+  }
+
+  closeChanges(): void {
+    this.changesOpen.set(false);
+    this.filesLoadKey = '';
+    this.resetFiles();
   }
 
   private resetFiles(): void {

@@ -1,0 +1,293 @@
+using System.Text.RegularExpressions;
+
+namespace AgentStudio.Git;
+
+/// <summary>
+/// Composes read-only repository facts with task, lease, integration-presence,
+/// and runtime deployment metadata for the Project Hub Git graph.
+///
+/// Git topology remains owned by <see cref="GitService"/>. develop/main
+/// presence remains owned by <see cref="BoardMergeStatusService"/>. This class
+/// only joins those cached projections by SHA and branch name.
+/// </summary>
+public sealed partial class ProjectGitGraphService
+{
+    private readonly GitService _git;
+    private readonly TaskScannerService _tasks;
+    private readonly BoardMergeStatusService _presence;
+    private readonly TaskRunnerService _runner;
+    private readonly BuildIdentity _identity;
+
+    public ProjectGitGraphService(
+        GitService git,
+        TaskScannerService tasks,
+        BoardMergeStatusService presence,
+        TaskRunnerService runner,
+        IConfiguration configuration)
+    {
+        _git = git;
+        _tasks = tasks;
+        _presence = presence;
+        _runner = runner;
+        _identity = BuildIdentity.Load(configuration);
+    }
+
+    public GitProjectInventory BuildInventory(string projectName)
+    {
+        var inventory = _git.GetProjectInventory(projectName);
+        if (!inventory.IsRepo || string.IsNullOrWhiteSpace(inventory.RepositoryPath))
+            return inventory;
+
+        var tasks = ProjectTasks(projectName);
+        var taskByBranch = BuildTaskByBranch(tasks, inventory.Branches);
+        var branches = inventory.Branches
+            .Select(branch => branch with
+            {
+                Tasks = taskByBranch.TryGetValue(branch.Name, out var cards) ? cards : [],
+            })
+            .ToList();
+        var worktrees = inventory.Worktrees
+            .Select(worktree => worktree with
+            {
+                Task = worktree.Branch is not null
+                    && taskByBranch.TryGetValue(worktree.Branch, out var cards)
+                        ? cards.FirstOrDefault()
+                        : null,
+            })
+            .ToList();
+        var deployments = DeploymentMarkers();
+        var history = inventory.History is null
+            ? null
+            : EnrichHistory(projectName, inventory.RepositoryPath, inventory.History, tasks, deployments);
+        var active = BuildActiveCheckouts(tasks, branches, worktrees);
+
+        return inventory with
+        {
+            Branches = branches,
+            Worktrees = worktrees,
+            History = history,
+            ActiveCheckouts = active,
+            Deployments = deployments,
+        };
+    }
+
+    public GitHistoryPage BuildHistory(string projectName, int offset, int pageSize)
+    {
+        var page = _git.GetProjectHistory(projectName, offset, pageSize);
+        var root = _git.ResolveProjectRepoRoot(projectName);
+        if (root is null || page.Commits.Count == 0) return page;
+        return EnrichHistory(projectName, root, page, ProjectTasks(projectName), DeploymentMarkers());
+    }
+
+    private GitHistoryPage EnrichHistory(
+        string projectName,
+        string repoRoot,
+        GitHistoryPage page,
+        IReadOnlyList<TaskInfo> tasks,
+        IReadOnlyList<GitDeploymentMarker> deployments)
+    {
+        var presence = _presence.BuildCommitPresence(
+            projectName,
+            repoRoot,
+            page.Commits.Select(commit => commit.Sha));
+        var taskByCommit = BuildTaskByCommit(tasks);
+        var taskByKey = tasks
+            .Select(task => (Key: DisplayKey(task), Task: task))
+            .GroupBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Task, StringComparer.OrdinalIgnoreCase);
+
+        var commits = page.Commits.Select(commit =>
+        {
+            var cards = taskByCommit.TryGetValue(commit.Sha, out var direct)
+                ? new List<GitTaskBadge>(direct)
+                : [];
+            var mergeKey = MergeTaskKey(commit.Subject);
+            if (mergeKey is not null
+                && taskByKey.TryGetValue(mergeKey, out var mergedTask)
+                && cards.All(card => !string.Equals(card.TaskKey, mergedTask.TaskKey, StringComparison.Ordinal)))
+                cards.Add(Card(mergedTask));
+
+            presence.TryGetValue(commit.Sha, out var commitPresence);
+            return commit with
+            {
+                Tasks = cards,
+                Presence = commitPresence is null
+                    ? null
+                    : new GitCommitPresence(
+                        commitPresence.InIntegration,
+                        commitPresence.InRelease,
+                        commitPresence.IntegrationBranch,
+                        commitPresence.ReleaseBranch),
+                Deployments = deployments
+                    .Where(marker => string.Equals(marker.Sha, commit.Sha, StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+            };
+        }).ToList();
+        return page with { Commits = commits };
+    }
+
+    private IReadOnlyList<TaskInfo> ProjectTasks(string projectName)
+        => _tasks.ScanAllJobsWithArchive()
+            .Where(task => string.Equals(task.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+            .Where(task => !task.Fixture)
+            .ToList();
+
+    private IReadOnlyList<GitActiveCheckout> BuildActiveCheckouts(
+        IReadOnlyList<TaskInfo> tasks,
+        IReadOnlyList<GitBranchEntry> branches,
+        IReadOnlyList<GitWorktreeEntry> worktrees)
+    {
+        var status = _runner.GetStatus();
+        status.Projects.TryGetValue(
+            tasks.FirstOrDefault()?.ProjectName ?? "",
+            out var projectStatus);
+        var active = new List<GitActiveCheckout>();
+        foreach (var task in tasks.Where(task => task.State == TaskStates.Progress))
+        {
+            var facts = _runner.GetRunActivityForJob(task.Id, task.ProjectName);
+            var runnerBadge = _runner.ResolveRunnerBadge(task.TaskKey);
+            var isActive = facts.SlotActive
+                || runnerBadge is not null
+                || string.Equals(projectStatus?.ActiveJobId, task.Id, StringComparison.OrdinalIgnoreCase);
+            if (!isActive) continue;
+
+            var branch = branches.FirstOrDefault(candidate =>
+                candidate.Tasks?.Any(card => card.TaskKey == task.TaskKey) == true);
+            var worktree = worktrees.FirstOrDefault(candidate =>
+                candidate.Task?.TaskKey == task.TaskKey
+                || (branch is not null
+                    && string.Equals(candidate.Branch, branch.Name, StringComparison.Ordinal)));
+            var location = runnerBadge?.IsRemote == true ? "remote" : "local";
+            active.Add(new GitActiveCheckout(
+                Card(task),
+                branch?.Name ?? task.Provenance?.Branch,
+                branch?.TipSha ?? LatestCommitSha(task),
+                location,
+                runnerBadge?.RunnerName ?? _runner.BackendName,
+                location == "local" ? worktree?.Path : null,
+                runnerBadge?.AcquiredAt));
+        }
+        return active;
+    }
+
+    private IReadOnlyList<GitDeploymentMarker> DeploymentMarkers()
+    {
+        if (!ReviewSubjectStore.IsValidResultSha(_identity.Commit)) return [];
+        var shortSha = _identity.Commit[..Math.Min(7, _identity.Commit.Length)];
+        return
+        [
+            new GitDeploymentMarker("backend", _identity.Commit, shortSha),
+            new GitDeploymentMarker("runner", _identity.Commit, shortSha),
+            new GitDeploymentMarker("frontend", _identity.Commit, shortSha),
+        ];
+    }
+
+    internal static Dictionary<string, List<GitTaskBadge>> BuildTaskByCommit(
+        IReadOnlyList<TaskInfo> tasks)
+    {
+        var result = new Dictionary<string, List<GitTaskBadge>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var task in tasks)
+        {
+            var shas = task.Commits.Select(commit => commit.Sha).ToList();
+            if (task.Commit is not null) shas.Add(task.Commit.Sha);
+            if (task.Provenance?.Merge?.MergeCommit is { Length: > 0 } merge) shas.Add(merge);
+            var subject = ReadReviewSubject(task);
+            if (subject is not null) shas.Add(subject.ResultSha);
+            foreach (var sha in shas.Where(ReviewSubjectStore.IsValidResultSha)
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!result.TryGetValue(sha, out var cards))
+                {
+                    cards = [];
+                    result[sha] = cards;
+                }
+                if (cards.All(card => card.TaskKey != task.TaskKey)) cards.Add(Card(task));
+            }
+        }
+        return result;
+    }
+
+    internal static Dictionary<string, List<GitTaskBadge>> BuildTaskByBranch(
+        IReadOnlyList<TaskInfo> tasks,
+        IReadOnlyList<GitBranchEntry> branches)
+    {
+        var result = new Dictionary<string, List<GitTaskBadge>>(StringComparer.Ordinal);
+        foreach (var branch in branches)
+        {
+            foreach (var task in tasks.Where(task => BranchBelongsToTask(branch.Name, task)))
+            {
+                if (!result.TryGetValue(branch.Name, out var cards))
+                {
+                    cards = [];
+                    result[branch.Name] = cards;
+                }
+                cards.Add(Card(task));
+            }
+        }
+        return result;
+    }
+
+    private static bool BranchBelongsToTask(string branch, TaskInfo task)
+    {
+        var normalized = NormalizeBranch(branch);
+        var known = new[]
+        {
+            task.Provenance?.Branch,
+            WorktreeTaskLifecycle.BranchFor(task.Id),
+            ReadReviewSubject(task)?.ResultRef,
+        };
+        if (known.Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => NormalizeBranch(value!))
+            .Any(value => string.Equals(value, normalized, StringComparison.Ordinal)))
+            return true;
+        if (!normalized.StartsWith("runner/", StringComparison.Ordinal)) return false;
+        var tail = normalized.Split('/').LastOrDefault() ?? "";
+        var candidates = new[] { task.Key, task.Id, DisplayKey(task) }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => SafeBranchSegment(value!));
+        return candidates.Any(candidate =>
+            string.Equals(tail, candidate, StringComparison.OrdinalIgnoreCase)
+            || tail.StartsWith(candidate + "-collision-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeBranch(string branch)
+    {
+        var value = branch.Trim();
+        if (value.StartsWith("refs/heads/", StringComparison.Ordinal))
+            return value["refs/heads/".Length..];
+        if (value.StartsWith("refs/remotes/origin/", StringComparison.Ordinal))
+            return value["refs/remotes/origin/".Length..];
+        if (value.StartsWith("origin/", StringComparison.Ordinal))
+            return value["origin/".Length..];
+        return value;
+    }
+
+    private static string SafeBranchSegment(string value)
+    {
+        var chars = value.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '-').ToArray();
+        return new string(chars).Trim('-', '.');
+    }
+
+    private static string DisplayKey(TaskInfo task)
+        => string.IsNullOrWhiteSpace(task.Key) ? task.Id : task.Key;
+
+    private static ReviewSubjectRecord? ReadReviewSubject(TaskInfo task)
+        => string.IsNullOrWhiteSpace(task.FolderPath)
+            ? null
+            : ReviewSubjectStore.Read(task.FolderPath);
+
+    private static string? LatestCommitSha(TaskInfo task)
+        => task.Commits.LastOrDefault()?.Sha ?? task.Commit?.Sha;
+
+    private static GitTaskBadge Card(TaskInfo task)
+        => new(task.TaskKey, DisplayKey(task), task.Title, task.State);
+
+    private static string? MergeTaskKey(string subject)
+    {
+        var match = CuratedMergeSubject().Match(subject);
+        return match.Success ? match.Groups["key"].Value.Trim() : null;
+    }
+
+    [GeneratedRegex(@"^merge(?:-recut)?\((?<key>[^)]+)\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CuratedMergeSubject();
+}

@@ -1,0 +1,62 @@
+<nav class="tree" aria-label="Repository branches and worktrees" data-testid="git-tree">
+  @for (group of groups(); track group.id) {
+    <section class="tree__group" [attr.data-testid]="'git-tree-group-' + group.id">
+      <h3 class="tree__heading">
+        <span>{{ group.label }}</span>
+        <span class="tree__count">{{ group.count }}</span>
+      </h3>
+
+      @for (node of group.children; track node.id) {
+        <div class="tree__row" [class.tree__row--selected]="selectedId() === node.id">
+          @if (node.kind === 'active') {
+            <button type="button" class="tree__main" data-testid="git-active-row"
+                    [attr.data-task-key]="node.checkout.task.taskKey"
+                    (click)="activeSelected.emit(node.checkout)">
+              <span class="tree__dot" [attr.data-location]="node.checkout.location" aria-hidden="true"></span>
+              <span class="tree__name mono">{{ node.checkout.branch || 'detached checkout' }}</span>
+              <span class="tree__meta">{{ node.checkout.location }} · {{ node.checkout.runner }}</span>
+            </button>
+            <button type="button" class="tree__task" (click)="openTask($event, node.checkout.task)"
+                    [attr.aria-label]="'Open task ' + node.checkout.task.key">{{ node.checkout.task.key }}</button>
+          } @else if (node.kind === 'worktree') {
+            <button type="button" class="tree__main" data-testid="git-worktree-row"
+                    [attr.data-path]="node.worktree.path"
+                    (click)="worktreeSelected.emit(node.worktree)">
+              <span class="tree__type">{{ node.worktree.isPrimary ? 'main' : 'wt' }}</span>
+              <span class="tree__name mono">{{ node.worktree.path }}</span>
+              <span class="tree__meta mono">{{ node.worktree.branch || 'detached' }}</span>
+            </button>
+            @if (node.worktree.task; as task) {
+              <button type="button" class="tree__task" (click)="openTask($event, task)"
+                      [attr.aria-label]="'Open task ' + task.key">{{ task.key }}</button>
+            }
+          } @else {
+            <button type="button" class="tree__main" data-testid="git-branch-row"
+                    [attr.data-branch]="node.branch.name"
+                    (click)="branchSelected.emit(node.branch)">
+              <span class="tree__type" [attr.data-category]="node.branch.category">{{ categoryLabel(node.branch) }}</span>
+              <span class="tree__name mono">{{ node.branch.name }}</span>
+              @if (node.branch.isCurrent) { <span class="tree__head">HEAD</span> }
+              @if (!node.branch.isLocal) {
+                <span class="tree__remote">origin only</span>
+              } @else if (node.branch.hasRemote) {
+                <span class="tree__remote">origin</span>
+              } @else {
+                <span class="tree__remote tree__remote--local">local</span>
+              }
+              @if (aheadBehind(node.branch); as distance) {
+                <span class="tree__meta mono">{{ distance }}</span>
+              }
+            </button>
+            @for (task of node.branch.tasks ?? []; track task.taskKey) {
+              <button type="button" class="tree__task" (click)="openTask($event, task)"
+                      [attr.aria-label]="'Open task ' + task.key">{{ task.key }}</button>
+            }
+          }
+        </div>
+      }
+    </section>
+  } @empty {
+    <p class="tree__empty">No branches or worktrees found.</p>
+  }
+</nav>

@@ -42,7 +42,15 @@ export interface GitProjectSummary {
 }
 
 /** Coarse branch classification used by the Project Hub Git View tree. */
-export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'other';
+export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'runner' | 'other';
+
+/** Compact task-card link attached to a branch, checkout, or commit. */
+export interface GitTaskBadge {
+  taskKey: string;
+  key: string;
+  title: string;
+  lane: string;
+}
 
 /**
  * One checkout of the project repository (primary or an ADR-0052 per-task
@@ -58,6 +66,7 @@ export interface GitWorktreeEntry {
   isPrimary: boolean;
   isDetached: boolean;
   isBare: boolean;
+  task?: GitTaskBadge | null;
 }
 
 /** One local branch in the Git View inventory. Mirrors backend `GitBranchEntry`. */
@@ -73,6 +82,10 @@ export interface GitBranchEntry {
   lastCommitSubject: string | null;
   lastCommitAtUtc: string | null;
   worktreePath: string | null;
+  isLocal?: boolean;
+  hasRemote?: boolean;
+  remoteTipSha?: string | null;
+  tasks?: GitTaskBadge[];
 }
 
 /** One commit in the Git View recent-history list. Mirrors backend `GitCommitInfo`. */
@@ -85,6 +98,51 @@ export interface GitCommitEntry {
   filesChanged: number;
   added: number;
   removed: number;
+}
+
+export interface GitCommitRef {
+  name: string;
+  kind: 'head' | 'branch' | 'tag' | 'ref' | string;
+  isRemote: boolean;
+}
+
+export interface GitCommitPresence {
+  inIntegration: boolean;
+  inRelease: boolean;
+  integrationBranch: string;
+  releaseBranch: string;
+}
+
+export interface GitDeploymentMarker {
+  target: 'backend' | 'runner' | 'frontend' | string;
+  sha: string;
+  shortSha: string;
+}
+
+export interface GitGraphCommit extends GitCommitEntry {
+  parentShas: string[];
+  refs: GitCommitRef[];
+  tasks: GitTaskBadge[];
+  presence: GitCommitPresence | null;
+  deployments: GitDeploymentMarker[];
+}
+
+export interface GitHistoryPage {
+  offset: number;
+  pageSize: number;
+  nextOffset: number | null;
+  hasMore: boolean;
+  commits: GitGraphCommit[];
+}
+
+export interface GitActiveCheckout {
+  task: GitTaskBadge;
+  branch: string | null;
+  headSha: string | null;
+  location: 'local' | 'remote' | string;
+  runner: string;
+  worktreePath: string | null;
+  activeSince: string | null;
 }
 
 /**
@@ -102,6 +160,9 @@ export interface GitProjectInventory {
   worktrees: GitWorktreeEntry[];
   branches: GitBranchEntry[];
   recentCommits: GitCommitEntry[];
+  history?: GitHistoryPage | null;
+  activeCheckouts?: GitActiveCheckout[];
+  deployments?: GitDeploymentMarker[];
   error: string | null;
 }
 

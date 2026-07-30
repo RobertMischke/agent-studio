@@ -22,6 +22,13 @@ export type {
   GitWorktreeEntry,
   GitBranchEntry,
   GitCommitEntry,
+  GitTaskBadge,
+  GitCommitRef,
+  GitCommitPresence,
+  GitDeploymentMarker,
+  GitGraphCommit,
+  GitHistoryPage,
+  GitActiveCheckout,
   GitProjectInventory,
   IntegrationQueueState,
   IntegrationQueueItem,
@@ -44,11 +51,13 @@ export {
   buildGitTree,
   branchCategoryLabel,
 } from './models/git-tree.model';
+export { buildGitGraphRows } from './models/git-graph-layout.model';
 export type {
   GitTreeGroupId,
   GitTreeGroup,
   GitTreeLeaf,
   GitTreeBranchNode,
   GitTreeWorktreeNode,
-  GitTreeCommitNode,
+  GitTreeActiveNode,
 } from './models/git-tree.model';
+export type { GitGraphRow, GitGraphSegment } from './models/git-graph-layout.model';

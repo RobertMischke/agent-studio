@@ -127,8 +127,18 @@ public static class SystemEndpoints
         // branches, on-disk worktree/checkout folders, and recent commits so
         // the Git View tree can distinguish main / develop / feature / task
         // branches and hand a browsed SHA to the shared diff renderer.
-        app.MapGet("/api/git/inventory", (string project, GitService git) =>
-            Results.Ok(git.GetProjectInventory(project)));
+        app.MapGet("/api/git/inventory", (string project, ProjectGitGraphService graph) =>
+            Results.Ok(graph.BuildInventory(project)));
+
+        // Older graph rows are fetched only on explicit demand. Page size is
+        // clamped in GitService and every row is enriched through the same
+        // cached develop/main presence resolver as the initial inventory page.
+        app.MapGet("/api/git/history", (
+            string project,
+            int? offset,
+            int? limit,
+            ProjectGitGraphService graph) =>
+            Results.Ok(graph.BuildHistory(project, offset ?? 0, limit ?? 50)));
 
         // First-class integration object: accepted-card queue, curated publisher
         // merges on origin/develop, and the card-granular develop -> main
