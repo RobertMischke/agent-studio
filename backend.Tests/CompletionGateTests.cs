@@ -436,6 +436,185 @@ public class CompletionGateTests
         Assert.Empty(findings);
     }
 
+    // ── Per-run evidence scoping (MKT-8 gate-latch regression) ────────────
+
+    [Fact]
+    public void ScopeToLatestRunWindow_CleanFinalRun_DropsOlderRunLines()
+    {
+        var log = string.Join('\n',
+            "[21:35:22.996] [system] [taskboard] Started codex CLI (PID 17912), model=gpt-5.6-sol",
+            "[21:42:38.221] [stderr] ERROR codex_core::tools::router: error=apply_patch verification failed: invalid hunk at line 2",
+            "[21:44:48.607] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=565,6s",
+            "[21:48:46.506] [system] [taskboard] Started codex CLI (PID 63216), model=gpt-5.6-sol",
+            "[21:52:59.000] [stdout] Verified the target file contains the full intended content.",
+            "[21:53:06.256] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=259,8s");
+
+        var window = CompletionGate.ScopeToLatestRunWindow(log);
+
+        Assert.DoesNotContain("apply_patch", window, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PID 63216", window);
+        Assert.Contains("Verified the target file", window);
+    }
+
+    [Fact]
+    public void ScopeToLatestRunWindow_DirtyFinalRun_KeepsWholeLog()
+    {
+        // A failed final run must NOT hide older evidence: scoping only applies
+        // when the latest exit is a clean terminal.
+        var log = string.Join('\n',
+            "[12:00] [system] [taskboard] Started codex CLI (PID 1)",
+            "[12:01] [stderr] error CS0103: the name does not exist.",
+            "[12:02] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=60s",
+            "[12:10] [system] [taskboard] Started codex CLI (PID 2)",
+            "[12:11] [system] [taskboard] codex CLI exited: status=failed, exitCode=1, duration=10s");
+
+        Assert.Equal(log, CompletionGate.ScopeToLatestRunWindow(log));
+    }
+
+    [Fact]
+    public void ScopeToLatestRunWindow_NoExitMarker_KeepsWholeLog()
+    {
+        var log = "[12:00] [stdout] doing work\n[12:01] [stdout] [[TASK_DONE]]";
+
+        Assert.Equal(log, CompletionGate.ScopeToLatestRunWindow(log));
+    }
+
+    [Fact]
+    public void ExtractFindings_OldRunApplyPatchError_ClearedByCleanFinalRun()
+    {
+        // MKT-8 round 1: run 1's apply_patch failure sat in the accumulated log
+        // tail; the reissued run terminated clean and verified the fix, but the
+        // gate re-read the old line as fresh evidence. Per-run scoping must
+        // clear evidence that a clean terminal run superseded.
+        var status = "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n";
+        var log = string.Join('\n',
+            "[21:35:22.996] [system] [taskboard] Started codex CLI (PID 17912)",
+            "[21:42:38.221] [stderr] ERROR codex_core::tools::router: error=apply_patch verification failed: invalid hunk at line 2",
+            "[21:44:48.607] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=565,6s",
+            "[21:48:46.506] [system] [taskboard] Started codex CLI (PID 63216)",
+            "[21:52:59.000] [stdout] [[TASK_DONE]]",
+            "[21:53:06.256] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=259,8s");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_ApplyPatchErrorInLatestRun_StillReported()
+    {
+        // Guard the guard: a failure INSIDE the latest run's own window remains
+        // evidence even though the run claims a clean exit.
+        var status = "## Summary\nDone.\n\nResult: Success\n";
+        var log = string.Join('\n',
+            "[21:48:46.506] [system] [taskboard] Started codex CLI (PID 63216)",
+            "[21:50:00.000] [stderr] ERROR codex_core::tools::router: error=apply_patch verification failed: invalid hunk at line 2",
+            "[21:53:06.256] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=259,8s");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.NotEmpty(findings);
+    }
+
+    // ── Gate-verdict echo suppression (MKT-8 self-sustaining latch) ───────
+
+    [Theory]
+    // The gate's own verdict, echoed back at it: the supervisor escalate line,
+    // the reissue follow-up, the agent's narration of / investigation into the
+    // prior verdict. None of these is the run's own claim of open work.
+    [InlineData("[21:53:25.191] [supervisor] [escalate] Auto-review completion gate could not clear unfinished-work evidence. Reason: [completion-gate-unresolved] Completion gate found unfinished-work evidence after 2 prior orchestrator reissue(s); user attention required.")]
+    [InlineData("The Orchestrator Completion-Gate found unfinished work in the previous run's own result/status evidence.")]
+    [InlineData("Der Completion-Gate hat eine einzelne, später behobene `apply_patch`-Fehlermeldung aus dem alten CLI-Log als „unfinished“ interpretiert.")]
+    [InlineData("[21:46:24.366] [stdout] ● Run \"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -Command \"rg -n -i \\\"unfinished|incomplete|pending\\\" .\"")]
+    public void ExtractFindings_GateVerdictEcho_InLog_IsNotReported(string echoLine)
+    {
+        var status = "Result: Success\n## Open Items\nNone.";
+        var log = string.Join('\n',
+            echoLine,
+            "[21:53:00.000] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_VerdictNarrationInStatusNotes_IsNotReported()
+    {
+        // MKT-8's literal close-out: the Notes honestly narrate that the gate
+        // flagged an already-fixed apply_patch error as "unfinished" and that
+        // the agent verified the fix. That narration must not re-feed the gate.
+        var status = string.Join('\n',
+            "# Status",
+            "",
+            "- Result: Success",
+            "",
+            "## Open Items",
+            "- Release gate: remains locked pending explicit approval of reproducible quickstart and onboarding card acceptance.",
+            "",
+            "## Notes",
+            "- Multiple session recoveries due to Codex rollout state loss during run; final pass completed with full validation.",
+            "- Auto-review gate flagged prior apply_patch error from first run as \"unfinished\"; agent verified target file contained all intended content correctly.");
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void Evaluate_Mkt8ShapedCloseOut_PassesAtBudgetEnd()
+    {
+        // End to end for the MKT-8 escalation: budget spent, clean final run,
+        // status narrating the prior verdict plus an approval-gated deliverable
+        // -> the gate must PASS instead of escalating to 5e.
+        var status = string.Join('\n',
+            "- Result: Success",
+            "",
+            "## Open Items",
+            "- Release gate: remains locked pending explicit approval of reproducible quickstart and onboarding card acceptance.",
+            "",
+            "## Notes",
+            "- Auto-review gate flagged prior apply_patch error from first run as \"unfinished\"; agent verified target file contained all intended content correctly.");
+        var log = string.Join('\n',
+            "[21:35:22.996] [system] [taskboard] Started codex CLI (PID 17912)",
+            "[21:42:38.221] [stderr] ERROR codex_core::tools::router: error=apply_patch verification failed: invalid hunk at line 2",
+            "[21:44:48.607] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=565,6s",
+            "[21:48:46.506] [system] [taskboard] Started codex CLI (PID 63216)",
+            "[21:52:59.000] [stdout] [[TASK_DONE]]",
+            "[21:53:06.256] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=259,8s");
+
+        var decision = CompletionGate.Evaluate(status, log, priorReissues: 2, maxReissues: 2);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
+    [Theory]
+    // Guard the guards: genuine work that merely mentions approval or the gate
+    // subject matter must still be reported.
+    [InlineData("- [ ] Get approval from the design team, then wire the header.")]
+    [InlineData("- [ ] The completion gate refactor is still pending.")]
+    public void ExtractFindings_GenuineWorkNearSuppressedVocabulary_StillReported(string openItemLine)
+    {
+        var status = string.Join('\n', "## Open Items", openItemLine);
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.NotEmpty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_ApprovalGatedOpenItem_IsNotReported()
+    {
+        var status = string.Join('\n',
+            "## Open Items",
+            "- [ ] Publishing awaits the operator's approval.",
+            "- [ ] Release remains locked pending explicit approval of the quickstart.");
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
     [Fact]
     public void Evaluate_NoFindings_Passes()
     {
