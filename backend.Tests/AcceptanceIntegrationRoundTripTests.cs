@@ -527,6 +527,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                     using var document = JsonDocument.Parse(File.ReadAllText(path));
                     Assert.Equal(Slug, document.RootElement.GetProperty("id").GetString());
                 }
+                catch (IOException)
+                {
+                    // Windows: ReplaceFile keeps the destination name valid but
+                    // holds it exclusively for the instant of the swap, so a
+                    // plain open can transiently fail with a sharing violation.
+                    // That is OS behaviour, not a truncation: the invariant
+                    // under test is that a reader that GETS the file never sees
+                    // partial JSON or a foreign id. Transient opens retry.
+                }
                 catch (Exception ex)
                 {
                     failures.Enqueue(ex);
