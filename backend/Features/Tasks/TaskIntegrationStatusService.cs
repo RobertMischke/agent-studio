@@ -28,7 +28,8 @@ namespace AgentStudio.Tasks;
 ///   short-SHAs in the detail;</item>
 /// <item>NONE are ancestors → <c>pending</c> (or <c>conflict-skipped</c> when a
 ///   merge-into-develop conflict was recorded);</item>
-/// <item>no attributed commit at all → <c>no-branch</c>.</item>
+/// <item>no attributed commit and no evidenced delivery ref →
+///   <c>no-branch</c>.</item>
 /// </list>
 /// </para>
 ///
@@ -39,10 +40,10 @@ namespace AgentStudio.Tasks;
 /// answers every card in that repo with in-memory lookups. Provenance merge
 /// records, pipeline success, lane state, and curated merge subjects never
 /// override commit membership. This also detects out-of-band merges on the next
-/// read. The only per-card touch is a best-effort local
-/// <c>pipeline-execution.json</c> read for the not-integrated subset
-/// (integration-failed vs. plain pending). Never throws: a git failure yields
-/// the conservative reading.
+/// read. Per-card local reads resolve the delivery ref from the same task card
+/// and review-subject truth as acceptance; the not-integrated subset also reads
+/// <c>pipeline-execution.json</c> best-effort (integration-failed vs. plain
+/// pending). Never throws: a git failure yields the conservative reading.
 /// </para>
 /// </summary>
 public sealed class TaskIntegrationStatusService
@@ -196,19 +197,21 @@ public sealed class TaskIntegrationStatusService
     /// verdict is derived entirely from the target-branch ancestry of the card's attributed
     /// <c>commits[]</c> (the same list the commit widget shows): all landed →
     /// integrated, some → partial, none → pending/conflict, and no attributed
-    /// commit at all → no-branch. The branch tip is deliberately NOT an anchor - it
-    /// is a WIP snapshot the widget never shows, whose use was the AGT-2171
-    /// badge/widget self-contradiction.
+    /// commit plus no delivery ref → no-branch. The branch tip is deliberately
+    /// NOT an ancestry anchor - it is a WIP snapshot the widget never shows,
+    /// whose use was the AGT-2171 badge/widget self-contradiction. It remains
+    /// valid evidence that a local delivery ref exists.
     /// </summary>
     private TaskIntegrationStatus ClassifyWithRepo(TaskInfo job, RepoIntegration reach)
     {
         var branchName = reach.IntegrationBranch;
+        var deliveryRef = DeliveryRefFor(job);
 
         // Anchor = integrable entries in the attributed commits[] list. Zero-file
         // runner lifecycle markers are metadata, not delivery expectations.
         var attributed = AttributedCommits(job);
         if (attributed.Count == 0)
-            return ClassifyNotIntegrated(job, branchName, repoResolved: true);
+            return ClassifyNotIntegrated(job, branchName, deliveryRef, repoResolved: true);
 
         var missing = new List<string>();
         foreach (var sha in attributed)
@@ -217,14 +220,14 @@ public sealed class TaskIntegrationStatusService
         // NONE of the attributed commits landed → conflict-skipped / pending
         // (no-branch is impossible here: there IS attributed work).
         if (missing.Count == attributed.Count)
-            return ClassifyNotIntegrated(job, branchName, repoResolved: true);
+            return ClassifyNotIntegrated(job, branchName, deliveryRef, repoResolved: true);
 
         var newest = attributed[^1];
 
         // ALL attributed commits landed. Attempt history and recorded merge
         // provenance are deliberately irrelevant to this result.
         if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, "anchor-ancestor");
+            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
 
         // SOME landed, some did not → partial, naming the missing short-SHAs so the
         // tooltip says exactly which attributed commits are not in develop yet.
@@ -233,6 +236,7 @@ public sealed class TaskIntegrationStatusService
         return new TaskIntegrationStatus
         {
             Status = IntegrationStatuses.Partial,
+            DeliveryRef = deliveryRef,
             IntegrationBranch = branchName,
             Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
                      + $"missing: {missingShort}",
@@ -242,18 +246,25 @@ public sealed class TaskIntegrationStatusService
     /// <summary>
     /// Splits a not-integrated card into conflict-skipped / pending / no-branch. A
     /// recorded merge-into-develop conflict / error wins (the work was NOT merged
-    /// and needs a human); a card with no integrable work at all is no-branch;
-    /// otherwise the work simply has not landed yet - pending.
+    /// and needs a human); only a card with neither an attributed commit nor an
+    /// evidenced delivery ref is no-branch; otherwise the work simply has not
+    /// landed yet - pending.
     /// </summary>
-    private TaskIntegrationStatus ClassifyNotIntegrated(TaskInfo job, string branchName, bool repoResolved)
+    private TaskIntegrationStatus ClassifyNotIntegrated(
+        TaskInfo job,
+        string branchName,
+        string? deliveryRef = null,
+        bool repoResolved = false)
     {
+        deliveryRef ??= DeliveryRefFor(job);
         var anchor = AnchorFor(job);
-        var hasWork = anchor != null;
+        var hasWork = anchor != null || deliveryRef != null;
 
         if (repoResolved && ReadMergeConflict(job) is { } conflictDetail)
             return new TaskIntegrationStatus
             {
                 Status = IntegrationStatuses.ConflictSkipped,
+                DeliveryRef = deliveryRef,
                 IntegrationBranch = branchName,
                 Detail = conflictDetail,
             };
@@ -262,25 +273,65 @@ public sealed class TaskIntegrationStatusService
             return new TaskIntegrationStatus
             {
                 Status = IntegrationStatuses.NoBranch,
+                DeliveryRef = null,
                 IntegrationBranch = branchName,
-                Detail = "No task branch or attributed commit to integrate.",
+                Detail = "No delivery ref or attributed commit to integrate.",
             };
 
         return new TaskIntegrationStatus
         {
             Status = IntegrationStatuses.Pending,
+            DeliveryRef = deliveryRef,
             IntegrationBranch = branchName,
-            Detail = $"Accepted work is not yet in {branchName}.",
+            Detail = deliveryRef is null
+                ? $"Accepted work is not yet in {branchName}."
+                : $"Delivery ref '{deliveryRef}' is not yet integrated into {branchName}.",
         };
     }
 
-    private static TaskIntegrationStatus Integrated(string sha, string branchName, string detail) => new()
+    private static TaskIntegrationStatus Integrated(
+        string sha,
+        string branchName,
+        string? deliveryRef,
+        string detail) => new()
     {
         Status = IntegrationStatuses.Integrated,
         Sha = sha,
+        DeliveryRef = deliveryRef,
         IntegrationBranch = branchName,
         Detail = detail,
     };
+
+    /// <summary>
+    /// Projects the same delivery-ref resolution used by acceptance onto the
+    /// card. Immutable result refs, attributed commit branches, and canonical
+    /// runner refs are durable card truth. The resolver's final
+    /// <c>task/&lt;slug&gt;</c> compatibility value is only surfaced when
+    /// provenance proves that a local task branch actually existed; otherwise
+    /// it would recreate the ghost badge this projection is meant to remove.
+    /// </summary>
+    internal static string? DeliveryRefFor(TaskInfo job)
+    {
+        var resolved = DeliveryRefResolver.Resolve(job.Id, job.FolderPath);
+        if (resolved.Source != DeliveryRefSource.LocalTaskFallback)
+            return resolved.Ref;
+
+        var attributedBranch = job.Commits
+            .LastOrDefault(commit => !string.IsNullOrWhiteSpace(commit.Branch))
+            ?.Branch
+            ?? job.Commit?.Branch;
+        if (!string.IsNullOrWhiteSpace(attributedBranch))
+            return TaskIntegrationBranch.Name(attributedBranch, resolved.Ref);
+
+        var hasLocalBranchEvidence = job.Provenance?.Transitions.Any(transition =>
+            !string.IsNullOrWhiteSpace(transition.BranchTip)) == true;
+        if (!hasLocalBranchEvidence)
+            return null;
+
+        return string.IsNullOrWhiteSpace(job.Provenance?.Branch)
+            ? resolved.Ref
+            : TaskIntegrationBranch.Name(job.Provenance!.Branch, resolved.Ref);
+    }
 
     /// <summary>
     /// Reads the deferred merge-into-develop step outcome from the card's local

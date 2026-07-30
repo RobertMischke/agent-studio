@@ -411,12 +411,16 @@ export type IntegrationStatusValue =
  * into the integration branch (develop)? Mirrors backend `TaskIntegrationStatus`
  * and ships via `TaskInfo.integration`. It is computed from attributed-commit
  * membership at the current target HEAD, batched and cached per repository.
- * Lane state, provenance, and remembered merge attempts are not status inputs.
- * Null on cards not in an accepted lane.
+ * `deliveryRef` comes from the same durable resolver truth used by acceptance,
+ * so remote runner refs and evidenced local task refs render uniformly. Lane
+ * state and remembered merge attempts are not membership inputs. Null on cards
+ * not in an accepted lane.
  */
 export interface TaskIntegrationStatus {
   /** integrated | pending | conflict-skipped | no-branch. */
   status: IntegrationStatusValue;
+  /** Actual delivery ref from card truth; null only when no ref is evidenced. */
+  deliveryRef: string | null;
   /** Short attributed SHA proving target-branch membership; null unless integrated. */
   sha: string | null;
   /** Integration branch the verdict was computed against (usually "develop"). */

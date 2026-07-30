@@ -247,6 +247,13 @@ public record TaskIntegrationStatus
     public string Status { get; init; } = IntegrationStatuses.NoBranch;
 
     /// <summary>
+    /// Actual delivery ref selected from durable card truth. Remote runner refs
+    /// and local <c>task/&lt;slug&gt;</c> refs use the same field. Null only when
+    /// the card has no evidenced delivery ref.
+    /// </summary>
+    public string? DeliveryRef { get; init; }
+
+    /// <summary>
     /// Short attributed SHA that proves target-branch membership when
     /// <see cref="Status"/> is <see cref="IntegrationStatuses.Integrated"/>.
     /// Null for every non-integrated status.
@@ -282,7 +289,7 @@ public static class IntegrationStatuses
     /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
     public const string ConflictSkipped = "conflict-skipped";
 
-    /// <summary>The card has no task branch and no attributed commit - nothing to integrate.</summary>
+    /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
     public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];

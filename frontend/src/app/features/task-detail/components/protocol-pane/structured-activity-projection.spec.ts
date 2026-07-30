@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolBurstEvent } from 'coding-agent-chat/core';
+import type { SystemStatusEvent, ToolBurstEvent } from 'coding-agent-chat/core';
 import type { CliOutputLine } from '../../../../models/task.model';
 import { projectStructuredActivityContent } from './structured-activity-projection';
 
@@ -58,7 +58,7 @@ describe('projectStructuredActivityContent', () => {
 
   it('projects runner system records quietly and drops delivery bookkeeping', () => {
     const result = projectStructuredActivityContent(fixture(), 'AGT-2355');
-    const runner = result.events.filter((event) =>
+    const runner = result.events.filter((event): event is SystemStatusEvent =>
       event.kind === 'system.status' && event.category === 'runner');
 
     expect(runner).toHaveLength(3);

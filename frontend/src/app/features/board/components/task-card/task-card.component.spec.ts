@@ -884,6 +884,7 @@ describe('TaskCardComponent (smoke)', () => {
       },
       integration: {
         status: 'integrated',
+        deliveryRef: 'task/ATP-1',
         sha: 'a1b2c3d',
         integrationBranch: 'develop',
         detail: 'Every attributed commit is present in develop.',
@@ -966,6 +967,31 @@ describe('TaskCardComponent (smoke)', () => {
     expect(el?.getAttribute('data-tone')).toBe('discovery');
     expect(el?.className).toContain('task-card__no-commits--discovery');
     expect(el?.textContent).toContain('commit discovery pending');
+  });
+
+  it('remote delivery ref without attributed commits is discovery-pending, never no-code', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      codeActivityDetected: false,
+      integration: {
+        status: 'pending',
+        deliveryRef: 'runner/agent-runner-01/AGT-2220',
+        sha: null,
+        integrationBranch: 'main',
+        detail: 'Delivery ref exists but attribution is pending.',
+      },
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.value).toBe('runner/agent-runner-01/AGT-2220');
+    expect(context?.summary).toBe('commit discovery pending');
+    expect(fixture.componentInstance.commitEmptyBadge()?.tone).toBe('discovery');
+
+    const el = fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]') as HTMLElement | null;
+    expect(el?.textContent).toContain('commit discovery pending');
+    expect(el?.textContent).not.toContain('no code changes');
   });
 
   it('does not render a zero-commit badge outside review lanes (3-progress stays quiet)', async () => {
@@ -1661,6 +1687,7 @@ describe('buildHumanReviewBadge — current lane only', () => {
 describe('current card-status reconciliation', () => {
   const integration = {
     status: 'integrated' as const,
+    deliveryRef: 'task/task-1',
     sha: '2d8d201',
     integrationBranch: 'develop',
     detail: null,

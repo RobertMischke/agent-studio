@@ -203,20 +203,23 @@ export interface CommitEmptyBadge {
 
 /** Zero-commit diagnostic for review-lane cards (AC#3, bug (3)). Only fires in
  *  review lanes and only when the attributed chain is genuinely empty.
- *  `codeActivityDetected` (scanner signal, never repo HEAD) disambiguates the
- *  two cases the operator could not tell apart before:
+ *  `codeActivityDetected` (scanner signal, never repo HEAD) and the canonical
+ *  delivery ref disambiguate the two cases the operator could not tell apart:
  *   - `false` -> analysis-only task: a calm "no code changes" badge.
- *   - `true`  -> a run moved HEAD but no commit is attributed: an amber
+ *   - `true` or a delivery ref -> work exists but no commit is attributed: an amber
  *     "commit discovery pending" diagnostic so a lost/undiscovered commit is
  *     visibly different from a correct no-op. */
 export function buildCommitEmptyBadge(job: TaskInfo): CommitEmptyBadge | null {
   if (!COMMIT_REVIEW_LANES.has(job.state)) return null;
   if (commitChainOf(job).length > 0) return null;
-  if (job.codeActivityDetected) {
+  const deliveryRef = job.integration?.deliveryRef?.trim() || null;
+  if (job.codeActivityDetected || deliveryRef) {
     return {
       tone: 'discovery',
       label: 'commit discovery pending',
-      tooltip: 'This task moved repository HEAD during a run, but no commit is attributed to it yet. Open the task and check the Git view: the attribution backfill may still be pending, or a commit landed that the rule could not associate. This is NOT an analysis-only task.',
+      tooltip: deliveryRef
+        ? `Delivery ref ${deliveryRef} exists, but no commit is attributed to this task yet. Open the task and check the Git view: the attribution backfill may still be pending, or the rule could not associate the delivered commit. This is NOT an analysis-only task.`
+        : 'This task moved repository HEAD during a run, but no commit is attributed to it yet. Open the task and check the Git view: the attribution backfill may still be pending, or a commit landed that the rule could not associate. This is NOT an analysis-only task.',
     };
   }
   return {
@@ -712,6 +715,9 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   const mergeSha = recordedMergeSha(prov);
   const canonicalIntegration = currentIntegrationStatus(job);
   const usesCanonicalIntegration = INTEGRATION_STATUS_LANES.has(job.state);
+  const deliveryRef = usesCanonicalIntegration
+    ? canonicalIntegration?.deliveryRef?.trim() || null
+    : null;
 
   if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
     return null;
@@ -736,6 +742,18 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
       tooltip: landedSha
         ? `Git state: attributed commits are present in ${landedBranch} at ${shortSha(landedSha)}.`
         : `Git state: attributed commits are present in ${landedBranch}.`,
+    };
+  }
+
+  // Accepted remote deliveries and settled local task branches use the same
+  // backend-projected ref. This deliberately precedes the local branch-tip
+  // heuristic so runner/<host>/<KEY> never falls through to "main checkout".
+  if (deliveryRef) {
+    return {
+      kind: 'pre-merge',
+      label: deliveryRef,
+      glyph: '⎇',
+      tooltip: `Git state: delivery ref ${deliveryRef} exists and is not yet fully integrated into ${canonicalIntegration?.integrationBranch || 'develop'}.`,
     };
   }
 

@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 80 specs
+### `board/` - 81 specs
 
 | Spec | Summary |
 |------|---------|
@@ -160,6 +160,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `bug-cross-project-counter.spec.ts` | project chip strip: single-select switch |
 | `card-cooldown-retry.spec.ts` | DtC step 6 - CooldownRetry banner on the progress card |
 | `card-delete-button.spec.ts` | Card delete button |
+| `card-delivery-ref.spec.ts` | Review card delivery ref projection |
 | `card-live-state-by-lane.spec.ts` | Task-card live-state visibility by lane |
 | `card-merge-signal.spec.ts` | AGT-2046 board card merge signal |
 | `card-mode-badge.spec.ts` | Card mode badge (planning / research / concept recognizable on the board) |

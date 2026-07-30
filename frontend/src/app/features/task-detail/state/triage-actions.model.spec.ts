@@ -50,6 +50,7 @@ function mergedProvenance(mergeCommit: string | null): TaskProvenanceRecord {
 function integrated(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
   return {
     status: 'integrated',
+    deliveryRef: 'task/triage-fixture',
     sha: 'ddddddd',
     integrationBranch: 'develop',
     detail: 'anchor-ancestor',
@@ -123,6 +124,7 @@ describe('needsUnintegratedArchiveWarning — Delivered archive guard', () => {
       state: TaskState.Completed,
       integration: status === null ? null : {
         status,
+        deliveryRef: 'task/triage-fixture',
         sha: status === 'integrated' ? 'abc1234' : null,
         integrationBranch: 'develop',
         detail: status,

@@ -14,6 +14,7 @@ function integration(
 ): TaskIntegrationStatus {
   return {
     status,
+    deliveryRef: null,
     sha: status === 'integrated' ? 'abc1234' : null,
     integrationBranch: 'develop',
     detail: null,
