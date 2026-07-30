@@ -25,7 +25,7 @@ const valid = {
   },
   phases: [...expectedPhases],
   resources: { workspaceId: 'w', projectId: 'p', taskId: 't' },
-  contract: {
+  acceptance: {
     chronicleLinks: [],
     expectedTerminal: '5-human-review',
     recoveryBudget: { unit: 'review-attempts', maximum: 2 },
@@ -41,8 +41,23 @@ const valid = {
   }
 };
 
-test('manifest validation accepts the canonical phase contract', () => {
+test('manifest validation accepts standard acceptance metadata', () => {
   assert.equal(validateManifest(structuredClone(valid)).name, 'reference-change');
+});
+
+test('manifest validation keeps replay contract optional for standard and fault scenarios', () => {
+  const withoutAcceptance = structuredClone(valid);
+  delete withoutAcceptance.acceptance;
+  assert.equal(validateManifest(withoutAcceptance).name, 'reference-change');
+});
+
+test('JSON schema keeps contract optional and separates standard acceptance metadata', async () => {
+  const schema = JSON.parse(await readFile(
+    path.resolve(import.meta.dirname, '..', 'scenario.schema.json'),
+    'utf8'));
+  assert.equal(schema.required.includes('contract'), false);
+  assert.ok(schema.properties.contract);
+  assert.ok(schema.properties.acceptance);
 });
 
 test('manifest validation rejects reordered phases and underspecified fixtures', () => {
@@ -129,12 +144,19 @@ test('protected stable and managed task roots are rejected', () => {
   }), /protected resource root/);
 });
 
-test('every checked-in single-fault and multi-fault manifest satisfies the contract', async () => {
+test('checked-in manifests validate and select exactly one engine family', async () => {
   const scenarioRoot = path.resolve(import.meta.dirname, '..', 'scenarios');
   const files = (await readdir(scenarioRoot)).filter(file => file.endsWith('.json'));
   assert.ok(files.length >= 8);
   for (const file of files) {
     const manifest = JSON.parse(await readFile(path.join(scenarioRoot, file), 'utf8'));
     assert.equal(validateManifest(manifest).name, path.basename(file, '.json'));
+    const historical = [
+      'divergent-salvage-lineage',
+      'external-completion-cycle',
+      'lease-adoption-restart'
+    ].includes(manifest.name);
+    assert.equal('contract' in manifest, historical);
+    assert.equal('acceptance' in manifest, !historical);
   }
 });

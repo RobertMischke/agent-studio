@@ -250,6 +250,7 @@ console.log(JSON.stringify({
 }, null, 2));
 
 async function scenarioReportRun({ scenario, runId, outcome, runRoot, manifest }) {
+  const acceptance = manifest.contract ?? manifest.acceptance;
   const result = await readJson(path.join(runRoot, 'result.json'));
   const detailed = await readJsonIfPresent(path.join(runRoot, 'assertions.json'));
   const timing = await phaseTiming(path.join(runRoot, 'phases.jsonl'), result.phaseSequence);
@@ -263,7 +264,7 @@ async function scenarioReportRun({ scenario, runId, outcome, runRoot, manifest }
     && result.recoveryBudget.used <= result.recoveryBudget.maximum
     && result.assertions.every(assertion => assertion.passed === true);
   if (!contractPassed) throw new Error(`${runId} did not pass its declared contract.`);
-  const incidentLinks = result.chronicleLinks ?? manifest.contract.chronicleLinks;
+  const incidentLinks = result.chronicleLinks ?? acceptance.chronicleLinks;
   const rawHref = `./raw/scenarios/${runId}/result.json`;
   const attemptId = detailed?.assertions?.lease?.runAttemptId
     ?? result.evidence?.sourceRunAttemptId
@@ -489,6 +490,7 @@ function assertion(id, label, passed, detail) {
 }
 
 async function incidentsForManifest(manifest, result) {
+  const acceptance = manifest.contract ?? manifest.acceptance;
   const catalog = await readJson(path.join(suiteRoot, 'fault-catalog.json'));
   const incidents = [];
   for (const faultId of manifest.faults ?? []) {
@@ -502,8 +504,8 @@ async function incidentsForManifest(manifest, result) {
       recoveryOutcome: result.incidentOutcome
     });
   }
-  if (incidents.length === 0 && manifest.contract.chronicleLinks.length > 0) {
-    for (const link of manifest.contract.chronicleLinks) {
+  if (incidents.length === 0 && acceptance.chronicleLinks.length > 0) {
+    for (const link of acceptance.chronicleLinks) {
       incidents.push({
         class: manifest.name,
         label: `Historical replay: ${manifest.name}`,
