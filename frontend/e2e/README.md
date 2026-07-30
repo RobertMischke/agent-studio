@@ -62,7 +62,7 @@ auto-discovers via `testDir: './e2e'` so no path tweaks are needed.
 | `perf/` | Perf baselines + frontend stress. | 3 |
 | `project/` | Per-project detail panels: drift, observability, runtime, security, UX/UI, token usage, steering, identity. | 15 |
 | `system/` | Cross-cutting chrome: modal stack, caret suppression, markdown body, concept help, decision banner, update banner. | 8 |
-| `task-detail/` | Task detail view: header, lane pager, status dropdown, panes, protocol pane, prompts, triage, verbose debug. | 29 |
+| `task-detail/` | Task detail view: header, lane pager, status dropdown, panes, protocol pane, prompts, triage, verbose debug. | 30 |
 | `visual-evidence/` | Screenshots reel, lightbox, README + dialog screenshot regressions. | 8 |
 
 Per-spec coverage map is auto-generated below (run
@@ -572,6 +572,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `pipeline-loop-guard.spec.ts` | Pipeline loop guard (Ralph-loop early detection) |
 | `pipeline-orchestrator-review-distinct.spec.ts` | Pipeline: orchestrator-review rows are distinct, single final verdict |
 | `pipeline-prerun-model.spec.ts` | Pipeline: pre-run resolved model |
+| `pipeline-remote-lifecycle.spec.ts` | Pipeline: remote run, Review Plane grade, gate, and token ledger projection |
 | `pipeline-regression-radar.spec.ts` | Regression radar pipeline step |
 | `pipeline-restart-indicator.spec.ts` | Pipeline restart indicator |
 | `pipeline-step-explanations.spec.ts` | Pipeline: per-step explanation tooltips |

@@ -1074,6 +1074,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         allSteps: [
           { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
           { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-orchestrator-decision', displayName: 'Final verdict', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
         ],
       },
       execution: {
@@ -1148,6 +1149,72 @@ describe('OverviewPaneComponent (smoke)', () => {
       '[data-testid="overview-pipeline-run-option"][data-current="true"]',
     ) as HTMLElement | null;
     expect(currentRun?.textContent).toContain('not run');
+  });
+
+  it('pipeline block: remote-only skipped steps say not applicable instead of not run', async () => {
+    const fixture = await build(baseJob({ state: TaskState.Completed }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: '2026-07-30T08:00:00Z', completedAt: '2026-07-30T08:20:00Z',
+        steps: [
+          {
+            stepId: 'core-agent-run', kind: 'core', status: 'passed',
+            startedAt: '2026-07-30T08:00:00Z', completedAt: '2026-07-30T08:10:00Z',
+            durationMs: 600_000, inputTokens: 100, outputTokens: 20,
+            cacheReadTokens: 0, cacheCreationTokens: 0,
+          },
+          {
+            stepId: 'aspect-code-quality', kind: 'aspect', status: 'skipped',
+            durationMs: 0, inputTokens: 0, outputTokens: 0,
+            cacheReadTokens: 0, cacheCreationTokens: 0,
+            reason: 'Executed remotely; this local pipeline step is not applicable.',
+          },
+          {
+            stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'passed',
+            durationMs: 0, inputTokens: 10, outputTokens: 2,
+            cacheReadTokens: 0, cacheCreationTokens: 0,
+            verdict: 'pass',
+            reason: 'Remote Review Plane verdict Pass (attempt rat-2427).',
+          },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentRef.setInput('runOutcome', {
+      kind: 'task-state', status: 'succeeded', emoji: '🟢', label: 'Pipeline completed',
+      detail: 'The task is delivered.', duration: null, signals: [],
+    });
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const aspect = fixture.componentInstance.pipelineRows()
+      .find(row => row.id === 'aspect-code-quality');
+    expect(aspect?.status).toBe('skipped');
+    expect(aspect?.skipHint).toBe('executed remotely · not applicable');
+    expect(aspect?.statusTooltip?.body).toContain('Executed remotely');
+    const decision = fixture.componentInstance.pipelineRows()
+      .find(row => row.id === 'post-orchestrator-decision');
+    expect(fixture.componentInstance.decisionBadgeForRow(decision!)?.verdict).toBe('pass');
+    expect(fixture.componentInstance.decisionBadgeForRow(decision!)?.label).toBe('Review Pass');
+
+    fixture.componentInstance.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    const row = fixture.nativeElement.querySelector(
+      '[data-step-id="aspect-code-quality"]',
+    ) as HTMLElement | null;
+    expect(row?.getAttribute('data-status')).toBe('skipped');
+    expect(row?.textContent).toContain('executed remotely · not applicable');
+    expect(row?.textContent).not.toContain('not run:');
   });
 
   it('pipeline block: subset passes plus failed and skipped statuses expose their recorded reasons', async () => {

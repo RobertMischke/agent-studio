@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-28
+Version: 2026-07-30
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -58,6 +58,12 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Features/Pipeline/RemotePipelineExecutionProjection.cs`: read-time
+  bridge for remote cards. It overlays the remote claim and completion facts
+  from session/timeline data, the latest Review Plane grade, and canonical
+  token-ledger calls onto the normal pipeline catalogue while preserving
+  locally recorded integration gates. It never writes
+  `pipeline-execution.json` or another lifecycle state.
 - `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
   `task-server/TaskServerOrchestrationStore.cs`, and
   `orchestrator-engine/`: the separated flow boundary. Project flow
@@ -217,6 +223,14 @@ pipeline view.
 
 ## Invariants
 
+- The task pipeline endpoint projects local and remote lifecycle facts at read
+  time. A remote claim/completion becomes CORE work, a Review Plane grade
+  becomes the DECISION verdict, and recorded integration gates remain TOOL
+  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
+  structurally omits are `Skipped` with an explicit remote/not-applicable
+  reason. `Not run` is reserved for a step the current attempt genuinely never
+  reached. Remote token totals, historical list-price estimates, and call
+  counts come from the same token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
