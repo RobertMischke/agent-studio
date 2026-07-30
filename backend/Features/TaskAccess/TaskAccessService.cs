@@ -224,7 +224,13 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             };
         }
 
-        var outcome = await _transitions.MoveAsync(request.JobId, request.TargetLane, request.WatchPath, ct);
+        var outcome = await _transitions.MoveAsync(
+            request.JobId,
+            request.TargetLane,
+            request.WatchPath,
+            ct,
+            cause: request.Cause,
+            reason: request.Reason);
         if (outcome.Status == MoveJobStatus.NotFound)
             return new TaskMutationResult { Status = TaskMutationStatus.NotFound, Message = outcome.Message };
         if (outcome.Status == MoveJobStatus.TargetFolderExists)

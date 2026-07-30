@@ -9,6 +9,16 @@ namespace AgentStudio.Tasks;
 /// </summary>
 public sealed class TaskTransitionService
 {
+    private const string ResultScaffoldMarker = "<!-- agent-studio:result-scaffold -->";
+    private const string OperatorBackfillMarker = "<!-- agent-studio:operator-result-backfill -->";
+    private static readonly HashSet<string> ResultRequiredStates = new(StringComparer.Ordinal)
+    {
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Escalated,
+        TaskStates.Completed,
+    };
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly TaskMutationService _mutations;
@@ -109,6 +119,25 @@ public sealed class TaskTransitionService
 
         var settings = _settings.Get(info.ProjectName);
         var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
+
+        // Result is a transition invariant, not a runner or endpoint concern.
+        // Materialize the fallback before the folder move so it travels with the
+        // task atomically. If the task store is not writable, refuse the move:
+        // landing a review/terminal card without a Result is not a valid state.
+        if (ResultRequiredStates.Contains(targetState)
+            && !TryEnsureResultDocument(
+                info,
+                targetState,
+                operatorBackfill: false,
+                refreshOwnedScaffold: true,
+                DateTime.UtcNow,
+                integrationReferenceOverride: null,
+                out var resultError))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                $"Cannot move task to {targetState} because status.md could not be ensured: {resultError}");
+        }
 
         // Read-only modes (planning / research) skip every git side effect on the
         // transition: no auto-commit, no immediate push, no commit-attribution,
@@ -218,6 +247,34 @@ public sealed class TaskTransitionService
                             jobId);
                     }
                 }
+            }
+        }
+
+        if (outcome.Status == MoveJobStatus.Success && ResultRequiredStates.Contains(targetState))
+        {
+            // Rebuild only an application-owned scaffold after the move. The
+            // target-lane TaskInfo lets the accepted-card integration projection
+            // contribute its computed status. A real generated status.md is
+            // never overwritten.
+            var moved = _scanner.FindJob(jobId, watchPath);
+            if (moved != null
+                && !TryEnsureResultDocument(
+                    moved,
+                    targetState,
+                    operatorBackfill: false,
+                    refreshOwnedScaffold: true,
+                    DateTime.UtcNow,
+                    integrationReferenceOverride: null,
+                    out var refreshError))
+            {
+                // The pre-move scaffold already preserves the invariant. Keep the
+                // landed transition, but make the failed enrichment visible.
+                _logger.LogError(
+                    "result-scaffold-refresh-failed project={Project} job={JobId} state={State} error={Error}",
+                    moved.ProjectName,
+                    moved.Id,
+                    targetState,
+                    refreshError);
             }
         }
 
@@ -368,6 +425,315 @@ public sealed class TaskTransitionService
 
         return outcome;
     }
+
+    /// <summary>
+    /// One-time, idempotent operator repair for legacy accepted cards whose
+    /// Result tab is empty. Existing non-empty status documents are preserved.
+    /// The startup caller invokes this once per process; subsequent boots are
+    /// no-ops because every repaired card now owns a marked status.md.
+    /// </summary>
+    public ResultDocumentBackfillOutcome BackfillMissingResultDocuments(DateTime? nowUtc = null)
+    {
+        var repaired = 0;
+        var failures = new List<string>();
+        var missing = new List<TaskInfo>();
+        var candidates = _scanner.ScanAllJobsWithArchive()
+            .Where(task => task.State is
+                TaskStates.HumanReview or TaskStates.Completed or TaskStates.Archive)
+            .OrderBy(task => task.EnteredLaneAt)
+            .ThenBy(task => task.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var at = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
+
+        foreach (var task in candidates)
+        {
+            var path = Path.Combine(task.FolderPath, "status.md");
+            try
+            {
+                if (File.Exists(path) && !string.IsNullOrWhiteSpace(File.ReadAllText(path)))
+                    continue;
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{task.TaskKey}: {ex.Message}");
+                continue;
+            }
+
+            missing.Add(task);
+        }
+
+        var integrationByKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (_integrationStatus != null && missing.Count > 0)
+        {
+            try
+            {
+                foreach (var (key, status) in _integrationStatus.BuildLookup(missing))
+                    integrationByKey[key] = FormatIntegrationReference(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "result-document-backfill integration batch failed");
+            }
+        }
+
+        foreach (var task in missing)
+        {
+            var integration = integrationByKey.GetValueOrDefault(
+                task.TaskKey,
+                _integrationStatus == null
+                    ? "Not computed (integration projection unavailable)"
+                    : "Unknown (integration projection unavailable for this card)");
+            if (TryEnsureResultDocument(
+                    task,
+                    task.State,
+                    operatorBackfill: true,
+                    refreshOwnedScaffold: false,
+                    at,
+                    integration,
+                    out var error))
+            {
+                repaired++;
+            }
+            else
+            {
+                failures.Add($"{task.TaskKey}: {error}");
+            }
+        }
+
+        if (repaired > 0)
+        {
+            _logger.LogInformation(
+                "result-document-backfill repaired={Repaired} scanned={Scanned}",
+                repaired,
+                candidates.Count);
+        }
+        foreach (var failure in failures)
+            _logger.LogWarning("result-document-backfill-failed task={Failure}", failure);
+
+        return new ResultDocumentBackfillOutcome(candidates.Count, repaired, failures);
+    }
+
+    private bool TryEnsureResultDocument(
+        TaskInfo task,
+        string targetState,
+        bool operatorBackfill,
+        bool refreshOwnedScaffold,
+        DateTime atUtc,
+        string? integrationReferenceOverride,
+        out string? error)
+    {
+        var path = Path.Combine(task.FolderPath, "status.md");
+        try
+        {
+            if (File.Exists(path))
+            {
+                var existing = File.ReadAllText(path);
+                if (!string.IsNullOrWhiteSpace(existing)
+                    && (!refreshOwnedScaffold
+                        || !existing.Contains(ResultScaffoldMarker, StringComparison.Ordinal)))
+                {
+                    error = null;
+                    return true;
+                }
+            }
+
+            Directory.CreateDirectory(task.FolderPath);
+            File.WriteAllText(
+                path,
+                BuildResultScaffold(
+                    task,
+                    targetState,
+                    operatorBackfill,
+                    atUtc,
+                    integrationReferenceOverride),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "result-scaffold-write-failed project={Project} job={JobId} state={State} path={Path}",
+                task.ProjectName,
+                task.Id,
+                targetState,
+                path);
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private string BuildResultScaffold(
+        TaskInfo task,
+        string targetState,
+        bool operatorBackfill,
+        DateTime atUtc,
+        string? integrationReferenceOverride)
+    {
+        var landed = string.Equals(task.State, targetState, StringComparison.Ordinal);
+        var result = ResolveScaffoldResult(task, targetState);
+        var grade = ResolveGradeReference(task);
+        var deliverables = ResolveDeliverablesReference(task);
+        // Do not put a cold Git projection on the transition's preflight path.
+        // Before the move, the target-lane projection is not authoritative
+        // anyway. The post-move refresh and the startup backfill run against the
+        // landed state and write the actual computed integration verdict.
+        var integration = integrationReferenceOverride
+            ?? (landed || operatorBackfill
+                ? ResolveIntegrationReference(task)
+                : "Pending target-lane computation");
+        var provenance = operatorBackfill
+            ? $"Operator backfill on {atUtc:yyyy-MM-ddTHH:mm:ssZ} from existing task artifacts."
+            : landed
+                ? $"Synthesized by Agent Studio after entering `{targetState}` because no generated status.md was available."
+                : $"Prepared by Agent Studio for a transition into `{targetState}` because no generated status.md was available.";
+        var title = SingleLine(task.Title);
+        if (title.Length == 0) title = task.TaskKey;
+        var nl = Environment.NewLine;
+        var sb = new System.Text.StringBuilder();
+        sb.Append(ResultScaffoldMarker).Append(nl);
+        if (operatorBackfill) sb.Append(OperatorBackfillMarker).Append(nl);
+        sb.Append("# Status").Append(nl).Append(nl);
+        sb.Append("- Result: ").Append(result).Append(nl);
+        sb.Append("- Case: ").Append(result is "Success" or "NoOp" ? "generic" : "blocked").Append(nl);
+        sb.Append("- Grade: ").Append(grade).Append(nl);
+        sb.Append("- Deliverables: ").Append(deliverables).Append(nl);
+        sb.Append("- Integration: ").Append(integration).Append(nl);
+        sb.Append("- Provenance: ").Append(provenance).Append(nl).Append(nl);
+        sb.Append("## Overview").Append(nl).Append(nl);
+        sb.Append("- Problem: `status.md` was missing ")
+            .Append(landed ? "when" : "before")
+            .Append(" task `")
+            .Append(SingleLine(task.TaskKey))
+            .Append(landed ? "` reached `" : "` could move into `")
+            .Append(targetState)
+            .Append("`.").Append(nl);
+        sb.Append("- Solution: This honest scaffold exposes the recorded outcome and existing evidence for ")
+            .Append(title)
+            .Append(".").Append(nl).Append(nl);
+        sb.Append("## What Was Done").Append(nl).Append(nl);
+        sb.Append(landed ? "- The task reached `" : "- A transition is pending into `")
+            .Append(targetState)
+            .Append("`.").Append(nl);
+        sb.Append("- Grade, deliverables, and integration facts are linked or stated above when available.")
+            .Append(nl).Append(nl);
+        sb.Append("## Open Items").Append(nl).Append(nl);
+        sb.Append("- None recorded in this synthesized scaffold.").Append(nl).Append(nl);
+        sb.Append("## Notes").Append(nl).Append(nl);
+        sb.Append("- This document does not infer work that is absent from task.json and the task artifact folder.")
+            .Append(nl);
+        return sb.ToString();
+    }
+
+    private static string ResolveScaffoldResult(TaskInfo task, string targetState)
+    {
+        if (targetState == TaskStates.Escalated) return "NeedsInput";
+
+        try
+        {
+            var logPath = TaskPaths.CliOutputLog(task.FolderPath);
+            if (File.Exists(logPath))
+            {
+                var classified = TerminalRunOutcomeClassifier.TryClassifyRenderedLog(
+                    File.ReadAllText(logPath));
+                var result = classified?.Outcome.ProtocolResult;
+                if (result is "Success" or "Failed" or "NoOp" or "Blocked" or "NeedsInput" or "Partial")
+                {
+                    return result;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: scaffold outcome log read is best-effort");
+            // The lane fallback below is deliberately conservative.
+        }
+
+        return targetState == TaskStates.Completed ? "Success" : "Partial";
+    }
+
+    private static string ResolveGradeReference(TaskInfo task)
+    {
+        var gradeTag = (task.Tags ?? [])
+            .FirstOrDefault(tag =>
+                tag.StartsWith("code-review:grade-", StringComparison.OrdinalIgnoreCase));
+        var grade = gradeTag?["code-review:grade-".Length..].Trim().ToUpperInvariant();
+        string? artifact = null;
+        try
+        {
+            artifact = Directory.EnumerateFiles(
+                    task.FolderPath,
+                    "code-review-grade*.md",
+                    SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ThenByDescending(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
+                .Select(Path.GetFileName)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: scaffold grade artifact enumeration is best-effort");
+            // A tag still supplies the recorded grade when enumeration fails.
+        }
+
+        if (!string.IsNullOrWhiteSpace(grade) && !string.IsNullOrWhiteSpace(artifact))
+            return $"{grade} ([{artifact}]({artifact}))";
+        if (!string.IsNullOrWhiteSpace(grade))
+            return $"{grade} (grade artifact not found)";
+        if (!string.IsNullOrWhiteSpace(artifact))
+            return $"See [{artifact}]({artifact})";
+        return "Not recorded";
+    }
+
+    private static string ResolveDeliverablesReference(TaskInfo task)
+    {
+        var path = Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "deliverables.md");
+        return File.Exists(path)
+            ? "[results/deliverables.md](results/deliverables.md)"
+            : "Not recorded";
+    }
+
+    private string ResolveIntegrationReference(TaskInfo task)
+    {
+        if (_integrationStatus == null)
+            return "Not computed (integration projection unavailable)";
+
+        try
+        {
+            var lookup = _integrationStatus.BuildLookup([task]);
+            if (!lookup.TryGetValue(task.TaskKey, out var status))
+                return $"Not applicable in `{task.State}`";
+            return FormatIntegrationReference(status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "result-scaffold-integration-read-failed project={Project} job={JobId}",
+                task.ProjectName,
+                task.Id);
+            return "Unknown (integration projection failed)";
+        }
+    }
+
+    private static string FormatIntegrationReference(TaskIntegrationStatus status)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append('`').Append(SingleLine(status.Status)).Append("` on `")
+            .Append(SingleLine(status.IntegrationBranch)).Append('`');
+        if (!string.IsNullOrWhiteSpace(status.Sha))
+            sb.Append(" at `").Append(SingleLine(status.Sha)).Append('`');
+        if (!string.IsNullOrWhiteSpace(status.Detail))
+            sb.Append(" (").Append(SingleLine(status.Detail)).Append(')');
+        return sb.ToString();
+    }
+
+    private static string SingleLine(string? value)
+        => (value ?? string.Empty)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
 
     private async Task<MoveJobOutcome> BeginTransactionalAcceptAsync(
         TaskInfo reviewed,
@@ -1241,3 +1607,8 @@ public sealed class TaskTransitionService
         }
     }
 }
+
+public sealed record ResultDocumentBackfillOutcome(
+    int Scanned,
+    int Repaired,
+    IReadOnlyList<string> Failures);

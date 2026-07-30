@@ -176,7 +176,6 @@ public sealed class HumanReviewEscalation
     private const string SystemPrompt = "(deterministic system escalation)";
     private const string NoModelResponse = "(no fast-model call)";
 
-    private readonly TaskStateMachine _states;
     private readonly TaskTransitionService _transitions;
     private readonly string? _workspaceRoot;
     private readonly ILogger _logger;
@@ -207,7 +206,6 @@ public sealed class HumanReviewEscalation
         TaskScannerService? scanner = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
     {
-        _states = states;
         _transitions = transitions;
         _workspaceRoot = workspaceRoot;
         _logger = logger;
@@ -256,9 +254,9 @@ public sealed class HumanReviewEscalation
     }
 
     /// <summary>
-    /// Synchronous variant for the pickup loop, which is sync and already moved
-    /// folders through the state machine directly. Records the verdict and
-    /// status stub on success.
+    /// Synchronous variant for the pickup loop. It blocks only on the shared
+    /// transition service so the Result invariant and move notifications remain
+    /// identical to the asynchronous path.
     /// </summary>
     public MoveJobOutcome Escalate(
         string jobId, string watchPath, string project,
@@ -267,12 +265,15 @@ public sealed class HumanReviewEscalation
         var beforeFolder = ResolveSourceFolder(jobId, watchPath);
         if (!string.IsNullOrWhiteSpace(beforeFolder))
             WriteStatusStubIfMissing(beforeFolder, category, reason);
-        var outcome = _states.MoveJob(
-            jobId,
-            TaskStates.Escalated,
-            watchPath,
-            cause: TimelineActors.System,
-            reason: reason);
+        var outcome = _transitions.MoveAsync(
+                jobId,
+                TaskStates.Escalated,
+                watchPath,
+                CancellationToken.None,
+                cause: TimelineActors.System,
+                reason: reason)
+            .GetAwaiter()
+            .GetResult();
         if (outcome.Status == MoveJobStatus.Success)
         {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);

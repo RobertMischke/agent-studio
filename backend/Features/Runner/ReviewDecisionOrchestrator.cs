@@ -66,7 +66,7 @@ namespace AgentStudio.Runner;
 /// <c>{workspace}/logs/decisions/{project}.jsonl</c>, plus the
 /// orchestrator chat log written into the job's <c>cli-output.log</c>.
 /// The single-state-machine rule still applies: lane transitions go
-/// through <see cref="TaskStateMachine"/>.
+/// through <see cref="TaskTransitionService"/>.
 /// </para>
 ///
 /// <para>
@@ -112,7 +112,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal static readonly TimeSpan VerdictlessBackfillMinimumAge = TimeSpan.FromMinutes(10);
 
     private readonly TaskScannerService _scanner;
-    private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
     private readonly OrchestratorChatLog _chatLog;
     private readonly RuntimePromptService _prompts;
@@ -266,7 +265,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
-        _stateMachine = stateMachine;
         _taskAccess = taskAccess;
         _chatLog = chatLog;
         _prompts = prompts;
@@ -596,7 +594,34 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private MoveJobOutcome GuardedMoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
     {
         _postProcessingGitGate.Wait();
-        try { return _stateMachine.MoveJob(jobId, targetState, watchPath, cause); }
+        try
+        {
+            var result = _taskAccess.TransitionLaneAsync(new TaskTransitionRequest
+                {
+                    JobId = jobId,
+                    TargetLane = targetState,
+                    WatchPath = watchPath,
+                    Cause = cause,
+                })
+                .GetAwaiter()
+                .GetResult();
+            return result.Status switch
+            {
+                TaskMutationStatus.Applied => new MoveJobOutcome(
+                    MoveJobStatus.Success,
+                    result.Message,
+                    result.Job?.FolderPath),
+                TaskMutationStatus.NotFound => new MoveJobOutcome(
+                    MoveJobStatus.NotFound,
+                    result.Message),
+                TaskMutationStatus.Conflict => new MoveJobOutcome(
+                    MoveJobStatus.TargetFolderExists,
+                    result.Message),
+                _ => new MoveJobOutcome(
+                    MoveJobStatus.Failure,
+                    result.Message),
+            };
+        }
         finally { _postProcessingGitGate.Release(); }
     }
 
@@ -1814,7 +1839,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// verdict but never left <c>4-auto-review</c> (the move failed after the
     /// verdict was recorded - a Move-Lock from open handles / orphan processes,
     /// vgl. ASS-759, or a backend restart between record and
-    /// <see cref="TaskStateMachine.MoveJob"/>). This is the move-retry the
+    /// <see cref="TaskTransitionService.MoveAsync"/>). This is the move-retry the
     /// verdict paths lacked: they warned-but-continued on a failed move and left
     /// the card verdict-but-stuck. Performs ONLY the due move
     /// (<see cref="ReviewDecisionKind.Reissue"/> -> 2-ready,
@@ -5636,7 +5661,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (NOOP/BLOCKED/gate reissue + escalate) write their
     /// <c>[orchestrator]</c>/<c>[supervisor]</c> follow-up line FIRST - which
     /// resolves the agent sentinel - then only warn-but-continue if
-    /// <see cref="TaskStateMachine.MoveJob"/> fails (a Move-Lock from open log
+    /// <see cref="TaskTransitionService.MoveAsync"/> fails (a Move-Lock from open log
     /// handles / orphan processes - vgl. ASS-759 - or a backend restart between
     /// recording and moving), yet still append the verdict record. The card is
     /// then invisible to every other path: the sentinel is resolved, and
