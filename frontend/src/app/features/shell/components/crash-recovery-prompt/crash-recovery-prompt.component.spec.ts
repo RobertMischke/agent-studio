@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
+import { NotificationService } from '../../../../services/notification.service';
 import { TaskService } from '../../../../services/task.service';
 import { CrashRecoveryPromptComponent } from './crash-recovery-prompt.component';
 
@@ -69,5 +70,51 @@ describe('CrashRecoveryPromptComponent', () => {
     expect(fixture.componentInstance.pending()).toEqual([]);
     expect(fixture.componentInstance.busyAll()).toBe(false);
     expect(fixture.componentInstance.open()).toBe(false);
+  });
+
+  it('routes unattributed metadata sidecars to a non-blocking leave-uncommitted notification', async () => {
+    const items = [
+      {
+        id: 'sidecar',
+        projectName: 'Coding Agent Runner',
+        jobId: null,
+        reason: 'r',
+        repoRoot: 'x',
+        message: 'm',
+        files: ['docs/runner.md.meta.json'],
+        createdAt: '2026-07-30T00:00:00Z',
+        classification: 'trivial' as const,
+      },
+    ];
+    const dismissed = vi.fn(() => of({ status: 'dismissed', pending: null, commitSha: null, error: null }));
+    await TestBed.configureTestingModule({
+      imports: [CrashRecoveryPromptComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: TaskService,
+          useValue: {
+            getPendingCrashRecoveries: () => of({ pending: items }),
+            commitCrashRecovery: () => of({ status: 'committed', pending: null, commitSha: 'abc123', error: null }),
+            dismissCrashRecovery: dismissed,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CrashRecoveryPromptComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.open()).toBe(false);
+    expect(fixture.componentInstance.trivialPending()).toEqual(items);
+    expect(document.querySelector('[data-testid="crash-recovery-prompt"]')).toBeNull();
+    const notification = TestBed.inject(NotificationService).notifications()[0];
+    expect(notification.title).toBe('Crash recovery found read-evidence sidecars');
+    expect(notification.actions?.map(action => action.label)).toEqual(['Leave uncommitted']);
+
+    notification.actions?.[0]?.callback();
+    expect(dismissed).toHaveBeenCalledWith('sidecar');
+    expect(fixture.componentInstance.pending()).toEqual([]);
   });
 });
