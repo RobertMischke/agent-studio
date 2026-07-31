@@ -248,10 +248,10 @@ public sealed class MergeIntoDevelopRunner
             {
                 // Pin the object the push may publish: the merge result this card's
                 // gate released, or, for AlreadyMerged, the exact SHA recovered
-                // from the gate receipt. An ungated AlreadyMerged path falls back
-                // to the branch tip as it stands at release time. Reading it here
-                // and not in the worker closes the gate window: by the time the
-                // queued push runs, the tip may carry a merge no gate approved.
+                // from the gate receipt. A project without an applicable gate uses
+                // the branch tip as it stands at release time. Reading it here and
+                // not in the worker closes the gate window: by the time the queued
+                // push runs, the tip may carry a merge no gate approved.
                 var approvedSha = !string.IsNullOrWhiteSpace(result.MergedSha)
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
@@ -315,11 +315,10 @@ public sealed class MergeIntoDevelopRunner
         Func<MergeIntoIntegrationResult> merge)
     {
         var profile = BuildProfileFor(project);
-        var skipReason = _preDevelopBuildGate is null
-            ? "no build gate is wired"
-            : PreDevelopBuildGate.AppliesTo(profile)
-                ? null
-                : "the project declares no build-profile build commands";
+        var gateApplies = PreDevelopBuildGate.AppliesTo(profile);
+        var skipReason = gateApplies
+            ? null
+            : "the project declares no build-profile build commands";
         var result = merge();
         if (skipReason is not null)
         {
@@ -387,22 +386,40 @@ public sealed class MergeIntoDevelopRunner
             : null;
         if (gate is null)
         {
-            gate = await _preDevelopBuildGate!.RunAsync(
-                new BuildTestGateRequest(repoRoot, gatedSha, "merge-into-develop-build-gate")
+            if (_preDevelopBuildGate is null)
+            {
+                gate = new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail,
+                    null,
+                    0,
+                    string.Empty,
+                    "The applicable pre-develop build gate is not available.",
+                    false,
+                    false)
                 {
-                    Project = project,
-                    JobId = jobId,
-                    Lane = TaskStates.Completed,
-                    TestExecution = TestExecutionFor(project),
-                    JobFolderPath = jobFolderPath,
-                    SubjectRef = integrationBranch,
-                },
-                profile,
-                _preDevelopTimeout,
-                // Deliberately NOT the caller's token: once the background worker
-                // starts a merge, its gate and possible rollback must reach a
-                // consistent terminal state. The gate stays bounded by its timeout.
-                CancellationToken.None).ConfigureAwait(false);
+                    ExpectedSha = gatedSha,
+                    FailureKind = BuildTestGateFailureKind.MissingSource,
+                };
+            }
+            else
+            {
+                gate = await _preDevelopBuildGate.RunAsync(
+                    new BuildTestGateRequest(repoRoot, gatedSha, "merge-into-develop-build-gate")
+                    {
+                        Project = project,
+                        JobId = jobId,
+                        Lane = TaskStates.Completed,
+                        TestExecution = TestExecutionFor(project),
+                        JobFolderPath = jobFolderPath,
+                        SubjectRef = integrationBranch,
+                    },
+                    profile,
+                    _preDevelopTimeout,
+                    // Deliberately NOT the caller's token: once the background worker
+                    // starts a merge, its gate and possible rollback must reach a
+                    // consistent terminal state. The gate stays bounded by its timeout.
+                    CancellationToken.None).ConfigureAwait(false);
+            }
             RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", gate);
         }
         else
@@ -920,9 +937,9 @@ public sealed class MergeIntoDevelopRunner
     }
 
     /// <summary>
-    /// Reads the newest durable gate receipt for one exact subject. A green
-    /// receipt is reusable only when both the expected and tested SHAs match;
-    /// malformed or partial crash debris is ignored and forces a fresh gate.
+    /// Reads the newest durable gate receipt for one exact subject. A receipt is
+    /// applicable only when both the expected and tested SHAs match; malformed
+    /// or partial crash debris is ignored and forces a fresh gate.
     /// </summary>
     private static BuildTestGateResult? ReadExactGateVerdict(
         string jobFolderPath,
@@ -947,16 +964,8 @@ public sealed class MergeIntoDevelopRunner
                 var recordedExpected = HeaderValue(shaLine, "expectedSha=");
                 var recordedTested = HeaderValue(shaLine, "testedSha=");
                 if (!Enum.TryParse<BuildTestGateVerdict>(verdictValue, ignoreCase: true, out var verdict)
-                    || !string.Equals(recordedExpected, expectedSha, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // A reusable green receipt releases only the object it actually
-                // tested. An older Skipped receipt without a tested SHA is not
-                // enough for recovery; the policy must be evaluated again.
-                if ((verdict is BuildTestGateVerdict.Ok or BuildTestGateVerdict.Skipped)
-                    && !string.Equals(recordedTested, expectedSha, StringComparison.OrdinalIgnoreCase))
+                    || !string.Equals(recordedExpected, expectedSha, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(recordedTested, expectedSha, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

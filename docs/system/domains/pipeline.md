@@ -115,8 +115,10 @@ pipeline view.
   or SHA-mismatched receipt reruns the gate against that tip. Until the gate
   returns green, the merge step stays pending and no push request is released;
   a red recovery gate records `GateFailed` and leaves the existing branch graph
-  unchanged for manual repair. This closes the BP-02 merge-commit-before-gate
-  crash window without treating Git ancestry as a verdict.
+  unchanged for manual repair. If the gate applies but its runtime component is
+  unavailable, recovery also fails closed without releasing a push. This closes
+  the BP-02 merge-commit-before-gate crash window without treating Git ancestry
+  as a verdict.
 - `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
   read model fed by the SSH gate start/completion events. The Execution Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is

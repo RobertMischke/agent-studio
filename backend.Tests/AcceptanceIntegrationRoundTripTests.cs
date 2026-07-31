@@ -881,6 +881,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task AcceptanceMerge_LandedBeforeGateVerdict_BackstopWaitsForExactGateBeforePassingOrPush()
     {
         var deliverySha = PublishDelivery("merge-gate-restart.txt", "merge survived before gate verdict\n");
