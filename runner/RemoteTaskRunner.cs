@@ -132,7 +132,7 @@ public sealed class RemoteTaskRunner
         var workspace = new GitWorkspace(
             _options, slot.TaskKey, _log, slot.ProjectId, slot.RepositoryUrl, slot.DefaultBranch,
             restoredBaseSha: slot.BaseSha,
-            sourceRunAttemptId: slot.RunId ?? slot.AttemptId,
+            sourceRunAttemptId: slot.RunId ?? slot.Lease.AttemptId ?? slot.AttemptId,
             fencingToken: slot.Lease.FencingToken);
         return await RunPersistedAsync(slot, workspace, stopRun, reattach: true);
     }
