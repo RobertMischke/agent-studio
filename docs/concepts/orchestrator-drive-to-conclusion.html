@@ -1402,6 +1402,27 @@
             attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2460</code><br><span class="small">settled result requeued into a phantom second run</span></td>
+          <td>
+            A Remote completion could persist a Completed RunAttempt and immutable ResultEnvelope, then lose the
+            following Progress-to-Auto-Review lane move during a backend interruption. Operator recovery, the stale
+            sweep, or a liveness detector could subsequently move the residual Progress card to Ready, allowing a
+            second coding attempt to replace the pending review lineage of the already delivered result.
+          </td>
+          <td>
+            Requeue decisions treated a free lease and the folder lane as sufficient evidence. The shared transition
+            boundary did not query attempt authority for a completed, enveloped current run and had no idempotent path
+            to recreate the missing review handoff.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every Progress-to-Ready transition now checks attempt authority.
+            A valid Completed RunAttempt suppresses requeue, recreates the same review subject idempotently, advances
+            the card to Auto Review, queues post-processing, and records <code>settled_run_recovered</code>. Regression
+            coverage exercises operator, sweep, and detector triggers and asserts that exactly one RunAttempt remains.
+          </td>
+        </tr>
       </tbody>
     </table>
 

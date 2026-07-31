@@ -38,6 +38,7 @@ public sealed class TaskTransitionService
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
+    private readonly AttemptAuthorityService? _attemptAuthority;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -70,7 +71,8 @@ public sealed class TaskTransitionService
         TimelineLog? timeline = null,
         OperatorReviewRequeueService? operatorReviewRequeue = null,
         AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
-        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null)
+        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
         _states = states;
@@ -91,6 +93,7 @@ public sealed class TaskTransitionService
         _operatorReviewRequeue = operatorReviewRequeue;
         _pipelineLog = pipelineLog;
         _acceptedIntegrationQueue = acceptedIntegrationQueue;
+        _attemptAuthority = attemptAuthority;
     }
 
     /// <summary>
@@ -116,6 +119,25 @@ public sealed class TaskTransitionService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+
+        var settledRunRecovery = PrepareSettledRunRecovery(info, targetState, cause);
+        if (settledRunRecovery.Error is not null)
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                settledRunRecovery.Error,
+                info.FolderPath);
+        }
+        if (settledRunRecovery.Run is not null)
+        {
+            targetState = TaskStates.AutoReview;
+            authorityWrite = new AttemptWriteReference(
+                settledRunRecovery.Run.AttemptId,
+                settledRunRecovery.Run.LastFence,
+                settledRunRecovery.Run.AuthorityEpoch,
+                $"settled-run-recovery:{settledRunRecovery.Run.AttemptId}");
+            reason = $"Recovered completed RunAttempt {settledRunRecovery.Run.AttemptId} from its immutable result envelope; requeue was suppressed.";
+        }
 
         var settings = _settings.Get(info.ProjectName);
         var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
@@ -152,6 +174,7 @@ public sealed class TaskTransitionService
         // still self-gates on a clean tree and scopes dirty paths to this task.
         var shouldAutoCommit =
             !suppressProductExecution &&
+            settledRunRecovery.Run is null &&
             !isReadOnly &&
             info.State == TaskStates.Progress &&
             targetState == TaskStates.AutoReview &&
@@ -288,7 +311,7 @@ public sealed class TaskTransitionService
         if (outcome.Status == MoveJobStatus.Success
             && targetState == TaskStates.AutoReview
             && (info.State == TaskStates.Progress || operatorRequeue)
-            && !suppressProductExecution)
+            && (!suppressProductExecution || settledRunRecovery.Run is not null))
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) EnterPostProcessingPhase(attributed);
@@ -313,6 +336,28 @@ public sealed class TaskTransitionService
             if (attributed != null)
             {
                 EnqueueAutoReviewPostProcessing(attributed);
+            }
+        }
+
+        if (outcome.Status == MoveJobStatus.Success && settledRunRecovery.Run is not null)
+        {
+            var recovered = _scanner.FindJob(jobId, watchPath);
+            if (recovered is not null)
+            {
+                _timeline?.Append(
+                    recovered.FolderPath,
+                    TimelineEventKinds.SettledRunRecovered,
+                    TimelineActors.System,
+                    $"Recovered completed run {settledRunRecovery.Run.AttemptId}; no replacement run was queued.",
+                    runId: settledRunRecovery.Run.AttemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["requestedTarget"] = TaskStates.Ready,
+                        ["recoveryTarget"] = TaskStates.AutoReview,
+                        ["trigger"] = string.IsNullOrWhiteSpace(cause) ? TimelineActors.System : cause,
+                        ["resultSha"] = settledRunRecovery.Run.ResultSha!,
+                        ["resultEnvelopeDigest"] = settledRunRecovery.Run.ResultEnvelopeDigest!,
+                    });
             }
         }
 
@@ -426,6 +471,143 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// BP-09 guard for every Progress-to-Ready requeue, regardless of whether
+    /// the caller is an operator, a periodic sweep, or a liveness detector.
+    /// Authority, not lane residue, decides whether the coding run already
+    /// completed. A valid immutable envelope is driven forward through the
+    /// idempotent review handoff instead of allowing a second coding attempt.
+    /// </summary>
+    private SettledRunRecoveryPreparation PrepareSettledRunRecovery(
+        TaskInfo info,
+        string targetState,
+        string? trigger)
+    {
+        if (_attemptAuthority is null
+            || !string.Equals(info.State, TaskStates.Progress, StringComparison.Ordinal)
+            || !string.Equals(targetState, TaskStates.Ready, StringComparison.Ordinal))
+        {
+            return SettledRunRecoveryPreparation.None;
+        }
+
+        var taskKey = !string.IsNullOrWhiteSpace(info.Key)
+            ? info.Key
+            : !string.IsNullOrWhiteSpace(info.TaskKey)
+                ? info.TaskKey
+                : info.Id;
+        var run = _attemptAuthority.GetTaskProjection(taskKey).CurrentRunAttempt;
+        if (!IsRecoverableSettledRun(run)) return SettledRunRecoveryPreparation.None;
+
+        try
+        {
+            if (!TaskModes.IsReportOnly(info.Mode))
+            {
+                var requirementsPath = Path.Combine(info.FolderPath, "prompt.md");
+                var requirements = File.Exists(requirementsPath)
+                    ? File.ReadAllText(requirementsPath)
+                    : info.Id;
+                var envelope = run!.ResultEnvelope!;
+                var review = _attemptAuthority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                    taskKey,
+                    run.RepositoryId,
+                    run.ResultSha!,
+                    run.AttemptId,
+                    AttemptAuthorityService.Hash(requirements),
+                    AttemptAuthorityService.Hash("remote-review-policy:v1"),
+                    run.EvidenceDigests,
+                    $"review-subject:{run.AttemptId}:{run.ResultSha}",
+                    RepositoryUrl: envelope.RepositoryUrl,
+                    ResultRef: envelope.ImmutableRemoteRef));
+                if (!review.Accepted)
+                {
+                    return new SettledRunRecoveryPreparation(
+                        null,
+                        $"Completed run {run.AttemptId} has an immutable result envelope, so requeue is forbidden, but review recovery failed: {review.Status} {review.Message}");
+                }
+
+                var existing = AgentStudio.Pipeline.ReviewSubjectStore.Read(info.FolderPath);
+                if (existing is null
+                    || !string.Equals(existing.ResultSha, run.ResultSha, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(existing.ImmutableResultRef, envelope.ImmutableRemoteRef, StringComparison.Ordinal))
+                {
+                    AgentStudio.Pipeline.ReviewSubjectStore.Write(
+                        info.FolderPath,
+                        new AgentStudio.Pipeline.ReviewSubjectRecord
+                        {
+                            TaskKey = taskKey,
+                            Project = info.ProjectName,
+                            Repository = envelope.RepositoryUrl ?? string.Empty,
+                            ResultSha = run.ResultSha!,
+                            AttemptChainId = run.Lease?.LeaseId ?? run.AttemptId,
+                            Executor = run.Lease?.ExecutorId ?? "authority-recovery",
+                            LeaseId = run.Lease?.LeaseId ?? run.AttemptId,
+                            FencingToken = run.LastFence,
+                            ImmutableResultRef = envelope.ImmutableRemoteRef,
+                            ResultRef = envelope.ImmutableRemoteRef,
+                            IntegrationBranch = existing?.IntegrationBranch,
+                            CompletedAtUtc = run.TerminalAt ?? DateTimeOffset.UtcNow,
+                        });
+                }
+            }
+
+            _logger.LogWarning(
+                "settled-run-requeue-suppressed project={Project} task={TaskKey} attempt={AttemptId} resultSha={ResultSha} trigger={Trigger}",
+                info.ProjectName,
+                taskKey,
+                run!.AttemptId,
+                run.ResultSha,
+                string.IsNullOrWhiteSpace(trigger) ? TimelineActors.System : trigger);
+            return new SettledRunRecoveryPreparation(run, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "settled-run-recovery-failed project={Project} task={TaskKey} attempt={AttemptId}",
+                info.ProjectName,
+                taskKey,
+                run!.AttemptId);
+            return new SettledRunRecoveryPreparation(
+                null,
+                $"Completed run {run.AttemptId} has an immutable result envelope, so requeue is forbidden, but its recovery handoff failed: {ex.Message}");
+        }
+    }
+
+    private static bool IsRecoverableSettledRun(RunAttemptDto? run)
+    {
+        if (run is not
+            {
+                State: AttemptLifecycleState.Completed,
+                ResultEnvelope: not null,
+                ResultEnvelopeDigest: not null,
+                ResultSha: not null,
+            })
+        {
+            return false;
+        }
+
+        try
+        {
+            AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Validate(run.ResultEnvelope);
+            return string.Equals(run.ResultEnvelope.SourceRunAttemptId, run.AttemptId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(run.ResultEnvelope.RepositoryId, run.RepositoryId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(run.ResultEnvelope.ResultSha, run.ResultSha, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(run.ResultEnvelope),
+                    run.ResultEnvelopeDigest,
+                    StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            return false;
+        }
+    }
+
+    private sealed record SettledRunRecoveryPreparation(RunAttemptDto? Run, string? Error)
+    {
+        public static SettledRunRecoveryPreparation None { get; } = new(null, null);
     }
 
     /// <summary>

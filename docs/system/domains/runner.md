@@ -390,7 +390,15 @@ state.
   host runs it in a detached disposable checkout. No task branch, salvage
   commit, or push is created. Only the children produced by the plan enter the
   coding pipeline. An interrupted assigned card whose lease is free is requeued
-  to Ready inside the next atomic claim before a higher fence is issued.
+  to Ready inside the next atomic claim before a higher fence is issued. Before
+  any `3-progress` to `2-ready` requeue, `TaskTransitionService` queries attempt
+  authority. If the current RunAttempt is Completed and its immutable
+  ResultEnvelope validates, the Ready move is suppressed: the existing review
+  handoff is recreated idempotently, the card advances to `4-auto-review`, and
+  `settled_run_recovered` records the original attempt and envelope digest.
+  This guard is shared by operator moves, stale sweeps, and liveness or crash
+  detectors. Review reissues from later lanes remain deliberate new delivery
+  cycles and are outside this BP-09 guard.
 
 - A terminal sentinel in the final agent reply is authoritative. Sentinel-shaped
   text in streamed tool output, diffs, file content, or stderr is not a verdict.
