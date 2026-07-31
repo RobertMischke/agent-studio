@@ -144,40 +144,51 @@ public sealed class TestRunService
         foreach (var projectJobs in jobs.GroupBy(job => job.WatchPath, StringComparer.OrdinalIgnoreCase))
         {
             var groupedJobs = projectJobs.ToList();
+            var taskScoped = groupedJobs.ToDictionary(
+                job => job.TaskKey,
+                job => IsSettledCard(job.State)
+                    ? TaskScopedTestEvidenceReader.Read(job)
+                    : new TaskScopedTestEvidenceSnapshot([], "not-settled"),
+                StringComparer.Ordinal);
             var project = _projects.FindByStorageLocation(projectJobs.Key);
             var repo = _git.ResolveRepoRootForWatchPath(projectJobs.Key);
             if (project is null || string.IsNullOrWhiteSpace(repo))
             {
-                foreach (var job in groupedJobs) result[job.TaskKey] = None(job, "No test run assigned");
+                foreach (var job in groupedJobs)
+                {
+                    result[job.TaskKey] = Match(
+                        job,
+                        [],
+                        new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase),
+                        new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase),
+                        taskScoped[job.TaskKey].Sources);
+                }
                 continue;
             }
             var runs = _store.List(project.Id);
-            var signature = Signature(groupedJobs, runs);
+            var signature = Signature(groupedJobs, runs, taskScoped);
             if (!_evidenceCache.TryGetValue(projectJobs.Key, out var cached)
                 || cached.Signature != signature
                 || DateTime.UtcNow - cached.At > TimeSpan.FromSeconds(5))
             {
-                Dictionary<string, TaskTestRunEvidence> value;
-                if (runs.Count == 0)
-                {
-                    value = groupedJobs.ToDictionary(job => job.TaskKey, job => None(job, "No test run assigned"), StringComparer.Ordinal);
-                }
-                else
-                {
-                    var refs = runs.Select(run => run.Commit)
-                        .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
-                    var graph = _git.GetCommitParentGraph(repo, refs);
-                    var distances = refs.ToDictionary(reference => reference, reference => AncestorDistances(graph, reference), StringComparer.OrdinalIgnoreCase);
-                    var integrationMerges = _git.GetIntegrationMergesByKey(
-                        repo,
-                        runs.Select(run => run.Commit).ToArray());
-                    value = groupedJobs.ToDictionary(
-                        job => job.TaskKey,
-                        job => Match(job, runs, distances, integrationMerges),
-                        StringComparer.Ordinal);
-                }
+                var refs = runs.Select(run => run.Commit)
+                    .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
+                    .Concat(taskScoped.Values.SelectMany(snapshot => snapshot.Sources).Select(source => source.Commit))
+                    .Where(reference => !string.IsNullOrWhiteSpace(reference))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var graph = _git.GetCommitParentGraph(repo, refs);
+                var distances = refs.ToDictionary(
+                    reference => reference,
+                    reference => AncestorDistances(graph, reference),
+                    StringComparer.OrdinalIgnoreCase);
+                var integrationMerges = _git.GetIntegrationMergesByKey(
+                    repo,
+                    runs.Select(run => run.Commit).ToArray());
+                var value = groupedJobs.ToDictionary(
+                    job => job.TaskKey,
+                    job => Match(job, runs, distances, integrationMerges, taskScoped[job.TaskKey].Sources),
+                    StringComparer.Ordinal);
                 cached = (signature, DateTime.UtcNow, value);
                 _evidenceCache[projectJobs.Key] = cached;
             }
@@ -215,10 +226,11 @@ public sealed class TestRunService
         TaskInfo job,
         IReadOnlyList<TestRunRecord> runs,
         IReadOnlyDictionary<string, Dictionary<string, int>> distances,
-        IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> integrationMerges)
+        IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> integrationMerges,
+        IReadOnlyList<TaskTestEvidenceSource> taskScopedSources)
     {
         var anchor = BoardMergeStatusService.AnchorFor(job);
-        if (string.IsNullOrWhiteSpace(anchor)) return None(job, "No test run assigned: card has no commit");
+        if (string.IsNullOrWhiteSpace(anchor)) return None("No test evidence assigned: card has no commit");
         var anchorCommittedAt = CurrentCommitAt(job);
         var integratedAnchors = string.IsNullOrWhiteSpace(job.Key) || anchorCommittedAt is null
             ? []
@@ -226,6 +238,7 @@ public sealed class TestRunService
                 .Where(merge => merge.CommittedAtUtc > anchorCommittedAt.Value)
                 .Select(merge => merge.Sha)
                 .ToArray();
+        var scopedMatches = MatchTaskScoped(anchor, taskScopedSources, distances, integratedAnchors);
 
         var candidates = new List<(TestRunRecord Run, string Quality, string Direction, int Distance, bool Contains)>();
         foreach (var run in runs)
@@ -261,7 +274,10 @@ public sealed class TestRunService
             .ThenBy(candidate => candidate.Distance)
             .ThenByDescending(candidate => candidate.Run.CreatedAt)
             .FirstOrDefault();
-        if (selected.Run is null) return None(job, "No matching test run");
+        if (selected.Run is null)
+            return scopedMatches.Count > 0
+                ? FromTaskScoped(scopedMatches)
+                : None(runs.Count == 0 ? "No test evidence assigned" : "No matching test run");
 
         var evidenceState = !selected.Contains
             ? "not-proven"
@@ -275,7 +291,7 @@ public sealed class TestRunService
             "contains-diff" => $"{selected.Distance} commit(s) after, diff included",
             _ => $"{selected.Distance} commit(s) before, diff not included",
         };
-        return new TaskTestRunEvidence
+        var projected = new TaskTestRunEvidence
         {
             RunId = selected.Run.Id,
             RunCommit = selected.Run.Commit,
@@ -288,13 +304,74 @@ public sealed class TestRunService
             EvidenceState = evidenceState,
             AwaitingEvidence = waiting,
             Summary = waiting ? $"Evidence pending: {summary}" : summary,
+            Sources = scopedMatches.Select(match => match.Source).ToList(),
+        };
+        return evidenceState == "not-proven" && scopedMatches.Count > 0
+            ? FromTaskScoped(scopedMatches)
+            : projected;
+    }
+
+    private static IReadOnlyList<ScopedEvidenceMatch> MatchTaskScoped(
+        string anchor,
+        IReadOnlyList<TaskTestEvidenceSource> sources,
+        IReadOnlyDictionary<string, Dictionary<string, int>> distances,
+        IReadOnlyList<string> integratedAnchors)
+    {
+        var matches = new List<ScopedEvidenceMatch>();
+        foreach (var source in sources)
+        {
+            if (string.Equals(anchor, source.Commit, StringComparison.OrdinalIgnoreCase))
+            {
+                matches.Add(new(source, "perfect", "exact", 0));
+                continue;
+            }
+            if (distances.GetValueOrDefault(source.Commit)?.TryGetValue(anchor, out var afterDistance) == true)
+            {
+                matches.Add(new(source, "contains-diff", "after", afterDistance));
+                continue;
+            }
+            var integrationDistance = integratedAnchors
+                .Select(merge =>
+                    distances.GetValueOrDefault(source.Commit) is { } sourceDistances
+                    && sourceDistances.TryGetValue(merge, out var distance)
+                        ? (int?)distance
+                        : null)
+                .Where(distance => distance is not null)
+                .Min();
+            if (integrationDistance is not null)
+                matches.Add(new(source, "contains-diff", "after", integrationDistance.Value));
+        }
+        return matches
+            .OrderByDescending(match => match.Source.ObservedAt ?? DateTime.MinValue)
+            .ToList();
+    }
+
+    private static TaskTestRunEvidence FromTaskScoped(IReadOnlyList<ScopedEvidenceMatch> matches)
+    {
+        var selected = matches[0];
+        var evidenceState = selected.Source.Result switch
+        {
+            "passed" => "proven",
+            "failed" => "failed",
+            _ => "not-proven",
+        };
+        return new TaskTestRunEvidence
+        {
+            MatchQuality = selected.Quality,
+            Direction = selected.Direction,
+            Distance = selected.Distance,
+            DiffContained = true,
+            EvidenceState = evidenceState,
+            AwaitingEvidence = false,
+            Summary = selected.Source.Summary,
+            Sources = matches.Select(match => match.Source).ToList(),
         };
     }
 
-    private static TaskTestRunEvidence None(TaskInfo job, string summary) => new()
+    private static TaskTestRunEvidence None(string summary) => new()
     {
-        AwaitingEvidence = IsSettledCard(job.State),
-        Summary = IsSettledCard(job.State) ? "Evidence pending: " + summary : summary,
+        AwaitingEvidence = false,
+        Summary = summary,
     };
 
     private static bool IsSettledCard(string state) => state is TaskStates.AutoReview or TaskStates.HumanReview
@@ -335,9 +412,12 @@ public sealed class TestRunService
         return distances;
     }
 
-    private static string Signature(IReadOnlyCollection<TaskInfo> jobs, IReadOnlyCollection<TestRunRecord> runs)
+    private static string Signature(
+        IReadOnlyCollection<TaskInfo> jobs,
+        IReadOnlyCollection<TestRunRecord> runs,
+        IReadOnlyDictionary<string, TaskScopedTestEvidenceSnapshot> taskScoped)
         => string.Join('|', jobs.OrderBy(job => job.TaskKey).Select(job =>
-            $"{job.TaskKey}:{job.State}:{BoardMergeStatusService.AnchorFor(job)}:{CurrentCommitAt(job):O}"))
+            $"{job.TaskKey}:{job.State}:{BoardMergeStatusService.AnchorFor(job)}:{CurrentCommitAt(job):O}:{taskScoped[job.TaskKey].Signature}"))
            + "||" + string.Join('|', runs.OrderBy(run => run.Id).Select(run => $"{run.Id}:{run.Commit}:{run.State}:{run.Result}"));
 
     private static DateTime? CurrentCommitAt(TaskInfo job)
@@ -386,4 +466,10 @@ public sealed class TestRunService
         Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar),
         Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar),
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private sealed record ScopedEvidenceMatch(
+        TaskTestEvidenceSource Source,
+        string Quality,
+        string Direction,
+        int Distance);
 }

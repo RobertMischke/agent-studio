@@ -170,6 +170,113 @@ public sealed class TestRunServiceTests : IDisposable
     }
 
     [Fact]
+    public void CardEvidence_BindsExactRemoteReviewBuildTestsGrade_WhenProjectRunIsAbsent()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.Archive, "review-evidence");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(
+            Path.Combine(folder, "remote-review-grade-review-42.md"),
+            $"""
+             ---
+             type: remote-review-grade
+             attemptId: "review-42"
+             receivedAt: 2026-07-29T20:41:22Z
+             outcome: "Pass"
+             expectedResultSha: "{commit}"
+             actualHead: "{commit}"
+             ---
+
+             | Aspect | Status | Classification | Summary |
+             | --- | --- | --- | --- |
+             | build-tests | pass | CommandPassed | Review command passed. |
+             """);
+        var job = Task("review-evidence", stack.Storage, commit) with
+        {
+            State = TaskStates.Archive,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("proven", evidence.EvidenceState);
+        Assert.Equal("perfect", evidence.MatchQuality);
+        Assert.False(evidence.AwaitingEvidence);
+        Assert.Equal($"Review build-tests Pass at {commit[..8]}", evidence.Summary);
+        var source = Assert.Single(evidence.Sources);
+        Assert.Equal("review-build-tests", source.Kind);
+        Assert.Equal("review-42", source.Id);
+        Assert.Equal(commit, source.Commit);
+        Assert.Equal("passed", source.Result);
+    }
+
+    [Fact]
+    public void CardEvidence_BindsExactBuildGateLog_WhenProjectRunIsAbsent()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, "gate-evidence");
+        var postSteps = Path.Combine(folder, "post-steps");
+        Directory.CreateDirectory(postSteps);
+        File.WriteAllText(
+            Path.Combine(postSteps, "build-test-gate-1.log"),
+            $"verdict=Ok exit=0 signal=n/a durationMs=1500\n"
+            + "gateId=post-build-test-gate failureKind=None failureFingerprint=n/a\n"
+            + "gateRunId=gate-42 startedAtUtc=2026-07-29T20:39:00Z completedAtUtc=2026-07-29T20:40:00Z\n"
+            + $"repository=demo expectedSha={commit} testedSha={commit}\n"
+            + "reason=All selected commands passed.\n");
+        var job = Task("gate-evidence", stack.Storage, commit) with { FolderPath = folder };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("proven", evidence.EvidenceState);
+        Assert.Equal($"Build/test gate green at {commit[..8]}", evidence.Summary);
+        var source = Assert.Single(evidence.Sources);
+        Assert.Equal("build-test-gate", source.Kind);
+        Assert.Equal("gate-42", source.Id);
+    }
+
+    [Fact]
+    public void CardEvidence_DoesNotReuseTaskScopedGradeForDifferentCommit()
+    {
+        var stack = BuildStack();
+        var oldCommit = RevParse(stack.Repo, "HEAD");
+        Commit(stack.Repo, "new.txt", "new", "New card revision");
+        var currentCommit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.Archive, "stale-review-evidence");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(
+            Path.Combine(folder, "remote-review-grade-review-old.md"),
+            $"""
+             ---
+             type: remote-review-grade
+             attemptId: "review-old"
+             receivedAt: 2026-07-29T20:41:22Z
+             outcome: "Pass"
+             expectedResultSha: "{oldCommit}"
+             actualHead: "{oldCommit}"
+             ---
+
+             | Aspect | Status | Classification | Summary |
+             | --- | --- | --- | --- |
+             | build-tests | pass | CommandPassed | Review command passed. |
+             """);
+        var job = Task("stale-review-evidence", stack.Storage, currentCommit) with
+        {
+            State = TaskStates.Archive,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("unassigned", evidence.EvidenceState);
+        Assert.False(evidence.AwaitingEvidence);
+        Assert.Empty(evidence.Sources);
+        Assert.Equal("No test evidence assigned", evidence.Summary);
+    }
+
+    [Fact]
     public void CardEvidence_RecognizesDiffInCuratedRecut_WhenOriginalCommitIsNotAnAncestor()
     {
         var stack = BuildStack();

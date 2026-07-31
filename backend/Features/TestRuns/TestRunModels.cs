@@ -90,7 +90,18 @@ public sealed record TaskTestRunEvidence
     public bool DiffContained { get; init; }
     public string EvidenceState { get; init; } = "unassigned";
     public bool AwaitingEvidence { get; init; }
-    public string Summary { get; init; } = "No test run assigned";
+    public string Summary { get; init; } = "No test evidence assigned";
+    public IReadOnlyList<TaskTestEvidenceSource> Sources { get; init; } = [];
+}
+
+public sealed record TaskTestEvidenceSource
+{
+    public string Kind { get; init; } = "";
+    public string Id { get; init; } = "";
+    public string Commit { get; init; } = "";
+    public string Result { get; init; } = "";
+    public DateTime? ObservedAt { get; init; }
+    public string Summary { get; init; } = "";
 }
 
 public sealed record DeploymentTestRunReference

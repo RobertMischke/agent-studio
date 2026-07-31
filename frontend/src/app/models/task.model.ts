@@ -1609,6 +1609,15 @@ export interface TaskPublishSignal {
 export type TestRunMatchQuality = 'none' | 'perfect' | 'contains-diff' | 'does-not-contain-diff';
 export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven';
 
+export interface TaskTestEvidenceSource {
+  kind: 'project-test-run' | 'review-build-tests' | 'build-test-gate' | 'pre-develop-build-gate' | 'pre-main-test-gate' | string;
+  id: string;
+  commit: string;
+  result: 'passed' | 'failed' | 'not-proven' | string;
+  observedAt: string | null;
+  summary: string;
+}
+
 export interface TaskTestRunEvidence {
   runId: string | null;
   runCommit: string | null;
@@ -1621,6 +1630,8 @@ export interface TaskTestRunEvidence {
   evidenceState: TestEvidenceState;
   awaitingEvidence: boolean;
   summary: string;
+  /** SHA-linked task-owned grades and gate logs that complement project TestRunStore runs. */
+  sources?: TaskTestEvidenceSource[];
 }
 
 export interface CrashRecoveryPending {
