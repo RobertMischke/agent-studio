@@ -79,6 +79,8 @@ class Api {
     }
     return result.value;
   }
+  // Historical replay scenarios use one non-throwing attempt to inspect
+  // expected stale-writer and fencing rejections.
   async attempt(method, route, body) {
     const response = await fetch(`${this.baseUrl}${route}`, {
       method,
@@ -388,11 +390,7 @@ async function executeScenario(context) {
     }
   };
 
-  if ([
-    'divergent-salvage-lineage',
-    'lease-adoption-restart',
-    'external-completion-cycle'
-  ].includes(manifest.name)) {
+  if (manifest.contract) {
     return await executeHistoricalReplay({
       ...context,
       api,

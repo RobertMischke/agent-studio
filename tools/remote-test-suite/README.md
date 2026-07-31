@@ -26,10 +26,13 @@ harness never writes under the managed task workspace.
 | `lease-adoption-restart` | Live, dead, and PID-mismatched generations across daemon restart | `4-auto-review` | 1 live-generation adoption |
 | `external-completion-cycle` | Idempotent external completion, requeue replay, and failed stranded salvage | `2-ready` | 1 post-completion requeue |
 
-Each manifest declares its hardening-chronicle links, expected terminal,
-bounded recovery budget, and machine assertion IDs. The executor must satisfy
-every declaration before it can report `accepted: true`. The complete evidence
-record is written to
+Historical replay manifests declare `contract`, which selects the replay
+engine. Reference and fault-injection manifests declare `acceptance` and stay
+on the standard engine. Both metadata objects carry the hardening-chronicle
+links, expected terminal, bounded recovery budget, and machine assertion IDs;
+the schema keeps both optional so a standard fault manifest is not
+misclassified or invalidated. The executor must satisfy every declaration
+before it can report `accepted: true`. The complete evidence record is written to
 `.tmp/remote-test-suite/<scenario>/<run-id>/result.json`.
 
 Add `--cleanup` to remove the isolated run root after success. Setup rollback

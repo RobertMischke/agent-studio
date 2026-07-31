@@ -9,7 +9,7 @@ export function validateManifest(manifest) {
   const errors = [];
   rejectUnknown(manifest, [
     '$schema', 'version', 'name', 'description', 'task', 'fixture', 'phases', 'resources', 'hooks',
-    'contract', 'faults', 'expected'
+    'acceptance', 'contract', 'faults', 'expected'
   ], 'manifest', errors);
   if (manifest?.version !== 1) errors.push('version must be 1');
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(manifest?.name ?? '')) errors.push('name is invalid');
@@ -24,38 +24,11 @@ export function validateManifest(manifest) {
     if (!manifest?.resources?.[field]?.trim()) errors.push(`resources.${field} is required`);
   }
   rejectUnknown(manifest?.resources, ['workspaceId', 'projectId', 'taskId'], 'resources', errors);
-  rejectUnknown(
-    manifest?.contract,
-    ['chronicleLinks', 'expectedTerminal', 'recoveryBudget', 'assertions'],
-    'contract',
-    errors);
-  const chronicleLinks = manifest?.contract?.chronicleLinks;
-  if (!Array.isArray(chronicleLinks)
-      || new Set(chronicleLinks).size !== chronicleLinks.length
-      || chronicleLinks.some(link =>
-        !/^docs\/operations\/haertung-verteilte-ausfuehrung\/historie\.html#incident-[a-z0-9-]+$/.test(link))) {
-    errors.push('contract.chronicleLinks must contain unique hardening-chronicle incident links');
+  if (manifest?.acceptance !== undefined && manifest?.contract !== undefined) {
+    errors.push('manifest must not declare both acceptance and contract');
   }
-  if (!/^[0-9]+-[a-z0-9-]+$/.test(manifest?.contract?.expectedTerminal ?? '')) {
-    errors.push('contract.expectedTerminal must be a durable lane state');
-  }
-  rejectUnknown(
-    manifest?.contract?.recoveryBudget,
-    ['unit', 'maximum'],
-    'contract.recoveryBudget',
-    errors);
-  if (!/^[a-z0-9][a-z0-9-]+$/.test(manifest?.contract?.recoveryBudget?.unit ?? '')
-      || !Number.isInteger(manifest?.contract?.recoveryBudget?.maximum)
-      || manifest.contract.recoveryBudget.maximum < 0) {
-    errors.push('contract.recoveryBudget must declare a unit and non-negative maximum');
-  }
-  const assertions = manifest?.contract?.assertions;
-  if (!Array.isArray(assertions)
-      || assertions.length === 0
-      || new Set(assertions).size !== assertions.length
-      || assertions.some(assertion => !/^[a-z0-9][a-z0-9-]+$/.test(assertion))) {
-    errors.push('contract.assertions must contain unique machine assertion ids');
-  }
+  validateScenarioContract(manifest?.acceptance, 'acceptance', errors);
+  validateScenarioContract(manifest?.contract, 'contract', errors);
   rejectUnknown(manifest?.fixture, [
     'defaultBranch', 'changeCommand', 'acceptanceCommand', 'expectedChangedFiles'
   ], 'fixture', errors);
@@ -109,8 +82,46 @@ export function validateManifest(manifest) {
   return manifest;
 }
 
+function validateScenarioContract(contract, label, errors) {
+  if (contract === undefined) return;
+  rejectUnknown(
+    contract,
+    ['chronicleLinks', 'expectedTerminal', 'recoveryBudget', 'assertions'],
+    label,
+    errors);
+  const chronicleLinks = contract?.chronicleLinks;
+  if (!Array.isArray(chronicleLinks)
+      || new Set(chronicleLinks).size !== chronicleLinks.length
+      || chronicleLinks.some(link =>
+        !/^docs\/operations\/haertung-verteilte-ausfuehrung\/historie\.html#incident-[a-z0-9-]+$/.test(link))) {
+    errors.push(`${label}.chronicleLinks must contain unique hardening-chronicle incident links`);
+  }
+  if (!/^[0-9]+-[a-z0-9-]+$/.test(contract?.expectedTerminal ?? '')) {
+    errors.push(`${label}.expectedTerminal must be a durable lane state`);
+  }
+  rejectUnknown(
+    contract?.recoveryBudget,
+    ['unit', 'maximum'],
+    `${label}.recoveryBudget`,
+    errors);
+  if (!/^[a-z0-9][a-z0-9-]+$/.test(contract?.recoveryBudget?.unit ?? '')
+      || !Number.isInteger(contract?.recoveryBudget?.maximum)
+      || contract.recoveryBudget.maximum < 0) {
+    errors.push(`${label}.recoveryBudget must declare a unit and non-negative maximum`);
+  }
+  const assertions = contract?.assertions;
+  if (!Array.isArray(assertions)
+      || assertions.length === 0
+      || new Set(assertions).size !== assertions.length
+      || assertions.some(assertion => !/^[a-z0-9][a-z0-9-]+$/.test(assertion))) {
+    errors.push(`${label}.assertions must contain unique machine assertion ids`);
+  }
+}
+
 export function scenarioAssertions(manifest) {
-  const declared = new Set(manifest.contract.assertions);
+  const contract = manifest.contract ?? manifest.acceptance;
+  if (!contract) throw new Error('Scenario assertions require acceptance or contract metadata.');
+  const declared = new Set(contract.assertions);
   const observed = new Map();
   return {
     check(id, condition, detail) {
@@ -124,25 +135,25 @@ export function scenarioAssertions(manifest) {
       if (missing.length > 0) {
         throw new Error(`Scenario did not execute declared assertions: ${missing.join(', ')}`);
       }
-      if (actualTerminal !== manifest.contract.expectedTerminal) {
+      if (actualTerminal !== contract.expectedTerminal) {
         throw new Error(
-          `Scenario terminal mismatch: expected ${manifest.contract.expectedTerminal}, got ${actualTerminal}`);
+          `Scenario terminal mismatch: expected ${contract.expectedTerminal}, got ${actualTerminal}`);
       }
       if (!Number.isInteger(recoveryUsed)
           || recoveryUsed < 0
-          || recoveryUsed > manifest.contract.recoveryBudget.maximum) {
+          || recoveryUsed > contract.recoveryBudget.maximum) {
         throw new Error(
-          `Scenario recovery budget exceeded: ${recoveryUsed}/${manifest.contract.recoveryBudget.maximum} `
-          + manifest.contract.recoveryBudget.unit);
+          `Scenario recovery budget exceeded: ${recoveryUsed}/${contract.recoveryBudget.maximum} `
+          + contract.recoveryBudget.unit);
       }
       return {
-        expectedTerminal: manifest.contract.expectedTerminal,
+        expectedTerminal: contract.expectedTerminal,
         actualTerminal,
         recoveryBudget: {
-          ...manifest.contract.recoveryBudget,
+          ...contract.recoveryBudget,
           used: recoveryUsed
         },
-        chronicleLinks: [...manifest.contract.chronicleLinks],
+        chronicleLinks: [...contract.chronicleLinks],
         assertions: [...observed.values()]
       };
     }
