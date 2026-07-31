@@ -15,22 +15,29 @@ Pure types only:
 - `JobHygieneContext` — context the hygiene strip needs to render its three icons.
 - `JobCommitInfo`, `JobCommitDetail` — per-commit metadata + full diff.
 
-Project Hub Git View (AGT-1807):
+Project Hub Git tree:
 
-- `GitProjectInventory` — read-only branch / worktree / recent-history inventory for one
-  project. Mirrors backend `GitProjectInventory`; `isRepo === false` + `error` is the
-  empty/error signal.
-- `GitWorktreeEntry`, `GitBranchEntry`, `GitCommitEntry`, `GitBranchCategory` — inventory rows.
-- `buildGitTree(inventory)` + `GitTreeGroup` / `GitTreeLeaf` node types — the pure model that
-  groups the inventory into the Git View tree (worktrees, integration / feature / task
-  branches, recent history). Unit-tested in `models/git-tree.model.spec.ts`.
+- `GitProjectInventory` is the read-only branch, worktree, active checkout, and
+  first commit-page projection for one project. `isRepo === false` plus `error`
+  is the empty/error signal.
+- `GitGraphCommit` carries parents, refs, linked task cards, deployment markers,
+  and calculated develop/main presence. Presence comes from the same cached
+  reachability resolver used by board merge status.
+- `buildGitTree(inventory)` groups active local or remote leases, worktrees,
+  integration, feature, task, and runner branches in the left repository tree.
+- `buildGitGraphRows(commits)` assigns quiet SVG lanes from commit and parent
+  SHAs. Older history comes from the bounded `/api/git/history` page endpoint.
 
 ## Where the consumers live
 
 - The git pane component is in `features/job-detail/components/git-pane/`.
 - The hygiene strip is in `features/job-detail/components/hygiene-strip/`.
 - The Project Hub Git View is `features/project-detail/components/project-git-panel/`; its
-  HTTP wrapper is `services/project-git.service.ts` (`/api/git/inventory`,
-  `/api/git/project-commit/{files,diff}`). It reuses the shared diff renderer
-  `components/diff-content/` (also used by the full-screen `StudioDiffViewComponent`).
+  tree and graph render in dedicated child components. Its optional changes
+  inspector fetches files and diffs only after an explicit click and reuses the
+  shared `components/diff-content/` renderer.
+- The HTTP wrapper is `services/project-git.service.ts`
+  (`/api/git/inventory`, `/api/git/history`, and
+  `/api/git/project-commit/{files,diff}`). The Git tree itself exposes no
+  mutation control.
 - The HTTP wrappers are in `services/git-summary.service.ts` and `services/git-hygiene.service.ts`.

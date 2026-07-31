@@ -121,14 +121,24 @@ public static class SystemEndpoints
         app.MapGet("/api/git/hygiene", (string project, GitService git) =>
             Results.Ok(git.GetProjectHygiene(project)));
 
-        // Project Hub Git View: read-only branch / worktree / recent-history
+        // Project Hub Git View: read-only branch / worktree / first graph-page
         // inventory for one project. Cached ~3 s server-side. Deliberately
         // project-scoped (never a global git client): it lists the project's
-        // branches, on-disk worktree/checkout folders, and recent commits so
-        // the Git View tree can distinguish main / develop / feature / task
-        // branches and hand a browsed SHA to the shared diff renderer.
-        app.MapGet("/api/git/inventory", (string project, GitService git) =>
-            Results.Ok(git.GetProjectInventory(project)));
+        // local and origin branches, active checkouts, on-disk worktrees, and
+        // enriched commits so the tree can distinguish integration / feature /
+        // task / runner state and hand a browsed SHA to the shared diff renderer.
+        app.MapGet("/api/git/inventory", (string project, ProjectGitGraphService graph) =>
+            Results.Ok(graph.BuildInventory(project)));
+
+        // Older graph rows are fetched only on explicit demand. Page size is
+        // clamped in GitService and every row is enriched through the same
+        // cached develop/main presence resolver as the initial inventory page.
+        app.MapGet("/api/git/history", (
+            string project,
+            int? offset,
+            int? limit,
+            ProjectGitGraphService graph) =>
+            Results.Ok(graph.BuildHistory(project, offset ?? 0, limit ?? 50)));
 
         // First-class integration object: accepted-card queue, curated publisher
         // merges on origin/develop, and the card-granular develop -> main

@@ -130,6 +130,63 @@ public class GitProjectInventoryTests : IDisposable
     }
 
     [Fact]
+    public void Inventory_FoldsLocalAndOriginRefs_AndKeepsOriginOnlyBranches()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteFile(repoRoot, "README.md", "seed");
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", "seed");
+
+        var remote = Path.Combine(_tempDir, "origin.git");
+        RunGit(_tempDir, "init", "-q", "--bare", remote);
+        RunGit(repoRoot, "remote", "add", "origin", remote);
+        RunGit(repoRoot, "push", "-q", "-u", "origin", "main");
+        RunGit(repoRoot, "branch", "local-only");
+        RunGit(repoRoot, "branch", "remote-only");
+        RunGit(repoRoot, "push", "-q", "origin", "remote-only");
+        RunGit(repoRoot, "branch", "-D", "remote-only");
+
+        var inventory = BuildGitService(repoRoot, watchPath).GetProjectInventory("Demo");
+        var branches = inventory.Branches.ToDictionary(branch => branch.Name, branch => branch);
+
+        Assert.True(branches["main"].IsLocal);
+        Assert.True(branches["main"].HasRemote);
+        Assert.True(branches["local-only"].IsLocal);
+        Assert.False(branches["local-only"].HasRemote);
+        Assert.False(branches["remote-only"].IsLocal);
+        Assert.True(branches["remote-only"].HasRemote);
+        Assert.Equal("origin/main", branches["main"].Upstream);
+    }
+
+    [Fact]
+    public void History_IsBoundedAndPaged_WithParentsAndRefDecorations()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        for (var index = 0; index < 12; index++)
+        {
+            WriteFile(repoRoot, "history.txt", $"revision {index}");
+            RunGit(repoRoot, "add", "-A");
+            RunGit(repoRoot, "commit", "-q", "-m", $"history {index}");
+        }
+
+        var git = BuildGitService(repoRoot, watchPath);
+        var first = git.GetProjectHistory("Demo", offset: 0, pageSize: 10);
+        var second = git.GetProjectHistory("Demo", offset: first.NextOffset!.Value, pageSize: 10);
+
+        Assert.Equal(10, first.Commits.Count);
+        Assert.True(first.HasMore);
+        Assert.Equal(10, first.NextOffset);
+        Assert.Equal(2, second.Commits.Count);
+        Assert.False(second.HasMore);
+        Assert.Null(second.NextOffset);
+        Assert.Single(first.Commits[0].ParentShas);
+        Assert.Contains(first.Commits[0].Refs, reference => reference.Name == "HEAD");
+        Assert.Contains(first.Commits[0].Refs, reference => reference.Name == "main");
+        Assert.Empty(first.Commits.Select(commit => commit.Sha)
+            .Intersect(second.Commits.Select(commit => commit.Sha)));
+    }
+
+    [Fact]
     public void ParseWorktreePorcelain_MarksPrimary_ParsesBranchAndDetached()
     {
         const string sample =
@@ -163,6 +220,7 @@ public class GitProjectInventoryTests : IDisposable
     [InlineData("develop", "develop")]
     [InlineData("dev", "develop")]
     [InlineData("task/42", "task")]
+    [InlineData("runner/agent-runner-01/AGT-2430", "runner")]
     [InlineData("feature/login", "feature")]
     [InlineData("feat/login", "feature")]
     [InlineData("hotfix/x", "other")]

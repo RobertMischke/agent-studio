@@ -6,6 +6,7 @@ import type {
   GitCleanupPlan,
   GitCleanupResult,
   GitFileChange,
+  GitHistoryPage,
   GitProjectInventory,
   ProjectIntegrationView,
 } from '../features/git';
@@ -31,6 +32,16 @@ export class ProjectGitService {
   getInventory(project: string): Observable<GitProjectInventory> {
     return this.http.get<GitProjectInventory>('/api/git/inventory', {
       params: new HttpParams().set('project', project),
+    });
+  }
+
+  /** One older, bounded page of the all-ref commit graph. */
+  getHistory(project: string, offset: number, limit = 50): Observable<GitHistoryPage> {
+    return this.http.get<GitHistoryPage>('/api/git/history', {
+      params: new HttpParams()
+        .set('project', project)
+        .set('offset', offset)
+        .set('limit', limit),
     });
   }
 

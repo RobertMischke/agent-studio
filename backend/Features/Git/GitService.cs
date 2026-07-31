@@ -192,16 +192,18 @@ public record GitWorktreeEntry(
     string? HeadShortSha,
     bool IsPrimary,
     bool IsDetached,
-    bool IsBare);
+    bool IsBare,
+    GitTaskBadge? Task = null);
 
 /// <summary>
-/// One local branch in the Project Hub Git View inventory. <see cref="Category"/>
+/// One logical branch in the Project Hub Git View inventory. It folds matching
+/// local and <c>origin/*</c> refs into one row while retaining their individual
+/// presence flags. <see cref="Category"/>
 /// is a coarse classification (<c>main</c> / <c>develop</c> / <c>feature</c> /
-/// <c>task</c> / <c>other</c>) the frontend groups the branch tree by, so the
-/// operator can see at a glance what is integration, what is a feature branch,
-/// and what is an open task branch. <see cref="WorktreePath"/> is non-null when
-/// the branch is currently checked out in one of the <see cref="GitWorktreeEntry"/>
-/// folders.
+/// <c>task</c> / <c>runner</c> / <c>other</c>) the frontend groups the branch
+/// tree by, so the operator can see at a glance what is integration, feature,
+/// task, or runner state. <see cref="WorktreePath"/> is non-null when the branch
+/// is currently checked out in one of the <see cref="GitWorktreeEntry"/> folders.
 /// </summary>
 public record GitBranchEntry(
     string Name,
@@ -214,7 +216,75 @@ public record GitBranchEntry(
     int Behind,
     string? LastCommitSubject,
     DateTime? LastCommitAtUtc,
-    string? WorktreePath);
+    string? WorktreePath,
+    bool IsLocal = true,
+    bool HasRemote = false,
+    string? RemoteTipSha = null,
+    IReadOnlyList<GitTaskBadge>? Tasks = null);
+
+/// <summary>A task card associated with a branch, worktree, or commit.</summary>
+public sealed record GitTaskBadge(
+    string TaskKey,
+    string Key,
+    string Title,
+    string Lane);
+
+/// <summary>A ref decoration attached to one commit in the graph.</summary>
+public sealed record GitCommitRef(string Name, string Kind, bool IsRemote);
+
+/// <summary>
+/// The shared develop/main commit-presence verdict projected onto a graph row.
+/// </summary>
+public sealed record GitCommitPresence(
+    bool InIntegration,
+    bool InRelease,
+    string IntegrationBranch,
+    string ReleaseBranch);
+
+/// <summary>A running application surface whose immutable build SHA is known.</summary>
+public sealed record GitDeploymentMarker(string Target, string Sha, string ShortSha);
+
+/// <summary>
+/// One topologically ordered commit row. Parents are included so the frontend
+/// can draw graph lanes without another git call.
+/// </summary>
+public sealed record GitGraphCommit
+{
+    public string Sha { get; init; } = "";
+    public string ShortSha { get; init; } = "";
+    public IReadOnlyList<string> ParentShas { get; init; } = [];
+    public DateTime AuthorDateUtc { get; init; }
+    public string Author { get; init; } = "";
+    public string Subject { get; init; } = "";
+    public int FilesChanged { get; init; }
+    public int Added { get; init; }
+    public int Removed { get; init; }
+    public IReadOnlyList<GitCommitRef> Refs { get; init; } = [];
+    public IReadOnlyList<GitTaskBadge> Tasks { get; init; } = [];
+    public GitCommitPresence? Presence { get; init; }
+    public IReadOnlyList<GitDeploymentMarker> Deployments { get; init; } = [];
+}
+
+/// <summary>A bounded page of the all-ref commit graph.</summary>
+public sealed record GitHistoryPage(
+    int Offset,
+    int PageSize,
+    int? NextOffset,
+    bool HasMore,
+    IReadOnlyList<GitGraphCommit> Commits);
+
+/// <summary>
+/// One currently owned task checkout. Remote leases may not have a path visible
+/// to Studio, so <see cref="WorktreePath"/> is optional.
+/// </summary>
+public sealed record GitActiveCheckout(
+    GitTaskBadge Task,
+    string? Branch,
+    string? HeadSha,
+    string Location,
+    string Runner,
+    string? WorktreePath,
+    DateTime? ActiveSince);
 
 /// <summary>
 /// One ref as emitted by <c>git for-each-ref</c>, used by the Git-Management
@@ -241,11 +311,11 @@ public record GitIntegrationMergeCommit(
     string Subject);
 
 /// <summary>
-/// Read-only branch + worktree + recent-history inventory for a single
+/// Read-only branch + worktree + first graph-page inventory for a single
 /// project, returned by <see cref="GitService.GetProjectInventory"/> and
 /// surfaced on the Project Hub Git View. Deliberately project-scoped: it
 /// answers "what branches and checkouts does THIS project's repository have,
-/// and what changed recently", never a global git-client view. Carries an
+/// and how are its refs connected", never a global git-client view. Carries an
 /// <see cref="Error"/> (with <see cref="IsRepo"/> false) when the project has
 /// no configured repository or the folder is not a git working tree, so the
 /// frontend can render a clean empty/error state.
@@ -258,7 +328,10 @@ public record GitProjectInventory(
     List<GitWorktreeEntry> Worktrees,
     List<GitBranchEntry> Branches,
     List<GitCommitInfo> RecentCommits,
-    string? Error);
+    string? Error,
+    GitHistoryPage? History = null,
+    IReadOnlyList<GitActiveCheckout>? ActiveCheckouts = null,
+    IReadOnlyList<GitDeploymentMarker>? Deployments = null);
 
 /// <summary>
 /// Repository hygiene snapshot used by the project header badge and the
@@ -881,8 +954,8 @@ public class GitService
     private static readonly TimeSpan InventoryTtl = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// Branch / worktree / recent-history inventory for one project, backing the
-    /// Project Hub Git View. Read-only: it forks a handful of cheap plumbing
+    /// Branch / worktree / first graph-page inventory for one project, backing
+    /// the Project Hub Git View. Read-only: it forks a bounded set of plumbing
     /// commands (<c>worktree list</c>, <c>for-each-ref</c>, <c>log</c>) and never
     /// mutates the repository. Cached per project for ~3 s so a polling UI can
     /// call freely without forking N git processes per render. Returns a shape
@@ -931,28 +1004,165 @@ public class GitService
         if (root == null)
             return EmptyInventory(projectName, configured, $"Not a git repository: {configured}");
 
-        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
-        var currentBranch = string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim();
-
         var (wtOut, _, wtCode) = RunGitArgs(root, "worktree", "list", "--porcelain");
         var worktrees = wtCode == 0 ? ParseWorktreePorcelain(wtOut) : [];
+        // The primary porcelain entry already carries the checked-out branch.
+        // Reusing it avoids a separate rev-parse spawn on every cold inventory.
+        var currentBranch = worktrees.FirstOrDefault(worktree => worktree.IsPrimary)?.Branch;
         var worktreeByBranch = worktrees
             .Where(w => !string.IsNullOrEmpty(w.Branch))
             .GroupBy(w => w.Branch!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Path, StringComparer.Ordinal);
 
         var branches = ReadBranchInventory(root, currentBranch, worktreeByBranch);
-
-        // Recent history on the current HEAD; the tree browser reads this as the
-        // "browse recent commits" list and hands a selected SHA to the reused
-        // diff renderer. Bounded so a long-lived repo can't stall the render.
-        var (logOut, _, logCode) = RunGitArgs(root,
-            "log", "--no-merges", "--max-count=40", "--shortstat",
-            "--pretty=format:%H%x1f%h%x1f%aI%x1f%aN%x1f%s");
-        var recent = logCode == 0 ? ParseLogBlocks(logOut) : [];
+        var history = ReadProjectHistoryPage(root, offset: 0, pageSize: 50);
+        var recent = history.Commits
+            .Select(commit => new GitCommitInfo(
+                commit.Sha,
+                commit.ShortSha,
+                commit.AuthorDateUtc,
+                commit.Author,
+                commit.Subject,
+                commit.FilesChanged,
+                commit.Added,
+                commit.Removed))
+            .ToList();
 
         return new GitProjectInventory(
-            projectName, root, true, currentBranch, worktrees, branches, recent, null);
+            projectName, root, true, currentBranch, worktrees, branches, recent, null, history);
+    }
+
+    /// <summary>
+    /// Returns one bounded all-ref graph page for a project. The first page is
+    /// already carried by <see cref="GetProjectInventory"/>; this method backs
+    /// explicit "Load older" requests. Inventory cache hits avoid repeat work on
+    /// initial render, while older pages are briefly memoized by project/offset.
+    /// </summary>
+    public GitHistoryPage GetProjectHistory(string projectName, int offset, int pageSize)
+    {
+        offset = Math.Max(0, offset);
+        pageSize = Math.Clamp(pageSize, 10, 100);
+        var inventory = GetProjectInventory(projectName);
+        var root = inventory.IsRepo ? inventory.RepositoryPath : null;
+        if (root == null) return new GitHistoryPage(offset, pageSize, null, false, []);
+
+        var fingerprint = ReadOnlyGitRefFingerprint.Capture(
+            root,
+            inventory.Branches.Select(branch => branch.Name));
+        var logicalKey = $"git-graph\0{root}\0{fingerprint}\0{offset}\0{pageSize}";
+        return MemoizeByHead(root, logicalKey, () => ReadProjectHistoryPage(root, offset, pageSize));
+    }
+
+    private GitHistoryPage ReadProjectHistoryPage(string root, int offset, int pageSize)
+    {
+        const char US = '\x1f';
+        const char RS = '\x1e';
+        var format = string.Join("%x1f",
+            "%H", "%h", "%P", "%aI", "%aN", "%s", "%D");
+        var (output, _, code) = RunGitArgs(
+            root,
+            "log",
+            "--all",
+            "--topo-order",
+            "--date-order",
+            $"--max-count={pageSize + 1}",
+            $"--skip={offset}",
+            "--shortstat",
+            "--decorate=full",
+            $"--pretty=format:%x1e{format}");
+        if (code != 0 || string.IsNullOrWhiteSpace(output))
+            return new GitHistoryPage(offset, pageSize, null, false, []);
+
+        var commits = new List<GitGraphCommit>();
+        foreach (var block in output.Replace("\r\n", "\n").Split(RS))
+        {
+            var lines = block.Split('\n');
+            var recordLine = lines.FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 7) continue;
+            if (!DateTime.TryParse(
+                    parts[3],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var parsedAt))
+                continue;
+            var shortstat = lines
+                .SkipWhile(line => !ReferenceEquals(line, recordLine)
+                    && !string.Equals(line, recordLine, StringComparison.Ordinal))
+                .Skip(1)
+                .FirstOrDefault(line => line.Contains(" changed", StringComparison.Ordinal));
+            var (files, added, removed) = ParseShortstat(shortstat);
+            commits.Add(new GitGraphCommit
+            {
+                Sha = parts[0].Trim(),
+                ShortSha = parts[1].Trim(),
+                ParentShas = parts[2]
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                AuthorDateUtc = DateTime.SpecifyKind(parsedAt, DateTimeKind.Utc),
+                Author = parts[4],
+                Subject = parts[5],
+                FilesChanged = files,
+                Added = added,
+                Removed = removed,
+                Refs = ParseGraphRefs(parts[6]),
+            });
+        }
+
+        var hasMore = commits.Count > pageSize;
+        var page = commits.Take(pageSize).ToList();
+        return new GitHistoryPage(
+            offset,
+            pageSize,
+            hasMore ? offset + page.Count : null,
+            hasMore,
+            page);
+    }
+
+    internal static IReadOnlyList<GitCommitRef> ParseGraphRefs(string? decorations)
+    {
+        if (string.IsNullOrWhiteSpace(decorations)) return [];
+        var refs = new List<GitCommitRef>();
+
+        void Add(string raw)
+        {
+            var value = raw.Trim();
+            if (value.Length == 0) return;
+            if (value.StartsWith("HEAD -> ", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef("HEAD", "head", false));
+                Add(value["HEAD -> ".Length..]);
+                return;
+            }
+            if (value == "HEAD")
+            {
+                refs.Add(new GitCommitRef("HEAD", "head", false));
+                return;
+            }
+            if (value.StartsWith("tag: refs/tags/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["tag: refs/tags/".Length..], "tag", false));
+                return;
+            }
+            if (value.StartsWith("refs/heads/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["refs/heads/".Length..], "branch", false));
+                return;
+            }
+            if (value.StartsWith("refs/remotes/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["refs/remotes/".Length..], "branch", true));
+                return;
+            }
+            refs.Add(new GitCommitRef(value, "ref", false));
+        }
+
+        foreach (var decoration in decorations.Split(", ", StringSplitOptions.RemoveEmptyEntries))
+            Add(decoration);
+        return refs
+            .DistinctBy(item => $"{item.Kind}\0{item.Name}", StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>
@@ -1015,54 +1225,110 @@ public class GitService
     private List<GitBranchEntry> ReadBranchInventory(
         string root, string? currentBranch, IReadOnlyDictionary<string, string> worktreeByBranch)
     {
-        // One for-each-ref pass gives tip SHA, upstream, ahead/behind track, the
-        // last-commit date and subject per branch. The explicit refs/heads
-        // pattern is intentional: refs/backups/* is an operational safety net,
-        // not user-visible branch inventory, and large backup namespaces must
-        // not add scan or response cost. Fields are separated by the Unit
-        // Separator (0x1f) so a commit subject with spaces round-trips.
+        // One pass covers local heads and origin tracking refs. Rows are folded
+        // by their branch name so the view can distinguish local-only,
+        // local+origin, and origin-only branches without a second git command.
+        // refs/backups/* stays outside the explicit patterns.
         const char US = '';
         var fmt = string.Join(US.ToString(), new[]
         {
-            "%(refname:short)", "%(objectname)", "%(objectname:short)",
+            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)",
             "%(upstream:short)", "%(upstream:track)",
             "%(committerdate:iso-strict)", "%(contents:subject)"
         });
         var (output, _, code) = RunGitArgs(root,
-            "for-each-ref", "--sort=-committerdate", "--count=200",
-            $"--format={fmt}", "refs/heads");
+            "for-each-ref", "--sort=-committerdate", "--count=400",
+            $"--format={fmt}", "refs/heads", "refs/remotes/origin");
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
 
-        var list = new List<GitBranchEntry>();
+        var byName = new Dictionary<string, BranchInventoryAccumulator>(StringComparer.Ordinal);
+        var order = new List<string>();
         foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
             var parts = raw.Split(US);
-            if (parts.Length < 7) continue;
-            var name = parts[0].Trim();
-            if (name.Length == 0) continue;
+            if (parts.Length < 8) continue;
+            var fullRef = parts[0].Trim();
+            var remote = fullRef.StartsWith("refs/remotes/origin/", StringComparison.Ordinal);
+            if (fullRef == "refs/remotes/origin/HEAD") continue;
+            var name = remote
+                ? fullRef["refs/remotes/origin/".Length..]
+                : fullRef.StartsWith("refs/heads/", StringComparison.Ordinal)
+                    ? fullRef["refs/heads/".Length..]
+                    : parts[1].Trim();
+            if (name.Length == 0 || name == "HEAD") continue;
 
-            var (ahead, behind) = ParseAheadBehind(parts[4]);
+            var (ahead, behind) = ParseAheadBehind(parts[5]);
             DateTime? lastAt = null;
-            if (DateTime.TryParse(parts[5], System.Globalization.CultureInfo.InvariantCulture,
+            if (DateTime.TryParse(parts[6], System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
                     out var ts))
                 lastAt = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
 
-            list.Add(new GitBranchEntry(
+            if (!byName.TryGetValue(name, out var entry))
+            {
+                entry = new BranchInventoryAccumulator(name);
+                byName[name] = entry;
+                order.Add(name);
+            }
+
+            if (remote)
+            {
+                entry.HasRemote = true;
+                entry.RemoteTipSha = EmptyToNull(parts[2]);
+                entry.RemoteTipShortSha = EmptyToNull(parts[3]);
+                entry.RemoteSubject = EmptyToNull(parts[7]);
+                entry.RemoteAt = lastAt;
+            }
+            else
+            {
+                entry.IsLocal = true;
+                entry.LocalTipSha = EmptyToNull(parts[2]);
+                entry.LocalTipShortSha = EmptyToNull(parts[3]);
+                entry.Upstream = EmptyToNull(parts[4]);
+                entry.Ahead = ahead;
+                entry.Behind = behind;
+                entry.LocalSubject = EmptyToNull(parts[7]);
+                entry.LocalAt = lastAt;
+            }
+        }
+        return order.Select(name =>
+        {
+            var entry = byName[name];
+            return new GitBranchEntry(
                 Name: name,
                 Category: CategorizeBranch(name),
-                TipSha: EmptyToNull(parts[1]),
-                TipShortSha: EmptyToNull(parts[2]),
+                TipSha: entry.LocalTipSha ?? entry.RemoteTipSha,
+                TipShortSha: entry.LocalTipShortSha ?? entry.RemoteTipShortSha,
                 IsCurrent: string.Equals(name, currentBranch, StringComparison.Ordinal),
-                Upstream: EmptyToNull(parts[3]),
-                Ahead: ahead,
-                Behind: behind,
-                LastCommitSubject: EmptyToNull(parts[6]),
-                LastCommitAtUtc: lastAt,
-                WorktreePath: worktreeByBranch.TryGetValue(name, out var wt) ? wt : null));
-        }
-        return list;
+                Upstream: entry.Upstream,
+                Ahead: entry.Ahead,
+                Behind: entry.Behind,
+                LastCommitSubject: entry.LocalSubject ?? entry.RemoteSubject,
+                LastCommitAtUtc: entry.LocalAt ?? entry.RemoteAt,
+                WorktreePath: worktreeByBranch.TryGetValue(name, out var wt) ? wt : null,
+                IsLocal: entry.IsLocal,
+                HasRemote: entry.HasRemote,
+                RemoteTipSha: entry.RemoteTipSha);
+        }).ToList();
+    }
+
+    private sealed class BranchInventoryAccumulator(string name)
+    {
+        public string Name { get; } = name;
+        public bool IsLocal { get; set; }
+        public bool HasRemote { get; set; }
+        public string? LocalTipSha { get; set; }
+        public string? LocalTipShortSha { get; set; }
+        public string? RemoteTipSha { get; set; }
+        public string? RemoteTipShortSha { get; set; }
+        public string? Upstream { get; set; }
+        public int Ahead { get; set; }
+        public int Behind { get; set; }
+        public string? LocalSubject { get; set; }
+        public string? RemoteSubject { get; set; }
+        public DateTime? LocalAt { get; set; }
+        public DateTime? RemoteAt { get; set; }
     }
 
     private static string? EmptyToNull(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -1080,6 +1346,7 @@ public class GitService
         if (name is "main" or "master") return "main";
         if (name is "develop" or "dev") return "develop";
         if (name.StartsWith("task/", StringComparison.Ordinal)) return "task";
+        if (name.StartsWith("runner/", StringComparison.Ordinal)) return "runner";
         if (name.StartsWith("feature/", StringComparison.Ordinal) ||
             name.StartsWith("feat/", StringComparison.Ordinal)) return "feature";
         return "other";
@@ -1143,11 +1410,8 @@ public class GitService
     /// </summary>
     private string? ResolveProjectRoot(string projectName)
     {
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-        if (entry == null) return null;
-        var configured = ResolveConfiguredRepositoryPath(entry);
-        if (string.IsNullOrWhiteSpace(configured)) return null;
-        return ResolveGitToplevel(configured);
+        var inventory = GetProjectInventory(projectName);
+        return inventory.IsRepo ? inventory.RepositoryPath : null;
     }
 
     /// <summary>

@@ -44,11 +44,38 @@ const INVENTORY = {
     { name: 'task/1', category: 'task', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: false, upstream: null, ahead: 2, behind: 0, lastCommitSubject: 'task work in progress', lastCommitAtUtc: '2026-07-03T00:00:00Z', worktreePath: 'C:/repo/demo-project-task-1' },
     { name: 'task/2', category: 'task', tipSha: '2'.repeat(40), tipShortSha: '2222222', isCurrent: false, upstream: null, ahead: 4, behind: 0, lastCommitSubject: 'another task branch', lastCommitAtUtc: '2026-07-04T00:00:00Z', worktreePath: null },
   ],
-  recentCommits: [
-    { sha: COMMIT_SHA, shortSha: 'ccccccc', authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev', subject: 'feat: add the widget rendering pipeline', filesChanged: 3, added: 42, removed: 8 },
-    { sha: 'f'.repeat(40), shortSha: 'fffffff', authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: dependency cleanup', filesChanged: 2, added: 5, removed: 21 },
-    { sha: '9'.repeat(40), shortSha: '9999999', authorDateUtc: '2026-07-01T08:00:00Z', author: 'dev', subject: 'refactor: extract the diff renderer', filesChanged: 5, added: 63, removed: 40 },
-  ],
+  recentCommits: [],
+  history: {
+    offset: 0, pageSize: 50, nextOffset: null, hasMore: false,
+    commits: [
+      {
+        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40)],
+        authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev',
+        subject: 'feat: add the widget rendering pipeline', filesChanged: 3, added: 42, removed: 8,
+        refs: [{ name: 'develop', kind: 'branch', isRemote: false }, { name: 'origin/develop', kind: 'branch', isRemote: true }],
+        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '5-human-review' }],
+        presence: { inIntegration: true, inRelease: false, integrationBranch: 'develop', releaseBranch: 'main' },
+        deployments: [{ target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' }],
+      },
+      {
+        sha: 'f'.repeat(40), shortSha: 'fffffff', parentShas: ['9'.repeat(40)],
+        authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: dependency cleanup',
+        filesChanged: 2, added: 5, removed: 21, refs: [], tasks: [],
+        presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
+        deployments: [],
+      },
+      {
+        sha: '9'.repeat(40), shortSha: '9999999', parentShas: [],
+        authorDateUtc: '2026-07-01T08:00:00Z', author: 'dev', subject: 'refactor: extract the diff renderer',
+        filesChanged: 5, added: 63, removed: 40, refs: [], tasks: [], presence: null, deployments: [],
+      },
+    ],
+  },
+  activeCheckouts: [{
+    task: { taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '3-progress' },
+    branch: 'task/1', headSha: 'b'.repeat(40), location: 'remote',
+    runner: 'agent-runner-01', worktreePath: null, activeSince: '2026-07-03T09:00:00Z',
+  }],
   error: null,
 };
 
@@ -96,6 +123,9 @@ async function installHubRoutes(page: Page): Promise<void> {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/**', r => r.fulfill(json([])).catch(() => { /* late */ }));
+  await page.route('**/api/auth/status', r => r.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
   await page.route(/\/api\/(?:jobs|tasks)\/grouped/, r => r.fulfill(json(EMPTY_GROUPED)));
   await page.route(/\/api\/(?:jobs|tasks)(\?|$)/, r => r.fulfill(json([])));
   await page.route('**/api/watch-paths**', r => r.fulfill(json([{ name: PROJECT, path: REPO_PATH, rootPath: REPO_PATH, repositoryPath: REPO_PATH }])));
@@ -187,6 +217,9 @@ async function installPaneRoutes(page: Page): Promise<void> {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => { /* late */ }));
+  await page.route('**/api/auth/status', r => r.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
   await page.route(/\/api\/(?:jobs|tasks)(\?|$)/, r => r.fulfill(json([])));
   await page.route(/\/api\/(?:jobs|tasks)\/grouped/, r => r.fulfill(json(EMPTY_GROUPED)));
   await page.route('**/api/watch-paths**', r => r.fulfill(json([{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH, repositoryPath: WATCH_PATH }])));
@@ -288,8 +321,8 @@ test.describe('AGT-2011 · Git-View layout shots (mocked)', () => {
       await setTheme(page, theme);
 
       // Open a commit so the files list + diff render (the busy state).
-      await page.locator(`[data-testid="git-commit-row"][data-sha="${COMMIT_SHA}"]`).click();
-      await expect(page.getByTestId('git-detail-card')).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('button', { name: 'Inspect changes in ccccccc' }).click();
+      await expect(page.getByTestId('git-changes')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('git-file-row').first()).toBeVisible();
       await expect(page.getByTestId('git-diff')).toBeVisible({ timeout: 15_000 });
       await dismissErrorDialog(page);
