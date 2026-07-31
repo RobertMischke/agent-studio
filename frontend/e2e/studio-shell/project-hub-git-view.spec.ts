@@ -111,6 +111,7 @@ async function installRoutes(page: Page): Promise<void> {
 
   // Catch-all first (returns []); specific routes registered afterwards win.
   await page.route('**/api/**', r => r.fulfill(json([])).catch(() => { /* late */ }));
+  await page.route('**/api/runner/orchestrator-feed**', r => r.fulfill(json({ entries: [], generatedAtUtc: '2026-07-31T00:00:00Z' })));
   await page.route('**/api/auth/status', r => r.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   })));

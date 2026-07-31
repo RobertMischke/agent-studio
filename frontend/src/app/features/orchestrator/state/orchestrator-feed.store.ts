@@ -46,7 +46,14 @@ export class OrchestratorFeedStore {
     if (!silent) this._loading.set(true);
     this.tasks.getGlobalOrchestratorFeed().subscribe({
       next: response => {
-        const next = this.reuseStableEntries(response.entries ?? []);
+        // Shape guard: a proxy/mock or older backend may answer with a bare
+        // array or an envelope without entries. A non-array must never reach
+        // reuseStableEntries (`next.map` crashed app-wide via the global error
+        // dialog when the feed met a `[]` catch-all mock, sweep 31.07.).
+        const entries = Array.isArray(response?.entries)
+          ? response.entries
+          : Array.isArray(response) ? (response as unknown as OrchestratorLogEntry[]) : [];
+        const next = this.reuseStableEntries(entries);
         if (!this.sameReferences(this._entries(), next)) this._entries.set(next);
         this.initialiseAlertBaseline(next);
         this.loaded = true;

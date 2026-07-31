@@ -123,6 +123,7 @@ async function installHubRoutes(page: Page): Promise<void> {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/**', r => r.fulfill(json([])).catch(() => { /* late */ }));
+  await page.route('**/api/runner/orchestrator-feed**', r => r.fulfill(json({ entries: [], generatedAtUtc: '2026-07-31T00:00:00Z' })));
   await page.route('**/api/auth/status', r => r.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   })));
@@ -217,6 +218,7 @@ async function installPaneRoutes(page: Page): Promise<void> {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => { /* late */ }));
+  await page.route('**/api/runner/orchestrator-feed**', r => r.fulfill(json({ entries: [], generatedAtUtc: '2026-07-31T00:00:00Z' })));
   await page.route('**/api/auth/status', r => r.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   })));
