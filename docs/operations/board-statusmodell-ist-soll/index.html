@@ -1419,7 +1419,7 @@
           <tr><td><strong>BP-08</strong></td><td>Acquire und <code>2 → 3</code> sind eine replaybare Convergence Unit. Replay re-drivet die Lane. Jeder lokale und Remote-Pickup prüft dieselbe Live-Authority.</td><td>AcquireDeliveryKey, AttemptId, Lease, TransitionId und konsistenter Progress-State.</td><td>Invariant.</td></tr>
           <tr><td><strong>BP-09</strong></td><td>Ein settled Attempt mit gültigem Envelope wird nie requeued. Recovery setzt Completion-Ingest, Review-Erzeugung und <code>3 → 4</code> für denselben Attempt fort.</td><td>SettledAt, Envelope, CompletionConvergenceStatus, nextAction.</td><td>Invariant; Recovery-Intervall konfigurierbar.</td></tr>
           <tr><td><strong>BP-10</strong></td><td>Runner-Startup scannt unslotted Worktrees/Prozesse vor Slot-Freigabe. Worktrees sind attempt-spezifisch. Hostverlust wird aus Origin/Task rekonstruiert, nicht durch Pfadwiederverwendung.</td><td>Attempt WorktreeToken als Diagnose, Orphan-Befund, Takeover-Grund.</td><td>Scan-Timeout konfigurierbar; Admission-Gate invariant.</td></tr>
-          <tr><td><strong>BP-11</strong></td><td>AuthorityEpoch wird mindestens pro Projekt/Repository gescoped. Rotation schreibt vor Wirksamkeit einen Recovery-Plan für jeden betroffenen Task und triggert Reconcile/Adoption statt blinder Requeue-Welle.</td><td>AuthorityScope, old/new Epoch, RotationReason und RecoveryDisposition.</td><td>Robert-Entscheidung E12: Projekt- oder Repository-Scope. Globaler stiller Rotate ist verboten.</td></tr>
+          <tr><td><strong>BP-11</strong></td><td><code>AuthorityEpoch</code> is a claim generation. Rotation advances the generation used by new run and review claims, while already leased attempts remain current and drain through renewal, reporting, settlement, release, or expiry. A new claim cannot displace a live draining lease.</td><td>Current AuthorityEpoch plus each attempt's AuthorityEpoch, lease, fence, lifecycle state, and the structured rotation log counts make the drain reviewable.</td><td>Soft draining is invariant. Repository or project scoping remains an optional later blast-radius reduction, not a prerequisite for safe rotation.</td></tr>
           <tr><td><strong>BP-12</strong></td><td>Attribution ist append-only pro Attempt. Die Current-Projektion enthält nur Commits, die aus attempt-eigenen Refs beweisbar und vom aktuellen ResultSha erreichbar sind; übernommene Vorgängerarbeit behält ihren ursprünglichen Runner.</td><td>Memberships mit AttemptId, RunnerId, Ref, ReachabilityProof und ProjectionRevision.</td><td>Invariant; Historien-Retention konfigurierbar.</td></tr>
           <tr><td><strong>BP-13</strong></td><td>Server verweigert Reclaim an jeden Executor, der den superseded Attempt noch aktiv meldet. Prozessidentität enthält attempt-spezifisches Secret/Token zusätzlich zu PID und Startzeit.</td><td>ActiveInventoryObservation, ProcessTokenDigest, ReclaimDecision.</td><td>Grace konfigurierbar; Guard invariant.</td></tr>
           <tr><td><strong>BP-14</strong></td><td>Jeder Authority-Side-Effect folgt persist-intent, deduplizierter Effect, persist-ack. Neue Side-Effect-Kinds müssen ihren Receipt-Key registrieren und testen.</td><td>EffectIntentId, Kind, DeliveryKey, Ack und ResultDigest.</td><td>Invariant.</td></tr>
@@ -1584,9 +1584,9 @@
     <div class="decision">
       <div class="decision-no">E12</div>
       <div>
-        <h3>Wie wird <code>AuthorityEpoch</code> statt global gescoped?</h3>
-        <p><strong>A:</strong> Pro Projekt. <strong>B:</strong> Pro Repository/Integration Line. <strong>C:</strong> Global lassen.</p>
-        <p class="verdict"><strong>Empfehlung:</strong> B, weil Tasks mehrerer Projekte dieselbe Git-Linie teilen können. C wird verworfen; jede Rotation braucht in jedem Fall einen taskweisen Recovery-Plan.</p>
+        <h3>Does <code>AuthorityEpoch</code> need a narrower scope after soft draining?</h3>
+        <p><strong>Implemented decision:</strong> keep the current global claim generation, but make rotation soft. Existing leases drain and only new claims receive the new epoch.</p>
+        <p class="verdict"><strong>Follow-up option:</strong> repository or project scoping may reduce operational coupling further. It is no longer needed to prevent a global strand and requeue wave.</p>
       </div>
     </div>
     <div class="decision">

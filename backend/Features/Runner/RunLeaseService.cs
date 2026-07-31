@@ -4,7 +4,9 @@ namespace AgentStudio.Runner;
 /// Compatibility facade for the runner lease API. Canonical identity, lease,
 /// fence, epoch, heartbeat, and restart persistence are owned by
 /// <see cref="AttemptAuthorityService"/>; this type preserves the established
-/// lease wire contract while callers migrate to explicit Attempt IDs.
+/// lease wire contract while callers migrate to explicit Attempt IDs. Epochs
+/// identify claim generations; an older epoch remains valid while its exact
+/// current lease drains.
 /// </summary>
 public sealed class RunLeaseService
 {
@@ -109,7 +111,6 @@ public sealed class RunLeaseService
         if (Blank(taskKey)) return new RunLeaseResponse("Invalid", false, null, "TaskKey is required.");
         var run = Current(taskKey);
         if (run is not { State: AttemptLifecycleState.Leased, Lease: not null }
-            || run.AuthorityEpoch != _authority.AuthorityEpoch
             || run.Lease.ExpiresAt <= _utcNow())
             return new RunLeaseResponse("Free", false, null);
         return new RunLeaseResponse("Held", false, ToLease(run));
@@ -126,7 +127,6 @@ public sealed class RunLeaseService
         var run = Current(taskKey);
         if (run?.Lease is null) return new RunLeaseInspection("none", null);
         var active = run.State == AttemptLifecycleState.Leased
-                     && run.AuthorityEpoch == _authority.AuthorityEpoch
                      && run.Lease.ExpiresAt > _utcNow();
         var state = active
             ? "active"
@@ -145,7 +145,6 @@ public sealed class RunLeaseService
     {
         var run = Current(taskKey);
         return run is { State: AttemptLifecycleState.Leased, Lease: not null }
-               && run.AuthorityEpoch == _authority.AuthorityEpoch
                && run.LastFence == fencingToken
                && run.Lease.ExpiresAt > _utcNow()
                && string.Equals(run.Lease.LeaseId, leaseId, StringComparison.Ordinal)
