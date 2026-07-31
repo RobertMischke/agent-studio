@@ -22,8 +22,11 @@ const CODEX_RECORD_HEADERS = new Map<string, 'agent' | 'user' | 'tool'>([
   ['view_image', 'tool'],
   ['web_search', 'tool'],
   ['imagegen', 'tool'],
+  ['read_file', 'tool'],
+  ['read_mcp_resource', 'tool'],
 ]);
 
+const MARKUP_FILE_EXTENSION = /\.(?:html?|xhtml|xml|svg)(?:[?#].*)?$/i;
 const CODEX_BANNER = /^OpenAI Codex\b/;
 const RUNNER_LINE = /^\[runner\]\s*(?<body>.*)$/i;
 const RUNNER_DELIVERY = /^\[runner-log-delivery:[^\]]+\]$/i;
@@ -182,6 +185,7 @@ function runnerPresentation(body: string): {
 function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
   const content = trimBlankEdges(block.lines);
   const commandLine = content[0]?.line.text.trim() || block.header;
+  const markupFile = markupFilePath(block.header, commandLine);
   const outputLines = content.slice(1).map(({ line }) => line.text);
   const resultLine = outputLines.find((text) => TOOL_RESULT.test(text));
   const result = resultLine ? TOOL_RESULT.exec(resultLine)?.groups?.['status'].toLowerCase() : null;
@@ -207,6 +211,7 @@ function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
     durationMs: durationMs(content),
     samples: { [family]: commandLine },
     commands: [command],
+    files: markupFile ? [markupFile] : undefined,
     collapsedByDefault: true,
   };
 }
@@ -266,7 +271,20 @@ function toolFamily(header: string): ToolFamily {
   if (header === 'exec') return 'command';
   if (header === 'apply_patch') return 'edit';
   if (header === 'update_plan') return 'todo';
+  if (header === 'read_file' || header === 'read_mcp_resource') return 'read';
   return 'other';
+}
+
+/**
+ * File payloads become tool events from their declared record header, never
+ * from looking at the payload body. The extension check only annotates known
+ * file-read tools as markup so the canonical tool renderer can disclose the
+ * source path beside its collapsed, plain-text <pre>.
+ */
+function markupFilePath(header: string, commandLine: string): string | null {
+  if (header !== 'read_file' && header !== 'read_mcp_resource') return null;
+  const path = commandLine.trim().replace(/^['"]|['"]$/g, '');
+  return MARKUP_FILE_EXTENSION.test(path) ? path : null;
 }
 
 function trimBlankEdges(
