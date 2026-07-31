@@ -367,7 +367,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `remote-run-testsuite-report.spec.ts` | @mockup remote-run testsuite report |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |
 
-### `orchestrator/` - 16 specs
+### `orchestrator/` - 17 specs
 
 | Spec | Summary |
 |------|---------|
@@ -376,6 +376,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `orchestrator-chat-scroll-stability.spec.ts` | mixed-height streamed rows stay mounted without scrollbar correction |
 | `orchestrator-config-panel.spec.ts` | Orchestrator logic config (consolidated Settings, Admin/System entry) |
 | `orchestrator-context-header.spec.ts` | Orchestrator context header · where am I |
+| `orchestrator-feed-main-view.spec.ts` | Feed main view: route, Activity icon, fresh-alert badge, windowing, live stability, and responsive themes |
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |
 | `orchestrator-model-picker.spec.ts` | full live GPT picker persists across Board and Task contexts |
 | `orchestrator-project-chat.spec.ts` | orchestrator project chat |

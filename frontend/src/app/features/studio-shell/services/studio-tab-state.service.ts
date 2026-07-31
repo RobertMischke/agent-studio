@@ -324,6 +324,8 @@ export class StudioTabStateService {
     switch (tab.kind) {
       case 'board':
         return { kind: 'board', projectName: tab.projectName };
+      case 'feed':
+        return { kind: 'feed' };
       case 'epics':
         return { kind: 'epics', projectName: tab.projectName };
       case 'epic':

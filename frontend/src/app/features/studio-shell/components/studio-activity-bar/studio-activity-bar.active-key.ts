@@ -33,6 +33,8 @@ export function resolveActiveActivityKey(state: {
   sidebarVisible: boolean;
 }): StudioActivityItemKey | null {
   switch (state.activeTabKind) {
+    case 'feed':
+      return 'activity';
     case 'epics':
       return 'epics';
     case 'workspace-settings':

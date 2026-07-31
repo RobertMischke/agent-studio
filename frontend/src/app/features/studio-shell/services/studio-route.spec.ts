@@ -19,6 +19,7 @@ describe('Studio route contract', () => {
       kind: 'board',
       projectSlug: null,
     });
+    expect(parseStudioRoute('#/feed')).toEqual({ kind: 'feed' });
     expect(parseStudioRoute('#/projects/agent-studio/board')).toEqual({
       kind: 'board',
       projectSlug: 'agent-studio',
@@ -75,6 +76,7 @@ describe('Studio route contract', () => {
   it('builds one hash-path pattern for tabs', () => {
     const cases: [StudioTab, string | null, string][] = [
       [{ kind: 'board', projectName: '__all__' }, null, '/board'],
+      [{ kind: 'feed' }, null, '/feed'],
       [{ kind: 'board', projectName: 'Agent Studio' }, null, '/projects/agent-studio/board'],
       [{ kind: 'hub', projectName: 'Agent Studio', section: 'wiki' }, null, '/projects/agent-studio/wiki'],
       [

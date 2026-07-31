@@ -1,19 +1,15 @@
+@use '../../../../../styles/mixins' as m;
+
 // Colours read from the Tier-2 semantic theme tokens so the card is legible
 // on both the dark (Mocha) and light shells. The card formerly hardcoded
 // purple/slate hex + white-alpha text that washed out to near-invisible on
 // the light theme. The violet accent (the orchestrator's identity colour)
 // is kept but expressed through the accent-4 token + color-mix tints so the
 // tint flips with the theme instead of staying a fixed dark wash.
-:host { display: block; margin: 0 0 var(--studio-spacing-5); }
+:host { display: block; }
 
 .global-orch {
-  padding: var(--studio-spacing-4) var(--studio-spacing-5);
-  border: 1px solid color-mix(in srgb, var(--studio-accent-4) 32%, var(--studio-border));
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at top left,
-      color-mix(in srgb, var(--studio-accent-4) 14%, transparent), transparent 60%),
-    var(--studio-bg-elevated);
+  @include m.deck-panel;
 }
 .global-orch__head {
   display: flex;

@@ -51,6 +51,8 @@ import {
 } from './features/task-detail';
 import {
   buildComposerLocationContext,
+  OrchestratorFeedComponent,
+  OrchestratorFeedStore,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -161,6 +163,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskDetailComponent,
     DetailLoadErrorComponent,
     OrchestratorSideSheetComponent,
+    OrchestratorFeedComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
     StatusBarComponent,
@@ -225,6 +228,7 @@ export class App implements OnInit, OnDestroy {
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
   readonly projectHubUrls = inject(ProjectHubUrlService);
+  private readonly orchestratorFeedStore = inject(OrchestratorFeedStore);
   private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
@@ -989,6 +993,9 @@ export class App implements OnInit, OnDestroy {
         case 'board':
           project = tab.projectName === '__all__' ? null : tab.projectName;
           break;
+        case 'feed':
+          project = null;
+          break;
         case 'hub':
           project = tab.projectName;
           break;
@@ -1208,6 +1215,7 @@ export class App implements OnInit, OnDestroy {
   ngOnInit() { this.auth.initialize(); }
   private initializeStudio(): void {
     if (this.studioInitialized) return; this.studioInitialized = true;
+    this.orchestratorFeedStore.start();
     // Backlog-lane spec: hydrate the filter bar from the URL hash before
     // rendering so a bookmark or copy-paste lands on the same view.
     this.boardFilters.hydrateFromUrl();
@@ -1301,6 +1309,7 @@ export class App implements OnInit, OnDestroy {
 
   private teardownStudio(): void {
     this.jobService.stopLiveUpdates();
+    this.orchestratorFeedStore.stop();
     if (this.hashListener) {
       window.removeEventListener('hashchange', this.hashListener);
       window.removeEventListener('popstate', this.hashListener);
@@ -2197,6 +2206,9 @@ export class App implements OnInit, OnDestroy {
     switch (route.kind) {
       case 'board':
         this.studioTabState.open({ kind: 'board', projectName: projectName ?? '__all__' });
+        break;
+      case 'feed':
+        this.studioTabState.open({ kind: 'feed' });
         break;
       case 'workbench':
         this.studioTabState.open({ kind: 'workbench', projectName: projectName!, workbenchId: route.workbenchId });

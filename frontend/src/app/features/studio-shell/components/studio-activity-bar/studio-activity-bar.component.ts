@@ -35,4 +35,9 @@ export class StudioActivityBarComponent {
   readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
   /** Fires when the user clicks the Epics button (shown only when epics exist). */
   readonly openEpicsRequest = output<void>();
+
+  badgeLabel(item: StudioActivityBarItem, count: number): string {
+    if (item.key === 'activity') return `${count} fresh ${count === 1 ? 'alert' : 'alerts'}`;
+    return `${count} ${count === 1 ? 'filter' : 'filters'} active`;
+  }
 }

@@ -252,6 +252,12 @@
         </div>
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
+            @case ('feed') {
+              <app-orchestrator-feed
+                [projectName]="'Workspace'"
+                [embedded]="true"
+                (openTask)="onOpenJobDetailFromSheet($event)" />
+            }
             @case ('board') {
               @if (boardLoading() && jobService.jobs().length === 0) {
                 <app-loading-surface kind="board" label="Loading board…" />

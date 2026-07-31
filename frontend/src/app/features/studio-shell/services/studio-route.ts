@@ -14,6 +14,7 @@ export type TaskInspectorRouteTab = 'task' | 'activity' | 'protocol';
 
 export type StudioRoute =
   | { kind: 'board'; projectSlug: string | null }
+  | { kind: 'feed' }
   | { kind: 'hub'; projectSlug: string; section: string; page: string | null; folder: string | null }
   | { kind: 'workbench'; projectSlug: string; workbenchId: string }
   | { kind: 'task'; reference: string; tab: TaskDetailRouteTab; inspector: TaskInspectorRouteTab }
@@ -47,6 +48,9 @@ export function parseStudioRoute(hash: string): StudioRoute | null {
 
   if (segments.length === 1 && segments[0] === 'board') {
     return { kind: 'board', projectSlug: null };
+  }
+  if (segments.length === 1 && segments[0] === 'feed') {
+    return { kind: 'feed' };
   }
   if (segments.length === 1 && segments[0] === 'epics') {
     return { kind: 'epics', projectSlug: null };
@@ -109,6 +113,8 @@ export function studioRouteForTab(
       return tab.projectName === '__all__'
         ? '/board'
         : `/projects/${studioProjectSlug(tab.projectName)}/board`;
+    case 'feed':
+      return '/feed';
     case 'hub': {
       const base = `/projects/${studioProjectSlug(tab.projectName)}`;
       return !tab.section || tab.section === 'overview' ? base : `${base}/${encodeURIComponent(tab.section)}`;
