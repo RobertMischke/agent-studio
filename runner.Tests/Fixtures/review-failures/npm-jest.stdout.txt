@@ -1,0 +1,15 @@
+> storefront@1.0.0 test
+> jest --runInBand
+
+FAIL src/cart/cart.service.spec.ts
+  CartService
+    ✕ calculates the total (12 ms)
+
+  ● CartService › calculates the total
+
+    expect(received).toBe(expected)
+
+Test Suites: 1 failed, 4 passed, 5 total
+Tests:       1 failed, 17 passed, 18 total
+npm error Lifecycle script `test` failed with error:
+npm error code 1

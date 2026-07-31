@@ -17,6 +17,77 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         _reviewRoot = Path.Combine(_root, "review");
     }
 
+    public static TheoryData<string, string[]> NodeFailureFixtures => new()
+    {
+        {
+            "npm-jest.stdout.txt",
+            ["src/cart/cart.service.spec.ts > CartService > calculates the total"]
+        },
+        {
+            "ng-karma.stdout.txt",
+            ["CartComponent removes an item after confirmation"]
+        },
+        {
+            "npm-vitest.stderr.txt",
+            [
+                "src/math.spec.ts > arithmetic > adds positive values",
+                "src/math.spec.ts > arithmetic > rejects NaN",
+            ]
+        },
+        {
+            "node-test.stdout.txt",
+            ["rejects an expired lease", "returns the current lease"]
+        },
+        {
+            "npm-lifecycle.stderr.txt",
+            ["npm script test:unit"]
+        },
+        {
+            "npm-legacy.stderr.txt",
+            ["npm script test"]
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(NodeFailureFixtures))]
+    public void Parsed_test_failures_understands_node_test_runner_output(
+        string fixtureName,
+        string[] expected)
+    {
+        var output = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "review-failures",
+            fixtureName));
+        var result = fixtureName.Contains("stderr", StringComparison.Ordinal)
+            ? new ProcessResult(1, string.Empty, output)
+            : new ProcessResult(1, output, string.Empty);
+
+        Assert.Equal(expected, RemoteReviewWorkspace.ParsedTestFailures(result));
+    }
+
+    [Fact]
+    public void Parsed_test_failures_ignores_failure_text_when_process_succeeds()
+    {
+        var result = new ProcessResult(0, "FAIL src/example.spec.ts > suite > test", string.Empty);
+
+        Assert.Empty(RemoteReviewWorkspace.ParsedTestFailures(result));
+    }
+
+    [Fact]
+    public void Parsed_test_failures_strips_terminal_colours_and_ignores_tap_todo_items()
+    {
+        var result = new ProcessResult(
+            1,
+            "\u001b[31m FAIL  src/example.spec.ts > suite > fails\u001b[39m\n" +
+            "not ok 2 - planned follow-up # TODO pending implementation",
+            string.Empty);
+
+        Assert.Equal(
+            ["src/example.spec.ts > suite > fails"],
+            RemoteReviewWorkspace.ParsedTestFailures(result));
+    }
+
     [Fact]
     public async Task Exact_sha_workspace_records_head_tree_commands_environment_and_clean_after()
     {
@@ -171,6 +242,36 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal("block", verdict.Status);
         Assert.Contains("1 new failures: Product.NewFailure", verdict.Summary, StringComparison.Ordinal);
         Assert.Contains("1 pre-existing failures: Product.ExistingFailure", verdict.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Baseline_comparison_blocks_only_new_vitest_failures_and_names_them()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var command = BaselineCommand(
+            "if grep -q subject product.txt; then " +
+            "printf ' FAIL  src/math.spec.ts > arithmetic > existing failure\\n" +
+            " FAIL  src/math.spec.ts > arithmetic > new failure\\n'; " +
+            "else printf ' FAIL  src/math.spec.ts > arithmetic > existing failure\\n'; fi; exit 1");
+        var (workspace, _) = Workspace(
+            "attempt-new-vitest-failure",
+            subjectSha,
+            [command],
+            26004,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main");
+        await workspace.PrepareAsync(null!, default);
+
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("ProductFailure", evidence.Outcome);
+        var commandEvidence = Assert.Single(evidence.Commands);
+        Assert.Equal(
+            ["src/math.spec.ts > arithmetic > new failure"],
+            commandEvidence.NewFailures);
+        Assert.Equal(
+            ["src/math.spec.ts > arithmetic > existing failure"],
+            commandEvidence.PreExistingFailures);
     }
 
     [Fact]

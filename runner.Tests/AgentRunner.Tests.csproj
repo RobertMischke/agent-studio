@@ -21,4 +21,8 @@
     <ProjectReference Include="..\runner\AgentRunner.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures\review-failures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

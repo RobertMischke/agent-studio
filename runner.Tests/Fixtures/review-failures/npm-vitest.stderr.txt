@@ -1,0 +1,15 @@
+> shared-ui@1.0.0 test
+> vitest run
+
+ ❯ src/math.spec.ts (3 tests | 2 failed) 18ms
+   × arithmetic > adds positive values 8ms
+   × arithmetic > rejects NaN 3ms
+
+ FAIL  src/math.spec.ts > arithmetic > adds positive values
+AssertionError: expected 3 to be 4
+
+ FAIL  src/math.spec.ts > arithmetic > rejects NaN
+AssertionError: expected function to throw an error
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)

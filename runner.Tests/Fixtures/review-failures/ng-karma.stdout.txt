@@ -1,0 +1,9 @@
+> storefront@1.0.0 test
+> ng test --watch=false --browsers=ChromeHeadless
+
+Chrome Headless 126.0.0.0 (Linux x86_64): Executed 6 of 7 SUCCESS (0 secs / 0.031 secs)
+Chrome Headless 126.0.0.0 (Linux x86_64) CartComponent removes an item after confirmation FAILED
+        Expected 2 to be 1.
+            at <Jasmine>
+Chrome Headless 126.0.0.0 (Linux x86_64): Executed 7 of 7 (1 FAILED) (0.042 secs / 0.039 secs)
+TOTAL: 1 FAILED, 6 SUCCESS
