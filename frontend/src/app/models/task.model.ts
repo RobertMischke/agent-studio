@@ -395,10 +395,11 @@ export interface TaskInfo {
    * AGT-2202: honest, git-derived integration verdict for accepted cards
    * (5-human-review / 6-completed / 7-archive): is the work actually in develop?
    * Mirrors backend `TaskInfo.Integration`; one of integrated / pending /
-   * conflict-skipped / no-branch. Resolves the "Accept != Merge" blind spot -
-   * it reads attributed-commit membership at the current target HEAD and ignores
-   * lane state, provenance, and remembered merge attempts. Null on cards not in
-   * an accepted lane.
+   * conflict-skipped / no-branch. It also projects the actual delivery ref from
+   * card truth, including runner/<host>/<KEY> and evidenced task/<slug> refs.
+   * Resolves the "Accept != Merge" blind spot by reading attributed-commit
+   * membership at the current target HEAD; lane state and remembered merge
+   * attempts cannot force membership. Null on cards not in an accepted lane.
    */
   integration?: TaskIntegrationStatus | null;
 

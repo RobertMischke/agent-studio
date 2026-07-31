@@ -41,6 +41,7 @@ function provenance(overrides: Partial<TaskProvenanceRecord> = {}): TaskProvenan
 function integration(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
   return {
     status: 'integrated',
+    deliveryRef: null,
     sha: 'ddddddd',
     integrationBranch: 'develop',
     detail: 'anchor-ancestor',
@@ -230,6 +231,31 @@ describe('buildGitStateBadge — lifecycle ground truth (ASS-1752)', () => {
 
       expect(badge!.kind).toBe('pre-merge');
       expect(badge!.label).toBe('main checkout');
+    });
+
+    it('shows the backend-projected remote delivery ref instead of main checkout', () => {
+      const job = makeJob({
+        state: TaskState.HumanReview,
+        codeActivityDetected: false,
+        provenance: provenance({
+          transitions: [anchor({ lane: TaskState.HumanReview, branchTip: null })],
+        }),
+        integration: integration({
+          status: 'pending',
+          deliveryRef: 'runner/agent-runner-01/AGT-2220',
+          sha: null,
+          detail: 'Delivery ref exists but attribution is pending.',
+        }),
+      });
+
+      const badge = buildGitStateBadge(job);
+
+      expect(badge).toMatchObject({
+        kind: 'pre-merge',
+        label: 'runner/agent-runner-01/AGT-2220',
+      });
+      expect(badge!.tooltip).toContain('delivery ref');
+      expect(badge!.label).not.toBe('main checkout');
     });
   });
 

@@ -15,8 +15,9 @@ import { TaskService } from '../../services/task.service';
  *   - red    "Integration failed"   — the integration step reached a failed outcome,
  *   - grey   "kein Branch"          — nothing to integrate (read-only / no code).
  *
- * The verdict is derived from the SAME attributed `commits[]` list the card's
- * commit widget renders, so badge and widget can never contradict (AGT-2171).
+ * Membership is derived from the SAME attributed `commits[]` list the card's
+ * commit widget renders. Branch presence comes from the acceptance resolver's
+ * projected `deliveryRef`, so a remote delivery cannot render as "kein Branch".
  *
  * Follows the {@link ExecutionLocationBadgeComponent} pill pattern. Purely
  * presentational; hidden when the card carries no integration verdict.

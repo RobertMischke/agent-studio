@@ -276,6 +276,7 @@ describe('TriageController · planning accept spawn-contract guard', () => {
       mode: 'coding',
       integration: status === null ? null : {
         status,
+        deliveryRef: 'task/triage-fixture',
         sha: status === 'integrated' ? 'abc1234' : null,
         integrationBranch: 'develop',
         detail: status === 'integrated' ? 'Already integrated.' : 'Merge is still pending.',
