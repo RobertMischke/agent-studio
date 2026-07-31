@@ -136,6 +136,9 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
 
         var (git, log) = Build(repo);
         var jobFolder = BeginRun(log, repo, jobId: "AGT-STALE");
+        File.WriteAllText(
+            Path.Combine(jobFolder, "task.json"),
+            """{"id":"AGT-STALE","key":"AGT-STALE"}""");
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-STALE",

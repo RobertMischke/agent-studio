@@ -38,6 +38,7 @@ public sealed class TaskTransitionService
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
+    private readonly AttemptAuthorityService? _attemptAuthority;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -51,7 +52,61 @@ public sealed class TaskTransitionService
     /// </summary>
     public event Action<string, string, string, string>? OnJobMoved;
 
+    /// <summary>
+    /// Production constructor. Acceptance always receives the authority store,
+    /// so a remote subject cannot bypass current-attempt validation through
+    /// missing dependency wiring.
+    /// </summary>
     public TaskTransitionService(
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskMutationService mutations,
+        GitService git,
+        ProjectSettingsService settings,
+        ILogger<TaskTransitionService> logger,
+        AttemptAuthorityService attemptAuthority,
+        TaskSessionLog? sessions = null,
+        CompletedPushQueue? pushQueue = null,
+        AgentStudio.Drift.DriftPostStepRunner? driftRunner = null,
+        CliRouter? cliRouter = null,
+        IAutoReviewPostProcessingQueue? autoReviewQueue = null,
+        AgentStudio.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
+        TaskProvenanceService? provenance = null,
+        AgentStudio.Bus.AgentMessageBusBridge? bus = null,
+        TaskIntegrationStatusService? integrationStatus = null,
+        TimelineLog? timeline = null,
+        OperatorReviewRequeueService? operatorReviewRequeue = null,
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null)
+        : this(
+            scanner,
+            states,
+            mutations,
+            git,
+            settings,
+            logger,
+            sessions,
+            pushQueue,
+            driftRunner,
+            cliRouter,
+            autoReviewQueue,
+            mergeRunner,
+            provenance,
+            bus,
+            integrationStatus,
+            timeline,
+            operatorReviewRequeue,
+            pipelineLog,
+            acceptedIntegrationQueue,
+            attemptAuthority)
+    {
+    }
+
+    /// <summary>
+    /// Compatibility constructor for isolated fixtures whose transition does
+    /// not consume a remote review subject.
+    /// </summary>
+    internal TaskTransitionService(
         TaskScannerService scanner,
         TaskStateMachine states,
         TaskMutationService mutations,
@@ -70,7 +125,8 @@ public sealed class TaskTransitionService
         TimelineLog? timeline = null,
         OperatorReviewRequeueService? operatorReviewRequeue = null,
         AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
-        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null)
+        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
         _states = states;
@@ -91,6 +147,7 @@ public sealed class TaskTransitionService
         _operatorReviewRequeue = operatorReviewRequeue;
         _pipelineLog = pipelineLog;
         _acceptedIntegrationQueue = acceptedIntegrationQueue;
+        _attemptAuthority = attemptAuthority;
     }
 
     /// <summary>
@@ -752,6 +809,20 @@ public sealed class TaskTransitionService
         string? reason,
         AttemptWriteReference? authorityWrite)
     {
+        var reviewSubject = AgentStudio.Pipeline.ReviewSubjectStore.Read(reviewed.FolderPath);
+        if (reviewSubject is not null
+            && _attemptAuthority is not null
+            && !AgentStudio.Pipeline.ReviewSubjectStore.TryValidateCurrentAttempt(
+                reviewed.FolderPath,
+                reviewSubject,
+                _attemptAuthority,
+                out var subjectError))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                subjectError ?? "The review subject does not belong to the current run attempt.");
+        }
+
         if (string.Equals(reviewed.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
         {
             return new MoveJobOutcome(

@@ -100,6 +100,64 @@ public static class ReviewSubjectStore
         File.Move(path, path + ".invalidated", overwrite: true);
     }
 
+    /// <summary>
+    /// Verifies that a folder-scoped subject belongs to the task in that folder
+    /// and to its current settled RunAttempt. Call this before acceptance or
+    /// integration trusts any ref carried by the sidecar.
+    /// </summary>
+    public static bool TryValidateCurrentAttempt(
+        string taskFolder,
+        ReviewSubjectRecord subject,
+        AttemptAuthorityService authority,
+        out string? error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskFolder);
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        var taskKey = ReadTaskKey(taskFolder);
+        if (string.IsNullOrWhiteSpace(taskKey))
+        {
+            error = "The accepted task has no stable key for review-subject validation.";
+            return false;
+        }
+        if (!string.Equals(subject.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Review subject belongs to '{subject.TaskKey}', but the accepted task is '{taskKey}'.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(subject.RunAttemptId))
+        {
+            error = $"Review subject for '{taskKey}' has no RunAttemptId and cannot be accepted.";
+            return false;
+        }
+
+        var current = authority.GetTaskProjection(taskKey).CurrentRunAttempt;
+        if (current is null)
+        {
+            error = $"Review subject for '{taskKey}' has no current RunAttempt in the authority store.";
+            return false;
+        }
+        if (!string.Equals(subject.RunAttemptId, current.AttemptId, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is stale; current RunAttempt is '{current.AttemptId}'.";
+            return false;
+        }
+        if (current.State != AttemptLifecycleState.Completed)
+        {
+            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is not the current settled delivery.";
+            return false;
+        }
+        if (!string.Equals(subject.ResultSha, current.ResultSha, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Review subject ResultSha does not match current RunAttempt '{current.AttemptId}'.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
     public static ReviewSubjectRecord? Read(string taskFolder)
     {
         var path = PathFor(taskFolder);
@@ -118,5 +176,30 @@ public static class ReviewSubjectStore
             SilentCatch.Note(ex, "ReviewSubjectStore: malformed or unreadable subject");
             return null;
         }
+    }
+
+    private static string? ReadTaskKey(string taskFolder)
+    {
+        try
+        {
+            var path = Path.Combine(taskFolder, "task.json");
+            if (!File.Exists(path)) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            foreach (var property in new[] { "key", "taskKey", "id" })
+            {
+                if (root.TryGetProperty(property, out var value)
+                    && value.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    return value.GetString()!.Trim();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "ReviewSubjectStore: task key read failed");
+        }
+        return null;
     }
 }

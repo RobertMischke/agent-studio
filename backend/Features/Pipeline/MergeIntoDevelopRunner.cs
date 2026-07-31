@@ -216,7 +216,11 @@ public sealed class MergeIntoDevelopRunner
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
             if (reviewSubject is not null
                 && _attemptAuthority is not null
-                && !TryValidateCurrentReviewSubject(reviewSubject, out var subjectError))
+                && !ReviewSubjectStore.TryValidateCurrentAttempt(
+                    jobFolderPath,
+                    reviewSubject,
+                    _attemptAuthority,
+                    out var subjectError))
             {
                 var stale = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
@@ -340,43 +344,6 @@ public sealed class MergeIntoDevelopRunner
             }
             return errored;
         }
-    }
-
-    private bool TryValidateCurrentReviewSubject(
-        ReviewSubjectRecord subject,
-        out string? error)
-    {
-        var current = _attemptAuthority!
-            .GetTaskProjection(subject.TaskKey)
-            .CurrentRunAttempt;
-        if (current is null)
-        {
-            error = $"Review subject for '{subject.TaskKey}' has no current RunAttempt in the authority store.";
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(subject.RunAttemptId))
-        {
-            error = $"Review subject for '{subject.TaskKey}' has no RunAttemptId and cannot be accepted.";
-            return false;
-        }
-        if (!string.Equals(subject.RunAttemptId, current.AttemptId, StringComparison.OrdinalIgnoreCase))
-        {
-            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is stale; current RunAttempt is '{current.AttemptId}'.";
-            return false;
-        }
-        if (current.State != AttemptLifecycleState.Completed)
-        {
-            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is not the current settled delivery.";
-            return false;
-        }
-        if (!string.Equals(subject.ResultSha, current.ResultSha, StringComparison.OrdinalIgnoreCase))
-        {
-            error = $"Review subject ResultSha does not match current RunAttempt '{current.AttemptId}'.";
-            return false;
-        }
-
-        error = null;
-        return true;
     }
 
     /// <summary>
