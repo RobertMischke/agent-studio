@@ -16,6 +16,7 @@ public sealed class RemoteDeliveryBackfillService
     private readonly GitService _git;
     private readonly ProjectRegistry _projects;
     private readonly ProjectSettingsService _settings;
+    private readonly AttemptAuthorityService _authority;
     private readonly ILogger<RemoteDeliveryBackfillService> _logger;
 
     public RemoteDeliveryBackfillService(
@@ -25,6 +26,7 @@ public sealed class RemoteDeliveryBackfillService
         GitService git,
         ProjectRegistry projects,
         ProjectSettingsService settings,
+        AttemptAuthorityService authority,
         ILogger<RemoteDeliveryBackfillService> logger)
     {
         _scanner = scanner;
@@ -33,6 +35,7 @@ public sealed class RemoteDeliveryBackfillService
         _git = git;
         _projects = projects;
         _settings = settings;
+        _authority = authority;
         _logger = logger;
     }
 
@@ -116,10 +119,19 @@ public sealed class RemoteDeliveryBackfillService
             var attemptChainId = details.GetValueOrDefault("attemptChainId")
                                  ?? completion.RunId
                                  ?? $"legacy-backfill:{key}";
+            var currentRun = _authority.GetTaskProjection(key).CurrentRunAttempt;
+            if (currentRun is null
+                || currentRun.State != AttemptLifecycleState.Completed
+                || !string.Equals(currentRun.ResultSha, resultSha, StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"{key}: current settled RunAttempt does not match the backfill ResultSha");
+                continue;
+            }
             _ = long.TryParse(details.GetValueOrDefault("fence"), out var fence);
             ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
             {
                 TaskKey = key,
+                RunAttemptId = currentRun.AttemptId,
                 Project = task.ProjectName,
                 Repository = repository?.RepositoryUrl ?? repoRoot,
                 ResultSha = resultSha,

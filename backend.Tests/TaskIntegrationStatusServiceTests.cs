@@ -325,6 +325,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
         {
             TaskKey = job.Key!,
+            RunAttemptId = "run-agt-2220",
             Project = project,
             Repository = repo,
             ResultSha = new string('7', 40),

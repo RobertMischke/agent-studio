@@ -33,6 +33,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly ProjectSettingsService? _projectSettings;
     private readonly PreMainTestGate? _preMainTestGate;
     private readonly PreDevelopBuildGate? _preDevelopBuildGate;
+    private readonly AttemptAuthorityService? _attemptAuthority;
     private readonly TimeSpan _preMainTimeout;
     private readonly TimeSpan _preDevelopTimeout;
     private readonly Func<int, TimeSpan> _environmentalBackoff;
@@ -40,7 +41,43 @@ public sealed class MergeIntoDevelopRunner
     private readonly SemaphoreSlim _pushGate = new(1, 1);
     private int _mergeGateUsers;
 
+    /// <summary>
+    /// Production constructor. Acceptance always receives the authority store,
+    /// so a remote subject can never bypass attempt validation through missing
+    /// dependency wiring.
+    /// </summary>
     public MergeIntoDevelopRunner(
+        GitService git,
+        PipelineExecutionLog pipelineLog,
+        ILogger<MergeIntoDevelopRunner> logger,
+        AttemptAuthorityService attemptAuthority,
+        IntegrationPushQueue? pushQueue = null,
+        ProjectSettingsService? projectSettings = null,
+        PreMainTestGate? preMainTestGate = null,
+        TimeSpan? preMainTimeout = null,
+        Func<int, TimeSpan>? environmentalBackoff = null,
+        PreDevelopBuildGate? preDevelopBuildGate = null,
+        TimeSpan? preDevelopTimeout = null)
+        : this(
+            git,
+            pipelineLog,
+            logger,
+            pushQueue,
+            projectSettings,
+            preMainTestGate,
+            preMainTimeout,
+            environmentalBackoff,
+            preDevelopBuildGate,
+            preDevelopTimeout,
+            attemptAuthority)
+    {
+    }
+
+    /// <summary>
+    /// Compatibility constructor for isolated unit fixtures that exercise local
+    /// branch and gate behavior without a Task Server authority store.
+    /// </summary>
+    internal MergeIntoDevelopRunner(
         GitService git,
         PipelineExecutionLog pipelineLog,
         ILogger<MergeIntoDevelopRunner> logger,
@@ -50,7 +87,8 @@ public sealed class MergeIntoDevelopRunner
         TimeSpan? preMainTimeout = null,
         Func<int, TimeSpan>? environmentalBackoff = null,
         PreDevelopBuildGate? preDevelopBuildGate = null,
-        TimeSpan? preDevelopTimeout = null)
+        TimeSpan? preDevelopTimeout = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _git = git;
         _pipelineLog = pipelineLog;
@@ -59,6 +97,7 @@ public sealed class MergeIntoDevelopRunner
         _projectSettings = projectSettings;
         _preMainTestGate = preMainTestGate;
         _preDevelopBuildGate = preDevelopBuildGate;
+        _attemptAuthority = attemptAuthority;
         _preMainTimeout = preMainTimeout is { } configured && configured > TimeSpan.Zero
             ? configured
             : TimeSpan.FromHours(1);
@@ -175,6 +214,24 @@ public sealed class MergeIntoDevelopRunner
             }
 
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+            if (reviewSubject is not null
+                && _attemptAuthority is not null
+                && !TryValidateCurrentReviewSubject(reviewSubject, out var subjectError))
+            {
+                var stale = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: subjectError);
+                Record(
+                    jobFolderPath,
+                    project,
+                    jobId,
+                    integrationBranch,
+                    stale,
+                    preMainResult: null,
+                    preDevelopResult: null,
+                    startedAt);
+                return stale;
+            }
             var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
             var branch = reviewSubject is not null
                 ? TaskIntegrationBranch.Name(
@@ -283,6 +340,43 @@ public sealed class MergeIntoDevelopRunner
             }
             return errored;
         }
+    }
+
+    private bool TryValidateCurrentReviewSubject(
+        ReviewSubjectRecord subject,
+        out string? error)
+    {
+        var current = _attemptAuthority!
+            .GetTaskProjection(subject.TaskKey)
+            .CurrentRunAttempt;
+        if (current is null)
+        {
+            error = $"Review subject for '{subject.TaskKey}' has no current RunAttempt in the authority store.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(subject.RunAttemptId))
+        {
+            error = $"Review subject for '{subject.TaskKey}' has no RunAttemptId and cannot be accepted.";
+            return false;
+        }
+        if (!string.Equals(subject.RunAttemptId, current.AttemptId, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is stale; current RunAttempt is '{current.AttemptId}'.";
+            return false;
+        }
+        if (current.State != AttemptLifecycleState.Completed)
+        {
+            error = $"Review subject RunAttempt '{subject.RunAttemptId}' is not the current settled delivery.";
+            return false;
+        }
+        if (!string.Equals(subject.ResultSha, current.ResultSha, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Review subject ResultSha does not match current RunAttempt '{current.AttemptId}'.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     /// <summary>

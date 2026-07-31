@@ -1086,6 +1086,7 @@ public static class LeaseEndpoints
                 ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
                 {
                     TaskKey = req.TaskKey,
+                    RunAttemptId = run.AttemptId,
                     Project = task.ProjectName,
                     Repository = req.Repository
                                  ?? git.ResolveRepoRootForWatchPath(task.WatchPath)

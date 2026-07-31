@@ -10,8 +10,14 @@ namespace AgentStudio.Pipeline;
 /// </summary>
 public sealed record ReviewSubjectRecord
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
     public string TaskKey { get; init; } = "";
+    /// <summary>
+    /// RunAttempt that settled the immutable delivery represented by this
+    /// sidecar. Acceptance must match it against the authority store's current
+    /// settled attempt before trusting any ref from this record.
+    /// </summary>
+    public string RunAttemptId { get; init; } = "";
     public string Project { get; init; } = "";
     public string Repository { get; init; } = "";
     public string ResultSha { get; init; } = "";
@@ -53,6 +59,8 @@ public static class ReviewSubjectStore
         ArgumentNullException.ThrowIfNull(subject);
         if (!IsValidResultSha(subject.ResultSha))
             throw new ArgumentException("ResultSha must be a full Git commit SHA.", nameof(subject));
+        if (string.IsNullOrWhiteSpace(subject.RunAttemptId))
+            throw new ArgumentException("RunAttemptId is required.", nameof(subject));
         if (string.IsNullOrWhiteSpace(subject.AttemptChainId))
             throw new ArgumentException("AttemptChainId is required.", nameof(subject));
 
@@ -76,6 +84,20 @@ public static class ReviewSubjectStore
                 // Best effort cleanup of a file that was never authoritative.
             }
         }
+    }
+
+    /// <summary>
+    /// Removes the canonical subject before a transition that opens a new run
+    /// generation. The most recently invalidated subject remains as diagnostic
+    /// evidence but can no longer be consumed by review or integration.
+    /// </summary>
+    public static void InvalidateForNewAttempt(string taskFolder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskFolder);
+        var path = PathFor(taskFolder);
+        if (!File.Exists(path)) return;
+
+        File.Move(path, path + ".invalidated", overwrite: true);
     }
 
     public static ReviewSubjectRecord? Read(string taskFolder)

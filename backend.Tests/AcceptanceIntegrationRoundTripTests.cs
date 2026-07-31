@@ -984,6 +984,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
             {
                 TaskKey = TaskKey,
+                RunAttemptId = "run-fixture-attempt",
                 Project = Project,
                 Repository = _origin,
                 ResultSha = deliverySha,
