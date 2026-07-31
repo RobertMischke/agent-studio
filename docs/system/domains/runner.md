@@ -76,9 +76,11 @@ state.
   invoke. `LeaseEndpoints` adds the candidate card's normalized CLI keys to the
   existing required-capability set before repository preflight or lease
   acquisition. An incompatible card stays Ready. Fenced idempotent claim replay
-  is evaluated first and always describes the already claimed run. Capability
-  matching never rewrites the card's model or thinking selection; those remain
-  governed by [the model-routing policy](model-routing-policy.md).
+  is evaluated first and always describes the already claimed run. If acquire
+  authority was persisted before the Ready-to-Progress move, replay re-drives
+  that same fenced lane transition before returning the claim. Capability matching
+  never rewrites the card's model or thinking selection; those remain governed by
+  [the model-routing policy](model-routing-policy.md).
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task

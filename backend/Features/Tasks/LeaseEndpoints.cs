@@ -294,6 +294,51 @@ public static class LeaseEndpoints
                                 Message: "The original claim repository is no longer configured.")));
                         }
 
+                        // The acquire receipt and Ready-to-Progress move form
+                        // one replayable convergence unit. A crash can persist
+                        // the lease before the original move, so repair that
+                        // split state under the claim gate before re-serving the
+                        // lease. The expected source state keeps a concurrent
+                        // operator move from being pulled back into Progress.
+                        if (string.Equals(replayedTask.State, TaskStates.Ready, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var replayMove = await transitions.MoveAsync(
+                                replayedTask.Id,
+                                TaskStates.Progress,
+                                replayedTask.WatchPath,
+                                ct,
+                                cause: $"remote-runner:{req.RunnerName.Trim()}",
+                                authorityWrite: new AttemptWriteReference(
+                                    replay.Lease.AttemptId!,
+                                    replay.Lease.FencingToken,
+                                    replay.Lease.AuthorityEpoch,
+                                    $"lane-claim:{requestedClaimKey}"),
+                                expectedSourceState: TaskStates.Ready);
+                            if (replayMove.Status != MoveJobStatus.Success)
+                            {
+                                leases.Release(new RunLeaseReleaseRequest(
+                                    replay.Lease.TaskKey,
+                                    replay.Lease.LeaseId,
+                                    replay.Lease.FencingToken,
+                                    req.RunnerId.Trim(),
+                                    replay.Lease.AttemptId,
+                                    replay.Lease.AuthorityEpoch,
+                                    $"claim-rollback:{replay.Lease.TaskKey}:{replay.Lease.LeaseId}"));
+                                logger.LogWarning(
+                                    "remote-runner-claim-replay-move-failed project={Project} task={TaskKey} runner={Runner} status={Status} message={Message}",
+                                    replayedTask.ProjectName,
+                                    replay.Lease.TaskKey,
+                                    req.RunnerName,
+                                    replayMove.Status,
+                                    replayMove.Message);
+                                return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                                    RunnerClaimStatus.Empty,
+                                    Message: $"claim replay move refused: {replayMove.Status} {replayMove.Message}")));
+                            }
+
+                            replayedTask = FindTask(scanner, replay.Lease.TaskKey) ?? replayedTask;
+                        }
+
                         // A replay re-serves a lease this host already holds, so
                         // occupancy does not grow. Recording the unchanged count
                         // keeps the ledger free of the old "active + 1" drift.

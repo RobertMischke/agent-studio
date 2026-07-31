@@ -932,6 +932,56 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Daemon_claim_replay_repairs_ready_lane_after_acquire_was_persisted_before_move()
+    {
+        const string claimKey = "claim-replay-after-persisted-acquire";
+        SeedTask(TaskStates.Ready, TaskKey, "Claim replay recovery", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        // This direct acquire models the crash boundary in the daemon claim
+        // endpoint: authority persisted the lease, but the Ready-to-Progress
+        // lane transition did not happen before the response was lost.
+        var acquired = await client.AcquireLeaseAsync(new RAcquire(
+            TaskKey,
+            RunnerId,
+            ProjectName,
+            "replay-host",
+            4242,
+            "remote-runner",
+            RequestedTtlSeconds: 120,
+            IdempotencyKey: claimKey), CancellationToken.None);
+        Assert.True(acquired.Granted);
+        Assert.NotNull(acquired.Lease);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        var replay = await client.ClaimAsync(new RClaim(
+            RunnerId,
+            ProjectName,
+            "replay-host",
+            4242,
+            "remote-runner",
+            AvailableSlots: 1,
+            ActiveSlots: 0,
+            IdempotencyKey: claimKey), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, replay.Status);
+        Assert.Equal(acquired.Lease!.LeaseId, replay.Lease!.LeaseId);
+        Assert.Equal(acquired.Lease.AttemptId, replay.Lease.AttemptId);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, TaskKey);
+        Assert.True(Directory.Exists(progressFolder));
+        using var task = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Path.Combine(progressFolder, "task.json")));
+        Assert.Equal(TaskStates.Progress, task.RootElement.GetProperty("state").GetString());
+    }
+
+    [Fact]
     public async Task Codex_only_runner_leaves_claude_card_ready_until_claude_is_advertised()
     {
         SeedTask(
