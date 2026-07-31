@@ -293,10 +293,12 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
                 FullSuiteRan = true,
             },
         });
+        var queue = new IntegrationPushQueue();
         var runner = new MergeIntoDevelopRunner(
             git,
             log,
             NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
             projectSettings: settings,
             preMainTestGate: new PreMainTestGate(gateRunner));
         var jobFolder = BeginRun(log, repo, jobId: "remote-main");
@@ -328,6 +330,9 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Equal(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
         Assert.False(git.BranchExists(repo, WorktreeTaskLifecycle.BranchFor("remote-main")));
         Assert.Equal(resultSha, gateRunner.Request!.ExpectedSha);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal("main", queued!.IntegrationBranch);
+        Assert.Equal(resultSha, queued.ApprovedSha);
     }
 
     [Fact]

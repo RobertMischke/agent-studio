@@ -226,7 +226,6 @@ public sealed class MergeIntoDevelopRunner
                 jobFolderPath,
                 watchPath,
                 repoRoot,
-                integrationBranch,
                 delivery,
                 result,
                 pipelineType);
@@ -344,7 +343,6 @@ public sealed class MergeIntoDevelopRunner
         string jobFolderPath,
         string? watchPath,
         string repoRoot,
-        string requestedIntegrationBranch,
         AcceptedDelivery delivery,
         MergeIntoIntegrationResult result,
         string pipelineType)
@@ -357,8 +355,7 @@ public sealed class MergeIntoDevelopRunner
         }
 
         // Pin the object the push may publish: the merge result this card's gate
-        // released, or the target tip when no commit was created. Keep the
-        // historical requested-branch hand-off unchanged in this refactor.
+        // released, or the target tip when no commit was created.
         var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
             ? result.MergedSha
             : _git.GetBranchTip(repoRoot, delivery.IntegrationBranch);
@@ -367,7 +364,7 @@ public sealed class MergeIntoDevelopRunner
             jobId,
             jobFolderPath,
             watchPath,
-            requestedIntegrationBranch,
+            delivery.IntegrationBranch,
             approvedSha,
             pipelineType);
     }
