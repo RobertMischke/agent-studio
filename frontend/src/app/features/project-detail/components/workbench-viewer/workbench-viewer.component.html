@@ -10,9 +10,18 @@
         <h1>{{ doc.workbench.title }}</h1>
         <p>{{ doc.workbench.summary }}</p>
       </div>
-      <span class="workbench-viewer__status" [attr.data-status]="doc.workbench.status">
-        <i aria-hidden="true"></i>{{ statusLabel() }}
-      </span>
+      <div class="workbench-viewer__header-actions">
+        <button type="button"
+                class="workbench-viewer__wiki-link"
+                data-testid="workbench-viewer-open-wiki"
+                (click)="openCurrentPageInWiki()">
+          <app-studio-icon name="book" [size]="13" />
+          <span>Open in Wiki</span>
+        </button>
+        <span class="workbench-viewer__status" [attr.data-status]="doc.workbench.status">
+          <i aria-hidden="true"></i>{{ statusLabel() }}
+        </span>
+      </div>
       @if (pageContext(); as pageContext) {
         <app-page-action-bar
           class="workbench-viewer__actions"
@@ -35,11 +44,23 @@
       [projectName]="projectName()"
       [document]="doc"
       (decisionChanged)="refreshDecision()" />
-    <iframe class="workbench-viewer__frame"
-            #workbenchFrame
-            data-testid="workbench-viewer-frame"
-            title="Workbench artifact: {{ doc.workbench.title }}"
-            sandbox="allow-scripts"
-            referrerpolicy="no-referrer"></iframe>
+    <div class="workbench-viewer__frame-shell"
+         [class.workbench-viewer__frame-shell--maximized]="maximized()"
+         data-testid="workbench-viewer-frame-shell">
+      <button type="button"
+              class="workbench-viewer__maximize"
+              data-testid="workbench-viewer-maximize"
+              [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
+              [attr.title]="maximized() ? 'Restore (Esc)' : 'Maximize'"
+              (click)="toggleMaximize()">
+        <app-studio-icon [name]="maximized() ? 'collapse' : 'expand'" [size]="12" />
+      </button>
+      <iframe class="workbench-viewer__frame"
+              #workbenchFrame
+              data-testid="workbench-viewer-frame"
+              title="Workbench artifact: {{ doc.workbench.title }}"
+              sandbox="allow-scripts"
+              referrerpolicy="no-referrer"></iframe>
+    </div>
   }
 </section>

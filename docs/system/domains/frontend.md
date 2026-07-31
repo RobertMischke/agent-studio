@@ -143,11 +143,13 @@ boundary, route map, and visual ownership diagram are in
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
   read-only Workbench host. Explorer discovery is lazy per expanded project;
   Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
-  in an opaque-origin `srcdoc` iframe with the Workbench CSP and no host API
-  bridge. An inert DOM parse moves artifact nodes into a fixed policy-first
-  wrapper, and dirty working-tree content is labelled as uncommitted instead of
-  receiving the current HEAD revision. Chat pinning and decision mutations are
-  intentionally not mounted.
+  in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
+  message boundary maps docs-relative links to the in-app Wiki and opens absolute
+  HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
+  DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
+  pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
+  content is labelled as uncommitted instead of receiving the current HEAD
+  revision. Chat pinning and decision mutations are intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

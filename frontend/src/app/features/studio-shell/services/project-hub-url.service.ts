@@ -70,6 +70,21 @@ export class ProjectHubUrlService {
     return this.projects().find(project => project.displayName === projectName)?.id ?? null;
   }
 
+  /** Open one exact repository document in the project's in-app Wiki reader. */
+  openWikiPage(projectName: string, relPath: string): boolean {
+    const project = this.projects().find(candidate => candidate.displayName === projectName);
+    const page = relPath.trim().replace(/^docs\//i, '');
+    if (!project || !page) return false;
+    const next = withProjectHubRoute(
+      window.location.hash,
+      project.id,
+      'wiki',
+      `?page=${encodeURIComponent(page)}`,
+    );
+    this.writeHash(next, 'push');
+    return this.applyHash(false);
+  }
+
   /** Resolve the current hash into the Studio's in-editor Project Hub tab. */
   applyHash(closeWhenMissing: boolean): boolean {
     if (!this.registryLoaded()) return false;

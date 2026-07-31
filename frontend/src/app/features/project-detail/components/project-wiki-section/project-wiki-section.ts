@@ -10,6 +10,7 @@ import {
   output,
   signal,
   HostListener,
+  viewChildren,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -93,6 +94,11 @@ import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
 import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
 import { WikiPageActionsComponent } from './wiki-page-actions/wiki-page-actions';
 import { WikiLiveRefreshService } from '../../services/wiki-live-refresh.service';
+import {
+  ISOLATED_HTML_LINK_MESSAGE,
+  buildIsolatedHtmlSrcdoc,
+  resolveIsolatedHtmlNavigation,
+} from '../../../../services/sandboxed-html.util';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -300,6 +306,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
 
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly htmlFrames = viewChildren<ElementRef<HTMLIFrameElement>>('wikiHtmlFrame');
   private pendingOpenRestore: { rel: string; tab: WikiViewerTab } | null = null;
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
@@ -347,6 +354,24 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (typeof window !== 'undefined') {
       window.addEventListener('hashchange', this.onHashChange);
     }
+  }
+
+  @HostListener('window:message', ['$event'])
+  onHtmlFrameMessage(event: MessageEvent): void {
+    if (!this.htmlFrames().some(frame => event.source === frame.nativeElement.contentWindow)) return;
+    const message = event.data as { type?: unknown; href?: unknown } | null;
+    if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
+    const openedRel = this.openedRel();
+    if (!openedRel) return;
+    const navigation = resolveIsolatedHtmlNavigation(`docs/${openedRel}`, message.href);
+    if (navigation?.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (navigation?.kind !== 'wiki') return;
+    const node = this.findNode(this.roots(), navigation.relPath);
+    if (!node || node.type === 'folder' || !node.relPath) return;
+    this.openFile(node.relPath, node.type);
   }
 
   ngOnDestroy(): void {
@@ -421,11 +446,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly trustedHtml = computed<SafeHtml>(() =>
-    this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
+    this.sanitizer.bypassSecurityTrustHtml(buildIsolatedHtmlSrcdoc(this.displayContent())));
 
   readonly trustedReportHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.reportHtmlForAnchor(
-      this.reportContent(),
+      buildIsolatedHtmlSrcdoc(this.reportContent()),
       this.reportAnchor())));
 
   /** Pretty JSON preview for metadata files; invalid JSON falls back to source. */

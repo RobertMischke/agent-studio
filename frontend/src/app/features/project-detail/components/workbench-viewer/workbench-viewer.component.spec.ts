@@ -2,7 +2,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
+import { ISOLATED_HTML_LINK_MESSAGE } from '../../../../services/sandboxed-html.util';
 import { WorkbenchViewerComponent } from './workbench-viewer.component';
 
 const DOCUMENT: WorkbenchDocument = {
@@ -56,11 +58,49 @@ describe('WorkbenchViewerComponent', () => {
     const frame = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-frame"]') as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.srcdoc).toBe(srcdoc);
+    expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
       .toContain('uncommitted');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="page-action-archive"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="page-action-extra"]')).toBeNull();
+
+    const wikiTargets: string[] = [];
+    fixture.componentInstance.openWiki.subscribe(path => wikiTargets.push(path));
+    const wikiButton = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-open-wiki"]') as HTMLButtonElement;
+    wikiButton.click();
+    expect(wikiTargets).toEqual(['workbenches/boundary/index.html']);
+
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: '../target/index.html' },
+    } as MessageEvent);
+    expect(wikiTargets).toEqual([
+      'workbenches/boundary/index.html',
+      'workbenches/target/index.html',
+    ]);
+
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: 'https://example.com/reference' },
+    } as MessageEvent);
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://example.com/reference',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    openSpy.mockRestore();
+
+    const maximize = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-maximize"]') as HTMLButtonElement;
+    maximize.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.maximized()).toBe(true);
+    expect(maximize.getAttribute('aria-label')).toBe('Restore');
+    fixture.componentInstance.exitMaximized();
+    expect(fixture.componentInstance.maximized()).toBe(false);
     http.verify();
   });
 });
