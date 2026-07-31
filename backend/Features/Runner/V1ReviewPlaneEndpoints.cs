@@ -705,11 +705,19 @@ public static class V1ReviewPlaneEndpoints
                 var shellCommand = string.IsNullOrWhiteSpace(command.WorkingSubdir)
                     ? command.Command
                     : $"cd -- {ShellQuote(command.WorkingSubdir)} && {command.Command}";
+                // AGT-2446 root cause: the contract default of 1800s starved
+                // dotnet build/test on the review host once several attempts ran
+                // in parallel - the killed process surfaced as
+                // ReviewInfra/BaselineUnavailable (baseline) or the bogus
+                // "<unparsed failure in verify-2>" ProductFailure (subject).
+                // Build/test verify commands get the full clamp window instead;
+                // the runner-side hard clamp (7200s) stays the ceiling.
                 return new Contract.ReviewCommandDto(
                     $"verify-{index + 1}",
                     command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests",
                     "sh",
                     ["-lc", shellCommand],
+                    TimeoutSeconds: 7200,
                     CompareToBaseline: command.Kind == VerifyCommandKind.Test);
             })
             .ToList();
