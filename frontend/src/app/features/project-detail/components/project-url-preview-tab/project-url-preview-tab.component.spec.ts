@@ -245,6 +245,7 @@ describe('ProjectUrlPreviewTabComponent', () => {
     // a disabled "Starting…" state.
     expect(fixture.nativeElement.querySelector('[data-testid="url-preview-start"]')).toBeFalsy();
     const starting: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-starting"]');
+    expect(starting?.textContent).toContain('Console output is active');
     expect(starting?.textContent).toContain('accept connections');
     expect(starting?.textContent).toContain('http://localhost:4202');
     const post = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'));
@@ -287,7 +288,7 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(fixture.componentInstance.settingsOpen()).toBe(true);
   });
 
-  it('turns an accepted start that never becomes reachable into an actionable failure', () => {
+  it('keeps waiting beyond the former 20-second limit while console output stays active', () => {
     vi.useFakeTimers();
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
@@ -295,14 +296,52 @@ describe('ProjectUrlPreviewTabComponent', () => {
     fixture.detectChanges();
 
     fixture.componentInstance.start();
-    http.expectOne(req => req.method === 'POST').flush(processSnapshot());
+    http.expectOne(req => req.method === 'POST').flush(processSnapshot('starting', ['Compiling application bundles...']));
     vi.advanceTimersByTime(25_000);
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(processSnapshot('starting', ['Compiling application bundles...', 'Generating browser application bundles...']));
     fixture.detectChanges();
 
-    const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
-    expect(failed?.textContent).toContain('did not become reachable');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-starting"]')?.textContent)
+      .toContain('Console output is active');
     const consoleEl: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-process-console"]');
-    expect(consoleEl?.textContent).toContain('c:/demo');
+    expect(consoleEl?.textContent).toContain('Generating browser application bundles');
+    expect(consoleEl?.querySelector('[data-testid="url-preview-process-status"]')?.textContent)
+      .toContain('Starting · console active');
+  });
+
+  it.each([
+    ['process-exit', 'Preview process exited'],
+    ['silence-timeout', 'Preview start went quiet'],
+    ['startup-limit', 'Preview reached startup limit'],
+  ] as const)('shows the honest %s terminal diagnosis', (reason, heading) => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    fixture.componentInstance.start();
+    http.expectOne(req => req.method === 'POST').flush(processSnapshot('starting', ['Building...']));
+    fixture.componentInstance.process.session.set(processSnapshot(
+      reason === 'process-exit' ? 'exited' : 'failed',
+      reason === 'process-exit' ? ['Process exited with code 7'] : ['Readiness failed'],
+    ));
+    fixture.detectChanges();
+
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic')).flush({
+      ...diagnostic(reason === 'process-exit' ? 'process-exited' : 'timeout'),
+      startupFailureReason: reason,
+      summary: `Terminal cause: ${reason}`,
+      exitCode: reason === 'process-exit' ? 7 : null,
+      timedOut: reason !== 'process-exit',
+    });
+    fixture.detectChanges();
+
+    const state: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-offline"]');
+    expect(state?.getAttribute('data-failure-reason')).toBe(reason);
+    expect(state?.textContent).toContain(heading);
+    expect(state?.textContent).toContain(`Terminal cause: ${reason}`);
   });
 
   it('shows bounded live output in place and stops the owned process explicitly', () => {
@@ -411,7 +450,8 @@ describe('ProjectUrlPreviewTabComponent', () => {
       ...STARTABLE_URL,
       startRule: {
         command: README_SUGGESTION.command, cwd: README_SUGGESTION.cwd, port: 4184,
-        healthUrl: 'http://localhost:4184', readinessTimeoutSeconds: 20, source: 'readme',
+        healthUrl: 'http://localhost:4184', readinessTimeoutSeconds: 30,
+        startupTimeoutSeconds: 600, source: 'readme',
       },
     };
     put.flush({ ...workspacesWith([corrected])[0].projects[0] });

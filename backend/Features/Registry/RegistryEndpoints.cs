@@ -527,7 +527,7 @@ public static class RegistryEndpoints
                 return Results.BadRequest(new { error = "This URL has no start rule to run." });
             try
             {
-                return Results.Ok(procs.Start(record, url));
+                return Results.Ok(procs.StartWithReadiness(record, url));
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {

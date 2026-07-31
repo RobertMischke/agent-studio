@@ -36,6 +36,7 @@ export class ProjectUrlProcessController {
       next: session => {
         if (this.projectId !== projectId || this.urlId !== urlId) return;
         this.session.set(session);
+        if (session?.state === 'starting') this.consoleOpen.set(true);
         this.schedulePoll();
       },
       error: () => { /* An absent owned process is a normal empty state. */ },
@@ -61,6 +62,7 @@ export class ProjectUrlProcessController {
       exitCode: null,
       output: ['[studio] Starting the configured dev server…'],
     });
+    this.schedulePoll();
     return this.tasks.startProjectUrl(projectId, url.id).pipe(tap(session => {
       this.session.set(session);
       this.schedulePoll();

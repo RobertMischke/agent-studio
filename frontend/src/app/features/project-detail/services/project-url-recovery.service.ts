@@ -40,7 +40,8 @@ export class ProjectUrlRecoveryService {
         cwd: suggestion.cwd,
         port: suggestion.port,
         healthUrl: suggestion.url ?? url.url,
-        readinessTimeoutSeconds: 20,
+        readinessTimeoutSeconds: 30,
+        startupTimeoutSeconds: 600,
         source: suggestion.source,
       },
     }).pipe(map(project => project.urls.find(item => item.id === url.id) ?? null));

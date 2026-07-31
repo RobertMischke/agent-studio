@@ -30,6 +30,9 @@ export class ProjectUrlSettingsDialogComponent {
   readonly command = signal('');
   readonly cwd = signal('');
   readonly port = signal<number | null>(null);
+  readonly healthUrl = signal('');
+  readonly silenceTimeout = signal(30);
+  readonly startupTimeout = signal(600);
 
   constructor() {
     effect(() => {
@@ -38,6 +41,9 @@ export class ProjectUrlSettingsDialogComponent {
       this.command.set(url.startRule?.command ?? '');
       this.cwd.set(url.startRule?.cwd ?? '');
       this.port.set(url.startRule?.port ?? null);
+      this.healthUrl.set(url.startRule?.healthUrl ?? url.url);
+      this.silenceTimeout.set(url.startRule?.readinessTimeoutSeconds ?? 30);
+      this.startupTimeout.set(url.startRule?.startupTimeoutSeconds ?? 600);
     });
   }
 
@@ -51,6 +57,9 @@ export class ProjectUrlSettingsDialogComponent {
         command,
         cwd: this.cwd().trim() || null,
         port: this.port(),
+        healthUrl: this.healthUrl().trim() || null,
+        readinessTimeoutSeconds: Math.max(2, Math.min(300, this.silenceTimeout() || 30)),
+        startupTimeoutSeconds: Math.max(2, Math.min(3600, this.startupTimeout() || 600)),
         source: 'manual',
       } : null,
     });

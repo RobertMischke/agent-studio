@@ -56,6 +56,9 @@ public record ProjectUrlStartRule
     public string Command { get; init; } = "";       // "npm run website"
     public string? Cwd { get; init; }                // defaults to RepositoryPath
     public int? Port { get; init; }
+    public string? HealthUrl { get; init; }
+    public int ReadinessTimeoutSeconds { get; init; } = 30; // console silence
+    public int StartupTimeoutSeconds { get; init; } = 600;  // absolute ceiling
     public string Source { get; init; } = "manual";  // "manual" | "package-json" | "readme"
 }
 ```
@@ -200,6 +203,14 @@ drawer, orchestrator input bar with a context chip) - it is a sketch of the
 - A dedicated singleton owns dev-server sessions and a bounded output tail.
   Restart, URL/project removal, failed launch cleanup, and backend shutdown all
   terminate the complete process tree.
+- Startup readiness is activity-based. The process remains `starting` while it
+  is alive and stdout or stderr has produced output inside the configured
+  silence window. `ReadinessTimeoutSeconds` is the silence window, not a fixed
+  start stopwatch. Persisted values such as the former 20-second timeout retain
+  their number and are reinterpreted as silence windows.
+- `StartupTimeoutSeconds` is the independent absolute ceiling, defaults to 600
+  seconds, and remains configurable per start rule. Process exit, silence
+  timeout, and startup-limit exhaustion are distinct terminal causes.
 - Each URL keeps its own explicit command and optional CWD/port. Working
   directory resolution falls back from URL CWD to repository path, then project
   root path.
