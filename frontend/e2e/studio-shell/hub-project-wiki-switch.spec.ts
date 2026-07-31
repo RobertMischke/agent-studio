@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { setTheme, type Theme } from '../helpers/theme';
 
 /**
  * AGT-2023 regression — switching between the Project (Overview) and Wiki
@@ -29,6 +30,8 @@ const SCREENSHOT_DIR = (() => {
   if (fromEnv && fromEnv.trim()) return fromEnv;
   return path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'hub-project-wiki-switch');
 })();
+
+const screenshotTheme = process.env.DECK_ACCEPTANCE_THEME as Theme | undefined;
 
 function shot(page: Page, name: string) {
   return page.screenshot({ path: path.join(SCREENSHOT_DIR, name), fullPage: true });
@@ -257,6 +260,7 @@ async function gotoStudio(page: Page): Promise<void> {
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 15_000 });
+  if (screenshotTheme) await setTheme(page, screenshotTheme);
 }
 
 /** Expand the seeded project so its Board / Hub / Wiki child rows show. */
