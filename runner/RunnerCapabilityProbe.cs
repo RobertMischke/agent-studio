@@ -80,7 +80,6 @@ internal static class RunnerCapabilityProbe
             CapabilityProtocol.CliExecution(AgentCliProcess.ConfiguredCliType(options)),
             CapabilityProtocol.ProviderAuthentication(AgentCliProcess.ConfiguredCliType(options)),
             CapabilityProtocol.GitFetch,
-            CapabilityProtocol.GitPush,
             CapabilityProtocol.RepositoryAccess,
             CapabilityProtocol.Disk,
             CapabilityProtocol.TaskServerConnectivity,

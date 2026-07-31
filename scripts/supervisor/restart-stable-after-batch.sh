@@ -12,15 +12,15 @@
 # wraps this in a sleep-tick loop. Same convention as run-system-review.sh.
 #
 # Decision rules (single tick):
-#   1. If no baseline snapshot exists yet, take one and exit. The next tick
-#      starts counting from "what is in 4-review right now".
-#   2. Compute new-jobs-in-4-review = (jobs in 4-review now) \ (jobs in the
-#      snapshot). If that count is < threshold, exit.
-#   3. Probe stable's /api/runner/status. If unreachable, exit (try later).
-#   4. If any project reports a non-null activeJobId, exit (busy).
-#   5. Otherwise: capture HEAD, run update-stable.sh, capture HEAD again,
-#      append a structured line to <workspace>/logs/stable-restarts.jsonl,
-#      and refresh the snapshot.
+#   1. In review-batch mode (the default), compare 4-review with the last
+#      snapshot and continue only after the configured arrival threshold.
+#   2. In main-advance mode, compare the stable checkout HEAD with remote main
+#      and continue only when main has moved. This is the deploy-cron handoff
+#      for a completed develop -> main promotion.
+#   3. Probe stable's /api/runner/status. If unreachable, exit and try later.
+#   4. If any project reports a non-null activeJobId, exit because it is busy.
+#   5. Otherwise: drain the merge gate, call update-stable.sh, verify the new
+#      checkout, append a structured log line, and resume the runner.
 #
 # Read-only contract with the runner: the runner is the single state-machine
 # authority over its own job state (ADR-0017). This script never pokes
@@ -33,6 +33,9 @@
 #   ATP_STABLE_CHECKOUT      stable repo (default: <devspace>/agent-taskboard-stable)
 #   ATP_STABLE_API           stable API base URL (default: http://127.0.0.1:5031)
 #   ATP_RESTART_THRESHOLD    new-job count that triggers a restart (default: 3)
+#   ATP_RESTART_TRIGGER      review-batch (default) or main-advance
+#   ATP_DEPLOY_REMOTE        stable checkout remote watched by main-advance
+#                            (default: origin)
 #   ATP_UPDATE_SCRIPT        update script path (default: <devspace>/update-stable.sh)
 #   ATP_GATE_DRAIN_TIMEOUT_SECONDS
 #                            max wait for an active merge gate (default: 120)
@@ -62,6 +65,8 @@ PROJECT="${ATP_PROJECT:-agent-taskboard}"
 STABLE="${ATP_STABLE_CHECKOUT:-$DEVSPACE_DIR/agent-taskboard-stable}"
 STABLE_API="${ATP_STABLE_API:-http://127.0.0.1:5031}"
 THRESHOLD="${ATP_RESTART_THRESHOLD:-3}"
+TRIGGER="${ATP_RESTART_TRIGGER:-review-batch}"
+DEPLOY_REMOTE="${ATP_DEPLOY_REMOTE:-origin}"
 UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$DEVSPACE_DIR/update-stable.sh}"
 GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
 GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
@@ -152,6 +157,15 @@ stable_head() {
   git -C "$STABLE" rev-parse --short HEAD 2>/dev/null || printf 'unknown'
 }
 
+stable_full_head() {
+  git -C "$STABLE" rev-parse HEAD 2>/dev/null || printf 'unknown'
+}
+
+remote_main_head() {
+  git -C "$STABLE" ls-remote --exit-code "$DEPLOY_REMOTE" refs/heads/main 2>/dev/null \
+    | awk 'NR == 1 { print $1 }'
+}
+
 # JSON string escaping for fields that can carry path-like values.
 # We only emit ASCII fields so a minimal escape (backslash, quote) suffices.
 json_escape() {
@@ -168,6 +182,13 @@ if [ ! -d "$STABLE" ]; then
   log "ERROR: stable checkout missing: $STABLE"
   exit 2
 fi
+case "$TRIGGER" in
+  review-batch|main-advance) ;;
+  *)
+    log "ERROR: ATP_RESTART_TRIGGER must be review-batch or main-advance, got: $TRIGGER"
+    exit 2
+    ;;
+esac
 case "$GATE_DRAIN_TIMEOUT:$GATE_DRAIN_POLL" in
   *[!0-9:]*|:*|*:)
     log "ERROR: gate drain timeout and poll interval must be non-negative integer seconds"
@@ -181,38 +202,58 @@ fi
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 
-# Bootstrap the snapshot on first run; do NOT restart on the bootstrap tick.
-if [ ! -r "$SNAPSHOT" ]; then
-  list_review_now > "$SNAPSHOT"
-  baseline_n="$(count_lines < "$SNAPSHOT")"
-  log "bootstrap: snapshot taken at $baseline_n jobs in $LANE_DIR — no restart"
-  exit 0
+target_main=""
+new_count=0
+if [ "$TRIGGER" = "review-batch" ]; then
+  # Bootstrap the snapshot on first run; do NOT restart on the bootstrap tick.
+  if [ ! -r "$SNAPSHOT" ]; then
+    list_review_now > "$SNAPSHOT"
+    baseline_n="$(count_lines < "$SNAPSHOT")"
+    log "bootstrap: snapshot taken at $baseline_n jobs in $LANE_DIR; no restart"
+    exit 0
+  fi
+
+  # Compute new arrivals since the snapshot.
+  NEW_TMP="$(mktemp 2>/dev/null || mktemp -t restart-watcher)"
+  trap 'rm -f "$NEW_TMP"' EXIT
+  list_review_now | comm -23 - "$SNAPSHOT" > "$NEW_TMP"
+  new_count="$(count_lines < "$NEW_TMP")"
+
+  if [ "$new_count" -lt "$THRESHOLD" ]; then
+    log "new=$new_count (< $THRESHOLD), no restart"
+    exit 0
+  fi
+  trigger_reason="new=$new_count >= $THRESHOLD"
+else
+  set +e
+  target_main="$(remote_main_head)"
+  remote_rc=$?
+  set -e
+  if [ "$remote_rc" -ne 0 ] || [ -z "$target_main" ]; then
+    log "remote main is unavailable from $DEPLOY_REMOTE; skipping this cron tick"
+    exit 0
+  fi
+  deployed_head="$(stable_full_head)"
+  if [ "$deployed_head" = "$target_main" ]; then
+    log "stable already matches $DEPLOY_REMOTE/main at $target_main; no deploy"
+    exit 0
+  fi
+  trigger_reason="stable=$deployed_head target-main=$target_main"
 fi
 
-# Compute new arrivals since the snapshot.
-NEW_TMP="$(mktemp 2>/dev/null || mktemp -t restart-watcher)"
-trap 'rm -f "$NEW_TMP"' EXIT
-list_review_now | comm -23 - "$SNAPSHOT" > "$NEW_TMP"
-new_count="$(count_lines < "$NEW_TMP")"
-
-if [ "$new_count" -lt "$THRESHOLD" ]; then
-  log "new=$new_count (< $THRESHOLD), no restart"
-  exit 0
-fi
-
-# At threshold or above. Now check stable's runner state.
+# A trigger is pending. Now check stable's runner state.
 set +e
 stable_active_state
 state=$?
 set -e
 case "$state" in
-  0) log "new=$new_count >= $THRESHOLD but stable has an active job — skipping"; exit 0 ;;
-  2) log "new=$new_count >= $THRESHOLD but stable API unreachable at $STABLE_API — skipping"; exit 0 ;;
+  0) log "$trigger_reason but stable has an active job; skipping"; exit 0 ;;
+  2) log "$trigger_reason but stable API is unreachable at $STABLE_API; skipping"; exit 0 ;;
 esac
 
 wait_for_merge_gate
 
-log "new=$new_count >= $THRESHOLD and stable is idle — calling $UPDATE_SCRIPT"
+log "$trigger_reason and stable is idle; calling $UPDATE_SCRIPT"
 
 ts="$(iso_now)"
 before="$(stable_head)"
@@ -246,24 +287,41 @@ if [ "$update_rc" -eq 0 ]; then
       log "resume-runner.sh failed (rc=$resume_rc); stable runner may still be paused"
     fi
   fi
+  if [ "$TRIGGER" = "main-advance" ]; then
+    set +e
+    current_remote_main="$(remote_main_head)"
+    current_remote_rc=$?
+    set -e
+    deployed_after="$(stable_full_head)"
+    if [ "$current_remote_rc" -ne 0 ] || [ -z "$current_remote_main" ]; then
+      status="remote-verify-failed"
+      log "updated stable, but remote main could not be verified"
+    elif [ "$deployed_after" != "$current_remote_main" ]; then
+      status="behind-main-after-update"
+      log "updated stable to $deployed_after, but $DEPLOY_REMOTE/main is $current_remote_main; a later cron tick will retry"
+    fi
+  fi
 else
   status="failed"
   log "update-stable.sh exited with code $update_rc"
 fi
 
-# Refresh the snapshot regardless of update outcome: we don't want a broken
-# update to make us re-trigger every tick. The user will see status=failed
-# in the JSONL log and intervene.
-list_review_now > "$SNAPSHOT"
-review_after="$(count_lines < "$SNAPSHOT")"
+# Review-batch mode refreshes its arrival snapshot regardless of outcome. The
+# main-advance mode deliberately keeps retrying while stable differs from main.
+if [ "$TRIGGER" = "review-batch" ]; then
+  list_review_now > "$SNAPSHOT"
+fi
+review_after="$(list_review_now | count_lines)"
 
 ts_e="$(json_escape "$ts")"
 before_e="$(json_escape "$before")"
 after_e="$(json_escape "$after")"
 status_e="$(json_escape "$status")"
+trigger_e="$(json_escape "$TRIGGER")"
+target_main_e="$(json_escape "$target_main")"
 
-printf '{"ts":"%s","event":"restart","status":"%s","jobsSinceLastRestart":%s,"headBefore":"%s","headAfter":"%s","durationSeconds":%s,"reviewCountAfter":%s}\n' \
-  "$ts_e" "$status_e" "$new_count" "$before_e" "$after_e" "$duration" "$review_after" \
+printf '{"ts":"%s","event":"restart","trigger":"%s","status":"%s","jobsSinceLastRestart":%s,"targetMain":"%s","headBefore":"%s","headAfter":"%s","durationSeconds":%s,"reviewCountAfter":%s}\n' \
+  "$ts_e" "$trigger_e" "$status_e" "$new_count" "$target_main_e" "$before_e" "$after_e" "$duration" "$review_after" \
   >> "$JSONL"
 
-log "logged restart: status=$status duration=${duration}s before=$before after=$after"
+log "logged restart: trigger=$TRIGGER status=$status duration=${duration}s before=$before after=$after"
