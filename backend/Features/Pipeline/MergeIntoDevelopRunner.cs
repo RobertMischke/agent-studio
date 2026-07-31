@@ -26,6 +26,21 @@ namespace AgentStudio.Pipeline;
 /// </summary>
 public sealed class MergeIntoDevelopRunner
 {
+    private sealed record AcceptedDelivery(
+        DeliveryRefResolution Resolution,
+        string IntegrationBranch,
+        string IntegrationStrategy)
+    {
+        public string SourceRef => Resolution.Ref;
+        public string? ExpectedResultSha => Resolution.ExpectedResultSha;
+        public bool IsRemote => Resolution.IsRemote;
+    }
+
+    private sealed record IntegrationExecution(
+        MergeIntoIntegrationResult Result,
+        BuildTestGateResult? PreMainResult = null,
+        BuildTestGateResult? PreDevelopResult = null);
+
     private readonly GitService _git;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<MergeIntoDevelopRunner> _logger;
@@ -174,90 +189,47 @@ public sealed class MergeIntoDevelopRunner
                 return unresolved;
             }
 
-            var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
-            var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
-            var branch = reviewSubject is not null
-                ? TaskIntegrationBranch.Name(
-                    reviewSubject.IntegrationBranch,
-                    TaskIntegrationBranch.Name(integrationBranch))
-                : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
-            var taskBranch = delivery.Ref;
-            var strategy = IntegrationStrategies.Normalize(integrationStrategy);
-            BuildTestGateResult? preMainResult = null;
-            BuildTestGateResult? preDevelopResult = null;
-            MergeIntoIntegrationResult result;
-            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch);
-            if (!synchronized.Success)
-            {
-                result = MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: synchronized.Error);
-            }
-            else if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.Ordinal))
-            {
-                result = MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.PushedForReview,
-                    error: $"Delivery '{taskBranch}' remains outside {branch} because the project uses the pull-request integration strategy.");
-            }
-            else if (IsReleaseBranch(branch))
-            {
-                (result, preMainResult) = await MergeIntoMainAsync(
-                    project,
-                    jobId,
-                    jobFolderPath,
-                    repoRoot,
-                    delivery,
-                    branch,
-                    ct).ConfigureAwait(false);
-            }
-            else if (delivery.IsRemote)
-            {
-                (result, preDevelopResult) = await MergeIntoIntegrationGatedAsync(
-                    project,
-                    jobId,
-                    jobFolderPath,
-                    repoRoot,
-                    branch,
-                    () => _git.MergeRemoteDeliveryIntoIntegration(
-                        repoRoot,
-                        delivery.Ref,
-                        delivery.ExpectedResultSha ?? string.Empty,
-                        branch)).ConfigureAwait(false);
-            }
-            else
-            {
-                (result, preDevelopResult) = await MergeIntoIntegrationGatedAsync(
-                    project,
-                    jobId,
-                    jobFolderPath,
-                    repoRoot,
-                    branch,
-                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch)).ConfigureAwait(false);
-            }
+            var delivery = ResolveAcceptedDelivery(
+                repoRoot,
+                jobId,
+                jobFolderPath,
+                integrationBranch,
+                integrationStrategy);
+            var execution = await ExecuteIntegrationAsync(
+                project,
+                jobId,
+                jobFolderPath,
+                repoRoot,
+                delivery,
+                ct).ConfigureAwait(false);
+            var result = execution.Result;
             _logger.LogInformation(
                 "merge-into-develop project={Project} job={JobId} delivery={Delivery} integration={Integration} strategy={Strategy} outcome={Outcome}",
-                project, jobId, taskBranch, branch, strategy, result.Outcome);
-            Record(jobFolderPath, project, jobId, branch, result, preMainResult, preDevelopResult, startedAt);
-
-            // AGT-1999: once the accepted task is folded into the integration
-            // branch, push that branch to origin so integration is never only
-            // local. Offloaded to the background worker (the same "not on the
-            // request path" strategy as the completed-job workspace push), so the
-            // accept transition never awaits the network round-trip.
-            if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
-            {
-                // Pin the object the push may publish: the merge result this card's
-                // gate released, or - for AlreadyMerged, where this run produced no
-                // commit - the branch tip as it stands at release time. Reading it
-                // here and not in the worker is what closes the gate window: by the
-                // time the queued push runs, the tip may already carry a merge no
-                // gate has approved yet.
-                var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
-                    ? result.MergedSha
-                    : _git.GetBranchTip(repoRoot, branch);
-                MaybeEnqueueIntegrationPush(
-                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha, pipelineType);
-            }
+                project,
+                jobId,
+                delivery.SourceRef,
+                delivery.IntegrationBranch,
+                delivery.IntegrationStrategy,
+                result.Outcome);
+            Record(
+                jobFolderPath,
+                project,
+                jobId,
+                delivery.IntegrationBranch,
+                result,
+                execution.PreMainResult,
+                execution.PreDevelopResult,
+                startedAt);
+            MaybeEnqueueSuccessfulIntegration(
+                project,
+                jobId,
+                jobFolderPath,
+                watchPath,
+                repoRoot,
+                integrationBranch,
+                delivery,
+                result,
+                pipelineType);
 
             return result;
         }
@@ -283,6 +255,121 @@ public sealed class MergeIntoDevelopRunner
             }
             return errored;
         }
+    }
+
+    private AcceptedDelivery ResolveAcceptedDelivery(
+        string repoRoot,
+        string jobId,
+        string jobFolderPath,
+        string integrationBranch,
+        string integrationStrategy)
+    {
+        var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+        var resolvedBranch = reviewSubject is not null
+            ? TaskIntegrationBranch.Name(
+                reviewSubject.IntegrationBranch,
+                TaskIntegrationBranch.Name(integrationBranch))
+            : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
+        return new AcceptedDelivery(
+            DeliveryRefResolver.Resolve(jobId, jobFolderPath),
+            resolvedBranch,
+            IntegrationStrategies.Normalize(integrationStrategy));
+    }
+
+    private async Task<IntegrationExecution> ExecuteIntegrationAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string repoRoot,
+        AcceptedDelivery delivery,
+        CancellationToken ct)
+    {
+        var synchronized = _git.SynchronizeIntegrationBranch(
+            repoRoot,
+            delivery.IntegrationBranch);
+        if (!synchronized.Success)
+        {
+            return new IntegrationExecution(MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: synchronized.Error));
+        }
+
+        if (string.Equals(
+                delivery.IntegrationStrategy,
+                IntegrationStrategies.PullRequest,
+                StringComparison.Ordinal))
+        {
+            return new IntegrationExecution(MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.PushedForReview,
+                error:
+                    $"Delivery '{delivery.SourceRef}' remains outside {delivery.IntegrationBranch} "
+                    + "because the project uses the pull-request integration strategy."));
+        }
+
+        if (IsReleaseBranch(delivery.IntegrationBranch))
+        {
+            var (merge, gate) = await MergeIntoMainAsync(
+                project,
+                jobId,
+                jobFolderPath,
+                repoRoot,
+                delivery.Resolution,
+                delivery.IntegrationBranch,
+                ct).ConfigureAwait(false);
+            return new IntegrationExecution(merge, PreMainResult: gate);
+        }
+
+        var (result, preDevelopResult) = await MergeIntoIntegrationGatedAsync(
+            project,
+            jobId,
+            jobFolderPath,
+            repoRoot,
+            delivery.IntegrationBranch,
+            delivery.IsRemote
+                ? () => _git.MergeRemoteDeliveryIntoIntegration(
+                    repoRoot,
+                    delivery.SourceRef,
+                    delivery.ExpectedResultSha ?? string.Empty,
+                    delivery.IntegrationBranch)
+                : () => _git.MergeBranchIntoIntegration(
+                    repoRoot,
+                    delivery.SourceRef,
+                    delivery.IntegrationBranch)).ConfigureAwait(false);
+        return new IntegrationExecution(result, PreDevelopResult: preDevelopResult);
+    }
+
+    private void MaybeEnqueueSuccessfulIntegration(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string? watchPath,
+        string repoRoot,
+        string requestedIntegrationBranch,
+        AcceptedDelivery delivery,
+        MergeIntoIntegrationResult result,
+        string pipelineType)
+    {
+        if (result.Outcome is not (
+                MergeIntoIntegrationOutcome.Merged
+                or MergeIntoIntegrationOutcome.AlreadyMerged))
+        {
+            return;
+        }
+
+        // Pin the object the push may publish: the merge result this card's gate
+        // released, or the target tip when no commit was created. Keep the
+        // historical requested-branch hand-off unchanged in this refactor.
+        var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
+            ? result.MergedSha
+            : _git.GetBranchTip(repoRoot, delivery.IntegrationBranch);
+        MaybeEnqueueIntegrationPush(
+            project,
+            jobId,
+            jobFolderPath,
+            watchPath,
+            requestedIntegrationBranch,
+            approvedSha,
+            pipelineType);
     }
 
     /// <summary>
