@@ -103,7 +103,9 @@
           [markdown]="d.detailMarkdown"
           [jobId]="detail().info.id"
           [watchPath]="detail().info.watchPath"
-          (openSource)="onOpenSource($event)" />
+          (openSource)="onOpenSource($event)"
+          (openWiki)="openWiki.emit($event)"
+          (openTask)="openTask.emit($event)" />
       </section>
     }
   </article>

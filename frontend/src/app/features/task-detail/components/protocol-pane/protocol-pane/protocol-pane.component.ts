@@ -75,6 +75,8 @@ import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.c
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
+import { TaskReferenceNavigationService } from '../../../../../services/task-reference-navigation.service';
+import { StudioTabStateService } from '../../../../studio-shell/services/studio-tab-state.service';
 export type InspectorTab = 'task' | 'activity' | 'protocol';
 
 /**
@@ -177,6 +179,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layout = inject(LayoutPanesService);
+  private readonly taskReferenceNavigation = inject(TaskReferenceNavigationService);
+  private readonly tabs = inject(StudioTabStateService);
 
   @ViewChild('runsPortalRoot')
   private runsPortalRoot?: ElementRef<HTMLDivElement>;
@@ -322,6 +326,23 @@ export class ProtocolPaneComponent implements OnDestroy {
   openSource(ref: { path: string; line: number | null }): void {
     if (!ref?.path) return;
     this.sourceViewerRequest.set({ path: ref.path, line: ref.line });
+  }
+
+  openWiki(path: string): void {
+    const projectName = this.detail().info.projectName;
+    if (!projectName || !path) return;
+    try {
+      const key = `atp.projectWiki.v1.${projectName}`;
+      const current = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...current, openedRel: path, viewerTab: 'doc' }));
+    } catch {
+      // The Wiki itself remains navigable when browser storage is unavailable.
+    }
+    this.tabs.open({ kind: 'hub', projectName, section: 'wiki' });
+  }
+
+  openTask(taskKey: string): void {
+    this.taskReferenceNavigation.openTaskKey(taskKey);
   }
 
   closeSourceViewer(): void {

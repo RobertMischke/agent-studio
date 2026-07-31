@@ -52,6 +52,12 @@ describe('projectStructuredActivityContent', () => {
       kind: 'system.status',
       category: 'result',
       label: 'Task complete',
+      explanation: 'Outcome ExplicitAgentDone · Exit 0',
+      rawRange: { source: 'AGT-2355', start: 16, end: 19 },
+    }));
+    expect(result.events).not.toContainEqual(expect.objectContaining({
+      kind: 'system.status',
+      label: 'Runner finished',
     }));
     expect(result.projectionLines).toEqual([]);
   });
@@ -61,11 +67,10 @@ describe('projectStructuredActivityContent', () => {
     const runner = result.events.filter((event): event is SystemStatusEvent =>
       event.kind === 'system.status' && event.category === 'runner');
 
-    expect(runner).toHaveLength(3);
+    expect(runner).toHaveLength(2);
     expect(runner.map((event) => event.label)).toEqual([
       'Runner ready',
       'Runner started',
-      'Runner finished',
     ]);
     expect(JSON.stringify(runner)).not.toContain('[runner]');
     expect(JSON.stringify(result.events)).not.toContain('[runner-log-delivery:');
@@ -142,6 +147,31 @@ describe('projectStructuredActivityContent', () => {
     expect(result.events).toContainEqual(expect.objectContaining({
       kind: 'message.taskAgent',
       body: 'Ready for review.',
+    }));
+  });
+
+  it('does not merge an older sentinel when the final agent block has no terminal outcome', () => {
+    const lines = fixture();
+    lines.splice(lines.length - 1, 0,
+      { timestamp: '2026-07-28T10:40:18.000Z', stream: 'stderr', text: 'codex' },
+      { timestamp: '2026-07-28T10:40:19.000Z', stream: 'stderr', text: 'One more note.' },
+    );
+    lines[lines.length - 1] = {
+      timestamp: '2026-07-28T10:40:20.000Z',
+      stream: 'system',
+      text: '[runner] CLI exited 0; typedOutcome=CleanExitWithoutExplicitOutcome',
+    };
+
+    const result = projectStructuredActivityContent(lines, 'AGT-2355');
+    expect(result.events).toContainEqual(expect.objectContaining({
+      kind: 'system.status',
+      category: 'result',
+      label: 'Task complete',
+    }));
+    expect(result.events).toContainEqual(expect.objectContaining({
+      kind: 'system.status',
+      category: 'runner',
+      label: 'Runner finished',
     }));
   });
 });

@@ -127,6 +127,20 @@ describe('renderResultsHtml', () => {
     expect(html).toMatch(/rel="noopener noreferrer"/);
   });
 
+  it('routes docs, task keys, and HTML reports to typed in-app controls', () => {
+    const md = [
+      '[convention](docs/quality/angular-components.md)',
+      '[report](results/report.html)',
+      '[card](#/tasks/AGT-2437)',
+    ].join('\n\n');
+    const { html } = renderResultsHtml(md, CTX);
+
+    expect(html).toContain('data-results-wiki="quality/angular-components.md"');
+    expect(html).toContain('data-results-source="results/report.html"');
+    expect(html).toContain('data-results-task-key="AGT-2437"');
+    expect(html).not.toContain('target="_blank"');
+  });
+
   it('lifts the sentinel marker out of the body even when surrounded by text', () => {
     const { html, banner } = renderResultsHtml('Finished.\n\n[[TASK_DONE]]', CTX);
     expect(banner?.kind).toBe('done');
