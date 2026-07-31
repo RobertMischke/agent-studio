@@ -880,6 +880,82 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             IntegrationStatuses.IsPendingTag);
     }
 
+    [Fact]
+    public async Task AcceptanceMerge_LandedBeforeGateVerdict_BackstopWaitsForExactGateBeforePassingOrPush()
+    {
+        var deliverySha = PublishDelivery("merge-gate-restart.txt", "merge survived before gate verdict\n");
+        var gate = new BlockingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "recovery gate passed",
+            true,
+            false));
+        var pushQueue = new IntegrationPushQueue();
+        var deps = Build(deliverySha, gateRunner: gate, pushQueue: pushQueue);
+
+        // Simulate a hard process death after the merge commit exists but before
+        // the exact-SHA gate verdict, pipeline step, and push request are durable.
+        var moved = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        var localDevelop = Git(_repo, "rev-parse", "develop").Out.Trim();
+        var remoteBefore = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        Assert.NotEqual(localDevelop, remoteBefore);
+
+        var mergeBackstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Pipeline,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
+        var recovery = Task.Run(() => mergeBackstop.RunOnce());
+
+        await gate.Entered.WaitAsync(AsyncTestDeadline);
+        Assert.NotNull(gate.Request);
+        Assert.Equal(localDevelop, gate.Request!.ExpectedSha);
+
+        var pending = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(pending);
+        Assert.Contains(pending!.Tags, IntegrationStatuses.IsPendingTag);
+        var pendingMerge = deps.Pipeline.Read(pending.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(pendingMerge);
+        Assert.Equal(PipelineStepStatus.Pending, pendingMerge!.Status);
+        Assert.False(pushQueue.Reader.TryRead(out _));
+
+        var pushBackstop = new IntegrationPushBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Pipeline,
+            deps.Merge,
+            deps.Configuration,
+            NullLogger<IntegrationPushBackstopHostedService>.Instance);
+        Assert.Equal(0, await pushBackstop.RunOnceAsync());
+        Assert.Equal(remoteBefore, Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim());
+
+        gate.Release();
+        Assert.Equal(1, await recovery.WaitAsync(AsyncTestDeadline));
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        var passedMerge = deps.Pipeline.Read(completed!.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(passedMerge);
+        Assert.Equal(PipelineStepStatus.Passed, passedMerge!.Status);
+        Assert.Equal("already-merged", passedMerge.Verdict);
+        Assert.True(pushQueue.Reader.TryRead(out var pushRequest));
+        Assert.Equal(localDevelop, pushRequest!.ApprovedSha);
+
+        Assert.Equal(1, await pushBackstop.RunOnceAsync());
+        Assert.Equal(localDevelop, Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim());
+    }
+
     private string PublishDelivery(string relativePath, string content)
     {
         RunGit(_repo, "checkout", "-q", "-b", DeliveryRef, "origin/develop");
@@ -912,7 +988,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         string integrationStrategy = IntegrationStrategies.DirectMerge,
         bool backgroundIntegration = false,
         IBuildTestGateRunner? gateRunner = null,
-        bool writeReviewSubject = true)
+        bool writeReviewSubject = true,
+        IntegrationPushQueue? pushQueue = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -945,6 +1022,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             git,
             pipeline,
             NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: pushQueue,
             projectSettings: settings,
             preDevelopBuildGate: gateRunner == null ? null : new PreDevelopBuildGate(gateRunner),
             preDevelopTimeout: TimeSpan.FromSeconds(30));
@@ -1101,6 +1179,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
         public Task Entered => _entered.Task;
 
+        public BuildTestGateRequest? Request { get; private set; }
+
         public void Release() => _released.TrySetResult();
 
         public async Task<BuildTestGateResult> RunAsync(
@@ -1111,6 +1191,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             TimeSpan timeout,
             CancellationToken ct)
         {
+            Request = request;
             _entered.TrySetResult();
             await _released.Task.WaitAsync(ct);
             return result with

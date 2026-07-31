@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-07-31
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -108,6 +108,15 @@ pipeline view.
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
+  An `AlreadyMerged` replay is not gate evidence. When the pre-develop build
+  gate applies, recovery requires a durable
+  `post-steps/pre-develop-build-gate-N.log` receipt whose expected and tested
+  SHA both equal the exact integration tip being released. A missing, partial,
+  or SHA-mismatched receipt reruns the gate against that tip. Until the gate
+  returns green, the merge step stays pending and no push request is released;
+  a red recovery gate records `GateFailed` and leaves the existing branch graph
+  unchanged for manual repair. This closes the BP-02 merge-commit-before-gate
+  crash window without treating Git ancestry as a verdict.
 - `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
   read model fed by the SSH gate start/completion events. The Execution Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
