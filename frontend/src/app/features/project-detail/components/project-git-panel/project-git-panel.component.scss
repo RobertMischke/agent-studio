@@ -106,13 +106,15 @@
 
   &__history {
     position: relative;
+    align-self: start;
     min-width: 0;
     min-height: 0;
+    max-height: 100%;
   }
 
   &__history > app-project-git-history {
     display: block;
-    height: 100%;
+    max-height: 100%;
   }
 
   &__history-error {

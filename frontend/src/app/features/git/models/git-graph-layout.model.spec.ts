@@ -29,7 +29,13 @@ describe('buildGitGraphRows', () => {
     ]);
 
     expect(rows.map(row => row.lane)).toEqual([0, 0, 0]);
-    expect(rows[0].segments[0]).toMatchObject({ x1: 8, x2: 8 });
+    expect(rows[0].segments).toContainEqual(expect.objectContaining({
+      kind: 'parent',
+      lane: 0,
+      x1: 10,
+      x2: 10,
+    }));
+    expect(rows.every(row => row.nodeY === row.height / 2)).toBe(true);
   });
 
   it('opens a second lane for a merge parent and rejoins it by SHA', () => {
@@ -40,9 +46,20 @@ describe('buildGitGraphRows', () => {
       commit('base', []),
     ]);
 
-    expect(rows[0].segments).toHaveLength(2);
+    expect(rows[0].segments.filter(segment => segment.kind === 'merge')).toHaveLength(1);
+    expect(rows[0].segments.find(segment => segment.kind === 'merge')).toMatchObject({
+      lane: 1,
+      x1: 10,
+      x2: 26,
+    });
     expect(rows[2].lane).toBe(1);
     expect(rows[3].lane).toBe(0);
-    expect(rows.some(row => row.width > 16)).toBe(true);
+    expect(rows.some(row => row.width > 20)).toBe(true);
+    expect(rows[2].segments).toContainEqual(expect.objectContaining({
+      kind: 'parent',
+      lane: 0,
+      x1: 26,
+      x2: 10,
+    }));
   });
 });

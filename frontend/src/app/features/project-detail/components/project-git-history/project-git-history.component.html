@@ -4,7 +4,6 @@
       <h2>Commit graph</h2>
       <p>Branches, cards, runtime markers, and calculated commit presence.</p>
     </div>
-    <span class="history__readonly">Read only</span>
   </header>
 
   <div class="history__list" role="list">
@@ -13,15 +12,18 @@
                [class.history__row--selected]="selectedSha() === row.commit.sha"
                [attr.aria-current]="selectedSha() === row.commit.sha ? 'true' : null"
                data-testid="git-commit-row" [attr.data-sha]="row.commit.sha">
-        <svg class="history__graph" aria-hidden="true" data-testid="git-graph-lanes"
-             [attr.viewBox]="'0 0 ' + row.width + ' 36'"
-             [style.width.px]="row.width">
-          @for (segment of row.segments; track segment.id) {
-            <line [attr.x1]="segment.x1" [attr.y1]="segment.y1"
-                  [attr.x2]="segment.x2" [attr.y2]="segment.y2"></line>
-          }
-          <circle data-testid="git-graph-node" [attr.cx]="row.nodeX" cy="18" r="4"></circle>
-        </svg>
+        <span class="history__graph" aria-hidden="true" data-testid="git-graph-lanes"
+              [style.width.px]="row.width" [style.min-height.px]="row.height">
+          <svg [attr.viewBox]="'0 0 ' + row.width + ' ' + row.height" preserveAspectRatio="none">
+            @for (segment of row.segments; track segment.id) {
+              <path class="history__segment" data-testid="git-graph-segment"
+                    [attr.data-kind]="segment.kind" [attr.data-lane]="segment.lane % 4"
+                    [attr.d]="segment.path"></path>
+            }
+          </svg>
+          <i class="history__node" data-testid="git-graph-node"
+             [attr.data-lane]="row.lane % 4" [style.left.px]="row.nodeX"></i>
+        </span>
 
         <button type="button" class="history__summary" (click)="commitSelected.emit(row.commit)">
           <span class="history__subject">{{ row.commit.subject }}</span>
