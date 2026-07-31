@@ -53,7 +53,7 @@ const INVENTORY = {
         authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev',
         subject: 'feat: add the widget rendering pipeline', filesChanged: 3, added: 42, removed: 8,
         refs: [{ name: 'develop', kind: 'branch', isRemote: false }, { name: 'origin/develop', kind: 'branch', isRemote: true }],
-        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '5-human-review' }],
+        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '3-progress' }],
         presence: { inIntegration: true, inRelease: false, integrationBranch: 'develop', releaseBranch: 'main' },
         deployments: [{ target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' }],
       },
@@ -327,6 +327,15 @@ test.describe('AGT-2011 · Git-View layout shots (mocked)', () => {
       await expect(page.getByTestId('git-changes')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('git-file-row').first()).toBeVisible();
       await expect(page.getByTestId('git-diff')).toBeVisible({ timeout: 15_000 });
+      const firstCommit = page.getByTestId('git-commit-row').first();
+      await expect(firstCommit).toContainText('Integrated · develop');
+      await expect(firstCommit).toContainText('Deployed · runner');
+      await expect(firstCommit).toContainText('AGT-1');
+      await expect(firstCommit).toContainText('In progress');
+      await expect(firstCommit).toContainText('Remote');
+      await expect(firstCommit).not.toContainText('origin/develop');
+      await page.getByTestId('git-chip-legend-toggle').click();
+      await expect(page.getByTestId('git-chip-legend-popover')).toBeVisible();
       await dismissErrorDialog(page);
       await page.waitForTimeout(150);
 
