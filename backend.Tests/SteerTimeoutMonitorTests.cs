@@ -121,6 +121,31 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
     }
 
     [Fact]
+    public async Task AutoAnswer_SettledEnvelope_RecoversToReview_WithoutPendingContinuation()
+    {
+        const string slug = "settled-steer";
+        WriteSteerPending(slug, question: "Is this already implemented?", waitedHours: 5);
+
+        var (monitor, scanner) = Build(configureAuthority: (authority, taskScanner) =>
+            SettleCompletedRun(authority, ResolveTaskKey(taskScanner, slug)));
+        scanner.InvalidateCache();
+        var outcome = Assert.Single(await monitor.SweepAsync());
+
+        Assert.Equal(SteerTimeoutOutcomeKinds.SettledRunRecovered, outcome.Kind);
+        Assert.Equal("settled-run-authority", outcome.ReasonCode);
+        Assert.Equal(TaskStates.AutoReview, outcome.TargetState);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        var recovered = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Assert.True(Directory.Exists(recovered));
+        Assert.False(File.Exists(Path.Combine(recovered, "pending-intent.json")));
+        Assert.False(File.Exists(Path.Combine(recovered, "pending-intent.consumed.json")));
+        Assert.False(SteerPendingMarker.Exists(recovered));
+        var audit = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "steer-timeout.jsonl"));
+        Assert.Contains("\"kind\":\"settled-run-recovered\"", audit);
+        Assert.DoesNotContain("\"kind\":\"auto-answered\"", audit);
+    }
+
+    [Fact]
     public async Task SteerPendingPhaseWithoutMarker_IsStillBounded()
     {
         // AGT-2087: the UI showed "waiting for answer" for 155 minutes, but
@@ -297,7 +322,9 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
                 : SteerResolveResult.Ambiguous("the follow-up is a design decision not derivable from the task context");
     }
 
-    private (SteerTimeoutMonitor Monitor, TaskScannerService Scanner) Build(bool enabled = true)
+    private (SteerTimeoutMonitor Monitor, TaskScannerService Scanner) Build(
+        bool enabled = true,
+        Action<AttemptAuthorityService, TaskScannerService>? configureAuthority = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -317,7 +344,16 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
+        var authority = new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance);
+        configureAuthority?.Invoke(authority, scanner);
+        var transitions = new TaskTransitionService(
+            scanner,
+            states,
+            mutations,
+            git,
+            settings,
+            NullLogger<TaskTransitionService>.Instance,
+            attemptAuthority: authority);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
@@ -342,6 +378,49 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
             }
         };
         return (monitor, scanner);
+    }
+
+    private static void SettleCompletedRun(AttemptAuthorityService authority, string taskKey)
+    {
+        const string resultSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var acquired = authority.AcquireRun(
+            taskKey,
+            "demo-repository",
+            sourceAttemptId: null,
+            executorId: "runner-a",
+            hostId: "host-a",
+            requestedTtlSeconds: 120,
+            idempotencyKey: $"claim:{taskKey}").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "demo-repository",
+            acquired.AttemptId,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            resultSha,
+            $"refs/agent-studio/results/{taskKey}/{acquired.AttemptId}",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        var settled = authority.SettleRun(
+            new AttemptWriteReference(
+                acquired.AttemptId,
+                acquired.LastFence,
+                acquired.AuthorityEpoch,
+                $"completion:{taskKey}"),
+            "done",
+            resultSha,
+            reason: null,
+            resultEnvelope: envelope,
+            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+    }
+
+    private string ResolveTaskKey(TaskScannerService scanner, string slug)
+    {
+        var task = Assert.IsType<TaskInfo>(scanner.FindJob(slug, _watchPath));
+        return !string.IsNullOrWhiteSpace(task.Key)
+            ? task.Key
+            : !string.IsNullOrWhiteSpace(task.TaskKey)
+                ? task.TaskKey
+                : task.Id;
     }
 
     // (auto-mode status is forced in Build via StatusProviderOverride)

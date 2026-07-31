@@ -233,7 +233,8 @@ public sealed class RunLivenessMonitor
 
         var actionable = outcomes.Count(o =>
             o.Kind is RunLivenessOutcomeKinds.DemotedProcessLost
-                   or RunLivenessOutcomeKinds.RetriggeredPostProcessing);
+                   or RunLivenessOutcomeKinds.RetriggeredPostProcessing
+                   or RunLivenessOutcomeKinds.SettledRunRecovered);
         if (actionable > 0 || isBoot)
         {
             _logger.LogInformation(
@@ -266,35 +267,51 @@ public sealed class RunLivenessMonitor
     {
         var jobId = TryReadJobId(c.JobFolder) ?? c.Slug;
 
-        // Break the launch-fail chain FIRST: null sessionName and tombstone the
-        // sessionChain so the retry starts a fresh session instead of resuming a
-        // session that died with the lost process ("No conversation found" /
-        // "no rollout found"). Both writes are needed - clearing sessionName
-        // alone lets RunPlanner re-derive the id from the chain tail.
-        _sessions.SetJobSessionName(jobId, null, entry.Path);
-        _sessions.MarkSessionChainRecovery(jobId, entry.Path);
-
-        // Best-effort: drop the dead owner's stale pickup lock so it does not
-        // ride into 2-ready. A live foreign lock would have made this card
-        // Healthy, so anything here is reclaimable.
-        _pickupLock.ClearIfStale(c.JobFolder);
-
-        // One compact recovery line travels with the folder so the demotion is
-        // never silent. "session new" reflects the cleared resume pointer. The
-        // worktree is deliberately NOT torn down: the task-owned worktree +
-        // branch are reused on the reissue, so uncommitted work is preserved
-        // (AGT-1945 - never lose work).
-        WriteDemotionDiagnostic(c.JobFolder, c.SecondsSinceActivity);
-
         try
         {
-            var move = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+            var move = await _transitions.MoveAsync(
+                jobId,
+                TaskStates.Ready,
+                entry.Path,
+                ct,
+                cause: "run-liveness-detector",
+                suppressProductExecution: true);
             if (move.Status != MoveJobStatus.Success)
             {
                 return Outcome(RunLivenessOutcomeKinds.DemoteFailed, entry, c, decision, jobId,
                     target: TaskStates.Ready,
                     reason: $"demote to {TaskStates.Ready} refused: {move.Status} {move.Message}", now);
             }
+
+            var moved = _scanner.FindJob(jobId, entry.Path);
+            var movedFolder = moved?.FolderPath ?? move.NewFolderPath ?? c.JobFolder;
+            _pickupLock.ClearIfStale(movedFolder);
+            if (string.Equals(moved?.State, TaskStates.AutoReview, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "RunLivenessMonitor: recovered settled run {JobId} -> 4-auto-review; no replacement run was queued and the completed session was preserved.",
+                    jobId);
+                return Outcome(
+                    RunLivenessOutcomeKinds.SettledRunRecovered,
+                    entry,
+                    c,
+                    decision,
+                    jobId,
+                    target: TaskStates.AutoReview,
+                    reason: "attempt authority reported a completed immutable result; recovered the existing delivery to auto-review instead of requeueing",
+                    now,
+                    reasonCode: "settled-run-authority");
+            }
+
+            // Authority has now confirmed that this is an interrupted run, not
+            // a settled delivery. Break the launch-fail chain only on the real
+            // Ready path so BP-09 recovery preserves the completed session.
+            _sessions.SetJobSessionName(jobId, null, entry.Path);
+            _sessions.MarkSessionChainRecovery(jobId, entry.Path);
+
+            // One compact recovery line travels with the Ready folder. The
+            // worktree remains task-owned so uncommitted work survives retry.
+            WriteDemotionDiagnostic(movedFolder, c.SecondsSinceActivity);
 
             _logger.LogWarning(
                 "RunLivenessMonitor: demoted {JobId} 3-progress -> 2-ready (process-lost, {Silence:F0}s silent) and cleared the session-resume pointer.",
@@ -496,12 +513,12 @@ public sealed class RunLivenessMonitor
 
     private static RunLivenessOutcome Outcome(
         string kind, WatchPathEntry entry, Candidate c, RunLivenessDecision decision,
-        string jobId, string? target, string reason, DateTime at)
+        string jobId, string? target, string reason, DateTime at, string? reasonCode = null)
         => new()
         {
             At = at,
             Kind = kind,
-            ReasonCode = decision.ReasonCode,
+            ReasonCode = reasonCode ?? decision.ReasonCode,
             ProjectName = entry.Name,
             Slug = c.Slug,
             JobId = jobId,
@@ -569,6 +586,8 @@ public static class RunLivenessOutcomeKinds
     public const string DemoteFailed = "demote-failed";
     /// <summary>Core run finished, post-processing lost: re-triggered 3-progress -&gt; 4-auto-review.</summary>
     public const string RetriggeredPostProcessing = "retriggered-post-processing";
+    /// <summary>Attempt authority found a completed immutable result, so the existing delivery advanced to review.</summary>
+    public const string SettledRunRecovered = "settled-run-recovered";
     /// <summary>The re-trigger move to 4-auto-review refused or threw.</summary>
     public const string RetriggerFailed = "retrigger-failed";
 }

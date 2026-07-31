@@ -498,7 +498,14 @@ public sealed class TaskTransitionService
                 ? info.TaskKey
                 : info.Id;
         var run = _attemptAuthority.GetTaskProjection(taskKey).CurrentRunAttempt;
-        if (!IsRecoverableSettledRun(run)) return SettledRunRecoveryPreparation.None;
+        if (run is not { State: AttemptLifecycleState.Completed, ResultEnvelope: not null })
+            return SettledRunRecoveryPreparation.None;
+        if (!IsRecoverableSettledRun(run))
+        {
+            return new SettledRunRecoveryPreparation(
+                null,
+                $"Completed run {run.AttemptId} has a result envelope, so requeue is forbidden, but the immutable envelope or its digest is invalid.");
+        }
 
         try
         {

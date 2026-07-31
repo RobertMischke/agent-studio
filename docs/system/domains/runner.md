@@ -396,6 +396,11 @@ state.
   ResultEnvelope validates, the Ready move is suppressed: the existing review
   handoff is recreated idempotently, the card advances to `4-auto-review`, and
   `settled_run_recovered` records the original attempt and envelope digest.
+  A Completed attempt that carries an invalid envelope or digest fails the
+  requested move closed and remains in Progress for repair; it is never made
+  claimable in Ready. Detector-specific retry state, such as a cleared session
+  or staged steer answer, is applied only after authority confirms a genuine
+  Ready transition.
   This guard is shared by operator moves, stale sweeps, and liveness or crash
   detectors. Review reissues from later lanes remain deliberate new delivery
   cycles and are outside this BP-09 guard.

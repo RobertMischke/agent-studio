@@ -1421,6 +1421,8 @@
             A valid Completed RunAttempt suppresses requeue, recreates the same review subject idempotently, advances
             the card to Auto Review, queues post-processing, and records <code>settled_run_recovered</code>. Regression
             coverage exercises operator, sweep, and detector triggers and asserts that exactly one RunAttempt remains.
+            Invalid settled envelopes fail closed in Progress. Liveness and steer-timeout recovery apply retry-only
+            session or pending-intent mutations only when the authority-backed transition actually reaches Ready.
           </td>
         </tr>
       </tbody>
