@@ -34,16 +34,21 @@ public sealed class RunLivenessMonitorTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _watchPath;
+    private readonly string _secondWatchPath;
     private readonly string _workspaceRoot;
     private const string ProjectName = "demo";
+    private const string SecondProjectName = "other";
 
     public RunLivenessMonitorTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "atp-run-liveness-" + Guid.NewGuid().ToString("N"));
         _workspaceRoot = Path.Combine(_tempDir, "workspace");
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
+        _secondWatchPath = Path.Combine(_workspaceRoot, "projects", SecondProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var watchPath in new[] { _watchPath, _secondWatchPath })
+            foreach (var state in TaskStates.All)
+                Directory.CreateDirectory(Path.Combine(watchPath, state));
     }
 
     public void Dispose()
@@ -180,6 +185,40 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
         Assert.True(Directory.Exists(folder), "a fresh card inside the grace must not be demoted");
         Assert.Empty(outcomes);
+    }
+
+    [Fact]
+    public async Task Uptime_FlatLayoutOrphans_AcrossAllProjects_RequeuedWithJournalFacts()
+    {
+        // Regression 2026-07-31: after the flat tasks/<bucket>/<key> cutover,
+        // ListLaneFolders still enumerated only legacy <lane>/<slug> folders.
+        // The hosted sweep therefore saw zero local 3-progress cards and four
+        // dead runs remained stranded for 10-39 hours after backend restarts.
+        var firstFolder = WriteFlatJobWithSession(
+            _watchPath, "DEM-101", "flat-zombie-a", sessionName: "dead-a");
+        var secondFolder = WriteFlatJobWithSession(
+            _secondWatchPath, "OTH-202", "flat-zombie-b", sessionName: "dead-b");
+
+        var (monitor, _) = Build();
+        var outcomes = await monitor.SweepAsync();
+
+        Assert.Equal(2, outcomes.Count);
+        Assert.All(outcomes, outcome => Assert.Equal(RunLivenessOutcomeKinds.DemotedProcessLost, outcome.Kind));
+        Assert.Equal(
+            new[] { ProjectName, SecondProjectName },
+            outcomes.Select(outcome => outcome.ProjectName).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+
+        // Flat-layout transitions are metadata-only. The task folders stay put
+        // while task.json.state changes back to Ready for a fresh local pickup.
+        Assert.Equal(TaskStates.Ready, ReadState(firstFolder));
+        Assert.Equal(TaskStates.Ready, ReadState(secondFolder));
+        Assert.True(Directory.Exists(firstFolder));
+        Assert.True(Directory.Exists(secondFolder));
+
+        var journal = File.ReadAllLines(Path.Combine(_workspaceRoot, "logs", "run-liveness.jsonl"));
+        Assert.Equal(2, journal.Length);
+        Assert.Contains(journal, line => line.Contains("\"projectName\":\"demo\"", StringComparison.Ordinal));
+        Assert.Contains(journal, line => line.Contains("\"projectName\":\"other\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -371,6 +410,10 @@ public sealed class RunLivenessMonitorTests : IDisposable
             ["WatchPaths:0:Path"] = _watchPath,
             ["WatchPaths:0:RootPath"] = _workspaceRoot,
             ["WatchPaths:0:RepositoryPath"] = _workspaceRoot,
+            ["WatchPaths:1:Name"] = SecondProjectName,
+            ["WatchPaths:1:Path"] = _secondWatchPath,
+            ["WatchPaths:1:RootPath"] = _workspaceRoot,
+            ["WatchPaths:1:RepositoryPath"] = _workspaceRoot,
             ["TaskRepository"] = _workspaceRoot,
             ["Runner:RunLiveness:Enabled"] = enabled ? "true" : "false",
         }).Build();
@@ -411,6 +454,29 @@ public sealed class RunLivenessMonitorTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"," +
             $"\"sessionName\":{sessionJson},\"sessionChain\":{chainJson},\"enteredLaneAt\":\"{enteredLaneAt}\"}}");
+    }
+
+    private static string WriteFlatJobWithSession(
+        string watchPath, string key, string id, string? sessionName)
+    {
+        var folder = Path.Combine(watchPath, "tasks", "000", key);
+        Directory.CreateDirectory(folder);
+        var enteredLaneAt = DateTime.UtcNow - TimeSpan.FromMinutes(10);
+        File.WriteAllText(Path.Combine(folder, "task.json"), JsonSerializer.Serialize(new
+        {
+            id,
+            key,
+            title = id,
+            state = TaskStates.Progress,
+            order = 1,
+            agent = "claude",
+            sessionName,
+            sessionChain = sessionName == null ? Array.Empty<string>() : new[] { sessionName },
+            enteredLaneAt,
+        }));
+        WriteCliLog(folder, "local CLI died with the backend");
+        SetMtimeOld(Path.Combine(folder, "logs", "cli-output.log"));
+        return folder;
     }
 
     private static void WriteCliLog(string folder, string body)
@@ -465,5 +531,11 @@ public sealed class RunLivenessMonitorTests : IDisposable
             foreach (var el in sc.EnumerateArray())
                 if (el.ValueKind == JsonValueKind.String) chain.Add(el.GetString()!);
         return (name, chain);
+    }
+
+    private static string? ReadState(string folder)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "task.json")));
+        return doc.RootElement.GetProperty("state").GetString();
     }
 }
