@@ -74,6 +74,10 @@ owns commands started by Studio. The tab exposes start/restart, a bounded
 stdout/stderr console, explicit stop, and URL/command/CWD/port settings in
 place. Closing the console or tab does not detach the process; URL/project
 removal and backend shutdown stop its whole process tree.
+Before a configured command starts, the backend checks its local target port.
+An existing listener prevents the spawn and the same readiness card identifies
+the occupying process and PID, while retaining the normal retry and settings
+recovery actions.
 
 Every Overview request has an independent unavailable state. Detail links emit
 rail navigation or task navigation through the shell. The Visual Evidence queue

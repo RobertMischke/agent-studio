@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -15,6 +16,7 @@ public static class ProjectUrlDiagnosisClasses
     public const string CommandUnavailable = "command-unavailable";
     public const string InvalidCwd = "invalid-cwd";
     public const string ProcessExited = "process-exited";
+    public const string PortInUse = "port-in-use";
     public const string PortNeverOpened = "port-never-opened";
     public const string Timeout = "timeout";
     public const string HttpError = "http-error-response";
@@ -26,6 +28,7 @@ public static class ProjectUrlDiagnosisClasses
 public static class ProjectUrlStartupFailureReasons
 {
     public const string ProcessExit = "process-exit";
+    public const string PortInUse = "port-in-use";
     public const string SilenceTimeout = "silence-timeout";
     public const string StartupLimit = "startup-limit";
 }
@@ -52,6 +55,10 @@ public sealed record ProjectUrlDiagnostic
     public bool PortReachable { get; init; }
     public int? HttpStatus { get; init; }
     public bool ContentReady { get; init; }
+    /// <summary>Process currently listening on the configured preview port.</summary>
+    public int? OccupyingProcessId { get; init; }
+    /// <summary>Executable name of the process currently listening on the configured preview port.</summary>
+    public string? OccupyingProcessName { get; init; }
     /// <summary>Terminal startup cause when readiness ended before the preview became usable.</summary>
     public string? StartupFailureReason { get; init; }
     /// <summary>Browser embedding evidence when response headers or the iframe can decide it.</summary>
@@ -86,15 +93,20 @@ public sealed class ProjectUrlProcessService : IDisposable
 
     private readonly ILogger<ProjectUrlProcessService> _logger;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IProjectUrlPortInspector _portInspector;
     private readonly ConcurrentDictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProjectUrlDiagnostic> _latest = new(StringComparer.Ordinal);
     private readonly object _lifecycleGate = new();
     private int _disposed;
 
-    public ProjectUrlProcessService(ILogger<ProjectUrlProcessService> logger, IHttpClientFactory httpFactory)
+    public ProjectUrlProcessService(
+        ILogger<ProjectUrlProcessService> logger,
+        IHttpClientFactory httpFactory,
+        IProjectUrlPortInspector? portInspector = null)
     {
         _logger = logger;
         _httpFactory = httpFactory;
+        _portInspector = portInspector ?? new ProjectUrlPortInspector();
     }
 
     /// <summary>
@@ -124,6 +136,27 @@ public sealed class ProjectUrlProcessService : IDisposable
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             RetirePrevious(key);
+
+            var targetPort = ResolveLocalTargetPort(url);
+            var occupant = targetPort == null ? null : _portInspector.FindListener(targetPort.Value);
+            if (occupant != null)
+            {
+                var diagnostic = Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+                {
+                    Classification = ProjectUrlDiagnosisClasses.PortInUse,
+                    Summary = $"Port {targetPort} is already in use by {occupant.ProcessName} (PID {occupant.ProcessId}).",
+                    RecommendedAction = "Stop the occupying process or configure a different preview port, then Retry.",
+                    ConfiguredPort = targetPort,
+                    PortReachable = true,
+                    StartupFailureReason = ProjectUrlStartupFailureReasons.PortInUse,
+                    OccupyingProcessId = occupant.ProcessId,
+                    OccupyingProcessName = Redact(occupant.ProcessName),
+                });
+                _logger.LogWarning(
+                    "project-url-port-occupied project={Id} url={UrlId} port={Port} process={ProcessName} pid={Pid}",
+                    project.Id, url.Id, targetPort, occupant.ProcessName, occupant.ProcessId);
+                throw new ProjectUrlPortOccupiedException(diagnostic);
+            }
 
             var process = new Process
             {
@@ -233,6 +266,20 @@ public sealed class ProjectUrlProcessService : IDisposable
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(url);
         var seed = Latest(project, url);
+        if (seed?.Classification == ProjectUrlDiagnosisClasses.PortInUse)
+        {
+            var port = ResolveLocalTargetPort(url);
+            var occupant = port == null ? null : _portInspector.FindListener(port.Value);
+            if (occupant != null)
+                return Save(project.Id, url.Id, seed with
+                {
+                    Summary = $"Port {port} is already in use by {occupant.ProcessName} (PID {occupant.ProcessId}).",
+                    OccupyingProcessId = occupant.ProcessId,
+                    OccupyingProcessName = Redact(occupant.ProcessName),
+                    CheckedAt = DateTimeOffset.UtcNow,
+                });
+            seed = null;
+        }
         var snapshot = Get(project.Id, url.Id);
         if (snapshot != null)
         {
@@ -269,6 +316,10 @@ public sealed class ProjectUrlProcessService : IDisposable
         try
         {
             StartProcess(project, url with { StartRule = rule! with { Cwd = cwd } }, readinessPending: true);
+        }
+        catch (ProjectUrlPortOccupiedException)
+        {
+            return Latest(project, url)!;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -517,6 +568,20 @@ public sealed class ProjectUrlProcessService : IDisposable
 
     private static string FormatDuration(int seconds) =>
         seconds % 60 == 0 ? $"{seconds / 60}-minute" : $"{seconds}-second";
+
+    private static int? ResolveLocalTargetPort(ProjectUrlRecord url)
+    {
+        if (!Uri.TryCreate(url.StartRule?.HealthUrl ?? url.Url, UriKind.Absolute, out var target))
+            return null;
+        if (!IsLocalHost(target.Host)) return null;
+        return url.StartRule?.Port ?? target.Port;
+    }
+
+    private static bool IsLocalHost(string host) =>
+        string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, Environment.MachineName, StringComparison.OrdinalIgnoreCase)
+        || IPAddress.TryParse(host, out var address) && (IPAddress.IsLoopback(address)
+            || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any));
 
     /// <summary>
     /// Validate a candidate configuration for the Settings quick setup. The

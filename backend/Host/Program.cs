@@ -228,6 +228,7 @@ builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceSettingsService>();
 builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>();
 // Project URLs: read-only repo scan for suggestions + minimal dev-server spawn.
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
+builder.Services.AddSingleton<AgentStudio.Registry.IProjectUrlPortInspector, AgentStudio.Registry.ProjectUrlPortInspector>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlReadinessService>();
 // AGT-2180: bounded HTTP client shared by the readiness probe and the URL

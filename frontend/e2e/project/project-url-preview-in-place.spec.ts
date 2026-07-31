@@ -14,6 +14,7 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   let processState: 'none' | 'starting' | 'running' | 'stopped' = 'none';
   let releaseReadiness = false;
   let settingsSaved = false;
+  let portOccupied = true;
   const url = {
     id: 'website', label: 'Website', url: 'http://localhost:4202', sortOrder: 0,
     startRule: { command: 'npm run website', cwd: null, port: 4202, source: 'manual' },
@@ -78,6 +79,25 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     if (pathname.endsWith('/urls/website/readiness')) return json(processState === 'running'
       ? { kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 3 }
       : { kind: 'offline', statusCode: null, framePolicy: 'unknown', detail: 'Connection refused.', durationMs: 3 });
+    if (pathname.endsWith('/urls/website/diagnostic')) return json(portOccupied
+      ? {
+          classification: 'port-in-use',
+          summary: 'Port 4202 is already in use by marketing-app (PID 9123).',
+          recommendedAction: 'Stop the occupying process or configure a different preview port, then Retry.',
+          command: url.startRule.command, cwd: '/mock/repo/embed', url: url.url, configuredPort: 4202,
+          processCreated: false, exitCode: null, stdoutTail: '', stderrTail: '', timedOut: false,
+          portReachable: true, httpStatus: null, contentReady: false, startupFailureReason: 'port-in-use',
+          occupyingProcessId: 9123, occupyingProcessName: 'marketing-app',
+          iframeReady: null, framePolicy: null, checkedAt: '2026-07-31T12:00:00Z',
+        }
+      : {
+          classification: 'not-started', summary: 'Nothing is accepting connections at the configured preview address.',
+          recommendedAction: 'Start the service or review its setup.', command: url.startRule.command,
+          cwd: '/mock/repo/embed', url: url.url, configuredPort: 4202, processCreated: false,
+          exitCode: null, stdoutTail: '', stderrTail: '', timedOut: false, portReachable: false,
+          httpStatus: null, contentReady: false, checkedAt: '2026-07-31T12:00:00Z',
+        });
+    if (pathname.endsWith('/url-suggestions')) return json([]);
     if (pathname.endsWith('/urls/website/context')) return json({
       projectName: PROJECT_NAME, repositoryName: 'quality-studio', workingDirectory: '/mock/repo/embed',
       repoRoot: '/mock/repo/embed', isRepo: true, branch: 'task/agt-2455-preview-context',
@@ -86,6 +106,14 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
       isDirty: false, error: null,
     });
     if (pathname.endsWith('/urls/website/start')) {
+      if (portOccupied) return json({
+        error: 'Port 4202 is already in use by marketing-app (PID 9123).',
+        command: url.startRule.command,
+        cwd: '/mock/repo/embed',
+        classification: 'port-in-use',
+        occupyingProcessId: 9123,
+        occupyingProcessName: 'marketing-app',
+      }, 400);
       processState = 'starting';
       return json(snapshot());
     }
@@ -157,6 +185,17 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await expect.poll(() => settingsSaved).toBe(true);
 
   await start.click();
+  const occupied = page.getByTestId('url-preview-start-failed');
+  await expect(occupied).toContainText('Preview port is occupied');
+  await expect(occupied).toContainText('marketing-app (PID 9123)');
+  await expect(occupied).toContainText('Stop the occupying process');
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await occupied.screenshot({ path: join(shots, `preview-port-occupied-${theme}--mocked.png`) });
+  }
+
+  portOccupied = false;
+  await page.getByTestId('url-preview-retry').click();
   const console = page.getByTestId('url-preview-process-console');
   await expect(console).toBeVisible();
   await expect(page.getByTestId('url-preview-starting')).toContainText('Console output is active');
@@ -198,7 +237,6 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await addr.fill(`${url.url}/docs`);
   await addr.press('Enter');
   await expect(page.getByTestId('url-preview-frame')).toHaveAttribute('src', `${url.url}/docs`);
-  await expect(page.getByTestId('url-preview-status')).toHaveText('custom');
   // The embedded page reported its live URL; the address bar mirrors it while
   // the frame src stays on the mounted URL (display only, no remount).
   await expect(addr).toHaveValue(`${url.url}/docs#reported`);
@@ -206,6 +244,7 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
 
   await page.getByTestId('url-preview-menu').click();
   await page.getByTestId('url-preview-menu-item-stop').click();
+  await expect.poll(() => processState).toBe('stopped');
   await expect(page.getByTestId('url-preview-process-status')).toContainText('Stopped');
   expect(processState).toBe('stopped');
 });

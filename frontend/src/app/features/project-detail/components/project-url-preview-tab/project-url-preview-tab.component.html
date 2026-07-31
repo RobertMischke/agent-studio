@@ -131,7 +131,7 @@
                     {{ projectName() }} · {{ urlRecord()?.label }}
                   </p>
                   <h2 class="url-preview__state-heading">
-                    @if (startFailure()) {
+                    @if (diagnostic()?.classification === 'port-in-use') { Preview port is occupied } @else if (startFailure()) {
                       Preview could not start
                     } @else if (building()) {
                       {{ consoleActive() ? 'Starting · console active' : 'Starting · waiting for output' }}
@@ -201,7 +201,7 @@
                 </div>
               }
 
-              @if (!building() && !startFailure() && diagnostic(); as diag) {
+              @if (!building() && diagnostic(); as diag) {
                 <div class="url-preview__recommendation" data-testid="url-preview-recommendation">
                   <span class="url-preview__recommendation-label">{{ diagnosis().status }} — {{ diagnosis().title }}</span>
                   <p class="url-preview__recommendation-summary">{{ diag.summary }}</p>
@@ -278,7 +278,7 @@
                     <div><dt>Working directory</dt><dd><code>{{ detail.cwd ?? 'Project root' }}</code></dd></div>
                     <div><dt>Port</dt><dd>{{ detail.configuredPort ?? 'From URL' }}</dd></div>
                     <div><dt>Process</dt><dd>{{ detail.processCreated ? 'Created' : 'Not created' }} @if (detail.exitCode !== null) { · exit {{ detail.exitCode }} }</dd></div>
-                    <div><dt>Readiness</dt><dd>Port {{ detail.portReachable ? 'reachable' : 'not reachable' }} · HTTP {{ detail.httpStatus ?? 'none' }}</dd></div>
+                    <div><dt>Readiness</dt><dd>Port {{ detail.portReachable ? 'reachable' : 'not reachable' }} · HTTP {{ detail.httpStatus ?? 'none' }} @if (detail.occupyingProcessName && detail.occupyingProcessId) { · owner <code>{{ detail.occupyingProcessName }}</code> (PID {{ detail.occupyingProcessId }}) }</dd></div>
                     <div><dt>Embedded page</dt><dd>{{ detail.iframeReady === true ? 'Ready' : detail.iframeReady === false ? 'Blocked or not renderable' : 'Not checked' }}</dd></div>
                     @if (detail.framePolicy) { <div><dt>Frame policy</dt><dd><code>{{ detail.framePolicy }}</code></dd></div> }
                   </dl>
