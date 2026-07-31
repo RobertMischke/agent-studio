@@ -301,6 +301,30 @@ public record GitHygieneStatus
 }
 
 /// <summary>
+/// Read-only repository identity for a Project URL preview. Unlike project
+/// hygiene, this snapshot is resolved from the preview command's effective
+/// working directory, so a URL configured for a nested or separate checkout
+/// reports the branch and HEAD that its process actually uses.
+/// </summary>
+public record PreviewRepositoryContext
+{
+    public string ProjectName { get; init; } = "";
+    public string? RepositoryName { get; init; }
+    public string? WorkingDirectory { get; init; }
+    public string? RepoRoot { get; init; }
+    public bool IsRepo { get; init; }
+    public string? Branch { get; init; }
+    public string? HeadSha { get; init; }
+    public string? HeadShortSha { get; init; }
+    public string? ComparisonRef { get; init; }
+    public string? ComparisonKind { get; init; }
+    public int Ahead { get; init; }
+    public int Behind { get; init; }
+    public bool IsDirty { get; init; }
+    public string? Error { get; init; }
+}
+
+/// <summary>
 /// Per-job hygiene overlay. Scope is intentionally narrow: it answers
 /// task-scoped questions only - did the platform stamp a commit on
 /// this job (<see cref="TaskInfoCommitPresent"/>), and does this task
@@ -698,6 +722,135 @@ public class GitService
             _hygieneCache[projectName] = (DateTime.UtcNow, fresh);
         }
         return fresh;
+    }
+
+    /// <summary>
+    /// Reads repository identity and integration distance at an explicit
+    /// working directory. The current branch's upstream wins as the comparison
+    /// ref. A branch without an upstream falls back to the project's remote
+    /// integration line, then its local integration line.
+    /// </summary>
+    public PreviewRepositoryContext GetPreviewContext(
+        string projectName,
+        string? workingDirectory,
+        string? configuredIntegrationBranch)
+    {
+        var seed = new PreviewRepositoryContext
+        {
+            ProjectName = projectName,
+            WorkingDirectory = workingDirectory,
+        };
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+            return seed with { Error = "Preview working directory is not configured." };
+        if (!Directory.Exists(workingDirectory))
+            return seed with { Error = $"Preview working directory does not exist: {workingDirectory}" };
+
+        var root = ResolveGitToplevel(workingDirectory);
+        if (root == null)
+        {
+            return seed with
+            {
+                RepositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(workingDirectory)),
+                IsRepo = false,
+                Error = "Preview working directory is not inside a Git repository.",
+            };
+        }
+
+        var (branchOut, _, branchCode) = RunGitArgs(root, "symbolic-ref", "--quiet", "--short", "HEAD");
+        var branch = branchCode == 0 && !string.IsNullOrWhiteSpace(branchOut)
+            ? branchOut.Trim()
+            : "detached HEAD";
+        var (headOut, headError, headCode) = RunGitArgs(root, "rev-parse", "HEAD");
+        if (headCode != 0 || string.IsNullOrWhiteSpace(headOut))
+        {
+            return seed with
+            {
+                RepositoryName = PreviewRepositoryName(root),
+                RepoRoot = root,
+                IsRepo = true,
+                Branch = branch,
+                Error = string.IsNullOrWhiteSpace(headError) ? "Git HEAD is unavailable." : headError.Trim(),
+            };
+        }
+
+        var headSha = headOut.Trim();
+        var comparisonRef = PreviewComparisonRef(root, configuredIntegrationBranch, out var comparisonKind);
+        var ahead = 0;
+        var behind = 0;
+        if (!string.IsNullOrWhiteSpace(comparisonRef))
+        {
+            var (countOut, _, countCode) = RunGitArgs(
+                root, "rev-list", "--left-right", "--count", $"HEAD...{comparisonRef}");
+            if (countCode == 0)
+            {
+                var parts = countOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    int.TryParse(parts[0], out ahead);
+                    int.TryParse(parts[1], out behind);
+                }
+            }
+        }
+
+        var (statusOut, _, statusCode) = RunGitReadonly(root, "status --porcelain=v1");
+        return seed with
+        {
+            RepositoryName = PreviewRepositoryName(root),
+            WorkingDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workingDirectory)),
+            RepoRoot = root,
+            IsRepo = true,
+            Branch = branch,
+            HeadSha = headSha,
+            HeadShortSha = headSha[..Math.Min(8, headSha.Length)],
+            ComparisonRef = comparisonRef,
+            ComparisonKind = comparisonKind,
+            Ahead = ahead,
+            Behind = behind,
+            IsDirty = statusCode == 0 && !string.IsNullOrWhiteSpace(statusOut),
+        };
+    }
+
+    private string? PreviewComparisonRef(string repoRoot, string? configuredIntegrationBranch, out string? kind)
+    {
+        var (upstreamOut, _, upstreamCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}");
+        if (upstreamCode == 0 && !string.IsNullOrWhiteSpace(upstreamOut))
+        {
+            kind = "upstream";
+            return upstreamOut.Trim();
+        }
+
+        var integration = ResolveIntegrationBranch(repoRoot, configuredIntegrationBranch);
+        var remote = integration.StartsWith("origin/", StringComparison.Ordinal)
+            ? integration
+            : "origin/" + integration;
+        var (_, _, remoteCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", remote);
+        if (remoteCode == 0)
+        {
+            kind = "integration";
+            return remote;
+        }
+        var (_, _, localCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", integration);
+        if (localCode == 0)
+        {
+            kind = "integration";
+            return integration;
+        }
+
+        kind = null;
+        return null;
+    }
+
+    private static string PreviewRepositoryName(string repoRoot)
+    {
+        var (originOut, _, originCode) = RunGitArgs(repoRoot, "config", "--get", "remote.origin.url");
+        var source = originCode == 0 && !string.IsNullOrWhiteSpace(originOut)
+            ? originOut.Trim().TrimEnd('/', '\\')
+            : repoRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var separator = Math.Max(source.LastIndexOf('/'), Math.Max(source.LastIndexOf('\\'), source.LastIndexOf(':')));
+        var name = separator >= 0 ? source[(separator + 1)..] : source;
+        var normalized = name.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+        return string.IsNullOrWhiteSpace(normalized) ? "repository" : normalized;
     }
 
     /// <summary>

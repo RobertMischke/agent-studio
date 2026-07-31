@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import path from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 const PROJECT_NAME = 'Embed Demo';
@@ -17,6 +18,10 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     repositoryPath: '/mock/repo/embed', repositoryUrl: null, sortOrder: 0, archived: false,
     color: null, cliDefault: null, modelDefault: null, createdAt: '2026-07-13T20:00:00Z', urls: [url],
   };
+  const openTasks = [
+    previewTask('QST-42', '2-ready'),
+    previewTask('QST-51', '5-human-review'),
+  ];
   const snapshot = () => ({
     started: true, projectId: PROJECT_ID, urlId: url.id, command: url.startRule.command,
     cwd: '/mock/repo/embed', state: processState, processId: 4242,
@@ -45,6 +50,9 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     const json = (body: unknown, status = 200) => route.fulfill({
       status, contentType: 'application/json', body: JSON.stringify(body),
     });
+    if (pathname === '/api/auth/status') return json({
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    });
     if (pathname === '/api/watch-paths') return json([{
       name: PROJECT_NAME, path: '/mock/tasks/embed', rootPath: '/mock/repo/embed',
     }]);
@@ -55,13 +63,20 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     if (pathname === '/api/projects') return json([project]);
     if (pathname === '/api/tasks' || pathname === '/api/tags') return json([]);
     if (pathname === '/api/tasks/grouped') return json({
-      backlog: [], preparation: [], ready: [], progress: [], autoReview: [],
-      humanReview: [], completed: [], archive: [],
+      backlog: [], preparation: [], ready: [openTasks[0]], progress: [], autoReview: [],
+      humanReview: [openTasks[1]], completed: [previewTask('QST-12', '6-completed')], archive: [],
     });
     if (pathname === '/api/crash-recovery/pending') return json({ pending: [] });
     if (pathname.endsWith('/urls/website/readiness')) return json(processState === 'running'
       ? { kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 3 }
       : { kind: 'offline', statusCode: null, framePolicy: 'unknown', detail: 'Connection refused.', durationMs: 3 });
+    if (pathname.endsWith('/urls/website/context')) return json({
+      projectName: PROJECT_NAME, repositoryName: 'quality-studio', workingDirectory: '/mock/repo/embed',
+      repoRoot: '/mock/repo/embed', isRepo: true, branch: 'task/agt-2455-preview-context',
+      headSha: 'abcdef0123456789abcdef0123456789abcdef01', headShortSha: 'abcdef01',
+      comparisonRef: 'origin/develop', comparisonKind: 'integration', ahead: 2, behind: 1,
+      isDirty: false, error: null,
+    });
     if (pathname.endsWith('/urls/website/start')) {
       processState = 'running';
       return json(snapshot());
@@ -93,6 +108,13 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   const start = page.getByTestId('url-preview-start');
   const open = page.getByTestId('url-preview-failure-open-external');
   await expect(offline).toBeVisible();
+  await expect(page.getByTestId('url-preview-repository')).toHaveText('quality-studio');
+  await expect(page.getByTestId('url-preview-branch')).toHaveText('task/agt-2455-preview-context');
+  await expect(page.getByTestId('url-preview-head')).toHaveText('abcdef01');
+  await expect(page.getByTestId('url-preview-integration')).toContainText('2 ahead, 1 behind origin/develop');
+  await expect(page.getByTestId('url-preview-tasks')).toContainText('2');
+  await page.getByTestId('url-preview-tasks').locator('summary').click();
+  await expect(page.getByTestId('url-preview-task-link')).toHaveCount(2);
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     await expect(start).toBeVisible();
@@ -106,7 +128,14 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
       .not.toBe('rgba(0, 0, 0, 0)');
     expect(await start.evaluate(element => getComputedStyle(element).paddingLeft)).not.toBe('0px');
     expect(await open.evaluate(element => getComputedStyle(element).borderTopWidth)).not.toBe('0px');
+    if (process.env['JOB_RESULTS_DIR']) {
+      await page.screenshot({
+        path: path.join(process.env['JOB_RESULTS_DIR'], `preview-context-offline-${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
   }
+  await page.getByTestId('url-preview-tasks').locator('summary').click();
 
   await page.getByTestId('url-preview-menu').click();
   await expect(page.getByTestId('url-preview-menu-item-start')).toBeVisible();
@@ -122,6 +151,16 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await expect(console).toBeVisible();
   await expect(page.getByTestId('url-preview-process-output')).toContainText('ready in 412 ms');
   await expect(page.getByTestId('url-preview-frame')).toBeAttached();
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await expect(page.getByTestId('url-preview-context')).toBeVisible();
+    if (process.env['JOB_RESULTS_DIR']) {
+      await page.screenshot({
+        path: path.join(process.env['JOB_RESULTS_DIR'], `preview-context-online-${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+  }
 
   // The address bar is a real input: its URL can be selected (copy) and a
   // typed target navigates the embedded preview without touching the registry.
@@ -142,7 +181,20 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await expect(addr).toHaveValue(`${url.url}/docs#reported`);
   await expect(page.getByTestId('url-preview-frame')).toHaveAttribute('src', `${url.url}/docs`);
 
-  await page.getByTestId('url-preview-process-stop').click();
+  await page.getByTestId('url-preview-menu').click();
+  await page.getByTestId('url-preview-menu-item-stop').click();
   await expect(page.getByTestId('url-preview-process-status')).toContainText('Stopped');
   expect(processState).toBe('stopped');
 });
+
+function previewTask(key: string, state: string) {
+  const id = key.toLowerCase();
+  return {
+    id, taskKey: `${PROJECT_ID}::${id}`, key, title: `Preview task ${key}`, state, order: 0,
+    agent: 'codex', createdAt: '2026-07-29T10:00:00Z', watchPath: '/mock/tasks/embed',
+    projectName: PROJECT_NAME, folderPath: `/mock/tasks/embed/${state}/${id}`,
+    lastActivity: '2026-07-29T10:00:00Z', enteredLaneAt: '2026-07-29T10:00:00Z',
+    sessionName: null, model: null, cliType: null, useOwnSession: null,
+    lastUsage: null, execution: null, commit: null,
+  };
+}

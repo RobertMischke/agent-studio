@@ -512,6 +512,35 @@ public static class RegistryEndpoints
             return Results.Ok(await procs.ProbeAsync(record, url, ct));
         });
 
+        // Repository identity for the Preview context header. This reads Git
+        // at the command's effective working directory, which may differ from
+        // the project's top-level checkout.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/context",
+            (string projId, string urlId, ProjectRegistry projects, GitService git,
+                AgentStudio.Projects.ProjectSettingsService settings) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null) return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
+            if (url == null) return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+
+            string? cwd;
+            if (url.StartRule != null)
+            {
+                try { cwd = ProjectUrlProcessService.ResolveWorkingDirectory(record, url.StartRule); }
+                catch (InvalidOperationException) { cwd = url.StartRule.Cwd ?? record.RepositoryPath ?? record.RootPath; }
+            }
+            else
+            {
+                cwd = record.RepositoryPath ?? record.RootPath;
+            }
+
+            return Results.Ok(git.GetPreviewContext(
+                record.DisplayName,
+                cwd,
+                settings.Get(record.DisplayName).IntegrationBranch));
+        });
+
         // Start/restart, inspect, and stop the owned dev-server lifecycle. The
         // bounded snapshot output powers the embed's in-place live console.
         app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
