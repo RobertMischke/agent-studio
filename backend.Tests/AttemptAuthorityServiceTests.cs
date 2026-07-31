@@ -362,6 +362,8 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var epoch = service.RotateAuthorityEpoch("planned credential rotation");
 
         Assert.Equal(activeRun.AuthorityEpoch + 1, epoch);
+        Assert.Equal(activeRun.AuthorityEpoch, service.GetRun(activeRun.AttemptId)!.AuthorityEpoch);
+        Assert.Equal(activeReview.AuthorityEpoch, service.GetReview(activeReview.AttemptId)!.AuthorityEpoch);
         Assert.Equal(AttemptLifecycleState.Leased, service.GetRun(activeRun.AttemptId)!.State);
         Assert.Equal(AttemptLifecycleState.Leased, service.GetReview(activeReview.AttemptId)!.State);
         var leases = new RunLeaseService(
@@ -439,6 +441,15 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(AttemptLifecycleState.Completed, completedRun.RunAttempt!.State);
         Assert.Equal(AttemptLifecycleState.Completed, completedReview.ReviewAttempt!.State);
         Assert.Equal(
+            AttemptWriteStatus.Accepted,
+            service.ReleaseRun(
+                new AttemptWriteReference(
+                    activeRun.AttemptId,
+                    activeRun.LastFence,
+                    activeRun.AuthorityEpoch,
+                    "run-release-after-rotation"),
+                "runner-a").Status);
+        Assert.Equal(
             AttemptWriteStatus.AuthorityEpochMismatch,
             service.AcceptRunWrite(new AttemptWriteReference(
                 freshRun.AttemptId,
@@ -448,18 +459,45 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
-    public void Restart_preserves_a_draining_epoch_until_the_active_attempt_settles()
+    public void Restart_preserves_draining_run_and_review_epochs_until_the_active_attempts_settle()
     {
         var now = new DateTime(2026, 7, 31, 10, 0, 0, DateTimeKind.Utc);
         var service = NewService(() => now);
         var draining = service.AcquireRun(
             "AGT-DRAINING", "PROJ-1", null, "runner-a", "host-a", 60, "run-a").RunAttempt!;
+        var reviewSource = service.AcquireRun(
+            "AGT-DRAINING-REVIEW", "PROJ-1", null, "runner-b", "host-b", 60, "review-source").RunAttempt!;
+        service.SettleRun(
+            new AttemptWriteReference(
+                reviewSource.AttemptId,
+                reviewSource.LastFence,
+                reviewSource.AuthorityEpoch,
+                "review-source-complete"),
+            "done",
+            "sha-review",
+            null);
+        var drainingReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-DRAINING-REVIEW",
+            "PROJ-1",
+            "sha-review",
+            reviewSource.AttemptId,
+            "requirements",
+            "policy",
+            [],
+            "review-create")).ReviewAttempt!;
+        drainingReview = service.ClaimReview(
+            drainingReview.AttemptId,
+            "reviewer-a",
+            "review-host-a",
+            60,
+            "review-claim").ReviewAttempt!;
         var currentEpoch = service.RotateAuthorityEpoch("planned restart");
 
         var restarted = NewService(() => now);
 
         Assert.Equal(currentEpoch, restarted.AuthorityEpoch);
         Assert.Equal(AttemptLifecycleState.Leased, restarted.GetRun(draining.AttemptId)!.State);
+        Assert.Equal(AttemptLifecycleState.Leased, restarted.GetReview(drainingReview.AttemptId)!.State);
         Assert.Equal(
             AttemptWriteStatus.Accepted,
             restarted.RenewRun(
@@ -481,6 +519,26 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
                 "done",
                 "sha-drained",
                 null).Status);
+        Assert.Equal(
+            AttemptWriteStatus.Accepted,
+            restarted.RenewReview(
+                new AttemptWriteReference(
+                    drainingReview.AttemptId,
+                    drainingReview.LastFence,
+                    drainingReview.AuthorityEpoch,
+                    "review-renew-after-restart"),
+                "reviewer-a",
+                60).Status);
+        Assert.Equal(
+            AttemptWriteStatus.Accepted,
+            restarted.SettleReview(new SettleReviewAttemptRequest(
+                new AttemptWriteReference(
+                    drainingReview.AttemptId,
+                    drainingReview.LastFence,
+                    drainingReview.AuthorityEpoch,
+                    "review-settle-after-restart"),
+                "sha-review",
+                ReviewTerminalOutcome.Pass)).Status);
 
         var fresh = restarted.AcquireRun(
             "AGT-FRESH", "PROJ-1", null, "runner-b", "host-b", 60, "run-b").RunAttempt!;
