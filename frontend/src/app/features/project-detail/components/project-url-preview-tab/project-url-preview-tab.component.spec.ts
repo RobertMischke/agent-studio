@@ -18,6 +18,7 @@ import type {
   RegistryProjectUrl,
 } from '../../../../models/task.model';
 import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 
 /** Signal-backed probe stub so tests drive running/offline without a real fetch. */
 class ProbeStub {
@@ -58,6 +59,7 @@ function mount(urlId = 'url-1') {
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: ProjectUrlProbeService, useValue: probe },
+      { provide: TaskReferenceNavigationService, useValue: { openTaskKey: vi.fn() } },
     ],
   });
   const fixture = TestBed.createComponent(ProjectUrlPreviewTabComponent);

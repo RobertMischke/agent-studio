@@ -149,6 +149,16 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/system/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- `frontend/src/app/features/project-detail/components/project-url-preview-tab/`
+  owns each online and offline Project URL preview. Its shared context header
+  reads repository name, current branch, HEAD, and ahead/behind distance from
+  `GET /api/projects/{projectId}/urls/{urlId}/context`. The backend resolves Git
+  at the preview command's effective working directory, prefers the branch
+  upstream as comparison line, and falls back to the project's integration
+  line. The header derives its open-task count and expandable task links from
+  the existing Task Server-backed grouped task snapshot, excluding completed
+  and archived cards. Readiness and last-start diagnosis remain independent, so
+  a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
   read-only Workbench host. Explorer discovery is lazy per expanded project;
   Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
@@ -277,7 +287,7 @@ The dashboard is a projection over existing domain truths:
 |---|---|---|
 | Delivered work | `GET /api/projects/{projectName}/throughput`, including archived task history and exact rolling 24-hour and 7-day windows | Board and task history |
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
-| Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
+| Project URLs | Embedded project URLs from `GET /api/workspaces`; command-working-directory Git identity from `GET .../context`; Task Server-backed open-card links; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, registry, and grouped task snapshot |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
 | Wiki activity | Initial `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`, then a visible-only conditional poll of `GET /api/projects/{projectName}/wiki/recent?limit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |

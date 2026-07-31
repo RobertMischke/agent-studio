@@ -66,6 +66,12 @@
       "styles": 584,
       "total": 1525
     },
+    "src/app/features/project-detail/components/project-url-preview-tab/project-url-preview-tab.component.ts": {
+      "typeScript": 614,
+      "template": 295,
+      "styles": 114,
+      "total": 1023
+    },
     "src/app/features/project-detail/components/project-steering-docs-section/project-steering-docs-section.ts": {
       "typeScript": 490,
       "template": 339,

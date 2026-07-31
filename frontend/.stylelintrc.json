@@ -210,6 +210,7 @@
         "src/app/features/project-detail/components/project-git-history/project-git-history.component.scss",
         "src/app/features/project-detail/components/project-git-panel/project-git-panel.component.scss",
         "src/app/features/project-detail/components/project-git-tree/project-git-tree.component.scss",
+        "src/app/features/project-detail/components/project-url-context-header/project-url-context-header.scss",
         "src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.scss",
         "src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss",
         "src/app/features/project-detail/components/pipeline-health-block/pipeline-health-block.scss",

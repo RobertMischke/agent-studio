@@ -30,6 +30,7 @@ import { ProjectUrlEmbedNavigationController } from '../../services/project-url-
 import { ProjectUrlAddressComponent } from '../project-url-address/project-url-address';
 import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 import { ProjectUrlProcessConsoleComponent } from '../project-url-process-console/project-url-process-console';
+import { ProjectUrlContextHeaderComponent } from '../project-url-context-header/project-url-context-header';
 import {
   ProjectUrlSettingsDialogComponent,
   type ProjectUrlSettingsValue,
@@ -75,6 +76,7 @@ const DIAGNOSABLE_KINDS: ReadonlySet<ProjectUrlReadiness['kind']> =
     AppTooltipDirective,
     MenuComponent,
     ProjectUrlAddressComponent,
+    ProjectUrlContextHeaderComponent,
     ProjectUrlProcessConsoleComponent,
     ProjectUrlSettingsDialogComponent,
   ],
@@ -99,7 +101,6 @@ export class ProjectUrlPreviewTabComponent {
   private readonly sanitizer = inject(DomSanitizer);
   readonly process = inject(ProjectUrlProcessController);
   readonly nav = inject(ProjectUrlEmbedNavigationController);
-
   /** ~6s without `load` while reachable reads as "probably refuses embedding". */
   private readonly LOAD_TIMEOUT_MS = 6000;
 
@@ -126,7 +127,6 @@ export class ProjectUrlPreviewTabComponent {
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
   private readonly frameRef = viewChild<ElementRef<HTMLIFrameElement>>('frame');
-
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   /** De-dupes diagnostic fetches per (project, url, readiness-kind) tuple. */
   private lastDiagnosedKey: string | null = null;
