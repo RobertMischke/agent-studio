@@ -26,6 +26,7 @@ namespace AgentStudio.Tests;
 /// </summary>
 public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 {
+    private static readonly TimeSpan AsyncTestDeadline = TimeSpan.FromSeconds(30);
     private const string Project = "Fixture";
     private const string Slug = "remote-delivery";
     private const string TaskKey = "AGT-2227";
@@ -91,7 +92,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
-    public async Task AcceptHttp_ReturnsWithinTwoSeconds_WhileColdGateFinishesAsGateFailed()
+    public async Task AcceptHttp_ReturnsWhileColdGateIsBlocked_AndFinishesAsGateFailed()
     {
         var deliverySha = PublishDelivery("cold-gate.txt", "remote work\n");
         RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
@@ -137,19 +138,18 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.True(PreDevelopBuildGate.AppliesTo(
             factory.Services.GetRequiredService<ProjectSettingsService>().Get(Project).BuildProfile));
 
-        var sw = Stopwatch.StartNew();
+        var queue = factory.Services.GetRequiredService<AcceptedIntegrationQueue>();
         var responseTask = client.PostAsJsonAsync(
             $"/api/tasks/{Slug}/move?watchPath={Uri.EscapeDataString(_watchPath)}",
             new { targetState = TaskStates.Completed });
+        Task<MergeIntoIntegrationResult>? processTask = null;
         try
         {
-            var winner = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(2)));
-            sw.Stop();
-            Assert.Same(responseTask, winner);
-
-            using var response = await responseTask;
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"Accept took {sw.Elapsed}.");
+            var request = await queue.Reader.ReadAsync()
+                .AsTask()
+                .WaitAsync(AsyncTestDeadline);
+            Assert.Equal(Project, request.Project);
+            Assert.True(PreDevelopBuildGate.AppliesTo(deps.Settings.Get(request.Project).BuildProfile));
 
             var pending = factory.Services.GetRequiredService<TaskScannerService>()
                 .FindJob(Slug, _watchPath);
@@ -163,10 +163,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             Assert.NotNull(pendingStep);
             Assert.Equal(PipelineStepStatus.Pending, pendingStep!.Status);
 
-            var queue = factory.Services.GetRequiredService<AcceptedIntegrationQueue>();
-            Assert.True(queue.Reader.TryRead(out var request));
-            Assert.Equal(Project, request!.Project);
-            Assert.True(PreDevelopBuildGate.AppliesTo(deps.Settings.Get(request.Project).BuildProfile));
             var runner = new MergeIntoDevelopRunner(
                 factory.Services.GetRequiredService<GitService>(),
                 factory.Services.GetRequiredService<PipelineExecutionLog>(),
@@ -184,18 +180,18 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 NullLogger<AcceptedIntegrationWorker>.Instance,
                 factory.Services.GetRequiredService<TaskTransitionService>(),
                 factory.Services.GetRequiredService<TimelineLog>());
-            var processTask = worker.ProcessAsync(request);
-            var workerWinner = await Task.WhenAny(
-                gate.Entered,
-                processTask,
-                Task.Delay(TimeSpan.FromSeconds(5)));
-            Assert.True(
-                ReferenceEquals(workerWinner, gate.Entered),
-                processTask.IsCompleted
-                    ? $"Worker completed before the gate with {(await processTask).Outcome}."
-                    : "Worker did not enter the gate within five seconds.");
+            processTask = worker.ProcessAsync(request);
+
+            // The production invariant is ordering, not latency: accepting the
+            // card must finish independently while the cold build gate remains
+            // blocked. The deadline only diagnoses a hang.
+            await gate.Entered.WaitAsync(AsyncTestDeadline);
+            using var response = await responseTask.WaitAsync(AsyncTestDeadline);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.False(processTask.IsCompleted, "Worker completed while its build gate was still blocked.");
+
             gate.Release();
-            var integrationResult = await processTask;
+            var integrationResult = await processTask.WaitAsync(AsyncTestDeadline);
             Assert.Equal(MergeIntoIntegrationOutcome.GateFailed, integrationResult.Outcome);
 
             var failedStep = factory.Services.GetRequiredService<PipelineExecutionLog>()
@@ -219,7 +215,9 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         finally
         {
             gate.Release();
-            await responseTask;
+            await responseTask.WaitAsync(AsyncTestDeadline);
+            if (processTask is not null)
+                await processTask.WaitAsync(AsyncTestDeadline);
         }
     }
 
@@ -607,7 +605,13 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
         var failures = new ConcurrentQueue<Exception>();
         using var started = new ManualResetEventSlim();
+        var firstSuccessfulRead = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var successfulReadAfterWrites = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         var reading = true;
+        var writesCompleted = false;
+        long successfulReads = 0;
         var reader = Task.Run(() =>
         {
             started.Set();
@@ -617,37 +621,63 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 {
                     using var document = JsonDocument.Parse(File.ReadAllText(path));
                     Assert.Equal(Slug, document.RootElement.GetProperty("id").GetString());
+                    Interlocked.Increment(ref successfulReads);
+                    firstSuccessfulRead.TrySetResult();
+                    if (Volatile.Read(ref writesCompleted))
+                        successfulReadAfterWrites.TrySetResult();
                 }
-                catch (IOException)
+                catch (IOException ex) when (IsRetryableFileSharingViolation(ex))
                 {
                     // Windows: ReplaceFile keeps the destination name valid but
                     // holds it exclusively for the instant of the swap, so a
                     // plain open can transiently fail with a sharing violation.
                     // That is OS behaviour, not a truncation: the invariant
                     // under test is that a reader that GETS the file never sees
-                    // partial JSON or a foreign id. Transient opens retry.
+                    // partial JSON or a foreign id. Only sharing/lock collisions
+                    // retry; every other IOException remains a test failure.
+                    Thread.Yield();
                 }
                 catch (Exception ex)
                 {
                     failures.Enqueue(ex);
+                    if (!firstSuccessfulRead.TrySetException(ex))
+                        successfulReadAfterWrites.TrySetException(ex);
                 }
             }
         });
         started.Wait();
-
-        var tags = Enumerable.Range(0, 2_000).Select(i => $"integration:test-{i:D4}").ToArray();
-        for (var i = 0; i < 100; i++)
+        try
         {
-            TaskJsonFile.UpdateField(
-                folder,
-                "tags",
-                i % 2 == 0 ? tags : new[] { IntegrationStatuses.PendingTag },
-                NullLogger.Instance);
+            await firstSuccessfulRead.Task.WaitAsync(AsyncTestDeadline);
+
+            var tags = Enumerable.Range(0, 2_000).Select(i => $"integration:test-{i:D4}").ToArray();
+            for (var i = 0; i < 100; i++)
+            {
+                TaskJsonFile.UpdateField(
+                    folder,
+                    "tags",
+                    i % 2 == 0 ? tags : new[] { IntegrationStatuses.PendingTag },
+                    NullLogger.Instance);
+            }
+
+            Volatile.Write(ref writesCompleted, true);
+            await successfulReadAfterWrites.Task.WaitAsync(AsyncTestDeadline);
+        }
+        finally
+        {
+            Volatile.Write(ref reading, false);
+            await reader.WaitAsync(AsyncTestDeadline);
         }
 
-        Volatile.Write(ref reading, false);
-        await reader;
         Assert.Empty(failures);
+        Assert.True(Interlocked.Read(ref successfulReads) >= 2);
+        using var finalDocument = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(Slug, finalDocument.RootElement.GetProperty("id").GetString());
+        Assert.Equal(
+            [IntegrationStatuses.PendingTag],
+            finalDocument.RootElement.GetProperty("tags")
+                .EnumerateArray()
+                .Select(tag => tag.GetString()));
     }
 
     [Fact]
@@ -1018,6 +1048,13 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     {
         var result = Git(cwd, args);
         Assert.True(result.Code == 0, $"git {string.Join(' ', args)} failed: {result.Err}");
+    }
+
+    private static bool IsRetryableFileSharingViolation(IOException exception)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        var nativeErrorCode = exception.HResult & 0xffff;
+        return nativeErrorCode is 32 or 33;
     }
 
     private static (string Out, string Err, int Code) Git(string cwd, params string[] args)

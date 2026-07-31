@@ -66,7 +66,8 @@ namespace AgentStudio.Tests;
 /// manual mode and never races the runner for the seeded card.
 /// </para>
 /// </summary>
-// MachineBound 20.07.: E2E ueber Server-API+Prozesse, lastabhaengig
+// MachineBound: real server/API, git processes, persisted timestamps, and host
+// scheduling make these end-to-end cases intentionally machine-dependent.
 [Trait("Category", "MachineBound")]
 [Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
@@ -1287,6 +1288,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     [Theory]
     [InlineData(TaskKinds.Task)]
     [InlineData(TaskKinds.Epic)]
+    // This exercises the production endpoint against persisted lease timestamps
+    // and real host time. The class-level MachineBound trait keeps both theory
+    // cases out of the card gate; the pure boundary decisions remain covered by
+    // RemoteRunRequeuePolicyTests in the deterministic gate suite.
     public async Task Remote_claim_requeues_only_after_grace_and_runner_confirms_inactive(string kind)
     {
         SeedTask(TaskStates.Ready, TaskKey, "Restart recovery", "Prompt.", kind: kind);
