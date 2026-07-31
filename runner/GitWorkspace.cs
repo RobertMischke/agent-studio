@@ -19,6 +19,8 @@ public sealed class GitWorkspace
     private readonly string? _projectId;
     private readonly bool _isProjectClone;
     private readonly string _workBranch;
+    private readonly string? _sourceRunAttemptId;
+    private readonly long? _fencingToken;
     private string? _preparedIntegrationBranch;
     private string? _startedHead;
     private readonly string? _restoredBaseSha;
@@ -35,7 +37,9 @@ public sealed class GitWorkspace
         string? gitRemote = null,
         string? defaultBranch = null,
         bool isProjectClone = false,
-        string? restoredBaseSha = null)
+        string? restoredBaseSha = null,
+        string? sourceRunAttemptId = null,
+        long? fencingToken = null)
     {
         _options = options;
         _log = log;
@@ -50,6 +54,19 @@ public sealed class GitWorkspace
             : string.IsNullOrWhiteSpace(options.GitPushRemote) ? _gitRemote : options.GitPushRemote.Trim();
         _baseBranch = string.IsNullOrWhiteSpace(defaultBranch) ? options.BaseBranch : defaultBranch.Trim();
         _workBranch = $"runner/{SafeSegment(_options.RunnerId)}/{_safeTaskKey}";
+        if (string.IsNullOrWhiteSpace(sourceRunAttemptId) != !fencingToken.HasValue)
+        {
+            throw new ArgumentException(
+                "Run attempt ID and fencing token must be supplied together.");
+        }
+        if (fencingToken is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(fencingToken),
+                "A positive fencing token is required for generation-scoped Git refs.");
+        _sourceRunAttemptId = string.IsNullOrWhiteSpace(sourceRunAttemptId)
+            ? null
+            : sourceRunAttemptId.Trim();
+        _fencingToken = fencingToken;
     }
 
     public string ProjectCachePath => CachePathForProject(_options.WorkDir, _projectId);
@@ -99,7 +116,17 @@ public sealed class GitWorkspace
             // applies before anything is removed.
             if (Directory.Exists(RepoPath))
             {
-                var retained = await SecureAndRemoveAsync("Unknown", sourceRunAttemptId: null, ct);
+                var retained = HasFencedGeneration
+                    ? await SecureAndRemoveAsync(
+                        "Unknown",
+                        sourceRunAttemptId: null,
+                        quarantine: true,
+                        ct)
+                    : await SecureAndRemoveAsync(
+                        "Unknown",
+                        sourceRunAttemptId: null,
+                        quarantine: false,
+                        ct);
                 _pickupReconciliation = retained.Reconciliation;
             }
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
@@ -113,7 +140,7 @@ public sealed class GitWorkspace
                 ? requested
                 : await OriginDefaultBranch(ct) ?? _baseBranch;
             string branch;
-            if (await BranchExistsOnOrigin(_workBranch, ct))
+            if (!HasFencedGeneration && await BranchExistsOnOrigin(_workBranch, ct))
             {
                 branch = _workBranch;
                 _log($"resuming task from existing salvage branch 'origin/{_workBranch}'");
@@ -393,6 +420,43 @@ public sealed class GitWorkspace
     }
 
     /// <summary>
+    /// Preserves a fenced-out generation without publishing a delivery ref.
+    /// Quarantine refs are generation- and SHA-specific, so a late runner can
+    /// never replace the current attempt's salvage or result identity.
+    /// </summary>
+    public async Task<WorktreeTeardownResult> TeardownToQuarantineAsync(
+        string outcome,
+        string? sourceRunAttemptId,
+        CancellationToken ct)
+    {
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            try
+            {
+                return await SecureAndRemoveAsync(
+                    outcome,
+                    sourceRunAttemptId,
+                    quarantine: true,
+                    ct);
+            }
+            catch (WorktreeSalvageException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log($"worktree-quarantine-failed branch={_workBranch} path={RepoPath} error={OneLine(ex.Message)}");
+                throw new WorktreeSalvageException(RepoPath, _workBranch, ex);
+            }
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    /// <summary>
     /// Secure the result on both the salvage ref and a run-scoped immutable ref,
     /// but keep the worktree present until the Task Server acknowledges the
     /// matching result envelope.
@@ -408,7 +472,7 @@ public sealed class GitWorkspace
             try
             {
                 return await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: false,
-                    immutableRefRequired: true, ct);
+                    immutableRefRequired: true, quarantine: false, ct);
             }
             catch (WorktreeSalvageException)
             {
@@ -529,16 +593,44 @@ public sealed class GitWorkspace
         string outcome,
         string? sourceRunAttemptId,
         CancellationToken ct)
-        => await SecureAsync(outcome, sourceRunAttemptId, removeAfterSecure: true,
-            immutableRefRequired: false, ct);
+        => await SecureAndRemoveAsync(
+            outcome,
+            sourceRunAttemptId,
+            quarantine: false,
+            ct);
+
+    private async Task<WorktreeTeardownResult> SecureAndRemoveAsync(
+        string outcome,
+        string? sourceRunAttemptId,
+        bool quarantine,
+        CancellationToken ct)
+        => await SecureAsync(
+            outcome,
+            sourceRunAttemptId,
+            removeAfterSecure: true,
+            immutableRefRequired: false,
+            quarantine,
+            ct);
 
     private async Task<WorktreeTeardownResult> SecureAsync(
         string outcome,
         string? sourceRunAttemptId,
         bool removeAfterSecure,
         bool immutableRefRequired,
+        bool quarantine,
         CancellationToken ct)
     {
+        if (HasFencedGeneration
+            && !string.IsNullOrWhiteSpace(sourceRunAttemptId)
+            && !string.Equals(
+                sourceRunAttemptId,
+                _sourceRunAttemptId,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Workspace generation '{_sourceRunAttemptId}' cannot publish for " +
+                $"run attempt '{sourceRunAttemptId}'.");
+        }
         if (!Directory.Exists(RepoPath))
         {
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
@@ -561,6 +653,9 @@ public sealed class GitWorkspace
         }
 
         var head = (await Git(["rev-parse", "HEAD"], RepoPath, ct)).StdOut.Trim();
+        var salvageBranch = quarantine
+            ? QuarantineBranch(head, sourceRunAttemptId)
+            : FencedSalvageBranch(head) ?? _workBranch;
         var changedDuringRun = _startedHead is not null
             && !string.Equals(_startedHead, head, StringComparison.OrdinalIgnoreCase);
         var hasWork = wasDirty || changedDuringRun || _startedFromSalvage;
@@ -576,13 +671,13 @@ public sealed class GitWorkspace
             try
             {
                 var hasLocalOnlyCommits = await HasLocalOnlyCommitsAsync(ct);
-                remoteHead = await RemoteBranchHeadAsync(_workBranch, ct);
+                remoteHead = await RemoteBranchHeadAsync(salvageBranch, ct);
                 hasWork = hasWork || hasLocalOnlyCommits || remoteHead is not null;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _log($"worktree-salvage-remote-check-failed branch={_workBranch} path={RepoPath} error={OneLine(ex.Message)}");
-                throw new WorktreeSalvageException(RepoPath, _workBranch, ex);
+                _log($"worktree-salvage-remote-check-failed branch={salvageBranch} path={RepoPath} error={OneLine(ex.Message)}");
+                throw new WorktreeSalvageException(RepoPath, salvageBranch, ex);
             }
         }
 
@@ -590,7 +685,14 @@ public sealed class GitWorkspace
         {
             try
             {
-                reconciliation = await ReconcileSalvageAsync(head, remoteHead, ct);
+                reconciliation = HasFencedGeneration || quarantine
+                    ? await PublishImmutableSalvageAsync(
+                        salvageBranch,
+                        head,
+                        remoteHead,
+                        quarantine,
+                        ct)
+                    : await ReconcileSalvageAsync(head, remoteHead, ct);
                 var verifiedBranch = reconciliation.RecoveryBranch ?? reconciliation.CanonicalBranch;
                 var verifiedCommit = reconciliation.RecoveryCommitSha ?? reconciliation.CanonicalCommitSha;
                 deliveryProof = new RemoteDeliveryProof(
@@ -600,17 +702,21 @@ public sealed class GitWorkspace
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _log($"worktree-salvage-push-failed branch={_workBranch} path={RepoPath} error={OneLine(ex.Message)}");
+                _log($"worktree-salvage-push-failed branch={salvageBranch} path={RepoPath} error={OneLine(ex.Message)}");
                 throw ex as WorktreeSalvageException
-                    ?? new WorktreeSalvageException(RepoPath, _workBranch, ex, head, remoteHead);
+                    ?? new WorktreeSalvageException(RepoPath, salvageBranch, ex, head, remoteHead);
             }
         }
 
         string? immutableResultRef = null;
-        if (!string.IsNullOrWhiteSpace(sourceRunAttemptId))
+        if (!quarantine && !string.IsNullOrWhiteSpace(sourceRunAttemptId))
         {
-            var candidateRef =
-                $"refs/heads/agent-studio/results/{SafeSegment(sourceRunAttemptId)}/{head.ToLowerInvariant()}";
+            var candidateRef = _fencingToken.HasValue
+                ? FencedGitRefs.ImmutableResult(
+                    sourceRunAttemptId,
+                    _fencingToken.Value,
+                    head)
+                : $"refs/heads/agent-studio/results/{SafeSegment(sourceRunAttemptId)}/{head.ToLowerInvariant()}";
             try
             {
                 await PushImmutableResultAndVerifyAsync(candidateRef, head, ct);
@@ -635,9 +741,9 @@ public sealed class GitWorkspace
             _log($"worktree-handoff-secured path={RepoPath} resultSha={head} immutableRef={immutableResultRef}");
 
         return hasWork
-            ? new WorktreeTeardownResult(true, _workBranch,
+            ? new WorktreeTeardownResult(true, salvageBranch,
                 reconciliation?.AuthoritativeBaseSha ?? head,
-                BuildBranchUrl(_gitRemote!, _workBranch),
+                BuildBranchUrl(_gitRemote!, salvageBranch),
                 ResultSha: head,
                 Reconciliation: reconciliation,
                 ImmutableResultRef: immutableResultRef,
@@ -650,6 +756,42 @@ public sealed class GitWorkspace
                 ResultSha: head,
                 ImmutableResultRef: immutableResultRef,
                 DeliveryProof: deliveryProof);
+    }
+
+    private async Task<SalvageReconciliationResult> PublishImmutableSalvageAsync(
+        string targetBranch,
+        string localHead,
+        string? remoteHead,
+        bool quarantine,
+        CancellationToken ct)
+    {
+        if (remoteHead is null)
+        {
+            await PushAndVerifyAsync(targetBranch, localHead, ct);
+        }
+        else if (!string.Equals(remoteHead, localHead, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Immutable salvage ref 'refs/heads/{targetBranch}' already resolves to " +
+                $"'{remoteHead}', expected '{localHead}'.");
+        }
+
+        var kind = quarantine ? "quarantined" : "generation-scoped";
+        var result = new SalvageReconciliationResult(
+            kind,
+            targetBranch,
+            localHead,
+            localHead,
+            null,
+            null,
+            targetBranch,
+            localHead);
+        _log(
+            $"worktree-salvage-reconciled kind={kind} " +
+            $"canonicalRef=refs/heads/{targetBranch} canonicalSha={localHead} " +
+            $"localSha={localHead} recoveryRef=none recoverySha=none " +
+            $"authoritativeBaseRef=refs/heads/{targetBranch} authoritativeBaseSha={localHead}");
+        return result;
     }
 
     private async Task RemoveSecuredWorktreeAsync(bool securedWork, CancellationToken ct)
@@ -721,11 +863,12 @@ public sealed class GitWorkspace
 
     private async Task PushAndVerifyAsync(string branch, string expectedHead, CancellationToken ct)
     {
-        if (!IsCardScopedSalvageTarget(_workBranch, branch))
+        if (!IsAllowedSalvageTarget(branch, expectedHead))
         {
             throw new InvalidOperationException(
                 $"Refusing salvage push to non-card branch '{branch}'. " +
-                $"Allowed targets are '{_workBranch}' and its collision refs.");
+                "Allowed targets are the exact fenced salvage or quarantine ref, " +
+                $"or legacy '{_workBranch}' collision refs.");
         }
         _log($"worktree-salvage-push-started branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
         await Git(["push", "origin", $"HEAD:refs/heads/{branch}"], RepoPath, ct);
@@ -735,6 +878,25 @@ public sealed class GitWorkspace
                 $"Registered project repository ref 'refs/heads/{branch}' resolved to " +
                 $"'{published ?? "missing"}' after push, expected '{expectedHead}'.");
         _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
+    }
+
+    private bool IsAllowedSalvageTarget(string targetBranch, string expectedHead)
+    {
+        if (!HasFencedGeneration
+            && IsCardScopedSalvageTarget(_workBranch, targetBranch))
+            return true;
+        var expectedFenced = FencedSalvageBranch(expectedHead);
+        if (expectedFenced is not null
+            && string.Equals(targetBranch, expectedFenced, StringComparison.Ordinal))
+            return true;
+        return string.Equals(
+            targetBranch,
+            QuarantineBranch(expectedHead, _sourceRunAttemptId),
+            StringComparison.Ordinal)
+            || string.Equals(
+                targetBranch,
+                QuarantineBranch(expectedHead, sourceRunAttemptId: null),
+                StringComparison.Ordinal);
     }
 
     internal static bool IsCardScopedSalvageTarget(string cardBranch, string targetBranch)
@@ -789,6 +951,29 @@ public sealed class GitWorkspace
 
     private string RecoveryBranch(string localHead, string remoteHead)
         => $"{_workBranch}-collision-{localHead}-{remoteHead}";
+
+    private bool HasFencedGeneration
+        => _sourceRunAttemptId is not null && _fencingToken.HasValue;
+
+    private string? FencedSalvageBranch(string head)
+        => !HasFencedGeneration
+            ? null
+            : $"agent-studio/salvage/{SafeSegment(_options.RunnerId)}/{_safeTaskKey}/" +
+              $"{SafeSegment(_sourceRunAttemptId!)}/fence-{_fencingToken!.Value}/" +
+              head.ToLowerInvariant();
+
+    private string QuarantineBranch(string head, string? sourceRunAttemptId)
+    {
+        var attempt = string.IsNullOrWhiteSpace(sourceRunAttemptId)
+            ? "unknown-generation"
+            : SafeSegment(sourceRunAttemptId);
+        var fence = _fencingToken.HasValue
+            && string.Equals(sourceRunAttemptId, _sourceRunAttemptId, StringComparison.Ordinal)
+                ? $"fence-{_fencingToken.Value}"
+                : "fence-unknown";
+        return $"agent-studio/quarantine/{SafeSegment(_options.RunnerId)}/{_safeTaskKey}/" +
+               $"{attempt}/{fence}/{head.ToLowerInvariant()}";
+    }
 
     private async Task<bool> HasLocalOnlyCommitsAsync(CancellationToken ct)
     {

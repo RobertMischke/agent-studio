@@ -660,7 +660,10 @@ public sealed class RemoteReviewAuthorityTests
             "test",
             default);
         var coding = await store.ClaimAsync(new ClaimRequest(codingId, codingInstance), codingId, default);
-        var resultRef = $"refs/heads/agent-studio/results/{coding.Run!.RunId}/{ResultSha}";
+        var resultRef = FencedGitRefs.ImmutableResult(
+            coding.Run!.RunId,
+            coding.Lease!.Fence,
+            ResultSha);
         var envelope = new ImmutableResultEnvelope(
             RepositoryId,
             coding.Run.RunId,

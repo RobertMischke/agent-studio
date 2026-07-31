@@ -923,6 +923,42 @@ public static class LeaseEndpoints
 
             var attemptId = req.AttemptId.Trim();
             var epoch = req.AuthorityEpoch.Value;
+            if (!string.IsNullOrWhiteSpace(req.ImmutableResultRef)
+                && !string.IsNullOrWhiteSpace(req.ResultSha))
+            {
+                string expectedResultRef;
+                try
+                {
+                    expectedResultRef =
+                        AgentStudio.TaskServer.Contracts.FencedGitRefs.ImmutableResult(
+                            attemptId,
+                            req.FencingToken,
+                            req.ResultSha);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        TaskStates.Progress,
+                        ex.Message,
+                        RunAttemptId: attemptId,
+                        FailureClassification: AttemptWriteStatus.Invalid.ToString()));
+                }
+                if (!string.Equals(
+                        req.ImmutableResultRef,
+                        expectedResultRef,
+                        StringComparison.Ordinal))
+                {
+                    return Results.BadRequest(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        TaskStates.Progress,
+                        $"Immutable result ref must be '{expectedResultRef}' for the current fenced attempt.",
+                        RunAttemptId: attemptId,
+                        FailureClassification: AttemptWriteStatus.SubjectMismatch.ToString()));
+                }
+            }
             // Result-SHA is independent authority. A salvage commit is useful
             // evidence, but it must never be promoted into the review subject.
             var resultSha = req.ResultSha;

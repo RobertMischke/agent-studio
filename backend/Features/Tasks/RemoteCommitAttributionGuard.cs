@@ -21,13 +21,13 @@ public static partial class RemoteCommitAttributionGuard
     private static partial Regex TaskKeyPattern();
 
     // Immutable ResultEnvelope refs are task-neutral by design:
-    // <project>/results/run_<id>/<result-sha>. Their identity is not the ref
+    // <project>/results/run_<id>/fence-<n>/<result-sha>. Their identity is not the ref
     // name but the fenced result SHA the caller already verified against the
     // branch tip (InspectRemoteDeliveryCommitRange), so the task-key suffix
     // rule must not apply to them - it rejected EVERY envelope delivery and
     // left canonical remote cards without attributed commits ("kein Branch"
     // on reviewed cards, AGT-2434/AGT-2445).
-    [GeneratedRegex(@"(^|/)results/run_[0-9a-f]{32}/[0-9a-f]{40}$",
+    [GeneratedRegex(@"(^|/)results/run_[0-9a-f]{32}/(?:fence-[1-9][0-9]*/)?[0-9a-f]{40}$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ImmutableResultRefPattern();
 

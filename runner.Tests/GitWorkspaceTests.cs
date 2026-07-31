@@ -362,17 +362,18 @@ public sealed class GitWorkspaceTests : IDisposable
     public async Task Durable_handoff_keeps_worktree_until_matching_ack_and_publishes_immutable_ref()
     {
         await SeedOriginAsync();
-        var workspace = CreateWorkspace();
+        const string runId = "run_test";
+        const long fence = 17;
+        var workspace = CreateWorkspace(sourceRunAttemptId: runId, fencingToken: fence);
         await workspace.PrepareAsync(CancellationToken.None);
         await CommitFileAsync(workspace.RepoPath, "result.txt", "durable", "durable result");
-        const string runId = "run_test";
 
         var secured = await workspace.SecureForHandoffAsync(
             "Done", runId, CancellationToken.None);
 
         Assert.True(Directory.Exists(workspace.RepoPath));
         Assert.Equal(
-            $"refs/heads/agent-studio/results/{runId}/{secured.ResultSha}",
+            FencedGitRefs.ImmutableResult(runId, fence, secured.ResultSha!),
             secured.ImmutableResultRef);
         Assert.Equal(
             secured.ResultSha,
@@ -405,10 +406,10 @@ public sealed class GitWorkspaceTests : IDisposable
     public async Task Durable_handoff_refuses_cleanup_when_worktree_changes_after_envelope_publication()
     {
         await SeedOriginAsync();
-        var workspace = CreateWorkspace();
+        const string runId = "run_post_handoff_change";
+        var workspace = CreateWorkspace(sourceRunAttemptId: runId, fencingToken: 18);
         await workspace.PrepareAsync(CancellationToken.None);
         await CommitFileAsync(workspace.RepoPath, "result.txt", "durable", "durable result");
-        const string runId = "run_post_handoff_change";
         var secured = await workspace.SecureForHandoffAsync(
             "Done", runId, CancellationToken.None);
         var digest = new string('a', 64);
@@ -437,6 +438,105 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.Equal(
             "must not be discarded",
             await File.ReadAllTextAsync(Path.Combine(workspace.RepoPath, "late-work.txt")));
+    }
+
+    [Fact]
+    public async Task Attempt_generations_publish_distinct_fenced_refs_without_moving_the_card_ref()
+    {
+        await SeedOriginAsync();
+        var first = CreateWorkspace(
+            sourceRunAttemptId: "run_generation_a",
+            fencingToken: 21);
+        await first.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(first.RepoPath, "generation.txt", "first", "first generation");
+        var firstResult = await first.TeardownAsync(
+            "Done",
+            "run_generation_a",
+            CancellationToken.None);
+
+        var second = CreateWorkspace(
+            sourceRunAttemptId: "run_generation_b",
+            fencingToken: 22);
+        var pickupBranch = await second.PrepareAsync(CancellationToken.None);
+        Assert.Equal("main", pickupBranch);
+        Assert.False(File.Exists(Path.Combine(second.RepoPath, "generation.txt")));
+        await CommitFileAsync(second.RepoPath, "generation.txt", "second", "second generation");
+        var secondResult = await second.TeardownAsync(
+            "Done",
+            "run_generation_b",
+            CancellationToken.None);
+
+        Assert.NotEqual(firstResult.Branch, secondResult.Branch);
+        Assert.Contains("/run_generation_a/fence-21/", firstResult.Branch);
+        Assert.Contains("/run_generation_b/fence-22/", secondResult.Branch);
+        Assert.Equal(
+            FencedGitRefs.ImmutableResult(
+                "run_generation_a",
+                21,
+                firstResult.ResultSha!),
+            firstResult.ImmutableResultRef);
+        Assert.Equal(
+            FencedGitRefs.ImmutableResult(
+                "run_generation_b",
+                22,
+                secondResult.ResultSha!),
+            secondResult.ImmutableResultRef);
+        Assert.Equal(
+            "first",
+            (await GitAsync(
+                _origin,
+                "show",
+                $"refs/heads/{firstResult.Branch}:generation.txt")).StdOut);
+        Assert.Equal(
+            "second",
+            (await GitAsync(
+                _origin,
+                "show",
+                $"refs/heads/{secondResult.Branch}:generation.txt")).StdOut);
+        Assert.False((await RunGitAsync(
+            _origin,
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/heads/runner/runner-test/AGT-2147")).Success);
+    }
+
+    [Fact]
+    public async Task Fenced_out_generation_publishes_only_a_quarantine_ref()
+    {
+        await SeedOriginAsync();
+        const string runId = "run_stale_generation";
+        var workspace = CreateWorkspace(
+            sourceRunAttemptId: runId,
+            fencingToken: 31);
+        await workspace.PrepareAsync(CancellationToken.None);
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace.RepoPath, "stale.txt"),
+            "preserve but never deliver");
+
+        var result = await workspace.TeardownToQuarantineAsync(
+            "LeaseLoss",
+            runId,
+            CancellationToken.None);
+
+        Assert.True(result.SecuredWork);
+        Assert.StartsWith(
+            "agent-studio/quarantine/runner-test/AGT-2147/" +
+            $"{runId}/fence-31/",
+            result.Branch);
+        Assert.Null(result.ImmutableResultRef);
+        Assert.Equal("quarantined", result.Reconciliation?.Kind);
+        Assert.Equal(
+            "preserve but never deliver",
+            (await GitAsync(
+                _origin,
+                "show",
+                $"refs/heads/{result.Branch}:stale.txt")).StdOut);
+        Assert.Empty((await GitAsync(
+            _origin,
+            "for-each-ref",
+            "--format=%(refname)",
+            $"refs/heads/agent-studio/results/{runId}/*")).StdOut);
     }
 
     [Fact]
@@ -589,7 +689,10 @@ public sealed class GitWorkspaceTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
     }
 
-    private GitWorkspace CreateWorkspace(Action<string>? log = null)
+    private GitWorkspace CreateWorkspace(
+        Action<string>? log = null,
+        string? sourceRunAttemptId = null,
+        long? fencingToken = null)
         => new(new RunnerOptions
         {
             ServerUrl = "http://localhost",
@@ -603,7 +706,11 @@ public sealed class GitWorkspaceTests : IDisposable
             BaseBranch = "main",
             CliBin = "test",
             CliArgs = "",
-        }, "AGT-2147", log ?? (_ => { }));
+        },
+            "AGT-2147",
+            log ?? (_ => { }),
+            sourceRunAttemptId: sourceRunAttemptId,
+            fencingToken: fencingToken);
 
     private GitWorkspace CreateProjectWorkspace(string? repositoryUrl, Action<string>? log = null)
         => new(new RunnerOptions

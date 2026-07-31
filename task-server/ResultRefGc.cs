@@ -216,6 +216,7 @@ public sealed partial class TaskServerStore
                    h.repository_url,
                    h.immutable_remote_ref,
                    h.result_sha,
+                   h.fence,
                    h.retain_until,
                    t.state,
                    h.run_id = (
@@ -262,11 +263,12 @@ public sealed partial class TaskServerStore
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.GetString(4),
                 reader.GetString(5),
-                Parse(reader.GetString(6)),
-                reader.GetString(7),
-                reader.GetBoolean(8),
+                reader.GetInt64(6),
+                Parse(reader.GetString(7)),
+                reader.GetString(8),
                 reader.GetBoolean(9),
-                reader.GetBoolean(10)));
+                reader.GetBoolean(10),
+                reader.GetBoolean(11)));
         }
         return result;
     }
@@ -330,6 +332,7 @@ public sealed partial class TaskServerStore
         if (!ValidImmutableResultRef(
                 item.ImmutableRemoteRef,
                 item.RunId,
+                item.Fence,
                 item.ResultSha))
             return "invalid-result-ref";
         if (item.IsCurrentAttempt)
@@ -350,10 +353,11 @@ public sealed partial class TaskServerStore
     private static bool ValidImmutableResultRef(
         string value,
         string runId,
+        long fence,
         string resultSha)
         => string.Equals(
             value,
-            $"refs/heads/agent-studio/results/{runId}/{resultSha.ToLowerInvariant()}",
+            FencedGitRefs.ImmutableResult(runId, fence, resultSha),
             StringComparison.Ordinal);
 
     private static ResultRefGcDecision ToDecision(
@@ -387,6 +391,7 @@ public sealed partial class TaskServerStore
         string? RepositoryUrl,
         string ImmutableRemoteRef,
         string ResultSha,
+        long Fence,
         DateTime RetainUntil,
         string State,
         bool IsCurrentAttempt,
