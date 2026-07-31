@@ -90,9 +90,13 @@ pipeline view.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
-  from origin and fenced to `ResultSha`. The configured integration ref is fetched and fast-forwarded
-  before the merge; a missing local branch is created from origin and a
-  divergent one fails visibly. The outcome is recorded so the pending step
+  from origin and fenced to `ResultSha`. Transactional acceptance first fetches
+  the configured origin integration ref and uses that refreshed remote ancestry
+  for its already-integrated decision, avoiding a redundant gate when the local
+  branch is stale. Immediately before a real merge or release gate, the
+  configured integration ref is fetched again and fast-forwarded; a missing
+  local branch is created from origin and a divergent one fails visibly. The
+  outcome is recorded so the pending step
   flips to passed / failed / skipped in place. After a successful merge it
   also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:

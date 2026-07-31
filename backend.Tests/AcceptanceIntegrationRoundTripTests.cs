@@ -368,6 +368,97 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptOutOfBandIntegratedCard_WithStaleLocalIntegrationBranch_SkipsGate()
+    {
+        var deliverySha = PublishDelivery("out-of-band-remote.txt", "already on origin\n");
+        RunGit(_repo, "branch", "develop", "origin/develop");
+        var staleLocalTip = Git(_repo, "rev-parse", "develop").Out.Trim();
+
+        var integrator = Path.Combine(_tempDir, "integrator");
+        RunGit(_tempDir, "clone", "-q", _origin, integrator);
+        RunGit(integrator, "config", "user.email", "test@example.com");
+        RunGit(integrator, "config", "user.name", "test");
+        RunGit(integrator, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(integrator, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        RunGit(integrator, "push", "-q", "origin", "develop");
+        var remoteTip = Git(integrator, "rev-parse", "develop").Out.Trim();
+
+        Assert.NotEqual(staleLocalTip, remoteTip);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "origin/develop").Code);
+
+        var gate = new CountingBuildTestGateRunner();
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            gateRunner: gate);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Equal(TaskStates.Completed, completed!.State);
+        Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+        Assert.Equal(0, gate.Invocations);
+        Assert.Equal(staleLocalTip, Git(_repo, "rev-parse", "develop").Out.Trim());
+        Assert.Equal(remoteTip, Git(_repo, "rev-parse", "origin/develop").Out.Trim());
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal("already-integrated", mergeStep!.Verdict);
+    }
+
+    [Fact]
+    public async Task Accept_WithDivergedLocalIntegrationBranch_RemainsReviewWithVisibleConflict()
+    {
+        var deliverySha = PublishDelivery("diverged-delivery.txt", "delivery\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        File.WriteAllText(Path.Combine(_repo, "local-integration.txt"), "local\n");
+        RunGit(_repo, "add", "-A");
+        RunGit(_repo, "commit", "-q", "-m", "chore: local integration work");
+        var localTip = Git(_repo, "rev-parse", "develop").Out.Trim();
+        RunGit(_repo, "checkout", "-q", "main");
+
+        var integrator = Path.Combine(_tempDir, "diverged-integrator");
+        RunGit(_tempDir, "clone", "-q", _origin, integrator);
+        RunGit(integrator, "config", "user.email", "test@example.com");
+        RunGit(integrator, "config", "user.name", "test");
+        RunGit(integrator, "checkout", "-q", "-b", "develop", "origin/develop");
+        File.WriteAllText(Path.Combine(integrator, "remote-integration.txt"), "remote\n");
+        RunGit(integrator, "add", "-A");
+        RunGit(integrator, "commit", "-q", "-m", "chore: remote integration work");
+        RunGit(integrator, "push", "-q", "origin", "develop");
+
+        var gate = new CountingBuildTestGateRunner();
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            gateRunner: gate);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Failure, accepted.Status);
+        Assert.Contains("diverged from origin", accepted.Message, StringComparison.Ordinal);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(reviewed);
+        Assert.Equal(TaskStates.HumanReview, reviewed!.State);
+        Assert.Null(reviewed.Phase);
+        Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+        Assert.Equal(0, gate.Invocations);
+        Assert.Equal(localTip, Git(_repo, "rev-parse", "develop").Out.Trim());
+
+        var mergeStep = deps.Pipeline.Read(reviewed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Failed, mergeStep!.Status);
+        Assert.Equal("error", mergeStep.Verdict);
+        var integration = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
+        Assert.Contains("diverged from origin", integration.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AcceptedIntegrationWorker_Shutdown_DrainsActiveMergeGate()
     {
         var deliverySha = PublishDelivery("worker-drain.txt", "remote work\n");
@@ -990,6 +1081,34 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 ExpectedSha = request.ExpectedSha,
                 TestedSha = request.ExpectedSha,
             };
+        }
+    }
+
+    private sealed class CountingBuildTestGateRunner : IBuildTestGateRunner
+    {
+        public int Invocations { get; private set; }
+
+        public Task<BuildTestGateResult> RunAsync(
+            BuildTestGateRequest request,
+            IReadOnlyList<string>? changedFiles,
+            BuildProfile? profile,
+            PostStepMode mode,
+            TimeSpan timeout,
+            CancellationToken ct)
+        {
+            Invocations++;
+            return Task.FromResult(new BuildTestGateResult(
+                BuildTestGateVerdict.Ok,
+                0,
+                0,
+                string.Empty,
+                "gate passed",
+                true,
+                false)
+            {
+                ExpectedSha = request.ExpectedSha,
+                TestedSha = request.ExpectedSha,
+            });
         }
     }
 }
