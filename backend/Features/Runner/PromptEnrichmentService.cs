@@ -195,6 +195,21 @@ public sealed class PromptEnrichmentService
         return authoredPrompt + separator + "---\n\n" + contextMarkdown.TrimEnd() + "\n";
     }
 
+    /// <summary>
+    /// Adds the audited enrichment block to the existing per-mode framing seam.
+    /// Local and remote runners both place that seam after the authored task, so
+    /// the task remains readable while mode instructions and enrichment retain a
+    /// single deterministic transport and rendering order.
+    /// </summary>
+    public static string ComposeModeFraming(string? modeFraming, string? enrichmentContext)
+    {
+        var blocks = new[] { modeFraming, enrichmentContext }
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .Select(block => block!.Trim());
+        var composed = string.Join("\n\n", blocks);
+        return composed.Length == 0 ? string.Empty : composed + "\n\n";
+    }
+
     public static string RenderLaunchContext(IntakeEnrichmentManifest manifest)
     {
         var builder = new StringBuilder();

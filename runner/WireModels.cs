@@ -196,7 +196,10 @@ public sealed record RunSpecDto(
     string? Model = null,
     string? ThinkingLevel = null,
     string? PermissionMode = null,
-    string? ContextMode = null);
+    string? ContextMode = null,
+    // Server-composed mode framing and prompt enrichment. Keeping both in one
+    // field gives daemon claims and persisted slots one deterministic seam.
+    string? ModeFraming = null);
 
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,
@@ -214,9 +217,7 @@ public sealed record RunnerClaimResponse(
     IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
     string? RegistrationFingerprint = null,
     // T0b: additive execution spec; an older server simply omits it.
-    RunSpecDto? RunSpec = null,
-    // Exact additive context selected and audited before this claim.
-    string? PromptEnrichmentContext = null);
+    RunSpecDto? RunSpec = null);
 
 public static class RemoteChatWorkKinds
 {
