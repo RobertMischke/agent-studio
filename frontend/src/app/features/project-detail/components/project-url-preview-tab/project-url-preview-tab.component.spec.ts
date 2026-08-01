@@ -247,12 +247,14 @@ describe('ProjectUrlPreviewTabComponent', () => {
     // a disabled "Starting…" state.
     expect(fixture.nativeElement.querySelector('[data-testid="url-preview-start"]')).toBeFalsy();
     const starting: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-starting"]');
-    expect(starting?.textContent).toContain('Console output is active');
+    expect(starting?.textContent).toContain('Waiting for console output');
     expect(starting?.textContent).toContain('accept connections');
     expect(starting?.textContent).toContain('http://localhost:4202');
     const post = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'));
     expect(post.request.method).toBe('POST');
     post.flush(processSnapshot());
+    fixture.detectChanges();
+    expect(fixture.componentInstance.process.session()?.output).toContain('ready in 412 ms');
 
     probe.status.set('running');
     vi.advanceTimersByTime(1_000);
@@ -266,6 +268,8 @@ describe('ProjectUrlPreviewTabComponent', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(null, { status: 204, statusText: 'No Content' });
     fixture.detectChanges();
 
     fixture.componentInstance.start();
@@ -295,6 +299,11 @@ describe('ProjectUrlPreviewTabComponent', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(null, { status: 204, statusText: 'No Content' });
+    fixture.detectChanges();
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic'))
+      .flush(diagnostic('not-started'));
     fixture.detectChanges();
 
     fixture.componentInstance.start();
@@ -321,6 +330,11 @@ describe('ProjectUrlPreviewTabComponent', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(null, { status: 204, statusText: 'No Content' });
+    fixture.detectChanges();
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic'))
+      .flush(diagnostic('not-started'));
     fixture.detectChanges();
 
     fixture.componentInstance.start();

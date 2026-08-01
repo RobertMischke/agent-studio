@@ -104,8 +104,7 @@ export class TaskLiveStatusComponent {
     const latestAt = latestActivityAt(task, status.latestEventAt);
     const idleMs = latestAt === null ? null : Math.max(0, this.now() - latestAt);
     const activeLane = task.state === TaskState.Progress
-      || task.state === TaskState.AutoReview
-      || task.state === TaskState.Preparation;
+      || task.state === TaskState.AutoReview;
     const stalled = activeLane && idleMs !== null && idleMs >= STALE_AFTER_MS;
     // AGT-2378: `runActivity` is classified from the LOCAL slot registry plus the
     // local CLI execution record. A remote run owns the task through a fenced
@@ -116,7 +115,7 @@ export class TaskLiveStatusComponent {
     // classification. The activity-based "possible hang" hint is deliberately
     // left alone: it is about silence, not about ownership.
     const runActive = isTaskRunActive(task);
-    const noActiveRun = !runActive
+    const noActiveRun = activeLane && !runActive
       && (task.runActivity?.kind === 'failed-idle'
         || task.runActivity?.kind === 'no-active-run');
 
@@ -126,7 +125,7 @@ export class TaskLiveStatusComponent {
         ? `No activity for ${elapsed(idleMs!)} · possible hang`
         : noActiveRun
           ? 'No active run'
-          : 'Between steps',
+          : task.state === TaskState.Preparation ? 'Preparing' : 'Between steps',
       detail: idleMs === null ? 'No recorded activity time' : `Last activity ${elapsed(idleMs)} ago`,
       next,
       attempt: status.attempt,

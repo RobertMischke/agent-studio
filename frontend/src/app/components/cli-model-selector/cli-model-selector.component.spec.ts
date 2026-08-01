@@ -4,7 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { Subject, of, throwError } from 'rxjs';
 import { CliModelSelectorComponent } from './cli-model-selector.component';
 import type { CliModelInfo } from '../../features/cli';
-import { CliCatalogStore } from '../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../features/cli';
 import { ModalStackService } from '../../services/modal-stack.service';
 
 /**

@@ -1,9 +1,10 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, finalize, tap } from 'rxjs/operators';
-import { CLI_TYPES, type CliType } from '../models/task.model';
-import { orderModelCatalog, type CliModelCatalog, type CliModelInfo } from '../features/cli';
-import { TaskService } from './task.service';
+import { CLI_TYPES, type CliType } from '../../../models/task.model';
+import { orderModelCatalog } from '../models/model-catalog-ordering';
+import type { CliModelCatalog, CliModelInfo } from '../models/cli.model';
+import { TaskService } from '../../../services/task.service';
 
 interface CatalogEntry {
   models: readonly CliModelInfo[];

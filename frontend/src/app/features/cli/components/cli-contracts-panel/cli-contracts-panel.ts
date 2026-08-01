@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
-import type { CliCompletionContract } from '../../../../features/cli';
+import type { CliCompletionContract } from '../../models/cli.model';
 import type { CliType } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 

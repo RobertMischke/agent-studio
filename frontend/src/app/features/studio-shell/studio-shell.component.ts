@@ -142,7 +142,6 @@ export class StudioShellComponent {
   private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
   private readonly themeService = inject(ThemeService);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly orchestratorFeed = inject(OrchestratorFeedStore);
 
   /** Tab list + active selection re-exposed for the template. */
@@ -173,41 +172,6 @@ export class StudioShellComponent {
       inline: 'nearest',
     });
   });
-
-  /**
-   * AGT-2135 — keep the active tab visible in the horizontally-scrolling
-   * tab strip. Every active-tab change (click activation, programmatic
-   * activation, or a freshly opened tab that pushed the strip past its
-   * edge) re-runs this. The measure + scroll is deferred to a microtask so
-   * the `@for` has rendered the (possibly new) active tab element before we
-   * read its geometry.
-   */
-  private readonly scrollActiveTabIntoViewFx = effect(() => {
-    this.activeKey();
-    queueMicrotask(() => this.scrollActiveTabIntoView());
-  });
-
-  /**
-   * Smooth-scroll the active tab just into view when it sits outside the tab
-   * strip's visible horizontal range. A tab already fully visible is left
-   * untouched so no needless scroll fires (`inline: 'nearest'` also matches
-   * this intent at the browser level).
-   */
-  private scrollActiveTabIntoView(): void {
-    if (typeof document === 'undefined') return;
-    const key = this.activeKey();
-    if (!key) return;
-    const list = this.host.nativeElement.querySelector<HTMLElement>('.studio-tabbar__list');
-    if (!list) return;
-    const active = Array.from(list.querySelectorAll<HTMLElement>('.studio-tab'))
-      .find(el => el.getAttribute('data-tab-key') === key);
-    if (!active || typeof active.scrollIntoView !== 'function') return;
-    const listRect = list.getBoundingClientRect();
-    const tabRect = active.getBoundingClientRect();
-    const fullyVisible = tabRect.left >= listRect.left && tabRect.right <= listRect.right;
-    if (fullyVisible) return;
-    active.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-  }
 
   /** Sidebar panel state re-exposed for the template. */
   readonly activePanel = this.panelState.active;

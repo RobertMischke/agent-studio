@@ -4,7 +4,7 @@ import { CliType, CLI_TYPES, ComponentRoutingRequest, ComponentRoutingResolution
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
-import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../cli';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { sessionFetch } from '../../../services/session-fetch';
 import { PageTaskRequest, pageContextKey } from '../../../models/page-context.model';
