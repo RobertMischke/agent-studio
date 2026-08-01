@@ -7193,12 +7193,15 @@ public class ProjectRunner
         var repositoryPath = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath;
         var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? worktreeCheckout : repositoryPath;
         var promptText = ReadPromptText(promptPath);
-        if (ShouldForegroundIntakeEnrichment(plan))
-        {
-            promptText = preparedPromptEnrichment?.LaunchPrompt
-                         ?? PrependIntakeEnrichment(info.FolderPath, promptText);
-        }
+        if (ShouldForegroundIntakeEnrichment(plan) && preparedPromptEnrichment is null)
+            promptText = PrependIntakeEnrichment(info.FolderPath, promptText);
 
+        var modeFraming = PromptEnrichmentService.ComposeModeFraming(
+            _prompts.RenderModeFraming(
+                info.Mode,
+                info.AllowWebAccess,
+                new PromptCallContext(info.ProjectName, "core", info.Model)),
+            preparedPromptEnrichment?.ContextMarkdown);
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {
             ["prompt_path"] = promptPath,
@@ -7208,10 +7211,7 @@ public class ProjectRunner
             ["working_directory"] = runWorkingDir,
             ["repository_path"] = effectiveRepositoryPath,
             ["attachments_list"] = BuildAttachmentsList(info.FolderPath),
-            ["mode_framing"] = _prompts.RenderModeFraming(
-                info.Mode,
-                info.AllowWebAccess,
-                new PromptCallContext(info.ProjectName, "core", info.Model))
+            ["mode_framing"] = modeFraming
         };
         var rendered = _prompts.Render(
             plan.PromptTemplate,

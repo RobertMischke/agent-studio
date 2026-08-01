@@ -30,16 +30,36 @@ public static class RemoteRunPrompt
         "This is required, not optional. The orchestrator parses this token; " +
         "without it the run lands in review as missing-terminal-sentinel.";
 
-    public static string Build(string taskPrompt, string? enrichmentContext = null)
+    public static string Build(string taskPrompt) =>
+        Build(taskPrompt, modeFraming: null, resultsDirectory: null);
+
+    /// <summary>
+    /// Builds the remote prompt with the server-composed per-mode framing block
+    /// between the task body and the standing instructions. Prompt enrichment is
+    /// one marked block inside this framing value, rather than a parallel prompt
+    /// argument or a separately mutable runner-side channel.
+    /// </summary>
+    public static string Build(
+        string taskPrompt,
+        string? modeFraming,
+        string? resultsDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(taskPrompt);
-        var enrichedPrompt = string.IsNullOrWhiteSpace(enrichmentContext)
-            ? taskPrompt
-            : taskPrompt + (taskPrompt.EndsWith('\n') ? Environment.NewLine : Environment.NewLine + Environment.NewLine)
-              + "---" + Environment.NewLine + Environment.NewLine
-              + enrichmentContext.TrimEnd() + Environment.NewLine;
-        return enrichedPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
+        var framingBlock = string.IsNullOrWhiteSpace(modeFraming)
+            ? string.Empty
+            : modeFraming.Trim() + Environment.NewLine + Environment.NewLine;
+        var resultsBlock = string.IsNullOrWhiteSpace(resultsDirectory)
+            ? string.Empty
+            : "Run context: result files (reports, screenshots, evidence - e.g. `results/report.html`) must be "
+              + $"written into the absolute directory `{resultsDirectory.Trim()}` (also exported as the "
+              + "`JOB_RESULTS_DIR` environment variable). Only files in that directory are collected and shipped "
+              + "to the reviewer; a relative `results/` path inside the repository checkout is NOT collected and "
+              + "is discarded with the temporary worktree."
+              + Environment.NewLine + Environment.NewLine;
+        return taskPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
             + "---" + Environment.NewLine + Environment.NewLine
+            + framingBlock
+            + resultsBlock
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + ContributionGuideInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;

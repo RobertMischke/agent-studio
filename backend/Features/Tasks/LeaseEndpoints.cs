@@ -334,8 +334,10 @@ public static class LeaseEndpoints
                             DefaultBranch: replayedRepository.DefaultBranch,
                             TaskKind: replayedTask.Kind,
                             // A replay must describe the same run as the original
-                            // claim, so it resolves the spec from the same card.
-                            RunSpec: BuildRunSpec(replayedTask, settings, prompts))));
+                            // claim, including the persisted enrichment framing.
+                            RunSpec: AddPersistedPromptEnrichment(
+                                BuildRunSpec(replayedTask, settings, prompts),
+                                replayedTask))));
                     }
                 }
 
@@ -711,6 +713,7 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty,
                         Message: $"Prompt enrichment blocked dispatch: {ex.Message}"));
                 }
+                runSpec = AddPromptEnrichment(runSpec, enrichmentPreparation?.ContextMarkdown);
                 remoteClaimFailures.PrepareForClaim(candidate);
                 var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
                     ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
@@ -825,8 +828,7 @@ public static class LeaseEndpoints
                     RepositoryUrl: repository.RepositoryUrl,
                     DefaultBranch: repository.DefaultBranch,
                     TaskKind: candidate.Kind,
-                    RunSpec: runSpec,
-                    PromptEnrichmentContext: enrichmentPreparation?.ContextMarkdown), admission.ReasonCode));
+                    RunSpec: runSpec), admission.ReasonCode));
             }
             finally
             {
@@ -1676,6 +1678,36 @@ public static class LeaseEndpoints
             settings.ResolveCliMode(task.ProjectName, cliType).Mode,
             settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode,
             modeFraming);
+    }
+
+    private static RunSpecDto AddPromptEnrichment(RunSpecDto runSpec, string? enrichmentContext)
+        => runSpec with
+        {
+            ModeFraming = PromptEnrichmentService.ComposeModeFraming(
+                runSpec.ModeFraming,
+                enrichmentContext),
+        };
+
+    private static RunSpecDto AddPersistedPromptEnrichment(RunSpecDto runSpec, TaskInfo task)
+    {
+        if (TaskKinds.IsEpic(task.Kind)) return runSpec;
+        try
+        {
+            var report = PromptEnrichmentService.ReadReport(task.FolderPath);
+            if (report is null || report.Status != PromptEnrichmentStatuses.Enriched)
+                return runSpec;
+            var contextPath = Path.Combine(
+                task.FolderPath,
+                IntakeRunner.EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            return File.Exists(contextPath)
+                ? AddPromptEnrichment(runSpec, File.ReadAllText(contextPath))
+                : runSpec;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "AddPersistedPromptEnrichment: replay uses base mode framing");
+            return runSpec;
+        }
     }
 
     private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)

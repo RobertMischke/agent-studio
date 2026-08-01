@@ -32,15 +32,9 @@ public sealed record PersistedRunnerSlot(
     // for persistence compatibility: state written before this field simply loads
     // as null and behaves exactly as it did before.
     string? BaseSha = null,
-    // T0b: the execution spec the claim carried for this card. Persisted for the
-    // same reason as BaseSha - only the claiming process ever saw it, and a
-    // replacement daemon that reattaches (or runs the bounded same-session
-    // resume) must relaunch with the card's CLI, model and reasoning level
-    // instead of silently dropping back to the host's RUNNER_CLI_* configuration.
-    RunSpecDto? RunSpec = null,
-    // Server-selected prompt context for this exact claim. Persisted so daemon
-    // replacement cannot silently relaunch without the audited enrichment.
-    string? PromptEnrichmentContext = null);
+    // The execution spec includes the server-composed mode and enrichment
+    // framing. Persisting the one spec keeps daemon replacement deterministic.
+    RunSpecDto? RunSpec = null);
 
 /// <summary>Atomic JSON persistence under RUNNER_STATE_DIR.</summary>
 public sealed class RunnerStateStore
@@ -66,8 +60,7 @@ public sealed class RunnerStateStore
         string? repositoryUrl = null,
         string? defaultBranch = null,
         string? taskKind = null,
-        RunSpecDto? runSpec = null,
-        string? promptEnrichmentContext = null)
+        RunSpecDto? runSpec = null)
     {
         var workerDirectory = Path.Combine(Root, GitWorkspace.SafeSegment(lease.LeaseId));
         Directory.CreateDirectory(workerDirectory);
@@ -88,8 +81,7 @@ public sealed class RunnerStateStore
             0,
             "claimed",
             DateTime.UtcNow,
-            RunSpec: runSpec,
-            PromptEnrichmentContext: promptEnrichmentContext);
+            RunSpec: runSpec);
         Save(slot);
         return slot;
     }

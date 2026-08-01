@@ -205,10 +205,8 @@ public sealed record RunSpecDto(
     string? ThinkingLevel = null,
     string? PermissionMode = null,
     string? ContextMode = null,
-    // Server-rendered per-mode framing block (read-only / research / concept /
-    // web contracts). Appended to the fetched task prompt at this runner's
-    // execution boundary, mirroring the local runner's {{mode_framing}} slot.
-    // Null from an older server keeps the previous verbatim-prompt behaviour.
+    // Server-composed mode framing and prompt enrichment. Keeping both in one
+    // field gives daemon claims and persisted slots one deterministic seam.
     string? ModeFraming = null);
 
 public sealed record RunnerClaimResponse(
@@ -233,9 +231,7 @@ public sealed record RunnerClaimResponse(
     string? RampStrategy = null,
     string? AdmissionReason = null,
     // T0b: additive execution spec; an older server simply omits it.
-    RunSpecDto? RunSpec = null,
-    // Exact additive context selected and audited before this claim.
-    string? PromptEnrichmentContext = null);
+    RunSpecDto? RunSpec = null);
 
 public static class RemoteChatWorkKinds
 {

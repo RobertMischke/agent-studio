@@ -184,24 +184,29 @@ public sealed class RunSpecInvocationTests : IDisposable
     }
 
     [Fact]
-    public void The_run_spec_and_prompt_enrichment_survive_the_persisted_daemon_slot()
+    public void The_run_spec_with_prompt_enrichment_survives_the_persisted_daemon_slot()
     {
         var stateRoot = Path.Combine(_root, "state");
         var store = new RunnerStateStore(stateRoot);
         var lease = Lease("AGT-SPEC-SLOT");
-        var spec = new RunSpecDto("codex", "gpt-5.6-codex", "high", "yolo", "shared");
         const string enrichment = "## Prompt enrichment\n\n- Apply the project style guide.";
+        var spec = new RunSpecDto(
+            "codex",
+            "gpt-5.6-codex",
+            "high",
+            "yolo",
+            "shared",
+            enrichment);
 
         store.Create(
             lease.TaskKey,
             lease,
             Path.Combine(_root, "worktree"),
-            runSpec: spec,
-            promptEnrichmentContext: enrichment);
+            runSpec: spec);
         var reloaded = Assert.Single(new RunnerStateStore(stateRoot).LoadAll());
 
         Assert.Equal(spec, reloaded.RunSpec);
-        Assert.Equal(enrichment, reloaded.PromptEnrichmentContext);
+        Assert.Equal(enrichment, reloaded.RunSpec?.ModeFraming);
     }
 
     [Fact]
@@ -215,7 +220,6 @@ public sealed class RunSpecInvocationTests : IDisposable
         var reloaded = Assert.Single(new RunnerStateStore(stateRoot).LoadAll());
 
         Assert.Null(reloaded.RunSpec);
-        Assert.Null(reloaded.PromptEnrichmentContext);
         Assert.Equal("AGT-LEGACY-SLOT", reloaded.TaskKey);
     }
 

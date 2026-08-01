@@ -361,7 +361,7 @@ public sealed class RemoteRunnerDaemon
                             claim.TaskKey, claim.Lease, workspace.RepoPath,
                             claim.RunId, claim.LeaseInstanceId, claim.ProjectId,
                             claim.RepositoryUrl, claim.DefaultBranch, claim.TaskKind,
-                            claim.RunSpec, claim.PromptEnrichmentContext);
+                            claim.RunSpec);
                         const string reason = "planned daemon shutdown completed an in-flight claim before worker start";
                         _log($"releasing claim completed during shutdown task={claim.TaskKey} lease={claim.Lease.LeaseId}");
                         if (!await taskRunner.ReleaseDeadAsync(slot, reason))
@@ -388,8 +388,7 @@ public sealed class RemoteRunnerDaemon
                             // T0b: the card's execution spec. Null from a server
                             // that predates it - the runner then falls back to
                             // its RUNNER_CLI_* configuration as before.
-                            claim.RunSpec,
-                            claim.PromptEnrichmentContext)));
+                            claim.RunSpec)));
                 }
 
                 if (!claimedAny)
