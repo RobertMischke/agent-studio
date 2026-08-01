@@ -341,6 +341,10 @@ state.
   the `Process.Start`-to-slot-save handoff window. The replacement renews
   authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
   persisted worktree, then follows JSONL output and completes the same attempt.
+  Startup discovery and the attached-process poll consume one durable-process
+  inspection verdict. If PID liveness fails, that inspection reads the atomic
+  terminal result a second time before declaring the worker lost, so a result
+  written during process exit cannot be released as a dead attempt.
   Reattachment also reopens the durable outbox with the original persisted
   attempt instance, never the replacement daemon's process identity.
   Missing or mismatched processes are actively released and returned to Ready;
