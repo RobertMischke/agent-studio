@@ -70,11 +70,12 @@ blocked run, while the durable evidence directory remains.
    `main`, waits for Stable to become safe to restart, runs `update-stable.sh`,
    verifies the deployed checkout, and resumes the runner.
 
-The first promotion after the 30 July convergence is exceptional. `main`
-received two follow-up fixes whose behavior was then integrated independently
-into `develop`, so the initial merge reports a conflict in the resolver test.
-After reviewing `main-only-patch-review.txt` and the conflict diff, the operator
-may run that one bootstrap with:
+The 1 August pre-promotion convergence at `0d8d6794a` merged the remaining
+`main` fixes into `develop`. The first promotion after that convergence must use
+the normal conflict-blocking path shown above. The bootstrap-only escape hatch
+is retained for recovery rehearsals and older repository states, but is not
+required for the current train. If an explicitly reviewed historic bootstrap
+does need it, use:
 
 ```sh
 ./scripts/release/promote-develop-to-main.sh \
@@ -86,7 +87,7 @@ may run that one bootstrap with:
 
 That option replaces every conflicted path with the exact `develop` version and
 records both the policy and path list. It is not the routine release policy. A
-later conflict requires a fresh review and should normally be converged on
+current conflict requires a fresh review and should normally be converged on
 `develop` before promotion.
 
 ## Mandatory full gate
@@ -125,8 +126,10 @@ full gate output and remote push response.
 ## Deploy cron handoff
 
 The one-shot Stable watcher now supports `ATP_RESTART_TRIGGER=main-advance`.
-Run it from a host scheduler with an external lock so long updates cannot
-overlap:
+This is the handoff for the repository-backed operator Stable checkout. It does
+not replace the immutable `vX.Y.Z` plus build-manifest deployment contract for
+packaged installations. Run it from a host scheduler with an external lock so
+long updates cannot overlap:
 
 ```cron
 * * * * * flock -n /var/lock/agent-studio-main-deploy.lock env ATP_RESTART_TRIGGER=main-advance ATP_WORKSPACE=/srv/agent-taskboard-workspace ATP_STABLE_CHECKOUT=/srv/agent-taskboard-stable ATP_UPDATE_SCRIPT=/srv/agent-taskboard-devspace/update-stable.sh /srv/agent-taskboard-dev/scripts/supervisor/restart-stable-after-batch.sh >>/var/log/agent-studio-main-deploy.log 2>&1
