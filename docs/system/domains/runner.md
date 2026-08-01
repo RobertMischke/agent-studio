@@ -43,10 +43,13 @@ state.
   `runner/RemoteRunPrompt.cs`: shared pre-spawn prompt materialization. Local
   fresh runs call the service before the pickup lock and in-memory run claim.
   Remote claims materialize the same report before lease acquisition and lane
-  movement, then carry the exact generated context on the claim and persist it
-  in the runner slot. The authored `prompt.md` is never rewritten. A missing or
-  unwritable report is an admission failure, while selector failure may use the
-  authored prompt only after a `fallback-unenriched` report has been persisted.
+  movement, then compose the exact generated context into the existing
+  `RunSpec.ModeFraming` value. The runner persists that single spec in its slot,
+  keeping mode framing, results-directory guidance, and enrichment on one
+  deterministic prompt path. The authored `prompt.md` is never rewritten. A
+  missing or unwritable report is an admission failure, while selector failure
+  may use the authored prompt only after a `fallback-unenriched` report has been
+  persisted.
 - `backend/Features/Runner/RunTimelineEventFactory.cs`: canonical projection of
   run execution context and terminal run facts into timeline events. Execution
   context preserves model, thinking level, source origin, and exact source

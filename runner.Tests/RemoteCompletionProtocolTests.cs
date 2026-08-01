@@ -91,15 +91,22 @@ public sealed class RemoteCompletionProtocolTests
     }
 
     [Fact]
-    public void Daemon_prompt_keeps_authored_prompt_then_appends_server_enrichment()
+    public void Daemon_prompt_keeps_authored_prompt_then_appends_composed_mode_framing()
     {
         const string authored = "# Original\n\nOperator-authored text.";
+        const string baseModeFraming = "## Planning mode\n\nProduce a plan before implementation.";
         const string enrichment =
             "## Prompt enrichment\n\n> Appended by the task server.\n\n- **Use the style guide** (`style-guide:frontend`)";
+        var composedModeFraming = baseModeFraming + "\n\n" + enrichment + "\n\n";
 
-        var prompt = RemoteRunPrompt.Build(authored, enrichment);
+        var prompt = RemoteRunPrompt.Build(
+            authored,
+            modeFraming: composedModeFraming,
+            resultsDirectory: null);
 
         Assert.StartsWith(authored, prompt, StringComparison.Ordinal);
+        Assert.True(prompt.IndexOf(baseModeFraming, StringComparison.Ordinal)
+                    < prompt.IndexOf(enrichment, StringComparison.Ordinal));
         Assert.True(prompt.IndexOf(enrichment, StringComparison.Ordinal)
                     < prompt.IndexOf(RemoteRunPrompt.ModelRoutingPolicyInstruction, StringComparison.Ordinal));
         Assert.Equal(1, Count(prompt, enrichment));

@@ -1,10 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
 const JOB_ID = 'prompt-enrichment-fixture';
 const WATCH_PATH = '/fixtures/prompt-enrichment';
-const RESULTS_DIR = path.resolve(__dirname, '../../results/AGT-2411');
+
+async function screenshotPath(testInfo: TestInfo, theme: 'light' | 'dark'): Promise<string> {
+  const configured = process.env['JOB_RESULTS_DIR']?.trim();
+  const resultsDir = configured ? path.resolve(configured) : testInfo.outputDir;
+  await mkdir(resultsDir, { recursive: true });
+  return path.join(resultsDir, `prompt-enrichment-report-${theme}--mocked.png`);
+}
 
 function json(body: unknown) {
   return {
@@ -207,7 +213,7 @@ async function installRoutes(page: Page): Promise<void> {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`shows the prompt enrichment report beside the authored prompt (${theme})`, async ({ page }) => {
+  test(`shows the prompt enrichment report beside the authored prompt (${theme})`, async ({ page }, testInfo) => {
     await page.addInitScript(selectedTheme => {
       localStorage.setItem('atp.studio.theme', selectedTheme);
       document.documentElement.dataset['studioTheme'] = selectedTheme;
@@ -239,9 +245,8 @@ for (const theme of ['light', 'dark'] as const) {
     expect(reportBox).not.toBeNull();
     expect(reportBox!.x).toBeGreaterThan(promptBox!.x + promptBox!.width);
 
-    await mkdir(RESULTS_DIR, { recursive: true });
     await page.screenshot({
-      path: path.join(RESULTS_DIR, `prompt-enrichment-report-${theme}.png`),
+      path: await screenshotPath(testInfo, theme),
       fullPage: false,
     });
   });

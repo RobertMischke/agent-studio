@@ -753,11 +753,12 @@ public class PipelineCatalogueTests
         Assert.Equal(PipelineCatalogue.ReadOnlyPipelineId, ro.Id);
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
-        Assert.Equal(4, ro.Pre.Count);
+        Assert.Equal(5, ro.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.ModelQualificationStepId, ro.Pre[1].Id);
-        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[2].Id);
-        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PromptEnrichmentStepId, ro.Pre[2].Id);
+        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[3].Id);
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[4].Id);
         Assert.Equal(
             [PipelineCatalogue.OrchestratorReviewStepId, PipelineCatalogue.OrchestratorDecisionStepId],
             ro.Post.Select(step => step.Id));

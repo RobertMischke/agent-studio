@@ -142,6 +142,23 @@ public sealed class PromptEnrichmentServiceTests : IDisposable
     }
 
     [Fact]
+    public void ComposeModeFraming_PreservesModeContractBeforeEnrichment()
+    {
+        const string modeContract = "**Read-only run.** Preserve the report-only contract.";
+        const string enrichment = "## Prompt enrichment\n\n- Apply the selected project context.";
+
+        var composed = PromptEnrichmentService.ComposeModeFraming(modeContract, enrichment);
+
+        Assert.StartsWith(modeContract, composed, StringComparison.Ordinal);
+        Assert.True(
+            composed.IndexOf(enrichment, StringComparison.Ordinal)
+            > composed.IndexOf(modeContract, StringComparison.Ordinal));
+        Assert.Equal(1, Count(composed, modeContract));
+        Assert.Equal(1, Count(composed, enrichment));
+        Assert.EndsWith("\n\n", composed, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Prepare_SelectorFailure_PersistsFallbackBeforeUsingAuthoredPrompt()
     {
         var folder = Path.Combine(_root, "fallback-card");
@@ -208,5 +225,17 @@ public sealed class PromptEnrichmentServiceTests : IDisposable
                 enabledOverride: true));
 
         Assert.Contains("Dispatch is blocked", error.Message);
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = text.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+        return count;
     }
 }

@@ -244,7 +244,8 @@ public sealed class RunnerSlotWiringTests : IDisposable
             State = TaskStates.Progress,
             FolderPath = jobFolder,
             WatchPath = _watchPath,
-            ProjectName = ProjectName
+            ProjectName = ProjectName,
+            Mode = TaskModes.Planning
         };
         var plan = new RunPlan(
             PromptTemplate: RuntimePromptService.RunnerFreshStart,
@@ -281,8 +282,13 @@ public sealed class RunnerSlotWiringTests : IDisposable
         Assert.Contains($"Git repository for status/diff/commits: `{worktree}`", rendered);
         var containmentIndex = rendered.IndexOf("## Worktree containment", StringComparison.Ordinal);
         var authoredIndex = rendered.IndexOf("Edit ", StringComparison.Ordinal);
+        var modeFramingIndex = rendered.IndexOf("Read-only run", StringComparison.Ordinal);
         var enrichmentIndex = rendered.IndexOf("## Prompt enrichment", StringComparison.Ordinal);
-        Assert.True(containmentIndex == 0 && authoredIndex > containmentIndex && enrichmentIndex > authoredIndex);
+        Assert.True(
+            containmentIndex == 0
+            && authoredIndex > containmentIndex
+            && modeFramingIndex > authoredIndex
+            && enrichmentIndex > modeFramingIndex);
     }
 
     [Fact]

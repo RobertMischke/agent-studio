@@ -319,11 +319,13 @@ pipeline view.
   provenance are treated as pinned. The selected/recommended pair remains
   visible on the step record.
 - `pre-prompt-enrichment` runs after qualification and before CORE spawn. The
-  original prompt remains byte-for-byte at the front of the launch prompt; the
-  labelled enrichment is additive. Its step token buckets describe selector
-  work only, which is zero in the deterministic implementation. Appended prompt
-  tokens are attributed in `enrichment-report.json` and remain part of CORE
-  input, so pipeline cost totals do not count them twice.
+  original task block remains byte-for-byte readable and the labelled
+  enrichment is additive inside the existing mode-framing seam. A worktree
+  containment notice may still precede the task block. Its step token buckets
+  describe selector work only, which is zero in the deterministic
+  implementation. Appended prompt tokens are attributed in
+  `enrichment-report.json` and remain part of CORE input, so pipeline cost
+  totals do not count them twice.
 - Cheap-model routing is explicit and reversible. `PipelineStepSetting` owns the
   `(cliType, model, thinkingLevel)` override per project and step; absent fields
   preserve the current runtime default. Aspect reviews and abort review honor
