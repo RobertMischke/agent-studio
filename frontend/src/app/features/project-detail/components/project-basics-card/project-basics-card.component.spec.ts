@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { of } from 'rxjs';
 import type { RegistryProjectSummary, RegistryWorkspaceListItem } from '../../../../models/task.model';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import { NotificationService } from '../../../../services/notification.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TaskService } from '../../../../services/task.service';

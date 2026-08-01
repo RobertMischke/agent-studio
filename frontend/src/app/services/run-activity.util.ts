@@ -106,13 +106,15 @@ function latestActivityMs(job: TaskInfo): number | null {
 export function isTaskRunActive(job: TaskInfo): boolean {
   if (job.liveStatus?.activeStep != null
     || job.execution?.status === 'running'
-    || job.runner != null
     || job.runActivity?.kind === 'active') {
     return true;
   }
   const location = job.executionLocation;
-  return (location?.state === 'local-running' || location?.state === 'remote-running')
-    && location.connectionState === 'connected';
+  if (location) {
+    return (location.state === 'local-running' || location.state === 'remote-running')
+      && location.connectionState === 'connected';
+  }
+  return job.runner != null;
 }
 
 /**

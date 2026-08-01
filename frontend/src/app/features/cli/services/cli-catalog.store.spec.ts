@@ -2,9 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { Subject, of, throwError } from 'rxjs';
 import { CliCatalogStore } from './cli-catalog.store';
-import { TaskService } from './task.service';
-import type { CliModelCatalog, CliModelInfo } from '../features/cli';
-import type { CliType } from '../models/task.model';
+import { TaskService } from '../../../services/task.service';
+import type { CliModelCatalog, CliModelInfo } from '../models/cli.model';
+import type { CliType } from '../../../models/task.model';
 
 interface JobsStub {
   getCliModelCatalog: ReturnType<typeof vi.fn>;

@@ -6,7 +6,9 @@ import {
 } from '../../../../components/segmented-control/segmented-control.component';
 import { ThemeService } from '../../services/theme.service';
 import { StudioPanelStateService } from '../../services/studio-panel-state.service';
-import { UiPreferencesService } from '../../../shell';
+// WorkspaceOverlaysComponent imports this component and is itself exported by
+// the shell barrel. Read the leaf service directly to avoid that barrel cycle.
+import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
 
 /**
  * AGT-2035 — Appearance section of the consolidated Workspace-settings view.

@@ -21,7 +21,7 @@ import type {
   CliUsageReport,
   CliUsageSection,
   LinkedJobRef,
-} from '../../../../features/cli';
+} from '../../models/cli.model';
 import {
   buildRows,
   countByCli,

@@ -12,9 +12,9 @@ import {
 } from '@angular/core';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { CliType } from '../../../../models/task.model';
-import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota.model';
 import { cliTypeIcon } from '../../../../services/format.util';
-import { QuotaApiService } from '../../../../features/quota';
+import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';

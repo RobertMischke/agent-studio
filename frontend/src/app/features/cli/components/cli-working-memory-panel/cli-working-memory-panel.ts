@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
-import type { CliWorkingMemoryEntry, CliWorkingMemoryReport } from '../../../../features/cli';
+import type { CliWorkingMemoryEntry, CliWorkingMemoryReport } from '../../models/cli.model';
 import type { CliType } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel, formatRelativeTime } from '../../../../services/format.util';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';

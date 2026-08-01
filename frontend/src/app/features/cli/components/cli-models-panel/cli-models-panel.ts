@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
-import type { CliModelInfo } from '../../../../features/cli';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import type { CliModelInfo } from '../../models/cli.model';
+import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService, type CliModelRouteProfile, type ModelRoutingPolicyView } from '../../../quota';
 
