@@ -172,8 +172,20 @@ public sealed class TaskIntegrationStatusService
     {
         try
         {
+            var subjectPath = ReviewSubjectStore.PathFor(job.FolderPath);
             var subject = ReviewSubjectStore.Read(job.FolderPath);
-            if (subject is null || !ReviewSubjectStore.IsValidResultSha(subject.ResultSha))
+            if (subject is null)
+            {
+                if (File.Exists(subjectPath))
+                {
+                    _logger.LogError(
+                        "Accepted delivery metadata at {Path} is invalid; fenced integration ancestry cannot be verified for {JobId}",
+                        subjectPath,
+                        job.Id);
+                }
+                return false;
+            }
+            if (!ReviewSubjectStore.IsValidResultSha(subject.ResultSha))
                 return false;
 
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
@@ -187,7 +199,10 @@ public sealed class TaskIntegrationStatusService
         }
         catch (Exception ex)
         {
-            SilentCatch.Note(ex, "TaskIntegrationStatusService: fenced delivery ancestry is best-effort");
+            _logger.LogError(
+                ex,
+                "Fenced integration ancestry could not be verified for {JobId}",
+                job.Id);
             return false;
         }
     }

@@ -459,9 +459,31 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Equal(IntegrationStatuses.Integrated, lookup[completed.TaskKey].Status);
     }
 
+    [Fact]
+    public void IsFencedDeliveryIntegrated_InvalidSubject_IsReportedAsIntegrationError()
+    {
+        var repo = SeedDevelopMainRepo();
+        var logger = new LevelCapturingLogger<TaskIntegrationStatusService>();
+        var svc = BuildService(repo, out var project, out var log, logger);
+        var job = Job("invalid-subject", "AGT-3006", project, repo, log);
+        var subjectPath = ReviewSubjectStore.PathFor(job.FolderPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(subjectPath)!);
+        File.WriteAllText(subjectPath, "{ invalid json");
+
+        Assert.False(svc.IsFencedDeliveryIntegrated(job));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Error
+                     && entry.Message.Contains("fenced integration ancestry", StringComparison.OrdinalIgnoreCase));
+    }
+
     // --- helpers -----------------------------------------------------------
 
-    private TaskIntegrationStatusService BuildService(string repo, out string projectName, out PipelineExecutionLog log)
+    private TaskIntegrationStatusService BuildService(
+        string repo,
+        out string projectName,
+        out PipelineExecutionLog log,
+        ILogger<TaskIntegrationStatusService>? logger = null)
     {
         projectName = "Fixture";
         var config = ConfigFor(repo, projectName);
@@ -471,7 +493,24 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         log = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         return new TaskIntegrationStatusService(
-            git, settings, log, NullLogger<TaskIntegrationStatusService>.Instance);
+            git, settings, log, logger ?? NullLogger<TaskIntegrationStatusService>.Instance);
+    }
+
+    private sealed class LevelCapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 
     private static IConfiguration ConfigFor(string repo, string projectName)
