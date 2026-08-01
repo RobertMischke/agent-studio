@@ -39,6 +39,11 @@ internal sealed record DetachedJobResult(
     bool TimedOut,
     DateTime CompletedAtUtc);
 
+internal sealed record DetachedJobProcessObservation(
+    bool IsLive,
+    DetachedJobResult? Result,
+    string Detail);
+
 internal sealed record DetachedWorkerIdentity(
     int ProcessId,
     DateTime ProcessStartedAtUtc,
@@ -201,8 +206,42 @@ internal sealed class DurableAgentProcess
         return VerifyLive(recovered, out reason);
     }
 
-    public static bool HasCompleted(PersistedRunnerSlot slot)
-        => File.Exists(Path.Combine(slot.WorkerDirectory, "result.json"));
+    /// <summary>
+    /// Resolves the only two facts that make a persisted worker reattachable:
+    /// a live, positively identified process or its atomically persisted
+    /// terminal result. The second result read closes the worker-exit race
+    /// where the result appears after the first read but before PID liveness is
+    /// checked.
+    /// </summary>
+    public static DetachedJobProcessObservation InspectForReattach(PersistedRunnerSlot slot)
+    {
+        var process = Attach(slot);
+        return InspectForReattach(
+            process.ReadResult,
+            () =>
+            {
+                var isLive = VerifyLive(slot, out var detail);
+                return (isLive, detail);
+            });
+    }
+
+    internal static DetachedJobProcessObservation InspectForReattach(
+        Func<DetachedJobResult?> readResult,
+        Func<(bool IsLive, string Detail)> verifyLive)
+    {
+        var result = readResult();
+        if (result is not null)
+            return new DetachedJobProcessObservation(false, result, "durable result ready");
+
+        var (isLive, detail) = verifyLive();
+        if (isLive)
+            return new DetachedJobProcessObservation(true, null, detail);
+
+        result = readResult();
+        return result is not null
+            ? new DetachedJobProcessObservation(false, result, "durable result ready")
+            : new DetachedJobProcessObservation(false, null, detail);
+    }
 
     public static bool VerifyLive(PersistedRunnerSlot slot, out string reason)
     {
