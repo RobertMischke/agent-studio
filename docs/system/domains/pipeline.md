@@ -96,9 +96,12 @@ pipeline view.
   branch is stale. Immediately before a real merge or release gate, the
   configured integration ref is fetched again and fast-forwarded; a missing
   local branch is created from origin and a divergent one fails visibly. The
-  outcome is recorded so the pending step
-  flips to passed / failed / skipped in place. After a successful merge it
-  also pushes the integration branch itself to `origin`
+  outcome is recorded so the pending step flips to passed / failed / skipped
+  in place. An existing but invalid review subject fails visibly instead of
+  falling back to a guessed local branch. Integration exceptions, returned
+  error outcomes, settings failures, and result-recording failures are logged
+  at error level. After a successful merge it also pushes the integration
+  branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
   the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
   (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as

@@ -98,6 +98,14 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 }
                 else
                 {
+                    if (result.Outcome == MergeIntoIntegrationOutcome.Error)
+                    {
+                        _logger.LogError(
+                            "accepted-integration-backstop integration failed project={Project} job={JobId}: {Error}",
+                            job.ProjectName,
+                            job.Id,
+                            result.Error ?? "unknown error");
+                    }
                     ReturnTransactionalAcceptToReview(
                         job,
                         result.Outcome.ToString(),

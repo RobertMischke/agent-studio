@@ -235,7 +235,7 @@ public sealed class MergeIntoDevelopRunner
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "merge-into-develop post-step failed for {JobId}", jobId);
+            _logger.LogError(ex, "merge-into-develop post-step failed for {JobId}", jobId);
             var errored = MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: ex.Message);
             try
             {
@@ -249,9 +249,12 @@ public sealed class MergeIntoDevelopRunner
                     preDevelopResult: null,
                     startedAt);
             }
-            catch (Exception __ex)
+            catch (Exception recordError)
             {
-                SilentCatch.Note(__ex, "MergeIntoDevelopRunner: recording is best-effort");
+                _logger.LogError(
+                    recordError,
+                    "merge-into-develop failed to record the terminal error for {JobId}",
+                    jobId);
             }
             return errored;
         }
@@ -264,7 +267,14 @@ public sealed class MergeIntoDevelopRunner
         string integrationBranch,
         string integrationStrategy)
     {
+        var reviewSubjectPath = ReviewSubjectStore.PathFor(jobFolderPath);
         var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+        if (reviewSubject is null && File.Exists(reviewSubjectPath))
+        {
+            throw new InvalidDataException(
+                $"Accepted delivery metadata at '{reviewSubjectPath}' is invalid; "
+                + "refusing to guess a local task branch.");
+        }
         var resolvedBranch = reviewSubject is not null
             ? TaskIntegrationBranch.Name(
                 reviewSubject.IntegrationBranch,
@@ -401,7 +411,8 @@ public sealed class MergeIntoDevelopRunner
         string integrationBranch,
         Func<MergeIntoIntegrationResult> merge)
     {
-        var profile = BuildProfileFor(project);
+        var settings = ReadProjectSettings(project);
+        var profile = settings?.BuildProfile;
         var skipReason = _preDevelopBuildGate is null
             ? "no build gate is wired"
             : PreDevelopBuildGate.AppliesTo(profile)
@@ -457,7 +468,7 @@ public sealed class MergeIntoDevelopRunner
                 Project = project,
                 JobId = jobId,
                 Lane = TaskStates.Completed,
-                TestExecution = TestExecutionFor(project),
+                TestExecution = settings?.TestExecution,
                 JobFolderPath = jobFolderPath,
                 SubjectRef = integrationBranch,
             },
@@ -494,27 +505,23 @@ public sealed class MergeIntoDevelopRunner
     }
 
     /// <summary>
-    /// The project's declared build profile, or null when no settings service is
-    /// wired (legacy fixtures) or the read fails. A null profile means "no gate".
+    /// Reads project settings once for a gated integration. Legacy fixtures
+    /// without a settings service keep their historical defaults. A failed read
+    /// remains non-blocking but is emitted as an integration error.
     /// </summary>
-    private BuildProfile? BuildProfileFor(string project)
+    private ProjectSettings? ReadProjectSettings(string project)
     {
         if (_projectSettings == null) return null;
-        try { return _projectSettings.Get(project).BuildProfile; }
-        catch (Exception ex)
+        try
         {
-            SilentCatch.Note(ex, "MergeIntoDevelopRunner: build-profile read is best-effort");
-            return null;
+            return _projectSettings.Get(project);
         }
-    }
-
-    private TestExecutionPolicy? TestExecutionFor(string project)
-    {
-        if (_projectSettings == null) return null;
-        try { return _projectSettings.Get(project).TestExecution; }
         catch (Exception ex)
         {
-            SilentCatch.Note(ex, "MergeIntoDevelopRunner: test-execution read is best-effort");
+            _logger.LogError(
+                ex,
+                "merge-into-develop could not read project settings for {Project}; using legacy gate defaults",
+                project);
             return null;
         }
     }
@@ -726,7 +733,10 @@ public sealed class MergeIntoDevelopRunner
         }
         catch (Exception ex)
         {
-            SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-enabled read is best-effort; default on");
+            _logger.LogError(
+                ex,
+                "merge-into-develop could not read push settings for {Project}; defaulting the push step to enabled",
+                project);
             return true;
         }
     }
@@ -828,15 +838,25 @@ public sealed class MergeIntoDevelopRunner
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "merge-into-develop push threw for project={Project} job={JobId}", project, jobId);
+            _logger.LogError(ex, "merge-into-develop push threw for project={Project} job={JobId}", project, jobId);
             result = new GitPushResult(false, string.Empty, "error", ex.Message);
         }
 
         _logger.LogInformation(
             "merge-into-develop-push project={Project} job={JobId} branch={Branch} status={Status} retries={Retries}",
             project, jobId, integrationBranch, result.Status, environmentalRetries);
-        try { RecordPushStep(jobFolderPath, project, jobId, result, startedAt, environmentalRetries); }
-        catch (Exception ex) { SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-step recording is best-effort"); }
+        try
+        {
+            RecordPushStep(jobFolderPath, project, jobId, result, startedAt, environmentalRetries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "merge-into-develop failed to record push result for project={Project} job={JobId}",
+                project,
+                jobId);
+        }
         return result;
     }
 
