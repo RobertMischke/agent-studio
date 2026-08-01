@@ -1,0 +1,33 @@
+@let d = detail();
+<section class="prompt-meta" data-testid="prompt-admin-meta">
+  <div class="prompt-meta__column">
+    <div class="prompt-meta__heading">Slots</div>
+    @if (d.slots.length) {
+      <div class="prompt-meta__slots">
+        @for (slot of d.slots; track slot) {
+          <code class="prompt-meta__slot"
+            [attr.data-testid]="'prompt-admin-slot-' + slot">{{ '{{' + slot + '}}' }}</code>
+        }
+      </div>
+    } @else {
+      <span class="prompt-meta__muted">No named slots - static template.</span>
+    }
+  </div>
+  <div class="prompt-meta__column">
+    <div class="prompt-meta__heading">Used by</div>
+    @if (d.usages.length) {
+      <table class="prompt-meta__usage" data-testid="prompt-admin-usage">
+        <tbody>
+          @for (use of d.usages; track use.component + use.member) {
+            <tr>
+              <td><code>{{ use.component }}.{{ use.member }}</code></td>
+              <td class="prompt-meta__muted">{{ use.purpose }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <span class="prompt-meta__muted">No recorded usage in the registry.</span>
+    }
+  </div>
+</section>

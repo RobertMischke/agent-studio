@@ -100,7 +100,6 @@ internal static class RunnerCapabilityProbe
         {
             CapabilityProtocol.CodingExecutor,
             CapabilityProtocol.GitFetch,
-            CapabilityProtocol.GitPush,
             CapabilityProtocol.RepositoryAccess,
             CapabilityProtocol.Disk,
             CapabilityProtocol.TaskServerConnectivity,

@@ -138,6 +138,14 @@ describe('resolveActiveActivityKey', () => {
     })).toBe('settings');
   });
 
+  it('maps the Feed main route to the Activity item', () => {
+    expect(resolveActiveActivityKey({
+      activeTabKind: 'feed',
+      activePanel: 'explorer',
+      sidebarVisible: true,
+    })).toBe('activity');
+  });
+
   it('maps the epics tab to the epics item', () => {
     expect(resolveActiveActivityKey({
       activeTabKind: 'epics',

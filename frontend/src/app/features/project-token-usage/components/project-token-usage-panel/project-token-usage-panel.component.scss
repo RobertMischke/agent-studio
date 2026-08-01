@@ -1,8 +1,10 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
 .tup { display: flex; flex-direction: column; gap: 18px; }
 
-.tup__head { padding-bottom: 12px; border-bottom: 1px solid var(--studio-bg-elevated); }
+.tup__head { padding-bottom: 12px; border-bottom: 1px solid var(--studio-border); }
 .tup__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tup__title { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--studio-fg-strong); display: flex; align-items: center; gap: 8px; }
 .tup__icon { width: 18px; text-align: center; }
@@ -10,20 +12,18 @@
 .tup__spacer { flex: 1; }
 .tup__loading { color: var(--studio-fg-muted); font-size: 0.78rem; }
 
+/* Live load failure — acute now. */
 .tup__error {
-  padding: 10px 14px;
-  background: rgba(243, 139, 168, 0.10);
-  border: 1px solid rgba(243, 139, 168, 0.30);
+  @include m.deck-panel;
+  @include m.deck-panel-attention;
   color: var(--severity-high);
-  border-radius: 6px;
   font-size: 0.85rem;
 }
 
+/* Empty state: read-only guidance, so muted rather than dashed. */
 .tup__empty {
-  padding: 24px 18px;
-  border: 1px dashed var(--studio-bg-elevated);
-  background: rgba(0,0,0,0.18);
-  border-radius: 6px;
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
   color: var(--studio-fg-muted);
 }
 .tup__empty p { margin: 0 0 6px; font-size: 0.88rem; }
@@ -32,22 +32,23 @@
 .tup__cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--studio-deck-panel-gap);
 }
 .tup__card {
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-bg-elevated);
-  border-radius: 8px;
-  padding: 14px 16px;
+  @include m.deck-panel;
   min-height: 110px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.tup__card--total { border-top: 3px solid var(--studio-accent-teal); }
-.tup__card--job { border-top: 3px solid var(--severity-info); }
-.tup__card--supporting { border-top: 3px solid var(--severity-pending); }
-.tup__card--orchestrator { border-top: 3px solid var(--studio-accent-strong); }
+/*
+ * Category pigment rides the whole panel edge instead of a decorative
+ * 3px top stripe (Deck-Panel v1: uniform border, never a side rail).
+ */
+.tup__card--total { border-color: color-mix(in srgb, var(--studio-accent-teal) 45%, var(--studio-card-border)); }
+.tup__card--job { border-color: color-mix(in srgb, var(--severity-info) 45%, var(--studio-card-border)); }
+.tup__card--supporting { border-color: color-mix(in srgb, var(--severity-pending) 45%, var(--studio-card-border)); }
+.tup__card--orchestrator { border-color: color-mix(in srgb, var(--studio-accent-strong) 45%, var(--studio-card-border)); }
 .tup__card-title {
   margin: 0; color: var(--studio-fg-muted); font-size: 0.74rem;
   letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;
@@ -69,15 +70,13 @@
 }
 .tup__section-empty { margin: 4px 0 0; color: var(--studio-fg-muted); font-size: 0.82rem; }
 
+/* Chart panel: the day labels hang below the bars, so the inset stays custom. */
 .tup__timeline-bars {
+  @include m.deck-panel(4px 4px 18px);
   display: flex;
   align-items: flex-end;
   height: 60px;
   gap: 2px;
-  padding: 4px 4px 18px;
-  background: var(--studio-bg-overlay);
-  border: 1px solid var(--studio-bg-elevated);
-  border-radius: 6px;
 }
 .tup__timeline-bar {
   flex: 1;
@@ -97,10 +96,8 @@
 }
 
 .tup__heatmap-scroll {
+  @include m.deck-panel(0);
   overflow-x: auto;
-  border: 1px solid var(--studio-bg-elevated);
-  border-radius: 6px;
-  background: var(--studio-bg-elevated);
 }
 .tup__heatmap {
   border-collapse: separate;
@@ -111,11 +108,11 @@
 .tup__heatmap thead th {
   position: sticky;
   top: 0;
-  background: var(--studio-bg-elevated);
+  background: var(--studio-card-bg);
   color: var(--studio-fg-muted);
   font-weight: 600;
   padding: 4px 4px;
-  border-bottom: 1px solid var(--studio-bg-elevated);
+  border-bottom: 1px solid var(--studio-border);
   text-align: center;
 }
 .tup__heatmap-corner { text-align: left !important; min-width: 240px; }
@@ -123,10 +120,10 @@
 .tup__heatmap-row-th {
   text-align: left;
   padding: 0;
-  border-bottom: 1px solid var(--studio-bg-elevated);
-  background: var(--studio-bg-elevated);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-card-bg);
 }
-.tup__heatmap-row-th--active { background: rgba(166, 227, 161, 0.10); }
+.tup__heatmap-row-th--active { background: color-mix(in srgb, var(--studio-success) 10%, transparent); }
 .tup__heatmap-row-btn {
   width: 100%;
   padding: 6px 8px;
@@ -141,7 +138,7 @@
   align-items: center;
   text-align: left;
 }
-.tup__heatmap-row-btn:hover { background: rgba(255,255,255,0.04); }
+.tup__heatmap-row-btn:hover { background: var(--studio-bg-hover); }
 .tup__heatmap-row-cat {
   font-size: 0.78rem;
   width: 18px;
@@ -165,24 +162,28 @@
   width: 18px;
   height: 22px;
   cursor: pointer;
-  border-bottom: 1px solid var(--studio-bg-elevated);
-  border-left: 1px solid var(--studio-bg-elevated);
+  border-bottom: 1px solid var(--studio-border);
+  border-left: 1px solid var(--studio-border);
   transition: filter 0.1s;
 }
 .tup__heatmap-cell:hover { filter: brightness(1.4); }
 .tup__heatmap-cell--n0 { background: var(--studio-bg-overlay); }
-.tup__heatmap-cell--n1 { background: rgba(137, 180, 250, 0.20); }
-.tup__heatmap-cell--n2 { background: rgba(137, 180, 250, 0.45); }
-.tup__heatmap-cell--n3 { background: rgba(250, 179, 135, 0.55); }
-.tup__heatmap-cell--n4 { background: rgba(243, 139, 168, 0.75); }
+.tup__heatmap-cell--n1 { background: color-mix(in srgb, var(--studio-accent-3) 20%, transparent); }
+.tup__heatmap-cell--n2 { background: color-mix(in srgb, var(--studio-accent-3) 45%, transparent); }
+.tup__heatmap-cell--n3 { background: color-mix(in srgb, var(--studio-accent-strong) 55%, transparent); }
+.tup__heatmap-cell--n4 { background: color-mix(in srgb, var(--studio-error) 75%, transparent); }
 
 .tup__expensive-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* List rows, not second cards: muted surface + the smaller row radius. */
 .tup__expensive-row {
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
 }
-.tup__expensive-row--active { border-color: rgba(166, 227, 161, 0.40); background: rgba(166, 227, 161, 0.06); }
+.tup__expensive-row--active {
+  border-color: color-mix(in srgb, var(--studio-success) 40%, transparent);
+  background: color-mix(in srgb, var(--studio-success) 6%, transparent);
+}
 .tup__expensive-btn {
   width: 100%;
   padding: 8px 12px;
@@ -197,7 +198,7 @@
   cursor: pointer;
   text-align: left;
 }
-.tup__expensive-btn:hover { background: rgba(255,255,255,0.03); }
+.tup__expensive-btn:hover { background: var(--studio-bg-hover); }
 .tup__expensive-cat {
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -207,9 +208,9 @@
   text-align: center;
   font-weight: 600;
 }
-.tup__expensive-cat--job { background: rgba(137, 180, 250, 0.16); color: var(--severity-info); }
-.tup__expensive-cat--supporting { background: rgba(203, 166, 247, 0.18); color: var(--severity-pending); }
-.tup__expensive-cat--orchestrator { background: rgba(250, 179, 135, 0.18); color: var(--studio-accent-strong); }
+.tup__expensive-cat--job { background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent); color: var(--severity-info); }
+.tup__expensive-cat--supporting { background: color-mix(in srgb, var(--studio-accent-4-strong) 18%, transparent); color: var(--severity-pending); }
+.tup__expensive-cat--orchestrator { background: color-mix(in srgb, var(--studio-accent-strong) 18%, transparent); color: var(--studio-accent-strong); }
 .tup__expensive-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tup__expensive-meta {
   color: var(--studio-fg-muted);
@@ -222,10 +223,7 @@
 .tup__expensive-meta-sep { color: var(--studio-fg-muted); }
 
 .tup__drill {
-  background: var(--studio-bg-overlay);
-  border: 1px solid var(--studio-bg-elevated);
-  border-radius: 8px;
-  padding: 14px 16px;
+  @include m.deck-panel;
 }
 .tup__drill-head {
   display: flex;
@@ -237,14 +235,14 @@
 .tup__drill-close {
   background: transparent;
   color: var(--studio-fg-muted);
-  border: 1px solid var(--studio-bg-elevated);
+  border: 1px solid var(--studio-card-muted-border);
   padding: 3px 10px;
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
 }
-.tup__drill-close:hover { background: var(--studio-bg-elevated); color: var(--studio-fg); }
+.tup__drill-close:hover { background: var(--studio-bg-hover); color: var(--studio-fg); }
 .tup__drill-summary {
   display: flex;
   align-items: center;
@@ -262,22 +260,23 @@
   border-radius: 999px;
   font-weight: 600;
 }
-.tup__drill-summary-cat--job { background: rgba(137, 180, 250, 0.16); color: var(--severity-info); }
-.tup__drill-summary-cat--supporting { background: rgba(203, 166, 247, 0.18); color: var(--severity-pending); }
-.tup__drill-summary-cat--orchestrator { background: rgba(250, 179, 135, 0.18); color: var(--studio-accent-strong); }
+.tup__drill-summary-cat--job { background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent); color: var(--severity-info); }
+.tup__drill-summary-cat--supporting { background: color-mix(in srgb, var(--studio-accent-4-strong) 18%, transparent); color: var(--severity-pending); }
+.tup__drill-summary-cat--orchestrator { background: color-mix(in srgb, var(--studio-accent-strong) 18%, transparent); color: var(--studio-accent-strong); }
 .tup__drill-summary-total { font-weight: 600; color: var(--studio-fg-strong); }
 .tup__drill-summary-calls { color: var(--studio-fg-muted); }
 .tup__drill-summary-model { color: var(--studio-fg-muted); font-size: 0.78rem; }
 
 .tup__drill-runs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* Run rows nested inside the drill panel: muted surface, small radius. */
 .tup__drill-run {
   display: grid;
   grid-template-columns: 32px 110px 130px auto auto 1fr;
   gap: 10px;
   align-items: center;
   padding: 6px 10px;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   font-size: 0.80rem;
   color: var(--studio-fg);
@@ -301,14 +300,13 @@
   white-space: nowrap;
 }
 
+/* Standing footnote — read-only guidance, so a muted panel. */
 .tup__disclaimer {
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
   margin: 0;
   color: var(--studio-fg-muted);
   font-size: 0.72rem;
-  padding: 8px 10px;
-  background: rgba(0,0,0,0.18);
-  border: 1px dashed var(--studio-bg-elevated);
-  border-radius: 6px;
 }
 
 /* Pipeline cost by step kind (the "how it develops over time" trend). */
@@ -330,7 +328,7 @@
 .tup__pl-legend-total {
   margin-left: auto;
   padding-left: 12px;
-  border-left: 1px solid var(--studio-bg-elevated);
+  border-left: 1px solid var(--studio-border);
   font-weight: 600;
 }
 .tup__pl-swatch {
@@ -344,15 +342,13 @@
 .tup__pl-legend-tokens { color: var(--studio-fg-muted); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
 .tup__pl-star { color: var(--studio-accent-strong); }
 
+/* Chart panel: the day labels hang below the columns, so the inset stays custom. */
 .tup__pl-bars {
+  @include m.deck-panel(4px 4px 18px);
   display: flex;
   align-items: flex-end;
   height: 72px;
   gap: 2px;
-  padding: 4px 4px 18px;
-  background: var(--studio-bg-overlay);
-  border: 1px solid var(--studio-bg-elevated);
-  border-radius: 6px;
 }
 .tup__pl-col {
   flex: 1;
@@ -395,4 +391,3 @@
   .tup__drill-run { grid-template-columns: 32px 1fr auto; }
   .tup__drill-run-ts, .tup__drill-run-model, .tup__drill-run-summary { display: none; }
 }
-  

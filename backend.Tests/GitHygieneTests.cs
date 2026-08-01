@@ -118,6 +118,56 @@ public class GitHygieneTests : IDisposable
     }
 
     [Fact]
+    public void PreviewContext_UsesThePreviewWorkingDirectoryAndItsUpstream()
+    {
+        var bare = Path.Combine(_tempDir, "preview-origin.git");
+        Directory.CreateDirectory(bare);
+        RunGit(bare, "init -q --bare -b main");
+
+        var repo = SeedRepo("preview-context");
+        RunGit(repo, $"remote add origin \"{bare}\"");
+        RunGit(repo, "push -q -u origin main");
+        var nested = Directory.CreateDirectory(Path.Combine(repo, "website")).FullName;
+        File.WriteAllText(Path.Combine(nested, "index.html"), "preview");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m preview");
+
+        var git = BuildGitService(("Preview", repo));
+        var context = git.GetPreviewContext("Preview", nested, "develop");
+
+        Assert.True(context.IsRepo);
+        Assert.Equal("preview-origin", context.RepositoryName);
+        Assert.Equal(nested, context.WorkingDirectory);
+        Assert.Equal(repo, context.RepoRoot);
+        Assert.Equal("main", context.Branch);
+        Assert.Equal("origin/main", context.ComparisonRef);
+        Assert.Equal("upstream", context.ComparisonKind);
+        Assert.Equal(1, context.Ahead);
+        Assert.Equal(0, context.Behind);
+        Assert.Equal(40, context.HeadSha?.Length);
+        Assert.Equal(8, context.HeadShortSha?.Length);
+    }
+
+    [Fact]
+    public void PreviewContext_WithoutUpstreamComparesAgainstIntegrationLine()
+    {
+        var repo = SeedRepo("preview-integration");
+        RunGit(repo, "switch -q -c task/preview");
+        File.WriteAllText(Path.Combine(repo, "preview.txt"), "task branch");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m preview");
+
+        var git = BuildGitService(("Preview", repo));
+        var context = git.GetPreviewContext("Preview", repo, "main");
+
+        Assert.Equal("task/preview", context.Branch);
+        Assert.Equal("main", context.ComparisonRef);
+        Assert.Equal("integration", context.ComparisonKind);
+        Assert.Equal(1, context.Ahead);
+        Assert.Equal(0, context.Behind);
+    }
+
+    [Fact]
     public void TaskHygiene_WithRecordedCommit_ReportsCommitPresent()
     {
         var repo = SeedRepo("with-job");

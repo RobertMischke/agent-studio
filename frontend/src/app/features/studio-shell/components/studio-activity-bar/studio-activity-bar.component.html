@@ -37,9 +37,12 @@
       </svg>
       @if (badgeCounts()[item.key]; as count) {
         <span class="studio-ab__badge"
-              [cacTooltip]="count + (count === 1 ? ' filter active' : ' filters active')"
+              [class.studio-ab__badge--alerts]="item.key === 'activity'"
+              [cacTooltip]="badgeLabel(item, count)"
               [attr.data-testid]="'studio-ab-badge-' + item.key"
-              aria-hidden="true">{{ count }}</span>
+              [attr.aria-label]="item.key === 'activity' ? badgeLabel(item, count) : null">
+          {{ count > 99 ? '99+' : count }}
+        </span>
       }
     </button>
   }

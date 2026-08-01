@@ -4,6 +4,7 @@ import { DialogComponent } from '../../../../components/dialog/dialog.component'
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import type { CrashRecoveryPending } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
+import { NotificationService } from '../../../../services/notification.service';
 import { TaskService } from '../../../../services/task.service';
 
 @Component({
@@ -17,16 +18,23 @@ import { TaskService } from '../../../../services/task.service';
 export class CrashRecoveryPromptComponent implements OnInit {
   private readonly tasks = inject(TaskService);
   private readonly modalStack = inject(ModalStackService);
+  private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly pending = signal<CrashRecoveryPending[]>([]);
+  readonly reviewPending = computed(() =>
+    this.pending().filter(item => item.classification !== 'trivial'));
+  readonly trivialPending = computed(() =>
+    this.pending().filter(item => item.classification === 'trivial'));
   readonly loading = signal(false);
   readonly busyId = signal<string | null>(null);
   readonly busyAll = signal(false);
   readonly error = signal<string | null>(null);
-  readonly open = computed(() => this.pending().length > 0);
+  readonly open = computed(() => this.reviewPending().length > 0);
 
   private stackDispose: (() => void) | null = null;
+  private trivialNotificationId: number | null = null;
+  private trivialNotificationFingerprint = '';
 
   constructor() {
     effect(() => {
@@ -39,7 +47,12 @@ export class CrashRecoveryPromptComponent implements OnInit {
         this.stackDispose = null;
       }
     });
-    this.destroyRef.onDestroy(() => this.stackDispose?.());
+    this.destroyRef.onDestroy(() => {
+      this.stackDispose?.();
+      if (this.trivialNotificationId !== null) {
+        this.notifications.dismiss(this.trivialNotificationId);
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -52,6 +65,7 @@ export class CrashRecoveryPromptComponent implements OnInit {
     this.tasks.getPendingCrashRecoveries().subscribe({
       next: (res) => {
         this.pending.set(res.pending ?? []);
+        this.syncTrivialNotification();
         this.loading.set(false);
       },
       error: (err) => {
@@ -84,7 +98,7 @@ export class CrashRecoveryPromptComponent implements OnInit {
     if (this.busyId() || this.busyAll()) return;
     this.busyAll.set(true);
     this.error.set(null);
-    const queue = [...this.pending()];
+    const queue = [...this.reviewPending()];
     const next = () => {
       const item = queue.shift();
       if (!item) {
@@ -128,6 +142,78 @@ export class CrashRecoveryPromptComponent implements OnInit {
 
   private remove(id: string): void {
     this.pending.update(items => items.filter(item => item.id !== id));
+    this.syncTrivialNotification();
+  }
+
+  private syncTrivialNotification(): void {
+    const items = this.trivialPending();
+    const fingerprint = items
+      .map(item => `${item.id}:${item.files.join('|')}`)
+      .sort()
+      .join(';');
+    const notificationStillVisible = this.trivialNotificationId !== null
+      && this.notifications.notifications().some(item => item.id === this.trivialNotificationId);
+
+    if (items.length === 0) {
+      if (this.trivialNotificationId !== null) {
+        this.notifications.dismiss(this.trivialNotificationId);
+      }
+      this.trivialNotificationId = null;
+      this.trivialNotificationFingerprint = '';
+      return;
+    }
+    if (notificationStillVisible && fingerprint === this.trivialNotificationFingerprint) return;
+    if (notificationStillVisible && this.trivialNotificationId !== null) {
+      this.notifications.dismiss(this.trivialNotificationId);
+    }
+
+    const fileCount = items.reduce((total, item) => total + item.files.length, 0);
+    const details = items.map(item =>
+      `${item.projectName}: ${this.fileCountLabel(item)}`);
+    this.trivialNotificationFingerprint = fingerprint;
+    this.trivialNotificationId = this.notifications.notify({
+      kind: 'info',
+      title: 'Crash recovery found read-evidence sidecars',
+      message: `${fileCount} metadata sidecar ${fileCount === 1 ? 'file remains' : 'files remain'} uncommitted. The board is ready to use.`,
+      source: 'No task attribution',
+      details,
+      durationMs: 0,
+      actions: [{
+        label: 'Leave uncommitted',
+        testId: 'crash-recovery-trivial-dismiss',
+        primary: true,
+        callback: () => this.dismissAllTrivial(),
+      }],
+    });
+  }
+
+  private dismissAllTrivial(): void {
+    if (this.busyAll()) return;
+    this.busyAll.set(true);
+    const queue = [...this.trivialPending()];
+    const next = () => {
+      const item = queue.shift();
+      if (!item) {
+        this.busyAll.set(false);
+        return;
+      }
+      this.tasks.dismissCrashRecovery(item.id).subscribe({
+        next: () => {
+          this.remove(item.id);
+          next();
+        },
+        error: (err) => {
+          this.busyAll.set(false);
+          this.trivialNotificationId = null;
+          this.syncTrivialNotification();
+          this.notifications.error(
+            this.errorMessage(err, `Could not leave '${item.projectName}' uncommitted.`),
+            'Crash recovery action failed',
+          );
+        },
+      });
+    };
+    next();
   }
 
   private errorMessage(err: unknown, fallback: string): string {

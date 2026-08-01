@@ -271,6 +271,7 @@ async function stubRouteData(page: Page): Promise<void> {
         branch: 'task/route',
         revision: '1234567890abcdef',
         workingTreeModified: false,
+        fingerprint: 'a'.repeat(64),
       });
     }
     if (/\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {

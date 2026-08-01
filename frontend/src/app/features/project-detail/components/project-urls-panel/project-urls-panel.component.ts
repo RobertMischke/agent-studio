@@ -79,7 +79,8 @@ export class ProjectUrlsPanelComponent {
   readonly formCwd = signal('');
   readonly formPort = signal<number | null>(null);
   readonly formHealthUrl = signal('');
-  readonly formTimeout = signal(20);
+  readonly formTimeout = signal(30);
+  readonly formStartupTimeout = signal(600);
   readonly formSource = signal('manual');
   readonly testing = signal(false);
   readonly testDiagnostic = signal<import('../../../../models/task.model').ProjectUrlDiagnostic | null>(null);
@@ -205,7 +206,8 @@ export class ProjectUrlsPanelComponent {
     this.formCwd.set(url.startRule?.cwd ?? '');
     this.formPort.set(url.startRule?.port ?? null);
     this.formHealthUrl.set(url.startRule?.healthUrl ?? url.url);
-    this.formTimeout.set(url.startRule?.readinessTimeoutSeconds ?? 20);
+    this.formTimeout.set(url.startRule?.readinessTimeoutSeconds ?? 30);
+    this.formStartupTimeout.set(url.startRule?.startupTimeoutSeconds ?? 600);
     this.formSource.set(url.startRule?.source ?? 'manual');
     this.suggestions.set([]);
     this.addOpen.set(true);
@@ -224,7 +226,8 @@ export class ProjectUrlsPanelComponent {
     this.formCwd.set('');
     this.formPort.set(null);
     this.formHealthUrl.set('');
-    this.formTimeout.set(20);
+    this.formTimeout.set(30);
+    this.formStartupTimeout.set(600);
     this.formSource.set('manual');
     this.testDiagnostic.set(null);
   }
@@ -260,7 +263,8 @@ export class ProjectUrlsPanelComponent {
       ? {
           command, cwd: this.formCwd().trim() || null, port: this.formPort(),
           healthUrl: this.formHealthUrl().trim() || null,
-          readinessTimeoutSeconds: Math.max(2, Math.min(120, this.formTimeout() || 20)),
+          readinessTimeoutSeconds: Math.max(2, Math.min(300, this.formTimeout() || 30)),
+          startupTimeoutSeconds: Math.max(2, Math.min(3600, this.formStartupTimeout() || 600)),
           source: this.formSource(),
         }
       : null;
@@ -287,7 +291,8 @@ export class ProjectUrlsPanelComponent {
     const startRule: ProjectUrlStartRule | null = command ? {
       command, cwd: this.formCwd().trim() || null, port: this.formPort(),
       healthUrl: this.formHealthUrl().trim() || null,
-      readinessTimeoutSeconds: Math.max(2, Math.min(120, this.formTimeout() || 20)),
+      readinessTimeoutSeconds: Math.max(2, Math.min(300, this.formTimeout() || 30)),
+      startupTimeoutSeconds: Math.max(2, Math.min(3600, this.formStartupTimeout() || 600)),
       source: this.formSource(),
     } : null;
     this.testing.set(true);

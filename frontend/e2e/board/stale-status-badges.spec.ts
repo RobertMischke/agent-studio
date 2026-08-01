@@ -64,6 +64,7 @@ const staleReview = task('aow-5', 'AOW-5 stale review signals', '5-human-review'
   },
   integration: {
     status: 'integrated',
+    deliveryRef: 'task/aow-5',
     sha: '2d8d201',
     integrationBranch: 'develop',
     detail: 'Curated retry integrated every attributed commit.',

@@ -81,6 +81,7 @@ function provenance(overrides: Partial<TaskProvenanceRecord> = {}): TaskProvenan
 function integration(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
   return {
     status: 'integrated',
+    deliveryRef: null,
     sha: 'a1b2c3d',
     integrationBranch: 'develop',
     detail: 'anchor-ancestor',

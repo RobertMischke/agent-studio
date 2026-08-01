@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "board-statusmodell-ist-soll",
+  "title": "Board-Statusmodell: IST-Karte und SOLL-Regeln",
+  "summary": "Entscheidungsreife Workbench zum Statusmodell des Boards. Sie kartiert alle Lane-Uebergaenge samt Ausloesern, Recovery und Edge-Cases, belegt die Widersprueche vom 28./29.07. und formuliert SOLL-Vertraege fuer Task-as-Truth, Multi-Runner-Takeover, Integration, Review, Accept und Archive. Der verpflichtende Brechpunkt-Katalog BP-01 bis BP-19 ist vollstaendig beantwortet.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-30T01:32:12Z",
+  "sourceTaskKeys": [
+    "AGT-2424"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2301",
+    "AGT-2417",
+    "AGT-2425",
+    "AGT-2202",
+    "AGT-2423",
+    "AGT-2427",
+    "AGT-2401",
+    "AGT-2405"
+  ],
+  "implementationTasks": []
+}

@@ -6,6 +6,7 @@ export { OrchestratorSideSheetComponent } from './components/orchestrator-side-s
 export { OrchestratorContextHeaderComponent } from './components/orchestrator-context-header/orchestrator-context-header.component';
 export { ChatSwitcherRailComponent } from './components/chat-switcher-rail/chat-switcher-rail.component';
 export { OrchestratorProjectPickerComponent } from './components/orchestrator-project-picker/orchestrator-project-picker.component';
+export { OrchestratorFeedStore } from './state/orchestrator-feed.store';
 // AGT-1812: the standalone OrchestratorSettingsModalComponent was retired; its
 // content (the platform-global lifecycle flags) now renders as the "Orchestrator"
 // section of the consolidated Settings view, so the panel itself is the export.

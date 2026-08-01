@@ -431,8 +431,10 @@ and presents these exact GitHub choices:</p>
 </ul>
 <p>The wizard waits for the runner startup result and explains
 <code>ready</code>, <code>ready-no-workflow-scope</code>, and <code>read-only</code>.
-Only <code>read-only</code> blocks claims. The middle state links to the permission checklist
-but does not try to predict whether a card will touch <code>.github/workflows</code>.
+These statuses describe only the configured fallback repository. Project claim
+admission uses the registered repository's own URL, target branch, and push proof.
+The middle state links to the permission checklist but does not try to predict
+whether a card will touch <code>.github/workflows</code>.
 Rotation updates and verifies both URL entries before the old token is revoked.</p>
 
 <h2>9 · Runner-host resource governance</h2>

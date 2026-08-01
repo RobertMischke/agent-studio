@@ -47,7 +47,9 @@
               [position]="menuPosition()" ariaLabel="Embed actions" testIdPrefix="url-preview-menu"
               (itemClick)="onMenuItem($event)" (closeRequest)="menuOpen.set(false)" />
   </div>
-
+  @if (resolveState() === 'resolved') {
+    <app-project-url-context-header [projectId]="projectId()" [projectName]="projectName()" [urlId]="urlId()" [workingDirectoryKey]="urlRecord()?.startRule?.cwd || repositoryPath() || rootPath()" />
+  }
   <div class="url-preview__body">
     @switch (resolveState()) {
       @case ('resolving') {
@@ -87,7 +89,6 @@
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                   referrerpolicy="no-referrer"
                   (load)="onFrameLoad($event)"></iframe>
-
           @if (frameState() === 'loading') {
             <div class="url-preview__overlay" data-testid="url-preview-loading">
               <span class="url-preview__spinner" aria-hidden="true"></span>
@@ -115,6 +116,7 @@
         } @else {
           <div class="url-preview__state"
                [attr.data-diagnosis]="diagnostic()?.classification ?? 'not-started'"
+               [attr.data-failure-reason]="diagnostic()?.startupFailureReason ?? null"
                [attr.data-testid]="readiness().kind === 'http-error'
                  ? 'url-preview-http-error'
                  : readiness().kind === 'frame-blocked'
@@ -132,7 +134,13 @@
                     @if (startFailure()) {
                       Preview could not start
                     } @else if (building()) {
-                      Starting preview
+                      {{ consoleActive() ? 'Starting · console active' : 'Starting · waiting for output' }}
+                    } @else if (diagnostic()?.startupFailureReason === 'process-exit') {
+                      Preview process exited
+                    } @else if (diagnostic()?.startupFailureReason === 'silence-timeout') {
+                      Preview start went quiet
+                    } @else if (diagnostic()?.startupFailureReason === 'startup-limit') {
+                      Preview reached startup limit
                     } @else if (readiness().kind === 'http-error') {
                       Preview returned HTTP {{ readiness().statusCode }}
                     } @else if (readiness().kind === 'frame-blocked') {
@@ -149,7 +157,9 @@
                   @if (startFailure()) {
                     Failed
                   } @else if (building()) {
-                    Starting
+                    {{ consoleActive() ? 'Console active' : 'Waiting' }}
+                  } @else if (diagnostic()?.startupFailureReason) {
+                    Failed
                   } @else if (readiness().kind === 'frame-blocked') {
                     Blocked
                   } @else if (readiness().kind === 'http-error') {
@@ -160,7 +170,7 @@
                 </span>
               </header>
 
-              @if (!startFailure() && !building()) {
+              @if (!startFailure() && !building() && !diagnostic()?.startupFailureReason) {
                 <p class="url-preview__state-note url-preview__state-note--wide">
                   @if (readiness().kind === 'http-error') {
                     The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
@@ -184,7 +194,10 @@
               } @else if (building()) {
                 <div class="url-preview__progress" role="status" data-testid="url-preview-starting">
                   <span class="url-preview__spinner url-preview__spinner--small" aria-hidden="true"></span>
-                  <span>The process is working — waiting for <code>{{ urlRecord()?.url }}</code> to accept connections…</span>
+                  <span>
+                    {{ consoleActive() ? 'Console output is active.' : 'Waiting for console output.' }}
+                    Waiting for <code>{{ urlRecord()?.url }}</code> to accept connections…
+                  </span>
                 </div>
               }
 
@@ -287,7 +300,6 @@
     [session]="process.session()" [open]="process.consoleOpen()" [stopping]="process.stopping()"
     (stopRequest)="stop()" (closeRequest)="process.consoleOpen.set(false)" />
 </div>
-
 @if (settingsOpen() && urlRecord(); as url) {
   <app-project-url-settings-dialog [url]="url" [saving]="settingsSaving()" [error]="settingsError()"
     (saveRequest)="saveSettings($event)" (closeRequest)="settingsOpen.set(false)" />

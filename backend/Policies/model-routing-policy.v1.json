@@ -1,0 +1,53 @@
+{
+  "version": "2026-07-24",
+  "wikiPath": "docs/system/domains/model-routing-policy.md",
+  "tiers": [
+    {
+      "id": "luna-medium",
+      "rank": 0,
+      "model": "gpt-5.6-luna",
+      "thinkingLevel": "medium",
+      "estimatedSavingsPercent": 65
+    },
+    {
+      "id": "terra-medium",
+      "rank": 1,
+      "model": "gpt-5.6-terra",
+      "thinkingLevel": "medium",
+      "estimatedSavingsPercent": 35
+    },
+    {
+      "id": "sol-medium",
+      "rank": 2,
+      "model": "gpt-5.6-sol",
+      "thinkingLevel": "medium",
+      "estimatedSavingsPercent": 0
+    },
+    {
+      "id": "sol-xhigh",
+      "rank": 3,
+      "model": "gpt-5.6-sol",
+      "thinkingLevel": "xhigh",
+      "estimatedSavingsPercent": 0
+    }
+  ],
+  "taskTypeDefaults": {
+    "chore": {
+      "tier": "luna-medium",
+      "score": 15
+    },
+    "feature": {
+      "tier": "terra-medium",
+      "score": 25
+    },
+    "bug": {
+      "tier": "terra-medium",
+      "hardFloorTier": "terra-medium",
+      "score": 49
+    }
+  },
+  "economyMode": {
+    "downgradeSteps": 1,
+    "label": "Economy mode"
+  }
+}

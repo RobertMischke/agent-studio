@@ -275,7 +275,13 @@ public sealed class TaskSpawnerPostStepRunner
 
         try
         {
-            var rendered = _prompts.Render(TemplateName, values);
+            var rendered = _prompts.Render(
+                TemplateName,
+                values,
+                new PromptCallContext(
+                    ctx.SourceProjectName,
+                    PipelineCatalogue.TaskSpawnerStepId,
+                    ctx.Model));
             if (!string.IsNullOrWhiteSpace(rendered)) return rendered;
         }
         catch (Exception ex)

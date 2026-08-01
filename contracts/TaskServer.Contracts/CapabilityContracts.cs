@@ -143,7 +143,10 @@ public sealed record RunnerCapabilitySnapshotDto(
     DateTime LastSeenAt,
     RemoteHostAdmissionDto HostAdmission,
     IReadOnlyList<CapabilityHealthDto> Capabilities,
-    HostTelemetrySnapshotDto? Telemetry);
+    HostTelemetrySnapshotDto? Telemetry,
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null,
+    int? EffectiveMaxParallelism = null,
+    DateTime? RuntimeCapacityAppliedAt = null);
 
 public sealed record OperatorHostDrainRequest(string Reason);
 

@@ -180,6 +180,128 @@ public class ClientIdentityTests : IDisposable
     }
 
     [Fact]
+    public void HostCapacity_IsSeededOnFirstContact_AndThenOwnedByTheOperator()
+    {
+        var config = BuildConfig();
+        var store = BuildStore(config);
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "capacity-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+
+        var seeded = store.RecordRunnerActivity(
+            runner.Id, activeSlots: 0, availableSlots: 1, claimed: false, seedMaxParallelism: 6);
+        Assert.Equal(6, seeded?.RunnerDesiredMaxParallelism);
+        Assert.Equal(HostCapacityPolicy.DefaultTargetLoadPercent, seeded?.RunnerTargetLoadPercent);
+        Assert.Equal(RunnerRampStrategies.Balanced, seeded?.RunnerRampStrategy);
+
+        var operatorSet = store.SetRunnerCapacity(runner.Id, 12, 85, "conservative");
+        Assert.Equal(12, operatorSet?.RunnerDesiredMaxParallelism);
+        Assert.Equal(85, operatorSet?.RunnerTargetLoadPercent);
+        Assert.Equal(RunnerRampStrategies.Conservative, operatorSet?.RunnerRampStrategy);
+        Assert.NotNull(operatorSet?.RunnerCapacityUpdatedAt);
+
+        // A later daemon poll must not push its own bootstrap value back over
+        // the operator's ceiling.
+        var afterPoll = store.RecordRunnerActivity(
+            runner.Id, activeSlots: 2, availableSlots: 99, claimed: false, seedMaxParallelism: 2);
+        Assert.Equal(12, afterPoll?.RunnerDesiredMaxParallelism);
+        Assert.Equal(12, BuildStore(config).Find(runner.Id)?.RunnerDesiredMaxParallelism);
+    }
+
+    [Fact]
+    public void SlotLedger_DerivesFreeSlotsFromTheCeiling_NotFromTheDaemonReport()
+    {
+        var store = BuildStore(BuildConfig());
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "ledger-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+        store.SetRunnerCapacity(runner.Id, 8, 80, RunnerRampStrategies.Balanced);
+
+        // The daemon's breathing "1 free" used to become the ledger total
+        // (active + 1); free must follow the ceiling instead.
+        var busy = store.RecordRunnerActivity(
+            runner.Id, activeSlots: 7, availableSlots: 1, claimed: true);
+        Assert.Equal(7, busy?.RunnerActiveSlots);
+        Assert.Equal(1, busy?.RunnerAvailableSlots);
+
+        var quieter = store.RecordRunnerActivity(
+            runner.Id, activeSlots: 2, availableSlots: 1, claimed: false);
+        Assert.Equal(2, quieter?.RunnerActiveSlots);
+        Assert.Equal(6, quieter?.RunnerAvailableSlots);
+    }
+
+    [Fact]
+    public void HostCapacity_RecordsWhichCeilingTheDaemonAdopted()
+    {
+        var store = BuildStore(BuildConfig());
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "adoption-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+        store.SetRunnerCapacity(runner.Id, 10, 80, RunnerRampStrategies.Balanced);
+
+        var appliedAt = new DateTime(2026, 7, 27, 9, 30, 0, DateTimeKind.Utc);
+        var reported = store.RecordRunnerActivity(
+            runner.Id,
+            activeSlots: 1,
+            availableSlots: 0,
+            claimed: false,
+            effectiveMaxParallelism: 4,
+            effectiveMaxParallelismAppliedAt: appliedAt);
+
+        Assert.Equal(10, reported?.RunnerDesiredMaxParallelism);
+        Assert.Equal(4, reported?.RunnerEffectiveMaxParallelism);
+        Assert.Equal(appliedAt, reported?.RunnerEffectiveMaxParallelismAppliedAt);
+    }
+
+    [Fact]
+    public void SetRunnerCapacity_ClampsOutOfRangeTargets_AndRefusesUnknownHosts()
+    {
+        var store = BuildStore(BuildConfig());
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "clamp-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+
+        var clamped = store.SetRunnerCapacity(runner.Id, 9999, 10, "nonsense");
+        Assert.Equal(256, clamped?.RunnerDesiredMaxParallelism);
+        Assert.Equal(50, clamped?.RunnerTargetLoadPercent);
+        Assert.Equal(RunnerRampStrategies.Balanced, clamped?.RunnerRampStrategy);
+        Assert.Null(store.SetRunnerCapacity("no-such-host", 4, 80, "balanced"));
+    }
+
+    [Fact]
+    public void SetRunnerCapacity_WithoutAMaxParallelism_KeepsTheCeiling_AndNeverInventsOne()
+    {
+        var store = BuildStore(BuildConfig());
+        var undeclared = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "undeclared-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+
+        // Changing only the ramp on a host that never declared a capacity must
+        // not conjure a ceiling: the server would start enforcing a cap nobody
+        // asked for.
+        var rampOnly = store.SetRunnerCapacity(undeclared.Id, null, null, "conservative");
+        Assert.Null(rampOnly?.RunnerDesiredMaxParallelism);
+        Assert.Equal(RunnerRampStrategies.Conservative, rampOnly?.RunnerRampStrategy);
+        Assert.Equal(HostCapacityPolicy.DefaultTargetLoadPercent, rampOnly?.RunnerTargetLoadPercent);
+
+        // With a ceiling in place, an omitted value keeps it unchanged.
+        store.SetRunnerCapacity(undeclared.Id, 5, null, null);
+        var loadOnly = store.SetRunnerCapacity(undeclared.Id, null, 90, null);
+        Assert.Equal(5, loadOnly?.RunnerDesiredMaxParallelism);
+        Assert.Equal(90, loadOnly?.RunnerTargetLoadPercent);
+    }
+
+    [Fact]
     public void RetiredHost_CanBeRevived_ThenPermanentlyDeleted()
     {
         var config = BuildConfig();

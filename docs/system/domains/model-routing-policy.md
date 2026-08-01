@@ -60,6 +60,36 @@ The Mini route is a role exception, not the bottom rung of the core-task
 ladder. Select it only when the call is a bounded pipeline decision with
 structured evidence and a parseable output contract.
 
+### Automated card convention
+
+The machine-readable registry is
+[`backend/Policies/model-routing-policy.v1.json`](../../../backend/Policies/model-routing-policy.v1.json).
+Its `version` must match this page. The registry owns tier ids, concrete Codex
+routes, task-type intake defaults, and correctness floors; appsettings must not
+redefine them.
+
+When a new task has no explicit model pin (`modelExplicit=false`), model
+qualification starts from this convention:
+
+| Task type | Intake score | Normal tier | Economy mode | Correctness floor |
+|---|---:|---|---|---|
+| Chore | 15 | Luna / medium | Luna / medium | None |
+| Feature | 25 | Terra / medium | Luna / medium | None |
+| Bug | 49 | Terra / medium | Terra / medium | Terra / medium |
+
+This is an intake fallback, not permission to ignore better task evidence.
+Security boundaries, distributed authority, credible data-loss paths, and
+subtle concurrent state machines promote to Sol/xhigh. Public protocols,
+persistent-state migrations, and changes spanning three or more runtime
+subsystems promote to at least Sol/medium. These promotions become correctness
+floors and economy mode cannot lower them.
+
+The create-task UI shows the recommendation, policy version, task type, tier,
+and whether economy mode caused a safe one-step downgrade. Choosing a model or
+thinking level marks the card explicit in one action. Explicit pins remain
+untouched by qualification, while the policy recommendation stays visible for
+comparison.
+
 ### Hard floors
 
 Apply these after scoring:
@@ -151,9 +181,11 @@ may still use Mini/high. The table selects the core implementation route.
 5. If no safe route is available, wait or ask for an explicit override. Never
    silently spend correctness margin.
 
-Quota state is run-scoped. It must not rewrite the card's configured model, and
-the decision log must retain the recommended route, selected route, selection
-source, score, and reason.
+Quota state is run-scoped. The workspace economy switch changes qualification
+and new-card suggestions without rewriting existing cards or turning a
+suggestion into an explicit pin. The decision log must retain the policy
+version, recommended tier and route, selected route, selection source, score,
+economy state, correctness floor, and reason.
 
 ## Roadmap: what happens next
 

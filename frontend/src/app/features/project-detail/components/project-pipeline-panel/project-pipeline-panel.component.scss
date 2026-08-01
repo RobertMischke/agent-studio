@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
 .pp {
@@ -20,7 +22,7 @@
 
 .pp__head {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   align-items: baseline;
   column-gap: var(--studio-spacing-3);
   padding-bottom: var(--studio-spacing-2);
@@ -44,21 +46,21 @@
 
 .pp__sub em { font-style: italic; color: var(--studio-fg); }
 
+/* Load failure of the pipeline config -> acute now. */
 .pp__error {
-  padding: var(--studio-card-compact-padding-block) var(--studio-card-compact-padding-inline);
-  background: color-mix(in srgb, var(--severity-high) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--severity-high) 30%, transparent);
+  @include m.deck-panel;
+  @include m.deck-panel-attention;
+
   color: var(--severity-high);
-  border-radius: var(--studio-card-compact-radius);
   font-size: 0.85rem;
 }
 
+/* Empty state: solid muted panel — the contract has no dashed variant. */
 .pp__empty {
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
+
   margin: 0;
-  padding: var(--studio-spacing-3) var(--studio-card-compact-padding-inline);
-  border: 1px dashed var(--studio-card-muted-border);
-  background: var(--studio-card-muted-bg);
-  border-radius: var(--studio-card-compact-radius);
   color: var(--studio-fg-muted);
   font-size: 0.85rem;
 }
@@ -132,7 +134,8 @@
   background: var(--studio-card-bg);
   border: 1px solid color-mix(in srgb, var(--pipeline-step-color) 20%, var(--studio-card-state-border));
   border-radius: var(--studio-card-compact-radius);
-  box-shadow: 0 0 0 1px var(--studio-card-state-border), var(--studio-card-shadow);
+  /* State ring only — Deck-Panel v1 allows no resting drop shadow. */
+  box-shadow: 0 0 0 1px var(--studio-card-state-border);
   overflow: clip;
 }
 
@@ -143,7 +146,7 @@
 .pp__row[data-kind='drift'] { --pipeline-step-color: var(--studio-accent-teal); }
 .pp__row[data-kind='module'] { --pipeline-step-color: var(--lane-progress); }
 
-.pp__row--off {
+.pp__row--off, .pp__row--not-applicable {
   --pipeline-step-color: var(--studio-fg-muted);
 
   background: var(--studio-card-muted-bg);

@@ -176,6 +176,33 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void ResolvedModelAndThinkingLevel_AreCarriedFromEventOntoRunRecord()
+    {
+        var events = new List<SessionEvent>
+        {
+            new()
+            {
+                Ts = T0,
+                Kind = "start",
+                Cli = "codex",
+                Model = "gpt-5.6-sol",
+                ThinkingLevel = "xhigh"
+            }
+        };
+        var lines = new List<CliOutputLine>
+        {
+            Sys(0, "[taskboard] Started codex CLI (PID 1234)"),
+            Sys(50, "[taskboard] codex CLI exited: status=completed, exitCode=0, duration=50s")
+        };
+
+        var run = Assert.Single(RunTimelineBuilder.Build(events, lines, T0.AddSeconds(60)).Runs);
+
+        Assert.Equal("gpt-5.6-sol", run.Model);
+        Assert.Equal("xhigh", run.ThinkingLevel);
+        Assert.Null(run.ExecutionContext);
+    }
+
+    [Fact]
     public void ExecutionContext_IsCarriedFromEventOntoRunRecord()
     {
         // The per-run execution-context surface (ASS-1739 / T1a) is backfilled

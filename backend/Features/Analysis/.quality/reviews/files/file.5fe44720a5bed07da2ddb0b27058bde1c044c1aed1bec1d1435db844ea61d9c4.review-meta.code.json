@@ -1,0 +1,192 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/faed92322b1475295c5429f6d0ded29d2ebf1a3f2099299ebfbfda173f1ea6b6",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+    "displayName": "AnalysisReportStore.cs"
+  },
+  "reviewedAt": "2026-07-21T11:27:22.6541992Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-68c94fbd012145dd8f5913435d0dd9ee"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "b6bbf19261490fa43acd4f68589946499f90fd05a3d60e0b20e625c2e2b53a7d"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+      "selector": "file",
+      "contentHash": "sha256:46dc0c330504e58c2dfe8a6103ff418f812f8814bba11a59e3b1083b4290ce9b"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "2e363b3bb09ef82bb9dc5969661424536aaebe1e2a9acd831f8fd6b3ab4298d7"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:1e9e17d0c953f7973e567f462a40299f6763fc5e195e269d26af4a3e64b1f11b"
+    }
+  },
+  "grade": {
+    "score": 68,
+    "band": "D",
+    "rationale": "The implementation is readable and compact, but its write ordering creates serious correctness risks. Validation and duplicate detection occur only after artifact files may have been created or overwritten, and the three-file operation is not atomic despite documentation claiming agreement and immutability."
+  },
+  "summary": "The store has a clear API and useful documentation, but AppendAsync can overwrite immutable artifacts or leave orphaned and inconsistent files when validation, duplicate detection, cancellation, serialization, or index appending fails. ReadMarkdown also has a file-existence race, and direct static filesystem coupling limits failure-path testing.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 62,
+        "band": "D",
+        "rationale": "Artifact writes happen before base-store validation and duplicate enforcement, while multi-file failures can leave storage inconsistent with the index."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 76,
+        "band": "C",
+        "rationale": "The code is small and well organized, but persistence invariants are distributed across ordered filesystem operations and the base class, making them difficult to preserve safely."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 84,
+        "band": "B",
+        "rationale": "Names and comments are clear, although claims that files always agree and reports are immutable do not match the implemented failure behavior."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 63,
+        "band": "D",
+        "rationale": "Exceptions and cancellation can interrupt the operation after durable changes without cleanup, rollback, or contextual reporting, and ReadMarkdown does not reliably honor its missing-file contract."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 72,
+        "band": "C",
+        "rationale": "Temporary-directory integration tests are possible, but static filesystem access makes deterministic testing of failures between individual persistence stages difficult."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "AR001",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Artifacts are written before validation and duplicate detection",
+      "description": "TryValidate and ID uniqueness enforcement are delegated to base.AppendAsync, but Markdown and JSON files are written first. An invalid report can therefore leave artifacts behind. More seriously, an append using an existing ReportId can overwrite the existing report\u0027s Markdown or sidecar before the base store rejects the duplicate, violating the documented append-only and immutable contract.",
+      "recommendation": "Validate the report before constructing or writing artifact paths, and reserve or reject the report ID before modifying artifacts. Use non-overwriting file creation or a base-store operation that atomically establishes uniqueness. Ensure retries cannot replace artifacts belonging to an existing report.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+          "range": {
+            "start": {
+              "line": 91,
+              "column": 9
+            },
+            "end": {
+              "line": 106,
+              "column": 97
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR002",
+      "aspect": "error_handling",
+      "severity": "high",
+      "title": "Multi-file append can leave permanently inconsistent storage",
+      "description": "Markdown, optional JSON, and the index are committed as separate operations. Serialization errors, I/O errors, cancellation, or an index append failure can leave only a subset on disk. This contradicts the stated invariant that the artifacts and index agree at write time, and callers cannot determine from the thrown exception which durable changes occurred.",
+      "recommendation": "Implement an explicit commit protocol. Write artifacts to uniquely named temporary files, perform validation and uniqueness checks first, then publish them with atomic moves and append the index at a defined commit point. On failure before commit, clean up temporary files; if full atomicity is impossible, document the recovery model and add reconciliation logic and failure-stage tests.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+          "range": {
+            "start": {
+              "line": 86,
+              "column": 9
+            },
+            "end": {
+              "line": 106,
+              "column": 97
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR003",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "ReadMarkdown does not reliably return null when the file is missing",
+      "description": "The File.Exists check and File.ReadAllText call are separate operations. If the file is removed or renamed between them, ReadAllText throws even though the method\u0027s contract says a missing Markdown file returns null. Other concurrent filesystem changes can produce the same time-of-check/time-of-use race.",
+      "recommendation": "Read directly and catch only FileNotFoundException and DirectoryNotFoundException to return null, allowing unrelated I/O failures to propagate. Consider providing an asynchronous counterpart for request-path callers.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+          "range": {
+            "start": {
+              "line": 126,
+              "column": 9
+            },
+            "end": {
+              "line": 128,
+              "column": 58
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "AR004",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Static filesystem operations impede deterministic failure-path testing",
+      "description": "Directory and File calls are hard-coded throughout the store. Tests can exercise successful behavior using temporary directories, but reliably injecting failures after Markdown creation, during sidecar publication, or before index append is difficult. Those are the most important paths given the consistency risks.",
+      "recommendation": "Introduce a narrowly scoped filesystem or artifact-writer abstraction, or extract the multi-file persistence protocol behind an injectable component. Add tests for validation failure, duplicate IDs, serialization failure, cancellation, and I/O failure at each stage.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportStore.cs",
+          "range": {
+            "start": {
+              "line": 86,
+              "column": 9
+            },
+            "end": {
+              "line": 106,
+              "column": 97
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

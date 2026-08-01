@@ -349,7 +349,54 @@ describe('TaskCardComponent (smoke)', () => {
     }
   });
 
-  it('flags a card in the current Escalated lane as needing attention', async () => {
+  it('keeps a Progress card running during a pre-step despite stale runActivity', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1',
+        taskKey: 'test::task-1',
+        processId: 0,
+        startedAt: '2026-07-26T20:00:00Z',
+        status: 'failed',
+        exitCode: 1,
+        durationSeconds: 1,
+        model: 'gpt-5',
+      },
+      runner: null,
+      executionLocation: null,
+      runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+      liveStatus: {
+        attempt: 1,
+        activeStep: {
+          stepId: 'pre-worktree-create',
+          displayName: 'Create worktree',
+          kind: 'pre',
+        },
+        nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+      },
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(fixture.componentInstance.executionBadge()).toEqual({ label: 'Running live', tone: 'running' });
+    expect(fixture.componentInstance.stalledState()).toBeNull();
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--running')).toBe(true);
+    expect(host?.classList.contains('task-card--stalled')).toBe(false);
+  });
+
+  it('flags an escalated human-review card as needing attention (Failed != Done)', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -884,6 +931,7 @@ describe('TaskCardComponent (smoke)', () => {
       },
       integration: {
         status: 'integrated',
+        deliveryRef: 'task/ATP-1',
         sha: 'a1b2c3d',
         integrationBranch: 'develop',
         detail: 'Every attributed commit is present in develop.',
@@ -966,6 +1014,31 @@ describe('TaskCardComponent (smoke)', () => {
     expect(el?.getAttribute('data-tone')).toBe('discovery');
     expect(el?.className).toContain('task-card__no-commits--discovery');
     expect(el?.textContent).toContain('commit discovery pending');
+  });
+
+  it('remote delivery ref without attributed commits is discovery-pending, never no-code', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      codeActivityDetected: false,
+      integration: {
+        status: 'pending',
+        deliveryRef: 'runner/agent-runner-01/AGT-2220',
+        sha: null,
+        integrationBranch: 'main',
+        detail: 'Delivery ref exists but attribution is pending.',
+      },
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.value).toBe('runner/agent-runner-01/AGT-2220');
+    expect(context?.summary).toBe('commit discovery pending');
+    expect(fixture.componentInstance.commitEmptyBadge()?.tone).toBe('discovery');
+
+    const el = fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]') as HTMLElement | null;
+    expect(el?.textContent).toContain('commit discovery pending');
+    expect(el?.textContent).not.toContain('no code changes');
   });
 
   it('does not render a zero-commit badge outside review lanes (3-progress stays quiet)', async () => {
@@ -1661,6 +1734,7 @@ describe('buildHumanReviewBadge — current lane only', () => {
 describe('current card-status reconciliation', () => {
   const integration = {
     status: 'integrated' as const,
+    deliveryRef: 'task/task-1',
     sha: '2d8d201',
     integrationBranch: 'develop',
     detail: null,

@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 80 specs
+### `board/` - 81 specs
 
 | Spec | Summary |
 |------|---------|
@@ -160,6 +160,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `bug-cross-project-counter.spec.ts` | project chip strip: single-select switch |
 | `card-cooldown-retry.spec.ts` | DtC step 6 - CooldownRetry banner on the progress card |
 | `card-delete-button.spec.ts` | Card delete button |
+| `card-delivery-ref.spec.ts` | Review card delivery ref projection |
 | `card-live-state-by-lane.spec.ts` | Task-card live-state visibility by lane |
 | `card-merge-signal.spec.ts` | AGT-2046 board card merge signal |
 | `card-mode-badge.spec.ts` | Card mode badge (planning / research / concept recognizable on the board) |
@@ -366,7 +367,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `remote-run-testsuite-report.spec.ts` | @mockup remote-run testsuite report |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |
 
-### `orchestrator/` - 16 specs
+### `orchestrator/` - 17 specs
 
 | Spec | Summary |
 |------|---------|
@@ -375,6 +376,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `orchestrator-chat-scroll-stability.spec.ts` | mixed-height streamed rows stay mounted without scrollbar correction |
 | `orchestrator-config-panel.spec.ts` | Orchestrator logic config (consolidated Settings, Admin/System entry) |
 | `orchestrator-context-header.spec.ts` | Orchestrator context header · where am I |
+| `orchestrator-feed-main-view.spec.ts` | Feed main view: route, Activity icon, fresh-alert badge, windowing, live stability, and responsive themes |
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |
 | `orchestrator-model-picker.spec.ts` | full live GPT picker persists across Board and Task contexts |
 | `orchestrator-project-chat.spec.ts` | orchestrator project chat |
@@ -470,6 +472,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 
 | Spec | Summary |
 |------|---------|
+| `active-tab-auto-scroll.spec.ts` | studio-shell · active tab remains visible in the scrolling strip |
 | `activity-bar-board-removed.spec.ts` | studio-shell · All-projects board opens only via Explorer header |
 | `activity-bar-single-active.spec.ts` | studio-shell · Activity Bar marks exactly one active item |
 | `empty-state-refresh.spec.ts` | studio-shell · refreshed empty state |

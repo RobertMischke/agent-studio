@@ -14,16 +14,18 @@
       <app-studio-icon name="plus" [size]="12" />
       <span>Create Task in Project</span>
     </button>
-    <button class="page-action-bar__button"
-            type="button"
-            data-testid="page-action-archive"
-            [disabled]="archived()"
-            [appPendingButton]="archivePending()"
-            pendingLabel="Archiving…"
-            (click)="archiveRequest.emit()">
-      <app-studio-icon name="archive" [size]="12" />
-      <span>{{ archived() ? 'Archived' : 'Archive' }}</span>
-    </button>
+    @if (!decisionActionsOwned()) {
+      <button class="page-action-bar__button"
+              type="button"
+              data-testid="page-action-archive"
+              [disabled]="archived()"
+              [appPendingButton]="archivePending()"
+              pendingLabel="Archiving…"
+              (click)="archiveRequest.emit()">
+        <app-studio-icon name="archive" [size]="12" />
+        <span>{{ archived() ? 'Archived' : 'Archive' }}</span>
+      </button>
+    }
     <button class="page-action-bar__button"
             type="button"
             data-testid="page-action-open-chat"
@@ -42,7 +44,7 @@
       <app-studio-icon name="pin" [size]="12" />
       <span>{{ pinned() ? 'Unpin from Home' : 'Pin to Home' }}</span>
     </button>
-    @if (extraIntent(); as intent) {
+    @if (!decisionActionsOwned() && extraIntent(); as intent) {
       <button class="page-action-bar__button page-action-bar__button--extra"
               type="button"
               data-testid="page-action-extra"

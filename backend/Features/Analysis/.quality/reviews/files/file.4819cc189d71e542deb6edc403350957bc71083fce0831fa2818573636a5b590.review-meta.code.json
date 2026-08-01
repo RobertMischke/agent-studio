@@ -1,0 +1,208 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/2316100a69d111c5aed8f6bb41ad6a94c8eebe69679169b402d39003db2274b5",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+    "displayName": "AnalysisReportValidator.cs"
+  },
+  "reviewedAt": "2026-07-21T11:28:02.4477818Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-3a50ae1f341f42ca8330e0d4f7f6aaec"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "b1b4264dcffc279936c35b39dc4a4cf97cda114b6bd46b23a6b8fe21c3d27bbf"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+      "selector": "file",
+      "contentHash": "sha256:a34e58721884c276785dbfd1e239c2a9183d3976e8129d09ec83e5de0f4a894f"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "aed02d96f7244b018897796dac9c9ac366df78b1ca92144d6b28579de232e842"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:8a030f94725eee08c45a8425f2f49ce95593d62f66d1ccce2dce463ff87da470"
+    }
+  },
+  "grade": {
+    "score": 74,
+    "band": "C",
+    "rationale": "The validator covers required strings, collection entries, scope-dependent fields, time-window ordering, and malformed-JSON diagnostics, but it does not actually enforce the documented enum value sets for programmatically constructed reports. Its nullable contracts and string-only diagnostics also reduce clarity and testability."
+  },
+  "summary": "The implementation is readable and straightforward, but its primary boundary guarantee is incomplete: undefined enum values can pass validation, including an unknown scope kind that bypasses every scope-specific rule. Tightening enum validation and making validation contracts more explicit would materially improve correctness and maintainability.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 67,
+        "band": "D",
+        "rationale": "Most required-field checks are correct, but undefined enum values are accepted. An unknown scope kind falls through the switch and succeeds without any required scope pointers."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 76,
+        "band": "C",
+        "rationale": "The code is compact and logically grouped, but enum validation is implicitly delegated to a parser even though this validator operates on public in-memory objects. TryValidateProducer currently adds indirection while checking only null."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 81,
+        "band": "B",
+        "rationale": "Control flow and error messages are generally understandable. However, the documentation claims enum rejection is already guaranteed, which is not true for directly constructed or mutated objects, and the non-nullable signatures conflict with explicit null handling."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 78,
+        "band": "C",
+        "rationale": "Failures return actionable messages and avoid exceptions, but diagnostics are unstructured strings, making reliable programmatic handling and localization difficult."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 75,
+        "band": "C",
+        "rationale": "The pure static API is easy to unit test, but callers and tests must assert brittle message text, and the missing enum checks leave important boundary cases unrepresented."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "ARV-001",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Undefined enum values are accepted",
+      "description": "C# enum properties can contain undefined numeric values through casts, deserialization configuration, mapping, or mutation. The validator does not check any of the documented enum domains. Most critically, an undefined scope.Kind reaches the end of the switch and is accepted without satisfying any scope-specific requirements. Undefined producer, trigger, severity, parse-status, and reference-kind values can likewise pass because their domains are never checked here. Reliance on a particular parser contradicts the validator\u0027s role as the shared in-memory/store boundary.",
+      "recommendation": "Explicitly validate every schema-constrained enum, preferably with exhaustive switches that reject the default case or a centralized allowed-value check. Add tests that cast out-of-range integers to every enum and verify rejection, including an unknown scope kind with all pointer fields absent.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 98,
+              "column": 9
+            },
+            "end": {
+              "line": 129,
+              "column": 10
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 135,
+              "column": 5
+            },
+            "end": {
+              "line": 140,
+              "column": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ARV-002",
+      "aspect": "clarity",
+      "severity": "low",
+      "title": "Null checks conflict with non-nullable parameter contracts",
+      "description": "TryValidate, TryValidateScope, and TryValidateProducer accept non-nullable parameters but explicitly handle null. Nullable-aware callers are therefore warned before using the supported validation path, while the signatures misleadingly promise that null cannot be supplied.",
+      "recommendation": "Declare the validated parameters nullable, such as AnalysisReport?, AnalysisReportScope?, and AnalysisReportProducer?, if returning a validation error for null is intentional. Otherwise remove the unreachable-by-contract checks and enforce non-null inputs at the caller boundary.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 25,
+              "column": 36
+            },
+            "end": {
+              "line": 27,
+              "column": 80
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 95,
+              "column": 42
+            },
+            "end": {
+              "line": 97,
+              "column": 77
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 135,
+              "column": 45
+            },
+            "end": {
+              "line": 137,
+              "column": 80
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ARV-003",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Validation failures expose only brittle free-form text",
+      "description": "The API returns only a human-readable string and embeds dynamic values in some messages. Consumers and tests that need to distinguish fields or failure categories must parse or compare wording, so harmless message edits can break them.",
+      "recommendation": "Return or expose a structured validation error containing a stable code and field path plus a display message. A compatibility overload can continue returning the current string representation.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/AnalysisReportValidator.cs",
+          "range": {
+            "start": {
+              "line": 25,
+              "column": 12
+            },
+            "end": {
+              "line": 25,
+              "column": 79
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

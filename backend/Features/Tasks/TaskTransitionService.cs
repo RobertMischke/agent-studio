@@ -305,7 +305,9 @@ public sealed class TaskTransitionService
             // affect the lane transition that already completed above.
             if (attributed != null && _driftRunner != null)
             {
-                TriggerDriftPostSteps(attributed, settings);
+                TriggerDriftPostSteps(
+                    attributed,
+                    AgentStudio.Pipeline.PipelineTypeSettings.ForTask(settings, attributed)!);
             }
 
             if (attributed != null)
@@ -760,13 +762,29 @@ public sealed class TaskTransitionService
 
         _mutations.SetJobPhase(reviewed.FolderPath, LifecyclePhases.Integrating);
         var integrating = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        var integrationBranch = TaskIntegrationBranch.Resolve(
+            integrating,
+            settings.IntegrationBranch);
         FlagIntegrationOnAccept(integrating, warnIfNotIntegrated: false);
         RecordIntegrationEvent(
             integrating,
             TimelineEventKinds.IntegrationStarted,
             cause,
-            $"Acceptance started integration into {TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch)}.",
+            $"Acceptance started integration into {integrationBranch}.",
             outcome: "integrating");
+
+        var synchronized = RefreshIntegrationBranch(integrating, integrationBranch);
+        if (!synchronized.Success)
+        {
+            RecordIntegrationSyncFailure(
+                integrating,
+                synchronized.Error ?? $"Integration branch '{integrationBranch}' could not be synchronized.");
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                synchronized.Error ?? $"Integration branch '{integrationBranch}' could not be synchronized.",
+                cause);
+        }
 
         if (IsAlreadyIntegrated(integrating))
         {
@@ -788,7 +806,7 @@ public sealed class TaskTransitionService
                     integrating.Id,
                     integrating.FolderPath,
                     integrating.WatchPath,
-                    TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch),
+                    integrationBranch,
                     settings.IntegrationStrategy,
                     targetIndex,
                     cause,
@@ -822,7 +840,7 @@ public sealed class TaskTransitionService
             integrating.Id,
             integrating.FolderPath,
             integrating.WatchPath,
-            TaskIntegrationBranch.Resolve(integrating, settings.IntegrationBranch),
+            integrationBranch,
             ct,
             settings.IntegrationStrategy).ConfigureAwait(false);
         if (result.Outcome is not (
@@ -859,6 +877,35 @@ public sealed class TaskTransitionService
         var lookup = _integrationStatus.BuildLookup([job]);
         return lookup.TryGetValue(job.TaskKey, out var status)
                && status.Status == IntegrationStatuses.Integrated;
+    }
+
+    private IntegrationBranchSyncResult RefreshIntegrationBranch(
+        TaskInfo job,
+        string integrationBranch)
+    {
+        var repoRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath)
+            ?? (string.IsNullOrWhiteSpace(job.WatchPath) ? null : job.WatchPath);
+        return string.IsNullOrWhiteSpace(repoRoot)
+            ? new IntegrationBranchSyncResult(
+                IntegrationBranchSyncOutcome.Error,
+                "Could not resolve repository root for the integration branch sync.")
+            : _git.RefreshIntegrationBranch(repoRoot, integrationBranch);
+    }
+
+    private void RecordIntegrationSyncFailure(TaskInfo job, string detail)
+    {
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "error",
+            VerdictSummary = "Integration branch synchronization failed.",
+            Reason = detail,
+        });
     }
 
     private async Task<MoveJobOutcome> CompleteTransactionalAcceptAsync(
@@ -1288,7 +1335,8 @@ public sealed class TaskTransitionService
                 moved.WatchPath,
                 TaskIntegrationBranch.Resolve(moved, settings.IntegrationBranch),
                 ct,
-                settings.IntegrationStrategy).ConfigureAwait(false);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(moved)).ConfigureAwait(false);
 
             // ASS-1752: persist historical merge-attempt provenance. Accepted
             // card status is derived separately from target-branch membership.

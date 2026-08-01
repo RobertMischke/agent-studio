@@ -2,7 +2,7 @@
   <div class="overlay" appOverlayPortal="modal" (click)="overlays.closeOrchFeed()" tabindex="0" (keydown.enter)="overlays.closeOrchFeed()" (keydown.space)="overlays.closeOrchFeed(); $event.preventDefault()">
     <div class="overlay__panel overlay__panel--orch-feed" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <button class="overlay__close" (click)="overlays.closeOrchFeed()" [cacTooltip]="'Close'">×</button>
-      <app-orchestrator-feed [projectName]="proj" />
+      <app-orchestrator-feed [projectName]="proj" (openTask)="openTask.emit($event)" />
     </div>
   </div>
 }

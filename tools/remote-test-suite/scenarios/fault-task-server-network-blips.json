@@ -20,7 +20,7 @@
     "projectId": "prj-{runId}",
     "taskId": "tsk-{runId}"
   },
-  "contract": {
+  "acceptance": {
     "chronicleLinks": [
       "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
       "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"

@@ -154,7 +154,7 @@ public record ProjectSettings
     public Dictionary<string, string>? LaneSortStrategyOverrides { get; init; }
 
     /// <summary>
-    /// Per-project pipeline-step configuration. Map of pipeline step id
+    /// Legacy per-project pipeline-step configuration. Map of pipeline step id
     /// (e.g. <c>aspect-code-quality</c>, <c>post-lint-scss</c>) to a
     /// per-step override of <c>enabled</c> / <c>mode</c> / <c>model</c>.
     /// A missing step id, or a null field inside an entry, falls through
@@ -168,7 +168,20 @@ public record ProjectSettings
     /// for <c>mode</c> it is step -&gt; built-in default.
     /// Persisted in <c>project-settings.json</c>.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, PipelineStepSetting>? PipelineSteps { get; init; }
+
+    /// <summary>
+    /// Per-project pipeline-step overrides keyed first by
+    /// <see cref="PipelineTypes"/> and then by pipeline step id. Each type owns
+    /// an independent chain configuration. Existing flat
+    /// <see cref="PipelineSteps"/> values migrate to task, bug, and feature;
+    /// planning intentionally starts from its lightweight catalogue defaults.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, Dictionary<string, PipelineStepSetting>>? PipelineStepsByType { get; init; }
 
     /// <summary>
     /// Optional per-project display/execution order for configurable pipeline
@@ -177,15 +190,31 @@ public record ProjectSettings
     /// added steps stay visible after upgrades. Core remains fixed and always
     /// runs as the single agent step.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? PipelineStepOrder { get; init; }
 
     /// <summary>
-    /// ADR-0052: maximum number of tasks the runner may execute concurrently
-    /// for this project. Default <c>1</c> keeps the runner strictly sequential
-    /// (one active slot, behaviour byte-for-byte identical to the pre-parallel
-    /// runner). Values &gt; 1 opt the project into worktree-isolated parallel
-    /// execution; the runner clamps to <c>&gt;= 1</c>. Persisted in
-    /// <c>project-settings.json</c>.
+    /// Optional per-type pre/post step order. Core remains fixed. Legacy flat
+    /// order migrates to task, bug, and feature alongside the step settings.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, IReadOnlyList<string>>? PipelineStepOrderByType { get; init; }
+
+    /// <summary>
+    /// DEPRECATED (AGT-2302 / AGT-2376, remove after 2026-10-01). Capacity is a
+    /// host fact now: the execution host carries one ceiling, one target load,
+    /// and one ramp strategy for every project it claims for
+    /// (<see cref="HostCapacityPolicy"/>, <c>PUT /api/clients/{id}/runner-capacity</c>).
+    ///
+    /// <para>
+    /// The value stays readable so existing <c>project-settings.json</c> files
+    /// keep meaning something during the migration: it seeds a host ceiling once
+    /// (see <c>LeaseEndpoints.DeprecatedProjectCompatCeiling</c>) and the legacy
+    /// in-process runner still reads it. No HTTP route and no UI control writes
+    /// it any more.
+    /// </para>
     /// </summary>
     public int MaxParallelism { get; init; } = 1;
 

@@ -1,0 +1,106 @@
+@use '../../../../../../styles/mixins' as m;
+
+:host {
+  display: block;
+}
+
+/* Bounded execution inspector inside a pipeline row — compact inset. */
+.pse {
+  @include m.deck-panel(var(--studio-spacing-2));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+}
+
+.pse__head,
+.pse__output-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+}
+
+.pse__label {
+  color: var(--studio-fg-strong);
+  font-size: var(--studio-card-meta-size);
+  font-weight: 650;
+}
+
+.pse__source {
+  margin-inline-start: var(--studio-spacing-2);
+  color: var(--studio-fg-dim);
+  font-size: var(--studio-card-meta-size);
+}
+
+.pse__probe {
+  min-height: var(--pp-control-h, 2rem);
+  padding: 0 var(--studio-spacing-3);
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: var(--studio-card-radius);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-strong);
+  cursor: pointer;
+}
+
+.pse__probe:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.pse__commands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: var(--studio-card-meta-size);
+}
+
+.pse__commands code,
+.pse__output pre {
+  overflow: auto;
+  padding: var(--studio-spacing-2);
+  border-radius: var(--studio-card-radius);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-strong);
+  font-family: var(--studio-font-mono, var(--font-mono));
+  white-space: pre-wrap;
+}
+
+.pse__notice,
+.pse__error {
+  margin: 0;
+  padding: var(--studio-spacing-2);
+  border-radius: var(--studio-card-radius);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-strong);
+  font-size: var(--studio-card-meta-size);
+}
+
+/* A probe that just failed -> acute now. */
+.pse__error {
+  @include m.deck-panel(var(--studio-spacing-2));
+  @include m.deck-panel-attention;
+
+  margin: 0;
+  color: var(--studio-fg-strong);
+  font-size: var(--studio-card-meta-size);
+}
+
+.pse__output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.pse__output-meta {
+  justify-content: flex-start;
+  color: var(--studio-fg-muted);
+  font-size: var(--studio-card-meta-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.pse__output pre {
+  max-height: 24rem;
+  margin: 0;
+}

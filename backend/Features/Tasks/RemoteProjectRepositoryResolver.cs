@@ -30,15 +30,13 @@ public static class RemoteProjectRepositoryResolver
         if (repositoryUrl is null) return null;
         var gitDirectory = ResolveGitDirectory(project.RepositoryPath);
 
-        // The configured integration branch is where cards are cut from and
-        // delivered to. origin/HEAD of the registered checkout typically points
-        // at the release line (main), so it must never override an explicit
-        // configuration; it only fills the gap when nothing is configured.
+        // The integration branch is the delivery target and is authoritative.
+        // Local checkout metadata is only a fallback for legacy registrations
+        // that do not yet carry an explicit target.
         var defaultBranch = string.IsNullOrWhiteSpace(configuredDefaultBranch)
             ? ReadDefaultBranch(gitDirectory)
             : configuredDefaultBranch.Trim();
-        if (string.IsNullOrWhiteSpace(defaultBranch))
-            defaultBranch = "main";
+        if (string.IsNullOrWhiteSpace(defaultBranch)) defaultBranch = "main";
 
         return new RemoteProjectRepository(
             project.Id,

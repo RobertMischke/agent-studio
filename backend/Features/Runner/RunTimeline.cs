@@ -29,6 +29,10 @@ public sealed record RunRecord
     /// <summary><c>running</c> | <c>completed</c> | <c>failed</c> | <c>cancelled</c> | <c>unknown</c>.</summary>
     public string Status { get; init; } = "unknown";
     public string? Cli { get; init; }
+    /// <summary>Effective model resolved by the runner before this CLI process started.</summary>
+    public string? Model { get; init; }
+    /// <summary>Effective thinking / reasoning level resolved for this run.</summary>
+    public string? ThinkingLevel { get; init; }
     public TaskExecutionLocation? ExecutionLocation { get; init; }
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
@@ -649,6 +653,8 @@ public static class RunTimelineBuilder
                 EndedAt = endedAt,
                 Status = status,
                 Cli = evt.Cli ?? startedMarker?.Cli,
+                Model = evt.Model,
+                ThinkingLevel = evt.ThinkingLevel,
                 ExecutionLocation = evt.ExecutionLocation is null ? null : evt.ExecutionLocation with { Historical = true },
                 ExitCode = exitMarker?.ExitCode,
                 DurationSeconds = exitMarker?.Duration,

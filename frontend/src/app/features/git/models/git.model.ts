@@ -42,7 +42,15 @@ export interface GitProjectSummary {
 }
 
 /** Coarse branch classification used by the Project Hub Git View tree. */
-export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'other';
+export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'runner' | 'other';
+
+/** Compact task-card link attached to a branch, checkout, or commit. */
+export interface GitTaskBadge {
+  taskKey: string;
+  key: string;
+  title: string;
+  lane: string;
+}
 
 /**
  * One checkout of the project repository (primary or an ADR-0052 per-task
@@ -58,9 +66,10 @@ export interface GitWorktreeEntry {
   isPrimary: boolean;
   isDetached: boolean;
   isBare: boolean;
+  task?: GitTaskBadge | null;
 }
 
-/** One local branch in the Git View inventory. Mirrors backend `GitBranchEntry`. */
+/** One local, remote, or folded local-and-origin branch in the Git View inventory. */
 export interface GitBranchEntry {
   name: string;
   category: GitBranchCategory;
@@ -73,6 +82,10 @@ export interface GitBranchEntry {
   lastCommitSubject: string | null;
   lastCommitAtUtc: string | null;
   worktreePath: string | null;
+  isLocal?: boolean;
+  hasRemote?: boolean;
+  remoteTipSha?: string | null;
+  tasks?: GitTaskBadge[];
 }
 
 /** One commit in the Git View recent-history list. Mirrors backend `GitCommitInfo`. */
@@ -87,8 +100,53 @@ export interface GitCommitEntry {
   removed: number;
 }
 
+export interface GitCommitRef {
+  name: string;
+  kind: 'head' | 'branch' | 'tag' | 'ref' | string;
+  isRemote: boolean;
+}
+
+export interface GitCommitPresence {
+  inIntegration: boolean;
+  inRelease: boolean;
+  integrationBranch: string;
+  releaseBranch: string;
+}
+
+export interface GitDeploymentMarker {
+  target: 'backend' | 'runner' | 'frontend' | string;
+  sha: string;
+  shortSha: string;
+}
+
+export interface GitGraphCommit extends GitCommitEntry {
+  parentShas: string[];
+  refs: GitCommitRef[];
+  tasks: GitTaskBadge[];
+  presence: GitCommitPresence | null;
+  deployments: GitDeploymentMarker[];
+}
+
+export interface GitHistoryPage {
+  offset: number;
+  pageSize: number;
+  nextOffset: number | null;
+  hasMore: boolean;
+  commits: GitGraphCommit[];
+}
+
+export interface GitActiveCheckout {
+  task: GitTaskBadge;
+  branch: string | null;
+  headSha: string | null;
+  location: 'local' | 'remote' | string;
+  runner: string;
+  worktreePath: string | null;
+  activeSince: string | null;
+}
+
 /**
- * Read-only branch / worktree / recent-history inventory for one project.
+ * Read-only branch / worktree / first graph-page inventory for one project.
  * Mirrors backend `GitProjectInventory`; fetched from
  * `GET /api/git/inventory?project=<name>` and consumed by the Project Hub Git
  * View. `isRepo === false` with a populated {@link error} is the empty/error
@@ -102,6 +160,9 @@ export interface GitProjectInventory {
   worktrees: GitWorktreeEntry[];
   branches: GitBranchEntry[];
   recentCommits: GitCommitEntry[];
+  history?: GitHistoryPage | null;
+  activeCheckouts?: GitActiveCheckout[];
+  deployments?: GitDeploymentMarker[];
   error: string | null;
 }
 
@@ -411,12 +472,16 @@ export type IntegrationStatusValue =
  * into the integration branch (develop)? Mirrors backend `TaskIntegrationStatus`
  * and ships via `TaskInfo.integration`. It is computed from attributed-commit
  * membership at the current target HEAD, batched and cached per repository.
- * Lane state, provenance, and remembered merge attempts are not status inputs.
- * Null on cards not in an accepted lane.
+ * `deliveryRef` comes from the same durable resolver truth used by acceptance,
+ * so remote runner refs and evidenced local task refs render uniformly. Lane
+ * state and remembered merge attempts are not membership inputs. Null on cards
+ * not in an accepted lane.
  */
 export interface TaskIntegrationStatus {
   /** integrated | pending | conflict-skipped | no-branch. */
   status: IntegrationStatusValue;
+  /** Actual delivery ref from card truth; null only when no ref is evidenced. */
+  deliveryRef: string | null;
   /** Short attributed SHA proving target-branch membership; null unless integrated. */
   sha: string | null;
   /** Integration branch the verdict was computed against (usually "develop"). */

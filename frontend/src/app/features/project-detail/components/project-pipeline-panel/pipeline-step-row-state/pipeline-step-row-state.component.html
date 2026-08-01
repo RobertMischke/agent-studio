@@ -1,0 +1,15 @@
+@if (framework()) {
+  <span class="framework"
+        [attr.data-testid]="'pipeline-step-framework-' + stepId()"
+        [cacTooltip]="'Framework-specific step: ' + framework()">{{ framework() }}</span>
+}
+@if (canDisable()) {
+  <label class="state toggle" [class.off]="!enabled()"
+         [cacTooltip]="enabled() ? 'On for this task type. Click to switch off.' : 'Off for this task type. Click to switch on.'">
+    <input type="checkbox" [attr.data-testid]="'pipeline-step-row-enabled-' + stepId()"
+           [disabled]="disabled()" [checked]="enabled()" (change)="onChange($event)">
+    <span>{{ enabled() ? 'On' : 'Off' }}</span>
+  </label>
+} @else {
+  <span class="state">always on</span>
+}

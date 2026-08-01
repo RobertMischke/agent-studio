@@ -53,6 +53,11 @@ state.
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
   mapping.
+- `backend/Features/Runner/RunTimeline.cs`: additive projection from durable
+  `session-events.jsonl` rows and CLI output into the per-task Runs API.
+  Confirmed local process starts and remote claims persist the resolved model
+  and thinking level on the session event, and every new `RunRecord` carries
+  those values independently of optional CLI init frames or token summaries.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
 - `backend/Features/Runner/OrchestratorChat.cs` and `OrchestratorRunner.cs`:
@@ -105,8 +110,9 @@ state.
   intervention primitives.
 - `runner/*`: the standalone `agent-host` daemon. A dependency-free console
   process that runs as either a separately registered `coding` or `review`
-  service. Coding continuously claims server-assigned projects with bounded
-  host slots (default 2), fenced leases + heartbeat, per-task linked git
+  service. Coding continuously claims server-assigned projects with centrally
+  managed bounded host slots (`RUNNER_MAX_PARALLELISM` is bootstrap/fallback
+  only), fenced leases + heartbeat, per-task linked git
   worktrees, log/artifact upload, and fenced normal completion into auto-review.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
@@ -228,6 +234,14 @@ state.
 
 ## Invariants
 
+- A coding result is delivered only after `git ls-remote` against the repository
+  URL from the project registration resolves the published ref to the exact
+  local result commit. The configured `origin` push URL is not delivery
+  evidence. A missing or mismatched registered-repository ref retains the host
+  worktree and routes the card to the visible Escalated failure state with
+  hostname, worktree path, branch, cause, and a recovery recipe. "Completed
+  out-of-band" is reserved for a missing terminal sentinel after this exact
+  remote proof succeeds.
 - Coding and review service identities are not interchangeable. A
   `review-executor` capability cannot claim coding work, mixed capabilities are
   rejected, and a registered identity cannot switch executor roles. Review
@@ -264,6 +278,13 @@ state.
   distinct API, audit action, persisted field, and UI label. Capability failure
   reports must bind the active coding or review claim and fence; stale and
   duplicate deliveries fail closed or replay idempotently.
+- The monolith V1 Review compatibility mount accepts the Review service's
+  `PUT /api/v1/runners/{runner-id}/capabilities` startup and refresh requests
+  with the same advertisement and snapshot contracts as the standalone Task
+  Server. It validates the registered Review runner and instance, schema,
+  freshness, and generation before retaining the latest snapshot. The separate
+  `review-executor` identity therefore remains on the V1 Review plane after
+  registration instead of failing startup on a missing capability route.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
@@ -286,6 +307,15 @@ state.
   and load include both pools and unrelated processes, so neither is inferred
   from lane membership or from CPU percentage. This keeps claim/lane drift
   visible instead of silently folding it into a slot count.
+
+- `RuntimeCapacitySettingsService` in the Task Server owns the versioned host
+  ceiling, target load, and ramp strategy. The first Runner registration seeds
+  it from the bootstrap value; later registrations and every Coding claim
+  inherit it. Admission counts active Coding RUN authority across every Runner
+  process on that host. Capacity changes take effect without a daemon restart
+  and never cancel already-running work. Projects consume the shared host
+  ceiling and do not own independent capacity settings. Review GATE work
+  remains governed by its separate pool and does not consume a RUN slot.
 
 - Linux host resource enforcement belongs to agent-host-managed systemd units,
   separately for Coding and Review. Host-level cgroups are the hard CPU and I/O
@@ -546,13 +576,16 @@ state.
   for mutations and discarded without salvage. Any mutation invalidates the
   plan and returns the Epic to Backlog because planning is source-read-only
   (AGT-2178).
-- Remote `agent-host` admission is write-capability gated. Startup keeps the fetch URL
-  and Git `pushurl` separate, performs one push dry-run, and publishes the result
-  on its client identity. A reported `read-only` identity receives no coding
-  claims. The per-project delivery preflight is stricter and applies before any
-  first project claim, including Epic planning: it creates and removes a
-  temporary runner ref so server-side write policy is exercised. Execution Hosts
-  surfaces both states for operator repair.
+- Remote `agent-host` delivery admission is repository-scoped. The startup
+  probe still checks the configured fallback fetch URL and Git `pushurl`, but
+  publishes that result as diagnostics only: it never grants or denies another
+  project's claim. Before a project receives a lease, its delivery preflight
+  requires the registered fetch and push URLs, an exact remote integration
+  branch, and a real create/delete push of a temporary runner ref. Proofs expire
+  after five minutes because branch and credential state can change without a
+  settings write. A failed or unconfigured project stays Ready while unrelated
+  projects assigned to the same host remain claimable. Execution Hosts and the
+  project's Execution card surface the per-project target and failure reason.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider

@@ -40,6 +40,11 @@ public sealed record PipelineStep
     public StepKind Kind { get; init; } = StepKind.Module;
     public StepRunMode RunMode { get; init; } = StepRunMode.Sequential;
     /// <summary>
+    /// Repository stack required by this step. The project value is derived
+    /// from repository markers, never copied from project settings.
+    /// </summary>
+    public string AppliesTo { get; init; } = PipelineStepStacks.Any;
+    /// <summary>
     /// Step ids that must complete before this step starts. Empty means
     /// "no intra-section dependency"; siblings with <see cref="RunMode"/>
     /// = <see cref="StepRunMode.Parallel"/> and no edges run together.
@@ -58,6 +63,12 @@ public sealed record PipelineStep
     /// </summary>
     public string? PromptTemplate { get; init; }
     public string? CliType { get; init; }
+    /// <summary>
+    /// Optional technology marker for a framework-specific step. Null means the
+    /// step is stack-neutral. The settings UI renders this as metadata, never as
+    /// an activation rule.
+    /// </summary>
+    public string? Framework { get; init; }
     public int? TimeoutMs { get; init; }
     /// <summary>
     /// When true, the step is safe to re-run after a partial failure.
@@ -93,6 +104,15 @@ public sealed record PipelineStep
     /// resolves the project override against this default.
     /// </summary>
     public bool DefaultEnabled { get; init; } = true;
+}
+
+/// <summary>Stable stack ids used by pipeline catalogue applicability metadata.</summary>
+public static class PipelineStepStacks
+{
+    public const string Any = "any";
+    public const string Angular = "angular";
+    public const string DotNet = "dotnet";
+    public const string Node = "node";
 }
 
 public enum StepKind
@@ -212,7 +232,7 @@ public sealed record PipelineStepExecution
     public string? RecommendedModel { get; init; }
     /// <summary>Reasoning level recommended before overrides.</summary>
     public string? RecommendedThinkingLevel { get; init; }
-    /// <summary>Where the effective selection came from, e.g. qualification or task-override.</summary>
+    /// <summary>Where the effective selection came from: policy, policy-economy, or task-override.</summary>
     public string? SelectionSource { get; init; }
     /// <summary>Heuristic saving versus the live catalogue's top rung.</summary>
     public int? EstimatedSavingsPercent { get; init; }

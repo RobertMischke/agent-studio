@@ -8,7 +8,7 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
         Path.GetTempPath(), "remote-project-repo-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Configured_integration_branch_wins_over_repository_origin_head()
+    public void Registry_url_and_configured_delivery_target_are_authoritative()
     {
         var git = Path.Combine(_root, ".git");
         Directory.CreateDirectory(Path.Combine(git, "refs", "remotes", "origin"));
@@ -132,6 +132,17 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
         Assert.StartsWith("repo_", result.RepositoryId, StringComparison.Ordinal);
         Assert.Equal(repositoryUrl, result.RepositoryUrl);
         Assert.Equal("registry-url", result.Source);
+    }
+
+    [Fact]
+    public void Delivery_preflight_cache_expires_after_its_bounded_freshness_window()
+    {
+        var now = new DateTime(2026, 7, 26, 12, 0, 0, DateTimeKind.Utc);
+        var fresh = new RunnerProjectPreflight { CheckedAt = now.AddMinutes(-4) };
+        var stale = new RunnerProjectPreflight { CheckedAt = now.AddMinutes(-6) };
+
+        Assert.True(ProjectDeliveryPreflightPolicy.IsFresh(fresh, now));
+        Assert.False(ProjectDeliveryPreflightPolicy.IsFresh(stale, now));
     }
 
     public void Dispose()

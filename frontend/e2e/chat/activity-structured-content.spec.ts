@@ -1,7 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2407');
+const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2437');
 const TARGET = {
   id: 'activity-structured-content-fixture',
   watchPath: 'C:/fixtures/activity-structured-content',
@@ -51,11 +51,43 @@ function outputBuffer(): OutLine[] {
     {
       timestamp: at(19),
       stream: 'stderr',
-      text: 'The concept and its navigation entry are ready for review.',
+      text: 'I will inspect the Wiki concept document before wrapping up.',
     },
-    { timestamp: at(20), stream: 'stderr', text: '[[TASK_DONE]]' },
+    { timestamp: at(20), stream: 'stderr', text: 'read_file' },
     {
       timestamp: at(21),
+      stream: 'stderr',
+      text: 'docs/concepts/wiki-concept.html',
+    },
+    { timestamp: at(22), stream: 'stderr', text: ' succeeded in 12ms:' },
+    { timestamp: at(23), stream: 'stderr', text: '<!doctype html>' },
+    { timestamp: at(24), stream: 'stderr', text: '<html lang="en">' },
+    { timestamp: at(25), stream: 'stderr', text: '<head>' },
+    { timestamp: at(26), stream: 'stderr', text: '  <meta charset="utf-8">' },
+    { timestamp: at(27), stream: 'stderr', text: '  <style>' },
+    { timestamp: at(28), stream: 'stderr', text: '    .concept-grid {' },
+    { timestamp: at(29), stream: 'stderr', text: '      display: grid;' },
+    { timestamp: at(30), stream: 'stderr', text: '      grid-template-columns: 1fr 1fr;' },
+    { timestamp: at(31), stream: 'stderr', text: '    }' },
+    { timestamp: at(32), stream: 'stderr', text: '  </style>' },
+    { timestamp: at(33), stream: 'stderr', text: '</head>' },
+    { timestamp: at(34), stream: 'stderr', text: '<body>' },
+    {
+      timestamp: at(35),
+      stream: 'stderr',
+      text: '  <p class="lead">The concept remains readable as source.</p>',
+    },
+    { timestamp: at(36), stream: 'stderr', text: '</body>' },
+    { timestamp: at(37), stream: 'stderr', text: '</html>' },
+    { timestamp: at(38), stream: 'stderr', text: 'codex' },
+    {
+      timestamp: at(39),
+      stream: 'stderr',
+      text: 'The concept and its navigation entry are ready for review.',
+    },
+    { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
+    {
+      timestamp: at(41),
       stream: 'system',
       text: '[runner] CLI exited 0; typedOutcome=ExplicitAgentDone classifier=execution-outcome/v1',
     },
@@ -66,8 +98,8 @@ function detail() {
   return {
     info: {
       id: TARGET.id,
-      taskKey: `ASS-E2E-${TARGET.id}`,
-      displayKey: 'ASS-E2E',
+      taskKey: 'ASS-4242',
+      displayKey: 'ASS-4242',
       title: 'Activity structured content fixture',
       state: '5-human-review',
       order: 1,
@@ -95,7 +127,24 @@ function detail() {
     promptMarkdown: 'Fixture prompt.',
     promptHistory: [],
     titleHistory: [],
-    statusMarkdown: '## Status\n\nWaiting for review.',
+    statusMarkdown: `# Status
+
+- Result: Success
+
+## Overview
+
+- Problem: Result links left the application.
+- Solution: Internal destinations now use Studio navigation.
+
+## References
+
+- [Convention](docs/quality/angular-components.md)
+- [HTML report](results/report.html)
+- [Card](#/tasks/ASS-4242)
+- [External](https://example.com)
+
+[[TASK_DONE]]
+`,
     contextUsage: null,
     log: [],
     summaryState: null,
@@ -142,6 +191,35 @@ async function installRoutes(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify([{ name: 'fixture', path: TARGET.watchPath, rootPath: TARGET.watchPath }]),
+    }));
+  const project = {
+    id: 'fixture',
+    displayName: 'fixture',
+    shortCode: 'ASS',
+    workspaceId: 'workspace-fixture',
+    storageLocation: TARGET.watchPath,
+    rootPath: TARGET.watchPath,
+    repositoryPath: TARGET.watchPath,
+    sortOrder: 0,
+    archived: false,
+    urls: [],
+  };
+  await page.route('**/api/projects', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([project]),
+    }));
+  await page.route('**/api/workspaces', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'workspace-fixture',
+        displayName: 'Fixture',
+        color: '#6c8cff',
+        projects: [project],
+      }]),
     }));
   await page.route('**/api/cli/quota**', (route) =>
     route.fulfill({
@@ -219,11 +297,14 @@ async function installRoutes(page: Page): Promise<void> {
     }));
 }
 
-test('Activity renders structured tool payloads and runner events quietly', async ({ page }) => {
+for (const theme of ['light', 'dark'] as const) {
+test(`Activity renders structured tool payloads and runner events quietly in ${theme} theme`, async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('atp.flag.nextGenChat', '1');
-    localStorage.setItem('atp.studio.theme', 'light');
   });
+  await page.addInitScript((selectedTheme) => {
+    localStorage.setItem('atp.studio.theme', selectedTheme);
+  }, theme);
   await installRoutes(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(
@@ -239,20 +320,87 @@ test('Activity renders structured tool payloads and runner events quietly', asyn
   }
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
 
-  const tool = panel.getByTestId('tool-burst-chip');
-  await expect(tool).toBeVisible();
-  await tool.getByTestId('tool-burst-row').click();
-  const output = tool.getByTestId('tool-burst-command-output');
-  await expect(output).toContainText('diff --git a/docs/start/README.md');
-  await expect(output).toContainText('"title": "Apply Robert\'s selected Deck icon"');
+  const tools = panel.getByTestId('tool-burst-chip');
+  await expect(tools).toHaveCount(2);
+  const diffTool = tools.nth(0);
+  await diffTool.getByTestId('tool-burst-row').click();
+  const diffOutput = diffTool.getByTestId('tool-burst-command-output');
+  await expect(diffOutput).toContainText('diff --git a/docs/start/README.md');
+  await expect(diffOutput).toContainText('"title": "Apply Robert\'s selected Deck icon"');
   expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
     .not.toContain('diff --git');
   await panel.screenshot({
-    path: path.join(SHOTS_DIR, 'activity-renderer-after.png'),
+    path: path.join(
+      SHOTS_DIR,
+      theme === 'light' ? 'activity-completion-after.png' : 'activity-completion-after-dark.png',
+    ),
   });
 
+  const markupTool = tools.nth(1);
+  await expect(markupTool.getByTestId('tool-burst-row')).toHaveAttribute('aria-expanded', 'false');
+  await markupTool.getByTestId('tool-burst-row').click();
+  const markupOutput = markupTool.getByTestId('tool-burst-command-output');
+  await expect(markupOutput).toContainText('<meta charset="utf-8">');
+  await expect(markupOutput).toContainText('<p class="lead">');
+  await expect(markupTool.getByTestId('tool-burst-files')).toContainText(
+    'docs/concepts/wiki-concept.html',
+  );
+  await expect(markupOutput.locator('li')).toHaveCount(0);
+  expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
+    .not.toContain('<meta charset=');
+  await panel.screenshot({
+    path: path.join(SHOTS_DIR, 'activity-html-after.png'),
+  });
   const runnerRows = panel.locator('[data-testid="conversation-system-status"][data-category="runner"]');
-  await expect(runnerRows).toHaveCount(3);
+  await expect(runnerRows).toHaveCount(2);
   await expect(runnerRows.first()).not.toContainText('[runner]');
+  const completion = panel.locator('[data-testid="conversation-system-status"][data-category="result"]');
+  await expect(completion).toHaveCount(1);
+  await expect(completion).toContainText('Task complete');
+  await expect(completion).toContainText('Outcome ExplicitAgentDone');
+  await expect(completion).toContainText('Exit 0');
+  await expect(completion.getByRole('button', { name: 'trace' })).toBeVisible();
+  await expect(panel).not.toContainText('Runner finished');
   await expect(panel).not.toContainText('[runner-log-delivery:');
+});
+}
+
+test('Result markdown keeps docs, reports, and task keys inside Studio', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('atp.studio.theme', 'light');
+  });
+  await installRoutes(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(
+    `/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`,
+  );
+
+  const result = page.getByTestId('protocol-beautiful-results');
+  await expect(result).toBeVisible();
+  const wiki = result.getByRole('link', { name: 'Open quality/angular-components.md in project Wiki' });
+  const report = result.getByRole('link', { name: 'Open results/report.html in source viewer' });
+  const card = result.getByRole('link', { name: 'Open task ASS-4242' });
+  const external = result.getByRole('link', { name: 'External' });
+  await expect(wiki).toBeVisible();
+  await expect(report).toBeVisible();
+  await expect(card).toBeVisible();
+  await expect(external).toHaveAttribute('target', '_blank');
+  await page.screenshot({
+    path: path.join(SHOTS_DIR, 'result-links-in-app-after.png'),
+    fullPage: false,
+  });
+
+  await report.click();
+  await expect(page.getByTestId('source-viewer')).toBeVisible();
+  await page.getByTestId('source-viewer-close').click();
+
+  await card.click();
+  await expect(page).toHaveURL(/#\/tasks\/ASS-4242/);
+
+  await result.getByRole('link', { name: 'Open quality/angular-components.md in project Wiki' }).click();
+  await expect(page).toHaveURL(/#\/projects\/fixture\/wiki/i);
+  await expect.poll(() => page.evaluate(() => {
+    const value = localStorage.getItem('atp.projectWiki.v1.fixture');
+    return value ? JSON.parse(value).openedRel : null;
+  })).toBe('quality/angular-components.md');
 });

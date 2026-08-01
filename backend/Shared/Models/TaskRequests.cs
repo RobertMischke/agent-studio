@@ -484,6 +484,14 @@ public record SetBuildProfileRequest
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/max-parallelism</c> (ADR-0052). The
 /// value is clamped to <c>&gt;= 1</c> server-side; <c>1</c> means sequential.
+///
+/// <para>
+/// DEPRECATED for remote execution (AGT-2302 / AGT-2376): a remotely executed
+/// project takes its concurrency from the host ceiling. The setting still
+/// governs the local <c>ProjectRunner</c> (<c>ParallelSlotPolicy</c>), which is
+/// why the route exists at all. Remove after 2026-10-01, when the CAR rework of
+/// local execution replaces it.
+/// </para>
 /// </summary>
 public record SetMaxParallelismRequest
 {
@@ -603,6 +611,8 @@ public record SetLaneSortStrategyRequest
 /// </summary>
 public record SetPipelineStepRequest
 {
+    /// <summary>The pipeline type whose chain is being edited.</summary>
+    public string PipelineType { get; init; } = PipelineTypes.Task;
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }

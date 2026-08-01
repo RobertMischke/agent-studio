@@ -23,7 +23,7 @@
         <p class="crp__error" data-testid="crash-recovery-error">{{ msg }}</p>
       }
 
-      @for (item of pending(); track item.id) {
+      @for (item of reviewPending(); track item.id) {
         <article class="crp__item" [attr.data-testid]="'crash-recovery-item-' + item.id">
           <header class="crp__item-head">
             <div class="crp__identity">

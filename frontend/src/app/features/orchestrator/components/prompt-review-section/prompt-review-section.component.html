@@ -1,0 +1,75 @@
+@let d = detail();
+<section class="prompt-review"
+  [class.prompt-review--stale]="d.review?.status === 'stale'"
+  [class.prompt-review--needs]="d.review?.status === 'needs-review'"
+  data-testid="prompt-admin-review">
+  <div class="prompt-review__head">
+    <div>
+      <span class="prompt-review__pill"
+        [class.prompt-review__pill--ok]="d.review?.status === 'current'"
+        [class.prompt-review__pill--warn]="d.review?.status === 'needs-review'"
+        [class.prompt-review__pill--err]="d.review?.status === 'stale'">
+        {{ statusLabel(d.review?.status) }}
+      </span>
+      <span class="prompt-review__muted">
+        last review:
+        {{ d.review?.lastReviewedAt ? (d.review!.lastReviewedAt | date:'dd.MM.yyyy') : 'never' }}
+        @if (d.review?.reviewedBy) { · {{ d.review!.reviewedBy }} }
+      </span>
+    </div>
+    <button type="button" class="prompt-review__button"
+      data-testid="prompt-admin-review-current"
+      [disabled]="busy()"
+      (click)="reviewRequest.emit()">
+      {{ busy() ? 'Reviewing…' : 'Review this prompt' }}
+    </button>
+  </div>
+  @if (d.review?.findings?.length) {
+    <ul class="prompt-review__findings">
+      @for (finding of d.review!.findings; track finding.code + finding.message) {
+        <li [attr.data-severity]="finding.severity">
+          <span class="prompt-review__pill">{{ finding.severity }}</span>
+          <span>{{ finding.message }}</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="prompt-review__muted">
+      {{ d.review ? 'No usage, content, or override findings in the last review.' : 'Run a review to check usage, repository references, and project overrides.' }}
+    </p>
+  }
+</section>
+
+<section class="prompt-overrides" data-testid="prompt-admin-project-overrides">
+  <div class="prompt-overrides__head">Project pipeline overrides</div>
+  @if (d.projectOverrides.length) {
+    <table>
+      <thead>
+        <tr><th>Project</th><th>Step</th><th>Diff vs file prompt</th><th>Override</th></tr>
+      </thead>
+      <tbody>
+        @for (item of d.projectOverrides; track item.projectName + item.stepId) {
+          <tr [attr.data-testid]="'prompt-admin-project-override-' + item.projectName + '-' + item.stepId">
+            <td><strong>{{ item.projectName }}</strong></td>
+            <td><code>{{ item.stepId }}</code></td>
+            <td>
+              @if (item.matchesDefault) {
+                <span class="prompt-review__pill prompt-review__pill--ok">matches</span>
+              } @else {
+                <span class="prompt-overrides__diff">+{{ item.addedLines }} / −{{ item.removedLines }}</span>
+              }
+            </td>
+            <td>
+              <details>
+                <summary>Show project prompt</summary>
+                <pre>{{ item.content }}</pre>
+              </details>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="prompt-review__muted">No project overrides target this prompt.</p>
+  }
+</section>

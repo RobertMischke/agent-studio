@@ -183,6 +183,35 @@
 }
 
 /* ---------------------------------------------------------------------
+ * deck-panel / deck-panel-muted / deck-panel-attention
+ *
+ * Deck-Panel v1 — the ONE bounded-panel shape for every Project Deck
+ * section. Decision: docs/concepts/visual-style-guide/deck-panel-v1.md
+ * (owner AGT-2337), delivered by AGT-2280.
+ *
+ *   background: var(--studio-card-bg)
+ *   border:     1px solid var(--studio-card-border)
+ *   radius:     10px
+ *   inset:      var(--studio-spacing-4)
+ *   shadow:     none at rest
+ *
+ * Section heading and description live OUTSIDE the panel; a panel holds one
+ * bounded unit of content, never a whole full-bleed workbench. Existing
+ * component classes `@include m.deck-panel;` instead of being renamed, so
+ * the contract lands without churning templates or test ids.
+ *
+ * Pass `$inset: 0` for a panel that hosts a flush list / table and lets its
+ * rows own the inset.
+ * ------------------------------------------------------------------- */
+@mixin deck-panel($inset: var(--studio-deck-panel-inset)) {
+  padding: $inset;
+  border: 1px solid var(--studio-card-border);
+  border-radius: var(--studio-deck-panel-radius);
+  background: var(--studio-card-bg);
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------
  * type-label
  *
  * The only shared opt-in for uppercase UI typography. Use it for short
@@ -199,26 +228,94 @@
   text-transform: uppercase;
 }
 
-/* ---------------------------------------------------------------------
- * Deck-Panel v1
- *
- * Outer-shell contract for Deck sections. Apply exactly one panel mixin to
- * an existing shell; never introduce a redundant wrapper. Status is carried
- * by the full surface and border, never by a colored left edge.
- * ------------------------------------------------------------------- */
-@mixin deck-panel {
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-card-border);
-  border-radius: 10px;
-  background: var(--studio-card-bg);
-}
-
+/* Read-only guidance, inherited values, settled history. */
 @mixin deck-panel-muted {
   border-color: var(--studio-card-muted-border);
   background: var(--studio-card-muted-bg);
 }
 
-@mixin deck-panel-attention {
-  border-color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-card-border));
-  background: color-mix(in srgb, var(--studio-error) 8%, var(--studio-card-bg));
+/*
+ * A state that is acute NOW — never "important content", never historical
+ * failure, never a coloured left stripe. Whole-surface tint plus a
+ * strengthened semantic border.
+ */
+@mixin deck-panel-attention($accent: var(--studio-error)) {
+  border-color: color-mix(in srgb, #{$accent} 55%, var(--studio-card-border));
+  background: color-mix(in srgb, #{$accent} 8%, var(--studio-card-bg));
+}
+
+/* ---------------------------------------------------------------------
+ * deck-section-head / deck-section-title / deck-section-desc /
+ * deck-section-eyebrow
+ *
+ * Deck-Panel v1 header contract: the SECTION owns the page title and one
+ * short description, above the panels rather than inside one. Every Deck
+ * rail used to invent its own heading scale (1.05rem / 1.35rem / 1.45rem /
+ * 15px / 24px / clamp(28px, 4vw, 42px)), which is what made the Deck read
+ * as a dozen products. One scale for all of them.
+ * ------------------------------------------------------------------- */
+@mixin deck-section-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  padding-bottom: var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
+}
+
+@mixin deck-section-title {
+  margin: 0;
+  color: var(--studio-fg-strong);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+@mixin deck-section-desc {
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--studio-fg-dim);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+@mixin deck-section-eyebrow {
+  margin: 0;
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* Sibling panels inside one Deck section. */
+@mixin deck-stack($gap: var(--studio-deck-panel-gap)) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  min-width: 0;
+}
+
+/*
+ * Panel header rhythm: title, optional eyebrow, optional quiet status badge.
+ * No decorative icon unless the icon communicates the content type.
+ */
+@mixin deck-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+  min-width: 0;
+
+  h2,
+  h3,
+  h4 {
+    margin: 0;
+    color: var(--studio-fg-strong);
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
 }

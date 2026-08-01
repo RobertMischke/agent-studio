@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildRunActivityBadge, deriveStalledTaskState, STALLED_IDLE_THRESHOLD_MS } from './run-activity.util';
+import {
+  buildRunActivityBadge,
+  deriveStalledTaskState,
+  freshestRunInfo,
+  isTaskRunActive,
+  STALLED_IDLE_THRESHOLD_MS,
+} from './run-activity.util';
 import { TaskState } from '../models/task.model';
 import type { TaskInfo, TaskRunActivity } from '../models/task.model';
 
@@ -69,6 +75,72 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
       const badge = buildRunActivityBadge(makeJob({ kind: 'active', processId: 0, attempt: 0 }), NOW);
       expect(badge!.tooltip.body).not.toContain('PID');
     });
+
+    it('treats a live pre-step as active when the runner classification is stale', () => {
+      const job = makeJob(
+        { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+        {
+          execution: {
+            jobId: 'task-1',
+            taskKey: 'test::task-1',
+            processId: 0,
+            startedAt: new Date(NOW - 60_000).toISOString(),
+            status: 'failed',
+            exitCode: 1,
+            durationSeconds: 1,
+            model: 'gpt-5',
+          },
+          runner: null,
+          executionLocation: null,
+          liveStatus: {
+            attempt: 1,
+            activeStep: {
+              stepId: 'pre-worktree-create',
+              displayName: 'Create worktree',
+              kind: 'pre',
+              startedAt: new Date(NOW - 10_000).toISOString(),
+            },
+            nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+          },
+        },
+      );
+
+      expect(buildRunActivityBadge(job, NOW)).toMatchObject({
+        kind: 'active',
+        tone: 'active',
+        label: 'Run aktiv',
+      });
+      expect(deriveStalledTaskState(job, NOW)).toBeNull();
+    });
+
+    it('keeps a between-steps run active while its execution is still running', () => {
+      const job = makeJob(
+        { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+        {
+          execution: {
+            jobId: 'task-1',
+            taskKey: 'test::task-1',
+            processId: 4242,
+            startedAt: new Date(NOW - 30_000).toISOString(),
+            status: 'running',
+            exitCode: null,
+            durationSeconds: null,
+            model: 'gpt-5',
+          },
+          liveStatus: {
+            attempt: 2,
+            activeStep: null,
+            nextSteps: [{ stepId: 'post-tests', displayName: 'Tests' }],
+            latestEventAt: new Date(NOW - 1_000).toISOString(),
+          },
+        },
+      );
+
+      const badge = buildRunActivityBadge(job, NOW);
+      expect(badge).toMatchObject({ kind: 'active', tone: 'active', label: 'Run aktiv' });
+      expect(badge!.tooltip.body).toContain('4242');
+      expect(deriveStalledTaskState(job, NOW)).toBeNull();
+    });
   });
 
   describe('(a) failed + backoff', () => {
@@ -128,6 +200,26 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
     it('omits the attempt line when there is no recorded failure streak', () => {
       const badge = buildRunActivityBadge(makeJob({ kind: 'no-active-run', attempt: 0 }), NOW);
       expect(badge!.tooltip.body).not.toContain('Versuch:');
+    });
+
+    it('does not infer an active run from upcoming steps alone', () => {
+      const badge = buildRunActivityBadge(
+        makeJob(
+          { kind: 'no-active-run', attempt: 0 },
+          {
+            liveStatus: {
+              attempt: 1,
+              activeStep: null,
+              nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+              queue: null,
+              latestEventAt: new Date(NOW - 60_000).toISOString(),
+            },
+          },
+        ),
+        NOW,
+      );
+
+      expect(badge).toMatchObject({ kind: 'no-active-run', tone: 'idle', label: 'kein aktiver Run' });
     });
   });
 });
@@ -222,5 +314,163 @@ describe('deriveStalledTaskState', () => {
     );
 
     expect(deriveStalledTaskState(job, NOW)).toMatchObject({ reason: 'idle', label: 'Stalled' });
+  });
+});
+
+/**
+ * AGT-2378: a task tab renders a TaskDetail fetched once on open. Only the board
+ * list keeps receiving the runtime overlay (push + heartbeat), so every
+ * run-liveness derivation in the detail has to read through to the live entry —
+ * otherwise a remote run, which has no local CLI poll to compensate, stays
+ * pinned on "kein aktiver Run" for as long as the card is open.
+ */
+describe('freshestRunInfo', () => {
+  it('prefers the live board entry for the same task key', () => {
+    const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 });
+    const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 });
+
+    expect(freshestRunInfo(snapshot, [makeJob(null, { taskKey: 'test::other' }), live]))
+      .toBe(live);
+    expect(buildRunActivityBadge(freshestRunInfo(snapshot, [live]), NOW))
+      .toMatchObject({ kind: 'active', label: 'Run aktiv' });
+  });
+
+  it('falls back to the snapshot when the task is not in the live list', () => {
+    const snapshot = makeJob({ kind: 'active', processId: 42, attempt: 0 });
+
+    expect(freshestRunInfo(snapshot, [])).toBe(snapshot);
+    expect(freshestRunInfo(snapshot, [makeJob(null, { taskKey: 'test::other' })])).toBe(snapshot);
+  });
+
+  /**
+   * The live entry may only override the snapshot when it is demonstrably at
+   * least as fresh. A mutation applied in the detail (lane move) lands in the
+   * snapshot instantly, while the board push carrying the same change can be
+   * seconds behind — an unconditional live-wins rule makes the display jump
+   * back to the pre-move lane.
+   */
+  describe('does not let a lagging board push undo a detail mutation', () => {
+    it('keeps the snapshot when the just-moved lane is newer than the live entry', () => {
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        state: TaskState.HumanReview,
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, {
+        state: TaskState.Progress,
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+        // Still heartbeating against the lane it was picked up in: newer than the
+        // move, but no evidence at all about where the task now lives.
+        executionLocation: {
+          state: 'local-running',
+          executionKind: 'local',
+          connectionState: 'connected',
+          leaseState: 'active',
+          trustReason: 'process',
+          lastHeartbeat: new Date(NOW).toISOString(),
+          lastActivityAt: new Date(NOW).toISOString(),
+        },
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+
+    it('takes the live entry when its state stamp is newer than the snapshot', () => {
+      const snapshot = makeJob({ kind: 'active', processId: 42, attempt: 0 }, {
+        state: TaskState.Progress,
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        state: TaskState.HumanReview,
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(live);
+    });
+
+    it('still prefers the live entry inside the same lane, whatever the stamps say', () => {
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+      });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, {
+        enteredLaneAt: new Date(NOW - 120_000).toISOString(),
+      });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(live);
+      expect(buildRunActivityBadge(freshestRunInfo(snapshot, [live]), NOW))
+        .toMatchObject({ kind: 'active', label: 'Run aktiv' });
+    });
+
+    it('keeps the snapshot when neither side carries a usable timestamp', () => {
+      const blank = { enteredLaneAt: null, phaseEnteredAt: null, lastActivity: '', createdAt: '' };
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, { ...blank, state: TaskState.HumanReview });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, { ...blank, state: TaskState.Progress });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+
+    it('keeps the snapshot on an equally fresh live entry in a different lane', () => {
+      const enteredLaneAt = new Date(NOW - 1_000).toISOString();
+      const snapshot = makeJob({ kind: 'no-active-run', attempt: 0 }, { state: TaskState.HumanReview, enteredLaneAt });
+      const live = makeJob({ kind: 'active', processId: 4242, attempt: 0 }, { state: TaskState.Progress, enteredLaneAt });
+
+      expect(freshestRunInfo(snapshot, [live])).toBe(snapshot);
+    });
+  });
+});
+
+/**
+ * AGT-2378: a remote run owns its task through a fenced lease and attempt
+ * records — the local slot registry and local CLI execution registry, which
+ * `runActivity` is classified from, know nothing about it.
+ */
+describe('isTaskRunActive — remote ownership', () => {
+  it('trusts a held run lease over a negative runner classification', () => {
+    const job = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+      runner: {
+        runnerId: 'agent-runner-01',
+        runnerName: 'agent-runner-01',
+        hostname: 'agent-runner-01',
+        backendName: 'stable',
+        isRemote: true,
+        leaseId: 'lease-1',
+        fencingToken: 7,
+        acquiredAt: new Date(NOW - 30_000).toISOString(),
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(true);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'active', label: 'Run aktiv' });
+    expect(deriveStalledTaskState(job, NOW)).toBeNull();
+  });
+
+  it('trusts a connected remote execution location with no local process', () => {
+    const job = makeJob({ kind: 'failed-idle', attempt: 2, lastError: 'stale failure' }, {
+      executionLocation: {
+        state: 'remote-running',
+        executionKind: 'remote',
+        hostDisplayName: 'agent-runner-01',
+        connectionState: 'connected',
+        leaseState: 'active',
+        trustReason: 'lease',
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(true);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'active', label: 'Run aktiv' });
+  });
+
+  it('stays inactive when nothing owns the task any more', () => {
+    const job = makeJob({ kind: 'no-active-run', attempt: 0 }, {
+      executionLocation: {
+        state: 'recovering',
+        executionKind: 'none',
+        connectionState: 'recovering',
+        leaseState: 'none',
+        trustReason: 'no owner',
+      },
+    });
+
+    expect(isTaskRunActive(job)).toBe(false);
+    expect(buildRunActivityBadge(job, NOW)).toMatchObject({ kind: 'no-active-run', label: 'kein aktiver Run' });
   });
 });

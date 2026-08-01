@@ -53,7 +53,7 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
                 step => step.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId);
             if (previousPush?.Status is PipelineStepStatus.Passed or PipelineStepStatus.Skipped) continue;
 
-            var settings = _settings.Get(job.ProjectName);
+            var settings = PipelineTypeSettings.ForTask(_settings.Get(job.ProjectName), job)!;
             if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId))
                 continue;
 

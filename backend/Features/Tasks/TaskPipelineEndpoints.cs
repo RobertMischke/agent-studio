@@ -41,9 +41,10 @@ public static class TaskPipelineEndpoints
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
-            var settings = string.IsNullOrWhiteSpace(info.ProjectName)
+            var rawSettings = string.IsNullOrWhiteSpace(info.ProjectName)
                 ? null
                 : projectSettings.Get(info.ProjectName);
+            var settings = PipelineTypeSettings.ForTask(rawSettings, info);
             var pipeline = ProjectPipelineOrder.Apply(UiTaskPipelineRouter.Select(info, settings), settings);
             var taskTokens = FindTaskTokens(
                 tokens.WorkspacePerJob(info.ProjectName, info.WatchPath),

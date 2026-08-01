@@ -108,17 +108,7 @@ public sealed class BoardMergeStatusService
             new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
             pair =>
             {
-                var cacheKey = $"{pair.Key.Root}\0{pair.Key.Branch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
-                    pair.Key.Root,
-                    [pair.Key.Branch, ReleaseBranch]);
-                reaches[pair.Key] = _cache.GetOrCreateVersioned(
-                    cacheKey,
-                    refFingerprint.Value,
-                    value => value.Succeeded
-                        ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
-                        : FailureCacheTtl,
-                    () => ComputeReachability(pair.Key.Root, pair.Key.Branch));
+                reaches[pair.Key] = GetReachability(pair.Key);
             });
 
         foreach (var (repoBranch, repoJobs) in byRepo)
@@ -152,6 +142,37 @@ public sealed class BoardMergeStatusService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Resolves develop/main presence for an arbitrary bounded commit set using
+    /// the exact same ref-fingerprinted reachability projection as
+    /// <see cref="BuildLookup"/>. The Project Hub Git graph calls this once per
+    /// history page, then renders every commit from in-memory set membership.
+    /// This is intentionally the shared resolver, not a second ancestry path.
+    /// </summary>
+    public Dictionary<string, CommitBranchPresence> BuildCommitPresence(
+        string projectName,
+        string repoRoot,
+        IEnumerable<string> commitShas)
+    {
+        var shas = commitShas
+            .Where(ReviewSubjectStore.IsValidResultSha)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (shas.Count == 0 || string.IsNullOrWhiteSpace(repoRoot)) return [];
+
+        using var _t = GitProcessTelemetry.BeginRequest("git/commit-presence", _logger);
+        var configured = _settings.Get(projectName).IntegrationBranch;
+        var reach = GetReachability(new RepoBranchKey(repoRoot, configured));
+        return shas.ToDictionary(
+            sha => sha,
+            sha => new CommitBranchPresence(
+                reach.Integration.Contains(sha),
+                reach.Release.Contains(sha),
+                reach.IntegrationBranch,
+                ReleaseBranch),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -199,6 +220,21 @@ public sealed class BoardMergeStatusService
         });
     }
 
+    private RepoReachability GetReachability(RepoBranchKey key)
+    {
+        var cacheKey = $"{key.Root}\0{key.Branch}";
+        var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
+            key.Root,
+            [key.Branch, ReleaseBranch]);
+        return _cache.GetOrCreateVersioned(
+            cacheKey,
+            refFingerprint.Value,
+            value => value.Succeeded
+                ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
+                : FailureCacheTtl,
+            () => ComputeReachability(key.Root, key.Branch));
+    }
+
     private string ConfiguredIntegrationBranch(TaskInfo task)
     {
         return TaskIntegrationBranch.Resolve(
@@ -221,3 +257,9 @@ public sealed class BoardMergeStatusService
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }
+
+public sealed record CommitBranchPresence(
+    bool InIntegration,
+    bool InRelease,
+    string IntegrationBranch,
+    string ReleaseBranch);

@@ -59,7 +59,7 @@ import { TaskCardQuotaWaitComponent } from '../task-card-quota-wait/task-card-qu
 import { taskCardNow } from './task-card-clock';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { deriveActiveTaskRun, deriveStalledTaskState } from '../../../../services/run-activity.util';
+import { deriveStalledTaskState, isTaskRunActive } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
@@ -421,7 +421,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return verdict ? verdict.replace(/-/g, ' ') : null;
   }
 
-  readonly isRunning = computed(() => deriveActiveTaskRun(this.job()) !== null);
+  readonly isRunning = computed(() =>
+    this.job().state === TaskState.Progress && isTaskRunActive(this.job()));
   readonly stalledState = computed(() => deriveStalledTaskState(this.job(), nowTick()));
   /**
    * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is

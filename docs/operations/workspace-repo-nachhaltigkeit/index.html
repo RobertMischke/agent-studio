@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nachhaltiges Workspace-Repo | Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; word-break: break-word; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; max-width:76ch; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 14px 16px; }
+  .stat .v { font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -.01em; }
+  .stat .l { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .stat.warn .v { color: var(--warn); } .stat.accent .v { color: var(--develop); }
+  .stat.bad .v { color: var(--bad); } .stat.ok .v { color: var(--ok); }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-val    { fill: var(--ink-1); font: 600 12.5px ui-monospace, Consolas, monospace; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  hr.sep { border: none; border-top: 1px solid var(--line); margin: 48px 0 0; }
+  .footnote { font-size: 12.5px; color: var(--ink-3); margin-top: 40px; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Agent Studio</p>
+  <h1>Nachhaltiges Workspace-Repo</h1>
+  <p class="lede">Der Task-Server sichert seinen Zustand in ein Git-Repo und pusht es als
+  Off-Machine-Backup. Der Push stand fünf Tage still &mdash; und die Ursache ist strukturell,
+  nicht zufällig. Analyse, warum das Repo aus Git herauswächst, und ein Zielbild, das den
+  Backup-Push dauerhaft klein und beobachtbar hält, ohne den Audit-Trail zu verlieren.</p>
+  <div class="meta">
+    <span><b>Repo:</b> agent-taskboard-workspace</span>
+    <span><b>Stand:</b> 25.07.2026</span>
+    <span><b>Anlass:</b> Push seit 20.07. still (100-MB-Blockade), 3.341 Commits ungepusht</span>
+    <span><b>Status:</b> <span class="pill new">Entwurf zur Abstimmung</span></span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">Kernaussagen</a></li>
+    <li><a href="#wand">§1 Die Wand, die wir schon berühren</a></li>
+    <li><a href="#inhalt">§2 Was tatsächlich im Repo liegt</a></li>
+    <li><a href="#treiber">§3 Der Treiber: cli-output.log</a></li>
+    <li><a href="#nichtfixes">§4 Warum die naheliegenden Fixes nicht reichen</a></li>
+    <li><a href="#zielbild">§5 Zielbild</a></li>
+    <li><a href="#programm">§6 Umsetzungsprogramm</a></li>
+    <li><a href="#sofort">§7 Sofortmaßnahme</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>Kernaussagen</h4>
+  <ul>
+    <li><b>Ein Artefakt dominiert alles.</b> Rohe Agent-CLI-Logs (<code>cli-output.log</code>) machen
+        <b>&gt;98&nbsp;% des gesamten Repo-Inhalts</b> aus &mdash; ≈138&nbsp;GB über 11.641 Versionen.
+        Der übrige, eigentlich schützenswerte Zustand (Task-Records, Timelines, Ledger) sind zusammen ≈2&nbsp;GB.</li>
+    <li><b>Der Push scheitert still.</b> Seit 20.07. blockieren 15 Log-Blobs &gt;100&nbsp;MB GitHubs harte
+        Dateigrenze; jeder Auto-Push wird komplett abgelehnt, unbemerkt. 3.341 Commits stauten sich lokal.</li>
+    <li><b>Es wiederholt sich systematisch.</b> 371 weitere Logs liegen im Band 50&ndash;100&nbsp;MB &mdash;
+        die nächste Wand. Bei 3.872 Commits/Woche wächst der Stau schneller, als eine Einmal-Bereinigung ihn abträgt.</li>
+    <li><b>Kompression ist nicht der Hebel.</b> Git komprimiert und deltat Blobs bereits selbst; vorkomprimieren
+        zerstört die Delta-Kompression und der Server müsste entpacken. Der Hebel ist, Riesen-Logs gar nicht
+        erst unbegrenzt zu committen.</li>
+    <li><b>Zielbild: an der Quelle deckeln.</b> Der Task-Server schreibt einen größenbegrenzten Log ins Repo
+        (Kopf+Schluss+Marker); der volle Stream geht in einen kalten Speicher. Dazu Intervall-Push und ein
+        Push-Health-Signal in der UI &mdash; damit ein Fünf-Tage-Stillstand nie wieder unbemerkt bleibt.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="wand"><span class="no">§1</span>Die Wand, die wir schon berühren</h2>
+<p class="stx stx-ok"><b>Stand 25.07.:</b> Sofortmaßnahme (§7) durchgeführt — oversized Blobs entfernt,
+3.341 Commits per Fast-Forward gepusht, <code>ahead=0</code>. Backup aufgeholt. Grundproblem (ungedeckelte
+Logs) bleibt bis Phase 1 offen; der live-committende Task-Server driftet sofort wieder ahead.</p>
+<p>Der letzte erfolgreiche Push nach <code>origin/main</code> war <b>20.07.2026, 17:13</b>. Seitdem wird jeder
+Auto-Push abgelehnt, weil Commits ab diesem Tag <code>cli-output.log</code>-Dateien über GitHubs harter
+<b>100-MB-Grenze pro Datei</b> enthalten. Git packt alle neuen Objekte in <i>einen</i> Push; ein einziger
+zu großer Blob lässt GitHub das gesamte Paket zurückweisen. Der nächste Push sendet dieselben Blobs erneut &mdash;
+und scheitert erneut. Der Rückstau wächst, ohne dass jemand es sieht.</p>
+
+<div class="stats">
+  <div class="stat bad"><div class="v">3.341</div><div class="l">Commits ungepusht (ahead von origin)</div></div>
+  <div class="stat warn"><div class="v">5 Tage</div><div class="l">seit letztem erfolgreichem Push</div></div>
+  <div class="stat bad"><div class="v">5,0 GB</div><div class="l">.git-Größe (11 GB Working-Tree)</div></div>
+  <div class="stat accent"><div class="v">3.872</div><div class="l">Commits in den letzten 7 Tagen</div></div>
+</div>
+
+<p>Drei Git-/GitHub-Grenzen sind im Spiel &mdash; die erste ist bereits gerissen, die anderen sind in Reichweite:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Grenze</th><th class="num">Limit</th><th>Unser Stand</th><th>Bewertung</th></tr></thead>
+  <tbody>
+    <tr><td>Dateigröße (GitHub, hart)</td><td class="num">100 MB</td><td>15 Log-Blobs darüber</td><td style="color:var(--bad);font-weight:600">gerissen &rarr; Push blockiert</td></tr>
+    <tr><td>Push-Größe über HTTPS</td><td class="num">~2 GB</td><td>3.341-Commit-Rückstau packt groß</td><td style="color:var(--warn);font-weight:600">Risiko beim Nachhol-Push</td></tr>
+    <tr><td>Repo-Warnschwelle (GitHub)</td><td class="num">~5 GB</td><td>.git bereits ≈5,0 GB</td><td style="color:var(--warn);font-weight:600">an der Schwelle</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="box warn">
+  <h4>Wie lange können wir noch pushen?</h4>
+  <p>Es ist kein Countdown, sondern bereits eingetreten: Die <b>bindende Grenze ist die Dateigröße</b>, und die
+  ist gerissen. Solange der Task-Server ungedeckelte Logs committet, entstehen laufend neue &gt;100-MB-Blobs
+  (15 da, 371 knapp darunter) &mdash; die effektive Rest-Reichweite bis „nicht mehr pushbar" ist <b>null</b>.
+  Erst wenn Logs an der Quelle gedeckelt sind (§5), wächst das Repo nur noch mit Metadaten (≈2&nbsp;GB über die
+  gesamte Historie, langsam) &mdash; dann sind es Jahre Reichweite statt Tage.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="inhalt"><span class="no">§2</span>Was tatsächlich im Repo liegt</h2>
+<p>Aggregiert man jede Blob-Version der gesamten Historie nach Dateiname, erzählt eine Grafik die ganze
+Geschichte: Ein Artefakt-Typ übertrifft alle anderen um zwei bis drei Größenordnungen.</p>
+
+<figure>
+<svg viewBox="0 0 1040 190" role="img" aria-label="Anteil: cli-output.log macht über 98 Prozent des Repo-Inhalts aus">
+  <text class="s-label" x="20" y="34">Kumulierter Blob-Inhalt der gesamten Historie ≈ 140 GB</text>
+  <!-- Proportionsbalken -->
+  <rect class="s-node" x="20" y="52" width="1000" height="54" rx="8"/>
+  <rect x="22" y="54" width="983" height="50" rx="6" fill="var(--bad)"/>
+  <rect x="1005" y="54" width="13" height="50" rx="3" fill="var(--develop)"/>
+  <text x="40" y="85" fill="#fff" font="600 14px system-ui, sans-serif" font-weight="600">cli-output.log &nbsp;·&nbsp; ≈138 GB &nbsp;·&nbsp; &gt;98 %</text>
+  <!-- Callout Rest -->
+  <path class="s-flow" d="M1011 106 V132 H900" marker-end="url(#arrb)"/>
+  <text class="s-sub" x="705" y="150">übrige Artefakte zusammen ≈ 2 GB (Task-Records, Timelines, Ledger &hellip;)</text>
+  <text class="s-tiny" x="20" y="176">Balkenlänge = wahrer Maßstab. Bei diesem Zoom sind die schützenswerten Metadaten praktisch unsichtbar &mdash; genau das ist die Aussage.</text>
+  <defs>
+    <marker id="arrb" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 1: Repo-Zusammensetzung.</b> Kumulierter Blob-Inhalt über die gesamte Historie,
+dedupliziert nach Objekt, gruppiert nach Dateiname. <code>cli-output.log</code> ist ≈138 GB &mdash; über
+98&nbsp;% von allem, was das Repo je gespeichert hat.</figcaption>
+</figure>
+
+<p>Der übrige Inhalt ist das, wofür das Repo eigentlich existiert &mdash; klein, dauerhaft, echt
+versionswürdig. Zum Vergleich die größten Metadaten-Artefakte (kumuliert, gerundet):</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Artefakt</th><th class="num">Kumuliert</th><th class="num">Versionen</th><th>Charakter</th></tr></thead>
+  <tbody>
+    <tr><td><b>cli-output.log</b></td><td class="num" style="color:var(--bad);font-weight:600">≈138 GB</td><td class="num">11.641</td><td>roher Konsolen-Stream &mdash; groß, flüchtig</td></tr>
+    <tr><td>Agent (Session-Bundles)</td><td class="num">380 MB</td><td class="num">604</td><td>Metadaten</td></tr>
+    <tr><td>prompts.jsonl</td><td class="num">314 MB</td><td class="num">1.186</td><td>Ledger</td></tr>
+    <tr><td>pipeline-execution.json</td><td class="num">223 MB</td><td class="num">4.830</td><td>Zustand, hoch-churn, winzig</td></tr>
+    <tr><td>timeline.jsonl</td><td class="num">129 MB</td><td class="num">7.856</td><td>Audit</td></tr>
+    <tr><td>task.json</td><td class="num">67 MB</td><td class="num">9.966</td><td>Kern-Zustand</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="dim">Zwei verschiedene Speicherprobleme in einem Repo: kleine, permanente Metadaten (gut für
+Versionierung) und ein großes, hoch-churnendes Log-Artefakt (schlecht für Versionierung). Das Zielbild trennt sie.</p>
+
+<!-- ============================================================ -->
+<h2 id="treiber"><span class="no">§3</span>Der Treiber: cli-output.log</h2>
+<p><code>cli-output.log</code> ist der rohe stdout/stderr-Konsolen-Stream des Coding-Agent-CLI für <i>einen</i>
+Task-Versuch &mdash; Orchestrator-Meldungen, Watchdog-Stille-Hinweise, Token-für-Token-Streaming-Echos. Ein
+typischer Anfang:</p>
+<div class="box">
+  <p class="mono" style="max-width:none">[06:46:46.305] [orchestrator] [watchdog] "Konzept: …" (claude): no output for 33s yet.
+  No action needed unless this repeats. [phase=SessionInitializing silence=33s allowed=120/600s]</p>
+</div>
+<p>Verbose, repetitiv, maschinengeneriert, geringe Informationsdichte. Der Fehlerfall ist ein durchlaufender
+Task, dessen Stream über 100&nbsp;MB aufbläht. Die Größenverteilung zeigt: kein Einzelfall, sondern ein
+Fett-Ende, das wir permanent füttern.</p>
+
+<figure>
+<svg viewBox="0 0 1040 250" role="img" aria-label="Größenverteilung der cli-output.log-Versionen nach Band">
+  <!-- bars: max count 4578 -> width scale to 760px at x0=250 -->
+  <!-- Band >=100 -->
+  <text class="s-sub" x="20" y="42">&ge; 100 MB</text>
+  <rect x="250" y="28" width="2.5" height="22" rx="3" fill="var(--bad)"/>
+  <text class="s-val" x="262" y="45">15</text>
+  <rect x="300" y="30" width="118" height="18" rx="4" fill="var(--bad-soft)" stroke="var(--bad)"/>
+  <text x="309" y="43" fill="var(--bad)" font="600 11.5px system-ui, sans-serif" font-weight="600">blockiert Push</text>
+  <!-- Band 50-100 -->
+  <text class="s-sub" x="20" y="82">50 – 100 MB</text>
+  <rect x="250" y="68" width="61" height="22" rx="3" fill="var(--warn)"/>
+  <text class="s-val" x="321" y="85">371</text>
+  <rect x="370" y="70" width="118" height="18" rx="4" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text x="379" y="83" fill="var(--warn)" font="600 11.5px system-ui, sans-serif" font-weight="600">nächste Wand</text>
+  <!-- Band 10-50 -->
+  <text class="s-sub" x="20" y="122">10 – 50 MB</text>
+  <rect x="250" y="108" width="760" height="22" rx="3" fill="var(--salvage)"/>
+  <text class="s-val" x="1010" y="125" text-anchor="end" fill="#fff">4.578</text>
+  <!-- Band 1-10 -->
+  <text class="s-sub" x="20" y="162">1 – 10 MB</text>
+  <rect x="250" y="148" width="552" height="22" rx="3" fill="var(--develop)"/>
+  <text class="s-val" x="814" y="165">3.325</text>
+  <!-- Band <1 -->
+  <text class="s-sub" x="20" y="202">&lt; 1 MB</text>
+  <rect x="250" y="188" width="556" height="22" rx="3" fill="var(--ink-3)"/>
+  <text class="s-val" x="818" y="205">3.352</text>
+  <text class="s-tiny" x="250" y="238">Balkenlänge = Anzahl Versionen (Maßstab: 4.578 = 760 px). Gesamt 11.641 Versionen.</text>
+</svg>
+<figcaption><b>Abb. 2: Größenbänder von <code>cli-output.log</code>.</b> Heutige Blocker sind die 15 über
+100&nbsp;MB &mdash; die <b>371 im Band 50&ndash;100&nbsp;MB sind die nächste Wand</b>: ein paar angehängte
+Zeilen mehr und sie überschreiten das Limit. Der Bauch liegt bei 10&ndash;50&nbsp;MB &mdash; schwer und stetig wachsend.</figcaption>
+</figure>
+
+<p><b>Wiederholt es sich?</b> Ja &mdash; laufend und konstruktionsbedingt, solange der Mechanismus gleich
+bleibt. Bei <b>3.872 Commits pro Woche</b> über <b>1.793 aktive Tasks</b> entstehen neue Logs schneller, als
+eine Einmal-Bereinigung nachkommt. Die heutigen 15 zu strippen entsperrt <i>diesen</i> Push &mdash; gegen die
+371 dahinter tut es nichts.</p>
+
+<!-- ============================================================ -->
+<h2 id="nichtfixes"><span class="no">§4</span>Warum die naheliegenden Fixes nicht reichen</h2>
+<p>Vier naheliegende Reflexe &mdash; jeder hilft ein wenig, keiner reicht allein. Sie zu benennen hält das
+Zielbild ehrlich.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Reflex</th><th>Was er tut</th><th>Warum er nicht reicht</th><th>Urteil</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Logs vor Commit komprimieren</b></td>
+      <td>gzip (~4× auf diesem Text), damit jeder Blob kleiner wird.</td>
+      <td>Git komprimiert Blobs <i>bereits</i> (zlib) und deltat über Versionen. Ein vorkomprimierter Blob
+      zerstört Gits Delta-Kompression und packt über viele Versionen <i>schlechter</i>; der Server müsste
+      zudem bei jedem Lesen entpacken. Netto: mehr Komplexität, kaum bis negativer Gewinn.</td>
+      <td style="color:var(--bad);font-weight:700">Nein</td>
+    </tr>
+    <tr>
+      <td><b>Alle Logs gitignoren</b></td>
+      <td><code>logs/</code> gar nicht mehr tracken.</td>
+      <td>Die <code>.gitignore</code> <i>behält</i> den Log-Audit-Trail bewusst (ignoriert nur
+      <code>attachments/</code> und <code>results/</code>). Pauschal ignorieren wirft die kleinen, nützlichen
+      Logs weg, um die wenigen pathologischen zu killen.</td>
+      <td style="color:var(--bad);font-weight:700">Nein</td>
+    </tr>
+    <tr>
+      <td><b>Oversized Blobs einmal strippen</b></td>
+      <td>Historie umschreiben, die 15 Dateien &gt;100&nbsp;MB entfernen, dann pushen.</td>
+      <td>Richtig und nötig als <i>erster</i> Schritt &mdash; aber einmalig. Die 371 grenznahen Logs
+      überschreiten binnen Tagen 100&nbsp;MB und blockieren erneut.</td>
+      <td style="color:var(--warn);font-weight:700">Nur 1. Schritt</td>
+    </tr>
+    <tr>
+      <td><b>Logs nach Git LFS</b></td>
+      <td>Große Dateien als LFS-Pointer außerhalb des Packs.</td>
+      <td>Entsperrt die 100-MB-Grenze, speichert aber weiter ≈138&nbsp;GB (jetzt als LFS-Bandbreite/-Storage)
+      und wächst weiter; zusätzlich LFS-Abhängigkeit für jeden Clone. Verlagert den Ballast, statt ihn zu entfernen.</td>
+      <td style="color:var(--warn);font-weight:700">Pflaster</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div class="box warn">
+  <h4>Der Reframe</h4>
+  <p>Die Frage ist nicht „wie quetschen wir die Riesen-Logs in Git?" Sondern: „<b>warum sind ungedeckelte
+  Rohlogs überhaupt im Backup-of-record?</b>" Das Repo soll <i>Task-Zustand und Audit-Metadaten</i> verlässlich
+  bewahren. Ein 100-MB-Konsolen-Dump ist weder Zustand noch nützliches Audit-Artefakt &mdash; er ist eine
+  Debugging-Bequemlichkeit, deren Vollform woanders billiger aufgehoben ist.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="zielbild"><span class="no">§5</span>Zielbild</h2>
+<p>Drei Prinzipien, dann der Fluss.</p>
+<ul>
+  <li><b>An der Quelle deckeln.</b> Der Task-Server schreibt einen <i>größenbegrenzten</i> Log ins Repo &mdash;
+  Kopf und Schluss (wo das Signal liegt) plus Trunkierungsmarker, gedeckelt auf ein kleines Budget (z.&nbsp;B.
+  2&nbsp;MB). Der Audit-Trail überlebt; der Blob kann nie einen Push blockieren.</li>
+  <li><b>Heiße Metadaten von kaltem Ballast trennen.</b> Task-Zustand (klein, permanent) bleibt voll in Git.
+  Volle Rohlogs (groß, flüchtig) sind kalte Artefakte &mdash; auf lokaler Platte und/oder externem Objekt-Store,
+  nie im Push-of-record.</li>
+  <li><b>Das Backup beobachtbar machen.</b> Push-Health sichtbar (Ahead-Zahl, Alter des letzten Pushes, letztes
+  Ergebnis) und in festem Intervall pushen &mdash; nicht opportunistisch. Ein stiller Fünf-Tage-Stillstand
+  wird damit unmöglich.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 1040 340" role="img" aria-label="Zielbild-Fluss: Agent-Run, Cap-und-Tee, Git-Repo und kalter Speicher">
+  <!-- Quelle -->
+  <rect class="s-node" x="20" y="140" width="200" height="60" rx="10"/>
+  <text class="s-label" x="40" y="167">Agent-CLI-Run</text>
+  <text class="s-tiny" x="40" y="186">roher Konsolen-Stream (unbegrenzt)</text>
+  <!-- Cap & Tee -->
+  <rect class="s-node" x="290" y="130" width="220" height="80" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text class="s-label" x="310" y="158">Cap &amp; Tee</text>
+  <text class="s-sub" x="310" y="178">Kopf+Schluss, Marker, ≤ 2 MB</text>
+  <text class="s-tiny" x="310" y="196">voller Stream wird abgezweigt</text>
+  <!-- Git repo -->
+  <rect class="s-node" x="590" y="40" width="430" height="90" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+  <text class="s-label" x="610" y="67">Git Workspace-Repo &mdash; Backup-of-record</text>
+  <text class="s-sub" x="610" y="88">task.json · timelines · ledger · <tspan font-weight="700">gedeckeltes</tspan> cli-output.log</text>
+  <text class="s-tiny" x="610" y="108">→ Intervall-Push nach GitHub · Push-Health in der UI</text>
+  <!-- Cold store -->
+  <rect class="s-node" x="590" y="210" width="430" height="90" rx="10" fill="var(--accent-soft)" stroke="var(--develop)"/>
+  <text class="s-label" x="610" y="237">Voller Log (Platte / Objekt-Store)</text>
+  <text class="s-sub" x="610" y="258">kompletter Rohstream · Retention-Policy</text>
+  <text class="s-tiny" x="610" y="278">bei Bedarf für Tief-Debugging geholt</text>
+  <!-- Flüsse -->
+  <path class="s-flow" d="M220 170 H290" marker-end="url(#arrz)"/>
+  <path class="s-flow" d="M510 158 C550 158 560 100 590 90" marker-end="url(#arrz)"/>
+  <path class="s-flow" d="M510 185 C550 185 560 245 590 255" marker-end="url(#arrz)"/>
+  <defs>
+    <marker id="arrz" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 3: Zielbild-Fluss.</b> Die Stufe <b>Cap &amp; Tee</b> ist der ganze Fix: Sie spaltet einen
+unbegrenzten Stream in ein begrenztes, git-sicheres Artefakt und eine volle kalte Kopie. Git bleibt klein und
+permanent; der volle Log bleibt dort erreichbar, wo Speicher billig ist und Größe das Backup nicht bedroht.</figcaption>
+</figure>
+
+<div class="box ok">
+  <h4>Was das bringt</h4>
+  <ul>
+    <li>Die Grenzen 100&nbsp;MB / 2&nbsp;GB / 5&nbsp;GB werden unerreichbar &mdash; gedeckelte Logs können sie nicht reißen.</li>
+    <li>Der Audit-Trail bleibt erhalten (Kopf+Schluss trägt das Signal); volle Logs bleiben bei Bedarf verfügbar.</li>
+    <li>Push wird eine langweilige, regelmäßige, <i>beobachtbare</i> Operation &mdash; das beantwortet die
+    ursprüngliche UI-Frage: ein Push-Health-Indikator am Workspace-Repo hätte das an Tag 1 angezeigt.</li>
+    <li>Repo-Wachstum folgt den Metadaten (wenige GB, langsam) statt den Logs (138&nbsp;GB, schnell).</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="programm"><span class="no">§6</span>Umsetzungsprogramm</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Phase</th><th>Maßnahme</th><th>Wirkung</th><th class="num">Wann</th></tr></thead>
+  <tbody>
+    <tr><td><b>0 · Entsperren</b> <span class="pill new">läuft</span></td>
+      <td>Backup-Bundle + Tag → 15 Blobs &gt;100&nbsp;MB aus ungepushter Historie strippen (normale Logs bleiben) → Fast-Forward-Push.</td>
+      <td>Backup aufgeholt, Fünf-Tage-Lücke geschlossen. Kein force-push (origin unverändert, Vorfahr).</td><td class="num">jetzt</td></tr>
+    <tr><td><b>1 · An der Quelle deckeln</b></td>
+      <td>Task-Server schreibt größenbegrenzten cli-output.log (Kopf+Schluss+Marker); voller Stream auf Platte abgezweigt.</td>
+      <td>Stoppt neue Oversize-Blobs an der Wurzel. Die 371 grenznahen Logs werden nie Blocker.</td><td class="num">nächster Schritt</td></tr>
+    <tr><td><b>1 · Push-Health + Intervall</b></td>
+      <td>Regelmäßiger Intervall-Push; Ahead-Zahl / Alter letzter Push / letztes Ergebnis in der Task-Server-UI.</td>
+      <td>Stille Stillstände unmöglich; beantwortet die ursprüngliche „Git-Status in der UI"-Frage.</td><td class="num">nächster Schritt</td></tr>
+    <tr><td><b>2 · Historien-Diät</b></td>
+      <td>Einmaliges Umschreiben, das <i>historische</i> Oversize-Logs deckelt; repack &amp; gc.</td>
+      <td>.git fällt deutlich unter die 5-GB-Warnschwelle; Nachhol-Pushes bleiben unter 2&nbsp;GB.</td><td class="num">nach Phase 1</td></tr>
+    <tr><td><b>3 · Kalter Speicher &amp; Retention</b></td>
+      <td>Volle Logs in externen/Objekt-Store mit Retention-Policy; On-Demand-Abruf fürs Debugging.</td>
+      <td>Langfristig flaches Wachstum; Tief-Logs bleiben erreichbar, wenn wirklich gebraucht.</td><td class="num">später</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="dim">Phase 1&ndash;3 sind Implementierungsarbeit und gehören auf Task-Karten, sobald dieses Konzept
+abgestimmt ist. Phase 0 ist operativ und läuft bereits.</p>
+
+<!-- ============================================================ -->
+<h2 id="sofort"><span class="no">§7</span>Sofortmaßnahme</h2>
+<section class="box accent">
+  <h4>Phase 0 &mdash; in Ausführung</h4>
+  <ol>
+    <li><b>Volles Sicherheits-Bundle</b> aller Objekte (2,7&nbsp;GB, „complete history" verifiziert) + Tag
+    <code>backup/pre-log-strip-2026-07-25</code> auf altem HEAD &mdash; <span class="pill done">erledigt</span>, der reversible Anker.</li>
+    <li><b>Blobs &gt;100&nbsp;MB gestrippt</b> via <code>git filter-repo --strip-blobs-bigger-than 100M</code>.
+    Ergebnis: nur die 15 Oversize-Log-Versionen entfernt; alle normalen Logs und Metadaten unangetastet.
+    <code>.git</code> von 5,0 → 3,4&nbsp;GB. <span class="pill done">erledigt</span></li>
+    <li><b>Fast-Forward-Push</b> in 500er-Chunks nach <code>origin/main</code> (unter dem 2-GB-Push-Limit).
+    <code>origin/main</code> (20.07.) blieb sauberer Vorfahr &rarr; <b>kein force-push</b>, keine bereits
+    veröffentlichten Commits umgeschrieben. 3.341 Commits durch, <code>ahead=0</code>. <span class="pill done">erledigt</span></li>
+  </ol>
+  <p class="stx stx-part"><b>Beobachtung:</b> Der Task-Server committet live weiter (auf der umgeschriebenen
+  Historie, keine Divergenz). Das Repo driftet ab sofort wieder ahead &mdash; Phase 1 (Deckeln + Intervall-Push +
+  Push-Health) ist damit dringend, nicht optional.</p>
+  <p>Kein-Reue-Schritt unter jeder Langfrist-Entscheidung aus §5: Die Oversize-Konsolen-Dumps tragen keinen
+  dauerhaften Wert, und Bundle+Tag machen den Schritt voll reversibel. Er legt uns <i>nicht</i> auf LFS, kalten
+  Speicher oder ein bestimmtes Phase-1-Design fest.</p>
+</section>
+
+<hr class="sep">
+<p class="footnote">Daten gemessen am Live-Checkout von <code>agent-taskboard-workspace</code>, 25.07.2026, via
+<code>git rev-list --objects --all</code> durch <code>git cat-file --batch-check</code> (Blob-Größen nach Objekt
+dedupliziert), plus <code>git log</code>-Commit-Raten und <code>du</code> für Plattengrößen. Kumulierte Werte
+zählen jede gespeicherte Blob-Version, nicht den Working-Tree-Snapshot.</p>
+
+</main>
+</body>
+</html>

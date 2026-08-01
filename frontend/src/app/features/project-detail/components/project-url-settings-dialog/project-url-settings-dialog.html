@@ -30,6 +30,24 @@
              data-testid="url-preview-settings-port" placeholder="4202"
              [ngModel]="port()" (ngModelChange)="port.set($event)" />
     </label>
+    <label>
+      <span>URL / health target</span>
+      <input type="url" name="healthUrl" data-testid="url-preview-settings-health-url"
+             placeholder="Defaults to the preview URL"
+             [ngModel]="healthUrl()" (ngModelChange)="healthUrl.set($event)" />
+    </label>
+    <label>
+      <span>Console silence timeout (seconds)</span>
+      <input type="number" name="silenceTimeout" min="2" max="300"
+             data-testid="url-preview-settings-silence-timeout"
+             [ngModel]="silenceTimeout()" (ngModelChange)="silenceTimeout.set($event)" />
+    </label>
+    <label>
+      <span>Maximum startup time (seconds)</span>
+      <input type="number" name="startupTimeout" min="2" max="3600"
+             data-testid="url-preview-settings-startup-timeout"
+             [ngModel]="startupTimeout()" (ngModelChange)="startupTimeout.set($event)" />
+    </label>
     @if (error()) {
       <p class="embed-settings__error" role="alert">{{ error() }}</p>
     }

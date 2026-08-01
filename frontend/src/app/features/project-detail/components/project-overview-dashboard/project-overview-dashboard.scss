@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
   display: block;
   width: 100%;
@@ -6,7 +8,7 @@
 .operator-dashboard {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-5);
+  gap: var(--studio-deck-panel-gap);
   width: 100%;
   color: var(--studio-fg);
 }
@@ -68,10 +70,7 @@
 .operator-dashboard__metrics,
 .operator-dashboard__wiki,
 .operator-dashboard__remote {
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  background: var(--studio-bg-elevated);
+  @include m.deck-panel;
 }
 
 .operator-dashboard__remote-rows {
@@ -86,7 +85,7 @@
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-3);
   border-radius: 8px;
-  background: var(--studio-bg-surface);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-muted);
   font-size: 0.74rem;
 }
@@ -130,7 +129,7 @@
 }
 .operator-dashboard__sync-directions strong { color: var(--studio-success); font-size: 0.72rem; }
 .operator-dashboard__remote-row[data-state='pending'] {
-  background: color-mix(in srgb, var(--studio-accent-warn) 8%, var(--studio-bg-surface));
+  background: color-mix(in srgb, var(--studio-warn) 8%, var(--studio-card-muted-bg));
 }
 .operator-dashboard__remote-row[data-state='pending'] .operator-dashboard__sync-directions strong { color: var(--studio-accent-warn); }
 .operator-dashboard__remote-row[data-state='untracked'] .operator-dashboard__sync-directions strong { color: var(--studio-fg-muted); }
@@ -170,7 +169,7 @@
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-3);
   border-radius: 8px;
-  background: var(--studio-bg-surface);
+  background: var(--studio-card-muted-bg);
 }
 
 .operator-dashboard__metric-icon {
@@ -204,9 +203,9 @@
   justify-content: space-between;
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border: 1px solid var(--studio-border);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 7px;
-  background: var(--studio-bg-editor);
+  background: var(--studio-card-muted-bg);
 }
 .operator-dashboard__metric-line dt { color: var(--studio-fg-muted); font-size: 0.68rem; }
 .operator-dashboard__metric-line dd {
@@ -219,7 +218,7 @@
 .operator-dashboard__split {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--studio-spacing-4);
+  gap: var(--studio-deck-panel-gap);
   align-items: stretch;
 }
 
@@ -255,7 +254,7 @@
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border: 0;
   border-radius: 7px;
-  background: var(--studio-bg-surface);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg);
   cursor: pointer;
   font: inherit;
@@ -279,18 +278,13 @@
 .operator-dashboard__remainder { padding: var(--studio-spacing-1) var(--studio-spacing-3); }
 
 .operator-dashboard__deployment {
-  padding: var(--studio-spacing-5);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 12px;
-  background: var(--studio-bg-elevated);
+  @include m.deck-panel;
 }
 .operator-dashboard__deployment[data-state='pending'] {
-  border-color: color-mix(in srgb, var(--studio-accent-warn) 55%, var(--studio-border));
-  background: color-mix(in srgb, var(--studio-accent-warn) 6%, var(--studio-bg-elevated));
+  @include m.deck-panel-attention(var(--studio-warn));
 }
 .operator-dashboard__deployment[data-state='failed'] {
-  border-color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-border));
-  background: color-mix(in srgb, var(--studio-error) 6%, var(--studio-bg-elevated));
+  @include m.deck-panel-attention;
 }
 .operator-dashboard__deployment h2 { font-size: 1.35rem; }
 
@@ -326,8 +320,8 @@
   display: grid;
   gap: var(--studio-spacing-1);
   padding: var(--studio-spacing-4);
-  border-radius: 9px;
-  background: var(--studio-bg-surface);
+  border-radius: 8px;
+  background: var(--studio-card-muted-bg);
 }
 .operator-dashboard__deploy-summary span,
 .operator-dashboard__deploy-summary small { color: var(--studio-fg-muted); font-size: 0.7rem; }
@@ -354,17 +348,17 @@
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border-radius: 7px;
-  background: var(--studio-bg-surface);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
   font-size: 0.74rem;
 }
 .operator-dashboard__deploy-details code { color: var(--studio-fg-strong); }
 
 .operator-dashboard__partial {
+  @include m.deck-panel(var(--studio-spacing-3));
+  @include m.deck-panel-attention(var(--studio-warn));
+
   margin: 0;
-  padding: var(--studio-spacing-3);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--studio-accent-warn) 9%, transparent);
   color: var(--studio-fg-dim);
   font-size: 0.76rem;
   text-align: center;

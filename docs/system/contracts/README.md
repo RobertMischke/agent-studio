@@ -13,4 +13,5 @@ Durable contracts that code, CLIs, and agents must respect.
 | [ui-task-pipeline.md](ui-task-pipeline.md) | Iterative UI routing, per-iteration visual evidence, cap, and Part 2 Human Gate marker. |
 | [loop-inventory.md](loop-inventory.md) | Re-entry, retry, and loop breaker registry. |
 | [code-patterns.md](code-patterns.md) | Code-pattern drift watchlist read by analysis services. |
+| [runtime-prompts.md](runtime-prompts.md) | Runtime prompt precedence, review companions, project override comparison, call telemetry, and cost boundaries. |
 | [wiki-tree.md](wiki-tree.md) | Wiki physical docs tree, mutation, rendering, and history contract. |

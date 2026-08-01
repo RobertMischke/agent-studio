@@ -51,6 +51,17 @@ public static class AdminConfigEndpoints
         // shadowed by the detail route.
         prompts.MapGet("/coverage", (PromptAdminService svc) => Results.Ok(svc.GetCoverage()));
 
+        prompts.MapPost("/review-all", (ReviewPromptsRequest? req, PromptAdminService svc) =>
+            Results.Ok(svc.ReviewAll(req?.ReviewedBy)));
+
+        prompts.MapPost("/{name}/review", (string name, ReviewPromptsRequest? req, PromptAdminService svc) =>
+        {
+            var result = svc.Review(name, req?.ReviewedBy);
+            return result == null
+                ? Results.NotFound(new { error = $"Unknown prompt '{name}'." })
+                : Results.Ok(result);
+        });
+
         prompts.MapGet("/{name}", (string name, PromptAdminService svc) =>
         {
             var detail = svc.GetDetail(name);
@@ -136,4 +147,9 @@ public sealed class PreviewPromptRequest
 
     /// <summary>Optional draft template to preview instead of the saved effective content.</summary>
     public string? Content { get; set; }
+}
+
+public sealed class ReviewPromptsRequest
+{
+    public string? ReviewedBy { get; set; }
 }

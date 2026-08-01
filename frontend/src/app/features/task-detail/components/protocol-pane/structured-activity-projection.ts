@@ -22,8 +22,11 @@ const CODEX_RECORD_HEADERS = new Map<string, 'agent' | 'user' | 'tool'>([
   ['view_image', 'tool'],
   ['web_search', 'tool'],
   ['imagegen', 'tool'],
+  ['read_file', 'tool'],
+  ['read_mcp_resource', 'tool'],
 ]);
 
+const MARKUP_FILE_EXTENSION = /\.(?:html?|xhtml|xml|svg)(?:[?#].*)?$/i;
 const CODEX_BANNER = /^OpenAI Codex\b/;
 const RUNNER_LINE = /^\[runner\]\s*(?<body>.*)$/i;
 const RUNNER_DELIVERY = /^\[runner-log-delivery:[^\]]+\]$/i;
@@ -88,10 +91,15 @@ export function projectStructuredActivityContent(
     const line = lines[index];
     const runner = runnerEvent(line, index, source);
     if (runner !== undefined) {
-      if (runner) events.push(runner);
       if (isRunnerExit(line.text)) {
+        const finalBlockStart = events.length;
         finishBlock();
+        if (runner && !mergeTerminalResultWithExit(events, runner, line.text, finalBlockStart)) {
+          events.push(runner);
+        }
         mode = 'outside';
+      } else if (runner) {
+        events.push(runner);
       }
       continue;
     }
@@ -182,6 +190,7 @@ function runnerPresentation(body: string): {
 function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
   const content = trimBlankEdges(block.lines);
   const commandLine = content[0]?.line.text.trim() || block.header;
+  const markupFile = markupFilePath(block.header, commandLine);
   const outputLines = content.slice(1).map(({ line }) => line.text);
   const resultLine = outputLines.find((text) => TOOL_RESULT.test(text));
   const result = resultLine ? TOOL_RESULT.exec(resultLine)?.groups?.['status'].toLowerCase() : null;
@@ -207,6 +216,7 @@ function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
     durationMs: durationMs(content),
     samples: { [family]: commandLine },
     commands: [command],
+    files: markupFile ? [markupFile] : undefined,
     collapsedByDefault: true,
   };
 }
@@ -262,11 +272,62 @@ function terminalLabel(kind: string): string {
   }
 }
 
+/**
+ * A terminal sentinel and the immediately following runner exit describe one
+ * outcome. Keep one calm status row, extend its trace range through the exit,
+ * and retain only the operator-useful typed outcome and exit code.
+ */
+function mergeTerminalResultWithExit(
+  events: ConversationEvent[],
+  runner: SystemStatusEvent,
+  rawExit: string,
+  finalBlockStart: number,
+): boolean {
+  let terminalIndex = -1;
+  for (let index = events.length - 1; index >= finalBlockStart; index -= 1) {
+    const event = events[index];
+    if (event.kind === 'system.status' && event.category === 'result') {
+      terminalIndex = index;
+      break;
+    }
+  }
+  if (terminalIndex < 0) return false;
+
+  const terminal = events[terminalIndex] as SystemStatusEvent;
+  const exit = /\bCLI exited\s+(?<code>-?\d+)\b/i.exec(rawExit)?.groups?.['code'] ?? 'unknown';
+  const typed = /\btypedOutcome=(?<outcome>[^\s;]+)/i.exec(rawExit)?.groups?.['outcome'] ?? 'unknown';
+  const detail = terminal.explanation.trim();
+  events[terminalIndex] = {
+    ...terminal,
+    timestamp: runner.timestamp,
+    rawRange: {
+      source: terminal.rawRange.source,
+      start: terminal.rawRange.start,
+      end: runner.rawRange.end,
+    },
+    explanation: [detail, `Outcome ${typed}`, `Exit ${exit}`].filter(Boolean).join(' · '),
+  };
+  return true;
+}
+
 function toolFamily(header: string): ToolFamily {
   if (header === 'exec') return 'command';
   if (header === 'apply_patch') return 'edit';
   if (header === 'update_plan') return 'todo';
+  if (header === 'read_file' || header === 'read_mcp_resource') return 'read';
   return 'other';
+}
+
+/**
+ * File payloads become tool events from their declared record header, never
+ * from looking at the payload body. The extension check only annotates known
+ * file-read tools as markup so the canonical tool renderer can disclose the
+ * source path beside its collapsed, plain-text <pre>.
+ */
+function markupFilePath(header: string, commandLine: string): string | null {
+  if (header !== 'read_file' && header !== 'read_mcp_resource') return null;
+  const path = commandLine.trim().replace(/^['"]|['"]$/g, '');
+  return MARKUP_FILE_EXTENSION.test(path) ? path : null;
 }
 
 function trimBlankEdges(

@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 .project-urls {
   display: block;
   padding: var(--studio-spacing-4);
@@ -22,12 +24,11 @@
 }
 
 .project-urls__empty {
-  padding: var(--studio-spacing-5) var(--studio-spacing-4);
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
+
   text-align: center;
   color: var(--studio-fg-muted);
-  background: var(--studio-bg-surface);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
   font-size: 12.5px;
 }
 
@@ -37,13 +38,11 @@
 
 /* ----- status strip ----- */
 .project-urls__strip {
+  @include m.deck-panel(var(--studio-spacing-2) var(--studio-spacing-3));
+
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border);
-  border-radius: 7px;
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
   margin-bottom: var(--studio-spacing-3);
 }
 
@@ -102,9 +101,9 @@
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border-radius: 7px;
   border: 1px solid transparent;
-  background: var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
 
-  &:hover { border-color: var(--studio-border); }
+  &:hover { border-color: var(--studio-card-muted-border); }
 }
 
 .project-urls__icon {
@@ -206,11 +205,9 @@
 }
 
 .project-urls__add {
+  @include m.deck-panel(var(--studio-spacing-3));
+
   margin-top: var(--studio-spacing-2);
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  padding: var(--studio-spacing-3);
 }
 
 .project-urls__add-hint {
@@ -304,9 +301,9 @@
   flex-direction: column;
   gap: var(--studio-spacing-1);
   padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border-strong);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 7px;
-  background: var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
   font-size: 12px;
 
@@ -326,8 +323,8 @@
 }
 
 .project-urls__test-result[data-state='running'] {
-  border-color: var(--studio-accent-success);
-  background: color-mix(in srgb, var(--studio-accent-success) 10%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-success) 55%, var(--studio-card-border));
+  background: color-mix(in srgb, var(--studio-success) 8%, var(--studio-card-bg));
 }
 
 .project-urls__btn {

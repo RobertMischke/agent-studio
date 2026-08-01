@@ -1,0 +1,25 @@
+@if (executesLocally()) {
+  <article class="parallel-card" data-testid="project-settings-parallel">
+    <div class="parallel-card__head">
+      <span class="parallel-card__icon" aria-hidden="true">⇉</span>
+      <span class="parallel-card__title">Parallel execution (local)</span>
+      <span class="parallel-card__badge">Deprecated for remote</span>
+    </div>
+    <p class="parallel-card__desc">
+      How many coding tasks this project runs at once <strong>locally</strong>
+      (ADR-0052). <strong>1 = sequential.</strong> Above 1, the orchestrator only
+      starts another task when it is disjoint from a running one; each parallel run
+      is isolated in its own git worktree and merged back into the work branch. On a
+      remote host the host capacity is the source and this value is ignored.
+    </p>
+    <label class="parallel-card__value">
+      Max parallelism&nbsp;
+      <select data-testid="project-settings-max-parallelism"
+              (change)="setMaxParallelism(+$any($event.target).value)">
+        @for (n of parallelOptions; track n) {
+          <option [value]="n" [selected]="n === maxParallelism()">{{ n }}{{ n === 1 ? ' (sequential)' : '' }}</option>
+        }
+      </select>
+    </label>
+  </article>
+}

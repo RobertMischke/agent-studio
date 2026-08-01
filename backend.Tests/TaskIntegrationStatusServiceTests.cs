@@ -317,6 +317,53 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_RemoteDeliveryRefWithoutAttributedCommit_IsPendingAndProjectsRef()
+    {
+        var repo = SeedDevelopMainRepo();
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("remote-delivery", "AGT-2220", project, repo, log);
+        ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
+        {
+            TaskKey = job.Key!,
+            Project = project,
+            Repository = repo,
+            ResultSha = new string('7', 40),
+            AttemptChainId = "attempt-agt-2220",
+            Executor = "agent-runner-01",
+            LeaseId = "lease-agt-2220",
+            FencingToken = 1,
+            ImmutableResultRef = "origin/runner/agent-runner-01/AGT-2220",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Equal("runner/agent-runner-01/AGT-2220", status.DeliveryRef);
+        Assert.Contains("runner/agent-runner-01/AGT-2220", status.Detail);
+        Assert.Null(status.Sha);
+    }
+
+    [Fact]
+    public void BuildLookup_EvidencedLocalTaskBranchWithoutAttributedCommit_ProjectsTaskRef()
+    {
+        var repo = SeedDevelopMainRepo();
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "local-delivery",
+            "AGT-2434",
+            project,
+            repo,
+            log,
+            prov: Prov(branch: "task/local-delivery", tip: new string('8', 40)));
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Equal("task/local-delivery", status.DeliveryRef);
+    }
+
+    [Fact]
     public void BuildLookup_TargetHeadMoveInvalidatesCachedStatusImmediately()
     {
         var repo = SeedDevelopMainRepo();
@@ -388,6 +435,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         var status = svc.BuildLookup(new[] { job })[job.TaskKey];
 
         Assert.Equal(IntegrationStatuses.NoBranch, status.Status);
+        Assert.Null(status.DeliveryRef);
         Assert.Null(status.Sha);
     }
 

@@ -18,8 +18,14 @@ function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-async function mockWiki(page: Page, projectName: string): Promise<void> {
+async function mockWiki(page: Page, projectName: string): Promise<{
+  updateFirstPage: () => void;
+}> {
   const project = encodeURIComponent(projectName);
+  const livePage = {
+    content: '# One\n\n[Second page](two.md)\n\n[AGT-2050](task:AGT-2050)',
+    etag: '"wiki-page-v1"',
+  };
   await page.route('**/api/watch-paths**', route => json(route, [{
     name: projectName,
     path: REPOSITORY_PATH,
@@ -74,27 +80,45 @@ async function mockWiki(page: Page, projectName: string): Promise<void> {
   await page.route(`**/api/projects/${project}/wiki/files/**`, route => {
     const relPath = decodeURIComponent(route.request().url().split('/wiki/files/')[1] ?? '');
     const content = relPath === FIRST_PAGE
-      ? '# One\n\n[Second page](two.md)\n\n[AGT-2050](task:AGT-2050)'
+      ? livePage.content
       : '# Two\n\nSecond page body.';
     return json(route, { relPath, content });
   });
   await page.route(`**/api/projects/${project}/wiki/history/**`, route => {
     const relPath = decodeURIComponent(route.request().url().split('/wiki/history/')[1] ?? '');
-    return json(route, {
-      relPath,
-      model: null,
-      metadata: {
+    if (route.request().headers()['if-none-match'] === livePage.etag) {
+      return route.fulfill({
+        status: 304,
+        headers: { ETag: livePage.etag },
+        body: '',
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { ETag: livePage.etag },
+      body: JSON.stringify({
+        relPath,
         model: null,
-        updatedAt: null,
-        reason: null,
-        taskKey: null,
-        status: null,
-        runCount: null,
-        hasFrontmatter: false,
-      },
-      commits: [],
+        metadata: {
+          model: null,
+          updatedAt: null,
+          reason: null,
+          taskKey: null,
+          status: null,
+          runCount: null,
+          hasFrontmatter: false,
+        },
+        commits: [],
+      }),
     });
   });
+  return {
+    updateFirstPage: () => {
+      livePage.content = '# One updated on disk';
+      livePage.etag = '"wiki-page-v2"';
+    },
+  };
 }
 
 test('meta-panel and section choices survive wiki navigation and reload', async ({ page }, testInfo) => {
@@ -148,4 +172,20 @@ test('meta-panel and section choices survive wiki navigation and reload', async 
   await expect(metaToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(linkedToggle).toHaveAttribute('aria-expanded', 'false');
   await expect(historyToggle).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('an external page change waits for explicit reload', async ({ page }) => {
+  const wiki = await mockWiki(page, PROJECT_NAME);
+
+  await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
+  await expect(page.getByTestId('project-wiki-viewer')).toContainText('One');
+
+  wiki.updateFirstPage();
+  const banner = page.getByTestId('project-wiki-update-banner');
+  await expect(banner).toContainText('Diese Seite wurde aktualisiert.', { timeout: 20_000 });
+  await expect(page.getByTestId('project-wiki-viewer')).not.toContainText('updated on disk');
+
+  await page.getByTestId('project-wiki-update-reload').click();
+  await expect(page.getByTestId('project-wiki-viewer')).toContainText('updated on disk');
+  await expect(banner).toHaveCount(0);
 });

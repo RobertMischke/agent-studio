@@ -65,7 +65,7 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     tokenUsage: null,
   };
 
-  async function setup() {
+  async function setup(entries: OrchestratorLogEntry[] = [{ ...decisionEntry, project: 'demo-project' }]) {
     await TestBed.configureTestingModule({
       imports: [OrchestratorFeedComponent],
       providers: [
@@ -80,8 +80,9 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     fixture.detectChanges();
 
     const httpCtrl = TestBed.inject(HttpTestingController);
+    fixture.componentInstance.refresh();
     const req = httpCtrl.expectOne((r) => r.url.includes('/api/runner/orchestrator-feed'));
-    req.flush({ entries: [{ ...decisionEntry, project: 'demo-project' }] });
+    req.flush({ entries });
     fixture.detectChanges();
     return { fixture, httpCtrl };
   }
@@ -98,8 +99,7 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
   });
 
   it('defaults to signal and hides passive observations', async () => {
-    const { fixture } = await setup();
-    fixture.componentInstance.entries.set([
+    const { fixture } = await setup([
       { ...decisionEntry, project: 'demo-project' },
       { ...decisionEntry, ts: '2026-05-14T10:00:00Z', kind: 'observation', summary: 'Routine scan', project: 'demo-project' },
     ]);
@@ -108,8 +108,7 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
   });
 
   it('renders pipeline health alarms and exposes the dedicated alert filter', async () => {
-    const { fixture } = await setup();
-    fixture.componentInstance.entries.set([{
+    const { fixture } = await setup([{
       ...decisionEntry,
       kind: 'alert',
       topic: 'pipeline-health',

@@ -93,6 +93,15 @@
     "runnerDaemonState": { "type": ["string", "null"], "enum": ["running", "read-only", "stopped", null] },
     "runnerLastClaimAt": { "type": ["string", "null"], "format": "date-time" },
     "runnerActiveSlots": { "type": ["integer", "null"], "minimum": 0 },
-    "runnerAvailableSlots": { "type": ["integer", "null"], "minimum": 0 }
+    "runnerAvailableSlots": { "type": ["integer", "null"], "minimum": 0 },
+    "runnerDesiredMaxParallelism": { "type": ["integer", "null"], "minimum": 1, "maximum": 256 },
+    "runnerTargetLoadPercent": { "type": ["integer", "null"], "minimum": 50, "maximum": 95 },
+    "runnerRampStrategy": {
+      "type": ["string", "null"],
+      "enum": ["conservative", "balanced", "aggressive", null]
+    },
+    "runnerCapacityUpdatedAt": { "type": ["string", "null"], "format": "date-time" },
+    "runnerEffectiveMaxParallelism": { "type": ["integer", "null"], "minimum": 1, "maximum": 256 },
+    "runnerEffectiveMaxParallelismAppliedAt": { "type": ["string", "null"], "format": "date-time" }
   }
 }

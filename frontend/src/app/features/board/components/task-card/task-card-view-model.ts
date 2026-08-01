@@ -8,6 +8,7 @@ import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel 
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
+import { isTaskRunActive } from '../../../../services/run-activity.util';
 import { buildTokenCostTooltip } from '../../../tokens';
 
 export interface TaskTypeChip {
@@ -203,20 +204,23 @@ export interface CommitEmptyBadge {
 
 /** Zero-commit diagnostic for review-lane cards (AC#3, bug (3)). Only fires in
  *  review lanes and only when the attributed chain is genuinely empty.
- *  `codeActivityDetected` (scanner signal, never repo HEAD) disambiguates the
- *  two cases the operator could not tell apart before:
+ *  `codeActivityDetected` (scanner signal, never repo HEAD) and the canonical
+ *  delivery ref disambiguate the two cases the operator could not tell apart:
  *   - `false` -> analysis-only task: a calm "no code changes" badge.
- *   - `true`  -> a run moved HEAD but no commit is attributed: an amber
+ *   - `true` or a delivery ref -> work exists but no commit is attributed: an amber
  *     "commit discovery pending" diagnostic so a lost/undiscovered commit is
  *     visibly different from a correct no-op. */
 export function buildCommitEmptyBadge(job: TaskInfo): CommitEmptyBadge | null {
   if (!COMMIT_REVIEW_LANES.has(job.state)) return null;
   if (commitChainOf(job).length > 0) return null;
-  if (job.codeActivityDetected) {
+  const deliveryRef = job.integration?.deliveryRef?.trim() || null;
+  if (job.codeActivityDetected || deliveryRef) {
     return {
       tone: 'discovery',
       label: 'commit discovery pending',
-      tooltip: 'This task moved repository HEAD during a run, but no commit is attributed to it yet. Open the task and check the Git view: the attribution backfill may still be pending, or a commit landed that the rule could not associate. This is NOT an analysis-only task.',
+      tooltip: deliveryRef
+        ? `Delivery ref ${deliveryRef} exists, but no commit is attributed to this task yet. Open the task and check the Git view: the attribution backfill may still be pending, or the rule could not associate the delivered commit. This is NOT an analysis-only task.`
+        : 'This task moved repository HEAD during a run, but no commit is attributed to it yet. Open the task and check the Git view: the attribution backfill may still be pending, or a commit landed that the rule could not associate. This is NOT an analysis-only task.',
     };
   }
   return {
@@ -288,7 +292,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export type EffectiveModelSource = 'fallback' | 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+export type EffectiveModelSource = 'fallback' | 'run' | 'policy' | 'explicit' | 'default' | 'human' | 'unknown';
 
 export interface EffectiveModelChip {
   icon: string;
@@ -347,7 +351,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     fullModel = job.model ?? ownerModel;
     effectiveCliType = cli;
     cliLbl = cli ? cliTypeLabel(cli) : null;
-    source = 'explicit';
+    source = job.modelExplicit === false ? 'policy' : 'explicit';
     isDefault = false;
   } else if (ownerCli || ownerModel) {
     icon = ownerCli ? cliTypeIcon(ownerCli) : '\u{1F916}';
@@ -405,7 +409,7 @@ function buildModelTooltip(
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
-  lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
+  lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : source === 'policy' ? ' <i>(policy suggestion)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
   if (thinkingLevel) {
     lines.push(`<b>Thinking level:</b> ${escapeHtml(thinkingLevel.effective)}${thinkingLevel.differsFromConfigured ? ' <i>(effective)</i>' : ''}`);
@@ -425,7 +429,7 @@ function buildModelTooltip(
   lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
 
   return {
-    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'policy' ? 'Policy-derived model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
 }
@@ -712,6 +716,9 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   const mergeSha = recordedMergeSha(prov);
   const canonicalIntegration = currentIntegrationStatus(job);
   const usesCanonicalIntegration = INTEGRATION_STATUS_LANES.has(job.state);
+  const deliveryRef = usesCanonicalIntegration
+    ? canonicalIntegration?.deliveryRef?.trim() || null
+    : null;
 
   if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
     return null;
@@ -736,6 +743,18 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
       tooltip: landedSha
         ? `Git state: attributed commits are present in ${landedBranch} at ${shortSha(landedSha)}.`
         : `Git state: attributed commits are present in ${landedBranch}.`,
+    };
+  }
+
+  // Accepted remote deliveries and settled local task branches use the same
+  // backend-projected ref. This deliberately precedes the local branch-tip
+  // heuristic so runner/<host>/<KEY> never falls through to "main checkout".
+  if (deliveryRef) {
+    return {
+      kind: 'pre-merge',
+      label: deliveryRef,
+      glyph: '⎇',
+      tooltip: `Git state: delivery ref ${deliveryRef} exists and is not yet fully integrated into ${canonicalIntegration?.integrationBranch || 'develop'}.`,
     };
   }
 
@@ -1109,9 +1128,6 @@ export function buildPhaseBadge(
 export interface ExecutionBadge { label: string; tone: 'running' | 'failed' | 'cancelled'; }
 
 export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
-  const execution = job.execution;
-  if (!execution) return null;
-
   // Lane wins over execution-status. The backend overlay already clears
   // Execution for non-progress tasks (TaskEndpointHelpers.WithRuntime), but a
   // stale poll snapshot or an optimistic move can briefly land on the card
@@ -1120,9 +1136,15 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
   // executing in this lane.
   if (job.state !== TaskState.Progress) return null;
 
-  if (execution.status === 'running') {
+  // The pipeline overlay is newer than the runner/execution overlays. A live
+  // pre-step or between-step owner therefore wins over stale terminal CLI
+  // state instead of flashing a false failure.
+  if (isTaskRunActive(job)) {
     return { label: 'Running live', tone: 'running' };
   }
+
+  const execution = job.execution;
+  if (!execution) return null;
 
   if (shouldShowFailureToast(execution)) {
     return { label: execution.exitCode === null ? 'Failed' : `Failed (${execution.exitCode})`, tone: 'failed' };

@@ -95,6 +95,36 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StartWithReadiness_ReturnsStartingAndPublishesSilenceFailureInSession()
+    {
+        using var service = new ProjectUrlProcessService(
+            NullLogger<ProjectUrlProcessService>.Instance,
+            new PassiveHttpClientFactory());
+        var candidate = Url("url-readiness", LongRunningCommand()) with
+        {
+            StartRule = Rule(LongRunningCommand()) with
+            {
+                Port = 4202,
+                ReadinessTimeoutSeconds = 2,
+                StartupTimeoutSeconds = 10,
+            },
+        };
+
+        var started = service.StartWithReadiness(Project(repositoryPath: _root), candidate);
+        var settled = await WaitForAsync(
+            service,
+            candidate.Id,
+            snapshot => snapshot.State == ProjectUrlProcessStates.Failed);
+
+        Assert.Equal(ProjectUrlProcessStates.Starting, started.State);
+        Assert.Contains(settled.Output, line => line.Contains("no console output", StringComparison.Ordinal));
+        Assert.Equal(
+            ProjectUrlStartupFailureReasons.SilenceTimeout,
+            service.Latest(Project(repositoryPath: _root), candidate)?.StartupFailureReason);
+        service.Stop(settled.ProjectId, settled.UrlId);
+    }
+
+    [Fact]
     public void Stop_TerminatesTheOwnedProcessTreeAndRetainsItsSnapshot()
     {
         using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());

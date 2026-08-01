@@ -1,0 +1,44 @@
+<section class="context" data-testid="url-preview-context" aria-label="Preview source context">
+  @if (context(); as context) {
+    <div class="context__identity">
+      <span class="context__label">Repository</span>
+      <strong data-testid="url-preview-repository">{{ context.repositoryName || projectName() }}</strong>
+      <span class="context__divider" aria-hidden="true">/</span>
+      <code data-testid="url-preview-branch">{{ context.branch || 'Branch unavailable' }}</code>
+      <code class="context__sha" data-testid="url-preview-head"
+            [title]="context.headSha || 'HEAD unavailable'">{{ context.headShortSha || 'No HEAD' }}</code>
+      @if (context.isDirty) { <span class="context__badge">Uncommitted</span> }
+    </div>
+
+    <div class="context__integration" data-testid="url-preview-integration"
+         [title]="context.error || integrationSummary()">
+      <span class="context__label">Integration</span>
+      <strong>{{ context.error ? 'Unavailable' : integrationSummary() }}</strong>
+    </div>
+  } @else {
+    <div class="context__identity" data-testid="url-preview-context-loading">
+      <span class="context__label">Repository</span>
+      <strong>{{ loading() ? 'Reading working directory' : 'Context unavailable' }}</strong>
+    </div>
+  }
+
+  @if (openTasks().length > 0) {
+    <details class="context__tasks" [open]="tasksExpanded()"
+             (toggle)="tasksExpanded.set($any($event.target).open)" data-testid="url-preview-tasks">
+      <summary><span class="context__label">Open tasks</span><strong>{{ openTasks().length }}</strong></summary>
+      <div class="context__task-list">
+        @for (task of openTasks(); track task.taskKey) {
+          <button type="button" data-testid="url-preview-task-link"
+                  [attr.aria-label]="'Open task ' + taskLabel(task) + ': ' + task.title"
+                  (click)="openTask(task)">
+            <code>{{ taskLabel(task) }}</code><span>{{ task.title }}</span>
+          </button>
+        }
+      </div>
+    </details>
+  } @else {
+    <div class="context__task-count" data-testid="url-preview-tasks">
+      <span class="context__label">Open tasks</span><strong>0</strong>
+    </div>
+  }
+</section>

@@ -72,7 +72,9 @@ and presents the exact GitHub choices:
   `https://github.com/OWNER/REPOSITORY.git`.
 
 The wizard waits for the runner's startup result and explains all three states:
-`ready`, `ready-no-workflow-scope`, and `read-only`. Only `read-only` blocks
-claims. The middle state links to the permission checklist but does not try to
-predict whether a card will touch `.github/workflows`. Rotation repeats both URL
-entries and both checks before the old token is revoked.
+`ready`, `ready-no-workflow-scope`, and `read-only`. These states describe only
+the configured fallback repository. Project claim admission uses the registered
+repository's own URL, target branch, and push proof. The middle state links to
+the permission checklist but does not try to predict whether a card will touch
+`.github/workflows`. Rotation repeats both URL entries and both checks before
+the old token is revoked.

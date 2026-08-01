@@ -18,6 +18,10 @@ export interface RunRecord {
   endedAt: string | null;
   status: string; // 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'
   cli: string | null;
+  /** Effective model resolved by the runner before this CLI process started. */
+  model?: string | null;
+  /** Effective thinking / reasoning level resolved for this run. */
+  thinkingLevel?: string | null;
   executionLocation?: TaskExecutionLocation | null;
   exitCode: number | null;
   durationSeconds: number | null;

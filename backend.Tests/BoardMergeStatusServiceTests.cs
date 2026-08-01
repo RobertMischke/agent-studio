@@ -209,6 +209,25 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildCommitPresence_ReusesDevelopAndMainReachabilityTruth()
+    {
+        var repo = SeedDevelopMainRepo(out var mainTip, out _);
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "graph.txt"), "graph work");
+        Commit(repo, "feat: graph work");
+        var developOnly = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var service = BuildService(repo, out var project);
+        var presence = service.BuildCommitPresence(project, repo, [developOnly, mainTip]);
+
+        Assert.True(presence[developOnly].InIntegration);
+        Assert.False(presence[developOnly].InRelease);
+        Assert.True(presence[mainTip].InIntegration);
+        Assert.True(presence[mainTip].InRelease);
+        Assert.Equal(1, service.ComputationCount);
+    }
+
+    [Fact]
     public void BuildLookup_SequentialCommitOnDevelop_LightsDevelopWithoutMergeFact()
     {
         var repo = SeedDevelopMainRepo(out _, out _);

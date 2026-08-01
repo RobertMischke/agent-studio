@@ -598,7 +598,29 @@ public class ProjectRegistryTests : IDisposable
         Assert.NotNull(rule);
         Assert.Equal("npm run website", rule!.Command); // trimmed
         Assert.Equal(4202, rule.Port);
+        Assert.Equal(30, rule.ReadinessTimeoutSeconds);
+        Assert.Equal(600, rule.StartupTimeoutSeconds);
         Assert.Equal("package-json", rule.Source);
+    }
+
+    [Fact]
+    public void AddUrl_ExistingReadinessTimeoutBecomesSilenceWindowAndKeepsConfiguredStartupLimit()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Website", "http://localhost:4202",
+            new ProjectUrlStartRule
+            {
+                Command = "npm run website",
+                Port = 4202,
+                ReadinessTimeoutSeconds = 20,
+                StartupTimeoutSeconds = 900,
+            });
+
+        var rule = Assert.IsType<ProjectUrlStartRule>(updated.Urls.Single().StartRule);
+        Assert.Equal(20, rule.ReadinessTimeoutSeconds);
+        Assert.Equal(900, rule.StartupTimeoutSeconds);
     }
 
     [Fact]

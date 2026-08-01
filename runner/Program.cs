@@ -154,7 +154,7 @@ static void PrintUsage()
                                   Private-CA/rehearsal certificate pin
                                                             (RUNNER_TLS_CERTIFICATE_SHA256)
           --ttl <seconds>         Requested lease TTL         (RUNNER_TTL_SECONDS)
-          --max-parallelism <n>   Daemon host slots            (RUNNER_MAX_PARALLELISM, default 2)
+          --max-parallelism <n>   Bootstrap/fallback host slots (RUNNER_MAX_PARALLELISM, default 2)
           --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)
           --poll                  Run continuously (also the default without a task key)
           -h, --help              Show this help

@@ -1,8 +1,9 @@
 <section class="pp" data-testid="project-detail-pipeline">
   <header class="pp__head">
+    <app-pipeline-type-picker [value]="pipelineType()" (valueChange)="pipelineType.set($event)" />
     <h2 class="pp__title">Pipeline</h2>
     <p class="pp__sub">
-      Compact per-project order, agent, prompt binding, and gates. Each step
+      Per-type project order, agent, prompt binding, and gates. Each step
       with LLM participation shows its token spend over the last
       {{ tokenWindowDays }} days. Tool steps never show token usage. Prompt
       <em>content</em> lives in Prompts; changes apply to the next run.
@@ -26,12 +27,11 @@
         </summary>
         <div class="pp__rows" role="list">
           @for (step of group.rows; track step.id) {
-            <details class="pp__row"
-                     role="listitem"
-                     [class.pp__row--off]="!step.enabled"
+            <details class="pp__row" role="listitem"
+                     [class.pp__row--off]="!step.enabled" [class.pp__row--not-applicable]="!step.applicable"
                      [class.pp__row--dragging]="draggingStepId() === step.id"
                      [class.pp__row--drop-target]="dragTargetStepId() === step.id"
-                     [attr.data-enabled]="step.enabled"
+                     [attr.data-enabled]="step.enabled" [attr.data-applicable]="step.applicable"
                      [attr.data-kind]="kindKey(step.kind)"
                      [attr.data-testid]="'pipeline-step-row-' + step.id"
                      (dragover)="onStepDragOver($event, step)"
@@ -51,8 +51,7 @@
                       [attr.data-testid]="'pipeline-step-kind-' + step.id"
                       [attr.data-kind]="kindKey(step.kind)"
                       [cacTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
-                <span class="pp__summary-main">
-                  <span class="pp__name"
+                <span class="pp__summary-main"><span class="pp__name"
                         [attr.data-testid]="'pipeline-step-name-' + step.id">{{ step.displayName }}</span>
                 </span>
                 <button type="button"
@@ -63,6 +62,9 @@
                         tooltipPosition="right"
                         (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
                 <span class="pp__summary-chips">
+                  @if (!step.applicable) {
+                    <span class="pp__state pp__state--off">not applicable</span>
+                  }
                   @if (hasTokenUsage(step)) {
                     <span class="pp__chip pp__chip--tokens"
                           [class.pp__chip--tokens-empty]="step.tokenSum === null"
@@ -97,17 +99,17 @@
                     <span class="pp__chip pp__chip--muted">When {{ conditionSummary(step) }}</span>
                   }
                 </span>
-                <app-pipeline-step-toggle
+                <app-pipeline-step-row-state
                   [stepId]="step.id"
-                  [stepName]="step.displayName"
+                  [framework]="step.framework ?? ''"
                   [enabled]="step.enabled"
                   [canDisable]="step.canDisable"
-                  [busy]="!!stepBusy[step.id]"
+                  [disabled]="!!stepBusy[step.id]"
                   (enabledChange)="onStepEnabledChange(step.id, $event)" />
                 <span class="pp__summary-caret" aria-hidden="true">▾</span>
               </summary>
-              <div class="pp__details">
-                <p class="pp__purpose">{{ stepPurpose(step) }}</p>
+              <div class="pp__details"><p class="pp__purpose">{{ stepPurpose(step) }}</p>
+                <app-pipeline-step-execution [projectName]="projectName()" [step]="step" />
                 <div class="pp__settings"
                      role="table"
                      [attr.aria-label]="step.displayName + ' settings'">

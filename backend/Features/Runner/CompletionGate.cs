@@ -386,6 +386,45 @@ public static class CompletionGate
         return int.TryParse(matches[^1].Groups["code"].Value, out var code) ? code : null;
     }
 
+    /// <summary>
+    /// Completion ruling based only on durable structured evidence. Narrative
+    /// status text is deliberately absent from this API.
+    /// </summary>
+    public static Decision EvaluateStructured(
+        CompletionAcceptanceRecord record,
+        int priorReissues,
+        int maxReissues)
+    {
+        if (record.Blockers.Count > 0)
+        {
+            return new Decision
+            {
+                Action = CompletionGateAction.Escalate,
+                Findings = record.Blockers.Select(b => $"{b.Kind}: {b.Reason} (source: {b.Source})").ToList(),
+                Reason = record.DecisionReason,
+            };
+        }
+
+        if (record.Lifecycle.TurnComplete && record.Lifecycle.ImplementationComplete)
+            return new Decision { Reason = record.DecisionReason };
+
+        var evidenceReasons = record.Evidence
+            .Where(e => !e.SupportsCompletion && e.Kind != "results-artifacts")
+            .Select(e => $"{e.Kind}: {e.Reason} (source: {e.Source})")
+            .ToList();
+        if (evidenceReasons.Count == 0)
+            evidenceReasons.Add("Structured turn or implementation completion evidence is absent.");
+
+        return new Decision
+        {
+            Action = priorReissues >= maxReissues ? CompletionGateAction.Escalate : CompletionGateAction.Reissue,
+            Findings = evidenceReasons,
+            Reason = priorReissues >= maxReissues
+                ? "Structured completion evidence remained incomplete after the bounded reissue budget."
+                : "Structured completion evidence is incomplete; reissuing with explicit evidence reasons.",
+        };
+    }
+
     public static bool ExtractLatestRunCompleted(string? recentLog)
     {
         if (string.IsNullOrWhiteSpace(recentLog)) return false;

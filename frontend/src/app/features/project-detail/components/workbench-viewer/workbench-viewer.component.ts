@@ -1,23 +1,28 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
+import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
 import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
-import { NotificationService } from '../../../../services/notification.service';
-import { buildIsolatedHtmlSrcdoc } from '../../../../services/sandboxed-html.util';
+import {
+  ISOLATED_HTML_LINK_MESSAGE,
+  buildIsolatedHtmlSrcdoc,
+  resolveIsolatedHtmlNavigation,
+} from '../../../../services/sandboxed-html.util';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
  * opaque origin (`allow-scripts` without `allow-same-origin`) and a deny-by-
- * default CSP. No credential, API, form, navigation, download, popup, modal, or
- * clipboard capability is bridged into the frame. Future chat pinning and
- * decision actions attach to the typed document signal in host chrome only.
+ * default CSP. No credential, API, form, direct navigation, download, popup,
+ * modal, or clipboard capability is bridged into the frame. Link clicks cross
+ * one typed host boundary: docs-relative targets open in the Wiki and absolute
+ * HTTP(S) targets open in a separate browser tab.
  */
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent],
+  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -25,15 +30,14 @@ import { buildIsolatedHtmlSrcdoc } from '../../../../services/sandboxed-html.uti
 export class WorkbenchViewerComponent {
   readonly projectName = input.required<string>();
   readonly workbenchId = input.required<string>();
+  readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
-  private readonly notifications = inject(NotificationService);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
 
   readonly document = signal<WorkbenchDocument | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly archived = signal(false);
-  readonly archiveBusy = signal(false);
+  readonly maximized = signal(false);
 
   readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(this.document()?.html ?? ''));
   readonly pageContext = computed<PageContext | null>(() => {
@@ -58,36 +62,65 @@ export class WorkbenchViewerComponent {
     effect(() => {
       const project = this.projectName();
       const id = this.workbenchId();
-      this.loading.set(true);
-      this.error.set(null);
-      this.document.set(null);
-      this.archived.set(false);
-      this.docs.getWorkbench(project, id).subscribe({
-        next: document => { this.document.set(document); this.loading.set(false); },
-        error: () => { this.error.set('Workbench could not be loaded.'); this.loading.set(false); },
-      });
+      this.maximized.set(false);
+      this.loadDocument(project, id);
     });
   }
 
   statusLabel(): string {
     const workbench = this.document()?.workbench;
-    return workbench?.phase ?? workbench?.status ?? '';
+    if (!workbench) return '';
+    return workbench.status === 'active'
+      ? workbench.phase ?? workbench.status
+      : workbench.status;
   }
 
-  archivePage(): void {
-    const context = this.pageContext();
-    if (!context || this.archived() || this.archiveBusy()) return;
-    this.archived.set(true);
-    this.archiveBusy.set(true);
-    this.docs.setWikiClassification(context.projectName, context.relPath, 'archived').subscribe({
-      next: () => {
-        this.archiveBusy.set(false);
-        this.notifications.success(`Archived ${context.relPath}.`, 'Page classification');
+  openCurrentPageInWiki(): void {
+    const path = this.document()?.workbench.entryPath.replace(/^docs\//i, '');
+    if (path) this.openWiki.emit(path);
+  }
+
+  @HostListener('window:message', ['$event'])
+  onFrameMessage(event: MessageEvent): void {
+    const frameWindow = this.frame()?.nativeElement.contentWindow;
+    if (!frameWindow || event.source !== frameWindow) return;
+    const message = event.data as { type?: unknown; href?: unknown } | null;
+    if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
+    const entryPath = this.document()?.workbench.entryPath;
+    if (!entryPath) return;
+    const navigation = resolveIsolatedHtmlNavigation(entryPath, message.href);
+    if (navigation?.kind === 'wiki') {
+      this.openWiki.emit(navigation.relPath);
+    } else if (navigation?.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  toggleMaximize(): void {
+    this.maximized.update(value => !value);
+  }
+
+  @HostListener('document:keydown.escape')
+  exitMaximized(): void {
+    if (this.maximized()) this.maximized.set(false);
+  }
+
+  refreshDecision(): void {
+    this.loadDocument(this.projectName(), this.workbenchId(), false);
+  }
+
+  private loadDocument(project: string, id: string, clear = true): void {
+    this.loading.set(true);
+    this.error.set(null);
+    if (clear) this.document.set(null);
+    this.docs.getWorkbench(project, id).subscribe({
+      next: document => {
+        this.document.set(document);
+        this.loading.set(false);
       },
       error: () => {
-        this.archived.set(false);
-        this.archiveBusy.set(false);
-        this.notifications.error(`Could not archive ${context.relPath}.`, 'Page classification');
+        this.error.set('Workbench could not be loaded.');
+        this.loading.set(false);
       },
     });
   }

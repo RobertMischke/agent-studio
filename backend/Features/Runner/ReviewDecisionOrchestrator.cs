@@ -1294,7 +1294,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 stored.RepoRelativeDirectory);
         }
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         _pipelineLog?.EnsureRun(
             current.FolderPath,
             ProjectPipelineOrder.Apply(PipelineCatalogue.Concept, settings),
@@ -1981,10 +1981,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _statusSnapshot.SetCurrentStep(
             entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            current);
         var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
-            ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(current), settings),
             entry.Name,
             current.Id);
         using var pipelineAttempt = pipelineRecord == null
@@ -2117,32 +2119,35 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // forever while the aspect rows below it completed. EnsureRun
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            current);
         var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
-            ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(current), projectSettings),
             entry.Name,
             current.Id);
         using var pipelineAttempt = pipelineRecord == null
             ? null
             : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
 
-        // Post-core completeness gate (Orchestrator-Review, the first post-step):
-        // before spending the parallel aspect review, scan the run's OWN close-out
-        // evidence - status Open Items / Notes, the Result line, and the log tail -
-        // for unfinished-work signals: open checklist boxes, self-reported build /
-        // compile / test failures, or a success claim contradicted by a build
-        // error. A hit short-circuits the accept and drives the task to a
-        // conclusion: reissue with the items foregrounded while the shared reissue
-        // budget allows, otherwise escalate to 5e-escalated. This closes the
-        // silent-completion gap (ASS-764 self-reported build error accepted with
-        // concerns; ASS-766 silent finish + open items parked without a verdict)
-        // where a run says done while its own evidence still lists open work.
-        var gate = CompletionGate.Evaluate(
-            statusSummary, recentLog,
+        // Post-core completeness gate. Persist the exact requirement source,
+        // machine evidence, blockers, and lifecycle states before review. Never
+        // infer open work from bullets or narrative in status.md: AGT-2149 was
+        // reopened on four historical/external-access prose lines despite a
+        // TASK_DONE, exit-0, verified run.
+        var acceptance = CompletionAcceptanceRecord.Capture(
+            taskBody,
+            recentLog,
+            CompletionGate.ExtractLatestExitCode(recentLog),
+            CompletionGate.ExtractLatestRunCompleted(recentLog),
+            HasResultsArtifacts(current.FolderPath),
+            parsedDoneSignal: pending.Kind == ReviewSignalKind.Done);
+        CompletionAcceptanceRecord.Write(current.FolderPath, acceptance, _logger);
+        var gate = CompletionGate.EvaluateStructured(
+            acceptance,
             CountPriorReissues(workspace, entry.Name, current.Id),
-            ConfiguredMaxReissues(),
-            HasResultsArtifacts(current.FolderPath));
+            ConfiguredMaxReissues());
         if (gate.IsIncomplete)
         {
             await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
@@ -2184,7 +2189,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
         // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var conditionContext = new PipelineStepConditionContext
         {
             Aborted = false,
@@ -2443,6 +2448,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // and left orphan logs/cli-output.log skeletons in 4-auto-review.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath,
+            "pipeline-execution.json",
+            report.Overall == AspectStatus.Concerns
+                ? $"Structured aspect review accepted with concerns: {FormatConcernCount(report)}"
+                : "Structured aspect review accepted all requirements.",
+            _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -2889,6 +2901,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", loopBreak.Reason, _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -3228,7 +3242,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_lintScssRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var lintStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.LintScssStepId, StringComparison.OrdinalIgnoreCase));
         if (lintStep is not null
@@ -3396,7 +3410,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_buildTestGateRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.BuildTestGateStepId, StringComparison.OrdinalIgnoreCase));
         if (step is not null
@@ -3815,14 +3829,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
-        var count = gate.Findings.Count;
-        var noun = count == 1 ? "item" : "items";
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{title}\" back to 2-ready ({count} unfinished {noun} from its own close-out).");
+            $"Auto-review sent \"{title}\" back to 2-ready. {gate.Reason} Evidence: {findingsBlock}");
 
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
-            $"Reopened: completion gate found {count} unfinished {noun} in the run's own close-out.",
+            $"Reopened: {gate.Reason}",
             BuildReopenDetails("completion-gate",
                 CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
 
@@ -3910,7 +3922,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return null;
         }
 
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            job);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         if (catalogueStep is not null
@@ -4112,7 +4126,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (_taskSpawner == null) return;
 
         var stepId = PipelineCatalogue.TaskSpawnerStepId;
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         var conditionCtx = new PipelineStepConditionContext
@@ -4577,7 +4591,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 : (Func<string, string?, RegressionRadarResult>?)null);
         if (analyze == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var radarStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.RegressionRadarStepId, StringComparison.OrdinalIgnoreCase));
         var shouldRun = radarStep is null
@@ -4657,7 +4671,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiMaintenance == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var wikiStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiMaintenanceStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4745,7 +4759,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiLearnings == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiLearningsStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4930,7 +4944,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_agentsWikiSync == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.AgentsWikiSyncStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -6285,6 +6299,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", reason, _logger);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
             summary: reason,
             performerCliType: NormalizeReviewCliType(cliBinary),

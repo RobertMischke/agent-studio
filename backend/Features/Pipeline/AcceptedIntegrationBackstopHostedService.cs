@@ -114,7 +114,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 job.FolderPath,
                 job.WatchPath,
                 TaskIntegrationBranch.Resolve(job, settings.IntegrationBranch),
-                settings.IntegrationStrategy);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(job));
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
                 FinalizeTransactionalAccept(job);

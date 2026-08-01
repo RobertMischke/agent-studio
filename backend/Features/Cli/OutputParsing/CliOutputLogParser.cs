@@ -145,7 +145,12 @@ public static partial class CliOutputLogParser
         return output;
     }
 
-    private static CliOutputLine ParseLine(string line, DateTime fallbackDateUtc)
+    /// <summary>
+    /// Parse one persisted CLI-log row. Internal consumers that must fold a
+    /// complete file can stream lines through this method without materializing
+    /// the bounded UI-oriented <see cref="ParseFile"/> result.
+    /// </summary>
+    internal static CliOutputLine ParseLine(string line, DateTime fallbackDateUtc)
     {
         var match = PersistedLineRegex().Match(line);
         if (!match.Success)

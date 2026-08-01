@@ -176,7 +176,7 @@ public static class RegistryEndpoints
         app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces,
             WorkspaceManagementService workspaceManagement, TaskScannerService scanner, TaskWatcherService watcher,
             AgentStudio.Runner.TaskRunnerService runners, AgentStudio.Projects.ProjectSettingsService projectSettings,
-            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
+            ClientIdentityStore clients, WikiContentCache wikiContentCache, ILoggerFactory loggerFactory) =>
         {
             if (body == null)
                 return Results.BadRequest(new { error = "body required" });
@@ -303,6 +303,7 @@ public static class RegistryEndpoints
             var liveEntry = scanner.GetWatchPaths().First(entry =>
                 string.Equals(entry.Path, created.StorageLocation, StringComparison.OrdinalIgnoreCase));
             watcher.EnsureWatching(liveEntry);
+            wikiContentCache.Preload(liveEntry.Name);
             runners.EnsureRunner(liveEntry);
             loggerFactory.CreateLogger("ProjectCreate").LogInformation(
                 "project-onboarded id={Id} workspaceId={WorkspaceId} storage={Storage} repository={Repository} runner={Runner}",
@@ -314,7 +315,7 @@ public static class RegistryEndpoints
         app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body,
             ProjectRegistry projects, WorkspaceRegistry workspaces,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
-            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
+            ClientIdentityStore clients, WikiContentCache wikiContentCache, ILoggerFactory loggerFactory) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
             var previous = projects.FindById(projId);
@@ -370,6 +371,9 @@ public static class RegistryEndpoints
                 if (body.RepositoryUrl != null || body.ClearRepositoryUrl == true
                     || body.RepositoryPath != null || body.ClearRepositoryPath == true)
                     clients.InvalidateRunnerProjectPreflights(projId);
+                if (body.WikiSourceBranch != null || body.ClearWikiSourceBranch == true
+                    || body.RepositoryPath != null || body.ClearRepositoryPath == true)
+                    wikiContentCache.Invalidate(projId);
                 return Results.Ok(ProjectSummary.From(result));
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
@@ -508,6 +512,35 @@ public static class RegistryEndpoints
             return Results.Ok(await procs.ProbeAsync(record, url, ct));
         });
 
+        // Repository identity for the Preview context header. This reads Git
+        // at the command's effective working directory, which may differ from
+        // the project's top-level checkout.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/context",
+            (string projId, string urlId, ProjectRegistry projects, GitService git,
+                AgentStudio.Projects.ProjectSettingsService settings) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null) return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
+            if (url == null) return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+
+            string? cwd;
+            if (url.StartRule != null)
+            {
+                try { cwd = ProjectUrlProcessService.ResolveWorkingDirectory(record, url.StartRule); }
+                catch (InvalidOperationException) { cwd = url.StartRule.Cwd ?? record.RepositoryPath ?? record.RootPath; }
+            }
+            else
+            {
+                cwd = record.RepositoryPath ?? record.RootPath;
+            }
+
+            return Results.Ok(git.GetPreviewContext(
+                record.DisplayName,
+                cwd,
+                settings.Get(record.DisplayName).IntegrationBranch));
+        });
+
         // Start/restart, inspect, and stop the owned dev-server lifecycle. The
         // bounded snapshot output powers the embed's in-place live console.
         app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
@@ -523,7 +556,7 @@ public static class RegistryEndpoints
                 return Results.BadRequest(new { error = "This URL has no start rule to run." });
             try
             {
-                return Results.Ok(procs.Start(record, url));
+                return Results.Ok(procs.StartWithReadiness(record, url));
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {

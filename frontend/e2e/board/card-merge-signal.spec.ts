@@ -48,6 +48,7 @@ function mergeSignal(inDev: boolean, inMain: boolean): MergeSignal {
 function integrationStatus(inDev: boolean, sha = 'c0ffee1'): IntegrationStatus {
   return {
     status: inDev ? 'integrated' : 'pending',
+    deliveryRef: 'task/e2e-merge-signal',
     sha: inDev ? sha : null,
     integrationBranch: 'develop',
     detail: inDev

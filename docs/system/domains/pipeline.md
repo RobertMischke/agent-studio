@@ -90,9 +90,13 @@ pipeline view.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
-  from origin and fenced to `ResultSha`. The configured integration ref is fetched and fast-forwarded
-  before the merge; a missing local branch is created from origin and a
-  divergent one fails visibly. The outcome is recorded so the pending step
+  from origin and fenced to `ResultSha`. Transactional acceptance first fetches
+  the configured origin integration ref and uses that refreshed remote ancestry
+  for its already-integrated decision, avoiding a redundant gate when the local
+  branch is stale. Immediately before a real merge or release gate, the
+  configured integration ref is fetched again and fast-forwarded; a missing
+  local branch is created from origin and a divergent one fails visibly. The
+  outcome is recorded so the pending step
   flips to passed / failed / skipped in place. After a successful merge it
   also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
@@ -147,6 +151,13 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Shared/Models/PipelineTypes.cs` and
+  `backend/Features/Pipeline/PipelineTypeSettings.cs`: resolve each card to the
+  extensible `task`, `bug`, `feature`, or `planning` settings dimension and
+  project that type's step overrides and order before runtime resolution.
+- `backend/Features/Projects/ProjectSettingsService.cs`: persists typed
+  pipeline overrides and migrates legacy flat settings into all three coding
+  types. Planning deliberately starts from its lightweight defaults.
 - `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
   the lane policy, changed files, project/component ownership, explicit impact
   rules, and Test Hub history. It produces the immutable selection audit used
@@ -162,6 +173,13 @@ pipeline view.
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
   handling.
+- `backend/Features/Pipeline/ProjectStackDetector.cs`: bounded convention-based
+  Angular, .NET, and Node detection from repository markers. Pipeline catalogue
+  applicability never reads the configured build-profile stack label.
+- `backend/Features/Pipeline/PipelineStepExecutionResolver.cs` and
+  `PipelineStepProbeService.cs`: effective shell-command projection and isolated
+  per-step probes. Probes do not create or move tasks and execute through the
+  build/test gate runner so they share its machine lock.
 - `backend/Services/Pipeline/ProjectPipelineCostService.cs` and
   `PipelineCostCalculator.cs`: cost summary projection.
 - `backend/Services/Runner/PostAbortReviewStepService.cs` and
@@ -223,6 +241,12 @@ pipeline view.
 
 ## Invariants
 
+- Pipeline settings are resolved from the card before enablement, ordering,
+  model, prompt, condition, gate, deferred merge, or push decisions. Generic
+  coding work, bugs, and features have independent override maps even though
+  they currently share the standard catalogue defaults. Planning and research
+  use the lightweight planning chain and never inherit migrated coding
+  overrides. Concept retains its dedicated document-first catalogue.
 - The task pipeline endpoint projects local and remote lifecycle facts at read
   time. A remote claim/completion becomes CORE work, a Review Plane grade
   becomes the DECISION verdict, and recorded integration gates remain TOOL
@@ -274,6 +298,13 @@ pipeline view.
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the
   same boundary.
+- Framework-specific catalogue steps declare `appliesTo`; `any` remains the
+  default. The project catalogue response includes derived `detectedStacks`, an
+  `applicable` flag, and the effective resolved command list for every step.
+  Inapplicable steps remain visible in Project Hub -> Pipeline.
+- A project-level step probe is diagnostic only. It may run the step's resolved
+  shell command against the repository, but it never creates a task or changes a
+  lane. Every shell probe is serialized by the build/test machine lock.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model

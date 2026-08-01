@@ -2,15 +2,17 @@
 // + --studio-panel-content-max), and the panel card already provides padding,
 // so the host just needs to be a block. Previously capped at 760px + centered,
 // which made this rail drift from the full-bleed data panels.
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 .proj-detail { display: flex; flex-direction: column; gap: 2px; }
 
+/* Decisions waiting on the operator right now -> warn attention surface. */
 .proj-detail__banner {
+  @include m.deck-panel;
+  @include m.deck-panel-attention(var(--studio-warn));
+
   margin: 0 0 16px;
-  padding: 10px 12px;
-  border: 1px solid rgba(249, 226, 175, 0.40);
-  background: rgba(249, 226, 175, 0.10);
-  border-radius: 6px;
   color: var(--studio-fg);
   font-size: 0.85rem;
 }
@@ -31,7 +33,7 @@
 .proj-detail__banner li { margin: 2px 0; }
 .proj-detail__banner code {
   font-size: 0.78rem;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -41,25 +43,19 @@
  * ADR-0027: live, in-progress decision banner. Distinct from the
  * yellow post-run "review-decisions-pending" banner above on
  * purpose: this one fires while the agent is still running and is
- * actively asking. Red border + softer red fill so it pops next to
- * the rest of the panel without competing with the yellow review
- * surface. Different shape: a rounded card with a textarea-and-send
- * affordance instead of a list of one-liners.
+ * actively asking — the acute case, so the error attention surface.
+ * Deck-Panel v1: flat tint instead of the former gradient + glow.
  */
 .proj-detail__live-banner {
+  @include m.deck-panel;
+  @include m.deck-panel-attention;
+
   margin: 0 0 16px;
-  padding: 14px 16px;
-  border: 1px solid rgba(248, 113, 113, 0.55);
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(248,113,113,0.18) 0%, rgba(248,113,113,0.08) 100%);
-  box-shadow: 0 6px 18px rgba(248,113,113,0.12);
-  color: var(--studio-fg-strong, #f8fafc);
+  color: var(--studio-fg-strong);
   font-size: 0.88rem;
 }
 .proj-detail__live-banner--blocked {
-  border-color: rgba(244, 114, 182, 0.55);
-  background: linear-gradient(180deg, rgba(244,114,182,0.18) 0%, rgba(244,114,182,0.08) 100%);
-  box-shadow: 0 6px 18px rgba(244,114,182,0.12);
+  @include m.deck-panel-attention(var(--severity-pending));
 }
 .proj-detail__live-banner header {
   display: flex;
@@ -78,32 +74,32 @@
   margin-left: auto;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(248,113,113,0.20);
+  background: color-mix(in srgb, var(--severity-high) 20%, transparent);
   color: var(--severity-high);
   font-size: 0.72rem;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 .proj-detail__live-banner--blocked .proj-detail__live-banner__chip {
-  background: rgba(244,114,182,0.20);
+  background: color-mix(in srgb, var(--severity-pending) 20%, transparent);
   color: var(--severity-pending);
 }
 .proj-detail__live-banner__title {
   margin: 0 0 2px;
-  color: var(--studio-fg-strong, #f8fafc);
+  color: var(--studio-fg-strong);
   font-weight: 600;
 }
 .proj-detail__live-banner__reason {
   margin: 0 0 10px;
-  color: rgba(248,250,252,0.85);
+  color: var(--studio-fg-dim);
   font-style: italic;
 }
 .proj-detail__live-banner__reply textarea {
   width: 100%;
   box-sizing: border-box;
   background: var(--studio-bg-overlay);
-  color: var(--studio-fg-strong, #f8fafc);
-  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--studio-fg-strong);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 8px 10px;
   font: inherit;
@@ -113,8 +109,8 @@
 }
 .proj-detail__live-banner__reply textarea:focus {
   outline: none;
-  border-color: rgba(248,113,113,0.65);
-  box-shadow: 0 0 0 2px rgba(248,113,113,0.20);
+  border-color: color-mix(in srgb, var(--severity-high) 65%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--severity-high) 20%, transparent);
 }
 .proj-detail__live-banner__actions {
   display: flex;
@@ -124,9 +120,9 @@
   margin-top: 8px;
 }
 .proj-detail__live-banner__send {
-  background: rgba(248,113,113,0.25);
+  background: color-mix(in srgb, var(--severity-high) 25%, transparent);
   color: var(--studio-fg-strong);
-  border: 1px solid rgba(248,113,113,0.50);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 50%, transparent);
   border-radius: 6px;
   padding: 6px 14px;
   font: inherit;
@@ -134,7 +130,7 @@
   cursor: pointer;
 }
 .proj-detail__live-banner__send:hover:not(:disabled) {
-  background: rgba(248,113,113,0.40);
+  background: color-mix(in srgb, var(--severity-high) 40%, transparent);
 }
 .proj-detail__live-banner__send:disabled {
   opacity: 0.55;
@@ -190,7 +186,7 @@
   color: var(--studio-fg-dim);
   letter-spacing: 0;
   text-transform: none;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--studio-border);
 }
 .proj-detail__group h4 {
   margin: 14px 0 8px;
@@ -209,17 +205,17 @@
 .proj-detail__mode {
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--studio-card-muted-border);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
   font-size: 0.80rem;
   cursor: pointer;
 }
-.proj-detail__mode:hover { color: var(--studio-fg); border-color: rgba(255,255,255,0.28); }
+.proj-detail__mode:hover { color: var(--studio-fg); border-color: var(--studio-card-border-hover); }
 .proj-detail__mode--active {
-  background: #89b4fa;
-  color: #1e1e2e;
-  border-color: #89b4fa;
+  background: var(--severity-info);
+  color: var(--studio-bg-editor);
+  border-color: var(--severity-info);
   font-weight: 600;
 }
 
@@ -228,7 +224,7 @@
 .proj-detail__model-select {
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 0.85rem;
@@ -260,20 +256,23 @@
   min-width: 150px;
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 0.85rem;
 }
 
+/*
+ * Permanent advisory copy about the permission modes — important, but not a
+ * state that is acute right now, so the muted panel rather than attention.
+ */
 .proj-detail__warn {
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
+
   display: flex;
   gap: 8px;
   margin: 0 0 10px;
-  padding: 8px 10px;
-  border: 1px solid rgba(249,226,175,0.40);
-  border-radius: 6px;
-  background: rgba(249,226,175,0.10);
   color: var(--severity-warn);
   font-size: 0.8rem;
   line-height: 1.4;
@@ -305,8 +304,8 @@
   flex: 0 0 auto;
   padding: 1px 7px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--studio-card-muted-border);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-muted);
   font-size: 0.68rem;
   text-transform: uppercase;
@@ -314,7 +313,7 @@
 }
 .proj-detail__cli-source--project {
   border-color: var(--studio-accent-teal);
-  background: rgba(148,226,213,0.16);
+  background: color-mix(in srgb, var(--studio-accent-teal) 16%, transparent);
   color: var(--studio-accent-teal);
 }
 .proj-detail__cli-select {
@@ -322,7 +321,7 @@
   min-width: 150px;
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 0.85rem;
@@ -330,15 +329,15 @@
 .proj-detail__cli-reset {
   flex: 0 0 auto;
   padding: 3px 9px;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
-  background: rgba(255,255,255,0.04);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg);
   font: inherit;
   font-size: 0.76rem;
   cursor: pointer;
 }
-.proj-detail__cli-reset:hover { border-color: rgba(137,180,250,0.48); background: rgba(137,180,250,0.10); }
+.proj-detail__cli-reset:hover { border-color: color-mix(in srgb, var(--severity-info) 48%, transparent); background: color-mix(in srgb, var(--severity-info) 10%, transparent); }
 .proj-detail__cli-reset:disabled { opacity: 0.5; cursor: default; }
 .proj-detail__cli-args {
   flex: 1 1 auto;
@@ -360,7 +359,7 @@
 }
 .proj-detail__toggle code {
   font-size: 0.78rem;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -378,9 +377,9 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
-  background: rgba(255,255,255,0.04);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg);
   font: inherit;
   font-size: 0.83rem;
@@ -388,13 +387,13 @@
   text-align: left;
 }
 .proj-detail__push-option:hover {
-  border-color: rgba(137,180,250,0.48);
-  background: rgba(137,180,250,0.10);
+  border-color: color-mix(in srgb, var(--severity-info) 48%, transparent);
+  background: color-mix(in srgb, var(--severity-info) 10%, transparent);
 }
 .proj-detail__push-option--active {
   border-color: var(--studio-accent-teal);
-  background: rgba(148,226,213,0.16);
-  color: var(--studio-fg-strong, #f8fafc);
+  background: color-mix(in srgb, var(--studio-accent-teal) 16%, transparent);
+  color: var(--studio-fg-strong);
   font-weight: 600;
 }
 .proj-detail__push-option small {
@@ -404,20 +403,20 @@
   font-weight: 600;
 }
 
+/* Queue-health summary strip. Healthy is the quiet default panel; the
+   critical state is acute now and gets the attention surface. */
 .proj-detail__health {
+  @include m.deck-panel;
+
   display: flex;
   align-items: center;
   gap: 10px;
   justify-content: space-between;
-  padding: 9px 11px;
-  border: 1px solid rgba(74,222,128,0.28);
-  border-radius: 6px;
-  background: rgba(74,222,128,0.08);
   color: var(--severity-pass);
 }
 .proj-detail__health--critical {
-  border-color: rgba(248,113,113,0.45);
-  background: rgba(248,113,113,0.10);
+  @include m.deck-panel-attention;
+
   color: var(--severity-high);
 }
 .proj-detail__health span {
@@ -436,7 +435,7 @@
 .proj-detail__compact-list code {
   padding: 1px 4px;
   border-radius: 3px;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-accent-4-strong);
 }
 .proj-detail__repair-row {
@@ -449,16 +448,16 @@
   font-size: 0.78rem;
 }
 .proj-detail__repair {
-  border: 1px solid rgba(248,113,113,0.45);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 45%, transparent);
   border-radius: 6px;
-  background: rgba(248,113,113,0.14);
+  background: color-mix(in srgb, var(--severity-high) 14%, transparent);
   color: var(--severity-high);
   padding: 6px 10px;
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
 }
-.proj-detail__repair:hover:not(:disabled) { background: rgba(248,113,113,0.22); }
+.proj-detail__repair:hover:not(:disabled) { background: color-mix(in srgb, var(--severity-high) 22%, transparent); }
 .proj-detail__repair:disabled { opacity: 0.55; cursor: wait; }
 
 /*
@@ -474,7 +473,7 @@
   padding-left: 12px;
   background: none;
 }
-.proj-detail__entry p { margin: 0 0 6px; color: var(--studio-fg, #e2e8f0); font-size: 0.92rem; line-height: 1.5; }
+.proj-detail__entry p { margin: 0 0 6px; color: var(--studio-fg); font-size: 0.92rem; line-height: 1.5; }
 .proj-detail__entry header {
   display: flex;
   gap: 10px;
@@ -485,7 +484,7 @@
   text-transform: none;
 }
 .proj-detail__entry-kind { font-weight: 600; color: var(--studio-fg-dim); }
-.proj-detail__entry-topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.72rem; }
+.proj-detail__entry-topic { padding: 1px 6px; border-radius: 3px; background: var(--studio-card-muted-bg); font-family: var(--font-mono, monospace); font-size: 0.72rem; }
 .proj-detail__entry-ts { margin-left: auto; font-variant-numeric: tabular-nums; }
 
 .proj-detail__session dd code { font-size: 0.78rem; color: var(--studio-accent-4-strong); }
@@ -502,7 +501,7 @@
   max-height: 240px;
   overflow: auto;
   background: var(--studio-bg-overlay);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 0.78rem;
@@ -523,9 +522,9 @@
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border: 1px solid rgba(255,255,255,0.10);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
-  background: rgba(255,255,255,0.03);
+  background: var(--studio-card-muted-bg);
 }
 .proj-detail__pl-row--disabled {
   opacity: 0.55;
@@ -546,9 +545,9 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 5px;
-  background: rgba(255,255,255,0.04);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg);
   font: inherit;
   font-size: 0.74rem;
@@ -556,8 +555,8 @@
   cursor: pointer;
 }
 .proj-detail__pl-order-btn:hover:not(:disabled) {
-  border-color: rgba(137,180,250,0.48);
-  background: rgba(137,180,250,0.10);
+  border-color: color-mix(in srgb, var(--severity-info) 48%, transparent);
+  background: color-mix(in srgb, var(--severity-info) 10%, transparent);
 }
 .proj-detail__pl-order-btn:disabled {
   opacity: 0.35;
@@ -570,7 +569,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--studio-fg-muted);
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-card-muted-bg);
   border-radius: 4px;
   padding: 1px 6px;
 }
@@ -591,7 +590,7 @@
   flex: 0 0 auto;
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
   padding: 3px 6px;
   font-size: 0.78rem;

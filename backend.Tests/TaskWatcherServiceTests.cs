@@ -115,6 +115,31 @@ public sealed class TaskWatcherServiceTests : IDisposable
         Assert.Equal(1, Volatile.Read(ref fired));
     }
 
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task DocsFileSystemWatcher_DispatchesDebouncedProjectEvent()
+    {
+        var docsDir = Path.Combine(_watchPath, "docs");
+        Directory.CreateDirectory(docsDir);
+        var dispatched = new TaskCompletionSource<(string Project, string Path)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _watcher.OnWikiChanged += (project, path) => dispatched.TrySetResult((project, path));
+
+        Assert.True(_watcher.EnsureWatching(new WatchPathEntry
+        {
+            Name = "watcher-test",
+            Path = _watchPath,
+            RootPath = _watchPath,
+        }));
+
+        var page = Path.Combine(docsDir, "changed.md");
+        File.WriteAllText(page, "# Changed\n");
+
+        var observed = await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal("watcher-test", observed.Project);
+        Assert.Equal(page, observed.Path);
+    }
+
     [Fact]
     public async Task Dispose_CancelsPendingDispatch()
     {

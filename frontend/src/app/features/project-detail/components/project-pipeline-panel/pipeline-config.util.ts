@@ -4,8 +4,33 @@
  * the component controller stays under its size budget. Nothing here
  * touches Angular — it operates on the catalogue + order arrays directly.
  */
-import type { PipelineCatalogueStep } from '../../../task-pipeline';
+import type { PipelineCatalogueStep, PipelineStepSetting, PipelineType } from '../../../task-pipeline';
 import { buildTokenCostTooltip } from '../../../tokens';
+
+/** Pipeline type selector, ordered per the settings convention. */
+export const PIPELINE_TYPES: readonly { id: PipelineType; label: string; hint: string }[] = [
+  { id: 'task', label: 'Task', hint: 'Default chain for chores and technical work.' },
+  { id: 'bug', label: 'Bug', hint: 'Chain used by cards classified as bugs.' },
+  { id: 'feature', label: 'Feature', hint: 'Chain used by feature cards.' },
+  { id: 'planning', label: 'Planning', hint: 'Lightweight read-only chain used by planning and research cards.' },
+];
+
+export function pipelineTypeOverrides(
+  settings: {
+    pipelineSteps?: Record<string, PipelineStepSetting>;
+    pipelineStepOrder?: string[];
+    pipelineStepsByType?: Record<string, Record<string, PipelineStepSetting>>;
+    pipelineStepOrderByType?: Record<string, string[]>;
+  } | undefined,
+  type: PipelineType,
+): { steps: Record<string, PipelineStepSetting>; order: string[] } {
+  const legacySteps = type === 'task' ? settings?.pipelineSteps : undefined;
+  const legacyOrder = type === 'task' ? settings?.pipelineStepOrder : undefined;
+  return {
+    steps: settings?.pipelineStepsByType?.[type] ?? legacySteps ?? {},
+    order: settings?.pipelineStepOrderByType?.[type] ?? legacyOrder ?? [],
+  };
+}
 
 /** Gate-mode choices for steps that expose a warn/fail gate (lint, decision). */
 export const PIPELINE_GATE_MODES: readonly { id: string; label: string }[] = [
@@ -42,6 +67,9 @@ export interface PipelineAdminRow {
   id: string;
   displayName: string;
   kind: string;
+  appliesTo: 'angular' | 'dotnet' | 'node' | 'any';
+  applicable: boolean;
+  effectiveExecution: NonNullable<PipelineCatalogueStep['effectiveExecution']>;
   runMode: string;
   dependsOn: string[];
   idempotent: boolean;
@@ -53,6 +81,7 @@ export interface PipelineAdminRow {
   supportsMode: boolean;
   canDisable: boolean;
   supportsCondition: boolean;
+  framework?: string;
   phase: string;
   enabled: boolean;
   economyModel: boolean;

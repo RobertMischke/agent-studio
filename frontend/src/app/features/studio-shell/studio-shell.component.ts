@@ -11,6 +11,7 @@ import {
   output,
   signal,
   untracked,
+  viewChildren,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, RegistryProjectSummary, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
@@ -60,6 +61,7 @@ import { ExplorerSectionsService } from './services/explorer-sections.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
 import { GlobalSearchComponent } from './components/global-search/global-search.component';
+import { OrchestratorFeedStore } from '../orchestrator';
 
 /** Canonicalise project storage paths so titlebar workspace lookup survives
  * slash style, trailing separator, and case differences. */
@@ -141,12 +143,36 @@ export class StudioShellComponent {
   private readonly projectLookup = inject(ProjectLookupService);
   private readonly themeService = inject(ThemeService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly orchestratorFeed = inject(OrchestratorFeedStore);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
   readonly activeKey = this.tabState.activeKey;
   readonly activeTab = this.tabState.activeTab;
   readonly tabKey = studioTabKey;
+  private readonly tabElements = viewChildren<ElementRef<HTMLElement>>('studioTab');
+
+  /** Keep every newly activated editor tab inside the horizontally scrolling
+   *  strip without moving the page or disturbing an already visible tab. */
+  private readonly keepActiveTabVisibleFx = effect(() => {
+    const activeKey = this.activeKey();
+    const tabs = this.tabs();
+    if (!activeKey || !tabs.some(tab => studioTabKey(tab) === activeKey)) return;
+
+    const activeElement = this.tabElements()
+      .find(ref => ref.nativeElement.dataset['tabKey'] === activeKey)
+      ?.nativeElement;
+    if (!activeElement || typeof activeElement.scrollIntoView !== 'function') return;
+
+    const listRect = activeElement.parentElement?.getBoundingClientRect();
+    const activeRect = activeElement.getBoundingClientRect();
+    if (!listRect || (activeRect.left >= listRect.left && activeRect.right <= listRect.right)) return;
+    activeElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  });
 
   /**
    * AGT-2135 — keep the active tab visible in the horizontally-scrolling
@@ -616,10 +642,22 @@ export class StudioShellComponent {
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
     filters: this.filterBadgeCount()
       ?? this.boardFilters.activeFilterCount(),
+    activity: this.orchestratorFeed.freshAlertCount(),
   }));
+
+  private readonly feedSeenFx = effect(() => {
+    this.orchestratorFeed.freshAlertCount();
+    if (this.activeTab()?.kind !== 'feed') return;
+    untracked(() => this.orchestratorFeed.markAlertsSeen());
+  });
 
   openBoard(projectName: string): void {
     this.tabState.open({ kind: 'board', projectName });
+  }
+
+  openFeed(): void {
+    this.orchestratorFeed.markAlertsSeen();
+    this.tabState.open({ kind: 'feed' });
   }
 
   /**
@@ -968,6 +1006,10 @@ export class StudioShellComponent {
       this.toggleWorkspaceSettingsTab();
       return;
     }
+    if (panel === 'activity') {
+      this.openFeed();
+      return;
+    }
     this.panelState.toggle(panel);
   }
 
@@ -1075,6 +1117,8 @@ export class StudioShellComponent {
     switch (tab.kind) {
       case 'board':
         return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
+      case 'feed':
+        return 'Activity across projects';
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {

@@ -112,7 +112,6 @@
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
                [cacTooltip]="rowTitle(p)"
-               (contextmenu)="onProjectContextMenu($event, p)"
                (cdkDragStarted)="onDragStart(p)"
                (cdkDragEnded)="onDragEnd()">
             @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
@@ -142,7 +141,8 @@
                             [testid]="'studio-explorer-project-' + p.name"
                             (chevronClick)="toggleExpanded.emit(p.name)"
                             (selectRequest)="toggleExpanded.emit(p.name)"
-                            (secondary)="openBoardRequest.emit(p.name)">
+                            (secondary)="openBoardRequest.emit(p.name)"
+                            (contextmenu)="onProjectContextMenu($event, p)">
                 @let autoPickup = autoPickupFor(p.name);
                 <app-explorer-auto-pickup-indicator
                   [state]="autoPickup.state"

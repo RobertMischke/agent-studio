@@ -1,19 +1,18 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
   display: block;
 }
 
 .radar {
-  border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: var(--studio-bg-elevated, rgba(255, 255, 255, 0.03));
+  @include m.deck-panel;
 
   &--loading,
   &--empty {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.45));
+    color: var(--studio-fg-muted);
     font-size: 0.82rem;
   }
 
@@ -21,7 +20,7 @@
     display: inline-block;
     width: 14px;
     height: 14px;
-    border: 2px solid var(--studio-fg-muted, rgba(255, 255, 255, 0.2));
+    border: 2px solid var(--studio-fg-muted);
     border-top-color: var(--studio-accent-3);
     border-radius: 50%;
     animation: radar-spin 0.8s linear infinite;
@@ -49,7 +48,7 @@
   &__title {
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+    color: var(--studio-fg-strong);
     margin: 0;
     letter-spacing: 0.01em;
   }
@@ -90,7 +89,7 @@
     align-items: center;
     gap: 5px;
     font-size: 0.78rem;
-    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.6));
+    color: var(--studio-fg-dim);
   }
 
   &__dot {
@@ -111,7 +110,7 @@
     flex-wrap: wrap;
     margin-bottom: 8px;
     font-size: 0.72rem;
-    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+    color: var(--studio-fg-muted);
   }
 
   &__meta-item {
@@ -123,8 +122,8 @@
     font-family: var(--font-mono, ui-monospace, monospace);
     padding: 1px 6px;
     border-radius: 4px;
-    background: var(--studio-bg-hover, rgba(255, 255, 255, 0.05));
-    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.55));
+    background: var(--studio-card-muted-bg);
+    color: var(--studio-fg-dim);
     cursor: default;
   }
 
@@ -138,7 +137,7 @@
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.6));
+    color: var(--studio-fg-dim);
     cursor: pointer;
     font: inherit;
     font-size: 0.76rem;
@@ -146,8 +145,8 @@
     text-align: left;
 
     &:hover {
-      background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
-      color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-strong);
     }
   }
 
@@ -183,14 +182,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+    color: var(--studio-fg-strong);
     font-size: 0.78rem;
     font-weight: 600;
   }
 
   &__task-meta {
     flex-shrink: 0;
-    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+    color: var(--studio-fg-muted);
     font-size: 0.7rem;
   }
 
@@ -214,7 +213,7 @@
     text-align: left;
 
     &:hover {
-      background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+      background: var(--studio-bg-hover);
     }
   }
 
@@ -231,7 +230,7 @@
 
   &__entry-file {
     font-weight: 500;
-    color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+    color: var(--studio-fg-strong);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -239,7 +238,7 @@
   }
 
   &__entry-status {
-    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+    color: var(--studio-fg-muted);
     font-size: 0.72rem;
     flex-shrink: 0;
   }
@@ -283,8 +282,8 @@
       display: block;
       width: 5px;
       height: 5px;
-      border-right: 1.5px solid var(--studio-fg-muted, rgba(255, 255, 255, 0.35));
-      border-bottom: 1.5px solid var(--studio-fg-muted, rgba(255, 255, 255, 0.35));
+      border-right: 1.5px solid var(--studio-fg-muted);
+      border-bottom: 1.5px solid var(--studio-fg-muted);
       transform: rotate(-45deg);
     }
 
@@ -296,7 +295,7 @@
   &__entry-detail {
     padding: 6px 8px 8px 20px;
     font-size: 0.74rem;
-    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.6));
+    color: var(--studio-fg-dim);
   }
 
   &__detail-row {
@@ -305,7 +304,7 @@
     padding: 2px 0;
 
     &:not(:last-child) {
-      border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.04));
+      border-bottom: 1px solid var(--studio-card-muted-border);
     }
   }
 
@@ -313,7 +312,7 @@
     flex-shrink: 0;
     width: 70px;
     font-weight: 500;
-    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+    color: var(--studio-fg-muted);
   }
 
   &__detail-value {
@@ -332,7 +331,7 @@
 .radar-inline-note {
   display: flex;
   align-items: center;
-  color: var(--studio-fg-muted, rgba(255, 255, 255, 0.45));
+  color: var(--studio-fg-muted);
   font-size: 0.82rem;
   line-height: 1.4;
   padding-block: var(--studio-spacing-1);

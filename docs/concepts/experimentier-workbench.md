@@ -15,8 +15,9 @@ lifecycleHistory:
 
 Status: concept and mockup complete, 2026-07-11. The first read-only production
 slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
-viewer, Pulse thinking inbox, and the curated legacy pilot. Chat attachment and
-decision mutations remain future slices.
+viewer, Pulse thinking inbox, and the curated legacy pilot. The card-scoped
+Sichtblick panel and repository-backed decision mutation landed on 2026-07-26.
+Chat attachment remains a future slice.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -323,6 +324,22 @@ Confirmation creates the card through `TaskMutationService.CreateJob`, the same
 bounded entry point used by the Project Hub proposal flow and the AGT-2028 task
 spawner. It does not invoke the post-task-spawner pipeline step, because this is
 an explicit operator action rather than post-run relevance automation.
+
+The trusted Workbench host now owns this action through
+`WorkbenchDecisionPanelComponent` and `WorkbenchDecisionStore`. The panel first
+*prepares*: the backend validates the draft against the exact Workbench
+revision/fingerprint and writes nothing. A separate visible confirmation is the
+single durable write, and it lands in the Workbench's own `workbench.json`
+(schema v2: `lifecycleState` + a `lifecycleHistory` entry carrying the decision
+text; schema v1: `status` + `updatedAt`) together with a `decision` receipt.
+Visibility hangs on that descriptor, never on a `.meta.json` sidecar - which is
+why generic Wiki classification cannot archive a canonical Workbench.
+
+The delivered slice deliberately stops short of creating the card: the decision
+service records the direction and hands the validated draft back, and task
+creation stays on the existing task API owned by the client. A settled feature
+receipt therefore carries the spawned task keys only once the client reports
+them.
 
 WB-4 should implement a narrow **decision draft -> validated task mutation ->
 receipt** service over the existing mutation boundary instead of copying the
