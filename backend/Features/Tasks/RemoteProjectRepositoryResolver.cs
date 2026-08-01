@@ -6,8 +6,10 @@ namespace AgentStudio.Tasks;
 /// <summary>
 /// Resolves the git origin and default branch a remote runner needs from the
 /// durable project registry. A URL entry named <c>repo</c> is mandatory and
-/// authoritative. The registered local checkout may supply only branch metadata;
-/// its origin is never a remote-runner fallback.
+/// authoritative. The configured project integration branch is the authoritative
+/// working branch; the registered local checkout's <c>origin/HEAD</c> is only a
+/// fallback when no branch is configured. Its origin is never a remote-runner
+/// fallback.
 /// </summary>
 public static class RemoteProjectRepositoryResolver
 {

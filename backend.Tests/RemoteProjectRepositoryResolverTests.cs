@@ -47,6 +47,8 @@ public sealed class RemoteProjectRepositoryResolverTests : IDisposable
                 "https://github.com/agent-orc/quality-studio.git"),
             result.RepositoryId);
         Assert.Equal("https://github.com/agent-orc/quality-studio.git", result.RepositoryUrl);
+        // origin/HEAD of the registered checkout says main, but the configured
+        // integration branch is authoritative for where cards are cut from.
         Assert.Equal("develop", result.DefaultBranch);
         Assert.Equal("registry-url", result.Source);
     }
