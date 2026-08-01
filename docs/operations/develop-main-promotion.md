@@ -50,10 +50,13 @@ blocked run, while the durable evidence directory remains.
    ```
 
 4. Review `manifest-summary.tsv`, `manifest-commits.tsv`,
-   `main-only-patch-review.txt`, the candidate commit, and any conflict list in
-   the reported evidence directory. This file-level manifest is the manual
-   bridge until the in-product REL-1 surface adds live task acceptance groups.
-   It does not claim that integration equals acceptance.
+   `main-only-patch-review.txt`, `candidate-whitespace-review.txt`, the
+   candidate commit, and any conflict list in the reported evidence directory.
+   Historical committed whitespace is review evidence rather than a release
+   veto; the mandatory build and test gate remains blocking. This file-level
+   manifest is the manual bridge until the in-product REL-1 surface adds live
+   task acceptance groups. It does not claim that integration equals
+   acceptance.
 5. Run the promotion with a deliberate release marker:
 
    ```sh
