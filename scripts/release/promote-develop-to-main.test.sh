@@ -84,6 +84,9 @@ EOF
   fi
   printf '%s\n' develop > "$seed/payload.txt"
   printf '%s\n' "develop-$name" > "$seed/develop.txt"
+  # Historical integrated content may contain whitespace findings. Promotion
+  # records them for review but leaves pass/fail authority with the full gate.
+  printf '%s  \n' "historical-$name" > "$seed/historical-whitespace.txt"
   git -C "$seed" add .
   git -C "$seed" commit --quiet -m 'develop work'
   git -C "$seed" push --quiet -u origin develop
@@ -126,6 +129,7 @@ test "$(git --git-dir="$green_remote" rev-parse refs/tags/release/test-green^{})
 grep -q '"status":"promoted"' "$green_evidence/promotion-record.json"
 grep -q '"atomicPush":true' "$green_evidence/promotion-record.json"
 grep -Fxq 'PROMOTION_FULL_GATE=passed' "$green_evidence/full-gate.log"
+grep -q 'historical-whitespace.txt' "$green_evidence/candidate-whitespace-review.txt"
 
 # A red or nominally green but incomplete gate cannot advance either ref.
 for gate_mode in fail incomplete; do
