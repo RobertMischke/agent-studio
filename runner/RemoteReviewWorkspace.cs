@@ -14,7 +14,7 @@ namespace AgentRunner;
 /// </summary>
 public sealed class RemoteReviewWorkspace
 {
-    private const int TestFailureParserVersion = 2;
+    private const int TestFailureParserVersion = 3;
     private readonly RunnerOptions _options;
     private readonly ReviewSubjectDto _subject;
     private readonly ReviewLeaseDto _lease;
@@ -768,7 +768,7 @@ public sealed class RemoteReviewWorkspace
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex TestFileFailure = new(
-        @"^\s*FAIL\s+(?<name>.+?)\s*$",
+        @"^\s*FAIL\s+(?<name>.+?)(?:\s+\(\d+(?:\.\d+)?\s*(?:ms|s)\))?\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex JestFailure = new(

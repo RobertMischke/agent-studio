@@ -1,7 +1,7 @@
 > storefront@1.0.0 test
 > jest --runInBand
 
-FAIL src/cart/cart.service.spec.ts
+FAIL src/cart/cart.service.spec.ts (5.123 s)
   CartService
     ✕ calculates the total (12 ms)
 

@@ -117,10 +117,11 @@ pipeline view.
   verification. Test commands marked `CompareToBaseline` compare their parsed
   failing-test set with the merge-base on the plan's integration ref. The
   parser recognizes .NET, Jest, Karma, Vitest, native Node test, and npm
-  lifecycle output, normalizes ANSI-decorated names, and versions its cache
-  entries when parsing semantics change. Baseline results are single-flight
-  cached by repository, baseline SHA, and command hash. Only failures still new
-  after one subject retry block the review.
+  lifecycle output, normalizes ANSI-decorated names and volatile Jest file
+  durations, and versions its cache entries when parsing semantics change.
+  Baseline results are single-flight cached by repository, baseline SHA, and
+  command hash. Only failures still new after one subject retry block the
+  review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel
