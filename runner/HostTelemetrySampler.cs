@@ -14,6 +14,15 @@ public sealed class HostTelemetrySampler
     {
         var now = DateTime.UtcNow;
         if (now < _nextAt) return null;
+        return SampleNow(activeSlots, now);
+    }
+
+    /// <summary>Capture a fresh sample for a host-local admission decision.</summary>
+    public HostTelemetrySample SampleNow(int activeSlots)
+        => SampleNow(activeSlots, DateTime.UtcNow);
+
+    private HostTelemetrySample SampleNow(int activeSlots, DateTime now)
+    {
         _nextAt = now.AddSeconds(30);
         return OperatingSystem.IsLinux() ? SampleLinux(now, activeSlots) : SampleWindows(now, activeSlots);
     }

@@ -276,6 +276,15 @@ state.
   restart takeover changes both the durable fence and the containment namespace.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
+- Review slot admission is host-load aware and immediate. Before each claim the
+  Review Executor captures a fresh one-minute load sample and admits at most one
+  new slot per poll only when `Load1 < CpuCores * ClaimMaxLoadPerCore`. Missing
+  load or core evidence closes admission. The configured slot ceiling remains a
+  hard upper bound, and an admission decision never cancels an active review.
+  Immutable ReviewPlans normalize every direct or shell-wrapped `dotnet test`
+  command to `-maxcpucount:2 -p:ParallelizeTestCollections=false` before storage
+  or claim. Subject, baseline, retry, and fenced command evidence therefore use
+  the same bounded command.
 - Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
   daemon-local slot reduction. Coding and review services publish versioned,
   expiring health for provider authentication, Git fetch/push, repository

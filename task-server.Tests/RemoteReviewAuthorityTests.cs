@@ -16,6 +16,29 @@ public sealed class RemoteReviewAuthorityTests
     private const string RepositoryUrl = "https://example.invalid/product.git";
 
     [Fact]
+    public async Task Stored_review_subject_limits_dotnet_test_cpu_before_it_becomes_immutable()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [new ReviewCommandDto(
+                "verify-2",
+                "build-tests",
+                "sh",
+                ["-lc", "dotnet test"],
+                CompareToBaseline: true)],
+            ["build-tests"],
+            IntegrationRef: "refs/heads/develop");
+
+        var subject = await SeedReviewSubjectAsync(store, plan: plan);
+
+        Assert.Equal(
+            "dotnet test -maxcpucount:2 -p:ParallelizeTestCollections=false",
+            Assert.Single(subject.Plan.Commands).Arguments[1]);
+    }
+
+    [Fact]
     public async Task Fenced_review_claim_report_cleanup_reaches_human_review_and_is_idempotent()
     {
         using var temp = new TempDirectory();

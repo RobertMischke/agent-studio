@@ -263,6 +263,8 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
 | `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts. |
 | `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
+| `RUNNER_CLAIM_MAX_LOAD_PER_CORE` | `--claim-max-load-per-core` | `1.5` | Load-per-core ceiling for new work. Coding uses the sustained gate below; Review checks it immediately before each single-slot claim. |
+| `RUNNER_LOAD_GATE_SUSTAINED_SECONDS` | none | `120` | Continuous high-load duration before Coding claim admission closes. Review admission does not use this delay. |
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
@@ -857,8 +859,13 @@ count for the selected time window instead of appearing as individual badges.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.
 
-Claim admission uses the same one-minute load sample. New claims stop only
-after load divided by logical CPU cores remains above
+Coding claim admission uses the same one-minute load sample. New Coding claims
+stop after load divided by logical CPU cores remains above
 `RUNNER_CLAIM_MAX_LOAD_PER_CORE` (default `1.5`) for
-`RUNNER_LOAD_GATE_SUSTAINED_SECONDS` (default `120`). Existing runs continue,
-and one recovery event is reported per sustained high-load interval.
+`RUNNER_LOAD_GATE_SUSTAINED_SECONDS` (default `120`). Review admission checks a
+fresh sample immediately before every claim and admits at most one new slot per
+poll only while `Load1 < CpuCores * RUNNER_CLAIM_MAX_LOAD_PER_CORE`. Missing
+Linux load evidence closes Review admission. Existing Coding and Review runs
+continue. Every immutable ReviewPlan also limits `dotnet test` to two MSBuild
+nodes and disables xUnit test-collection parallelism, including baseline and
+retry executions.
