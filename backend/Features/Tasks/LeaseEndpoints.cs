@@ -1071,6 +1071,9 @@ public static class LeaseEndpoints
                             deliveryRange.IntegrationBranch!);
                         mutations.SetRemoteCommitAttributionOnFolder(
                             task.FolderPath,
+                            attemptId,
+                            req.RunnerId,
+                            resultSha,
                             remoteAttribution.Commits);
                     }
                 }

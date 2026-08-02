@@ -282,29 +282,109 @@ public class TaskMutationService
         IReadOnlyList<TaskCommitInfo> attributed)
     {
         if (!Directory.Exists(folderPath)) return false;
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null) return false;
+        var producerBySha = persisted
+            .Where(commit => !string.IsNullOrWhiteSpace(commit.Sha))
+            .GroupBy(commit => commit.Sha, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var ordered = attributed
             .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
+            .Select(commit =>
+            {
+                if (!producerBySha.TryGetValue(commit.Sha, out var producer)) return commit;
+                return commit with
+                {
+                    Branch = commit.Branch ?? producer.Branch,
+                    RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
+                    RunnerId = commit.RunnerId ?? producer.RunnerId,
+                    ResultSha = commit.ResultSha ?? producer.ResultSha,
+                };
+            })
             .OrderBy(c => c.At)
             .ToList();
         return WriteCommitState(folderPath, ordered);
     }
 
     /// <summary>
-    /// Replaces commit attribution from a verified remote delivery range.
-    /// Unlike the ordinary attribution path, an empty value is authoritative:
-    /// the foreign-task guard deliberately clears previously misattributed
-    /// commits rather than preserving unsafe evidence.
+    /// Replaces one generation's attribution from its verified remote delivery
+    /// range, then projects <c>commits[]</c> as the SHA-deduplicated union of
+    /// every generation. Commits already owned by an earlier generation keep
+    /// that producer identity when a continuation delivery inherits them.
+    /// An empty value removes only the named generation, so a foreign-commit
+    /// rejection cannot erase valid attribution from earlier attempts.
+    /// The legacy replacement switch is reserved for the one-time reviewed-card
+    /// backfill, whose unscoped entries all came from the generation it repairs.
     /// </summary>
     public bool SetRemoteCommitAttributionOnFolder(
         string folderPath,
-        IReadOnlyList<TaskCommitInfo> attributed)
+        string runAttemptId,
+        string runnerId,
+        string resultSha,
+        IReadOnlyList<TaskCommitInfo> attributed,
+        bool replaceUnscopedLegacyAttribution = false)
     {
         if (!Directory.Exists(folderPath)) return false;
-        var ordered = attributed
+        if (string.IsNullOrWhiteSpace(runAttemptId)
+            || string.IsNullOrWhiteSpace(runnerId)
+            || string.IsNullOrWhiteSpace(resultSha))
+        {
+            return false;
+        }
+
+        var generation = attributed
             .Where(commit => !string.IsNullOrWhiteSpace(commit.Sha))
-            .OrderBy(commit => commit.At)
+            .Select(commit => commit with
+            {
+                RunAttemptId = runAttemptId,
+                RunnerId = runnerId,
+                ResultSha = resultSha,
+            })
             .ToList();
-        return WriteCommitState(folderPath, ordered, allowEmptyReplacement: true);
+
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null) return false;
+
+        var union = new List<TaskCommitInfo>();
+        foreach (var commit in persisted)
+        {
+            if (replaceUnscopedLegacyAttribution
+                && string.IsNullOrWhiteSpace(commit.RunAttemptId))
+            {
+                continue;
+            }
+            if (string.Equals(
+                    commit.RunAttemptId,
+                    runAttemptId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (union.Any(existing => string.Equals(
+                    existing.Sha,
+                    commit.Sha,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            union.Add(commit);
+        }
+        foreach (var commit in generation)
+        {
+            // A later delivery range can contain work inherited from an
+            // earlier attempt. Preserve the first producer instead of
+            // re-attributing that SHA to the continuation runner.
+            if (union.Any(existing => string.Equals(
+                    existing.Sha,
+                    commit.Sha,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            union.Add(commit);
+        }
+
+        return WriteCommitState(folderPath, union, allowEmptyReplacement: true);
     }
 
     public bool SetRunIntegrationBranchOnFolder(string folderPath, string integrationBranch)
@@ -572,6 +652,50 @@ public class TaskMutationService
         TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
             string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
         return Updated();
+    }
+
+    private static List<TaskCommitInfo>? ReadPersistedCommitChain(string folderPath)
+    {
+        try
+        {
+            var taskJsonPath = Path.Combine(folderPath, "task.json");
+            if (!File.Exists(taskJsonPath)) return [];
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                File.ReadAllText(taskJsonPath), TaskJsonFile.ReadOpts);
+            if (doc == null) return [];
+
+            var chain = new List<TaskCommitInfo>();
+            if (doc.TryGetValue("commits", out var commitsEl)
+                && commitsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in commitsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(
+                        item.GetRawText(), TaskJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha))
+                        chain.Add(parsed);
+                }
+                return chain;
+            }
+
+            if (doc.TryGetValue("commit", out var legacyEl)
+                && legacyEl.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(
+                    legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
+                if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha))
+                    chain.Add(parsed);
+            }
+            return chain;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(
+                ex,
+                "TaskMutationService: best-effort persisted commit chain for generation union.");
+            return null;
+        }
     }
 
     /// <summary>

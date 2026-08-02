@@ -26,6 +26,19 @@ public record TaskCommitInfo
     /// folder slug. Null on legacy and local commits that pre-date this field.
     /// </summary>
     public string? Branch { get; init; }
+    /// <summary>
+    /// Fenced run attempt that first produced this commit. Remote attribution
+    /// stamps this together with <see cref="RunnerId"/> and
+    /// <see cref="ResultSha"/> so a later generation can reuse the commit
+    /// without claiming that it produced it. Null on legacy and local entries.
+    /// </summary>
+    public string? RunAttemptId { get; init; }
+    /// <summary>Runner that owned <see cref="RunAttemptId"/>.</summary>
+    public string? RunnerId { get; init; }
+    /// <summary>
+    /// Verified result tip whose delivery range proved this commit reachable.
+    /// </summary>
+    public string? ResultSha { get; init; }
     public int FilesChanged { get; init; }
     public List<string> Files { get; init; } = [];
     public DateTime At { get; init; }
