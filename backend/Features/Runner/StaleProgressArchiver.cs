@@ -622,10 +622,6 @@ public sealed class StaleProgressArchiver
     {
         var jobId = TryReadJobId(jobFolder) ?? slug;
 
-        // Co-locate a human-readable trace in the job folder before the move so
-        // the requeue is never silent (it travels with the folder).
-        WriteRequeueDiagnostic(jobFolder, lastActivity, now);
-
         try
         {
             var outcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
@@ -642,9 +638,29 @@ public sealed class StaleProgressArchiver
                 };
             }
 
+            var moved = _scanner.FindJob(jobId, entry.Path);
+            if (string.Equals(moved?.State, TaskStates.AutoReview, StringComparison.Ordinal))
+            {
+                return new StaleProgressDecision
+                {
+                    At = now,
+                    Kind = StaleProgressDecisionKinds.RecoveredToReview,
+                    ProjectName = entry.Name,
+                    Slug = slug,
+                    JobId = jobId,
+                    TargetState = TaskStates.AutoReview,
+                    Reason = "attempt authority reported a completed immutable result; recovered the existing delivery to auto-review instead of requeueing"
+                };
+            }
+
+            // Only describe a requeue after the shared transition guard confirms
+            // that the card actually landed in Ready. A settled-envelope recovery
+            // goes to Auto Review and must never leave a contradictory log line.
+            WriteRequeueDiagnostic(moved?.FolderPath ?? outcome.NewFolderPath ?? jobFolder, lastActivity, now);
+
             // The single compact [recovery] line was written by
-            // WriteRequeueDiagnostic before the move and travels with the folder
-            // to 2-ready; the long-form rationale lives in orphan-recoveries.jsonl
+            // WriteRequeueDiagnostic after the move in the Ready folder; the
+            // long-form rationale lives in orphan-recoveries.jsonl
             // (AppendOrphanRecoveryEntry). No second chat note here.
             return new StaleProgressDecision
             {

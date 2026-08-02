@@ -22,7 +22,7 @@ bearing reference for the per-project `LaneMutexRegistry` (F21).
 
 | Writer | Trigger | What it moves | Entry point |
 |--------|---------|----------------|-------------|
-| `JobTransitionService.MoveAsync` | API `POST /api/tasks/{id}/move`, runner completion, drag-and-drop in UI | Single job from any lane to any lane; combines move with auto-commit + reorder. | `backend/Services/Jobs/JobTransitionService.cs` |
+| `TaskTransitionService.MoveAsync` | API `POST /api/tasks/{id}/move`, runner completion, drag-and-drop in UI, stale sweep, and liveness/crash detectors | Single task from any lane to any lane; combines move with auto-commit and reorder. Every `3-progress` to `2-ready` request first queries attempt authority. A current Completed RunAttempt with a valid immutable ResultEnvelope is recovered forward to `4-auto-review`, never requeued. | `backend/Features/Tasks/TaskTransitionService.cs` |
 | `JobTransitionService.BatchMoveAsync` | API `POST /api/tasks/batch-move` | Many jobs in one call (per-item atomic). Each item routes through `MoveAsync`. | same file |
 | `JobStateMachine.MoveJob` / `MoveFolderToState` / `DeleteJob` / `ChangeProject` | Called by every higher-level mover. The lowest-level lane mutator. | Direct `Directory.Move` / `Directory.Delete`. | `backend/Services/Jobs/JobStateMachine.cs` |
 | `CrashRecoveryService.RecoverAsync` | Boot (before first runner tick) | Finishes a transition whose `completion-marker.json` survived a backend crash. Calls `JobTransitionService.MoveAsync`. | `backend/Services/Runner/CrashRecoveryService.cs` |

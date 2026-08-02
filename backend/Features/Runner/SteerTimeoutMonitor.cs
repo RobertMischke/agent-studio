@@ -288,7 +288,13 @@ public sealed class SteerTimeoutMonitor
                 target: null, secondsWaiting, timeoutSeconds,
                 reason: "could not save the auto-answer pending intent (job not found)", now);
 
-        var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+        var moveOutcome = await _transitions.MoveAsync(
+            jobId,
+            TaskStates.Ready,
+            entry.Path,
+            ct,
+            cause: "steer-timeout-detector",
+            suppressProductExecution: true);
         if (moveOutcome.Status != MoveJobStatus.Success)
         {
             // Keep the marker + phase on a failed move. The next sweep retries,
@@ -299,7 +305,33 @@ public sealed class SteerTimeoutMonitor
                 reason: $"auto-answer saved but demote to {TaskStates.Ready} refused: {moveOutcome.Status} {moveOutcome.Message}", now);
         }
 
-        var movedFolder = moveOutcome.NewFolderPath ?? c.JobFolder;
+        var moved = _scanner.FindJob(jobId, entry.Path);
+        var movedFolder = moved?.FolderPath ?? moveOutcome.NewFolderPath ?? c.JobFolder;
+        if (string.Equals(moved?.State, TaskStates.AutoReview, StringComparison.Ordinal))
+        {
+            // The answer was staged before the atomic lane move so a genuine
+            // Ready transition cannot race pickup. BP-09 recovery proves there
+            // will be no continuation, so consume that staging file without
+            // disturbing the post-processing phase established by the move.
+            _mutations.DiscardPendingIntent(movedFolder);
+            SteerPendingMarker.Clear(movedFolder, _logger);
+            _logger.LogWarning(
+                "SteerTimeoutMonitor: recovered settled run {JobId} -> 4-auto-review; discarded the staged auto-answer and queued no replacement run.",
+                jobId);
+            return Outcome(
+                SteerTimeoutOutcomeKinds.SettledRunRecovered,
+                entry,
+                c,
+                decision,
+                jobId,
+                target: TaskStates.AutoReview,
+                secondsWaiting,
+                timeoutSeconds,
+                reason: "attempt authority reported a completed immutable result; recovered the existing delivery to auto-review instead of requeueing",
+                now,
+                reasonCode: "settled-run-authority");
+        }
+
         SteerPendingMarker.Clear(movedFolder, _logger);
         _mutations.SetJobPhase(movedFolder, null); // steer-pending phase is illegal in 2-ready
 
@@ -428,12 +460,13 @@ public sealed class SteerTimeoutMonitor
 
     private static SteerTimeoutOutcome Outcome(
         string kind, WatchPathEntry entry, Candidate c, SteerTimeoutDecision decision,
-        string jobId, string? target, double secondsWaiting, double timeoutSeconds, string reason, DateTime at)
+        string jobId, string? target, double secondsWaiting, double timeoutSeconds, string reason, DateTime at,
+        string? reasonCode = null)
         => new()
         {
             At = at,
             Kind = kind,
-            ReasonCode = decision.ReasonCode,
+            ReasonCode = reasonCode ?? decision.ReasonCode,
             ProjectName = entry.Name,
             Slug = c.Slug,
             JobId = jobId,
@@ -488,6 +521,8 @@ public static class SteerTimeoutOutcomeKinds
     public const string AutoAnswered = "auto-answered";
     /// <summary>The auto-answer save or resume move refused/threw.</summary>
     public const string AutoAnswerFailed = "auto-answer-failed";
+    /// <summary>Attempt authority found a completed immutable result, so no auto-answer continuation was queued.</summary>
+    public const string SettledRunRecovered = "settled-run-recovered";
     /// <summary>Timed out; no confident answer, escalated to 5e-escalated.</summary>
     public const string Blocked = "blocked";
     /// <summary>The escalation move refused or threw.</summary>

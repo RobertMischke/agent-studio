@@ -1098,6 +1098,29 @@ public class TaskMutationService
     }
 
     /// <summary>
+    /// Drops both forms of a pending intent when authority proves that no
+    /// continuation run may be queued. Unlike normal successful consumption,
+    /// this also removes the canonical, not-yet-stashed file.
+    /// </summary>
+    public bool DiscardPendingIntent(string jobFolder)
+    {
+        try
+        {
+            var canonical = Path.Combine(jobFolder, "pending-intent.json");
+            var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
+            if (File.Exists(canonical)) File.Delete(canonical);
+            if (File.Exists(stash)) File.Delete(stash);
+            _scanner.InvalidateCache();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to discard pending intent at {Folder}", jobFolder);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Roll back a failed pending-intent consumption: move the stash back to
     /// <c>pending-intent.json</c> so the next pickup tries again. If the
     /// canonical file already exists (rare race), the stash is dropped to

@@ -655,16 +655,37 @@ public sealed class CrashRecoveryService
 
             var jobId = Path.GetFileName(jobFolder);
 
-            // Leave a human-readable trace in the job folder so the requeue is
-            // never silent. This is the diagnostic the 2026-05-30 incident was
-            // missing entirely (empty logs/, no cli-output.log).
-            WriteInterruptedRunDiagnostic(jobFolder, existing);
-
             try
             {
                 var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
+                    var moved = _scanner.FindJob(jobId, entry.Path);
+                    if (string.Equals(moved?.State, TaskStates.AutoReview, StringComparison.Ordinal))
+                    {
+                        var recoveredDecision = new RecoveryDecision
+                        {
+                            At = DateTime.UtcNow,
+                            Kind = RecoveryDecisionKinds.SettledRunRecovered,
+                            ProjectName = entry.Name,
+                            JobId = jobId,
+                            TargetState = TaskStates.AutoReview,
+                            Reason = "attempt authority reported a completed immutable result; recovered the existing delivery to auto-review instead of requeueing"
+                        };
+                        decisions.Add(recoveredDecision);
+                        AppendRecoveryEntry(recoveredDecision);
+                        _logger.LogWarning(
+                            "CrashRecoveryService: recovered settled run {JobId} -> 4-auto-review (project {Project}); no replacement run was queued",
+                            jobId,
+                            entry.Name);
+                        continue;
+                    }
+
+                    // Leave a human-readable trace only after the shared BP-09
+                    // guard confirms that the card actually landed in Ready.
+                    WriteInterruptedRunDiagnostic(
+                        moved?.FolderPath ?? moveOutcome.NewFolderPath ?? jobFolder,
+                        existing);
                     var decision = new RecoveryDecision
                     {
                         At = DateTime.UtcNow,
@@ -969,6 +990,8 @@ public static class RecoveryDecisionKinds
     public const string OrphanSkipped = "orphan-skipped";
     /// <summary>An interrupted mid-flight run was requeued from 3-progress back to 2-ready.</summary>
     public const string RunInterruptedRequeued = "run-interrupted-requeued";
+    /// <summary>A settled immutable result was recovered forward instead of being requeued.</summary>
+    public const string SettledRunRecovered = "settled-run-recovered";
     /// <summary>An interrupted run was detected but the requeue move failed.</summary>
     public const string RunInterruptedRequeueFailed = "run-interrupted-requeue-failed";
     /// <summary>A stale .pickup-lock.json (owner pid dead on this host) was removed at boot.</summary>

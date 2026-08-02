@@ -103,6 +103,62 @@ public sealed class RunLivenessMonitorTests : IDisposable
     }
 
     [Fact]
+    public async Task BootAdoption_SettledEnvelope_RecoversToReview_AndPreservesCompletedSession()
+    {
+        const string slug = "settled-execution";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "sess-completed", chain: ["sess-completed"]);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "completion reached authority before the lane move");
+        WriteDeadPickupLock(folder);
+
+        var (monitor, _) = Build(configureAuthority: (authority, scanner) =>
+            SettleCompletedRun(authority, ResolveTaskKey(scanner, slug)));
+        var outcome = Assert.Single(await monitor.AdoptOnBootAsync());
+
+        Assert.Equal(RunLivenessOutcomeKinds.SettledRunRecovered, outcome.Kind);
+        Assert.Equal("settled-run-authority", outcome.ReasonCode);
+        Assert.Equal(TaskStates.AutoReview, outcome.TargetState);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        var recovered = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Assert.True(Directory.Exists(recovered));
+        var (sessionName, chain) = ReadSession(Path.Combine(recovered, "task.json"));
+        Assert.Equal("sess-completed", sessionName);
+        Assert.DoesNotContain("(recovery)", chain);
+        Assert.DoesNotContain("requeued to 2-ready", File.ReadAllText(Path.Combine(recovered, "logs", "cli-output.log")));
+    }
+
+    [Fact]
+    public async Task BootAdoption_CorruptSettledEnvelope_FailsClosed_WithoutRequeue()
+    {
+        const string slug = "corrupt-settled-execution";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "sess-completed", chain: ["sess-completed"]);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "completion reached authority before the lane move");
+        WriteDeadPickupLock(folder);
+
+        var (monitor, _) = Build(configureAuthority: (authority, scanner) =>
+        {
+            var taskKey = ResolveTaskKey(scanner, slug);
+            SettleCompletedRun(authority, taskKey);
+            var digest = authority.GetTaskProjection(taskKey).CurrentRunAttempt!.ResultEnvelopeDigest!;
+            var authorityPath = Path.Combine(_workspaceRoot, AttemptAuthorityService.RelativePath);
+            var json = File.ReadAllText(authorityPath);
+            var corrupted = json.Replace(digest, new string('d', digest.Length), StringComparison.Ordinal);
+            Assert.NotEqual(json, corrupted);
+            File.WriteAllText(authorityPath, corrupted);
+        });
+        var outcome = Assert.Single(await monitor.AdoptOnBootAsync());
+
+        Assert.Equal(RunLivenessOutcomeKinds.DemoteFailed, outcome.Kind);
+        Assert.True(Directory.Exists(folder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        var (sessionName, chain) = ReadSession(Path.Combine(folder, "task.json"));
+        Assert.Equal("sess-completed", sessionName);
+        Assert.DoesNotContain("(recovery)", chain);
+    }
+
+    [Fact]
     public async Task BootAdoption_FinishedRun_RetriggersPostProcessing_NotDemoted()
     {
         // AGT-1932: the agent run finished (and was merged) and only
@@ -363,7 +419,8 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
     private (RunLivenessMonitor Monitor, TaskScannerService Scanner) Build(
         bool enabled = true,
-        RunLeaseService? leases = null)
+        RunLeaseService? leases = null,
+        Action<AttemptAuthorityService, TaskScannerService>? configureAuthority = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -382,7 +439,20 @@ public sealed class RunLivenessMonitorTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
+        var authority = new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance);
+        if (configureAuthority is not null)
+        {
+            configureAuthority(authority, scanner);
+            authority = new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance);
+        }
+        var transitions = new TaskTransitionService(
+            scanner,
+            states,
+            mutations,
+            git,
+            settings,
+            NullLogger<TaskTransitionService>.Instance,
+            attemptAuthority: authority);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var pickupLock = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
@@ -399,6 +469,49 @@ public sealed class RunLivenessMonitorTests : IDisposable
             NullLogger<RunLivenessMonitor>.Instance,
             leases: leases);
         return (monitor, scanner);
+    }
+
+    private static void SettleCompletedRun(AttemptAuthorityService authority, string taskKey)
+    {
+        const string resultSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var acquired = authority.AcquireRun(
+            taskKey,
+            "demo-repository",
+            sourceAttemptId: null,
+            executorId: "runner-a",
+            hostId: "host-a",
+            requestedTtlSeconds: 120,
+            idempotencyKey: $"claim:{taskKey}").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "demo-repository",
+            acquired.AttemptId,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            resultSha,
+            $"refs/agent-studio/results/{taskKey}/{acquired.AttemptId}",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        var settled = authority.SettleRun(
+            new AttemptWriteReference(
+                acquired.AttemptId,
+                acquired.LastFence,
+                acquired.AuthorityEpoch,
+                $"completion:{taskKey}"),
+            "done",
+            resultSha,
+            reason: null,
+            resultEnvelope: envelope,
+            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+    }
+
+    private string ResolveTaskKey(TaskScannerService scanner, string slug)
+    {
+        var task = Assert.IsType<TaskInfo>(scanner.FindJob(slug, _watchPath));
+        return !string.IsNullOrWhiteSpace(task.Key)
+            ? task.Key
+            : !string.IsNullOrWhiteSpace(task.TaskKey)
+                ? task.TaskKey
+                : task.Id;
     }
 
     private void WriteJobWithSession(string state, string slug, string? sessionName, string[] chain)
