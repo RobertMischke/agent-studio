@@ -212,7 +212,7 @@ Echt parallelisierbar: T0a ∥ T0b · T1 ∥ T1c · T3-Vorarbeit ∥ alles. **Ni
 
 ## 4. Hot-Production-Strategie
 
-**Warum es überhaupt geht.** `deploy/systemd/agent-host.service` fährt `KillMode=process`: SIGTERM trifft nur die Daemon-PID, detached Worker laufen weiter, der Ersatz-Daemon verifiziert und reattacht sie vor der ersten neuen Claim (`RemoteRunnerDaemon.cs:92-121`, `RecoverLaunchingIdentityAsync:417-443`, Runbook `linux-runner-host.md:575-610`). Ein Runner-Deploy mitten in einer Welle ist damit ein etablierter, dokumentierter Vorgang — **kein** Sonderfall dieser Migration.
+**Warum es überhaupt geht.** `deploy/systemd/agent-host.service` fährt `KillMode=process`: SIGTERM trifft nur die Daemon-PID, detached Worker laufen weiter, der Ersatz-Daemon verifiziert und reattacht sie vor der ersten neuen Claim (`RemoteRunnerDaemon.cs:92-121`, `RecoverLaunchingIdentityAsync:417-443`, Runbook `linux-runner-host.md:575-610`). Ein Runner-Deploy mitten in einer Welle ist damit ein etablierter, dokumentierter Vorgang. Zusätzlich liegt jede Runner-Fassung in einem unveränderlichen Release-Verzeichnis; nur der `current`-Symlink wird atomar gewechselt.
 
 **Kanarienvogel statt Big Bang (remote).** Kein neuer Sonderpfad: der CAR-fähige Runner meldet eine zusätzliche Capability (`RunnerCapabilityProbe.Advertise`, `runner/RunnerCapabilityProbe.cs:8-60`), und die Kanarien-Karten fordern sie an (`RequiredCapabilities` im Claim-Match, `contracts/…/RunnerContracts.cs:37-38`). Kohorten: **1 Karte → 1 Welle (5 Karten) → Default**. Zwischen den Stufen: Grade, Gate-Status, Token-Ledger und `runActivity` vergleichen.
 
@@ -222,12 +222,12 @@ Echt parallelisierbar: T0a ∥ T0b · T1 ∥ T1c · T3-Vorarbeit ∥ alles. **Ni
 1. CAR 0.7.0 nach nuget.org (`scripts/release.sh`, Tag `v0.7.0`, Trusted Publishing).
 2. Backend zuerst mit **additivem** RunSpec-Feld (alte Runner bleiben lauffähig).
 3. Build-Manifest regenerieren (`scripts/release/generate-build-manifest.mjs`); `BuildIdentity.Validate` erzwingt die CAR-Artefaktzeile — ein vergessener Bump fällt hier auf, nicht im Betrieb.
-4. Runner publizieren, vorherige Fassung als `/opt/agent-host.prev` sichern, `systemctl restart agent-host`, Journal prüfen.
+4. Runner in ein neues `/opt/agent-host/releases/<release-id>` publizieren, bisherigen `current`-Zielpfad notieren, `current` atomar wechseln, `systemctl restart agent-host`, Journal prüfen. Niemals Dateien des laufenden Release-Verzeichnisses überschreiben.
 5. Kanarien-Karte queuen.
 
 **Umschaltmoment sauber halten:** vor dem Restart die Host-Kapazität kurz auf 0 setzen (RunnerCapacity, AGT-2376) — laufende Runs sind durch `KillMode=process` geschützt, neue Claims fallen nicht in den Wechsel.
 
-**Rollback, vier Stufen:** (1) Flag zurück + Restart (~30 s, laufende Runs überleben). (2) Karte neu queuen. (3) CAR-Pin zurück auf `[0.6.0]` + Backend-Redeploy. (4) Binär-Rollback aus `/opt/agent-host.prev`. Das RunSpec-Feld ist additiv und braucht **kein** Rollback.
+**Rollback, vier Stufen:** (1) Flag zurück + Restart (~30 s, laufende Runs überleben). (2) Karte neu queuen. (3) CAR-Pin zurück auf `[0.6.0]` + Backend-Redeploy. (4) `current` atomar auf das notierte vorherige Release-Verzeichnis zurücksetzen und den Daemon neu starten. Das RunSpec-Feld ist additiv und braucht **kein** Rollback.
 
 **Beobachtbarkeit:** die Zeile `[runner] spawning {CliBin} {CliArgs}` (`RemoteTaskRunner.cs:515`) wird ersetzt durch `engine=car cli=… model=… thinking=… permission=… context=…` — der Beweis im Log, welcher Pfad gelaufen ist, und der Filter für die Betriebsnachweis-Auswertung in T3.
 

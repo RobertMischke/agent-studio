@@ -358,7 +358,13 @@ state.
   attempt instance, never the replacement daemon's process identity.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
-  `KillMode=process`.
+  `KillMode=process`. Daemon binaries and their managed assemblies live in an
+  immutable, version-specific release directory selected through the atomic
+  `/opt/agent-host/current` symlink. Deployment must never publish over that
+  selected directory: the CLR can read file-backed metadata lazily, and an
+  in-place multi-file update can corrupt the still-running daemon before its
+  planned SIGTERM. Old release directories remain available while any daemon
+  or detached worker can reference them.
 - A failed lease renewal consumes the last server-issued authority window. The
   default requested window is 15 minutes, with a durable stop-before boundary
   one renewal interval before expiry. The standalone Runner persists that

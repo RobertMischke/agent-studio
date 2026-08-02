@@ -1449,6 +1449,30 @@
             metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2475</code><br><span class="small">live runner publish corrupted CLR metadata</span></td>
+          <td>
+            At 16:13:10 UTC the still-running daemon failed first with
+            <code>CultureNotFoundException</code> under invariant globalization, then with
+            <code>COMException 0x80131130</code> while formatting a stack trace whose symbol names contained control
+            bytes. systemd restarted it after ten seconds. The first actual CAR worker started later, at 16:14:32 UTC,
+            and its separate slot exited with code 1.
+          </td>
+          <td>
+            The multi-file publish replaced <code>CodingAgentRunner.dll</code>, <code>agent-host.dll</code>, and the
+            runtime configuration in the live installation between 16:12:58 and 16:13:01 UTC, but the old daemon was
+            not asked to restart until 16:13:22 UTC. Its CLR subsequently read inconsistent file-backed metadata. CAR
+            0.7.0 contains no named-culture construction in this path, and the production CAR startup passes with
+            invariant globalization; the culture error was a secondary metadata-corruption symptom.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Runner tools now install into immutable version directories and
+            atomically switch <code>current</code>; units execute through that release boundary and old releases remain
+            available to detached workers. Regression coverage rejects global in-place tool updates and executes the
+            real CAR startup path in invariant mode while explicitly guarding <code>CultureNotFoundException</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

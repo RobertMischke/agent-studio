@@ -215,16 +215,26 @@ copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 
 ```bash
 git clone <origin> agent-taskboard && cd agent-taskboard
-sudo dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host
+release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
+staging_root="$(mktemp -d)"
+release_root="/opt/agent-host/releases/$release_id"
+dotnet publish runner/AgentRunner.csproj -c Release -o "$staging_root"
+sudo install -d -m 0755 "$release_root"
+sudo cp -a "$staging_root/." "$release_root/"
+sudo ln -sfnT "$release_root" /opt/agent-host/current
 if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
   sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
 fi
 sudo ln -sfnT /opt/agent-host /opt/agent-runner
 ```
 
-The output binary is `/opt/agent-host/agent-host`. `/opt/agent-runner` is a
-transition symlink for existing automation; new deployments and units use only
-`/opt/agent-host`.
+The selected output binary is `/opt/agent-host/current/agent-host`.
+`/opt/agent-runner` is a transition symlink for existing automation; new
+deployments and units use only `/opt/agent-host`. Every publish must create a
+new release directory. Never publish into the active `current` target or over
+the files of a running daemon. The CLR can load metadata and method bodies
+lazily, so replacing only part of a live multi-file application can corrupt the
+running process even before systemd receives the planned restart.
 
 ## 3. Configure
 
@@ -496,7 +506,7 @@ Start the foreground daemon with no task argument or with `--poll`:
 export RUNNER_SERVER_URL=http://<studio-host>:5030
 export RUNNER_NAME=agent-runner-01
 export RUNNER_MAX_PARALLELISM=2
-/opt/agent-host/agent-host --poll
+/opt/agent-host/current/agent-host --poll
 ```
 
 The daemon registers once, polls `POST /api/runner/claim`, and fills free host
@@ -611,13 +621,16 @@ recovery. Installing or changing the unit requires root, followed by
 
 ### Planned daemon restart and deploy
 
-A planned Runner deploy no longer waits for host idle. Replace the published
-files and restart the main service process:
+A planned Runner deploy no longer waits for host idle. Publish the complete
+application into a new immutable release directory as described in section 2,
+atomically switch `/opt/agent-host/current`, and only then restart the main
+service process. Record the previous `readlink -f /opt/agent-host/current`
+target before switching so rollback can select that complete release.
 
 ```bash
 sudo systemctl restart agent-host
 sudo journalctl -u agent-host --since '-2 minutes' \
-  | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+  | rg 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
 ```
 
 On SIGTERM the old daemon stops making claims, leaves detached job workers
@@ -626,7 +639,10 @@ replacement, which verifies and reattaches those workers before opening any
 freed slot to claims. Confirm every previously occupied slot reports either
 `persisted attempt accepted` or `releasing dead persisted attempt`. The latter
 must be followed by a Ready card and a later higher-fence claim. Do not change
-the unit back to `KillMode=control-group`.
+the unit back to `KillMode=control-group`. Retain every release referenced by a
+daemon or detached worker; garbage collection is a separate, process-aware
+operation. Rollback switches `current` to the recorded previous release and
+restarts the daemon. It never copies old files over the active release.
 
 This procedure covers a planned daemon binary restart, not a machine reboot,
 power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
@@ -643,7 +659,7 @@ contracts.
    export RUNNER_SERVER_URL=http://<studio-host>:5030
    export RUNNER_GIT_REMOTE=<origin>
    export RUNNER_BRANCH=task/<the-task-branch>     # optional; falls back to base
-   /opt/agent-host/agent-host <TASK-KEY>
+   /opt/agent-host/current/agent-host <TASK-KEY>
    ```
 
 The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
