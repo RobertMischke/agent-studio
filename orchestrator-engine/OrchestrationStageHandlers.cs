@@ -25,10 +25,15 @@ public sealed class ReviewDecisionOrchestratorLoop : IOrchestrationStageHandler
     {
         ct.ThrowIfCancellationRequested();
         using var payload = JsonDocument.Parse(run.PayloadJson);
-        var outcome = ReadString(payload.RootElement, "agentOutcome")
+        var reviewOutcome = ReadString(payload.RootElement, "reviewOutcome");
+        var outcome = reviewOutcome
+                      ?? ReadString(payload.RootElement, "agentOutcome")
                       ?? ReadString(payload.RootElement, "terminal");
         var action = Normalize(outcome) switch
         {
+            "productfailure" => OrchestrationAction.Reissue,
+            "reviewinfra" => OrchestrationAction.Escalate,
+            "pass" => OrchestrationAction.Continue,
             "blocked" => OrchestrationAction.Escalate,
             "needsinput" => OrchestrationAction.Reissue,
             _ => OrchestrationAction.Continue,
@@ -38,6 +43,7 @@ public sealed class ReviewDecisionOrchestratorLoop : IOrchestrationStageHandler
             JsonSerializer.Serialize(new
             {
                 component = nameof(ReviewDecisionOrchestratorLoop),
+                source = reviewOutcome is null ? "execution-terminal" : "remote-review",
                 observedOutcome = outcome,
                 decision = action.ToString(),
             })));
@@ -77,6 +83,21 @@ public sealed class CouncilLoop : IOrchestrationStageHandler
                     blockerCount++;
             }
         }
+        if (payload.RootElement.TryGetProperty("verdicts", out var verdicts)
+            && verdicts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var verdict in verdicts.EnumerateArray())
+            {
+                if (!verdict.TryGetProperty("status", out var status)
+                    || status.ValueKind != JsonValueKind.String
+                    || status.GetString() is not { } value
+                    || value == "pass")
+                    continue;
+                findingCount++;
+                if (value is "concerns" or "block" or "fail")
+                    blockerCount++;
+            }
+        }
         var action = blockerCount > 0
             ? OrchestrationAction.Reissue
             : OrchestrationAction.Continue;
@@ -106,7 +127,7 @@ public sealed class PostProcessingLoop : IOrchestrationStageHandler
             JsonSerializer.Serialize(new
             {
                 component = nameof(PostProcessingLoop),
-                status = "dispatched-through-task-server-api",
+                status = "decision-chain-running-remotely",
             })));
     }
 }

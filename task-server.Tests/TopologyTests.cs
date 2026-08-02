@@ -165,6 +165,98 @@ public sealed class TopologyTests
         Assert.Contains(replayAfterFirstRun.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task Detached_studio_remote_engine_settles_pass_and_reissue_lanes()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = ProtocolTests.RepositoryRoot();
+        using var data = new TempDirectory();
+        var serverUrl = $"http://127.0.0.1:{FreePort()}";
+        var studioUrl = $"http://127.0.0.1:{FreePort()}";
+        using var server = StartBuilt(
+            root,
+            "task-server",
+            "task-server.dll",
+            "--urls", serverUrl,
+            "--TaskServer:DataDirectory", data.Path);
+        await WaitForHttpAsync(serverUrl + "/readyz", server);
+
+        using var studio = StartStudio(root, studioUrl, serverUrl);
+        await WaitForHttpAsync(studioUrl + "/healthz", studio);
+        using var studioClient = Client(studioUrl);
+        var workspace = await PostAsync<CreateWorkspaceRequest, WorkspaceDto>(
+            studioClient,
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest("Detached decision"));
+        var project = await PostAsync<CreateProjectRequest, ProjectDto>(
+            studioClient,
+            "/api/v1/projects",
+            new CreateProjectRequest(workspace.WorkspaceId, "Detached decision", "DET"));
+        var passing = await PostAsync<CreateTaskRequest, TaskDto>(
+            studioClient,
+            $"/api/v1/projects/{project.ProjectId}/tasks",
+            new CreateTaskRequest("Pass without Studio", State: "4-auto-review"));
+        var reissue = await PostAsync<CreateTaskRequest, TaskDto>(
+            studioClient,
+            $"/api/v1/projects/{project.ProjectId}/tasks",
+            new CreateTaskRequest("Reissue without Studio", State: "4-auto-review"));
+
+        studio.Stop();
+        Assert.True(studio.Process.HasExited);
+        using var serverClient = ProtocolClient(serverUrl);
+        await PostAsync<CreateOrchestrationRunRequest, OrchestrationRunDto>(
+            serverClient,
+            $"/api/v1/orchestration/projects/{project.ProjectId}/runs",
+            new CreateOrchestrationRunRequest(
+                passing.TaskId,
+                """{"reviewOutcome":"Pass"}""",
+                "detached-pass"));
+        await PostAsync<CreateOrchestrationRunRequest, OrchestrationRunDto>(
+            serverClient,
+            $"/api/v1/orchestration/projects/{project.ProjectId}/runs",
+            new CreateOrchestrationRunRequest(
+                reissue.TaskId,
+                """{"reviewOutcome":"ProductFailure"}""",
+                "detached-reissue"));
+
+        using var engine = StartBuilt(
+            root,
+            "orchestrator-engine",
+            "orchestrator-engine.dll",
+            new Dictionary<string, string?>
+            {
+                ["SERVER_URL"] = serverUrl,
+                ["CLIENT_ID"] = "detached-engine",
+                ["POLL_SECONDS"] = "1",
+                ["LEASE_SECONDS"] = "30",
+                ["REVIEW_CONCURRENCY"] = "1",
+                ["COUNCIL_CONCURRENCY"] = "1",
+                ["POST_PROCESSING_CONCURRENCY"] = "1",
+                ["GATE_DISPATCH_CONCURRENCY"] = "1",
+                ["COMPLETION_JUDGE_CONCURRENCY"] = "1",
+            });
+        await WaitForTaskStateAsync(
+            serverClient,
+            project.ProjectId,
+            passing.TaskKey,
+            "5-human-review",
+            engine,
+            TimeSpan.FromSeconds(20));
+        await WaitForTaskStateAsync(
+            serverClient,
+            project.ProjectId,
+            reissue.TaskKey,
+            "2-ready",
+            engine,
+            TimeSpan.FromSeconds(20));
+
+        AssertHealthy(server, server.Process.Id);
+        AssertHealthy(engine, engine.Process.Id);
+        Assert.Contains("orchestration stage settled", engine.ToString());
+    }
+
     [Fact(Timeout = 90000)]
     public async Task Server_outage_and_runner_restart_fail_closed_until_no_overlap_is_proven()
     {

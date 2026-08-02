@@ -1437,6 +1437,15 @@ Engine env file would make operational policy deployment state. Moving run
 state into the Engine would recreate the restart orphaning and split-brain
 failures that the Task Server boundary exists to remove.
 
+**Post-processing placement clarification (2026-08-02).** A fenced Remote
+Review report remains evidence until workspace cleanup succeeds. Cleanup and
+creation of its idempotent orchestration run share one Task Server transaction.
+The API-only Engine evaluates the normalized verdict and gates, while the Task
+Server alone applies the bounded cross-attempt reissue, escalation, or Human
+Review lane transition. Agent Studio is not required for this chain. Human
+acceptance and integration remain a separate deferred command; an automatic
+post-processing verdict cannot bypass that authority boundary.
+
 **Non-goals.**
 
 - No TaskScanner, task-folder, SQLite, repository, or direct Task Server store
@@ -1472,5 +1481,5 @@ Restart, boundary, stage, env, version, and handshake tests:
 [`task-server.Tests/ProtocolTests.cs`](../../../../task-server.Tests/ProtocolTests.cs).
 
 **Status.** Accepted. The API-only binary, durable run authority, restart
-reclaim, protocol handshake, version surface, env contract, and migration
-switch ship together.
+reclaim, protocol handshake, version surface, env contract, migration switch,
+and detached-Studio decision settlement ship together.

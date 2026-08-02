@@ -19,11 +19,35 @@ public sealed class StageHandlerTests
         Assert.Equal(expected, decision.Action);
     }
 
+    [Theory]
+    [InlineData("Pass", OrchestrationAction.Continue)]
+    [InlineData("ProductFailure", OrchestrationAction.Reissue)]
+    [InlineData("ReviewInfra", OrchestrationAction.Escalate)]
+    public async Task Review_decision_loop_maps_normalized_remote_review_verdicts(
+        string outcome,
+        OrchestrationAction expected)
+    {
+        var decision = await new ReviewDecisionOrchestratorLoop().ExecuteAsync(
+            Run($$"""{"reviewOutcome":"{{outcome}}"}"""),
+            default);
+
+        Assert.Equal(expected, decision.Action);
+    }
+
     [Fact]
     public async Task Council_reissues_named_critical_findings()
     {
         var decision = await new CouncilLoop().ExecuteAsync(
             Run("""{"reviewFindings":[{"severity":"critical","summary":"unsafe"}]}"""),
+            default);
+        Assert.Equal(OrchestrationAction.Reissue, decision.Action);
+    }
+
+    [Fact]
+    public async Task Council_reissues_normalized_remote_review_concerns()
+    {
+        var decision = await new CouncilLoop().ExecuteAsync(
+            Run("""{"verdicts":[{"aspect":"requirements","status":"concerns"}]}"""),
             default);
         Assert.Equal(OrchestrationAction.Reissue, decision.Action);
     }

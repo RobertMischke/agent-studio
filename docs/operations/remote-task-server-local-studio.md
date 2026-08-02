@@ -1,8 +1,9 @@
 # Remote Task Server with local Agent Studio
 
-Status: Phase A concept, proposed for Robert's approval, 2026-07-28. This
-document makes no infrastructure change. Every deployment action belongs to a
-separate Phase B task after approval.
+Status: Phase A architecture delivered; Phase B deployment remains subject to
+Robert's approval. Updated 2026-08-02 with the remote post-processing decision
+boundary. This document makes no infrastructure change. Every deployment
+action belongs to a separate Phase B task after approval.
 
 ## Purpose and scope
 
@@ -40,6 +41,43 @@ transport, fenced Runner authority, and no direct remote filesystem writer.
 
 These decisions are a package. Co-hosting the control plane with the Runner or
 using one shared bearer token would invalidate the threat model below.
+
+## Post-processing decision placement
+
+Closing Agent Studio must not suspend a card in Post Processing. The durable
+decision chain therefore belongs to the remote control plane introduced by
+AGT-2404, not to the local Studio connector or the legacy desktop backend.
+
+| Responsibility | Target owner | Decision |
+|---|---|---|
+| Review verdict validation and normalization | Task Server | Accept only a fenced report for the immutable review subject. Infrastructure failures retry the same review subject. A valid product verdict remains in `4-auto-review` until review workspace cleanup is confirmed. |
+| Reissue or escalation decision | Orchestrator Engine plus Task Server | The API-only Engine evaluates the normalized payload. The Task Server applies the shared reissue budget and owns the authoritative result. A product finding returns the card to `2-ready`; an exhausted budget moves it to `5e-escalated`. |
+| Lane transition and lifecycle evidence | Task Server | The Task Server writes the lane, resource version, audit row, and lifecycle event in the same fenced settlement transaction. Agent Studio only renders the resulting state. |
+| Reporting-only post-steps | Orchestrator Engine, or an admitted Runner when repository or tool access is required | Deterministic control-plane steps run in the Engine. Tool and repository work runs from a server-issued plan on a capable Runner and returns typed evidence. Neither path depends on a Studio process. |
+| Integration acceptance | Operator through the Task Server | Human Review remains the approval boundary. Closing Studio may delay a new operator command, but cannot lose or partially apply one already accepted by the Task Server. |
+| Merge, release gate, and push | Git-capable Runner | The Task Server records the integration command and its fence. A Runner performs repository work and reports the immutable result. The Task Server alone commits the final lane transition. |
+
+The first implementation slice covers the unambiguous control-plane cases.
+Every project has a default server-owned flow definition. Successful cleanup
+of a non-infrastructure Remote Review report idempotently creates an
+orchestration run. The external Engine evaluates that durable payload, and its
+fenced settlement either reissues, escalates, or hands the card to
+`5-human-review`. Reissue counts survive Engine and Studio restarts and are
+shared across coding attempts for the same task.
+
+Automatic integration is deliberately outside this slice. The existing
+contract requires an explicit Human Review decision and a transactional merge
+result before `6-completed`. Moving that authority into an automatic
+post-processing verdict would bypass the user's final say. Phase B must instead
+add a Task Server integration-command resource and a Git-capable Runner
+executor, preserving the current `integrating` recovery state, immutable result
+ref, merge gate, push, and failure evidence.
+
+The operational acceptance proof is one complete decision wave with Angular,
+the Studio connector, and the legacy backend stopped: Remote Review cleanup
+queues the flow, Engine settlement moves a passing task to Human Review, a
+finding reissues to Ready, and restarting the Engine between claim and
+settlement recovers through lease expiry without a duplicate lane mutation.
 
 ## Why a dedicated VM
 

@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -324,6 +324,16 @@ cannot erase an operator decision.
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
+- A standalone Remote Review report never performs the final lane move. A
+  review infrastructure outcome schedules another attempt on the same subject.
+  A non-infrastructure report remains in `4-auto-review` through successful
+  workspace cleanup, which atomically creates an idempotent Task Server
+  orchestration run. Fenced Engine settlement then moves the task to
+  `2-ready`, `5-human-review`, or `5e-escalated`. Reissue budget is counted
+  across decision runs for the task, not reset by an Engine or Studio restart.
+- Integration is still an explicit operator decision after Human Review. The
+  remote control plane may durably accept and schedule that command, but Post
+  Processing does not infer acceptance or move directly to `6-completed`.
 - Moving a task from `6-completed` to `7-archive` in task detail requires a
   second confirmation while `integration.status` is anything other than
   `integrated`. This is an operator warning, not a server-side hard block.

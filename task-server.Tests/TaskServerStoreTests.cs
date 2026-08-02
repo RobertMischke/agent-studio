@@ -81,6 +81,51 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Version_seven_seeds_default_flow_and_adds_task_version_fence()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var workspace = await first.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Migration"), "test", default);
+        var project = await first.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Migration", "MIG"),
+            "test",
+            default);
+
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={first.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM flow_definitions;
+                ALTER TABLE orchestration_runs DROP COLUMN task_version;
+                DELETE FROM schema_migrations WHERE version = 7;
+                UPDATE meta SET value = '6' WHERE key = 'schema_version';
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var upgraded = Store(temp.Path);
+        await upgraded.InitializeAsync();
+
+        var definition = await upgraded.GetFlowDefinitionAsync(project.ProjectId, default);
+        Assert.NotNull(definition);
+        Assert.Equal(0, definition.Version);
+        Assert.Equal(OrchestrationDefaults.CreateStages(), definition.Stages);
+        await using var upgradedConnection = new SqliteConnection(
+            $"Data Source={upgraded.DatabasePath};Pooling=False");
+        await upgradedConnection.OpenAsync();
+        await using var column = upgradedConnection.CreateCommand();
+        column.CommandText = """
+            SELECT count(*) FROM pragma_table_info('orchestration_runs')
+             WHERE name = 'task_version';
+            """;
+        Assert.Equal(1L, (long)(await column.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
     public async Task Backup_initialization_does_not_quarantine_live_authority()
     {
         using var temp = new TempDirectory();

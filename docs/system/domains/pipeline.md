@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -71,7 +71,17 @@ pipeline view.
   ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
   stages under bounded per-stage concurrency. A run snapshots the definition
   version and ordered stages at creation, so later definition edits do not
-  rewrite in-flight work.
+  rewrite in-flight work. The code-owned default definition is version zero;
+  the first project override becomes version one. After a fenced Remote Review
+  report and successful workspace cleanup, `TaskServerReviewStore` creates the
+  decision run in the same transaction. The card remains in `4-auto-review`
+  until the Engine settles it. Reissue settlement ends that decision run,
+  counts the bounded budget across the task's coding attempts, and moves the
+  card to `2-ready`; budget exhaustion moves it to `5e-escalated`. A clean
+  completion moves it to `5-human-review`, never directly to Completed. Each
+  decision snapshots the task resource version. A mutation while the decision
+  is pending supersedes that authority and escalates visibly instead of letting
+  stale evidence overwrite the newer task.
 - `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
   runs belong to commits rather than cards and expose planned order, scope,
   host, state, result, duration, and derived card attachments through
@@ -353,6 +363,20 @@ definitions live in the Task Server, while execution lives in
 results only through the public API. Its `engine.env` contains bootstrap
 connectivity, identity/credential, lease timing, and concurrency caps, never
 project flow definitions, model routing, or gate policy.
+
+A valid Remote Review report is evidence, not a lane decision. Infrastructure
+outcomes stay in Auto Review and retry the same immutable subject. A valid
+product report also stays there until cleanup proves the disposable review
+workspace is gone. That cleanup atomically appends one idempotent orchestration
+run with normalized verdicts and gate results. Only a fenced Engine settlement
+can then request reissue, escalation, or Human Review handoff, and only the Task
+Server can apply the lane mutation and lifecycle evidence. Studio and its BFF
+are read and command surfaces in this path, not loop owners.
+
+Integration remains a deferred operator decision. The target remote shape is a
+Task Server integration command plus execution on a Git-capable Runner. No
+automatic Post Processing verdict may bypass Human Review or mark a task
+Completed before the merge, release gate, and push have a decided result.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**

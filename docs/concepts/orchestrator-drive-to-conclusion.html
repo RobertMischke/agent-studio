@@ -1402,6 +1402,27 @@
             attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2470</code><br><span class="small">Post Processing depended on local Studio</span></td>
+          <td>
+            Cards could remain in <code>post-processing-running</code> because a valid Remote Review report still depended
+            on the local backend to interpret its verdict, decide reissue, and move the lane. A stopped or busy Studio
+            therefore stalled the whole decision wave even though Task Server and Runner were healthy.
+          </td>
+          <td>
+            Remote Review persisted evidence, and the new API-only Engine had durable stage leases, but no production
+            handoff connected successful review cleanup to an orchestration run. A Reissue action also restarted the same
+            decision stages without returning the card to Coding, and its budget was local to that one decision run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> successful cleanup now atomically queues the server-owned flow. Fenced Engine
+            settlement moves a finding to <span class="lane">2-ready</span>, sends an exhausted budget to
+            <span class="lane">5e-escalated</span>, or hands a clean result to
+            <span class="lane">5-human-review</span>. Reissue count survives Studio and Engine restarts and spans coding
+            attempts. Integration remains an explicit operator decision and cannot be inferred by Post Processing.
+          </td>
+        </tr>
       </tbody>
     </table>
 

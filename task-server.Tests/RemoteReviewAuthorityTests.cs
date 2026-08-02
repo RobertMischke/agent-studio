@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace TaskServer.Tests;
@@ -16,7 +17,7 @@ public sealed class RemoteReviewAuthorityTests
     private const string RepositoryUrl = "https://example.invalid/product.git";
 
     [Fact]
-    public async Task Fenced_review_claim_report_cleanup_reaches_human_review_and_is_idempotent()
+    public async Task Fenced_review_cleanup_queues_remote_decision_and_reaches_human_review_idempotently()
     {
         using var temp = new TempDirectory();
         var store = Store(temp.Path);
@@ -44,7 +45,7 @@ public sealed class RemoteReviewAuthorityTests
         var replay = await store.ReportReviewAsync(claim.Attempt.AttemptId, request, "review-a", default);
         Assert.Equal(report, replay);
         Assert.False(report.RetryScheduled);
-        Assert.Equal("5-human-review", report.TaskState);
+        Assert.Equal("4-auto-review", report.TaskState);
 
         var cleanupRequest = new ReviewCleanupRequest(
             "review-a", "review-instance-a", claim.Lease.LeaseId,
@@ -55,6 +56,20 @@ public sealed class RemoteReviewAuthorityTests
             claim.Attempt.AttemptId, cleanupRequest, "review-a", default);
         Assert.Equal("cleaned", cleanup.Status);
         Assert.Equal("duplicate", cleanupReplay.Status);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, source.TaskId)).State);
+        var orchestration = Assert.Single(await store.ListOrchestrationRunsAsync(
+            null, "pending", default));
+        Assert.Equal(source.TaskId, orchestration.TaskId);
+        var payload = JsonSerializer.Deserialize<ReviewOrchestrationPayloadDto>(
+            orchestration.PayloadJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(payload);
+        Assert.Equal("Pass", payload.ReviewOutcome);
+        Assert.Equal(claim.Attempt.AttemptId, payload.ReviewAttemptId);
+        Assert.All(payload.Verdicts, verdict => Assert.Equal("pass", verdict.Status));
+        Assert.All(payload.Gates, gate => Assert.Equal("passed", gate.Status));
+
+        await CompletePassingOrchestrationAsync(store, orchestration);
 
         var task = await TaskAsync(store, source.TaskId);
         Assert.Equal("5-human-review", task.State);
@@ -63,6 +78,7 @@ public sealed class RemoteReviewAuthorityTests
         Assert.Contains(audit, record => record.Action == "review.reported"
                                          && record.DetailJson.Contains(ResultSha, StringComparison.Ordinal));
         Assert.Contains(audit, record => record.Action == "review.cleaned");
+        Assert.Contains(audit, record => record.Action == "orchestration.run-created");
     }
 
     [Fact]
@@ -520,7 +536,19 @@ public sealed class RemoteReviewAuthorityTests
         var passed = await store.ReportReviewAsync(
             retry.Attempt!.AttemptId, PassingReport(retry), "review-a", default);
 
-        Assert.Equal("5-human-review", passed.TaskState);
+        Assert.Equal("4-auto-review", passed.TaskState);
+        var cleanup = await store.CleanupReviewAsync(
+            retry.Attempt.AttemptId,
+            new ReviewCleanupRequest(
+                "review-a", "instance-a", retry.Lease!.LeaseId, retry.Lease.Fence,
+                "cleanup-passing-retry", true),
+            "review-a",
+            default);
+        Assert.Equal("cleaned", cleanup.Status);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
+        var orchestration = Assert.Single(await store.ListOrchestrationRunsAsync(
+            null, "pending", default));
+        await CompletePassingOrchestrationAsync(store, orchestration);
         Assert.Equal("5-human-review", (await TaskAsync(store, subject.TaskId)).State);
         Assert.Equal(8, PassingReport(retry).Verdicts.Count);
         Assert.Equal(
@@ -804,5 +832,36 @@ public sealed class RemoteReviewAuthorityTests
     {
         var project = Assert.Single(await store.ListProjectsAsync(null, default));
         return (await store.GetTaskAsync(project.ProjectId, taskId, default))!;
+    }
+
+    private static async Task CompletePassingOrchestrationAsync(
+        TaskServerStore store,
+        OrchestrationRunDto run)
+    {
+        while (run.Status == "pending")
+        {
+            var claim = await store.ClaimOrchestrationAsync(
+                new OrchestrationClaimRequest(
+                    "engine-a", "engine-instance-a", [run.CurrentStage]),
+                "engine-a",
+                default);
+            var action = run.CurrentStage == OrchestrationStage.CompletionJudge
+                ? OrchestrationAction.Complete
+                : OrchestrationAction.Continue;
+            run = await store.CompleteOrchestrationStageAsync(
+                run.RunId,
+                new CompleteOrchestrationStageRequest(
+                    "engine-a",
+                    "engine-instance-a",
+                    claim.Lease!.LeaseId,
+                    claim.Lease.Fence,
+                    run.CurrentStage,
+                    action,
+                    "{}",
+                    $"settle:{run.RunId}:{run.CurrentStage}"),
+                "engine-a",
+                default);
+        }
+        Assert.Equal("completed", run.Status);
     }
 }

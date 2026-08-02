@@ -18,6 +18,36 @@ public enum OrchestrationAction
     Fail,
 }
 
+public static class OrchestrationDefaults
+{
+    public const int MaxReissueAttempts = 2;
+
+    public static IReadOnlyList<OrchestrationStage> CreateStages()
+        =>
+        [
+            OrchestrationStage.ReviewDecision,
+            OrchestrationStage.Council,
+            OrchestrationStage.PostProcessing,
+            OrchestrationStage.GateDispatch,
+            OrchestrationStage.CompletionJudge,
+        ];
+}
+
+public sealed record ReviewOrchestrationGateDto(
+    string StepId,
+    string Aspect,
+    string Status,
+    string? Classification = null);
+
+public sealed record ReviewOrchestrationPayloadDto(
+    string SourceRunId,
+    string ReviewAttemptId,
+    string ReviewOutcome,
+    string? FailureClassification,
+    string? Summary,
+    IReadOnlyList<ReviewVerdictDto> Verdicts,
+    IReadOnlyList<ReviewOrchestrationGateDto> Gates);
+
 public sealed record FlowDefinitionDto(
     string ProjectId,
     long Version,
@@ -28,7 +58,7 @@ public sealed record FlowDefinitionDto(
 public sealed record UpsertFlowDefinitionRequest(
     long? ExpectedVersion,
     IReadOnlyList<OrchestrationStage> Stages,
-    int MaxReissueAttempts = 2);
+    int MaxReissueAttempts = OrchestrationDefaults.MaxReissueAttempts);
 
 public sealed record CreateOrchestrationRunRequest(
     string TaskId,
@@ -54,7 +84,8 @@ public sealed record OrchestrationRunDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     DateTime? CompletedAt,
-    IReadOnlyList<OrchestrationStageResultDto>? StageResults = null);
+    IReadOnlyList<OrchestrationStageResultDto>? StageResults = null,
+    long TaskVersion = 0);
 
 public sealed record OrchestrationLeaseDto(
     string LeaseId,

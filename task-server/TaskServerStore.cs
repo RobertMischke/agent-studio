@@ -13,8 +13,9 @@ public sealed partial class TaskServerStore
 {
     // 6 = union of develop's capacity/quota schema (5) and AGT-2395's additive
     // result_ref_gc table (branched as 4 from base 3). The migration block is
-    // idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 6;
+    // idempotent; the number only guards downgrades. Version 7 seeds the
+    // server-owned default orchestration flow and fences its task version.
+    public const int CurrentSchemaVersion = 7;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -209,8 +210,13 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 INSERT INTO projects(id, workspace_id, name, task_key_prefix, next_task_number, version, created_at, updated_at)
                 VALUES ($id, $workspace, $name, $prefix, 1, 1, $now, $now);
+                INSERT INTO flow_definitions(project_id, version, stages_json, max_reissue_attempts, updated_at)
+                VALUES ($id, 0, $stages, $max_reissues, $now);
                 """, ct, transaction,
-                ("$id", id), ("$workspace", request.WorkspaceId), ("$name", request.Name.Trim()), ("$prefix", prefix), ("$now", now));
+                ("$id", id), ("$workspace", request.WorkspaceId), ("$name", request.Name.Trim()),
+                ("$prefix", prefix), ("$now", now),
+                ("$stages", JsonSerializer.Serialize(OrchestrationDefaults.CreateStages())),
+                ("$max_reissues", OrchestrationDefaults.MaxReissueAttempts));
             await AuditAsync(connection, transaction, actorId, "project.created", "project", id,
                 JsonSerializer.Serialize(new { request.WorkspaceId, request.Name, taskKeyPrefix = prefix }), ct);
         }, ct);
@@ -2071,6 +2077,7 @@ public sealed partial class TaskServerStore
                 id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL REFERENCES projects(id),
                 task_id TEXT NOT NULL REFERENCES tasks(id),
+                task_version INTEGER NOT NULL,
                 definition_version INTEGER NOT NULL,
                 stages_json TEXT NOT NULL,
                 max_reissue_attempts INTEGER NOT NULL,
@@ -2218,12 +2225,24 @@ public sealed partial class TaskServerStore
             ON CONFLICT(host_id) DO NOTHING;
             """, ct, ("$now", Iso(UtcNow)));
         await ExecuteAsync(connection, """
+            INSERT INTO flow_definitions(
+                project_id, version, stages_json, max_reissue_attempts, updated_at)
+            SELECT id, 0, $stages, $max_reissues, $now
+              FROM projects
+             WHERE true
+            ON CONFLICT(project_id) DO NOTHING;
+            """, ct,
+            ("$stages", JsonSerializer.Serialize(OrchestrationDefaults.CreateStages())),
+            ("$max_reissues", OrchestrationDefaults.MaxReissueAttempts),
+            ("$now", Iso(UtcNow)));
+        await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;
             """, ct, ("$version", CurrentSchemaVersion), ("$now", Iso(UtcNow)));
         await ApplyReviewMigrationAsync(connection, ct);
         await EnsureColumnAsync(connection, "review_attempts", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "review_attempts", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "orchestration_runs", "task_version", "INTEGER NOT NULL DEFAULT 0", ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
     }
 

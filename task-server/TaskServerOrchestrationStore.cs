@@ -101,92 +101,141 @@ public sealed partial class TaskServerStore
         CancellationToken ct)
     {
         RequireWritable();
+        OrchestrationRunDto? result = null;
+        await InWriteTransactionAsync(async (connection, transaction) =>
+        {
+            result = await CreateOrchestrationRunCoreAsync(
+                connection, transaction, projectId, request, actorId, ct);
+        }, ct);
+        return result!;
+    }
+
+    private async Task<OrchestrationRunDto> CreateOrchestrationRunCoreAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string projectId,
+        CreateOrchestrationRunRequest request,
+        string actorId,
+        CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(request.TaskId)
             || string.IsNullOrWhiteSpace(request.IdempotencyKey))
             throw new ArgumentException("Task id and idempotency key are required.");
         ValidateJson(request.PayloadJson, "payloadJson");
 
-        OrchestrationRunDto? result = null;
-        await InWriteTransactionAsync(async (connection, transaction) =>
+        var existing = await ReadOrchestrationRunByKeyAsync(
+            connection,
+            transaction,
+            request.IdempotencyKey,
+            ct);
+        if (existing is not null)
         {
-            var existing = await ReadOrchestrationRunByKeyAsync(
-                connection,
-                transaction,
-                request.IdempotencyKey,
-                ct);
-            if (existing is not null)
+            if (!string.Equals(existing.ProjectId, projectId, StringComparison.Ordinal)
+                || !string.Equals(existing.TaskId, request.TaskId, StringComparison.Ordinal)
+                || !JsonEquivalent(existing.PayloadJson, request.PayloadJson))
+                throw new TaskServerConflictException(
+                    "idempotency-conflict",
+                    "The orchestration idempotency key is already bound to different input.");
+            return existing;
+        }
+
+        string? taskProject = null;
+        string? taskState = null;
+        long taskVersion = 0;
+        await using (var command = Command(connection, """
+            SELECT project_id, state, version FROM tasks WHERE id = $task;
+            """, transaction, ("$task", request.TaskId)))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            if (await reader.ReadAsync(ct))
             {
-                if (!string.Equals(existing.ProjectId, projectId, StringComparison.Ordinal)
-                    || !string.Equals(existing.TaskId, request.TaskId, StringComparison.Ordinal)
-                    || !JsonEquivalent(existing.PayloadJson, request.PayloadJson))
-                    throw new TaskServerConflictException(
-                        "idempotency-conflict",
-                        "The orchestration idempotency key is already bound to different input.");
-                result = existing;
-                return;
+                taskProject = reader.GetString(0);
+                taskState = reader.GetString(1);
+                taskVersion = reader.GetInt64(2);
             }
+        }
+        if (string.IsNullOrWhiteSpace(taskProject)
+            || !string.Equals(taskProject, projectId, StringComparison.Ordinal))
+            throw new KeyNotFoundException("Task was not found in the requested project.");
+        if (!string.Equals(taskState, "4-auto-review", StringComparison.Ordinal))
+            throw new TaskServerConflictException(
+                "task-not-auto-review",
+                $"Orchestration can only start in Auto Review; task state is '{taskState}'.");
 
-            var taskProject = Convert.ToString(await ScalarAsync(
-                connection,
-                "SELECT project_id FROM tasks WHERE id = $task;",
-                ct,
-                transaction,
-                ("$task", request.TaskId)),
-                CultureInfo.InvariantCulture);
-            if (string.IsNullOrWhiteSpace(taskProject)
-                || !string.Equals(taskProject, projectId, StringComparison.Ordinal))
-                throw new KeyNotFoundException("Task was not found in the requested project.");
+        var activeRuns = Convert.ToInt32(await ScalarAsync(connection, """
+            SELECT count(*) FROM orchestration_runs
+             WHERE task_id = $task AND status IN ('pending', 'leased');
+            """, ct, transaction, ("$task", request.TaskId)) ?? 0L, CultureInfo.InvariantCulture);
+        if (activeRuns > 0)
+            throw new TaskServerConflictException(
+                "orchestration-already-active",
+                "The task already has an active orchestration run.");
 
-            var definition = await ReadFlowDefinitionAsync(connection, transaction, projectId, ct)
-                ?? throw new TaskServerConflictException(
-                    "flow-definition-missing",
-                    "The project has no orchestration flow definition.");
-            var now = UtcNow;
-            var runId = $"orch_{Guid.NewGuid():N}";
-            await ExecuteAsync(connection, """
-                INSERT INTO orchestration_runs(
-                    id, project_id, task_id, definition_version, stages_json,
-                    max_reissue_attempts, status, current_stage, payload_json,
-                    idempotency_key, reissue_attempts, created_at, updated_at)
-                VALUES (
-                    $id, $project, $task, $definition_version, $stages,
-                    $max_reissues, 'pending', $stage, $payload,
-                    $key, 0, $now, $now);
-                """, ct, transaction,
-                ("$id", runId),
-                ("$project", projectId),
-                ("$task", request.TaskId),
-                ("$definition_version", definition.Version),
-                ("$stages", JsonSerializer.Serialize(definition.Stages)),
-                ("$max_reissues", definition.MaxReissueAttempts),
-                ("$stage", definition.Stages[0].ToString()),
-                ("$payload", request.PayloadJson),
-                ("$key", request.IdempotencyKey),
-                ("$now", Iso(now)));
-            await AuditAsync(
-                connection,
-                transaction,
-                actorId,
-                "orchestration.run-created",
-                "orchestration-run",
-                runId,
-                JsonSerializer.Serialize(new { projectId, request.TaskId, definition.Version }),
-                ct);
-            result = new OrchestrationRunDto(
-                runId,
+        var definition = await ReadFlowDefinitionAsync(connection, transaction, projectId, ct)
+            ?? throw new TaskServerConflictException(
+                "flow-definition-missing",
+                "The project has no orchestration flow definition.");
+        var priorReissues = Convert.ToInt32(await ScalarAsync(connection, """
+            SELECT count(*)
+              FROM orchestration_stage_results result
+              JOIN orchestration_runs run ON run.id = result.run_id
+             WHERE run.task_id = $task
+               AND result.action = 'Reissue'
+               AND run.status IN ('reissued', 'escalated');
+            """, ct, transaction, ("$task", request.TaskId)) ?? 0L, CultureInfo.InvariantCulture);
+        var now = UtcNow;
+        var runId = $"orch_{Guid.NewGuid():N}";
+        await ExecuteAsync(connection, """
+            INSERT INTO orchestration_runs(
+                id, project_id, task_id, task_version, definition_version, stages_json,
+                max_reissue_attempts, status, current_stage, payload_json,
+                idempotency_key, reissue_attempts, created_at, updated_at)
+            VALUES (
+                $id, $project, $task, $task_version, $definition_version, $stages,
+                $max_reissues, 'pending', $stage, $payload,
+                $key, $reissues, $now, $now);
+            """, ct, transaction,
+            ("$id", runId),
+            ("$project", projectId),
+            ("$task", request.TaskId),
+            ("$task_version", taskVersion),
+            ("$definition_version", definition.Version),
+            ("$stages", JsonSerializer.Serialize(definition.Stages)),
+            ("$max_reissues", definition.MaxReissueAttempts),
+            ("$stage", definition.Stages[0].ToString()),
+            ("$payload", request.PayloadJson),
+            ("$key", request.IdempotencyKey),
+            ("$reissues", priorReissues),
+            ("$now", Iso(now)));
+        await AuditAsync(
+            connection,
+            transaction,
+            actorId,
+            "orchestration.run-created",
+            "orchestration-run",
+            runId,
+            JsonSerializer.Serialize(new
+            {
                 projectId,
                 request.TaskId,
                 definition.Version,
-                "pending",
-                definition.Stages[0],
-                request.PayloadJson,
-                0,
-                now,
-                now,
-                null,
-                []);
-        }, ct);
-        return result!;
+                priorReissues,
+            }),
+            ct);
+        return new OrchestrationRunDto(
+            runId,
+            projectId,
+            request.TaskId,
+            definition.Version,
+            "pending",
+            definition.Stages[0],
+            request.PayloadJson,
+            priorReissues,
+            now,
+            now,
+            null,
+            [],
+            taskVersion);
     }
 
     public async Task<OrchestrationRunDto?> GetOrchestrationRunAsync(
@@ -423,8 +472,36 @@ public sealed partial class TaskServerStore
             DateTime? completedAt = null;
             var reissues = run.ReissueAttempts;
             string? taskState = null;
+            var taskMutationVersion = run.TaskVersion;
+            string? currentTaskState = null;
+            long currentTaskVersion = 0;
+            await using (var command = Command(connection, """
+                SELECT state, version FROM tasks WHERE id = $task;
+                """, transaction, ("$task", run.TaskId)))
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+            {
+                if (await reader.ReadAsync(ct))
+                {
+                    currentTaskState = reader.GetString(0);
+                    currentTaskVersion = reader.GetInt64(1);
+                }
+            }
+            if (currentTaskState is null)
+                throw new KeyNotFoundException("Orchestration task was not found.");
 
-            switch (request.Action)
+            if (!string.Equals(currentTaskState, "4-auto-review", StringComparison.Ordinal))
+            {
+                nextStatus = "superseded";
+                completedAt = now;
+            }
+            else if (currentTaskVersion != run.TaskVersion)
+            {
+                nextStatus = "superseded";
+                completedAt = now;
+                taskState = "5e-escalated";
+                taskMutationVersion = currentTaskVersion;
+            }
+            else switch (request.Action)
             {
                 case OrchestrationAction.Continue:
                     var index = stages.IndexOf(run.CurrentStage);
@@ -441,7 +518,11 @@ public sealed partial class TaskServerStore
                     var maxReissues = await ReadRunMaxReissuesAsync(connection, transaction, runId, ct);
                     reissues++;
                     if (reissues <= maxReissues)
-                        nextStage = stages[0];
+                    {
+                        nextStatus = "reissued";
+                        completedAt = now;
+                        taskState = "2-ready";
+                    }
                     else
                     {
                         nextStatus = "escalated";
@@ -486,11 +567,52 @@ public sealed partial class TaskServerStore
                 await ExecuteAsync(connection, """
                     UPDATE tasks
                        SET state = $state, version = version + 1, updated_at = $updated
-                     WHERE id = $task;
+                     WHERE id = $task AND state = '4-auto-review' AND version = $task_version;
                     """, ct, transaction,
                     ("$state", taskState),
                     ("$updated", Iso(now)),
+                    ("$task_version", taskMutationVersion),
                     ("$task", run.TaskId));
+
+                var sourceRun = await ReadLatestTaskRunAuthorityAsync(
+                    connection, transaction, run.TaskId, ct);
+                if (sourceRun is not null)
+                {
+                    await AppendLifecycleEventAsync(
+                        connection,
+                        transaction,
+                        sourceRun.Value.RunId,
+                        run.TaskId,
+                        sourceRun.Value.Fence,
+                        LifecycleEventKinds.ReviewCompleted,
+                        new
+                        {
+                            authority = "task-server",
+                            orchestrationRunId = runId,
+                            stage = request.Stage.ToString(),
+                            action = request.Action.ToString(),
+                            nextState = taskState,
+                        },
+                        ct);
+                    await AppendLifecycleEventAsync(
+                        connection,
+                        transaction,
+                        sourceRun.Value.RunId,
+                        run.TaskId,
+                        sourceRun.Value.Fence,
+                        taskState == "2-ready"
+                            ? LifecycleEventKinds.Reissued
+                            : LifecycleEventKinds.TerminalHandoff,
+                        new
+                        {
+                            authority = "task-server",
+                            orchestrationRunId = runId,
+                            decision = nextStatus,
+                            reissueAttempts = reissues,
+                            nextState = taskState,
+                        },
+                        ct);
+                }
             }
             await AuditAsync(
                 connection,
@@ -499,7 +621,19 @@ public sealed partial class TaskServerStore
                 "orchestration.stage-completed",
                 "orchestration-run",
                 runId,
-                JsonSerializer.Serialize(new { request.Stage, request.Action, request.Fence, nextStatus, nextStage }),
+                JsonSerializer.Serialize(new
+                {
+                    request.Stage,
+                    request.Action,
+                    request.Fence,
+                    nextStatus,
+                    nextStage,
+                    previousTaskState = currentTaskState,
+                    expectedTaskVersion = run.TaskVersion,
+                    previousTaskVersion = currentTaskVersion,
+                    nextTaskState = taskState,
+                    reissueAttempts = reissues,
+                }),
                 ct);
             result = await ReadOrchestrationRunAsync(connection, transaction, runId, ct)
                 ?? throw new InvalidOperationException("Settled orchestration run disappeared.");
@@ -651,7 +785,8 @@ public sealed partial class TaskServerStore
     {
         await using var command = Command(connection, """
             SELECT id, project_id, task_id, definition_version, status, current_stage,
-                   payload_json, reissue_attempts, created_at, updated_at, completed_at
+                   payload_json, reissue_attempts, created_at, updated_at, completed_at,
+                   task_version
               FROM orchestration_runs WHERE id = $run;
             """, transaction, ("$run", runId));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -667,7 +802,9 @@ public sealed partial class TaskServerStore
             reader.GetInt32(7),
             Parse(reader.GetString(8)),
             Parse(reader.GetString(9)),
-            reader.IsDBNull(10) ? null : Parse(reader.GetString(10)));
+            reader.IsDBNull(10) ? null : Parse(reader.GetString(10)),
+            null,
+            reader.GetInt64(11));
         await reader.DisposeAsync();
 
         await using var resultsCommand = Command(connection, """
@@ -761,6 +898,25 @@ public sealed partial class TaskServerStore
             transaction,
             ("$run", runId)) ?? 0,
             CultureInfo.InvariantCulture);
+
+    private static async Task<(string RunId, long Fence)?> ReadLatestTaskRunAuthorityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string taskId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT id, coalesce(fence, 0)
+              FROM runs
+             WHERE task_id = $task
+             ORDER BY coalesce(finished_at, started_at, created_at) DESC, rowid DESC
+             LIMIT 1;
+            """, transaction, ("$task", taskId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct)
+            ? (reader.GetString(0), reader.GetInt64(1))
+            : null;
+    }
 
     private static async Task<(string RunId, OrchestrationStageResultDto Result)?> ReadStageResultByKeyAsync(
         SqliteConnection connection,

@@ -1,17 +1,13 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.OrchestratorEngine;
 
 public sealed class EngineTaskServerClient : IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
 
@@ -111,7 +107,8 @@ public sealed class EngineTaskServerClient : IDisposable
     public void Dispose() => _http.Dispose();
 }
 
-public sealed class EngineTaskServerException(int statusCode, string message) : Exception(message)
+public sealed class EngineTaskServerException(int statusCode, string message)
+    : Exception($"Task Server returned HTTP {statusCode}: {message}")
 {
     public int StatusCode { get; } = statusCode;
 }
