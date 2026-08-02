@@ -301,6 +301,22 @@ public sealed class TaskTransitionService
             }
         }
 
+        if (outcome.Status == MoveJobStatus.Success
+            && string.Equals(info.State, TaskStates.AutoReview, StringComparison.Ordinal)
+            && !string.Equals(targetState, TaskStates.AutoReview, StringComparison.Ordinal))
+        {
+            var terminalFolder = outcome.NewFolderPath ?? info.FolderPath;
+            var completed = targetState is TaskStates.HumanReview or TaskStates.Completed;
+            PostProcessingLifecycleStore.Terminalize(
+                terminalFolder,
+                DateTime.UtcNow,
+                failed: !completed,
+                detail: completed
+                    ? $"Post Processing completed and moved the task to {targetState}."
+                    : $"Post Processing stopped and moved the task to {targetState}.",
+                _logger);
+        }
+
         // Deterministic commit-attribution post-step (ADR "Commit-Attribution-Regel").
         // Runs on every 3-progress -> 4-auto-review transition, after the
         // auto-commit stamp, so the task's commit set is pinned to its own
@@ -628,7 +644,7 @@ public sealed class TaskTransitionService
         var repaired = 0;
         var failures = new List<string>();
         var missing = new List<TaskInfo>();
-        var candidates = _scanner.ScanAllJobsWithArchive()
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(task => task.State is
                 TaskStates.HumanReview or TaskStates.Completed or TaskStates.Archive)
             .OrderBy(task => task.EnteredLaneAt)
@@ -1274,23 +1290,13 @@ public sealed class TaskTransitionService
         try
         {
             var now = DateTime.UtcNow;
-            var snapshot = new LifecycleSnapshot
-            {
-                Phase = LifecyclePhases.PostProcessingRunning,
-                PhaseEnteredAt = now,
-                PostProcessingChecks =
-                [
-                    new LifecycleCheck
-                    {
-                        Name = "orchestrator-post-processing",
-                        Status = "running",
-                        StartedAt = now,
-                        Detail = "Task execution finished; orchestrator post-processing is running before human review."
-                    }
-                ]
-            };
-            var path = Path.Combine(info.FolderPath, "lifecycle.json");
-            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(snapshot, LifecycleJsonWriteOpts));
+            PostProcessingLifecycleStore.BeginPostProcessing(
+                info.FolderPath,
+                now,
+                "orchestrator-post-processing",
+                "Task execution finished; orchestrator post-processing is running before human review.",
+                _logger,
+                replaceChecks: true);
             PostProcessingOutcomeLog.Append(info.FolderPath, new PostProcessingOutcomeRecord
             {
                 At = now,
@@ -1311,13 +1317,6 @@ public sealed class TaskTransitionService
             _logger.LogWarning(ex, "Failed to write post-processing lifecycle evidence for {JobId}", info.Id);
         }
     }
-
-    private static readonly System.Text.Json.JsonSerializerOptions LifecycleJsonWriteOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
 
     /// <summary>
     /// Per-item-atomic batch move. Each item independently routes through

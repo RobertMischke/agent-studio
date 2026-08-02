@@ -230,6 +230,7 @@ public class OrchestratorIntakeTests : IDisposable
             new() { Id = "passed", State = TaskStates.Ready, Phase = LifecyclePhases.IntakePassed,  WatchPath = _watchPath, Order = 3 },
             new() { Id = "blocked", State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked, WatchPath = _watchPath, Order = 4 },
             new() { Id = "running", State = TaskStates.Ready, Phase = LifecyclePhases.IntakeRunning, WatchPath = _watchPath, Order = 5 },
+            new() { Id = "RUN-101", State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady, WatchPath = _watchPath, Order = 0, Fixture = true },
             new() { Id = "elsewhere", State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady, WatchPath = "/other", Order = 0 },
             new() { Id = "not-ready", State = TaskStates.Progress, Phase = LifecyclePhases.HumanReady, WatchPath = _watchPath, Order = 0 },
         };
@@ -237,7 +238,7 @@ public class OrchestratorIntakeTests : IDisposable
         var picked = IntakeHostedService.SelectCandidates(jobs, _watchPath, cap: 16);
 
         // Only the two awaiting cards for this project, oldest (Order) first;
-        // stamped / other-project / non-ready cards are excluded.
+        // Stamped, fixture, other-project, and non-ready cards are excluded.
         Assert.Equal(new[] { "a", "b" }, picked.Select(p => p.Id).ToArray());
     }
 

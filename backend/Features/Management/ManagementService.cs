@@ -61,7 +61,7 @@ public sealed class ManagementService
 
     public ManagementStatus Snapshot(string url)
     {
-        var jobs = _scanner.ScanAllJobs();
+        var jobs = _scanner.ScanAllAutomationJobs();
         var maintenance = ReadState();
         var migrations = _migrations.List();
         var backupFailure = ReadBackupFailure();
@@ -213,7 +213,7 @@ public sealed class ManagementService
 
     private ManagementCommandResult SweepArchive(bool dry, string actor, string key)
     {
-        var candidates = _scanner.ScanAllJobs().Where(x => x.State == TaskStates.Completed).ToArray();
+        var candidates = _scanner.ScanAllAutomationJobs().Where(x => x.State == TaskStates.Completed).ToArray();
         var affected = 0;
         if (!dry)
             foreach (var item in candidates)

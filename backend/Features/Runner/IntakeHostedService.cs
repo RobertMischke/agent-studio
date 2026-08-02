@@ -181,6 +181,7 @@ public sealed class IntakeHostedService : BackgroundService
     {
         return jobs
             .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)
+                        && !j.Fixture
                         && j.State == TaskStates.Ready
                         && IsAwaitingIntake(j.Phase))
             .OrderBy(j => j.Order)

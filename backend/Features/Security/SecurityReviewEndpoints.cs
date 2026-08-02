@@ -83,7 +83,7 @@ public static class SecurityReviewEndpoints
             // 3-progress — anything past 3-progress is finished from the
             // runner's perspective and should not block a fresh request.
             var openLanes = new[] { TaskStates.Preparation, TaskStates.OrchestratorPrep, TaskStates.Ready, TaskStates.Progress };
-            var existingAudit = scanner.ScanAllJobs().FirstOrDefault(j =>
+            var existingAudit = scanner.ScanAllAutomationJobs().FirstOrDefault(j =>
                 string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
                 openLanes.Contains(j.State, StringComparer.OrdinalIgnoreCase) &&
                 (j.Title?.StartsWith(AuditJobTitlePrefix, StringComparison.OrdinalIgnoreCase) ?? false));

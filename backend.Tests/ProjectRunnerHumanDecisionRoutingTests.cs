@@ -61,6 +61,18 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
     }
 
     [Fact]
+    public void GetNextReadyJob_SkipsFixtureCards()
+    {
+        WriteJob(TaskStates.Ready, "RUN-101", order: 1, fixture: true);
+        WriteJob(TaskStates.Ready, "real-work", order: 2);
+
+        var next = BuildRunner().GetNextReadyJob();
+
+        Assert.NotNull(next);
+        Assert.Equal("real-work", next!.Id);
+    }
+
+    [Fact]
     public void RelocateStrayHumanDecisionCards_MovesReadyCardToEscalated()
     {
         WriteJob(TaskStates.Ready, "human-decision-needed-bug-card-delete-button", order: 1);
@@ -101,14 +113,14 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
         method!.Invoke(runner, null);
     }
 
-    private void WriteJob(string state, string slug, int order)
+    private void WriteJob(string state, string slug, int order, bool fixture = false)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
-            "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
+            $"\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\",\"fixture\":{fixture.ToString().ToLowerInvariant()}}}");
     }
 
     private ProjectRunner BuildRunner()

@@ -31,7 +31,7 @@ public sealed class MergeCandidateFinder
         var primaryKey = primary.Key;
 
         var candidates = new List<MergeCandidate>();
-        foreach (var job in _scanner.ScanAllJobs())
+        foreach (var job in _scanner.ScanAllAutomationJobs())
         {
             if (job.Id == primary.Id) continue;
             if (!string.Equals(job.WatchPath, primary.WatchPath, StringComparison.OrdinalIgnoreCase)) continue;

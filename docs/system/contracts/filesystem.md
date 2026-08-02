@@ -194,6 +194,17 @@ The application owns transitions between these states. Successful CLI runs move 
 
 Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
 
+Post Processing attempt boundaries are active writes, not a read-time
+interpretation. A confirmed new coding process sets the sidecar phase to
+`execution-running` and clears prior `postProcessingChecks`. A backend recovery
+sweep replaces the lost attempt with checks whose `startedAt` is at or after the
+recovery start. Leaving Auto Review closes every `pending` or `running` Post
+Processing check as `completed` or `failed` and writes `finishedAt`; no terminal
+card may retain a running check from an earlier attempt. Cards marked
+`fixture: true` remain available to explicit fixture-aware API reads, but all
+background pickup, intake, review, recovery, liveness, supervisor, and
+maintenance scans exclude them.
+
 ### .metadata/review-attempt.json and results/history/ (optional)
 
 An explicit operator move out of `5-human-review` or `5e-escalated` into a

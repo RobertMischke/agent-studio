@@ -473,7 +473,7 @@ public class ProjectTokenUsageService
     {
         var map = new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(watchPath)) return map;
-        foreach (var job in _scanner.ScanAllJobs())
+        foreach (var job in _scanner.ScanAllAutomationJobs())
         {
             if (!string.Equals(job.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)) continue;
             map[job.Id] = job;

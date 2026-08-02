@@ -79,7 +79,7 @@ public sealed class ProjectVisualEvidenceService
         // Overview is a recent-evidence glance, so keep that work bounded to a
         // small set of the latest delivered tasks instead of walking the full
         // completed/archive history on every refresh.
-        var candidates = _scanner.ScanAllJobsWithArchive()
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(task => WatchPathComparison.PathsEqual(task.WatchPath, watch.Path))
             .Where(task => task.State is TaskStates.Completed or TaskStates.Archive)
             .OrderByDescending(task => task.LastActivity)

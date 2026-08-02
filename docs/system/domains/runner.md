@@ -239,6 +239,17 @@ state.
 
 ## Invariants
 
+- Background automation never acts on a card marked `fixture: true`. The raw
+  scanner retains fixtures for explicit `includeFixtures=true` API reads, while
+  pickup, intake, review, recovery, liveness, supervisor, summary, and
+  maintenance consumers use the fixture-free automation snapshot.
+- `lifecycle.json` describes only the current attempt. A confirmed coding
+  restart clears old Post Processing checks. A Post Processing recovery sweep
+  replaces old active checks with a recovery attempt timestamped no earlier
+  than the sweep start. A move out of Auto Review closes all active checks as
+  `completed` or `failed` with `finishedAt`, so stale `running` rows cannot feed
+  stuck detection after a retry, restart, or terminal decision.
+
 - Origin is a fenced side-effect channel. New Remote Run salvage refs include
   runner, task, attempt, fence, and SHA; immutable result refs include attempt,
   fence, and SHA. A newer generation never resumes or overwrites an older

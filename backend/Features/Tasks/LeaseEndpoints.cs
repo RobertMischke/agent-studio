@@ -298,7 +298,7 @@ public static class LeaseEndpoints
                         // occupancy does not grow. Recording the unchanged count
                         // keeps the ledger free of the old "active + 1" drift.
                         var replayedActiveRuns = Math.Max(
-                            CountHostLeases(scanner.ScanAllJobs(), leases, clientId, req.RunnerId),
+                            CountHostLeases(scanner.ScanAllAutomationJobs(), leases, clientId, req.RunnerId),
                             activeSlots ?? 0);
                         // Without a ceiling there is nothing to derive from, so the
                         // daemon's own headroom minus the served lease stays the
@@ -352,7 +352,7 @@ public static class LeaseEndpoints
                 // enough to requeue: wait through the authority grace and require
                 // this assigned runner poll to answer that the task is absent
                 // from its active process set.
-                foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
+                foreach (var interrupted in scanner.ScanAllAutomationJobs().Where(t => t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
                     if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)

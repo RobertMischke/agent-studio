@@ -227,6 +227,15 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// Returns the live task snapshot used by automated pickup, recovery,
+    /// review, supervisor, and maintenance scans. Explicit E2E fixtures remain
+    /// available through <see cref="ScanAllJobs"/> for opted-in API reads, but
+    /// they never participate in background automation.
+    /// </summary>
+    public List<TaskInfo> ScanAllAutomationJobs()
+        => ScanAllJobs().Where(task => !task.Fixture).ToList();
+
+    /// <summary>
     /// Returns only the terminal <c>7-archive</c> tasks, slim-hydrated. Mirrors
     /// <see cref="ScanAllJobs"/>: when a <see cref="TaskIndexCache"/> is wired
     /// (production) this is an O(1) read of the archive partition the cache
@@ -271,6 +280,10 @@ public class TaskScannerService : ITaskScanner
         // the 7-archive lane, so it is archive-inclusive by construction.
         return ScanAllJobsRaw();
     }
+
+    /// <summary>Archive-inclusive counterpart of <see cref="ScanAllAutomationJobs"/>.</summary>
+    public List<TaskInfo> ScanAllAutomationJobsWithArchive()
+        => ScanAllJobsWithArchive().Where(task => !task.Fixture).ToList();
 
     /// <summary>
     /// Returns the reverse-reference graph built for the current task snapshot.

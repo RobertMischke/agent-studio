@@ -161,6 +161,8 @@ public sealed class StaleProgressArchiver
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
+                if (_scanner.FindJob(laneFolder.Slug, entry.Path)?.Fixture == true)
+                    continue;
                 // Valid steer-pending markers are bounded by Slice B. This
                 // legacy stale-progress sweep must not promote/requeue them
                 // first based on an old NEEDS_INPUT sentinel. A malformed

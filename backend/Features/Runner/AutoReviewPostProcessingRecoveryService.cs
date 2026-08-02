@@ -101,9 +101,11 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
     internal static RecoverySummary RunRecoveryScan(
         TaskScannerService scanner,
         TaskTransitionService transitions,
-        ILogger logger)
+        ILogger logger,
+        DateTime? restartedAtUtc = null)
     {
-        var candidates = scanner.ScanAllJobs()
+        var recoveryStartedAt = (restartedAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+        var candidates = scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.State, TaskStates.AutoReview, StringComparison.Ordinal))
             .ToList();
 
@@ -120,6 +122,14 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
                 continue;
             }
 
+            PostProcessingLifecycleStore.BeginPostProcessing(
+                job.FolderPath,
+                recoveryStartedAt,
+                "orchestrator-post-processing",
+                "Post Processing restarted after backend recovery.",
+                logger,
+                replaceChecks: true);
+
             bool accepted;
             try
             {
@@ -128,14 +138,34 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
             catch (Exception ex)
             {
                 failed++;
+                PostProcessingLifecycleStore.Terminalize(
+                    job.FolderPath,
+                    DateTime.UtcNow,
+                    failed: true,
+                    detail: "Post Processing recovery could not enqueue a replacement attempt.",
+                    logger,
+                    onlyWhenActive: true);
                 logger.LogWarning(ex,
                     "post-processing startup-recovery: re-enqueue threw for project={Project} job={JobId}",
                     job.ProjectName, job.Id);
                 continue;
             }
 
-            if (accepted) reEnqueued++;
-            else failed++;
+            if (accepted)
+            {
+                reEnqueued++;
+            }
+            else
+            {
+                failed++;
+                PostProcessingLifecycleStore.Terminalize(
+                    job.FolderPath,
+                    DateTime.UtcNow,
+                    failed: true,
+                    detail: "Post Processing recovery could not enqueue a replacement attempt.",
+                    logger,
+                    onlyWhenActive: true);
+            }
         }
 
         var summary = new RecoverySummary(candidates.Count, reEnqueued, skipped, failed);

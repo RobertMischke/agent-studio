@@ -155,7 +155,7 @@ public static class DesignSurfaceEndpoints
         // Refuse duplicate work in the open lanes (taxonomy: this honours
         // single-active-task-per-project without locking the runner).
         var openLanes = new[] { TaskStates.Preparation, TaskStates.OrchestratorPrep, TaskStates.Ready, TaskStates.Progress };
-        var existing = scanner.ScanAllJobs().FirstOrDefault(j =>
+        var existing = scanner.ScanAllAutomationJobs().FirstOrDefault(j =>
             string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
             openLanes.Contains(j.State, StringComparer.OrdinalIgnoreCase) &&
             (j.Title?.StartsWith(titlePrefix, StringComparison.OrdinalIgnoreCase) ?? false));

@@ -427,7 +427,7 @@ public sealed class IntakeRunner
         var promptPath = Path.Combine(info.FolderPath, "prompt.md");
         var prompt = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
 
-        var peers = _scanner.ScanAllJobs()
+        var peers = _scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.WatchPath, info.WatchPath, StringComparison.OrdinalIgnoreCase)
                         && !string.Equals(j.Id, info.Id, StringComparison.Ordinal)
                         && (j.State == TaskStates.Ready

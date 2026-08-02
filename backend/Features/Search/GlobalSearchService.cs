@@ -101,7 +101,7 @@ public sealed class GlobalSearchService(
 
     private List<GlobalSearchItem> SearchTasks(string query, int limit, IReadOnlyDictionary<string, string> colors)
     {
-        return scanner.ScanAllJobsWithArchive()
+        return scanner.ScanAllAutomationJobsWithArchive()
             .Select(task => (Task: task, Text: ReadTaskText(task)))
             .Where(x => Contains(x.Task.Key, query) || Contains(x.Task.Title, query) || Contains(x.Text, query) || Contains(x.Task.State, query))
             .OrderBy(x => string.Equals(x.Task.Key, query, StringComparison.OrdinalIgnoreCase) ? 0 : 1)

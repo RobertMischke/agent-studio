@@ -256,7 +256,7 @@ public record IntakeConstraintSelection
 public record LifecycleCheck
 {
     public string Name { get; init; } = "";
-    /// <summary>One of: <c>pending</c>, <c>running</c>, <c>passed</c>, <c>failed</c>, <c>skipped</c>.</summary>
+    /// <summary>One of: <c>pending</c>, <c>running</c>, <c>completed</c>, <c>passed</c>, <c>failed</c>, <c>skipped</c>.</summary>
     public string Status { get; init; } = "pending";
     public DateTime? StartedAt { get; init; }
     public DateTime? FinishedAt { get; init; }

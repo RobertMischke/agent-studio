@@ -85,7 +85,7 @@ public class ScreenshotIndexService
     public IReadOnlyList<TaskScreenshot> ListWorkspaceScreenshots(int windowHours, string? projectFilter)
     {
         var cutoff = DateTime.UtcNow.AddHours(-Math.Max(1, windowHours));
-        var jobs = _scanner.ScanAllJobs();
+        var jobs = _scanner.ScanAllAutomationJobs();
         var collected = new List<TaskScreenshot>();
 
         foreach (var job in jobs)

@@ -50,7 +50,7 @@ public sealed class ProjectThroughputService
             && DateTime.UtcNow - cached.At < CacheTtl)
             return cached.Value;
 
-        var tasks = _scanner.ScanAllJobsWithArchive()
+        var tasks = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(task => WatchPathComparison.PathsEqual(task.WatchPath, entry.Path))
             .ToList();
         var value = BuildSummary(projectName, tasks, ReadTimeline, nowUtc);

@@ -1449,6 +1449,26 @@
             metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2480</code><br><span class="small">lifecycle checks survived retries and restarts</span></td>
+          <td>
+            <code>lifecycle.json</code> kept <code>post-processing-running</code> phases and running checks after a retry,
+            backend recovery, or terminal review decision. System pulse and scheduled stuck scans therefore reported
+            work that had already restarted or finished; marked RUN-1xx E2E fixtures also entered those scans.
+          </td>
+          <td>
+            Run start updated only <code>task.json.phase</code>, recovery restored only the volatile queue item, and
+            terminal moves did not close lifecycle checks. Background consumers read the raw fixture-inclusive scanner.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> confirmed coding starts clear prior Post Processing checks;
+            recovery replaces them at the recovery timestamp; Auto Review exits close active checks as
+            <code>completed</code> or <code>failed</code> with <code>finishedAt</code>. Fixture-marked cards are excluded
+            from automated pickup, review, recovery, liveness, supervisor, summary, and maintenance scans. Regression
+            coverage proves no recovered check predates the restart.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -90,7 +90,7 @@ public sealed class CompletedLaneAuditService
                     .FirstOrDefault(w => string.Equals(w.Name, projectIdOrName, StringComparison.OrdinalIgnoreCase)
                                          || string.Equals(w.Path, projectIdOrName, StringComparison.OrdinalIgnoreCase))?.Path);
 
-        var candidates = _scanner.ScanAllJobsWithArchive()
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
             .Where(j => watchPath == null || string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
             .Where(j => (j.Tags ?? []).Any(IntegrationStatuses.IsPendingTag))
@@ -214,7 +214,7 @@ public sealed class CompletedLaneAuditService
 
         // Snapshot the candidate set now so a card moving mid-run does not
         // produce a confusing "processed > total" report.
-        var candidates = _scanner.ScanAllJobs()
+        var candidates = _scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
             .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
             .OrderBy(j => j.LastActivity)

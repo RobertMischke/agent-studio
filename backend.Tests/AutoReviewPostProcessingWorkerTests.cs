@@ -54,6 +54,10 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "noop-task")));
         var followUp = Path.Combine(_watchPath, TaskStates.Ready, "noop-task", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUp));
+        var lifecycle = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Ready, "noop-task", "lifecycle.json"));
+        Assert.Contains("\"status\": \"failed\"", lifecycle);
+        Assert.Contains("\"finishedAt\"", lifecycle);
+        Assert.DoesNotContain("\"status\": \"running\"", lifecycle);
     }
 
     [Fact]

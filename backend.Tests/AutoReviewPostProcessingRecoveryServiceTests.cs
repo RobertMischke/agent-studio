@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 
 using Xunit;
 
@@ -92,6 +93,83 @@ public sealed class AutoReviewPostProcessingRecoveryServiceTests : IDisposable
         Assert.Empty(Drain(deps.Queue));
         Assert.Equal(0, summary.Scanned);
         Assert.Equal(0, summary.ReEnqueued);
+    }
+
+    [Fact]
+    public void RunRecoveryScan_ExcludesFixturesAndReplacesChecksOlderThanRestart()
+    {
+        var enteredLaneAt = new DateTime(2026, 08, 02, 8, 0, 0, DateTimeKind.Utc);
+        var restartedAt = enteredLaneAt.AddHours(1);
+        SeedAutoReviewJob("real-recovery", enteredLaneAt, writeEntryMarker: true, writeDecision: false);
+        SeedAutoReviewJob("RUN-101", enteredLaneAt, writeEntryMarker: true, writeDecision: false, fixture: true);
+        WriteRunningLifecycle("real-recovery", enteredLaneAt);
+        WriteRunningLifecycle("RUN-101", enteredLaneAt);
+
+        var deps = BuildDeps();
+        var summary = AgentStudio.Runner.AutoReviewPostProcessingRecoveryService.RunRecoveryScan(
+            deps.Scanner, deps.Transitions, NullLogger.Instance, restartedAt);
+
+        var request = Assert.Single(Drain(deps.Queue));
+        Assert.Equal("real-recovery", request.JobId);
+        Assert.Equal(1, summary.Scanned);
+        Assert.Equal(1, summary.ReEnqueued);
+
+        var recovered = ReadLifecycle("real-recovery");
+        Assert.Equal(LifecyclePhases.PostProcessingRunning, recovered.Phase);
+        Assert.Equal(restartedAt, recovered.PhaseEnteredAt);
+        Assert.NotEmpty(recovered.PostProcessingChecks);
+        Assert.All(recovered.PostProcessingChecks, check =>
+        {
+            Assert.Equal("running", check.Status);
+            Assert.NotNull(check.StartedAt);
+            Assert.True(check.StartedAt >= restartedAt,
+                $"Recovery kept stale check {check.Name} from {check.StartedAt:o} before restart {restartedAt:o}.");
+        });
+
+        var fixture = ReadLifecycle("RUN-101");
+        Assert.Equal(enteredLaneAt, fixture.PhaseEnteredAt);
+        Assert.Single(fixture.PostProcessingChecks);
+        Assert.Equal("stale-check", fixture.PostProcessingChecks[0].Name);
+    }
+
+    [Theory]
+    [InlineData(TaskStates.HumanReview, "completed")]
+    [InlineData(TaskStates.Ready, "failed")]
+    public async Task LeavingAutoReview_TerminalizesRunningChecks(string targetState, string expectedStatus)
+    {
+        var startedAt = new DateTime(2026, 08, 02, 8, 0, 0, DateTimeKind.Utc);
+        SeedAutoReviewJob("terminal-check", startedAt, writeEntryMarker: true, writeDecision: false);
+        WriteRunningLifecycle("terminal-check", startedAt);
+        var deps = BuildDeps();
+
+        var move = await deps.Transitions.MoveAsync(
+            "terminal-check", targetState, _watchPath, CancellationToken.None);
+
+        Assert.Equal(MoveJobStatus.Success, move.Status);
+        var lifecycle = ReadLifecycleAt(move.NewFolderPath!);
+        var check = Assert.Single(lifecycle.PostProcessingChecks);
+        Assert.Equal(expectedStatus, check.Status);
+        Assert.NotNull(check.FinishedAt);
+        Assert.NotEqual(LifecyclePhases.PostProcessingRunning, lifecycle.Phase);
+    }
+
+    [Fact]
+    public void ConfirmedExecutionStart_ClearsPriorPostProcessingAttempt()
+    {
+        var previousAttempt = new DateTime(2026, 08, 02, 8, 0, 0, DateTimeKind.Utc);
+        var newAttempt = previousAttempt.AddHours(1);
+        SeedAutoReviewJob("retry-reset", previousAttempt, writeEntryMarker: true, writeDecision: false);
+        WriteRunningLifecycle("retry-reset", previousAttempt);
+        var folder = Path.Combine(_watchPath, TaskStates.AutoReview, "retry-reset");
+
+        var updated = PostProcessingLifecycleStore.ResetForExecution(
+            folder, newAttempt, NullLogger.Instance);
+
+        Assert.True(updated);
+        var lifecycle = ReadLifecycleAt(folder);
+        Assert.Equal(LifecyclePhases.ExecutionRunning, lifecycle.Phase);
+        Assert.Equal(newAttempt, lifecycle.PhaseEnteredAt);
+        Assert.Empty(lifecycle.PostProcessingChecks);
     }
 
     // ---- Pure heuristic boundary tests -----------------------------------------
@@ -187,15 +265,26 @@ public sealed class AutoReviewPostProcessingRecoveryServiceTests : IDisposable
         return items;
     }
 
-    private void SeedAutoReviewJob(string slug, DateTime enteredLaneAt, bool writeEntryMarker, bool writeDecision)
-        => SeedJobInState(TaskStates.AutoReview, slug, enteredLaneAt, writeEntryMarker, writeDecision);
+    private void SeedAutoReviewJob(
+        string slug,
+        DateTime enteredLaneAt,
+        bool writeEntryMarker,
+        bool writeDecision,
+        bool fixture = false)
+        => SeedJobInState(TaskStates.AutoReview, slug, enteredLaneAt, writeEntryMarker, writeDecision, fixture);
 
-    private void SeedJobInState(string state, string slug, DateTime enteredLaneAt, bool writeEntryMarker, bool writeDecision)
+    private void SeedJobInState(
+        string state,
+        string slug,
+        DateTime enteredLaneAt,
+        bool writeEntryMarker,
+        bool writeDecision,
+        bool fixture = false)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"enteredLaneAt\":\"{enteredLaneAt:o}\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"enteredLaneAt\":\"{enteredLaneAt:o}\",\"fixture\":{fixture.ToString().ToLowerInvariant()}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nWork body.\n");
 
         if (writeEntryMarker)
@@ -226,6 +315,39 @@ public sealed class AutoReviewPostProcessingRecoveryServiceTests : IDisposable
             }, NullLogger.Instance);
         }
     }
+
+    private void WriteRunningLifecycle(string slug, DateTime startedAt)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        var snapshot = new LifecycleSnapshot
+        {
+            Phase = LifecyclePhases.PostProcessingRunning,
+            PhaseEnteredAt = startedAt,
+            PostProcessingChecks =
+            [
+                new LifecycleCheck
+                {
+                    Name = "stale-check",
+                    Status = "running",
+                    StartedAt = startedAt,
+                },
+            ],
+        };
+        File.WriteAllText(
+            Path.Combine(dir, "lifecycle.json"),
+            JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            }));
+    }
+
+    private LifecycleSnapshot ReadLifecycle(string slug)
+        => ReadLifecycleAt(Path.Combine(_watchPath, TaskStates.AutoReview, slug));
+
+    private static LifecycleSnapshot ReadLifecycleAt(string folderPath)
+        => JsonSerializer.Deserialize<LifecycleSnapshot>(
+            File.ReadAllText(Path.Combine(folderPath, "lifecycle.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
 
     private Deps BuildDeps()
     {

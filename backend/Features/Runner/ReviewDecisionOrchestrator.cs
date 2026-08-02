@@ -901,7 +901,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public void BackfillStaleConcernTags(string workspace, CancellationToken ct)
     {
         List<TaskInfo> jobs;
-        try { jobs = _scanner.ScanAllJobs(); }
+        try { jobs = _scanner.ScanAllAutomationJobs(); }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "ReviewDecisionOrchestrator: concern-tag backfill scan failed");
@@ -971,7 +971,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public void BackfillStaleAcceptedOutcomeIssues(string workspace, CancellationToken ct)
     {
         List<TaskInfo> jobs;
-        try { jobs = _scanner.ScanAllJobs(); }
+        try { jobs = _scanner.ScanAllAutomationJobs(); }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "ReviewDecisionOrchestrator: accepted-outcome backfill scan failed");
@@ -1055,7 +1055,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         List<TaskInfo> jobs;
-        try { jobs = _scanner.ScanAllJobs(); }
+        try { jobs = _scanner.ScanAllAutomationJobs(); }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less backfill scan failed");
@@ -4506,6 +4506,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUpTaskIds = followUpTaskIds?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
         }, _logger);
 
+        if (!string.Equals(outcome, PostProcessingOutcomes.FindingsAdded, StringComparison.Ordinal))
+        {
+            var failed = !string.Equals(
+                outcome,
+                PostProcessingOutcomes.PassToHumanReview,
+                StringComparison.Ordinal);
+            PostProcessingLifecycleStore.Terminalize(
+                job.FolderPath,
+                DateTime.UtcNow,
+                failed,
+                string.IsNullOrWhiteSpace(summary)
+                    ? $"Post Processing reached terminal outcome {outcome}."
+                    : summary!,
+                _logger,
+                onlyWhenActive: true);
+        }
+
         _logger.LogInformation(
             "post-processing-outcome project={Project} job={JobId} outcome={Outcome} performer={Performer} cli={CliType} step={StepId}",
             job.ProjectName, job.Id, outcome, performer, performerCliType ?? "", stepId ?? "");
@@ -6495,6 +6512,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
         foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
+            if (info.Fixture) continue;
             // Canonical ReviewAttempts belong to the remote review data plane.
             // Until that executor claims the attempt, leaving the card in Auto
             // Review is the fail-closed state. The legacy Task Server review
