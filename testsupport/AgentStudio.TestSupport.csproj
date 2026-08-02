@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <!-- Shared helpers, not a suite. Without this the xunit reference makes
+         `dotnet test agent-taskboard.sln` try to run this assembly as a test
+         project, which aborts the whole run. -->
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
