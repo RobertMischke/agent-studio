@@ -80,12 +80,23 @@ public sealed class HostOrchestratorJournal
             return _state.Work.Select(item => item.Acceptance).ToList();
     }
 
+    public IReadOnlyList<WorkPermitAcceptanceDto> RecoverRunningWork()
+    {
+        lock (_gate)
+            return _state.Work
+                .Where(item => item.Phase == "running")
+                .Select(item => item.Acceptance)
+                .ToList();
+    }
+
     public HostReportRequest PrepareReport(
         string runnerId,
         string hostId,
         string instanceId,
         int configuredCapacity,
         IReadOnlyList<HostCapabilityDto> capabilities,
+        int? effectiveCapacity = null,
+        int? occupiedCapacity = null,
         IReadOnlyList<HostPostProcessingStatusDto>? postProcessing = null,
         IReadOnlyList<HostFaultDto>? faults = null)
     {
@@ -93,9 +104,14 @@ public sealed class HostOrchestratorJournal
         {
             if (_state.PendingReport is not null) return _state.PendingReport;
 
-            var active = _state.Work.Count(item => item.Phase == "running");
+            var active = Math.Max(
+                _state.Work.Count(item => item.Phase == "running"),
+                occupiedCapacity ?? 0);
             var queued = _state.Work.Count(item => item.Phase == "queued");
-            var effective = Math.Max(0, configuredCapacity);
+            var effective = Math.Clamp(
+                effectiveCapacity ?? configuredCapacity,
+                active,
+                Math.Max(active, configuredCapacity));
             var queuedPosition = 0;
             var work = _state.Work
                 .OrderBy(item => item.AcceptedAt)
@@ -128,7 +144,18 @@ public sealed class HostOrchestratorJournal
                         Math.Max(0, effective - active)),
                     capabilities,
                     work,
-                    postProcessing ?? [],
+                    postProcessing ?? _state.Work
+                        .SelectMany(item => item.Acceptance.PostProcessingPlan.Select(step =>
+                            new HostPostProcessingStatusDto(
+                                step.StepExecutionId,
+                                step.RunId,
+                                step.StepId,
+                                item.Acceptance.Lease.Fence,
+                                step.Status,
+                                null,
+                                null,
+                                item.LastActivityAt)))
+                        .ToList(),
                     faults ?? []),
             };
             Persist();

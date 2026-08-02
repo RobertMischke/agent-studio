@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-31
+Version: 2026-08-02
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -133,6 +133,16 @@ state.
   origin are generation-scoped salvage and immutable result refs described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `runner/HostOrchestratorJournal.cs`, `runner/RemoteRunnerDaemon.cs`, and
+  `task-server/HostOrchestratorStore.cs`: the negotiated host-permit path for a
+  separated Task Server. The host sends replay-safe sequenced reports, journals
+  accepted permits before launch, and reports only implemented fenced
+  post-steps. `post-worktree-containment` is the first real host step: run
+  completion is blocked until the immutable result handoff is acknowledged and
+  the isolated checkout is safely torn down. A Task Server without the
+  `host-orchestrator` capability retains the established claim path. The full
+  placement matrix and migration sequence live in
+  [Remote Task Server with local Agent Studio](../../operations/remote-task-server-local-studio.md#post-processing-without-an-attached-studio).
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive

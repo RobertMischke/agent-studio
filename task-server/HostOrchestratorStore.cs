@@ -246,7 +246,7 @@ public sealed partial class TaskServerStore
                        run_id = $run
                  WHERE id = $permit AND status = 'available';
                 INSERT INTO post_step_executions(id, run_id, step_id, eligible_runner_id, status)
-                VALUES ($step, $run, 'post-run-host-evidence', $runner, 'available');
+                VALUES ($step, $run, 'post-worktree-containment', $runner, 'available');
                 """, ct, transaction,
                 ("$task", taskId),
                 ("$fence", fence),
@@ -339,6 +339,18 @@ public sealed partial class TaskServerStore
             var step = await ReadPostStepAsync(connection, transaction, runId, stepExecutionId, ct);
             if (!string.Equals(step.EligibleRunnerId, request.RunnerId, StringComparison.Ordinal))
                 throw new TaskServerConflictException("post-step-host-mismatch", "The post-step is bound to another host.");
+            if (step.Status == "completed")
+            {
+                var replayKey = Convert.ToString(await ScalarAsync(connection, """
+                    SELECT claim_idempotency_key FROM post_step_executions WHERE id = $step;
+                    """, ct, transaction, ("$step", stepExecutionId)), CultureInfo.InvariantCulture);
+                if (replayKey == request.IdempotencyKey)
+                {
+                    response = new PostStepClaimResponse("completed", step, request.RunFence);
+                    return;
+                }
+                throw new TaskServerConflictException("post-step-already-completed", "The post-step is already complete.");
+            }
             if (step.Status == "running")
             {
                 var replayKey = Convert.ToString(await ScalarAsync(connection, """

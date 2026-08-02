@@ -160,7 +160,7 @@ public sealed partial class TaskServerStore
                 version,
                 _serverId,
                 ["studio", "runner", "review-runner", TaskServerProtocol.EngineClientKind, "management"],
-                ["coding-plane", "review-plane", "orchestration-plane", "management-plane"]),
+                ["coding-plane", "review-plane", "orchestration-plane", "host-orchestrator", "management-plane"]),
             _startedAt,
             _outboxBacklog,
             _oldestUnacknowledgedSequence,
@@ -1170,7 +1170,7 @@ public sealed partial class TaskServerStore
                 new
                 {
                     artifacts = "canonical-store",
-                    reviewAuthority = "deployed-backend",
+                    reviewAuthority = "task-server",
                 },
                 ct);
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,

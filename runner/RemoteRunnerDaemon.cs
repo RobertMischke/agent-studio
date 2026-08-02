@@ -79,6 +79,8 @@ public sealed class RemoteRunnerDaemon
     public async Task RunAsync(CancellationToken shutdown)
     {
         var state = new RunnerStateStore(_options.StateDir);
+        var hostJournal = new HostOrchestratorJournal(
+            Path.Combine(_options.StateDir, "host-orchestrator.json"));
         var persistedAtStartup = state.LoadAll();
         using var startupAuthorityWatch = CancellationTokenSource.CreateLinkedTokenSource(
             shutdown);
@@ -95,11 +97,28 @@ public sealed class RemoteRunnerDaemon
             shutdown);
         _log(
             $"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; " +
-            $"slots={_client.HostMaxParallelism}");
+            $"slots={_client.HostMaxParallelism} admission={(_client.UsesHostOrchestrator ? "host-permits" : "claims")}");
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
 
         var inventory = new RunnerProcessInventoryTracker();
         var active = new List<ActiveSlot>();
+        var recoveredHostWork = _client.UsesHostOrchestrator
+            ? hostJournal.RecoverAcceptedWork()
+            : [];
+        var priorInstanceWork = recoveredHostWork.FirstOrDefault(accepted =>
+            !string.Equals(
+                accepted.Lease.InstanceId,
+                _client.RunnerInstanceId,
+                StringComparison.Ordinal));
+        if (priorInstanceWork is not null)
+        {
+            throw new InvalidOperationException(
+                $"Host journal retains permit '{priorInstanceWork.PermitId}' accepted by prior instance " +
+                $"'{priorInstanceWork.Lease.InstanceId}'. Host-orchestrator v1 has no verified instance-adoption " +
+                "transaction, so startup is fail-closed and the accepted authority remains journaled.");
+        }
+        foreach (var accepted in recoveredHostWork)
+            _client.AdoptWorkPermit(accepted);
         foreach (var persisted in state.LoadAll())
         {
             var slot = await RecoverLaunchingIdentityAsync(persisted, state);
@@ -136,6 +155,18 @@ public sealed class RemoteRunnerDaemon
         }
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
+        var persistedTaskKeys = state.LoadAll()
+            .Select(slot => slot.TaskKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var orphanedRunningPermit = hostJournal.RecoverRunningWork().FirstOrDefault(accepted =>
+            !persistedTaskKeys.Contains(accepted.Task.TaskKey));
+        if (orphanedRunningPermit is not null)
+        {
+            throw new InvalidOperationException(
+                $"Host journal retains running permit '{orphanedRunningPermit.PermitId}' for " +
+                $"'{orphanedRunningPermit.Task.TaskKey}' without durable process state. " +
+                "Startup is fail-closed so the accepted authority is not replaced.");
+        }
         await handoffRecovery.RecoverAllAsync(shutdown);
 
         // Recover heartbeats before the potentially slow fallback-remote probe.
@@ -210,6 +241,7 @@ public sealed class RemoteRunnerDaemon
             }
         }
         var consecutiveFaults = 0;
+        var hostReconciliationRequired = recoveredHostWork.Count > 0;
         while (!shutdown.IsCancellationRequested)
         {
             for (var i = active.Count - 1; i >= 0; i--)
@@ -256,6 +288,73 @@ public sealed class RemoteRunnerDaemon
                         "claim-stopped",
                         $"Claim admission stopped after load/core {loadDecision.LoadPerCore:0.00} remained high for {loadDecision.SustainedFor.TotalSeconds:0}s."));
                 }
+                AgentStudio.TaskServer.Contracts.HostReportResponse? hostReport = null;
+                if (_client.UsesHostOrchestrator)
+                {
+                    var report = hostJournal.PrepareReport(
+                        _options.RunnerId,
+                        _options.Hostname,
+                        _client.RunnerInstanceId,
+                        _client.HostMaxParallelism,
+                        [
+                            new AgentStudio.TaskServer.Contracts.HostCapabilityDto(
+                                "git-push",
+                                gitCapability.CanPush ? "ready" : "faulted",
+                                Reason: gitCapability.Detail,
+                                ObservedAt: DateTime.UtcNow),
+                            new AgentStudio.TaskServer.Contracts.HostCapabilityDto(
+                                "post-worktree-containment",
+                                "ready",
+                                ObservedAt: DateTime.UtcNow),
+                        ],
+                        effectiveCapacity: loadDecision.Throttle
+                            ? hostJournal.ActiveCount
+                            : _client.HostMaxParallelism,
+                        occupiedCapacity: active.Count);
+                    hostReport = await _client.ReportHostAsync(report, shutdown);
+                    hostJournal.AcknowledgeReport(hostReport.AcceptedSequence);
+
+                    if (hostReconciliationRequired)
+                    {
+                        foreach (var accepted in hostJournal.RecoverAcceptedWork())
+                            await _client.ReconcileHostRunAsync(
+                                accepted,
+                                hostReport.AcceptedSequence,
+                                shutdown);
+                        hostReconciliationRequired = false;
+                    }
+
+                    var availableQueueSlots = Math.Max(
+                        0,
+                        _client.HostMaxParallelism - active.Count - hostJournal.QueuedCount);
+                    if (!loadDecision.Throttle && availableQueueSlots > 0)
+                    {
+                        foreach (var permit in hostReport.AvailableWork.Take(availableQueueSlots))
+                        {
+                            try
+                            {
+                                var acceptance = await _client.AcceptWorkPermitAsync(
+                                    permit,
+                                    hostReport.AcceptedSequence,
+                                    hostReport.PolicyVersion,
+                                    CancellationToken.None);
+                                hostJournal.Enqueue(acceptance);
+                                claimedAny = true;
+                                _log(
+                                    $"accepted host permit {permit.PermitId} for " +
+                                    $"{acceptance.Task.ProjectId}/{acceptance.Task.TaskKey}; " +
+                                    $"queued={hostJournal.QueuedCount}");
+                            }
+                            catch (TaskServerException ex) when (ex.StatusCode == 409)
+                            {
+                                // Work-permit lists are snapshots shared across
+                                // hosts. Losing an acceptance race is normal and
+                                // must not restart this daemon.
+                                _log($"host permit {permit.PermitId} was no longer claimable: {ex.Message}");
+                            }
+                        }
+                    }
+                }
                 if (loadDecision.Throttle)
                 {
                     _log(
@@ -267,16 +366,19 @@ public sealed class RemoteRunnerDaemon
                         .Select(process => process.TaskKey)
                         .Distinct(StringComparer.Ordinal)
                         .ToArray();
-                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
-                        _options.RunnerId, _options.RunnerName, _options.Hostname,
-                        Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                        latestTelemetry,
-                        AvailableSlots: 0,
-                        ActiveSlots: active.Count,
-                        IdempotencyKey: $"load-gate:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys,
-                        Inventory: inventorySnapshot), shutdown);
-                    AcknowledgeInventory(inventory, inventorySnapshot, response);
+                    if (!_client.UsesHostOrchestrator)
+                    {
+                        var response = await _client.ClaimAsync(new RunnerClaimRequest(
+                            _options.RunnerId, _options.RunnerName, _options.Hostname,
+                            Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                            latestTelemetry,
+                            AvailableSlots: 0,
+                            ActiveSlots: active.Count,
+                            IdempotencyKey: $"load-gate:{_options.RunnerId}:{Guid.NewGuid():N}",
+                            ActiveTaskKeys: activeTaskKeys,
+                            Inventory: inventorySnapshot), shutdown);
+                        AcknowledgeInventory(inventory, inventorySnapshot, response);
+                    }
                     await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
                     consecutiveFaults = 0;
                     continue;
@@ -288,15 +390,18 @@ public sealed class RemoteRunnerDaemon
                         .Select(process => process.TaskKey)
                         .Distinct(StringComparer.Ordinal)
                         .ToArray();
-                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
-                            _options.RunnerId, _options.RunnerName, _options.Hostname,
-                            Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                            TakeTelemetry(), AvailableSlots: 0,
-                            ActiveSlots: active.Count,
-                            IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}",
-                            ActiveTaskKeys: activeTaskKeys,
-                            Inventory: inventorySnapshot), shutdown);
-                    AcknowledgeInventory(inventory, inventorySnapshot, response);
+                    if (!_client.UsesHostOrchestrator)
+                    {
+                        var response = await _client.ClaimAsync(new RunnerClaimRequest(
+                                _options.RunnerId, _options.RunnerName, _options.Hostname,
+                                Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                                TakeTelemetry(), AvailableSlots: 0,
+                                ActiveSlots: active.Count,
+                                IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}",
+                                ActiveTaskKeys: activeTaskKeys,
+                                Inventory: inventorySnapshot), shutdown);
+                        AcknowledgeInventory(inventory, inventorySnapshot, response);
+                    }
                 }
                 while (active.Count < _client.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
@@ -315,6 +420,49 @@ public sealed class RemoteRunnerDaemon
                             null,
                             new RemoteProjectChatRunner(_options, _client, _log)
                                 .RunAsync(chatClaim.Work, shutdown)));
+                        continue;
+                    }
+
+                    if (_client.UsesHostOrchestrator)
+                    {
+                        var acceptance = hostJournal.TryStartNext();
+                        if (acceptance is null) break;
+                        var permitClaim = _client.AdoptWorkPermit(acceptance);
+                        if (permitClaim.Lease is null
+                            || string.IsNullOrWhiteSpace(permitClaim.TaskKey))
+                        {
+                            throw new InvalidDataException(
+                                $"Accepted permit '{acceptance.PermitId}' has no executable lease or task identity.");
+                        }
+
+                        var permitRunner = new RemoteTaskRunner(
+                            _options,
+                            _client,
+                            _log,
+                            state,
+                            inventory);
+                        claimedAny = true;
+                        _log(
+                            $"starting host permit {acceptance.PermitId} for " +
+                            $"{permitClaim.ProjectName}/{permitClaim.TaskKey} in slot " +
+                            $"{active.Count + 1}/{_client.HostMaxParallelism}");
+                        active.Add(new ActiveSlot(
+                            permitClaim.TaskKey,
+                            RunAcceptedPermitAsync(
+                                hostJournal,
+                                _client,
+                                acceptance,
+                                permitRunner.RunClaimedAsync(
+                                    permitClaim.TaskKey,
+                                    permitClaim.Lease,
+                                    CancellationToken.None,
+                                    permitClaim.ProjectId,
+                                    permitClaim.RepositoryUrl,
+                                    permitClaim.DefaultBranch,
+                                    permitClaim.TaskKind,
+                                    permitClaim.RunId,
+                                    permitClaim.LeaseInstanceId,
+                                    permitClaim.RunSpec))));
                         continue;
                     }
 
@@ -412,6 +560,8 @@ public sealed class RemoteRunnerDaemon
                 // keep every in-flight slot running (their heartbeats tolerate the
                 // same blip) and retry the claim after a bounded backoff.
                 var delay = BackoffFor(++consecutiveFaults);
+                hostReconciliationRequired |= _client.UsesHostOrchestrator
+                                              && hostJournal.RecoverAcceptedWork().Count > 0;
                 _log($"task server unreachable while claiming work ({ex.Message}); " +
                      $"{active.Count} slot(s) still running; retry {consecutiveFaults} in {delay.TotalSeconds:0}s");
                 await DelayThroughShutdown(delay, shutdown);
@@ -526,6 +676,18 @@ public sealed class RemoteRunnerDaemon
     {
         try { await Task.Delay(delay, shutdown); }
         catch (OperationCanceledException) { /* shutting down; the loop condition ends it */ }
+    }
+
+    private static async Task<int> RunAcceptedPermitAsync(
+        HostOrchestratorJournal journal,
+        TaskServerClient client,
+        AgentStudio.TaskServer.Contracts.WorkPermitAcceptanceDto acceptance,
+        Task<int> execution)
+    {
+        var exitCode = await execution;
+        if (!client.HasAcceptedHostWork(acceptance.Task.TaskKey))
+            journal.Complete(acceptance.Task.TaskId);
+        return exitCode;
     }
 
     private void AcknowledgeInventory(

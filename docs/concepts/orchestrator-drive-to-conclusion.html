@@ -464,6 +464,33 @@
           </td>
         </tr>
         <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2470</code><br><span class="small">post-processing-without-local-studio</span></td>
+          <td>
+            Coding and Remote Review could finish on remote hosts, but the legacy
+            <code>AutoReviewPostProcessingWorker</code> still owned verdict evaluation, reissue, lane movement, and the
+            integration trigger inside the local backend process. A stopped or busy Windows backend therefore left cards in
+            <span class="lane">post-processing-running</span> even though Angular itself was not required.
+          </td>
+          <td>
+            Task authority and execution placement were coupled to the same card-folder workflow. The separated Task Server
+            already had fenced HostReports, WorkPermits, and post-step rows, while the Runner's durable
+            <code>HostOrchestratorJournal</code> was not connected to the daemon and the post-step plan contained only a
+            placeholder.
+          </td>
+          <td>
+            <span class="pill transient">first slice</span> the coding daemon now negotiates the host-orchestrator contract,
+            reports sequenced capacity and accepted work, journals and executes fenced permits, and completes the real
+            <code>post-worktree-containment</code> step only after immutable result handoff and safe checkout teardown. Task
+            Server completion remains fail-closed while host work is incomplete and now records Task Server review authority.
+            Cross-process adoption of an accepted permit remains the explicit H0.1 contract gap; v1 preserves it and stops
+            admission instead of transferring authority implicitly.
+            The per-step placement matrix and ordered migration are in
+            <code>docs/operations/remote-task-server-local-studio.md</code>. Full detached-backend drain still requires the
+            server-owned completeness and final verdict slices plus the selected host execution steps.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-23</td>
           <td><code>AGT-2260</code><br><span class="small">operator-requeue-attempt-epochs<br>(belege <code>AGT-1934/2110/2199</code>)</span></td>
           <td>

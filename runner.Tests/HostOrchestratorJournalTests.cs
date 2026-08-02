@@ -27,6 +27,8 @@ public sealed class HostOrchestratorJournalTests
         Assert.Equal(1, prepared.Sequence);
         Assert.Equal(new HostCapacityDto(1, 1, 1, 1, 0), prepared.Capacity);
         Assert.Equal(["TS-1", "TS-2"], prepared.Work.Select(item => item.TaskKey));
+        Assert.Equal(2, prepared.PostProcessing.Count);
+        Assert.All(prepared.PostProcessing, step => Assert.Equal("post-worktree-containment", step.StepId));
         Assert.Null(prepared.Work[0].QueuePosition);
         Assert.Null(prepared.Work[0].ProcessId);
         Assert.Equal(0, prepared.Work[1].QueuePosition);
@@ -42,6 +44,10 @@ public sealed class HostOrchestratorJournalTests
         Assert.Equal(prepared.ObservedAt, replay.ObservedAt);
         Assert.Equal("git-push", Assert.Single(replay.Capabilities).Kind);
         reopened.AcknowledgeReport(1);
+        var withExternalOccupancy = reopened.PrepareReport(
+            "runner-a", "host-a", "instance-a", 3, [], occupiedCapacity: 2);
+        Assert.Equal(new HostCapacityDto(3, 3, 2, 1, 1), withExternalOccupancy.Capacity);
+        reopened.AcknowledgeReport(withExternalOccupancy.Sequence);
         reopened.Complete("task-1");
 
         var reopenedAgain = new HostOrchestratorJournal(path);
@@ -52,7 +58,7 @@ public sealed class HostOrchestratorJournalTests
             "instance-a",
             1,
             [new HostCapabilityDto("git-push", "ready")]);
-        Assert.Equal(2, next.Sequence);
+        Assert.Equal(3, next.Sequence);
         Assert.Equal(1, next.Capacity.Active);
         Assert.Equal(0, next.Capacity.Queued);
     }
@@ -76,7 +82,7 @@ public sealed class HostOrchestratorJournalTests
             task,
             lease,
             lease.ExpiresAt,
-            [new PostStepPlanDto($"step-{taskId}", runId, "post-run-host-evidence", "runner-a", "available")]);
+            [new PostStepPlanDto($"step-{taskId}", runId, "post-worktree-containment", "runner-a", "available")]);
     }
 
     private sealed class JournalDirectory : IDisposable

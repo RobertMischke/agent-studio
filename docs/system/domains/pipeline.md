@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -366,12 +366,16 @@ pipeline view.
 
 ### Post-step lifecycle and ownership
 
-The separated control-plane path preserves the same ownership rule:
-definitions live in the Task Server, while execution lives in
-`orchestrator-engine`. The Engine receives the task payload and prior stage
-results only through the public API. Its `engine.env` contains bootstrap
-connectivity, identity/credential, lease timing, and concurrency caps, never
-project flow definitions, model routing, or gate policy.
+The separated control-plane path has three explicit owners. Definitions,
+attempts, verdict policy, retry budgets, and lane transitions live in the Task
+Server. API-only coordination lives in `orchestrator-engine`. Checkout-bound
+Git, build, test, lint, and model execution lives on a fenced Runner host. The
+Engine and host receive immutable plans and prior results only through the
+public API; neither reads the Task Server filesystem. Their environment files
+contain bootstrap connectivity, identity/credential, lease timing, and
+concurrency caps, never project flow definitions, model routing, or gate
+policy. The complete current-step classification is in
+[Remote Task Server with local Agent Studio](../../operations/remote-task-server-local-studio.md#standard-post-step-classification).
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**

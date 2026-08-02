@@ -13,6 +13,7 @@ public sealed class HostOrchestratorStoreTests
         using var temp = new TempDirectory();
         var first = Store(temp.Path);
         await first.InitializeAsync();
+        Assert.Contains("host-orchestrator", first.Status().Protocol.Capabilities ?? []);
         var workspace = await first.CreateWorkspaceAsync(new CreateWorkspaceRequest("Workspace"), "test", default);
         var project = await first.CreateProjectAsync(
             new CreateProjectRequest(workspace.WorkspaceId, "Project", "TS"),
@@ -46,6 +47,7 @@ public sealed class HostOrchestratorStoreTests
         Assert.Equal("accepted", acceptance.Status);
         var postStep = Assert.Single(acceptance.PostProcessingPlan);
         Assert.Equal("runner-a", postStep.EligibleRunnerId);
+        Assert.Equal("post-worktree-containment", postStep.StepId);
 
         var queuedWork = Work(acceptance, "queued", queuePosition: 0);
         var report2 = Report(
@@ -130,6 +132,21 @@ public sealed class HostOrchestratorStoreTests
             default);
         Assert.Equal("completed", completion.Status);
         Assert.Equal("runner-a", completion.Step.EligibleRunnerId);
+        var completedClaimReplay = await restarted.ClaimPostStepAsync(
+            acceptance.Run.RunId,
+            postStep.StepExecutionId,
+            new PostStepClaimRequest(
+                HostOrchestratorContract.Current,
+                "host-a",
+                "instance-a",
+                "runner-a",
+                acceptance.Lease.LeaseId,
+                acceptance.Lease.Fence,
+                3,
+                "post-claim-once"),
+            "runner-a",
+            default);
+        Assert.Equal("completed", completedClaimReplay.Status);
 
         var envelope = new ImmutableResultEnvelope(
             "project",
@@ -171,6 +188,11 @@ public sealed class HostOrchestratorStoreTests
             default);
         var completedTask = await restarted.GetTaskAsync(project.ProjectId, task.TaskKey, default);
         Assert.Equal("4-auto-review", completedTask!.State);
+        var history = await restarted.GetTaskHistoryAsync(project.ProjectId, task.TaskKey, 0, default);
+        var postProcessingEvent = Assert.Single(
+            history!.Events,
+            item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
+        Assert.Contains("\"reviewAuthority\":\"task-server\"", postProcessingEvent.PayloadJson);
 
         var audit = await restarted.ListAuditAsync(0, default);
         Assert.Contains(audit, item => item.Action == "host.report.accepted");
