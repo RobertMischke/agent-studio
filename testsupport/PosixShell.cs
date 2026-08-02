@@ -84,26 +84,7 @@ public static class PosixShell
         return FindOnPath("bash") ?? FindWindowsGitBash();
     }
 
-    private static string? FindOnPath(string exe)
-    {
-        var separator = OperatingSystem.IsWindows() ? ';' : ':';
-        var extension = OperatingSystem.IsWindows() ? ".exe" : "";
-        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var directory in pathEnv.Split(
-                     separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            try
-            {
-                var candidate = System.IO.Path.Combine(directory, exe + extension);
-                if (File.Exists(candidate)) return candidate;
-            }
-            catch (ArgumentException)
-            {
-                // A malformed PATH entry must not take the whole lookup down.
-            }
-        }
-        return null;
-    }
+    private static string? FindOnPath(string exe) => Executables.FindOnPath(exe);
 
     private static string? FindWindowsGitBash()
     {
