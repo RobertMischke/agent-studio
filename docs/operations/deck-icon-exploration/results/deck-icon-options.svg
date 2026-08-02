@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 330" role="img" aria-labelledby="title desc">
+  <title id="title">Deck icon options in light and dark themes</title>
+  <desc id="desc">Three line icons: recommended card stack, layered planes, and board stack.</desc>
+  <defs>
+    <style>
+      .label { font: 700 12px system-ui, sans-serif; letter-spacing: 1.2px; }
+      .name { font: 650 14px system-ui, sans-serif; }
+      .effect { font: 12px system-ui, sans-serif; }
+      .pick { font: 750 10px system-ui, sans-serif; letter-spacing: .8px; }
+      .icon { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <g id="card-stack" class="icon">
+      <rect x="7" y="3" width="13" height="15" rx="2"/>
+      <path d="M4 6v13a2 2 0 0 0 2 2h11"/>
+      <path d="M2 9v10a4 4 0 0 0 4 4h8"/>
+    </g>
+    <g id="layers" class="icon">
+      <path d="m12 3 9 5-9 5-9-5 9-5Z"/>
+      <path d="m3 12 9 5 9-5"/>
+      <path d="m3 16 9 5 9-5"/>
+    </g>
+    <g id="board-stack" class="icon">
+      <rect x="6" y="3" width="14" height="15" rx="2"/>
+      <path d="M11 7v7M15 7v4"/>
+      <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
+    </g>
+  </defs>
+
+  <rect width="1080" height="165" fill="#f5f5f3"/>
+  <rect y="165" width="1080" height="165" fill="#18181b"/>
+  <line x1="0" y1="165" x2="1080" y2="165" stroke="#3f3f46"/>
+
+  <text x="32" y="88" class="label" fill="#71717a">LIGHT</text>
+  <text x="32" y="253" class="label" fill="#a1a1aa">DARK</text>
+
+  <g transform="translate(130 34)">
+    <rect width="275" height="98" rx="9" fill="#e8eef8" stroke="#6d9bd2"/>
+    <text x="223" y="18" class="pick" fill="#2a78d6">PICK</text>
+    <g transform="translate(22 31) scale(1.5)" stroke="#3f3f46"><use href="#card-stack"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">A · Card stack</text>
+    <text x="78" y="66" class="effect" fill="#71717a">Literal, compact, product-specific</text>
+  </g>
+  <g transform="translate(422 34)">
+    <rect width="275" height="98" rx="9" fill="#ffffff" stroke="#ddddda"/>
+    <g transform="translate(22 31) scale(1.5)" stroke="#3f3f46"><use href="#layers"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">B · Layered planes</text>
+    <text x="78" y="66" class="effect" fill="#71717a">Structural, calm, slightly abstract</text>
+  </g>
+  <g transform="translate(714 34)">
+    <rect width="334" height="98" rx="9" fill="#ffffff" stroke="#ddddda"/>
+    <g transform="translate(22 31) scale(1.5)" stroke="#3f3f46"><use href="#board-stack"/></g>
+    <text x="78" y="45" class="name" fill="#3f3f46">C · Board stack</text>
+    <text x="78" y="66" class="effect" fill="#71717a">Board context plus one backing card</text>
+  </g>
+
+  <g transform="translate(130 199)">
+    <rect width="275" height="98" rx="9" fill="#283446" stroke="#3987e5"/>
+    <text x="223" y="18" class="pick" fill="#69aaf3">PICK</text>
+    <g transform="translate(22 31) scale(1.5)" stroke="#e4e4e7"><use href="#card-stack"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">A · Card stack</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">Literal, compact, product-specific</text>
+  </g>
+  <g transform="translate(422 199)">
+    <rect width="275" height="98" rx="9" fill="#232326" stroke="#3f3f46"/>
+    <g transform="translate(22 31) scale(1.5)" stroke="#e4e4e7"><use href="#layers"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">B · Layered planes</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">Structural, calm, slightly abstract</text>
+  </g>
+  <g transform="translate(714 199)">
+    <rect width="334" height="98" rx="9" fill="#232326" stroke="#3f3f46"/>
+    <g transform="translate(22 31) scale(1.5)" stroke="#e4e4e7"><use href="#board-stack"/></g>
+    <text x="78" y="45" class="name" fill="#e4e4e7">C · Board stack</text>
+    <text x="78" y="66" class="effect" fill="#a1a1aa">Board context plus one backing card</text>
+  </g>
+</svg>
