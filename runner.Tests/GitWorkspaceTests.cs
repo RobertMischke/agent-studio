@@ -1,5 +1,6 @@
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -136,10 +137,13 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_workDir, "PROJ-042", "repo", ".git")));
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): the rejection is produced by an executable
+    // POSIX pre-receive hook; Windows has no executable bit for git to honour.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Project_preflight_fails_when_origin_rejects_the_write_probe()
     {
-        if (OperatingSystem.IsWindows()) return;
+        PlatformGate.LinuxOnly("the origin rejects through an executable POSIX pre-receive hook");
 
         await SeedOriginAsync();
         var hook = Path.Combine(_origin, "hooks", "pre-receive");
@@ -253,10 +257,14 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.False(branch.Success);
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): WorktreeProcessReaper finds the offending
+    // processes through /proc/<pid>/cwd and is a no-op elsewhere.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Teardown_kills_processes_with_cwd_in_worktree_before_removal()
     {
-        if (!OperatingSystem.IsLinux()) return;
+        PlatformGate.LinuxOnly("the worktree process reaper scans /proc/<pid>/cwd");
+
         await SeedOriginAsync();
         var logs = new List<string>();
         var workspace = CreateWorkspace(logs.Add);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -12,10 +13,14 @@ public sealed class LeaseLossProcessKillTests : IDisposable
         Path.GetTempPath(),
         "runner-lease-loss-" + Guid.NewGuid().ToString("N"));
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): the kill goes to a POSIX process group that
+    // ProcessRunner creates with setsid, which only exists on Linux.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Rejected_lease_renewal_kills_the_agent_process_group()
     {
-        if (!OperatingSystem.IsLinux()) return;
+        PlatformGate.LinuxOnly("the agent process group is created with setsid and signalled as a group");
+
         Directory.CreateDirectory(_root);
         var parentPidPath = Path.Combine(_root, "parent.pid");
         var childPidPath = Path.Combine(_root, "child.pid");
