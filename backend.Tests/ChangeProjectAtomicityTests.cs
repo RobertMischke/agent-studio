@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
 using AgentStudio.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -137,6 +138,9 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
     // case - a write-protected directory, which has no Windows equivalent here.
     [SkippableFact]
     [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
+    // The runtime gate is PlatformGate.LinuxOnly; this states the same fact to the
+    // platform-compatibility analyzer, which only understands the annotation.
+    [UnsupportedOSPlatform("windows")]
     public void ChangeProject_ReferenceWriteFailure_RestoresSourceAndOriginalReferences()
     {
         PlatformGate.LinuxOnly("the failure is injected through Unix directory permissions");

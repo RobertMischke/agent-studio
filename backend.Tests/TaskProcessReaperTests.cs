@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using AgentStudio.Cli;
 using AgentStudio.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,6 +23,9 @@ public sealed class TaskProcessReaperTests
     // primitive. Linux teardown uses process groups and is covered separately.
     [SkippableFact]
     [Trait(PlatformGate.TraitName, PlatformGate.Windows)]
+    // The runtime gate is PlatformGate.WindowsOnly; this states the same fact to
+    // the platform-compatibility analyzer, which only understands the annotation.
+    [SupportedOSPlatform("windows")]
     public async Task Terminate_KillsDetachedGrandchild_ThatTreeKillWouldMiss()
     {
         PlatformGate.WindowsOnly("the reaper is built on the Win32 Job Object primitive");
@@ -82,6 +86,7 @@ public sealed class TaskProcessReaperTests
 
     [SkippableFact]
     [Trait(PlatformGate.TraitName, PlatformGate.Windows)]
+    [SupportedOSPlatform("windows")]
     public void CreateForProcess_OnExitedProcess_ReturnsNull_NoThrow()
     {
         PlatformGate.WindowsOnly("the reaper is built on the Win32 Job Object primitive");
