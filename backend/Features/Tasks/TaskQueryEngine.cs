@@ -8,7 +8,7 @@ internal sealed record TaskQueryRequest
 {
     private static readonly HashSet<string> AnalysisKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "project", "state", "kind", "cliType", "model", "epicId", "mode", "phase", "tag",
+        "state", "kind", "cliType", "model", "epicId", "mode", "phase", "tag",
         "verdict", "issueKind", "hasIssue", "minCommits", "maxCommits",
         "activitySince", "activityBefore", "createdSince", "createdBefore",
         "durationMin", "durationMax", "sortBy", "order", "limit", "offset", "fields",
