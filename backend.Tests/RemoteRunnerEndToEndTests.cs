@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using System.Diagnostics;
+using AgentStudio.TestSupport;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -1152,10 +1153,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             kind: TaskKinds.Epic, cliType: "codex", model: "gpt-5.6-codex");
         var origin = await SeedOriginAsync();
         var runnerWork = Path.Combine(_workspace, "remote-runner-work");
-        var cli = Path.Combine(_workspace, "fake-planner.sh");
-        await File.WriteAllTextAsync(cli,
-            "#!/bin/sh\nprintf '%s\\n' '```json' '{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"},{\"title\":\"Add UI\",\"prompt\":\"Build and test the UI.\"}]}' '```' '[[TASK_DONE]]'\n");
-        File.SetUnixFileMode(cli, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        // The planner stub only has to print a plan and exit; StubCli emits it in
+        // the form this host can execute (a shell script with the executable bit,
+        // or a .cmd on Windows, where neither shebangs nor Unix modes exist).
+        var cli = await StubCli.WriteAsync(
+            _workspace,
+            "fake-planner",
+            "```json",
+            "{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"},{\"title\":\"Add UI\",\"prompt\":\"Build and test the UI.\"}]}",
+            "```",
+            "[[TASK_DONE]]");
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
@@ -1295,7 +1302,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     public async Task Remote_claim_requeues_only_after_grace_and_runner_confirms_inactive(string kind)
     {
         SeedTask(TaskStates.Ready, TaskKey, "Restart recovery", "Prompt.", kind: kind);
-        using var factory = BuildFactory(remoteRequeueGraceSeconds: 1);
+        // Start with a grace so wide that no host can walk out of it. The endpoint
+        // re-reads the value from IConfiguration on every claim, so the test can
+        // narrow it later instead of racing the wall clock: with a 1s grace the
+        // "inside grace" assertions below simply lost on a slow-spawn host, which
+        // is what made both theory cases permanently red on Windows.
+        using var factory = BuildFactory(remoteRequeueGraceSeconds: 900);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         await RegisterCodingRunnerAsync(client, http);
@@ -1315,6 +1327,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(RClaimStatus.Empty, insideGrace.Status);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
 
+        // Narrow the grace to its minimum (the endpoint clamps to 1..900) and let
+        // it elapse. From here the remaining claims turn on the runner's own
+        // active-key report, not on timing.
+        factory.Services.GetRequiredService<IConfiguration>()["Runner:RemoteRequeue:GraceSeconds"] = "1";
         await Task.Delay(TimeSpan.FromMilliseconds(1100));
         var runnerStillActive = await client.ClaimAsync(new RClaim(
             RunnerId, ProjectName, "host", 2, "remote-runner",
