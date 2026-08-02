@@ -97,13 +97,20 @@ public sealed class RemoteReviewExecutor
             catch (Exception exception) { _log($"review heartbeat stopped with error: {exception.Message}"); }
 
             var removed = false;
-            try
+            if (report is not null)
             {
-                removed = await workspace.CleanupAsync();
+                try
+                {
+                    removed = await workspace.CleanupAsync();
+                }
+                catch (Exception exception)
+                {
+                    _log($"review workspace cleanup failed attempt={attempt.AttemptId} path={workspace.AttemptRoot}: {exception.Message}");
+                }
             }
-            catch (Exception exception)
+            else
             {
-                _log($"review workspace cleanup failed attempt={attempt.AttemptId} path={workspace.AttemptRoot}: {exception.Message}");
+                _log($"review workspace retained until report acceptance or retention expiry attempt={attempt.AttemptId} path={workspace.AttemptRoot}");
             }
 
             try
@@ -118,7 +125,7 @@ public sealed class RemoteReviewExecutor
                         $"review-cleanup:{attempt.AttemptId}:{lease.Fence}",
                         removed,
                         removed ? null : report is null
-                            ? "ExecutorStoppedBeforeReport"
+                            ? "ReportNotAccepted"
                             : "WorkspaceCleanupFailed",
                         AuthorityEpoch: lease.AuthorityEpoch),
                     CancellationToken.None);

@@ -122,6 +122,12 @@ pipeline view.
   Baseline results are single-flight cached by repository, baseline SHA, and
   command hash. Only failures still new after one subject retry block the
   review.
+- `runner/ReviewWorkspaceRetention.cs`: review workspace retention. The
+  executor removes an attempt workspace immediately only after the Task Server
+  accepts its terminal report. The daemon also sweeps inactive attempt
+  directories older than 72 hours once per hour. Active resource namespaces,
+  the reusable `.baseline-cache`, reparse points, and unrelated directories are
+  never deletion candidates.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel

@@ -19,7 +19,7 @@ public sealed class RemoteReviewDaemon
     public async Task RunAsync(CancellationToken shutdown)
     {
         await _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown);
-        var active = new List<(Task<int> Run, string AttemptId)>();
+        var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
         var telemetry = new HostTelemetrySampler();
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await _client.AdvertiseCapabilitiesAsync(
@@ -28,6 +28,7 @@ public sealed class RemoteReviewDaemon
             capabilityGeneration,
             shutdown);
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        var nextRetentionSweep = DateTime.MinValue;
         while (!shutdown.IsCancellationRequested)
         {
             for (var index = active.Count - 1; index >= 0; index--)
@@ -56,6 +57,22 @@ public sealed class RemoteReviewDaemon
                     ++capabilityGeneration,
                     shutdown);
                 nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+            }
+            if (DateTime.UtcNow >= nextRetentionSweep)
+            {
+                try
+                {
+                    ReviewWorkspaceRetention.Sweep(
+                        _options.ReviewWorkDir,
+                        active.Select(slot => slot.ResourceNamespace),
+                        DateTime.UtcNow,
+                        _log);
+                }
+                catch (Exception exception)
+                {
+                    _log($"review workspace retention sweep failed; retrying next interval: {exception.Message}");
+                }
+                nextRetentionSweep = DateTime.UtcNow.AddHours(1);
             }
             var claimedAny = false;
             while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
@@ -104,7 +121,7 @@ public sealed class RemoteReviewDaemon
                 claimedAny = true;
                 _log($"claimed remote review attempt={claim.Attempt!.AttemptId} subject={claim.Subject!.SubjectId} slot={active.Count + 1}/{_options.HostMaxParallelism}");
                 active.Add((new RemoteReviewExecutor(_options, _client, _log)
-                    .RunClaimedAsync(claim, shutdown), claim.Attempt!.AttemptId));
+                    .RunClaimedAsync(claim, shutdown), claim.Attempt!.AttemptId, claim.Lease!.ResourceNamespace));
             }
             if (!claimedAny)
                 await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
