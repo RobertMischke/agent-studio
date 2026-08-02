@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -291,9 +291,14 @@ pipeline view.
   branch to become absolutely green. For each baseline-compared test command,
   its verdict is based on `subject failures - merge-base failures`.
   Intersecting failures remain visible as pre-existing, while the aspect summary
-  names every new failure. A command with unparseable failing-test output stays
-  fail-closed as a new failure. This comparison does not weaken the absolute
-  full-suite boundary before advancing `main`.
+  names every new failure. The Review Executor reads xUnit
+  `Category=ReviewFlaky` traits from the exact subject's built test assemblies.
+  A newly failing marked test is retried once; if it does not reproduce, the
+  report retains its identity as `FlakyQuarantine` and does not classify the
+  card as `ProductFailure`. A reproduced marked failure remains a blocking new
+  failure. A command with unparseable failing-test output stays fail-closed as a
+  new failure. This comparison does not weaken the absolute full-suite boundary
+  before advancing `main`.
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.

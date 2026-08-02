@@ -12,6 +12,7 @@ using Xunit;
 namespace TaskServer.Tests;
 
 [Trait("Category", "MachineBound")]
+[Trait("Category", "ReviewFlaky")]
 public sealed class TopologyTests
 {
     [Fact(Timeout = 90000)]

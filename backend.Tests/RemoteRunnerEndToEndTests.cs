@@ -70,6 +70,7 @@ namespace AgentStudio.Tests;
 // MachineBound: real server/API, git processes, persisted timestamps, and host
 // scheduling make these end-to-end cases intentionally machine-dependent.
 [Trait("Category", "MachineBound")]
+[Trait("Category", "ReviewFlaky")]
 [Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
 {

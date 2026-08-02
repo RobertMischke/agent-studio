@@ -155,6 +155,7 @@ public sealed class RemoteReviewWorkspace
                 comparison = await CompareToBaselineAsync(command, execution.Process, ct);
                 if (comparison.NewFailures.Count > 0)
                 {
+                    var reviewFlakyTests = ReviewFlakyTestIndex.Discover(RepositoryPath, _log);
                     retryPerformed = true;
                     await AddArtifactsAsync(
                         $"{SafeSegment(command.StepId)}.initial",
@@ -162,7 +163,9 @@ public sealed class RemoteReviewWorkspace
                         artifacts,
                         ct);
                     execution = await RunCommandAsync(command, RepositoryPath, ct);
-                    comparison = comparison.Reclassify(SubjectFailures(command, execution.Process));
+                    comparison = comparison.Reclassify(
+                        SubjectFailures(command, execution.Process),
+                        reviewFlakyTests);
                 }
             }
 
@@ -190,7 +193,8 @@ public sealed class RemoteReviewWorkspace
                 comparison?.NewFailures,
                 comparison?.PreExistingFailures,
                 comparison?.CacheHit ?? false,
-                retryPerformed));
+                retryPerformed,
+                comparison?.FlakyQuarantinedFailures));
             artifacts.Add(new ReviewArtifactEvidenceDto(
                 Path.GetFileName(stdoutPath), "text/plain", stdout, new FileInfo(stdoutPath).Length));
             artifacts.Add(new ReviewArtifactEvidenceDto(
@@ -633,7 +637,7 @@ public sealed class RemoteReviewWorkspace
                 : $"Review command '{command.StepId}' exited {result.ExitCode}.");
     }
 
-    private static ReviewVerdictDto BaselineVerdict(
+    internal static ReviewVerdictDto BaselineVerdict(
         ReviewCommandDto command,
         BaselineComparison comparison)
     {
@@ -643,11 +647,19 @@ public sealed class RemoteReviewWorkspace
         var preExisting = comparison.PreExistingFailures.Count == 0
             ? "0 pre-existing failures"
             : $"{comparison.PreExistingFailures.Count} pre-existing failures: {string.Join(", ", comparison.PreExistingFailures)}";
+        var quarantined = comparison.FlakyQuarantinedFailures.Count == 0
+            ? "0 flaky quarantined failures"
+            : $"{comparison.FlakyQuarantinedFailures.Count} flaky quarantined failures: {string.Join(", ", comparison.FlakyQuarantinedFailures)}";
+        var classification = comparison.NewFailures.Count > 0
+            ? "NewTestFailures"
+            : comparison.FlakyQuarantinedFailures.Count > 0
+                ? ReviewFlakyTestIndex.VerdictClassification
+                : "BaselineCompared";
         return new ReviewVerdictDto(
             command.Aspect,
             comparison.NewFailures.Count == 0 ? "pass" : "block",
-            comparison.NewFailures.Count == 0 ? "BaselineCompared" : "NewTestFailures",
-            $"{newFailures}; {preExisting}. Baseline {comparison.BaselineSha} ({(comparison.CacheHit ? "cache hit" : "cache fill")}).");
+            classification,
+            $"{newFailures}; {preExisting}; {quarantined}. Baseline {comparison.BaselineSha} ({(comparison.CacheHit ? "cache hit" : "cache fill")}).");
     }
 
     private static IReadOnlyList<string> SubjectFailures(
@@ -899,6 +911,7 @@ internal sealed record BaselineComparison(
     IReadOnlyList<string> BaselineFailures,
     IReadOnlyList<string> NewFailures,
     IReadOnlyList<string> PreExistingFailures,
+    IReadOnlyList<string> FlakyQuarantinedFailures,
     bool CacheHit)
 {
     public static BaselineComparison Create(
@@ -917,11 +930,24 @@ internal sealed record BaselineComparison(
             subjectFailures.Where(baseline.Contains)
                 .Order(StringComparer.Ordinal)
                 .ToArray(),
+            [],
             cacheHit);
     }
 
-    public BaselineComparison Reclassify(IReadOnlyList<string> subjectFailures)
-        => Create(BaselineSha, BaselineFailures, subjectFailures, CacheHit);
+    public BaselineComparison Reclassify(
+        IReadOnlyList<string> subjectFailures,
+        ReviewFlakyTestIndex reviewFlakyTests)
+    {
+        var retried = Create(BaselineSha, BaselineFailures, subjectFailures, CacheHit);
+        var retriedFailures = subjectFailures.ToHashSet(StringComparer.Ordinal);
+        return retried with
+        {
+            FlakyQuarantinedFailures = NewFailures
+                .Where(failure => !retriedFailures.Contains(failure) && reviewFlakyTests.Contains(failure))
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+        };
+    }
 }
 
 public sealed class ReviewInfrastructureException : Exception
