@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Operations",
+  "source": {
+    "path": "docs/operations/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "909131bde031bab0532163034e6fc5fd72746f864b61b9b616285d4ee1588aa7",
+      "sizeBytes": 3028,
+      "lineCount": 38,
+      "capturedAt": "2026-07-26T20:27:33.7250000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T20:27:33.7250000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T20:27:33.7250000Z",
+        "taskKey": "AGT-1919"
+      }
+    ]
+  }
+}

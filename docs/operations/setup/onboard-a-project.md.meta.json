@@ -1,0 +1,42 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Onboard a project",
+  "source": {
+    "path": "docs/operations/setup/onboard-a-project.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "b3bc51b73036f31e0e421c18d2aa32f92e5e8524cf6d4919cdf18e0efe7c7bfe",
+      "sizeBytes": 14086,
+      "lineCount": 282,
+      "capturedAt": "2026-07-26T22:59:31.8160000Z"
+    }
+  },
+  "agentReads": {
+    "total": 5,
+    "lastReadAt": "2026-07-26T22:59:31.8160000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T22:59:31.8160000Z",
+        "taskKey": "AGT-1782"
+      },
+      {
+        "at": "2026-07-26T20:26:11.4120000Z",
+        "taskKey": "AGT-1919"
+      },
+      {
+        "at": "2026-07-26T12:37:24.8310000Z",
+        "taskKey": "AGT-1915"
+      },
+      {
+        "at": "2026-07-26T09:35:52.5450000Z",
+        "taskKey": "AGT-2024"
+      },
+      {
+        "at": "2026-07-26T09:11:13.7130000Z",
+        "taskKey": "AGT-2024"
+      }
+    ]
+  }
+}

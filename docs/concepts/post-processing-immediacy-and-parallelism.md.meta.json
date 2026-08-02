@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Post-processing: immediate re-sorting, real parallelism",
+  "source": {
+    "path": "docs/concepts/post-processing-immediacy-and-parallelism.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "cc03b94495328d0101ef6157c63dacd6d92a168d70717f41aa6288f615076d95",
+      "sizeBytes": 3365,
+      "lineCount": 53,
+      "capturedAt": "2026-07-26T18:41:01.3320000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T18:41:01.3320000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T18:41:01.3320000Z",
+        "taskKey": "AGT-1944"
+      }
+    ]
+  }
+}

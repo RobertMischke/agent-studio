@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Run-Liveness and Slot Semantics",
+  "source": {
+    "path": "docs/concepts/run-liveness-and-slot-semantics.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "2cb81ff3a1beb072fb2d73257b1642b989e6810a63987aabb362b017799fc7c8",
+      "sizeBytes": 13154,
+      "lineCount": 234,
+      "capturedAt": "2026-07-26T21:37:18.8610000Z"
+    }
+  },
+  "agentReads": {
+    "total": 3,
+    "lastReadAt": "2026-07-26T21:37:18.8610000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T21:37:18.8610000Z",
+        "taskKey": "AGT-2071"
+      },
+      {
+        "at": "2026-07-26T08:30:12.7170000Z",
+        "taskKey": "AGT-2000"
+      },
+      {
+        "at": "2026-07-26T00:14:09.2470000Z",
+        "taskKey": "AGT-2000"
+      }
+    ]
+  }
+}
