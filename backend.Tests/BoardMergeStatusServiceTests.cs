@@ -228,6 +228,33 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    public void BuildCommitPresence_SecondHistoryPageWithinTtl_StartsNoAdditionalGitProcess()
+    {
+        var repo = SeedDevelopMainRepo(out var mainTip, out _);
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "second-page.txt"), "second page");
+        Commit(repo, "feat: second history page");
+        var developOnly = RunGit(repo, "rev-parse develop").Out.Trim();
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-07-31T12:00:00Z"));
+        var telemetry = new CapturingLogger<BoardMergeStatusService>();
+        var service = BuildService(repo, out var project, time, telemetry);
+
+        var firstPage = service.BuildCommitPresence(project, repo, [developOnly]);
+        time.Advance(TimeSpan.FromMinutes(1));
+        var secondPage = service.BuildCommitPresence(project, repo, [mainTip]);
+        var rollups = Rollups(telemetry, "git/commit-presence");
+
+        Assert.True(firstPage[developOnly].InIntegration);
+        Assert.True(secondPage[mainTip].InIntegration);
+        Assert.True(secondPage[mainTip].InRelease);
+        Assert.Equal(2, rollups.Count);
+        Assert.True(rollups[0].Spawns > 0);
+        Assert.Equal(0, rollups[1].Spawns);
+        Assert.Equal(1, service.ComputationCount);
+    }
+
+    [Fact]
     public void BuildLookup_SequentialCommitOnDevelop_LightsDevelopWithoutMergeFact()
     {
         var repo = SeedDevelopMainRepo(out _, out _);
@@ -322,7 +349,8 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     private BoardMergeStatusService BuildService(
         string repo,
         out string projectName,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILogger<BoardMergeStatusService>? logger = null)
     {
         projectName = "Fixture";
         var dict = new Dictionary<string, string?>
@@ -340,8 +368,29 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         return new BoardMergeStatusService(
             git,
             settings,
-            NullLogger<BoardMergeStatusService>.Instance,
+            logger ?? NullLogger<BoardMergeStatusService>.Instance,
             timeProvider ?? TimeProvider.System);
+    }
+
+    private static List<(int Spawns, long GitMs, long WallMs, string Breakdown)> Rollups(
+        CapturingLogger<BoardMergeStatusService> logger,
+        string label)
+    {
+        return logger.Entries
+            .Where(entry => string.Equals(Field(entry, "Label")?.ToString(), label, StringComparison.Ordinal))
+            .Select(entry => (
+                Convert.ToInt32(Field(entry, "Spawns")),
+                Convert.ToInt64(Field(entry, "GitMs")),
+                Convert.ToInt64(Field(entry, "WallMs")),
+                Field(entry, "Breakdown")?.ToString() ?? ""))
+            .ToList();
+    }
+
+    private static object? Field(IReadOnlyList<KeyValuePair<string, object?>> state, string key)
+    {
+        foreach (var field in state)
+            if (field.Key == key) return field.Value;
+        return null;
     }
 
     /// <summary>main + a develop branched off it, both with one seed commit.</summary>
