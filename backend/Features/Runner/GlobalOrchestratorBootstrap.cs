@@ -144,7 +144,7 @@ public sealed class GlobalOrchestratorBootstrap
     {
         try
         {
-            var jobs = _scanner.ScanAllJobs();
+            var jobs = _scanner.ScanAllAutomationJobs();
             var byProject = new System.Text.StringBuilder();
             foreach (var grp in jobs.GroupBy(j => j.ProjectName))
             {

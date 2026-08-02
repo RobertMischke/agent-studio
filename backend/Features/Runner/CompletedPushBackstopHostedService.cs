@@ -32,7 +32,7 @@ public sealed class CompletedPushBackstopHostedService : BackgroundService
     public async Task<int> RunOnceAsync(CancellationToken ct = default)
     {
         var pushed = 0;
-        var completed = _scanner.ScanAllJobs()
+        var completed = _scanner.ScanAllAutomationJobs()
             .Where(j => j.State == TaskStates.Completed)
             .OrderBy(j => j.LastActivity)
             .ThenBy(j => j.Id, StringComparer.OrdinalIgnoreCase)

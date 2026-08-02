@@ -251,6 +251,12 @@ state.
 
 ## Invariants
 
+- Lifecycle projections describe only the current attempt. A confirmed coding
+  restart clears prior Post Processing checks, a recovery re-enqueue replaces
+  them with checks timestamped no earlier than the recovery boundary, and every
+  terminal Post Processing path closes active checks as `completed` or `failed`
+  with `finishedAt`. Cards marked `fixture: true` are excluded from automated
+  recovery, liveness, cron, health, and orchestration scans.
 - Origin is a fenced side-effect channel. New Remote Run salvage refs include
   runner, task, attempt, fence, and SHA; immutable result refs include attempt,
   fence, and SHA. A newer generation never resumes or overwrites an older

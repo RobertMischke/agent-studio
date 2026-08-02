@@ -1107,7 +1107,7 @@ public class ProjectRunner
     {
         if (_activeRuns.HasInFlight) return true;
 
-        return _scanner.ScanAllJobs().Any(job =>
+        return _scanner.ScanAllAutomationJobs().Any(job =>
             string.Equals(job.ProjectName, ProjectName, StringComparison.Ordinal)
             && (string.Equals(job.State, TaskStates.AutoReview, StringComparison.Ordinal)
                 || string.Equals(job.Phase, LifecyclePhases.PostProcessingRunning, StringComparison.Ordinal)));
@@ -2905,6 +2905,10 @@ public class ProjectRunner
             // admission/quota/spawn failures intentionally leave the wait visible.
             SteerPendingMarker.Clear(info.FolderPath, _logger);
             _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.ExecutionRunning);
+            PostProcessingLifecycleStore.ResetForExecution(
+                info.FolderPath,
+                execution.StartedAt,
+                _logger);
 
             // Mirror run-start onto the bus. Existing canonical signals
             // (session-events.jsonl + cli-output.log "[taskboard] Started ..."
@@ -4353,7 +4357,7 @@ public class ProjectRunner
                 ? await File.ReadAllTextAsync(promptPath, ct)
                 : string.Empty;
             var catalogue = await cli.GetModelCatalogAsync(false, ct);
-            var history = _scanner.ScanAllJobs()
+            var history = _scanner.ScanAllAutomationJobs()
                 .Where(task => string.Equals(task.ProjectName, info.ProjectName, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var decision = _modelQualification.Qualify(info, prompt, catalogue, history, startedAt);
@@ -7441,13 +7445,13 @@ public class ProjectRunner
     {
         var settings = _projectSettings.Get(ProjectName);
         var intakeEnabled = settings.IntakeEnabled == true;
-        var all = _scanner.ScanAllJobs();
+        var all = _scanner.ScanAllAutomationJobs();
         // AGT-2029 waits-on gate: resolve dependency fulfillment across ALL
         // projects and lanes. A dependency is satisfied once its target reaches
         // 6-completed OR 7-archive, and ScanAllJobs omits the archive lane, so
         // the gate index is built from the archive-inclusive snapshot. Built
         // once per candidate-list computation, not per card.
-        var waitsOnIndex = TaskReferenceIndex.Build(_scanner.ScanAllJobsWithArchive());
+        var waitsOnIndex = TaskReferenceIndex.Build(_scanner.ScanAllAutomationJobsWithArchive());
         return LaneSortApplier.Sort(
                 all.Where(j => j.ProjectName == ProjectName
                                 && j.State == TaskStates.Ready
@@ -7459,6 +7463,7 @@ public class ProjectRunner
 
     private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled, TaskReferenceIndex waitsOnIndex)
         => AgentTypes.IsAutoPickupEligible(job.Agent)
+           && !job.Fixture
            // Epics are containers, not work items: their sub-tasks flow through
            // the pipeline, the epic card never code-executes. Skip it hard so it
            // can never be loaded into a slot, even if it has come to rest in a
@@ -7562,7 +7567,7 @@ public class ProjectRunner
     {
         var settings = _projectSettings.Get(ProjectName);
         var orderedInfo = LaneSortApplier.Sort(
-                _scanner.ScanAllJobs()
+                _scanner.ScanAllAutomationJobs()
                     .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Progress),
                 TaskStates.Progress,
                 _ => settings)
@@ -7600,6 +7605,9 @@ public class ProjectRunner
             HandleStaleProgressOrphan(candidate, slug);
             return null;
         }
+
+        if (candidate.Info.Fixture)
+            return null;
 
         if (!AgentTypes.IsAutoPickupEligible(candidate.Info.Agent))
             return null;
@@ -7663,7 +7671,7 @@ public class ProjectRunner
         List<TaskInfo> stray;
         try
         {
-            stray = _scanner.ScanAllJobs()
+            stray = _scanner.ScanAllAutomationJobs()
                 .Where(j => j.ProjectName == ProjectName
                             && j.State == TaskStates.Ready
                             && TaskSlugs.IsHumanDecisionNeeded(j.Id))
@@ -7740,7 +7748,7 @@ public class ProjectRunner
     /// </remarks>
     private TaskInfo? GetNextResumableProgressJob()
     {
-        return _scanner.ScanAllJobs()
+        return _scanner.ScanAllAutomationJobs()
             .Where(j => j.ProjectName == ProjectName
                         && j.State == TaskStates.Progress
                         && HasResumableSession(j))
@@ -8428,6 +8436,9 @@ public class ProjectRunner
         // ADR-0024: enumerate 3-progress through the typed layer.
         // ListLaneFolders returns orphan folders (no task.json) too,
         // which is exactly the case the pickup loop is built around.
+        // Keep fixture metadata attached while enumerating physical folders so
+        // TryPrepareProgressCandidate can skip it explicitly instead of
+        // misclassifying the folder as orphan debris.
         var byId = _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Progress)
             .ToDictionary(j => j.Id, StringComparer.OrdinalIgnoreCase);
@@ -8947,7 +8958,7 @@ public class ProjectRunner
 
     private List<string> GetQueuedJobIds()
     {
-        return _scanner.ScanAllJobs()
+        return _scanner.ScanAllAutomationJobs()
             .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Ready)
             .OrderBy(j => j.Order)
             .Select(j => j.Id)

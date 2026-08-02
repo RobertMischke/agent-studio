@@ -363,7 +363,7 @@ public sealed class PipelineHealthService : BackgroundService, IPipelineHealthSe
         DateTime nowUtc)
     {
         var since = nowUtc - PipelineHealthConventions.DrainWindow;
-        var tasks = _scanner.ScanAllJobsWithArchive()
+        var tasks = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(task => string.Equals(task.ProjectName, project, StringComparison.OrdinalIgnoreCase)
                 || WatchPathComparison.PathsEqual(task.WatchPath, watchPath))
             .ToArray();

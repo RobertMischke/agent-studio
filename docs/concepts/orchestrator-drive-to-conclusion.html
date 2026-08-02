@@ -1449,6 +1449,27 @@
             metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2480</code><br><span class="small">stale lifecycle checks after retries and restarts</span></td>
+          <td>
+            <code>lifecycle.json</code> could retain a Post Processing phase and checks marked
+            <code>running</code> after a coding retry, backend restart, or terminal lane move. System pulse and scheduled
+            recovery scans consequently reported work that no longer existed, including RUN-1xx end-to-end fixtures.
+          </td>
+          <td>
+            Attempt boundaries updated <code>task.json.phase</code> and the volatile queue but did not own a matching
+            lifecycle reset or terminal write. Automated readers also used the fixture-inclusive storage scan, so test
+            cards participated in production health and recovery decisions.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> one synchronized lifecycle writer now clears old checks on a
+            confirmed coding restart, replaces them at recovery time, and closes every active check as
+            <code>completed</code> or <code>failed</code> with <code>finishedAt</code>. Automation scans exclude
+            <code>fixture: true</code>. Regression coverage proves that no active recovered check predates its recovery
+            boundary and that fixtures remain untouched.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -47,7 +47,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 
     public int RunOnce()
     {
-        var candidates = _scanner.ScanAllJobsWithArchive()
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(job =>
                 job.State is TaskStates.Completed or TaskStates.Archive
                 || (job.State == TaskStates.HumanReview

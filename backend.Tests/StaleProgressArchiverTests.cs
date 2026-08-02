@@ -477,6 +477,27 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task AutomatedSweeps_NeverTouchFixtureCards()
+    {
+        WriteJob(TaskStates.Progress, "RUN-101", fixture: true);
+        var progress = Path.Combine(_watchPath, TaskStates.Progress, "RUN-101");
+        WriteCliLog(progress, "fixture run has no sentinel");
+        SetMtimeOldEnough(Path.Combine(progress, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(progress, "task.json"));
+        WriteJob(TaskStates.FailedPickup, "RUN-102", fixture: true);
+        var failedPickup = Path.Combine(_watchPath, TaskStates.FailedPickup, "RUN-102");
+
+        var (archiver, _) = Build();
+        var staleDecisions = await archiver.SweepAsync();
+        var drainDecisions = await archiver.DrainFailedPickupLaneAsync();
+
+        Assert.Empty(staleDecisions);
+        Assert.Empty(drainDecisions);
+        Assert.True(Directory.Exists(progress));
+        Assert.True(Directory.Exists(failedPickup));
+    }
+
+    [Fact]
     public async Task Sweep_ZeroWindow_DisablesPass()
     {
         WriteJob(TaskStates.Progress, "would-be-orphan");
@@ -529,12 +550,12 @@ public sealed class StaleProgressArchiverTests : IDisposable
         return (archiver, scanner);
     }
 
-    private void WriteJob(string state, string slug)
+    private void WriteJob(string state, string slug, bool fixture = false)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"fixture\":{fixture.ToString().ToLowerInvariant()}}}");
     }
 
     private void WriteJobWithEnteredLaneAt(string state, string slug, DateTime enteredLaneAt)

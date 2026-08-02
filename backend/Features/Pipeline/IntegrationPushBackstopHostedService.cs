@@ -35,7 +35,7 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
     public async Task<int> RunOnceAsync(CancellationToken ct = default)
     {
         var pushed = 0;
-        var accepted = _scanner.ScanAllJobsWithArchive()
+        var accepted = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(job => job.State is TaskStates.Completed or TaskStates.Archive)
             .Where(job => File.Exists(Path.Combine(job.FolderPath, PipelineExecutionLog.FileName)))
             .OrderBy(job => job.EnteredLaneAt)

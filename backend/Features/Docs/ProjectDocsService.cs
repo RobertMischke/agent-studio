@@ -858,7 +858,7 @@ public class ProjectDocsService
     private WikiPulseActivity BuildPulseActivity(string projectName, GitService git)
     {
         var runs = new List<WikiPulseLiveRun>();
-        foreach (var task in _scanner.ScanAllJobs().Where(t =>
+        foreach (var task in _scanner.ScanAllAutomationJobs().Where(t =>
                      string.Equals(t.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)
                      && string.Equals(t.State, TaskStates.Progress, StringComparison.Ordinal)))
         {

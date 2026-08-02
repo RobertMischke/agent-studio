@@ -51,7 +51,7 @@ public static class ClientEndpoints
             var record = store.Find(id);
             if (record is null) return Results.NotFound(new { error = "client-not-found" });
 
-            var owned = scanner.ScanAllJobs()
+            var owned = scanner.ScanAllAutomationJobs()
                 .Where(j => string.Equals(j.OwnerClientId, id, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(j => j.LastActivity)
                 .ToList();

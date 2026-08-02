@@ -40,7 +40,7 @@ public sealed class RemoteDeliveryBackfillService
     {
         var repaired = 0;
         var warnings = new List<string>();
-        var tasks = _scanner.ScanAllJobs();
+        var tasks = _scanner.ScanAllAutomationJobs();
         foreach (var key in ReviewedTaskKeys)
         {
             var task = tasks.FirstOrDefault(candidate =>

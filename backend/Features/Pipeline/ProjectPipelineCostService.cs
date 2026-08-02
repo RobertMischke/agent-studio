@@ -55,7 +55,7 @@ public sealed class ProjectPipelineCostService
         var records = new List<PipelineExecutionRecord>();
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
-            foreach (var task in _scanner.ScanAllJobs())
+            foreach (var task in _scanner.ScanAllAutomationJobs())
             {
                 if (!string.Equals(task.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.IsNullOrWhiteSpace(task.FolderPath)) continue;
