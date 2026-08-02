@@ -17,7 +17,7 @@ Whenever a CLI integration is added, changed, or audited, this file is updated *
 
 ## 1. What "supported" means
 
-A "supported CLI" is a coding-agent CLI (Claude Code, Codex, Gemini, …) that the task processor can drive end-to-end:
+A "supported CLI" is a coding-agent CLI that Agent Studio can drive end-to-end. The current integrations are Claude Code, Codex, and Antigravity through its `agentapi` command. The persisted CLI type for Antigravity remains `gemini` for compatibility.
 
 - The task processor can spawn a process for it from a job folder.
 - It surfaces live output in the Activity Log.
@@ -38,7 +38,11 @@ Each capability has: a contract, the code that implements it, and the test that 
 
 **Contract.** Given a prompt, working directory, optional session id, optional model, the CLI driver must spawn a child process, stream stdout/stderr to the API consumer line-by-line, accept cancellation, and report final exit code + duration.
 
-**Code.** Subclass [`CliExecutionServiceBase`](../../backend/Services/Cli/CliExecutionServiceBase.cs) and implement `BuildStartInfo`. The base class handles spawning, streaming, cancellation, persistence, and reattach.
+**Code.** [`GenericCliExecutionService`](../../../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) is the Studio host adapter. [`BuiltInCliBehaviors`](../../../backend/Features/Cli/Execution/BuiltInCliBehaviors.cs) contains CLI-specific parsing and host behavior. Claude and Codex launch through CodingAgentRunner's `ICliDriver`; CAR owns their descriptors, argv, common normalization, process lifecycle, and typed events. Studio retains the output mirror, Activity Log rendering, session and usage capture, cancellation policy, active-job registry, and terminal classification.
+
+The local engine is rollout-gated. Resolution order is the process environment override `RUNNER_EXEC_ENGINE`, then project override, then workspace default, then the platform default `car`. Each configurable tier accepts `car` or `legacy`; `legacy` is the explicit rollback until the migration chain removes it. Antigravity always selects its legacy adapter even when the effective setting is `car`, because its current `agentapi` protocol is not CAR-compatible.
+
+The local backend does not reattach after a restart. `ReattachOnStartup` is intentionally an orphan reaper: it validates PID identity, kills a surviving process tree, and relies on the runner recovery path to demote or reissue the interrupted task. The remote runner's detached-worker reattach contract is separate.
 
 **Test.** A backend xUnit test that spawns the CLI in a temp directory and asserts a non-empty output line + clean exit. An E2E `@billable` "hello world" Playwright spec that drives the UI.
 
@@ -46,15 +50,15 @@ Each capability has: a contract, the code that implements it, and the test that 
 
 **Contract.** The driver decides whether the CLI has a usable session concept. If it does, it must:
 
-- Define `IsCompatibleSessionName(string?)` strictly — reject ids that came from a different CLI (a UUID handed to a CLI that expected a different id shape, or a leftover slug from the removed Copilot driver). Accepting an alien id leads to silent hangs.
-- Build the resume command in `BuildStartInfo` when `resumeSession=true`.
-- Optionally capture the session id from CLI output in `OnOutputLine` (Codex pattern).
+- Define `IsCompatibleSessionName(string?)` strictly. Reject identifiers from a different CLI and leftover slugs from the removed Copilot driver.
+- Supply the compatible session id to the selected CAR request or legacy launch when `resumeSession=true`.
+- Capture the session id from the raw or rendered output at the documented hook for that CLI.
 
 If the CLI has no usable session concept, `IsCompatibleSessionName` returns `false` for everything and the UI Continue button stays disabled automatically.
 
-**Session storage discovery.** [`SessionRegistry`](../../backend/Services/Cli/SessionRegistry.cs) reads each CLI's on-disk session store to populate the Sessions side-sheet. New CLIs add their own `BuildXxxProjects()` method here. Disk reads are best-effort — missing files mean "no sessions", not an error.
+**Session storage discovery.** [`SessionRegistry`](../../../backend/Features/Cli/Execution/SessionRegistry.cs) reads each CLI's on-disk session store to populate the Sessions side-sheet. Disk reads are best-effort: missing files mean "no sessions", not an error.
 
-**Session loss is an expected state.** A previously-captured session id can disappear between runs (user pruned the store, CLI upgrade rotated the slug format, retention expired, machine switch). The product handles this via graceful Recovery, not as a hard failure (ADR-0002 / ADR-0006). The driver's job is therefore minimal: when the CLI rejects the resume target, just don't capture a new session id. [`ProjectRunner.OnCliFinishedAsync`](../../backend/Services/Runner/ProjectRunner.cs) detects "resume attempted, no new id captured", clears `info.SessionName`, marks the chain as recovery, and writes a single `[capture-fail]` decision message into the chat. The next user follow-up routes through Recovery automatically. **Don't** keep a known-dead session id in `SessionName`; the next follow-up will then re-issue the same dead resume and produce an identical error. **Don't** map the CLI's session-not-found message to a hard failure status — the orchestrator already explains it once and the auto-rebuild is the design.
+**Session loss is an expected state.** A previously captured session id can disappear between runs because of retention, pruning, upgrades, or a machine change. The product handles this through recovery, not as a hard failure. [`ProjectRunner.OnCliFinishedAsync`](../../../backend/Features/Runner/ProjectRunner.cs) detects a resume attempt with no newly captured id, clears the dead pointer, records one recovery decision, and lets the next follow-up rebuild context. Do not retain a known-dead session id or convert a normal session-not-found response into an unrelated hard failure.
 
 **Stale sessions are a separate quality risk.** A session can still exist on disk and be accepted by the CLI while its useful context has degraded after a long idle period, provider-side cache eviction, prompt-harness changes, or a partially-applied resume optimization. The [April 23, 2026 Anthropic postmortem](https://www.anthropic.com/engineering/april-23-postmortem) is the reference incident: a Claude Code harness optimization for sessions idle over one hour accidentally kept clearing older thinking on every later turn, making resumed sessions forgetful and repetitive even though the model and API were fine. Our contract is therefore stronger than "resume command exits zero": a resumed run must still act on the user follow-up, preserve task intent, and produce useful evidence. When stale-session behavior is suspected, add tests at the runner/recovery layer first, then CLI-specific live probes for Claude and Codex.
 
@@ -68,7 +72,7 @@ If the CLI has no usable session concept, `IsCompatibleSessionName` returns `fal
 
 The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific UI code is needed if the JSON shape (`CliModelCatalog`) is honoured.
 
-**Selected model.** The chosen model id is passed into `BuildStartInfo` and added as the appropriate flag (`-m`, `--model`, …).
+**Selected model.** Studio first qualifies the chosen model against its live catalog. Claude and Codex then pass the qualified model and thinking level to CAR, which applies its common normalization and descriptor flags. The legacy Antigravity adapter maps the model to its `agentapi` vocabulary.
 
 ### 2.4 Quota probe
 
@@ -79,9 +83,9 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 - `Source` — what the probe queried (`/usage`, `/status`, footer text, HTTP endpoint, …).
 - `RawSample` — truncated raw output for debugging.
 
-**Implementation pattern.** Most probes spawn the CLI in a scratch dir under `%TEMP%/agent-taskboard-quota/<cliType>` via a PTY, send slash-commands, scrape the rendered panel. See `ProbeWithStepsAsync` in [`QuotaProbeBase`](../../backend/Services/Quota/QuotaProbeBase.cs).
+**Implementation pattern.** Most probes spawn the CLI in a scratch directory under `%TEMP%/agent-taskboard-quota/<cliType>` via a PTY, send slash commands, and scrape the rendered panel. See `ProbeWithStepsAsync` in [`QuotaProbeBase`](../../../backend/Features/Cli/Quota/QuotaProbeBase.cs).
 
-**Aggregation.** [`QuotaService`](../../backend/Services/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. New CLIs register via `services.AddSingleton<IQuotaProbe, XxxQuotaProbe>()` in `Program.cs`.
+**Aggregation.** [`QuotaService`](../../../backend/Features/Cli/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. New CLIs register an `IQuotaProbe` in [`backend/Host/Program.cs`](../../../backend/Host/Program.cs).
 
 **Quota fallback routing.** Workspace CLI Management persists one primary model
 and an optional fallback CLI/model/thinking level per CLI in
@@ -108,21 +112,21 @@ change the launch model. There was no quota-triggered model or CLI router.
 - **Streamed,** not buffered until the run finishes.
 - **Marker-line formatted** so the frontend's `activity-log.parser` can classify entries (Read/Search/Edit/Run/Todo/Task/Messages).
 - **Free of ANSI escapes** in the persisted form (the base class strips them on write).
-- **UTF-8 safe** — the base class forces UTF-8 stdout/stderr encoding; do not override.
+- **UTF-8 safe** so output is not corrupted by the host's legacy code page.
 
-**Implementation.** Override `TransformReadLine(CliOutputLine raw)` to translate the CLI's native output into marker lines. Reference: [`ClaudeCliService.TransformReadLine`](../../backend/Services/Cli/ClaudeCliService.cs) — it expands stream-json NDJSON into `● Read /path`, `● Edit /path`, `● Run <cmd>`, etc.
+**Implementation.** Add or update an [`ICliOutputRenderer`](../../../backend/Features/Cli/Execution/Rendering/ICliOutputRenderer.cs) and wire it through the CLI behavior's `TransformReadLine` delegate. Claude and Codex render their native streams into `● Read /path`, `● Edit /path`, `● Run <cmd>`, and related marker lines. Antigravity currently retains an inline renderer for its `agentapi` JSON.
 
 If the CLI emits plain text already in a parser-friendly shape, `TransformReadLine` can be the default identity transform.
 
 ### 2.6 Cancellation
 
-**Contract.** A running job must be cancellable from the UI. The base class kills the process tree on cancel.
+**Contract.** A running job must be cancellable from the UI. CAR owns the Claude and Codex process lifecycle and tree kill. Studio records the stop reason, retains Windows task job-object cleanup, and maps the terminal result. The legacy adapter retains the equivalent cancellation behavior for rollback and Antigravity.
 
 **CLI-specific cleanup.** If the CLI leaves orphaned PTY children, modal pickers, or background helpers, the driver is responsible for cleaning them up. Quota probes additionally send `<Esc><Esc>` before tearing down to close any open modal pickers — keep doing this for new CLIs.
 
 ### 2.7 Availability & authentication check
 
-**Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Default implementation runs `<cli> --version` and parses the first non-empty line. Override only if the CLI's version surface differs.
+**Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
 **Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The task processor does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
 
@@ -134,48 +138,41 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 - Model: [`CliExecutionContext` / `CliContextSource` / `CliContextSourceKinds`](../../../backend/Shared/Models/CliExecutionContext.cs).
 - Contract + base/convention implementation: [`ICliExecutionService.DescribeContextSources`](../../../backend/Features/Cli/Execution/ICliExecutionService.cs) and [`CliExecutionServiceBase`](../../../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) (`BuildConventionContext`).
 - Pure convention builder (per-CLI path conventions, filesystem-probed): [`CliContextConventions`](../../../backend/Features/Cli/Execution/CliContextConventions.cs).
-- Claude init-frame override + parser: [`ClaudeCliService.DescribeContextSources`](../../backend/Features/Cli/Execution/ClaudeCliService.cs) and [`ClaudeInitContextParser`](../../../backend/Features/Cli/Execution/Adapters/ClaudeInitContextParser.cs).
+- Claude init-frame merge and parser: [`BuiltInCliBehaviors`](../../../backend/Features/Cli/Execution/BuiltInCliBehaviors.cs) and [`ClaudeInitContextParser`](../../../backend/Features/Cli/Execution/Adapters/ClaudeInitContextParser.cs).
 - Persistence: the runner calls `DescribeContextSources` at run finish (while the per-run `ProcInfo` is still alive) and stamps the result onto the latest `SessionEvent` via [`TaskSessionLog.BackfillLatestSessionEventExecutionContext`](../../../backend/Features/Tasks/TaskSessionLog.cs); the run-detail "Execution Context" panel and a slim timeline marker read it back (`RunTimeline`).
 
 **Test.** `CliContextConventionsTests` (pure path conventions), `ClaudeInitContextParserTests` (init-frame parse), `DescribeContextSourcesTests` (service wiring for the convention CLIs + untracked-run null), `SessionEventsTests.BackfillLatestSessionEventExecutionContext_*` (durable JSONL round-trip), and `RunTimelineBuilderTests.ExecutionContext_IsCarriedFromEventOntoRunRecord` (timeline projection) together cover the producer → persistence → projection data path.
 
 **New CLI note.** The convention branch in `CliContextConventions.For` is the only thing a new sessionless/init-frame-less CLI needs; add its memory-file name and config-path conventions there. A driver that emits its own startup frame can override `DescribeContextSources` like Claude does.
 
-### 2.9 Context mode — clean vs. shared (per-run isolation)
+### 2.9 Context mode: clean vs. shared
 
-**Contract.** A run executes in one of two **context modes** (T1b / ASS-1742):
+**Contract.** A run executes in one of two context modes:
 
-- **`clean`** (the default for coding runs) — the run sees only the prompt plus the versioned repository files (`AGENTS.md` / `CLAUDE.md` and friends, which are committed and live in the working tree). It does **not** see the operator's accumulated global CLI state: user-level memory, prior session transcripts, or scratch config. This makes a run reproducible — two operators on the same commit get the same context.
-- **`shared`** — the run reuses the operator's global CLI state (whatever lives under `~/.claude`, `~/.codex`, …). Pick it deliberately when a run is *meant* to lean on accumulated local context.
+- `clean`, the default for coding runs, isolates user-level memory, prior transcripts, and scratch configuration while retaining repository instruction files.
+- `shared` reuses the operator's global CLI state and must be selected deliberately.
 
-`clean` is **not a CLI flag** — no supported CLI exposes "ignore my global state" as a switch. Each adapter implements it by relocating the CLI's whole config home to a freshly created per-run temp directory, seeding only the auth + base-config files the CLI needs to run, and pointing the CLI at that temp home via an environment override. Repo instruction files are untouched in both modes because they live in the working tree, not the config home.
+Clean context is implemented with a relocated config home, not a CLI flag. The home contains only authentication and base configuration. Repository instructions stay in the working directory.
 
-**Per-CLI mechanism.**
+| CLI | Support | Host environment | Seed policy |
+|---|---|---|---|
+| Claude | clean or shared | `CLAUDE_CONFIG_DIR` | Link `.credentials.json`; copy `settings.json`; exclude user memory and project history. |
+| Codex | clean or shared | `CODEX_HOME` | Link `auth.json`; copy `config.toml`; exclude history and prior rollouts. |
+| Antigravity, persisted as `gemini` | shared only | none documented for `agentapi` | No isolated-home claim is made. |
 
-| CLI | `SupportsCleanContext` | Mechanism | Seeded into the temp home |
-|-----|:---:|-----------|---------------------------|
-| Claude | ✅ | `CLAUDE_CONFIG_DIR` → per-run temp dir | `.credentials.json` (**shared by link**), `settings.json` (copied) — excludes `CLAUDE.md`, `projects/` |
-| Codex | ✅ | `CODEX_HOME` → per-run temp dir | `auth.json` (**shared by link**), `config.toml` (copied) — excludes `history.jsonl` |
-| Gemini / Antigravity | ❌ shared-only | agentapi driver exposes no documented home override | — |
+**CAR bridge.** CodingAgentRunner 0.7.0 owns a clean home for one process, while Studio must keep the same isolated home stable across attempts and resumes of one task. Studio therefore acquires or reuses its own task-stable home, asks CAR to run in `shared` mode, and passes `CLAUDE_CONFIG_DIR` or `CODEX_HOME` in `CliRunRequest.ExtraEnvironment`. CAR still owns the launch, but does not create a second process-scoped home. This temporary public-API boundary is tracked in PROJ-011 as `public-clean-context-lease`.
 
-A CLI with no isolation mechanism honestly **declares `shared-only`** (`SupportsCleanContext => false`). A run that requested `clean` against a shared-only CLI is stamped `contextMode = "shared"` so the read-only Execution Context panel (§2.8) shows the truth rather than a mode the CLI couldn't honor.
+Credential files are linked back to the operator home so a refresh writes through to the authoritative token. Base configuration remains an isolated copy. Link creation falls back to copying when the filesystem cannot support the link, with a warning that concurrent refresh protection is reduced for that run.
 
-**Auth is the adapter's duty.** Seeding only auth + base config (never history/memory) is what lets a clean run still log in. If auth comes from an env var instead (`ANTHROPIC_API_KEY`), a missing seed file is non-fatal — the clean home is still created and the env override still points at it.
+Context mode resolution remains task override, then project setting, then the `clean` default, narrowed to `shared` for Antigravity. The task-stable home is retained with the task's in-memory execution state and disposed at the task boundary. Teardown is best-effort and idempotent.
 
-**Credentials are shared by link, not copied (AGT-2066).** The credential file (`.credentials.json` / `auth.json`) is **hard-linked** (Windows) or **symlinked** (POSIX) back to the operator's one home file rather than copied into the temp home; base config stays an isolated copy. This closes the *OAuth token roulette* seen live on 2026-07-10: with per-run copies, N parallel runs that hit an expired token each refresh the same rotating refresh token, the provider validates only the first, its new token is written into a temp home that is deleted at run end, and the home file keeps the now-dead token — so every later launch fails "OAuth session expired and could not be refreshed". A shared link makes any run's refresh write through to the single home file that every concurrent run and every later launch reads. Tearing the per-run home down removes only the extra directory entry, never the home file's data. When a link cannot be created (cross-volume temp dir, missing privilege), the preparer falls back to the old copy for that run and logs a warning; auth still works, only the parallel-refresh drift is uncovered. The same drift on the Linux runner host is tracked in [`linux-runner-host.md`](../../operations/setup/linux-runner-host.md) (kickoff D5).
+**Code and tests.** [`CleanContextPreparation`](../../../backend/Features/Cli/Execution/CleanContextPreparation.cs) owns Studio's preparation and lease. [`BackendCarExecution`](../../../backend/Features/Cli/Execution/BackendCarExecution.cs) applies the CAR bridge. `CliContextModesTests` and `ProjectSettingsServiceTests` cover isolation, credential linking, support narrowing, and resolution precedence.
 
-**Lifetime.** The per-run temp home is owned by the run's `ProcInfo` and torn down when that is evicted (not at process exit), so the async `DescribeContextSources` call at run-finish can still read the seeded paths. Teardown is best-effort and idempotent.
+### 2.10 CAR callback and launch seams
 
-**Configuration & resolution.** Context mode is set per project (with an optional per-task override), defaulting to `clean`. Resolution precedence is **task override → project setting → `clean` default**, narrowed to `shared` when the resolved CLI is shared-only. Project endpoints: `GET/PUT /api/projects/{name}/cli-context-mode(s)`; the project-detail settings UI carries the recommendation verbatim: *"Empfehlung: clean - der Run sieht nur Prompt + versionierte Repo-Dateien; reproduzierbar. shared nur bewusst waehlen."*
+CAR 0.7.0 raises typed events before the matching raw-output callback. Studio must parse raw usage and session metadata before subscribers handle `TurnCompleted`, so [`CarCallbackBridge`](../../../backend/Features/Cli/Execution/BackendCarExecution.cs) buffers each typed batch, handles the raw line, and then publishes its events. This ordering is part of the token and cost ledger contract.
 
-**Code.**
-- Vocabulary + resolution: [`CliContextModes`](../../../backend/Shared/Models/CliContextModes.cs) (`Normalize` defaults to `clean`, `SupportsClean`), [`ProjectSettingsService`](../../../backend/Features/Projects/ProjectSettingsService.cs) (`SetCliContextMode` / `ResolveContextMode`).
-- Per-run preparer + handle: [`CleanContextPreparer` / `CleanContextPreparation`](../../../backend/Features/Cli/Execution/CleanContextPreparation.cs) (`PrepareClaude` / `PrepareCodex` return a disposable preparation that owns the temp home).
-- Adapter hook + env injection: `SupportsCleanContext` / `PrepareCleanContext` on [`CliExecutionServiceBase`](../../../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) (clean home built and env overrides applied in `StartAsync`); Claude / Codex overrides in their adapters.
-
-**Test.** `CliContextModesTests` (vocabulary defaults + `SupportsClean` matrix; `CleanContextPreparer` seeds only the allow-listed files, sets the right env var, surfaces the temp paths as sources, and tears the home down on dispose; **AGT-2066**: the credential file is shared by link so a simulated parallel-refresh storm writes through to the one home file and per-run teardown leaves it intact, while `settings.json` stays an isolated copy) and `ProjectSettingsServiceTests` (resolution precedence, shared-only reporting, override persistence) cover the policy + isolation path.
-
-**New CLI note.** Default a new CLI to **shared-only** (inherit the base `SupportsCleanContext => false`). Implement `clean` only when the CLI has a real config-home env override (like `CLAUDE_CONFIG_DIR` / `CODEX_HOME`): add a `PrepareXxx` to `CleanContextPreparer` that seeds only auth + base config, then override `SupportsCleanContext => true` and `PrepareCleanContext` on the adapter. Never fake `clean` by passing a flag the CLI doesn't honor — declaring shared-only honestly is correct.
+The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-shim healing for CAR-backed Claude launches. CAR 0.7.0 keeps its healer internal, so the existing Studio `NpmShimHealer` remains temporarily for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam only to attach host bookkeeping and the Claude rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as `public-clean-context-lease`, `public-hardened-spawner-composition`, `public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's internal Windows process helpers by copying them back into this repository.
 
 ---
 
@@ -185,18 +182,20 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 
 | Aspect | Status |
 |--------|--------|
-| Process lifecycle | ✅ `claude -p "<prompt>" --output-format stream-json --verbose --dangerously-skip-permissions` |
-| Session model | ✅ UUIDs only (`IsCompatibleSessionName` rejects slugs); resume via `-r <uuid>`; named-session create via `--name` |
-| Model selection | ⚠ Hardcoded list (Opus 4.7, Sonnet 4.6, Haiku 4.5) — no live discovery yet |
+| Execution engine | CAR 0.7.0 by default; explicit `legacy` rollback |
+| Process lifecycle | CAR Claude descriptor through `ICliDriver`; stream-json output; permission mode supplied from Studio's resolved local run configuration |
+| Session model | UUIDs only; resume through the CAR request; the CLI assigns the fresh session id |
+| Model selection | Studio catalog and qualification, then CAR model and thinking normalization |
 | Quota probe | ✅ `/usage` PTY probe - session + weekly buckets when reported; explicit unknown window for the Claude Code 2.1.202 tabbed API-billing view |
-| Logging | ✅ stream-json → marker lines via `TransformReadLine` |
-| Cancellation | ✅ |
+| Logging | Stream-json to typed CAR events and Studio marker lines |
+| Cancellation | CAR process-tree stop plus Studio terminal classification and Windows task job object |
 | Availability | ✅ `claude --version` |
 | Session storage | `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` |
 
 **Quirks.**
-- Claude reads stdin even with `-p`; the base class closes stdin immediately to avoid a 3 s "no stdin received" warning.
-- The npm shim on Windows points to `node_modules/@anthropic-ai/claude-code/bin/claude.exe`. An interrupted update can leave a `claude.exe.old.<timestamp>` and no `claude.exe`, breaking `--version`. Reinstall via `npm i -g @anthropic-ai/claude-code` to fix.
+- The CAR path uses the CAR-A one-shot stdin prompt transport and closes stdin immediately after the full prompt is flushed. This keeps prompts of at least 200 KiB out of argv and process listings without leaving an interactive pipe open. The temporary `legacy` rollback retains the older argv transport from ADR-0014.
+- CAR performs its built-in npm-shim healing before a CAR-backed Claude launch. The explicit legacy rollback and non-agent one-shot paths retain the pre-existing Studio healer until T4 because CAR 0.7.0 exposes no public repair API. CAR-backed agent runs never call the Studio healer.
+- Studio adds its centrally managed rules file through the narrow launch decorator until PROJ-011 `public-cli-launch-overlay` is available.
 - Claude Code 2.1.202 renders `/usage` as a tabbed `Settings / Status / Config / Usage / Stats` view. API-billed accounts can show only session cost and token counts there, with no subscription utilization percentage. The probe recognizes that exact PTY shape and returns `Quota: Unknown` instead of an empty/error snapshot. Older `Current session` and `Current week` text remains supported.
 - Rate-limit frames accept both the original camelCase keys and forgiving snake_case aliases. Unknown fields and optional fields with unexpected types are ignored so telemetry drift cannot break the CLI output loop.
 
@@ -204,79 +203,59 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 
 | Aspect | Status |
 |--------|--------|
-| Process lifecycle | ✅ `codex exec [resume <uuid>] --json [-m <model>] "<prompt>"` |
-| Session model | ✅ UUIDs only; first run auto-creates id, captured from the first `session_meta` JSON line |
-| Model selection | ✅ Live discovery via `CodexModelDiscovery` |
-| Quota probe | ✅ `/status` PTY probe — 5h + weekly buckets (Codex reports % left, we invert to % used) |
-| Logging | ⚠ Pass-through; no marker-line transform yet |
-| Cancellation | ✅ |
+| Execution engine | CAR 0.7.0 by default; explicit `legacy` rollback |
+| Process lifecycle | CAR Codex descriptor through `ICliDriver`; JSON event stream with prompt on stdin |
+| Session model | UUIDs only; captured from `thread.started`, with legacy `session_meta` accepted; resume through the CAR request |
+| Model selection | Live `CodexModelDiscovery`, Studio qualification, then CAR model and thinking normalization |
+| Quota probe | `/status` PTY probe with 5-hour and weekly buckets when reported |
+| Logging | Typed CAR events plus Studio marker lines from `CodexOutputRenderer` |
+| Cancellation | CAR process-tree stop plus Studio terminal classification and Windows task job object |
 | Availability | ✅ `codex --version` |
 | Session storage | `~/.codex/session_index.jsonl` + `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
 
 **Quirks.**
-- Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter. Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command — use `<Enter>` alone.
-- Trust + welcome + `/status` is a fragile multi-step probe; see comments in [`CodexQuotaProbe`](../../backend/Services/Quota/CodexQuotaProbe.cs).
+- Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter. Sending `1<Enter>` leaves a stray `1` that prefixes the next slash command, so use `<Enter>` alone.
+- Trust, welcome, and `/status` form a fragile multi-step probe. See [`CodexQuotaProbe`](../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs).
+- The CAR callback bridge must capture raw usage before publishing the matching `TurnCompleted` event.
 
-### 3.3 Gemini CLI (`gemini`)
-
-Verified against `@google/gemini-cli` v0.39.1.
+### 3.3 Antigravity (`agentapi`, persisted as `gemini`)
 
 | Aspect | Status |
 |--------|--------|
-| Process lifecycle | ✅ `gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]` |
-| Session model | ✅ UUIDs only (`IsCompatibleSessionName` rejects non-UUIDs); resume via `-r <uuid\|index\|latest>`; UUID captured from the first `init` stream-json frame |
-| Model selection | ⚠ Hardcoded list (auto, 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite, 3 Flash Preview). The CLI ships a static model registry; no live `gemini models list` command |
-| Quota probe | ✅ PTY drive of `/stats model` panel — parses tier, email, used %, daily limit, reset time. Sends a one-char prompt before `/stats model` so the panel renders QuotaStatsInfo (see below) |
-| Logging | ✅ stream-json `init` / `message` / `tool_call` / `tool_result` / `result` → marker lines via `TransformReadLine` |
-| Cancellation | ✅ |
-| Availability | ✅ `gemini --version` |
-| Session storage | `~/.gemini/tmp/<project-slug>/chats/session-<timestamp>-<short>.json` (slug map in `~/.gemini/projects.json`) |
+| Execution engine | Legacy adapter only, including when the effective rollout setting is `car` |
+| Process lifecycle | `agentapi new-conversation [--model=<id>] <prompt>` or `agentapi send-message <uuid> <prompt>` |
+| Session model | UUID conversation id captured from `agentapi` JSON; resume with `send-message` |
+| Model selection | Static `flash`, `pro`, and `flash_lite` mapping |
+| Quota probe | No local numeric surface; reports that quota is managed by the IDE session |
+| Logging | `agentapi` JSON rendered to the shared marker-line vocabulary; typed compatibility events use the existing adapter |
+| Cancellation | Studio legacy process-tree cancellation |
+| Availability | `agentapi --version`, accepting its usage response when that flag is not implemented |
+| Context mode | Shared only |
 
 **Quirks.**
-- The CLI prints `Warning: True color (24-bit) support not detected.` and `YOLO mode is enabled.` on **stderr**, not stdout. `TransformReadLine` lets stderr pass through unchanged so these surface as separate Activity Log lines.
-- Without `--skip-trust` the CLI blocks on a workspace-trust modal that has no headless equivalent. With `--skip-trust` the CLI runs untrusted but still works for non-MCP, non-extension prompts.
-- `-y` (alias `--yolo`) auto-approves all tool calls. Required for unattended runs because the default approval dialog is interactive and headless mode does not surface it.
-- Quota numbers (daily limit, remaining, reset time) are fetched dynamically via `refreshAvailableCredits()` against an authenticated Google endpoint and only rendered in the interactive `/stats model` panel. The probe drives the panel through a PTY: it pre-trusts a scratch folder via `~/.gemini/trustedFolders.json`, spawns gemini with `-m auto-gemini-3 --skip-trust`, dismisses the IDE / multiline setup modals if they appear, sends a one-character prompt (so `activeModels.length > 0` and the panel renders QuotaStatsInfo), then sends `/stats model` and parses the panel. Cost: one tiny generation call per probe, bounded by `Quota:TtlSeconds` (default 600). Free-tier accounts get identity only — the panel doesn't render quota lines there.
-- `--resume` accepts UUID, numeric index, or the literal `latest`. We persist UUIDs only (captured from the `init` frame) so a Codex/Claude session id can never be passed in by accident.
-- The `tool_use` stream-json frame uses `tool_name` + `parameters`, not Claude's `name` + `input`. The parser handles both shapes but Gemini-specific frames are the canonical source of truth — Gemini's tool-name vocabulary is also distinct (`run_shell_command`, `read_file`, `write_file`, `replace`, `glob`, `search_file_content`, `web_fetch`, `google_web_search`).
-- The init frame's session UUID is captured indirectly: `OnOutputLine` runs on the *transformed* line (after `TransformReadLine`), so we parse the marker line `● Session init <uuid> ...` rather than the raw JSON. This matters when adding new capture logic for Gemini.
-
-**Known limitation — stdout buffering when spawned with redirected stdout.**
-
-When the runner spawns `gemini` via `Process.Start` with `RedirectStandardOutput=true`, the CLI emits the `init` stream-json frame promptly but **buffers the remaining `message` / `tool_use` / `tool_result` / `result` frames** for the lifetime of the run, and the buffer is dropped on exit. The same invocation from a regular shell flushes correctly. Symptoms:
-
-- Job completes with `exitCode=0`, sometimes in seconds, sometimes after a long pause.
-- Activity Log shows only `● Session init <uuid> (<model>)` plus the stderr warnings.
-- The captured session UUID is correct and persisted, so resume works.
-- The on-disk `cli-output.log` is missing the same frames — it's a CLI-side flush issue, not a runner-side parser bug.
-
-Fixing this requires either a PTY-based spawn (analogous to the quota probe path) or a tiny Node wrapper that does line-buffered passthrough. Tracked here; not yet implemented.
+- The public CLI type is still `gemini`; changing the persisted value is a separate compatibility migration.
+- CAR 0.7.0 has an Antigravity descriptor, but it assumes a different stream and permission contract than Studio's current `agentapi` integration. T2 does not silently switch protocols.
+- `agentapi` exposes no documented config-home override, so Studio reports shared context honestly.
+- A future CAR migration requires recorded protocol fixtures for conversation creation, continuation, permission behavior, output framing, session capture, stop, and quota reporting.
 
 ---
 
-## 4. Adding a new CLI — checklist
+## 4. Adding a new CLI: checklist
 
 Use this as a PR template. Tick each box; missing items must be justified in section 3.
 
-- [ ] Add a constant to [`CliTypes`](../../backend/Models/CliTypes.cs) (`Gemini = "gemini"`) and append it to `All`.
-- [ ] Add the literal to the frontend type union in [`frontend/src/app/models/job.model.ts`](../../frontend/src/app/models/job.model.ts) (`CliType`, `CLI_TYPES`).
-- [ ] Implement `XxxCliService : CliExecutionServiceBase` in `backend/Services/Cli/`.
-   - `CliType` returns the new constant.
-   - `GetCliPath()` reads `XxxCli:Path` config with a sensible default.
-   - `BuildStartInfo` composes the prompt + session + model arguments.
-   - `IsCompatibleSessionName` returns the right thing — strict for UUID CLIs, `false` for sessionless CLIs.
-   - `TransformReadLine` if the CLI's output needs translating to marker lines.
-   - `GetModelCatalogAsync` if the CLI offers live model discovery.
-- [ ] Register the service as a singleton in [`Program.cs`](../../backend/Program.cs).
-- [ ] Add it to [`CliRouter`](../../backend/Services/Cli/CliRouter.cs)'s constructor and dispatch table.
-- [ ] Add a `BuildXxxProjects()` branch in [`SessionRegistry`](../../backend/Services/Cli/SessionRegistry.cs) — return `[]` if the CLI has no on-disk sessions.
-- [ ] Add a `Xxx(cwd, home)` branch in [`CliContextConventions`](../../../backend/Features/Cli/Execution/CliContextConventions.cs) for the read-only execution-context surface (§2.8) — the CLI's memory-file name and config-path conventions. Override `DescribeContextSources` only if the CLI emits its own startup frame.
-- [ ] Decide the **context mode** support (§2.9): leave the base `SupportsCleanContext => false` (shared-only) unless the CLI has a real config-home env override. If it does, add a `PrepareXxx` to [`CleanContextPreparer`](../../../backend/Features/Cli/Execution/CleanContextPreparation.cs) (seed only auth + base config) and override `SupportsCleanContext` / `PrepareCleanContext` on the adapter. Never fake `clean` with a flag the CLI doesn't honor.
-- [ ] Implement `XxxQuotaProbe : QuotaProbeBase` in `backend/Services/Quota/`.
-- [ ] Register the probe: `services.AddSingleton<IQuotaProbe, XxxQuotaProbe>()` in `Program.cs`.
-- [ ] Add a backend xUnit test for `BuildStartInfo` argument composition.
+- [ ] Add the CLI type and descriptor to CodingAgentRunner first, or document why its protocol must remain an explicit Studio legacy adapter. Do not create another unstructured default launch path.
+- [ ] Add the literal to the frontend type union in [`task.model.ts`](../../../frontend/src/app/models/task.model.ts).
+- [ ] Add a [`CliBehavior`](../../../backend/Features/Cli/Execution/CliBehavior.cs) for Studio-owned rendering, session capture, context observation, and model discovery. CLI argv belongs in CAR for a CAR-backed integration.
+- [ ] Register one keyed [`GenericCliExecutionService`](../../../backend/Host/Program.cs) and include it in [`CliRouter`](../../../backend/Features/Cli/Execution/CliRouter.cs).
+- [ ] Update the CAR support decision in [`BackendCarExecution`](../../../backend/Features/Cli/Execution/BackendCarExecution.cs). An unsupported CAR protocol must fall back explicitly and visibly.
+- [ ] Add session-store discovery to [`SessionRegistry`](../../../backend/Features/Cli/Execution/SessionRegistry.cs), or return no sessions if the CLI has no on-disk store.
+- [ ] Add path conventions to [`CliContextConventions`](../../../backend/Features/Cli/Execution/CliContextConventions.cs).
+- [ ] Default to shared-only context unless the CLI has a real config-home override and a credential-safe seed policy.
+- [ ] Add a quota probe under [`backend/Features/Cli/Quota`](../../../backend/Features/Cli/Quota) and register it in `backend/Host/Program.cs`.
+- [ ] Add backend contract tests for the Studio-to-CAR request, event ordering, output rendering, session capture, stop, and any deliberate legacy fallback.
 - [ ] Add a `@billable` E2E spec `frontend/e2e/<cli>-hello-world.spec.ts`.
 - [ ] Update **section 3** of this document with the real, observed behaviour and quirks.
 - [ ] Update [README.md](../../../README.md) and [AGENTS.md](../../../AGENTS.md) if the new CLI changes user-visible product scope.
 
-The order matters: get the skeleton compiling and registered first (steps 1–6) before tuning prompts/probes (steps 7+).
+The order matters: establish the CAR protocol contract and deterministic fixtures before enabling a production rollout.

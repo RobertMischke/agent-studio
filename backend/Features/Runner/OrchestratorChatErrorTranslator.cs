@@ -81,7 +81,7 @@ public static class OrchestratorChatErrorTranslator
         }
 
         // Process spawn errors. The OneShot driver's pre-spawn heal hook
-        // (NpmShimHealer) attempts to recover from the half-installed
+        // CAR's built-in Claude health hook attempts to recover from the half-installed
         // claude.exe stub before the spawn, but some hosts still hit raw
         // Win32 / FileNotFound exceptions here.
         if (lower.Contains("the system cannot find the file")

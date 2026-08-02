@@ -63,6 +63,13 @@ internal sealed class CliBehavior
     /// <summary>Per-output-line session-metadata capture hook. Default: no-op.</summary>
     public Action<GenericCliExecutionService, GenericCliExecutionService.ProcInfo, CliOutputLine>? OnOutputLine { get; init; }
 
+    /// <summary>
+    /// Capture metadata from one raw protocol line before its typed events are
+    /// published. This ordering is load-bearing for the token ledger: its
+    /// <c>TurnCompleted</c> subscriber reads the captured usage synchronously.
+    /// </summary>
+    public Action<GenericCliExecutionService, string, CliOutputLine>? CaptureRawLine { get; init; }
+
     /// <summary>Map a raw line to zero or more typed run events. Default: none.</summary>
     public MapLineToRunEventsDelegate? MapLineToRunEvents { get; init; }
 

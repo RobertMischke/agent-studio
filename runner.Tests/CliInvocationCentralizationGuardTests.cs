@@ -153,7 +153,8 @@ public class CliInvocationCentralizationGuardTests
 
         new("backend/Features/Cli/Execution/NpmShimHealer.cs",
             LegacyLayer
-            + "Repairs the npm claude.cmd shim. Literal clone of the CAR file; deleted in AGT-2373."),
+            + "Temporary repair helper for the explicit local rollback and non-agent ClaudeOneShot; "
+            + "CAR owns repair on CAR-backed runs and AGT-2373 deletes this exception."),
 
         new("backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs",
             LegacyLayer

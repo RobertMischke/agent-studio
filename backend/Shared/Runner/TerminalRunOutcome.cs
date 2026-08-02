@@ -57,6 +57,24 @@ public static class TerminalRunOutcomeClassifier
                 Reason: agentOutcome.Reason ?? "worker changed a protected branch or rewrote pre-existing history");
         }
 
+        // A deliberate stop is authoritative over heuristics derived from a
+        // short or empty output stream. This is especially important when the
+        // operator stops immediately after spawn: the analyzer correctly sees
+        // an EmptyFastExit shape, but that shape is not a CLI start failure
+        // when the host itself requested termination. A matched terminal
+        // sentinel still wins below because SentinelDetected is classified as
+        // completed by RunStatusClassifier before reaching this branch.
+        if (string.Equals(executionStatus, RunStatuses.Stopped, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executionStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TerminalRunOutcome(
+                TerminalRunOutcomeKinds.Interrupted,
+                "Failed",
+                ShouldMoveToReview: false,
+                ShouldShowFailureToast: false,
+                Reason: agentOutcome.Reason ?? "process was deliberately stopped");
+        }
+
         if (agentOutcome.IssueKind == RunIssueKind.EmptyFastExit)
         {
             return new TerminalRunOutcome(
@@ -138,17 +156,6 @@ public static class TerminalRunOutcomeClassifier
                 ShouldMoveToReview: false,
                 ShouldShowFailureToast: true,
                 Reason: agentOutcome.Reason ?? "process failed without terminal sentinel");
-        }
-
-        if (string.Equals(executionStatus, RunStatuses.Stopped, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(executionStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
-        {
-            return new TerminalRunOutcome(
-                TerminalRunOutcomeKinds.Interrupted,
-                "Failed",
-                ShouldMoveToReview: false,
-                ShouldShowFailureToast: false,
-                Reason: agentOutcome.Reason ?? "process was deliberately stopped");
         }
 
         if (string.Equals(executionStatus, RunStatuses.Completed, StringComparison.OrdinalIgnoreCase))

@@ -16,6 +16,9 @@ namespace AgentStudio.Runner;
 /// </summary>
 internal sealed class ActiveRun
 {
+    private readonly TaskCompletionSource _startHandshake =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public required string JobId { get; init; }
     /// <summary>CLI driving this run; null between claim and CLI resolution.</summary>
     public string? CliType { get; set; }
@@ -62,6 +65,16 @@ internal sealed class ActiveRun
     private int _holdsExecutionSlot = 1;
 
     public bool HoldsExecutionSlot => Volatile.Read(ref _holdsExecutionSlot) == 1;
+
+    /// <summary>
+    /// Completes after the confirmed process start has been written to the
+    /// durable session, timeline, phase, and pipeline projections. A very fast
+    /// CLI may exit before its StartAsync call returns; finalization must wait
+    /// for this handoff so it cannot write post-processing state first.
+    /// </summary>
+    public Task StartHandshake => _startHandshake.Task;
+
+    public void CompleteStartHandshake() => _startHandshake.TrySetResult();
 
     /// <summary>
     /// Atomically releases this run's execution seat. Multiple finish signals

@@ -61,6 +61,7 @@ internal static class BuiltInCliBehaviors
                             ?? "claude",
         IsCompatibleSessionName = (ctx, sessionName)
             => !string.IsNullOrWhiteSpace(sessionName) && ClaudeUuidRegex.IsMatch(sessionName),
+        NormalizeModelForInvocation = (_, model) => NormalizeModelId(model),
         BuildStartInfo = (ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode)
             => ClaudeBuildStartInfo(ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode),
         // ADR-0014: Claude does NOT pipe through stdin; the prompt is passed
@@ -70,6 +71,7 @@ internal static class BuiltInCliBehaviors
         // connected pipe).
         GetPromptStdinPayload = (ctx, prompt, sessionName, resumeSession, model) => null,
         EnsureCliHealthy = (ctx, ct) => ClaudeEnsureCliHealthyAsync(ctx, ct),
+        CaptureRawLine = (ctx, jobKey, line) => ClaudeCaptureRawLine(ctx, usageParsers, modelRegistry, jobKey, line),
         MapLineToRunEvents = (ctx, jobKey, line) => ClaudeMapLineToRunEvents(ctx, usageParsers, modelRegistry, jobKey, line),
         StartSessionLiveness = (ctx, info, resumeSession, sessionName) =>
         {
@@ -79,8 +81,6 @@ internal static class BuiltInCliBehaviors
         DescribeContextSources = (ctx, jobKey) => ClaudeDescribeContextSources(ctx, jobKey),
         PrepareCleanContext = (ctx, workingDirectory)
             => CleanContextPreparer.PrepareClaude(GenericCliExecutionService.ResolveUserHome(), ctx.Logger),
-        SpawnChild = (ctx, psi, prompt, sessionName, resumeSession, model, ct)
-            => ClaudeSpawnChildAsync(ctx, psi, prompt, sessionName, resumeSession, model, ct),
         TransformReadLine = (ctx, raw) => _claudeRenderer.Render(raw),
         OnOutputLine = (ctx, info, line) => ClaudeOnOutputLine(ctx, info, line),
         GetModelCatalog = (ctx, force, ct) => ClaudeGetModelCatalog(ctx, modelDiscovery, force, ct),
@@ -195,14 +195,10 @@ internal static class BuiltInCliBehaviors
     }
 
     /// <summary>
-    /// Pre-spawn self-heal for the npm-shim install. Probe first; if it
-    /// works (the common case) we return immediately so the hook adds no
-    /// measurable latency. Only when <c>--version</c> fails do we invoke
-    /// <see cref="NpmShimHealer.TryHealClaudeAsync"/>, which restores
-    /// atomic-rename orphans, re-runs the wrapper postinstall, and
-    /// re-verifies with a fresh <c>--version</c> call. Failure here lets
-    /// the spawn abort with a real error message instead of producing yet
-    /// another silent 3a-failed-pickup entry.
+    /// Legacy-engine pre-spawn repair. The CAR engine owns Claude's npm-shim
+    /// repair through its built-in descriptor; this temporary exception exists
+    /// only so the explicit rollback path remains operational until T4 removes
+    /// that path. CAR-backed runs do not call the Studio healer.
     /// </summary>
     private static async Task<(bool Ok, string? Error)> ClaudeEnsureCliHealthyAsync(GenericCliExecutionService ctx, CancellationToken ct)
     {
@@ -210,26 +206,26 @@ internal static class BuiltInCliBehaviors
         if (probe.Available) return (true, null);
 
         ctx.Logger.LogWarning(
-            "claude --version failed pre-spawn at '{Path}'; running NpmShimHealer", probe.Path);
+            "claude --version failed pre-spawn at '{Path}'; running rollback NpmShimHealer", probe.Path);
 
         var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct);
         if (outcome.Actions.Count > 0)
         {
             ctx.Logger.LogInformation(
-                "NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
+                "Rollback NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
         }
         if (!outcome.Available)
         {
             return (false,
-                outcome.Error ?? "NpmShimHealer reported claude as unavailable after repair pass");
+                outcome.Error ?? "Rollback NpmShimHealer reported claude as unavailable after repair pass");
         }
 
-        // Heal reported success; re-probe via the same code path the spawn will
-        // use, so a stale resolver cache or PATH quirk surfaces here, not later.
+        // Re-probe through the exact resolver the legacy spawn uses so a stale
+        // PATH or executable mismatch fails before Process.Start.
         var verify = ctx.TestCliPath();
         return verify.Available
             ? (true, null)
-            : (false, $"claude --version still failing after heal at '{verify.Path}'");
+            : (false, $"claude --version still failing after rollback heal at '{verify.Path}'");
     }
 
     /// <summary>
@@ -247,17 +243,6 @@ internal static class BuiltInCliBehaviors
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
 
-        // Capture the result-frame usage onto ProcInfo BEFORE the typed
-        // TurnCompleted event is raised by the adapter below, mirroring
-        // the Codex behavior. The runner's TurnCompleted subscriber immediately
-        // reads GetLastParsedTurnUsage to mirror the spend onto the agent
-        // message bus, so the stash must land first or that mirror races empty.
-        if (ctx.TryGetProc(jobKey, out var info))
-        {
-            ClaudeTryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
-            ClaudeTryCaptureInitContext(ctx, info, line);
-        }
-
         // Keep the rate-limit path local and forgiving. The packaged adapter
         // pins the original camelCase schema; this shim also accepts the
         // snake_case/string variants observed on adjacent Claude surfaces and
@@ -267,6 +252,18 @@ internal static class BuiltInCliBehaviors
             return [rateLimit];
 
         return ClaudeEventAdapter.Map(line.Text, jobKey);
+    }
+
+    private static void ClaudeCaptureRawLine(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry? usageParsers,
+        ICliModelRegistry modelRegistry,
+        string jobKey,
+        CliOutputLine line)
+    {
+        if (line.Stream != "stdout" || !ctx.TryGetProc(jobKey, out var info)) return;
+        ClaudeTryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
+        ClaudeTryCaptureInitContext(ctx, info, line);
     }
 
     /// <summary>
@@ -407,75 +404,6 @@ internal static class BuiltInCliBehaviors
     }
 
     /// <summary>
-    /// ADR-0014 follow-up (Survey § R5): when the
-    /// <c>ClaudeCli:UseHandleScrub</c> config flag is true, spawn via
-    /// <see cref="Win.WindowsHandleScrubSpawner"/> on Windows. The
-    /// flag is OFF by default - the first integration of this code
-    /// path (commit c5cfc63) broke init-frame delivery in live
-    /// ASP.NET hosting (hStdInput=NULL gave the child an
-    /// INVALID_HANDLE_VALUE), and even after the NUL-handle fix the
-    /// behaviour needs a deterministic regression test before it can
-    /// ship to production. Until the flag flips on, the Claude behavior
-    /// uses the engine <see cref="Process.Start"/> path with the
-    /// R1 (default-deny stdin) + R2 (env hardening) fixes from
-    /// ADR-0014.
-    ///
-    /// <para>
-    /// On non-Windows or when the flag is off, falls through to the
-    /// engine default spawn.
-    /// </para>
-    /// </summary>
-    private static async Task<ChildHandle> ClaudeSpawnChildAsync(
-        GenericCliExecutionService ctx,
-        ProcessStartInfo psi,
-        string prompt,
-        string? sessionName,
-        bool resumeSession,
-        string? model,
-        CancellationToken ct)
-    {
-        var useScrub = string.Equals(
-            ctx.Configuration["ClaudeCli:UseHandleScrub"], "true",
-            StringComparison.OrdinalIgnoreCase);
-        if (!useScrub || !OperatingSystem.IsWindows())
-        {
-            return await ctx.DefaultSpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
-        }
-
-        var argList = psi.ArgumentList.ToList();
-        var envBlock = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Collections.DictionaryEntry kv in Environment.GetEnvironmentVariables())
-        {
-            if (kv.Key is string k && kv.Value is string v) envBlock[k] = v;
-        }
-        foreach (var kv in psi.Environment) envBlock[kv.Key] = kv.Value;
-
-        var result = WindowsHandleScrubSpawner.Spawn(
-            exePath: psi.FileName,
-            argList: argList,
-            cwd: psi.WorkingDirectory,
-            envBlock: envBlock,
-            wantStdin: psi.RedirectStandardInput);
-
-        var stdoutReader = new StreamReader(result.Stdout, System.Text.Encoding.UTF8, leaveOpen: false);
-        var stderrReader = new StreamReader(result.Stderr, System.Text.Encoding.UTF8, leaveOpen: false);
-        Stream stdin = result.Stdin ?? Stream.Null;
-
-        Action<RunStopReason> kill = _ => result.KillTree();
-
-        ctx.Logger.LogInformation(
-            "[handle-scrub] Spawned {Cli} via STARTUPINFOEX (PID {Pid})",
-            ctx.CliType, result.Process.Id);
-
-        return new ChildHandle(
-            Process: result.Process,
-            Stdin: stdin,
-            Stdout: stdoutReader,
-            Stderr: stderrReader,
-            KillOverride: kill);
-    }
-
-    /// <summary>
     /// Walk the npm-shim convention to find the underlying claude.exe when
     /// <see cref="CliBehavior.GetCliPath"/> resolved to the <c>claude.CMD</c> dispatcher.
     ///
@@ -589,7 +517,7 @@ internal static class BuiltInCliBehaviors
     /// then walks up from <c>AppContext.BaseDirectory</c> looking for the file.
     /// Returns <c>null</c> if no candidate exists or the file is empty / oversized.
     /// </summary>
-    private static string? ResolveAgentRulesPath(GenericCliExecutionService ctx)
+    internal static string? ResolveAgentRulesPath(GenericCliExecutionService ctx)
     {
         var configured = ctx.Configuration["AgentRules:CorePath"];
         if (string.IsNullOrWhiteSpace(configured)) return null;
@@ -779,6 +707,7 @@ internal static class BuiltInCliBehaviors
             => string.IsNullOrEmpty(prompt)
                 ? null
                 : BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt,
+        CaptureRawLine = (ctx, jobKey, line) => CodexCaptureRawLine(ctx, usageParsers, modelRegistry, jobKey, line),
         MapLineToRunEvents = (ctx, jobKey, line) => CodexMapLineToRunEvents(ctx, usageParsers, modelRegistry, jobKey, line),
         TransformReadLine = (ctx, raw) => _codexRenderer.Render(raw),
         GetModelCatalog = (ctx, force, ct) => modelDiscovery.GetAsync(ctx.GetCliPath(), force, ct),
@@ -988,14 +917,20 @@ internal static class BuiltInCliBehaviors
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
 
-        if (ctx.TryGetProc(jobKey, out var info))
-        {
-            CodexTryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
-            CodexTryCaptureSessionId(ctx, info, line);
-            CodexTryCaptureCommandExecution(info, line);
-        }
-
         return MapCodexFrame(line.Text, jobKey);
+    }
+
+    private static void CodexCaptureRawLine(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry,
+        string jobKey,
+        CliOutputLine line)
+    {
+        if (line.Stream != "stdout" || !ctx.TryGetProc(jobKey, out var info)) return;
+        CodexTryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
+        CodexTryCaptureSessionId(ctx, info, line);
+        CodexTryCaptureCommandExecution(info, line);
     }
 
     /// <summary>

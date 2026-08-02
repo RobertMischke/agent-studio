@@ -564,6 +564,16 @@ public record SetCliContextModeRequest
     public string? Mode { get; init; }
 }
 
+/// <summary>
+/// Body for the project/workspace CLI execution-engine rollout endpoints.
+/// Null or blank clears the override; otherwise the value must be
+/// <c>car</c> or <c>legacy</c>.
+/// </summary>
+public record SetCliExecutionEngineRequest
+{
+    public string? ExecutionEngine { get; init; }
+}
+
 public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }

@@ -366,6 +366,20 @@ public class ProjectRunner
         return location == ExecutionLocations.Local ? null : location;
     }
 
+    private string ResolveCliExecutionEngine()
+    {
+        var resolution = _orchestratorDefaults?.ResolveCliExecutionEngine(ProjectName)
+            ?? AgentStudio.Registry.OrchestratorSettingsResolver.ResolveCliExecutionEngine(
+                _projectSettings.Get(ProjectName),
+                workspace: null);
+        _logger.LogInformation(
+            "[taskboard] CLI execution engine for {Project}: {ExecutionEngine} ({Source})",
+            ProjectName,
+            resolution.ExecutionEngine,
+            resolution.Source);
+        return resolution.ExecutionEngine;
+    }
+
     // Continuous decision review: while a job sits in 3-progress, we scan
     // its live output buffer every tick for an unresolved interruptive
     // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
@@ -1782,6 +1796,7 @@ public class ProjectRunner
             var resolverJobKey = $"{GetJobKey(info.Id)}:conflict-resolution";
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, resolverCliType).Mode;
             var contextMode = _projectSettings.ResolveContextMode(ProjectName, resolverCliType, info.ContextMode).Mode;
+            var executionEngine = ResolveCliExecutionEngine();
             var prompt = BuildConflictResolutionPrompt(info, run, workBranch, conflict);
             var (execution, error) = await resolver.StartAsync(
                 $"{info.Id}-conflict-resolution",
@@ -1795,6 +1810,7 @@ public class ProjectRunner
                 jobFolderPath: info.FolderPath,
                 permissionMode: permissionMode,
                 contextMode: contextMode,
+                executionEngine: executionEngine,
                 ct: CancellationToken.None);
 
             if (execution == null)
@@ -2725,6 +2741,7 @@ public class ProjectRunner
                 isWorktreeRun, activeRunForSpawn?.WorktreeReused == true, runWorkingDir, sessionBirthCwd);
             var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
             var effResumeFlag = canResumeSession && plan.ResumeFlag;
+            var executionEngine = ResolveCliExecutionEngine();
             var admittedSessionReason = plan.EventReason;
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
             {
@@ -2737,7 +2754,12 @@ public class ProjectRunner
             }
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
-                effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, contextMode, ct);
+                effSessionToResume, effResumeFlag, runModel, runThinkingLevel,
+                jobFolderPath: info.FolderPath,
+                permissionMode: permissionMode,
+                contextMode: contextMode,
+                executionEngine: executionEngine,
+                ct: ct);
 
             if (execution == null)
             {
@@ -2933,6 +2955,8 @@ public class ProjectRunner
         }
         finally
         {
+            if (processStartConfirmed)
+                _activeRuns.Get(jobId)?.CompleteStartHandshake();
             _processing = false;
         }
     }
@@ -5047,7 +5071,11 @@ public class ProjectRunner
         if (finishedRun == null) return;
         if (finishedRun.CliType != null && !string.Equals(cliType, finishedRun.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
-        _ = Task.Run(() => OnCliFinishedAsync(cliType, jobKey, execution, finishedRun.JobId));
+        _ = Task.Run(async () =>
+        {
+            await finishedRun.StartHandshake.ConfigureAwait(false);
+            await OnCliFinishedAsync(cliType, jobKey, execution, finishedRun.JobId).ConfigureAwait(false);
+        });
     }
 
     private async Task OnCliFinishedAsync(string cliType, string jobKey, CliExecution execution, string jobId)

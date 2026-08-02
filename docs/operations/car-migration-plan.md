@@ -1,22 +1,24 @@
 # Koordinationsplan: CAR-Migrations-Kette AGT-2370 → 2371 → 2372 → 2373
 
-**Stand:** 2026-07-28 · **Phase:** P2-Kickoff (Zielbild-Umsetzungsplan §3.2) · **Modus:** Planung, keine Code-Änderung
-**Quellen im Code verifiziert am 28.07.:** `runner/`, `backend/Features/Cli/Execution/`, `backend/Features/Runner/`, CAR-Repo (0.6.0 + Unreleased), `contracts/TaskServer.Contracts/`, `deploy/`, `docs/operations/{umsetzungsplan-zielbild,zielbild-komponenten-protokolle,execution-model-shift}`, `docs/concepts/distributed-agent-studio-target-architecture.md`
+**Status:** 2026-08-02 | **Phase:** T2 implementation (`AGT-2371`) | **Mode:** coordinated operator batch
+**Sources verified in code:** `runner/`, `backend/Features/Cli/Execution/`, `backend/Features/Runner/`, CodingAgentRunner 0.7.0, `contracts/TaskServer.Contracts/`, `deploy/`, `docs/operations/{umsetzungsplan-zielbild,zielbild-komponenten-protokolle,execution-model-shift}`, `docs/concepts/distributed-agent-studio-target-architecture.md`
+
+> The original planning baseline below is retained to explain the migration sequence. T1 completed on 2026-08-02. T2 now has an implemented CAR-backed local path in the `AGT-2371` worktree; acceptance verification and the later parity and cleanup batches remain separate gates.
 
 ---
 
-## 0. Kurzfassung — was dieser Plan entscheidet
+## 0. Current decision summary
 
-1. **Es sind vier CLI-Startpfade, nicht drei.** Der Kartentext nennt drei; `runner/RemoteProjectChatRunner.cs:89` startet zusätzlich roh `codex exec`. Der Scope der Kette wird darum um den Project-Chat-Pfad erweitert, sonst bleibt nach 2373 ein „second unstructured invocation path" stehen.
-2. **CAR braucht drei Erweiterungen, bevor 2370/2371 sinnvoll starten** — Prompt-Transport, Credential-Seed per Link, Adapter-Toleranz. Alles andere, was heute fehlt (Reattach, Outbox, Envelope, Orphan-Registry), bleibt bewusst beim Host.
-3. **Die Kette braucht eine Vorleistung T0, die in keiner der vier Karten steht:** eine Ausführungs-Spezifikation auf der Leitung. Der Claim transportiert heute **kein** `cliType`/`model`/`thinkingLevel`/`permissionMode`/`contextMode` (`runner/WireModels.cs:176-190`, `contracts/TaskServer.Contracts/ResourceContracts.cs:19-39`). Ohne dieses Feld tauscht 2370 nur den Transport und die Kartenwahl bleibt weiter wirkungslos.
-4. **Hot-Migration ist mechanisch abgesichert** — `KillMode=process` (`deploy/systemd/agent-host.service`) plus Reattach beim Start erlauben Runner-Deploys mitten in einer Welle. Der Kanarienvogel läuft über den vorhandenen Capability-Match, nicht über einen neuen Sonderpfad.
-5. **Container-Anschluss: eigene Tranche NACH T2**, aber mit drei Vorleistungen, die in T1/T2 hineingehören — sonst ist der Spawner-Hook am Ende wieder nutzlos (genau der Ist-Befund aus `execution-model-shift` §5).
-6. **Ausführungsform:** T1–T4 sind koordinierte Batches, keine card-scoped Auto-Review-Karten. Das ist keine Vorliebe, sondern die geltende Leitplanke (`zielbild-komponenten-protokolle` §4: „Architektur/Cross-Cutting … **Nein** … Genau hier brach alles").
+1. **The pre-migration baseline had four CLI launch paths, not three.** The chain includes the project-chat path so no unstructured Codex invocation is left behind.
+2. **CodingAgentRunner 0.7.0 delivered the prerequisite prompt, clean-context, and adapter work used by T1 and T2.** T2 found four narrower public composition gaps: `public-clean-context-lease`, `public-hardened-spawner-composition`, `public-cli-launch-overlay`, and `public-pre-spawn-health`. They stay in PROJ-011 and are bridged without copying CAR internals.
+3. **The execution specification on the claim was a required T0 dependency and is now implemented.** It carries `cliType`, `model`, `thinkingLevel`, `permissionMode`, and `contextMode` so the driver change preserves the card's execution choices.
+4. **Remote hot migration uses detached-worker durability.** `KillMode=process` and worker-level reattach allow runner deploys during a wave. This does not imply local backend reattach.
+5. **Container launch remains a tranche after T2.** T1 and T2 make the CAR spawner seam reachable so container launch can be implemented once.
+6. **T1 through T4 run as coordinated operator batches.** They are not independently auto-claimed cards.
 
 ---
 
-## 1. Ist-Stand: vier CLI-Startpfade
+## 1. Pre-migration baseline: four CLI launch paths
 
 | # | Pfad | Einstieg | Mechanik |
 |---|---|---|---|
@@ -33,6 +35,8 @@
 ---
 
 ## 2. API-Gap-Analyse CAR 0.6.x
+
+> Historical planning input. CodingAgentRunner 0.7.0 closed the prerequisite package described here. The implemented T2 boundary and the remaining 0.7.0 public API gaps are authoritative in the T2 section below.
 
 ### 2.1 Was CAR mitbringt und nicht nachgebaut wird
 
@@ -132,22 +136,54 @@ Wörtlich aus `execution-model-shift` §5: *„Keine Orchestrierung wandert hine
 
 **Abnahme (Kartentext + Ergänzungen):** echter Remote-Lauf mit attributierten Commits, verifiziertem Push, gültigem Attempt-Record · Reattach nachgewiesen (Daemon-Restart mitten im Lauf) · Kill/Timeout ohne verwaisten CLI-Prozess · `runner.Tests` grün + neue Tests für die Ausführungsschicht · **ergänzt:** ein Lauf mit dem größten real vorkommenden Prompt · Nachweis, dass der Host-eigene Claude-Token nach dem Lauf noch gültig ist · Notiz „welche CAR-Fähigkeit fehlte" mit den erzeugten `CAR-*`-Karten.
 
-### T2 = AGT-2371 · Backend-Lokal auf CAR
+### T2 = AGT-2371: local backend on CAR
 
-**Bestandsaufnahme (Ergebnis gehört als Tabelle in den Task-Ordner):**
+**Implementation status, 2026-08-02.** `GenericCliExecutionService` now selects an execution engine for every normal local card run and conflict-resolution run. Claude and Codex use `ICliDriver` from CodingAgentRunner 0.7.0 when the effective engine is `car`. Antigravity continues through the explicit legacy adapter because Studio's current integration speaks the `agentapi` conversation protocol, not CAR's Antigravity stream and permission protocol. This is a deliberate compatibility boundary, not an unsupported-CLI fallback.
 
-*Buchstäbliche Klone → ersatzlos löschen:* `ChildHandle.cs` (31 vs. 32 Zeilen), `Logging/CliOutputLogStore.cs`, `Logging/RunLogStore.cs`, `NpmShimHealer.cs` — Delta jeweils nur Namespace, `public` statt `internal` und `SilentCatch.Note(...)`.
-*CAR ist neuer als der Studio-Fork → auf CAR umstellen:* `Win/WindowsHandleScrubSpawner.cs` (CAR hat `Win32CommandLine.Build`, Handle-Rollback, Logger), `AgentGitCommandGuard.cs` (CAR parametrisiert per `GitGuardOptions`; das Studio hat feste `AGENT_TASKBOARD_*`-Namen — Umbenennung ist eine sichtbare Env-Änderung, gehört in die Migrationsnotiz).
-*Studio-spezifisch → bleibt:* `Win/TaskProcessReaper.cs`, `ClaudeSessionHeartbeat.cs`, `CodexSilentCompletionDetector.cs`, `SessionRegistry.cs`, `SessionToTaskIndex.cs`, `ClaudeSessionInspector.cs`, `CodexRolloutStore.cs`, `Rendering/*`, `Adapters/Claude*Parser.cs` (bis CAR-E), Active-Jobs-Datei + `ReapOrphans`, `--append-system-prompt-file` (`BuiltInCliBehaviors.cs:179-184`).
-*Studio-Lücke, die CAR schließt:* typisierte Interrupt-Klassifikation inkl. `QuotaExhausted` — heute nur ad-hoc `CheckEnvironmentBlocker` (`CliExecutionServiceBase.cs:1038-1087`).
+The local rollout selector has one process-wide emergency override, two
+persisted tiers and one fixed fallback:
 
-**Clean-Context-Interim (wichtig, exakt):** Solange CAR-B nicht draußen ist, fährt das Backend `ContextMode=shared` und injiziert sein eigenes, per Hardlink geseedetes Home über `CliRunRequest.ExtraEnvironment`. Das funktioniert, weil die Reihenfolge in `CliRunEngine.cs:274-288` lautet: Härtung → Deskriptor-Env → **ExtraEnvironment** → Clean-Context. Bei `clean` würde CAR gewinnen und kopieren; bei `shared` gewinnt der Host. Konsequenz: `CliRunInfo.CleanContextHome` ist dann `null` — der Claude-Heartbeat muss den Pfad weiter aus der Host-Vorbereitung beziehen (`BuiltInCliBehaviors.cs:287-297`).
+1. Process environment `RUNNER_EXEC_ENGINE=car|legacy`.
+2. Project override.
+3. Workspace default.
+4. Platform default, `car`.
 
-**Reattach ehrlich behandeln (Kartenpunkt 3):** Die Umstellung ändert daran **nichts**. `ReattachOnStartup()` ist ein Reaper, kein Reattach (`CliExecutionServiceBase.cs:1026,1499-1530`); Boot demotiert unterbrochene Runs nach `2-ready` und verwirft den Session-Zeiger (`RunLivenessMonitor.cs:108-175`). Das wird in T2 explizit dokumentiert und mit AGT-2199 verlinkt — nicht stillschweigend mitgeschleppt.
+The environment selector has highest precedence so an operator rollback cannot
+be masked by a persisted project or workspace value. Both persisted tiers also
+accept `car` or `legacy`. Blank environment input falls through to the persisted
+hierarchy; unknown environment or persisted values fail loudly. The standalone
+runner uses the same environment variable and also defaults to `car`.
 
-**Flag:** zweistufige Orchestrator-Settings nach ADR-0061 (`cli.executionEngine = car|legacy`, Workspace-Default + Projekt-Override) statt einer neuen Env-Variable — konform zu „Konvention statt Settings" für den Monolithen.
+**Implemented ownership split.** The boundary is intentionally not a wholesale replacement of Studio behavior:
 
-**Abnahme:** lokaler Kartendurchlauf inkl. Live-Ausgabe (SignalR `cliOutput/cliStarted/cliFinished/planUpdated`, `Host/Program.cs:1105-1120`), Stop, Steer-über-Resume, Token-/Kosten-Ledger · keine Regression bei Quota-Wait, Modell-Qualifizierung, Thinking-Level, Permission-Modus · Conflict-Resolution-Run (`ProjectRunner.cs:1745`) läuft mit · Tests grün.
+| Capability | Owner after T2 | Implemented treatment |
+|---|---|---|
+| CLI descriptors, argv/stdin transport, permission flags, common thinking normalization, process lifecycle, typed events | CAR 0.7.0 | Claude and Codex start through `ICliDriver`; Studio selects CAR-A stdin for Claude and does not rebuild these capabilities. |
+| Model qualification against the live Studio catalog | Studio | Qualification runs before the CAR request; CAR then applies its shared normalization. |
+| Live UI rendering, raw output mirror, session capture, quota and usage parsing, token and cost ledger, terminal sentinel classification | Studio | Existing callbacks and renderers consume the CAR output and event streams. |
+| Active-job persistence, orphan cleanup, Windows task job object, heartbeat and silent-completion detectors | Studio | These stay above the in-process CAR driver. |
+| Clean context across attempts of one task | Studio over CAR | Studio acquires or reuses its task-stable linked home, passes CAR `ContextMode=shared`, and injects `CLAUDE_CONFIG_DIR` or `CODEX_HOME` through `ExtraEnvironment`. This prevents CAR from creating a second process-scoped home and preserves resume state. |
+| Claude system-prompt file | Studio over CAR | A narrow public `ICliProcessSpawner` decorator adds `--append-system-prompt-file` until CAR exposes a launch overlay. |
+| Antigravity `agentapi` conversations | Studio legacy adapter | `new-conversation` and `send-message` retain their current output, session and permission semantics. |
+
+**Usage event ordering bridge.** CAR 0.7.0 publishes typed events before the matching raw-output callback. Studio's synchronous `TurnCompleted` ledger previously depended on usage and session metadata already having been parsed from that raw line. `CarCallbackBridge` therefore buffers the typed events, processes the raw line first, and then publishes the matching event batch. Live rendering still receives each line once, while ledger ordering remains unchanged.
+
+**Removed launch copy and temporary rollback exception.** The backend-specific `Win/WindowsHandleScrubSpawner` has been removed. CAR owns Claude npm-shim repair on the CAR path. CAR 0.7.0 does not expose that healer publicly, so the existing Studio `NpmShimHealer` remains temporarily for the explicit `legacy` rollback and the non-agent `ClaudeOneShot` path only. T4 removes it with those old invocation paths. Studio uses CAR's public `ICliProcessSpawner` seam for its host overlay and process bookkeeping.
+
+**CodingAgentRunner 0.7.0 gaps found during implementation.** These are library seams, not reasons to recreate CAR internals in Studio:
+
+| PROJ-011 card | 0.7.0 boundary | T2 bridge |
+|---|---|---|
+| `public-clean-context-lease` | CAR clean homes are process-scoped; Studio needs one stable home across task attempts and resumes. | Use Studio's task-stable home with `ContextMode=shared` plus explicit environment overrides. |
+| `public-hardened-spawner-composition` | CAR's hardened default spawner and Windows handle scrubber are internal and cannot be publicly decorated as one composition. | Use the public `ICliProcessSpawner` contract and keep the host decorator narrow. Do not restore the deleted Studio scrubber. |
+| `public-cli-launch-overlay` | `CliRunRequest` has no public extra-argv or descriptor overlay for the Claude rules file. | Add only the rules-file argument in the spawner decorator after CAR has built the launch. |
+| `public-pre-spawn-health` | CAR's npm-shim repair is internal to its driver and cannot be called by a legacy or one-shot host path. | Retain the pre-existing Studio healer only for the explicit rollback and `ClaudeOneShot`; delete it in T4 when those paths leave. |
+
+CAR's built-in descriptors and Windows helpers are also internal. T2 does not copy them. Studio-specific tolerant Claude rate-limit parsing and environment-blocker and terminal-sentinel semantics remain in the host because CAR 0.7.0 does not expose the required consumer policy seams.
+
+**Restart behavior remains unchanged.** The local backend does not reattach to a running CLI after restart. Its startup method is an orphan reaper: it validates persisted PID, process name and start time, terminates the leftover process tree, and lets existing liveness recovery demote or reissue the interrupted run. CAR is in-process, so it cannot recover the lost stdout and stdin pipes. Remote runner reattach is a separate detached-worker capability and must not be inferred for local runs.
+
+**Acceptance gate.** A local card run must cover agent execution, post-steps and gate through the CAR path, including SignalR live output, stop, steer through resume, and the token and cost ledger. Quota wait, model qualification, thinking level, permission mode and conflict-resolution behavior must remain at parity. T3 retains the fixture and live-run evidence gate; T4 retains final legacy removal.
 
 ### T3 = AGT-2372 · Parity-Suite
 
@@ -188,7 +224,7 @@ Wörtlich aus `execution-model-shift` §5: *„Keine Orchestrierung wandert hine
 
 ### T4 = AGT-2373 · Aufräumen, ADR, Doku
 
-**Löschen:** `runner/AgentCliProcess.cs` komplett; CLI-Anteil aus `runner/ProcessRunner.cs` (der Git-/Verifikationsteil **bleibt**, inkl. Kommentar warum); toter Parameter `isolateProcessGroup` (`ProcessRunner.cs:38`); `backend/Features/Cli/Execution/Win/WindowsHandleScrubSpawner.cs`; `ChildHandle.cs`, `Logging/CliOutputLogStore.cs`, `Logging/RunLogStore.cs`, `NpmShimHealer.cs`; beide Flags aus T1/T2; `RUNNER_CLI_BIN`/`RUNNER_CLI_ARGS`/`RUNNER_CLI_RESUME_ARGS` inkl. `docs/operations/setup/linux-runner-host.md:253-273` und `RunnerOptions.cs:257-260,306-308`.
+**Delete:** `runner/AgentCliProcess.cs` completely; the CLI portion of `runner/ProcessRunner.cs` while retaining its Git and verification responsibilities; the dead `isolateProcessGroup` parameter; the remaining duplicated `ChildHandle.cs`, `Logging/CliOutputLogStore.cs`, and `Logging/RunLogStore.cs`; both T1/T2 rollback switches; and `RUNNER_CLI_BIN`/`RUNNER_CLI_ARGS`/`RUNNER_CLI_RESUME_ARGS` including their runner-host documentation. Also delete the temporary backend `NpmShimHealer` exception when the legacy and `ClaudeOneShot` raw invocation paths are removed. The backend `Win/WindowsHandleScrubSpawner` was already removed in T2 and must not be reintroduced during cleanup.
 
 **Konsolidieren:** genau ein CAR-Bezugsweg (PackageReference, exakter Pin `[x.y.z]` in `backend/OrchestratorApi.csproj` **und** `runner/AgentRunner.csproj`) + ein Test, der beide Pins vergleicht. Nebenbefund korrigieren: `scripts/remote-runner-onboard.sh:19` installiert `--package-id CodingAgentRunner` als dotnet-Tool — falscher Artefaktname (Zeile 222 gibt es selbst zu).
 
@@ -296,12 +332,12 @@ Echt parallelisierbar: T0a ∥ T0b · T1 ∥ T1c · T3-Vorarbeit ∥ alles. **Ni
 
 | Risiko | Wirkung | Gegenmittel |
 |---|---|---|
-| Credential-Kopie statt Link | Host-Token nach Refresh ungültig → alle Remote-Läufe fallen aus | AP2 vor jedem Clean-Mode; bis dahin `ContextMode=shared` |
+| CAR process-scoped clean home used for a resumed local task | Resume state moves to a different home between attempts | T2 keeps the Studio task-stable linked home and passes it through `ContextMode=shared` plus environment overrides; track `public-clean-context-lease` |
 | Klartext → `stream-json` remote | `SentinelScanner` wechselt vom Rohtext- auf den `result`-Frame-Zweig | Parity P1/P5 gegen dieselbe Fixture in beiden Formen |
 | Erstmalige Permission-Flag-Injektion remote | Bypass-Modus wo bisher die Host-Config galt | gewollt (Zielbild-Konzept), aber als Verhaltensänderung dokumentieren; per RunSpec steuerbar |
 | Doppelte Log-Schreibung (CAR + Worker) | Plattenwachstum auf `agent-runner-01` | `IRunLogPathProvider` auf das Worker-Verzeichnis lenken; CAR-D beseitigt es (Log-Bloat hat schon einmal einen Push still blockiert) |
-| Antigravity/`agentapi`-Divergenz | T2 könnte still auf andere Semantik umschalten | in T2 explizit ausklammern, in T4 begründet dokumentieren |
-| Kein lokales Reattach (bleibt) | Backend-Restart verwaist Runs weiterhin | ehrlich dokumentieren, AGT-2199 verlinken — **nicht** heimlich in T2 mitlösen |
+| Antigravity/`agentapi` protocol divergence | A CAR switch could silently change conversation, output or permission semantics | T2 keeps Antigravity on the explicit legacy adapter; revisit only with protocol parity evidence |
+| No local reattach | A backend restart interrupts local runs | Keep the PID-identity-guarded reaper and recovery flow; do not claim detached-worker durability for local CAR runs |
 | `remote-runner-onboard.sh` installiert das falsche Paket | Onboarding schlägt fehl | in T4 korrigieren oder an AGT-2132 hängen |
 | Offene Zielbild-Entscheidungen (E1/E2/E6, Token-Refresh) | blockieren die **Container**-Tranche | blockieren die Konvergenz **nicht** — deshalb steht die Kette davor |
 
