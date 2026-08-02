@@ -103,7 +103,6 @@ public sealed class DurableAgentProcessTests : IDisposable
         PersistedRunnerSlot recovered = replacementSlot;
         var reason = string.Empty;
         var identityProven = false;
-        // Poll tightly: recovery is only observable while the worker is alive, and
         // The worker identity may not have reached durable storage yet. Poll
         // tightly so the test observes the recovery window before the fixture
         // exits on either supported host platform.

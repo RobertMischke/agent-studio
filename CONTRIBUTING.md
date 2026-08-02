@@ -25,7 +25,7 @@ dotnet build agent-taskboard.sln --configuration Release --no-restore
 dotnet test agent-taskboard.sln \
   --configuration Release \
   --no-build \
-  --filter "Category!=MachineBound"
+  --filter "Category!=MachineBound&Platform!=Linux"
 
 npm ci --prefix frontend
 npm --prefix frontend run lint:ci
@@ -35,6 +35,13 @@ npm --prefix frontend run build
 
 bash scripts/release/release-scripts.test.sh
 ```
+
+The .NET filter above is the canonical local Windows test set. When reporting
+it as green, include the tested solution or project, the exact filter, and the
+passed test count. Run excluded machine-bound and Linux-only tests separately
+on an appropriate host when a change affects them. See the
+[contributor setup runbook](docs/operations/setup/contributor-setup.md#27-run-the-reproducible-windows-test-set)
+for the trait definitions and unfiltered diagnostic behavior.
 
 Frontend behavior changes also require relevant Playwright coverage. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the test setup and
