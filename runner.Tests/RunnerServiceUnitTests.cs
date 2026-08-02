@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -56,7 +57,7 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("RUNNER_STATE_DIR=%s/state", content);
     }
 
-    [Theory]
+    [SkippableTheory]
     [InlineData("coding", "12", "CPUQuota=1200%\nCPUWeight=100\nIOWeight=100\n")]
     [InlineData("review", "12", "CPUQuota=400%\nCPUWeight=30\nIOWeight=30\n")]
     [InlineData("review", "2", "CPUQuota=100%\nCPUWeight=30\nIOWeight=30\n")]
@@ -65,19 +66,23 @@ public sealed class RunnerServiceUnitTests
         string cpuCount,
         string expected)
     {
+        PlatformGate.RequiresPosixShell();
+
         var profile = Path.Combine(Path.GetTempPath(), $"missing-agent-host-profile-{Guid.NewGuid():N}");
         var result = RunResourceGovernance(
             "--role", role,
             "--cpu-count", cpuCount,
             "--profile", profile);
 
-        Assert.Equal(0, result.ExitCode);
+        AssertScriptSucceeded(result);
         Assert.Equal(expected, result.StandardOutput.ReplaceLineEndings("\n"));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Agent_host_profile_is_the_only_explicit_resource_override()
     {
+        PlatformGate.RequiresPosixShell();
+
         var root = CreateTemporaryDirectory();
         try
         {
@@ -96,7 +101,7 @@ public sealed class RunnerServiceUnitTests
                 "--cpu-count", "12",
                 "--profile", profile);
 
-            Assert.Equal(0, result.ExitCode);
+            AssertScriptSucceeded(result);
             Assert.Equal(
                 "CPUQuota=600%\nCPUWeight=200\nIOWeight=150\nMemoryMax=16G\n",
                 result.StandardOutput.ReplaceLineEndings("\n"));
@@ -107,9 +112,11 @@ public sealed class RunnerServiceUnitTests
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void Agent_host_adopts_and_replaces_legacy_resource_drop_in()
     {
+        PlatformGate.RequiresPosixShell();
+
         var root = CreateTemporaryDirectory();
         try
         {
@@ -144,7 +151,7 @@ public sealed class RunnerServiceUnitTests
                 "--drop-in-dir", dropInDirectory,
                 "--migrate-drop-ins");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertScriptSucceeded(result);
             Assert.Equal(
                 "CPUQuota=400%\nCPUWeight=30\nIOWeight=30\nMemoryMax=8G\n",
                 result.StandardOutput.ReplaceLineEndings("\n"));
@@ -171,19 +178,32 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("/etc/systemd/system/${service_name}.service", content);
     }
 
+    /// <summary>
+    /// Runs the agent-host resource policy script through a real POSIX shell.
+    ///
+    /// Two Windows-specific details, both handled centrally in
+    /// <see cref="PosixShell"/> rather than here: the interpreter must be a full
+    /// path (Git's bash is usually not on the PATH of the test host process),
+    /// and every path argument must be MSYS-style, because the script enforces
+    /// <c>[[ "$profile" == /* ]]</c> and a literal <c>C:\...</c> fails that guard
+    /// with exit 2. The Windows form stays in the caller so its own file
+    /// assertions keep working - both spellings address the same file.
+    /// </summary>
     private static (int ExitCode, string StandardOutput, string StandardError) RunResourceGovernance(
         params string[] arguments)
     {
         var start = new ProcessStartInfo
         {
-            FileName = "bash",
+            FileName = PosixShell.RequirePath(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            CreateNoWindow = true,
         };
-        start.ArgumentList.Add(Path.Combine(RepoRoot(), "scripts", "agent-host-resource-governance.sh"));
+        start.ArgumentList.Add(
+            PosixShell.ToShellPath(Path.Combine(RepoRoot(), "scripts", "agent-host-resource-governance.sh")));
         foreach (var argument in arguments)
-            start.ArgumentList.Add(argument);
+            start.ArgumentList.Add(Path.IsPathRooted(argument) ? PosixShell.ToShellPath(argument) : argument);
 
         using var process = Process.Start(start)!;
         var standardOutput = process.StandardOutput.ReadToEnd();
@@ -191,6 +211,16 @@ public sealed class RunnerServiceUnitTests
         process.WaitForExit();
         return (process.ExitCode, standardOutput, standardError);
     }
+
+    /// <summary>
+    /// A bare exit-code assertion hides the script's own diagnosis; the script
+    /// reports every rejection on stderr, so surface it in the failure message.
+    /// </summary>
+    private static void AssertScriptSucceeded(
+        (int ExitCode, string StandardOutput, string StandardError) result)
+        => Assert.True(
+            result.ExitCode == 0,
+            $"agent-host-resource-governance.sh exited {result.ExitCode}: {result.StandardError.Trim()}");
 
     private static string CreateTemporaryDirectory()
     {
