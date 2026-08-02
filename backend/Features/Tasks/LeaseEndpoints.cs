@@ -487,19 +487,8 @@ public static class LeaseEndpoints
                 RunnerProjectPreflight? failedProjectPreflight = null;
                 string? nonRemoteCapableProject = null;
                 string? capabilityMismatch = null;
-                var readOnlyCodingSkipped = false;
                 foreach (var task in eligible)
                 {
-                    if (client is not null
-                        && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
-                        && !TaskKinds.IsEpic(task.Kind))
-                    {
-                        readOnlyCodingSkipped = true;
-                        logger.LogWarning(
-                            "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
-                            req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
-                        continue;
-                    }
                     var cliType = CliTypes.Normalize(task.CliType);
                     var requiredCapabilities = (req.RequiredCapabilities ?? [])
                         .Append(CapabilityProtocol.CodingExecutor)
@@ -599,11 +588,9 @@ public static class LeaseEndpoints
                 if (candidate is null || repository is null)
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
-                        Message: readOnlyCodingSkipped
-                            ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
-                            : nonRemoteCapableProject is not null
-                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                                : capabilityMismatch)));
+                        Message: nonRemoteCapableProject is not null
+                            ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                            : capabilityMismatch)));
 
                 if (string.IsNullOrWhiteSpace(clientId))
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
