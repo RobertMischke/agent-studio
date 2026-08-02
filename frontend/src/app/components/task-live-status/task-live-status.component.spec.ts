@@ -139,7 +139,7 @@ describe('TaskLiveStatusComponent', () => {
 
     const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
     expect(root.textContent).not.toContain('No active run');
-    expect(root.textContent).toContain('Between steps');
+    expect(root.textContent).toContain('Running remote on agent-runner-01');
     expect(root.dataset['liveTone']).toBe('active');
   });
 

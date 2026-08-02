@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Troubleshooting",
+  "source": {
+    "path": "docs/operations/setup/troubleshooting.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "72ab1a4b9dfdfb1027f1d8c8d518ef01ca13b5f475cc3ee48561f9ae478e6384",
+      "sizeBytes": 8824,
+      "lineCount": 114,
+      "capturedAt": "2026-07-26T20:40:32.5170000Z"
+    }
+  },
+  "agentReads": {
+    "total": 2,
+    "lastReadAt": "2026-07-26T20:40:32.5170000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T20:40:32.5170000Z",
+        "taskKey": "AGT-1919"
+      },
+      {
+        "at": "2026-07-26T20:26:23.4650000Z",
+        "taskKey": "AGT-1919"
+      }
+    ]
+  }
+}

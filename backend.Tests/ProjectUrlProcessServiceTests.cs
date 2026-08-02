@@ -60,6 +60,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public void Start_ReturnsCommandAndEffectiveWorkingDirectory()
     {
         using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
@@ -80,6 +81,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Start_CapturesOutputAndCompletionInTheSessionSnapshot()
     {
         using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
@@ -95,6 +97,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task StartWithReadiness_ReturnsStartingAndPublishesSilenceFailureInSession()
     {
         using var service = new ProjectUrlProcessService(
@@ -125,6 +128,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public void Stop_TerminatesTheOwnedProcessTreeAndRetainsItsSnapshot()
     {
         using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
@@ -144,6 +148,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public void StopProject_TerminatesEveryOwnedUrlProcess()
     {
         using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
@@ -158,6 +163,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public void Dispose_TerminatesOwnedProcessesSoHostShutdownCannotOrphanThem()
     {
         var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());

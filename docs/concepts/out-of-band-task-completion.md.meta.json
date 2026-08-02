@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Out-of-band Task Completion (concept)",
+  "source": {
+    "path": "docs/concepts/out-of-band-task-completion.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "9c671e6b75fa137277c386f26e9f090f9fc8b922eb2856cf50b82e6568e92794",
+      "sizeBytes": 8627,
+      "lineCount": 143,
+      "capturedAt": "2026-07-26T23:43:54.0200000Z"
+    }
+  },
+  "agentReads": {
+    "total": 2,
+    "lastReadAt": "2026-07-26T23:43:54.0200000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T23:43:54.0200000Z",
+        "taskKey": "AGT-1942"
+      },
+      {
+        "at": "2026-07-26T19:50:26.2560000Z",
+        "taskKey": "AGT-1942"
+      }
+    ]
+  }
+}

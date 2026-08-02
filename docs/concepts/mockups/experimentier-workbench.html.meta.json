@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "experimentier-workbench",
+  "source": {
+    "path": "docs/concepts/mockups/experimentier-workbench.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "c95ed38a8325c49f4d779849c1541eed5b2602ecb6ef9778a9a74139ab5ceb52",
+      "sizeBytes": 55842,
+      "lineCount": 1415,
+      "capturedAt": "2026-07-26T12:09:20.2060000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T12:09:20.2060000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T12:09:20.2060000Z",
+        "taskKey": "AGT-2097"
+      }
+    ]
+  }
+}

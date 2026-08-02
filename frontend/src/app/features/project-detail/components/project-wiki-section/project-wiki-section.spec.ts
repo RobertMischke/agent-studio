@@ -5,8 +5,10 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { vi } from 'vitest';
+import { of } from 'rxjs';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
 import { WikiStarsService } from './wiki-stars.service';
+import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { WIKI_LIVE_REFRESH_MS } from '../../services/wiki-live-refresh.service';
 import { ISOLATED_HTML_LINK_MESSAGE } from '../../../../services/sandboxed-html.util';
@@ -371,6 +373,9 @@ describe('ProjectWikiSectionComponent', () => {
   beforeEach(() => {
     clearWikiStorage();
     openTaskKey.mockClear();
+    // WikiHomeLinksComponent has its own focused HTTP contract tests. Keep this
+    // parent suite on a stable landing-page fixture across child remounts.
+    vi.spyOn(ProjectDocsService.prototype, 'getWikiHome').mockReturnValue(of(HOME));
     // Deep-link tests drive the hash; reset it so each test starts clean and
     // the existing (hash-agnostic) tests never inherit a stale wiki route.
     window.history.replaceState(null, '', '/');

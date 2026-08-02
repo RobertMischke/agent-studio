@@ -19,7 +19,7 @@ import { WorkspaceOverlaysService } from '../../../shell/state/workspace-overlay
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import {
   WorkspaceOrchestratorSettingsService,
   type WorkspaceOrchestratorSettings,

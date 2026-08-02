@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Product Runtime Log Capture",
+  "source": {
+    "path": "docs/operations/runtime/log-capture.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3b2a07492cd0dfeba0b9104310818f8a53175a931294418ac01005bf9561090a",
+      "sizeBytes": 11607,
+      "lineCount": 235,
+      "capturedAt": "2026-07-26T06:08:52.6660000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T06:08:52.6660000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T06:08:52.6660000Z",
+        "taskKey": "AGT-1926"
+      }
+    ]
+  }
+}

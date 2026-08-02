@@ -611,7 +611,17 @@ public sealed class RemoteTaskRunner
             (invocation.Note is null ? "" : $" note={invocation.Note}");
         _log(specLine);
         shipper.Add("system", specLine);
-        shipper.Add("system", $"[runner] spawning {invocation.FileName} {string.Join(' ', invocation.Arguments)}");
+        // Plan §4 (Beobachtbarkeit): the engine line is the proof of which
+        // execution path a run took and the filter for the T3 operating
+        // evidence. The legacy engine keeps its historical spawning line.
+        var engineLine = _options.ExecEngine == RunnerOptions.ExecEngineCar
+            ? $"[runner] engine=car cli={invocation.CliType} model={invocation.Model ?? "<cli-default>"} " +
+              $"thinking={invocation.ThinkingLevel ?? "<cli-default>"} " +
+              $"permission={CodingAgentRunner.Model.CliPermissionModes.Normalize(runSpec?.PermissionMode)} " +
+              $"context={CodingAgentRunner.Model.CliContextModes.Normalize(runSpec?.ContextMode)}"
+            : $"[runner] spawning {invocation.FileName} {string.Join(' ', invocation.Arguments)}";
+        _log(engineLine);
+        shipper.Add("system", engineLine);
         slot = _state.Save(slot with
         {
             WorktreePath = workspace.RepoPath,
@@ -630,7 +640,8 @@ public sealed class RemoteTaskRunner
         {
             process = DurableAgentProcess.Start(
                 _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir,
-                runSpec: runSpec);
+                runSpec: runSpec,
+                runId: slot.AttemptId);
         }
         catch (Exception ex)
         {
@@ -718,8 +729,15 @@ public sealed class RemoteTaskRunner
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
                         var sessionId = classified.Decision.RawFacts.SessionId!;
-                        var resumeArgs = _options.CliResumeArgs!
-                            .Replace("{sessionId}", sessionId, StringComparison.Ordinal);
+                        // The car engine resumes through CliRunRequest.ResumeSessionId
+                        // (the descriptor knows the handshake); the legacy engine keeps
+                        // substituting RUNNER_CLI_RESUME_ARGS. The gate stays the same
+                        // on both engines: no configured resume template, no resume.
+                        var carEngine = _options.ExecEngine == RunnerOptions.ExecEngineCar;
+                        var resumeArgs = carEngine
+                            ? null
+                            : _options.CliResumeArgs!
+                                .Replace("{sessionId}", sessionId, StringComparison.Ordinal);
                         shipper.Add(
                             "system",
                             $"[runner] bounded same-session resume 1/{ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts}; session={sessionId}");
@@ -737,11 +755,13 @@ public sealed class RemoteTaskRunner
                             workspace.RepoPath,
                             "Continue the interrupted attempt from the durable workspace state. Complete the requested work, verify it, and end with exactly one required [[TASK_*]] terminal sentinel.",
                             ResultsDir(slot.TaskKey),
-                            AgentCliProcess.SplitArgs(resumeArgs),
+                            resumeArgs is null ? null : AgentCliProcess.SplitArgs(resumeArgs),
                             // RUNNER_CLI_RESUME_ARGS carries only the resume
                             // handshake; the card's model / reasoning selection
                             // must survive the second attempt too.
-                            resumeSlot.RunSpec);
+                            resumeSlot.RunSpec,
+                            runId: resumeSlot.AttemptId,
+                            resumeSessionId: carEngine ? sessionId : null);
                         resumeSlot = _state.Save(resumeSlot with
                         {
                             ProcessId = resumed.ProcessId,
@@ -816,6 +836,12 @@ public sealed class RemoteTaskRunner
         int sameSessionResumeAttempts)
     {
         var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
+        // Resume stays gated on a configured RUNNER_CLI_RESUME_ARGS on BOTH
+        // engines, even though the CAR descriptor could resume from the session
+        // id alone. Production leaves that variable unset, so lifting the gate
+        // here would make runs resume that never resumed before - a third
+        // behaviour jump on top of the two T1 ships. It belongs to T2/T3, with a
+        // parity scenario (P12) behind it.
         var sessionState = !string.IsNullOrWhiteSpace(provider.SessionId)
                            && !string.IsNullOrWhiteSpace(_options.CliResumeArgs)
             ? ExecutionSessionState.Resumable

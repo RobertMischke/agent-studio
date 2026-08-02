@@ -58,6 +58,17 @@ internal static class RunnerCapabilityProbe
                         ? GitPushProbe.Ready
                         : GitPushProbe.ReadyNoWorkflowScope,
                 gitDetail));
+            // T1 canary mechanism (car-migration-plan §4): a CAR-engined host says
+            // so, and the canary cards request exactly this key through their
+            // RequiredCapabilities - cohorts 1 -> 5 -> default, no special path.
+            if (options.ExecEngine == RunnerOptions.ExecEngineCar)
+            {
+                list.Add(Capability(
+                    "exec-engine:car",
+                    "executor",
+                    typeof(CodingAgentRunner.CliRunner).Assembly.GetName().Version?.ToString(),
+                    options.ExecEngine));
+            }
         }
         else
         {
@@ -80,7 +91,6 @@ internal static class RunnerCapabilityProbe
             CapabilityProtocol.CliExecution(AgentCliProcess.ConfiguredCliType(options)),
             CapabilityProtocol.ProviderAuthentication(AgentCliProcess.ConfiguredCliType(options)),
             CapabilityProtocol.GitFetch,
-            CapabilityProtocol.GitPush,
             CapabilityProtocol.RepositoryAccess,
             CapabilityProtocol.Disk,
             CapabilityProtocol.TaskServerConnectivity,

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Onboarding a new CLI agent",
+  "source": {
+    "path": "docs/operations/setup/onboard-an-agent-cli.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "b07f02afe2e60ec7fbd332194bd4564734e858e47f5f8880c42ee8c28f11c064",
+      "sizeBytes": 9162,
+      "lineCount": 128,
+      "capturedAt": "2026-07-26T20:26:22.5050000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T20:26:22.5050000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T20:26:22.5050000Z",
+        "taskKey": "AGT-1919"
+      }
+    ]
+  }
+}

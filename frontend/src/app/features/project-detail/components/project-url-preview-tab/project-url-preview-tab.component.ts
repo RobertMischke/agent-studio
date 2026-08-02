@@ -267,9 +267,6 @@ export class ProjectUrlPreviewTabComponent {
       const kind = this.readiness().kind;
       if (!projectId || !url || this.resolveState() !== 'resolved') return;
       if (this.building() || !DIAGNOSABLE_KINDS.has(kind)) return;
-      const key = `${projectId}::${url.id}::${kind}`;
-      if (key === this.lastDiagnosedKey) return;
-      this.lastDiagnosedKey = key;
       this.fetchDiagnostic(projectId, url.id);
     });
 
@@ -522,6 +519,9 @@ export class ProjectUrlPreviewTabComponent {
   /** AGT-2180 — load the backend diagnosis and, when it points at a fixable
    *  configuration, look for a repository-derived quick fix. */
   private fetchDiagnostic(projectId: string, urlId: string): void {
+    const key = `${projectId}::${urlId}::${this.readiness().kind}`;
+    if (key === this.lastDiagnosedKey) return;
+    this.lastDiagnosedKey = key;
     this.taskService.diagnoseProjectUrl(projectId, urlId).subscribe({
       next: result => {
         if (this.projectId() !== projectId || this.urlRecord()?.id !== urlId) return;

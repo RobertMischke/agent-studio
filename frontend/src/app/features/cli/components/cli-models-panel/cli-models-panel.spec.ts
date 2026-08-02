@@ -50,7 +50,7 @@ describe('CliModelsPanelComponent', () => {
     economy.click();
     const save = http.expectOne('/api/cli/model-routing/economy-mode');
     expect(save.request.method).toBe('PUT');
-    expect(save.request.body).toEqual({ economyMode: true });
+    expect(save.request.body).toEqual({ enabled: true });
     save.flush({ economyMode: true });
     fixture.detectChanges();
     expect(fixture.componentInstance.policy()?.economyMode).toBe(true);

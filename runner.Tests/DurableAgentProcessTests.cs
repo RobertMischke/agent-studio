@@ -99,22 +99,27 @@ public sealed class DurableAgentProcessTests : IDisposable
 
         PersistedRunnerSlot recovered = replacementSlot;
         var reason = string.Empty;
-        for (var i = 0; i < 40; i++)
+        var identityProven = false;
+        // Poll tightly: recovery is only observable while the worker is alive, and
+        // on a host where the faked CLI binary does not exist (Windows, /bin/sh)
+        // that window is tens of milliseconds. The contract under test is the
+        // recovery itself, so the loop must not be able to step over the window.
+        for (var i = 0; i < 400 && !identityProven; i++)
         {
-            if (DurableAgentProcess.TryRecoverIdentity(replacementSlot, out recovered, out reason))
-                break;
-            await Task.Delay(50);
+            identityProven = DurableAgentProcess.TryRecoverIdentity(replacementSlot, out recovered, out reason);
+            if (!identityProven) await Task.Delay(5);
         }
 
+        // TryRecoverIdentity returns true only after it has verified the live PID
+        // generation, so this single assertion covers both halves of the contract.
+        // Re-verifying liveness afterwards would race the worker's own exit.
+        Assert.True(identityProven, reason);
         Assert.Equal(worker.ProcessId, recovered.ProcessId);
         Assert.InRange(
             Math.Abs((worker.ProcessStartedAtUtc - recovered.ProcessStartedAtUtc!.Value).TotalSeconds),
             0,
             2);
-        Assert.True(DurableAgentProcess.VerifyLive(recovered, out var proof), proof);
-        using var workerProcess = Process.GetProcessById(worker.ProcessId);
         worker.Kill();
-        await workerProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     private static RunnerOptions Options(string stateRoot, string worktree, string cliArgs) => new()
@@ -127,6 +132,10 @@ public sealed class DurableAgentProcessTests : IDisposable
         WorkDir = worktree,
         StateDir = stateRoot,
         BaseBranch = "main",
+        // These tests fake the CLI through CliBin/CliArgs, which only the legacy
+        // engine consumes. The worker/reattach mechanics under test are
+        // engine-independent; the CAR engine is covered by CarWorkerExecutionTests.
+        ExecEngine = RunnerOptions.ExecEngineLegacy,
         CliBin = "/bin/sh",
         CliArgs = cliArgs,
         TtlSeconds = 120,

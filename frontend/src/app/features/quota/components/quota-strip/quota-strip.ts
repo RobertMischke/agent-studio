@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import type { CliType } from '../../../../models/task.model';
-import { QuotaApiService } from '../../../../features/quota';
-import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
+import { QuotaApiService } from '../../services/quota-api.service';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota.model';
 import { cliTypeIcon } from '../../../../services/format.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';

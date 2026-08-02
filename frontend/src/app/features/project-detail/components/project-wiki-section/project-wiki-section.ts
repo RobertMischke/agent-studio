@@ -18,7 +18,7 @@ import { DriftReport, DriftReportDetailResponse } from '../../../../models/drift
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';

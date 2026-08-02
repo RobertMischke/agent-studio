@@ -146,6 +146,34 @@ public sealed class RunnerCapabilityProbeTests
     }
 
     [Fact]
+    public void Car_engine_is_advertised_as_the_canary_capability_and_legacy_is_not()
+    {
+        RunnerOptions Options(string engine) => new()
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            ExecEngine = engine,
+            CliBin = "codex",
+            CliArgs = "",
+        };
+
+        // The canary mechanism of the CAR migration (plan §4): cohort cards
+        // request exactly this key via RequiredCapabilities, so only CAR-engined
+        // hosts claim them - no special routing path.
+        var car = RunnerCapabilityProbe.Advertise(Options(RunnerOptions.ExecEngineCar), gitPushReady: true);
+        Assert.Equal("ready", Assert.Single(car, item => item.Key == "exec-engine:car").Status);
+
+        var legacy = RunnerCapabilityProbe.Advertise(Options(RunnerOptions.ExecEngineLegacy), gitPushReady: true);
+        Assert.DoesNotContain(legacy, item => item.Key == "exec-engine:car");
+    }
+
+    [Fact]
     public void Missing_secondary_cli_is_advertised_as_unavailable()
     {
         var options = new RunnerOptions

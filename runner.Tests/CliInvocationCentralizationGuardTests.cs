@@ -123,26 +123,24 @@ public class CliInvocationCentralizationGuardTests
     /// </summary>
     private static readonly AllowedFile[] Allowlist =
     [
-        new("runner/AgentCliProcess.cs",
-            LegacyLayer
-            + "Remote coding spawn: RUNNER_CLI_BIN/RUNNER_CLI_ARGS handed to ProcessRunner with the "
-            + "prompt on stdin. Deleted whole in AGT-2373."),
+        // AGT-2370 (T1) removed two entries: runner/AgentCliProcess.cs no longer
+        // spawns (pure invocation resolution since the dead instance path was
+        // deleted), and runner/RemoteProjectChatRunner.cs runs through CAR with
+        // PermissionMode=read-only (T1c) with no legacy fallback.
 
         new("runner/DurableAgentProcess.cs",
             LegacyLayer
-            + "Detached-worker launch (re-execs the runner binary) plus the worker's own "
-            + "ProcessRunner.RunAsync on the DetachedJobSpec. AGT-2370 replaces the second half with "
-            + "ICliDriver; the detached-worker half is host responsibility and stays."),
-
-        new("runner/RemoteProjectChatRunner.cs",
-            LegacyLayer
-            + "Fourth CLI start path - raw 'codex exec --experimental-json --sandbox read-only' "
-            + "(car-migration-plan §1). AGT-2370 step T1c moves it onto CAR with PermissionMode=read-only."),
+            + "Detached-worker launch (re-execs the runner binary) plus the worker's legacy raw "
+            + "ProcessRunner.RunAsync branch behind RUNNER_EXEC_ENGINE=legacy - the default engine is "
+            + "CAR (ICliDriver) since AGT-2370. The detached-worker half is host responsibility and "
+            + "stays; AGT-2373 deletes the legacy branch."),
 
         new("runner/RunnerOptions.cs",
             LegacyLayer
-            + "Parses RUNNER_CLI_BIN / RUNNER_CLI_ARGS / RUNNER_CLI_RESUME_ARGS. AGT-2370 replaces them "
-            + "with RUNNER_CLI_TYPE plus CliRunRequest fields; AGT-2373 removes the remainder."),
+            + "Parses RUNNER_CLI_BIN / RUNNER_CLI_ARGS / RUNNER_CLI_RESUME_ARGS - since AGT-2370 the "
+            + "binary-path and fallback surface for both engines (RUNNER_EXEC_ENGINE selects "
+            + "car|legacy; a new RUNNER_CLI_TYPE knob was deliberately not added so this ratchet can "
+            + "reach empty). AGT-2373 removes the trio."),
 
         new("runner/Program.cs",
             LegacyLayer

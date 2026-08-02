@@ -11,7 +11,7 @@ import {
   type ProjectBasicsValue,
 } from '../../../../models/project-basics.model';
 import { CLI_TYPES, type CliType, type RegistryProjectSummary, type RegistryWorkspaceListItem } from '../../../../models/task.model';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import { NotificationService } from '../../../../services/notification.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TaskService } from '../../../../services/task.service';
