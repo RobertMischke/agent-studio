@@ -506,7 +506,9 @@ public sealed class RemoteReviewWorkspace
                 expectedRoot.TrimEnd(Path.DirectorySeparatorChar),
                 StringComparison.Ordinal))
             throw new InvalidOperationException("Refusing review cleanup outside the configured attempt root.");
-        Directory.Delete(target, recursive: true);
+        // The attempt root holds a clone, so it contains read-only git objects
+        // and possibly reparse points - a plain recursive delete cannot remove it.
+        ResilientDirectory.Delete(target);
         return Task.FromResult(!Directory.Exists(target));
     }
 
