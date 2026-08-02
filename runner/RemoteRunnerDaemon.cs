@@ -356,7 +356,11 @@ public sealed class RemoteRunnerDaemon
                     {
                         var workspace = new GitWorkspace(
                             _options, claim.TaskKey, _log,
-                            claim.ProjectId, claim.RepositoryUrl, claim.DefaultBranch);
+                            claim.ProjectId, claim.RepositoryUrl, claim.DefaultBranch,
+                            sourceRunAttemptId: claim.RunId
+                                ?? claim.Lease.AttemptId
+                                ?? claim.Lease.LeaseId,
+                            fencingToken: claim.Lease.FencingToken);
                         var slot = state.Create(
                             claim.TaskKey, claim.Lease, workspace.RepoPath,
                             claim.RunId, claim.LeaseInstanceId, claim.ProjectId,

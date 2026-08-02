@@ -185,8 +185,10 @@ public sealed class ResultRefGcTests
         var resultSha = new string(
             runId[^1] is >= 'a' and <= 'f' ? runId[^1] : '2',
             40);
-        var resultRef =
-            $"refs/heads/agent-studio/results/{runId}/{resultSha}";
+        var resultRef = FencedGitRefs.ImmutableResult(
+            runId,
+            claim.Lease!.Fence,
+            resultSha);
         var envelope = new ImmutableResultEnvelope(
             "repo-project",
             runId,

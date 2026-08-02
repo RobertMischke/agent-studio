@@ -146,7 +146,7 @@ public sealed class DurableRunOutboxTests
         "run-1",
         new string('1', 40),
         new string('2', 40),
-        $"refs/heads/agent-studio/results/run-1/{new string('2', 40)}",
+        FencedGitRefs.ImmutableResult("run-1", 7, new string('2', 40)),
         null,
         new string('3', 64));
 

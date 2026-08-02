@@ -832,7 +832,6 @@ public sealed partial class TaskServerStore
         var computedDigest = ResultEnvelopeDigest.Compute(request.Envelope);
         if (!string.Equals(computedDigest, request.EnvelopeDigest, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Result envelope digest does not match the canonical envelope.");
-        ValidateImmutableSource(runId, request.Envelope);
 
         ResultHandoffAck? acknowledgement = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
@@ -858,6 +857,10 @@ public sealed partial class TaskServerStore
                 return;
             }
 
+            // Existing acknowledgements replay their exact historical envelope,
+            // including the pre-BP-01 ref form. Every new handoff must use the
+            // current attempt + fence + SHA identity.
+            ValidateImmutableSource(runId, request.Fence, request.Envelope);
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             ValidateLeaseReference(
@@ -2403,14 +2406,20 @@ public sealed partial class TaskServerStore
     private static bool RequiresResultEnvelope(string outcome)
         => outcome.Trim().ToLowerInvariant() is "success" or "done" or "noop" or "no-op";
 
-    private static void ValidateImmutableSource(string runId, ImmutableResultEnvelope envelope)
+    private static void ValidateImmutableSource(
+        string runId,
+        long fence,
+        ImmutableResultEnvelope envelope)
     {
         if (envelope.ImmutableRemoteRef is null) return;
-        var expected = $"refs/heads/agent-studio/results/{runId}/{envelope.ResultSha.ToLowerInvariant()}";
+        var expected = FencedGitRefs.ImmutableResult(
+            runId,
+            fence,
+            envelope.ResultSha);
         if (!string.Equals(envelope.ImmutableRemoteRef, expected, StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                $"Immutable result ref must be '{expected}'. Moving task or runner branches are not durable result identity.");
+                $"Immutable result ref must be '{expected}'. Moving task, runner, or other fence-generation refs are not durable result identity.");
         }
     }
 

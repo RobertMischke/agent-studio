@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-29
+Version: 2026-07-31
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -117,8 +117,8 @@ state.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
-  one-shot remains for diagnostics. It owns no task state. Its only git write to
-  origin is the mandatory teardown salvage branch described below.
+  one-shot remains for diagnostics. It owns no task state. Its Git writes to
+  origin are generation-scoped salvage and immutable result refs described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
 - `task-server/RemoteRunResultCollector.cs`,
@@ -153,8 +153,8 @@ state.
   at the Task Server mutation boundary, and canonical Remote completion suppresses
   the generic local auto-commit, drift, provenance, and post-processing queue
   path. Remote completion owns a separate attribution contract: it fetches the
-  pushed `runner/<runner-id>/<task-key>` ref, verifies that its tip equals the
-  fenced `ResultSha`, and writes every commit in the exact
+  pushed `agent-studio/results/<attempt>/fence-<n>/<result-sha>` ref, verifies
+  that its tip equals the fenced `ResultSha`, and writes every commit in the exact
   `merge-base..ResultSha` range to `commits[]` with `automatic` attribution.
   The range is rejected as a whole, left empty, and logged as a warning when
   the delivery branch belongs to another task or any commit subject explicitly
@@ -234,6 +234,14 @@ state.
 
 ## Invariants
 
+- Origin is a fenced side-effect channel. New Remote Run salvage refs include
+  runner, task, attempt, fence, and SHA; immutable result refs include attempt,
+  fence, and SHA. A newer generation never resumes or overwrites an older
+  generation's moving card ref. Known lease-loss and unattributed crash debris
+  publish only under `agent-studio/quarantine/...` and are never a delivery
+  candidate. The Task Server accepts a result handoff only when its exact ref
+  name matches the request's current run, fence, and result SHA. Integration
+  continues to consume only the settled envelope ref.
 - A coding result is delivered only after `git ls-remote` against the repository
   URL from the project registration resolves the published ref to the exact
   local result commit. The configured `origin` push URL is not delivery

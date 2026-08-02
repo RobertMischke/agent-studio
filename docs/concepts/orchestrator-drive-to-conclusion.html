@@ -1374,11 +1374,14 @@
             visible on the main line. No zero-file marker or direct salvage-to-base refspec was involved.
           </td>
           <td>
-            <span class="pill ok">hardened</span> every moving salvage push now passes a fail-closed target allowlist
-            immediately before <code>git push</code>. Only the exact card branch and collision refs derived from it are
-            accepted; <code>main</code>, <code>develop</code>, fully qualified base refs, and other cards are rejected.
-            An end-to-end regression proves teardown from an authoritative <code>main</code> base leaves
-            <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
+            <span class="pill ok">fenced</span> the first hardening layer rejects <code>main</code>, <code>develop</code>,
+            fully qualified base refs, and other cards immediately before <code>git push</code>. BP-01 adds the authority
+            layer: new salvage and result refs include attempt, fence, and SHA, so generations cannot share a push target;
+            the Task Server accepts only the exact current-fence result ref. A generation after known lease loss and
+            unattributed crash debris publish only under <code>agent-studio/quarantine/...</code>. New generations no
+            longer resume a moving card ref automatically. End-to-end regressions prove two generations retain distinct
+            tips and teardown from an authoritative <code>main</code> base leaves <code>origin/main</code> unchanged.
+            Existing main history is documented and was not rewritten.
           </td>
         </tr>
         <tr>

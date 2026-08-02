@@ -2305,6 +2305,28 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new RAcquire(TaskKey, RunnerId, ProjectName, "coding-host", 4242, "codex"), ct);
         Assert.True(lease.Granted);
 
+        var mismatchedRef = await Assert.ThrowsAsync<Runner::AgentRunner.TaskServerException>(() =>
+            coding.CompleteRunAsync(new RRemoteComplete(
+                TaskKey,
+                lease.Lease!.LeaseId,
+                lease.Lease.FencingToken,
+                RunnerId,
+                "Done",
+                ResultSha: resultSha,
+                AttemptChainId: lease.Lease.LeaseId,
+                Repository: "https://example.invalid/agent-studio.git",
+                AttemptId: lease.Lease.AttemptId,
+                AuthorityEpoch: lease.Lease.AuthorityEpoch,
+                IdempotencyKey: "v1-review-plane-wrong-fence-ref",
+                BaseSha: baseSha,
+                ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                    lease.Lease.AttemptId!,
+                    lease.Lease.FencingToken + 1,
+                    resultSha),
+                ArtifactManifestDigest: artifactDigest), ct));
+        Assert.Equal(400, mismatchedRef.StatusCode);
+        Assert.Contains("current fenced attempt", mismatchedRef.Message);
+
         var completion = await coding.CompleteRunAsync(new RRemoteComplete(
             TaskKey,
             lease.Lease!.LeaseId,
@@ -2318,7 +2340,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "v1-review-plane-completion",
             BaseSha: baseSha,
-            ImmutableResultRef: "refs/heads/agent-studio/results/e2e",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
             ArtifactManifestDigest: artifactDigest), ct);
         Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
 
