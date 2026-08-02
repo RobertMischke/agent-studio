@@ -142,7 +142,12 @@ state.
   and task-and-operation-scoped idempotency. Remote completion carries an
   explicit immutable Result-SHA independently of optional salvage-branch
   metadata, and rejected late review reports remain non-authoritative attempt
-  history. Only an exact
+  history. Authority epochs are claim generations. Rotation advances the epoch
+  used by every newly minted run or review lease, while an already leased
+  attempt keeps renewing, writing, and settling against its own older epoch.
+  Its exact lease remains current until settlement, release, expiry, or a
+  higher-fence takeover, including across a Task Server restart. Rotation does
+  not supersede attempts or make their task appear unleased. Only an exact
   acquire-delivery replay is idempotent; a new acquire from the same executor
   cannot renew a live lease without the canonical attempt and fence. Replayed
   review settlements become superseded once another subject is current. It
