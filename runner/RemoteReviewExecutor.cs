@@ -44,6 +44,21 @@ public sealed class RemoteReviewExecutor
                 evidence = await workspace.ExecutePlanAsync(shutdown);
                 summary = ExecutionSummary(evidence);
             }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+            {
+                // Review execution is not restart-reattachable yet. Settle the
+                // interrupted attempt as infrastructure work instead of letting
+                // it disappear behind a later re-claim of the same subject.
+                // The Task Server keeps the old attempt and schedules the retry.
+                failureClassification = "ExecutorRestarted";
+                summary =
+                    "The review daemon stopped before this attempt produced a report. " +
+                    "Completed test time from this attempt could not be resumed; a replacement review is required.";
+                evidence = InfrastructureEvidence(workspace, subject, lease, failureClassification);
+                _log(
+                    $"review interrupted by daemon shutdown attempt={attempt.AttemptId}; " +
+                    "settling lost in-flight work as ReviewInfra before cleanup");
+            }
             catch (ReviewInfrastructureException exception)
             {
                 failureClassification = exception.Classification;

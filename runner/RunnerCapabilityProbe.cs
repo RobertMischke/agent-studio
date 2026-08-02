@@ -11,7 +11,8 @@ internal static class RunnerCapabilityProbe
         bool gitPushReady,
         bool gitWorkflowPushReady = true,
         string? gitDetail = null,
-        ProviderAuthProbe? providerAuth = null)
+        ProviderAuthProbe? providerAuth = null,
+        TaskServerConnectivitySnapshot? connectivity = null)
     {
         var list = new List<AdvertisedCapabilityDto>
         {
@@ -25,7 +26,13 @@ internal static class RunnerCapabilityProbe
             Capability(CapabilityProtocol.GitFetch, "source", ToolVersion("git"), "git"),
             Capability(CapabilityProtocol.RepositoryAccess, "source", null, options.GitRemote ?? "server-routed"),
             Capability(CapabilityProtocol.Disk, "foundation", null, Path.GetPathRoot(options.WorkDir)),
-            Capability(CapabilityProtocol.TaskServerConnectivity, "foundation", null, new Uri(options.ServerUrl).Host),
+            Capability(
+                CapabilityProtocol.TaskServerConnectivity,
+                "foundation",
+                null,
+                new Uri(options.ServerUrl).Authority,
+                connectivity?.Status == TaskServerConnectivityStates.Unreachable ? "unavailable" : "ready",
+                ConnectivityDetail(connectivity)),
             Capability($"platform:{Platform()}", "platform", RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString()),
         };
         if (options.Role == "coding")
@@ -140,7 +147,25 @@ internal static class RunnerCapabilityProbe
                 sample.CpuCores,
                 sample.ActiveSlots,
                 DiskFreeBytes(),
-                DiskTotalBytes());
+                DiskTotalBytes(),
+                sample.TaskServerConnectionStatus,
+                sample.TaskServerConnectionObservedAt,
+                sample.TaskServerConnectionFailureStartedAt,
+                sample.TaskServerConnectionConsecutiveFailures,
+                sample.TaskServerConnectionEscalatedAt,
+                sample.TaskServerConnectionLastError,
+                sample.TaskServerConnectionLastRecoveredAt);
+
+    private static string ConnectivityDetail(TaskServerConnectivitySnapshot? connectivity)
+    {
+        if (connectivity is null || connectivity.Status == TaskServerConnectivityStates.Unknown)
+            return "Task Server route has not completed its first observed request yet.";
+        if (connectivity.Status == TaskServerConnectivityStates.Reachable)
+            return $"Task Server route reachable; observed {connectivity.ObservedAt:o}.";
+        return $"Task Server route unavailable since {connectivity.FailureStartedAt:o}; " +
+               $"{connectivity.ConsecutiveFailures} consecutive request failures. " +
+               (connectivity.LastError ?? "No transport detail was captured.");
+    }
 
     public static string Provider(string cliBinary)
     {

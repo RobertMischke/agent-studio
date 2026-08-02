@@ -118,6 +118,10 @@ pipeline view.
   failing-test set with the merge-base on the plan's integration ref. Baseline
   results are single-flight cached by repository, baseline SHA, and command
   hash. Only failures still new after one subject retry block the review.
+- `runner/RemoteReviewExecutor.cs`: a graceful daemon shutdown settles the
+  interrupted attempt as a visible ReviewInfra outcome before cleanup and
+  retry. Review processes are not restart-reattachable yet; do not describe
+  this settlement path as work preservation.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel

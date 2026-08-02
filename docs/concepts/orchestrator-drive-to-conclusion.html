@@ -1402,6 +1402,33 @@
             attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-01 to 2026-08-02</td>
+          <td><code>AGT-2471</code><br><span class="small">unobserved reverse-tunnel outage and review restart loss</span></td>
+          <td>
+            The SSH reverse tunnel from a Windows Studio to the remote Runner died at about 15:30 and was not restarted.
+            The review daemon issued 7,748 failed Task Server requests in 24 hours, while the complete Review lane made no
+            progress and the board showed no route-specific alarm. When the route returned, four queued reviews started
+            together and drove a six-core host to load 31.8. A later review-daemon restart reclaimed the same four attempts
+            and discarded about 28 minutes of already completed test time.
+          </td>
+          <td>
+            A bare, unsupervised <code>ssh -N -R</code> process was treated as the connection. The review poll loop absorbed
+            transport exceptions but logged every request failure. Host telemetry had no local Task Server route state, and
+            the UI did not interpret expiration of <code>task-server:connectivity</code> as the remote alarm. Coding attempts
+            had durable process reattachment, but remote reviews had no equivalent state store or reattach contract.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev, recovery gap explicit</span> both daemons now maintain a route state with one
+            initial log, a five-minute escalation, hourly summaries, and one recovery log. The state is included in host
+            telemetry; the three-minute connectivity capability freshness deadline drives an explicit Execution Hosts alarm.
+            A repository-owned Windows keeper functionally probes the route from the Linux host, removes only the matching
+            dead forward, and registers idempotently on a five-minute schedule. Graceful review shutdown now submits a
+            fenced infrastructure report with source classification <code>ExecutorRestarted</code> and an explicit lost-work
+            summary before cleanup. Full review process reattachment remains separate work in
+            <a href="/#/tasks/review-attempts-prozessuebergreifend-fortsetzen-statt-testzeit-verlieren"><code>AGT-2473</code></a>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

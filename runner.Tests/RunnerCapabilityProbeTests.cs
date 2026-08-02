@@ -175,6 +175,43 @@ public sealed class RunnerCapabilityProbeTests
     }
 
     [Fact]
+    public void Connectivity_outage_is_an_unavailable_capability_with_route_context()
+    {
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://127.0.0.1:15031",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "/bin/sh",
+            CliArgs = "",
+        };
+        var failureAt = new DateTime(2026, 8, 1, 15, 30, 0, DateTimeKind.Utc);
+
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            connectivity: new TaskServerConnectivitySnapshot(
+                TaskServerConnectivityStates.Unreachable,
+                failureAt.AddMinutes(5),
+                failureAt,
+                11,
+                failureAt.AddMinutes(5),
+                "connection refused",
+                null));
+
+        var route = Assert.Single(
+            advertised,
+            capability => capability.Key == CapabilityProtocol.TaskServerConnectivity);
+        Assert.Equal("unavailable", route.Status);
+        Assert.Equal("127.0.0.1:15031", route.Identity);
+        Assert.Contains("11 consecutive request failures", route.Detail);
+    }
+
+    [Fact]
     public void Salvage_gate_adds_the_token_scope_fix_for_a_real_workflow_rejection()
     {
         var rejection = new InvalidOperationException(

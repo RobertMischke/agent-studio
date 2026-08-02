@@ -44,33 +44,32 @@ public sealed class RemoteRunnerDaemon
         _ => false,
     };
 
-    private TimeSpan BackoffFor(int attempt)
-    {
-        // Base the backoff on the operator's poll cadence and grow it modestly so a
-        // longer outage is not hammered, capped so recovery is still prompt.
-        var seconds = Math.Min(_options.PollSeconds * Math.Min(attempt, 6), 60);
-        return TimeSpan.FromSeconds(Math.Max(1, seconds));
-    }
-
     /// <summary>
     /// Run a Task Server call, absorbing transient connectivity faults with a
     /// bounded backoff until it succeeds or shutdown is requested. Used for the
     /// one-time startup calls so a server that is briefly down at boot no longer
     /// costs a fatal exit and a systemd restart cycle.
     /// </summary>
-    private async Task<T> WithServerRetryAsync<T>(string what, Func<Task<T>> call, CancellationToken shutdown)
+    private async Task<T> WithServerRetryAsync<T>(
+        string what,
+        Func<Task<T>> call,
+        TaskServerConnectivityMonitor connectivity,
+        Func<int> activeSlots,
+        CancellationToken shutdown)
     {
         for (var attempt = 1; ; attempt++)
         {
             shutdown.ThrowIfCancellationRequested();
             try
             {
-                return await call();
+                var result = await call();
+                connectivity.RecordSuccess(DateTime.UtcNow, what);
+                return result;
             }
             catch (Exception ex) when (IsTransientServerFault(ex) && !shutdown.IsCancellationRequested)
             {
-                var delay = BackoffFor(attempt);
-                _log($"task server unreachable during {what} ({ex.Message}); retry {attempt} in {delay.TotalSeconds:0}s");
+                var delay = TaskServerConnectivityMonitor.RetryDelay(_options.PollSeconds, attempt);
+                connectivity.RecordFailure(DateTime.UtcNow, what, ex, delay, activeSlots());
                 await Task.Delay(delay, shutdown);
             }
         }
@@ -78,6 +77,7 @@ public sealed class RemoteRunnerDaemon
 
     public async Task RunAsync(CancellationToken shutdown)
     {
+        var connectivity = new TaskServerConnectivityMonitor(_log);
         var state = new RunnerStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
         using var startupAuthorityWatch = CancellationTokenSource.CreateLinkedTokenSource(
@@ -92,6 +92,8 @@ public sealed class RemoteRunnerDaemon
         var clientId = await WithServerRetryAsync(
             "runner registration",
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
+            connectivity,
+            () => 0,
             shutdown);
         _log(
             $"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; " +
@@ -151,11 +153,17 @@ public sealed class RemoteRunnerDaemon
                     gitCapability.Status, gitCapability.Detail, DateTime.UtcNow), shutdown);
                 return null;
             },
+            connectivity,
+            () => active.Count,
             shutdown);
         _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
         if (!gitCapability.CanPush)
             _log("Configured fallback Git remote is read-only; project claims remain eligible and are gated by their own delivery preflight.");
         var capabilityGeneration = DateTime.UtcNow.Ticks;
+        var telemetry = new HostTelemetrySampler();
+        HostTelemetrySample? latestTelemetry = telemetry.SampleIfDue(
+            active.Count,
+            connectivity.Snapshot);
         await WithServerRetryAsync<object?>(
             "capability advertisement",
             async () =>
@@ -165,12 +173,15 @@ public sealed class RemoteRunnerDaemon
                         _options,
                         gitCapability.CanPush,
                         gitCapability.CanPushWorkflows,
-                        gitCapability.Detail),
-                    null,
+                        gitCapability.Detail,
+                        connectivity: connectivity.Snapshot),
+                    RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
                     shutdown);
                 return null;
             },
+            connectivity,
+            () => active.Count,
             shutdown);
         if (!gitCapability.CanPush)
         {
@@ -190,17 +201,18 @@ public sealed class RemoteRunnerDaemon
                 shutdown);
         }
 
-        var telemetry = new HostTelemetrySampler();
         var loadGate = new RunnerLoadGate(
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
-        HostTelemetrySample? latestTelemetry = null;
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
-        HostTelemetrySample? TakeTelemetry()
+        HostTelemetrySample? TakeTelemetry(bool force = false)
         {
             try
             {
-                latestTelemetry = telemetry.SampleIfDue(active.Count) ?? latestTelemetry;
+                latestTelemetry = telemetry.SampleIfDue(
+                    active.Count,
+                    connectivity.Snapshot,
+                    force) ?? latestTelemetry;
                 return latestTelemetry;
             }
             catch (Exception ex)
@@ -232,7 +244,8 @@ public sealed class RemoteRunnerDaemon
                             _options,
                             gitCapability.CanPush,
                             gitCapability.CanPushWorkflows,
-                            gitCapability.Detail),
+                            gitCapability.Detail,
+                            connectivity: connectivity.Snapshot),
                         RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                         ++capabilityGeneration,
                         shutdown);
@@ -279,6 +292,11 @@ public sealed class RemoteRunnerDaemon
                     AcknowledgeInventory(inventory, inventorySnapshot, response);
                     await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
                     consecutiveFaults = 0;
+                    if (connectivity.RecordSuccess(DateTime.UtcNow, "claim poll"))
+                    {
+                        TakeTelemetry(force: true);
+                        nextCapabilityAdvertisement = DateTime.MinValue;
+                    }
                     continue;
                 }
                 if (active.Count >= _client.HostMaxParallelism)
@@ -394,6 +412,11 @@ public sealed class RemoteRunnerDaemon
                 if (!claimedAny)
                     await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
                 consecutiveFaults = 0;
+                if (connectivity.RecordSuccess(DateTime.UtcNow, "claim poll"))
+                {
+                    TakeTelemetry(force: true);
+                    nextCapabilityAdvertisement = DateTime.MinValue;
+                }
             }
             catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
             {
@@ -407,9 +430,16 @@ public sealed class RemoteRunnerDaemon
                 // code 4 - killing the whole cgroup and stranding leases. Instead:
                 // keep every in-flight slot running (their heartbeats tolerate the
                 // same blip) and retry the claim after a bounded backoff.
-                var delay = BackoffFor(++consecutiveFaults);
-                _log($"task server unreachable while claiming work ({ex.Message}); " +
-                     $"{active.Count} slot(s) still running; retry {consecutiveFaults} in {delay.TotalSeconds:0}s");
+                var delay = TaskServerConnectivityMonitor.RetryDelay(
+                    _options.PollSeconds,
+                    ++consecutiveFaults);
+                connectivity.RecordFailure(
+                    DateTime.UtcNow,
+                    "claim poll",
+                    ex,
+                    delay,
+                    active.Count);
+                TakeTelemetry(force: true);
                 await DelayThroughShutdown(delay, shutdown);
             }
         }

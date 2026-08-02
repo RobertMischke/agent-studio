@@ -814,6 +814,16 @@ proof.
   tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
   The runner refuses at preflight by design, so no half-started lease or CLI is
   left behind.
+- **Execution Hosts shows `Task Server route unreachable`** - the
+  `task-server:connectivity` advertisement is stale or explicitly unavailable.
+  This is the board-visible transport alarm even when the host itself is still
+  running, because a broken route cannot carry a fresh failure report through
+  itself. For the Windows-to-Linux reverse-tunnel topology, inspect
+  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log`, then run the
+  functional host-side curl from
+  [Remote runner: persistent connection](./remote-runner-persistent-connection.md).
+  Do not clear the symptom by restarting the review daemon; that discards
+  non-reattachable in-flight review work.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
   lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.
@@ -837,7 +847,16 @@ proof.
   `RUNNER_SERVER_URL` straight at the Studio.
 ## Reading host telemetry
 
-The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, active runner slots, and the last locally observed Task Server connection state together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+
+Task Server reachability has two complementary signals. The telemetry snapshot
+contains the daemon's local observation, failure start, consecutive failure
+count, escalation time, last error, and last recovery. The
+`task-server:connectivity` capability carries a three-minute freshness deadline.
+Freshness is the load-bearing remote alarm: when the route is down, the Task
+Server cannot receive another telemetry sample, so the last sample must not be
+misread as proof that the route remains healthy. The host card marks the route
+unreachable as soon as the connectivity capability expires.
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 
