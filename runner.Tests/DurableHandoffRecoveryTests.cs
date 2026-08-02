@@ -343,7 +343,9 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        // The root holds a git clone; its read-only objects make a plain recursive
+        // delete throw on Windows and fail the test from teardown.
+        ResilientDirectory.TryDelete(_root);
     }
 
     private async Task<string> SeedOriginAsync()
