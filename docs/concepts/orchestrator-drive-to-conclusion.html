@@ -1428,6 +1428,27 @@
             session or pending-intent mutations only when the authority-backed transition actually reaches Ready.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2463</code><br><span class="small">four local restart orphans</span></td>
+          <td>
+            Four local cards remained in <span class="lane">3-progress</span> for 10 to 39 hours after backend restarts
+            killed their CLI child processes. The registered uptime liveness service reported no actionable candidates,
+            so none of the cards reached its automatic Ready recovery terminal.
+          </td>
+          <td>
+            The flat task-storage cutover moved tasks to <code>tasks/&lt;bucket&gt;/&lt;key&gt;</code> and made
+            <code>task.json.state</code> authoritative, but <code>ITaskAccess.ListLaneFolders</code> still enumerated only
+            retired <code>&lt;lane&gt;/&lt;slug&gt;</code> directories. Local liveness, stale-progress, and steer-timeout sweeps
+            therefore saw zero flat-layout Progress tasks even though all registered projects were already in scope.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared lane-folder read now resolves flat task membership from
+            <code>task.json.state</code>, retains the external task ID for active-run matching, and falls back to physical
+            lane folders only for legacy projects. A two-project regression proves old local runs with no live owner move
+            metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
+          </td>
+        </tr>
       </tbody>
     </table>
 

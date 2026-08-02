@@ -93,6 +93,10 @@ Heartbeat + process-lost demotion. Two entry points over one pure policy
   the backend stays up (e.g. a foreign backend sharing the workspace crashed).
 
 Every decision is appended to `<workspace>/logs/run-liveness.jsonl`.
+Candidate discovery follows the active storage layout through `ITaskAccess`:
+flat projects resolve lane membership from `tasks/<bucket>/<key>/task.json.state`,
+while legacy projects retain physical `<lane>/<slug>` orphan enumeration. This
+keeps the boot and uptime scans project-wide after the flat-storage cutover.
 
 ### Key code
 
