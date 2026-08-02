@@ -254,8 +254,14 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
         IBuildTestGateRunner buildGate,
         Action onAspect)
     {
+        // The aspect steps are recorded by AspectRunnerService against its OWN
+        // pipeline log, not the orchestrator's. Without this the aspect runs
+        // happen but never reach pipeline-execution.json, and Complete()
+        // terminalizes the four pre-seeded aspect steps to Skipped.
         var aspectRunner = new AspectRunnerService(
-            harness.Prompts, NullLogger<AspectRunnerService>.Instance);
+            harness.Prompts,
+            NullLogger<AspectRunnerService>.Instance,
+            pipelineLog: harness.PipelineLog);
         aspectRunner.CliRunner = (_, _, _, _, _, _) =>
         {
             onAspect();
