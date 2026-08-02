@@ -21,13 +21,28 @@ public sealed class RemoteReviewDaemon
         await _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown);
         var active = new List<(Task<int> Run, string AttemptId)>();
         var telemetry = new HostTelemetrySampler();
+        HostTelemetrySample? TakeTelemetry()
+        {
+            try
+            {
+                return telemetry.SampleNow(active.Count);
+            }
+            catch (Exception exception)
+            {
+                _log(
+                    $"review host telemetry sample failed error={exception.GetType().Name} "
+                    + $"message={exception.Message}");
+                return null;
+            }
+        }
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await _client.AdvertiseCapabilitiesAsync(
             RunnerCapabilityProbe.Advertise(_options, gitPushReady: false),
-            RunnerCapabilityProbe.Telemetry(telemetry.SampleIfDue(0)),
+            RunnerCapabilityProbe.Telemetry(TakeTelemetry()),
             capabilityGeneration,
             shutdown);
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        var admissionClosed = false;
         while (!shutdown.IsCancellationRequested)
         {
             for (var index = active.Count - 1; index >= 0; index--)
@@ -48,18 +63,33 @@ public sealed class RemoteReviewDaemon
                 }
                 active.RemoveAt(index);
             }
+            var admissionTelemetry = TakeTelemetry();
             if (DateTime.UtcNow >= nextCapabilityAdvertisement)
             {
                 await _client.AdvertiseCapabilitiesAsync(
                     RunnerCapabilityProbe.Advertise(_options, gitPushReady: false),
-                    RunnerCapabilityProbe.Telemetry(telemetry.SampleIfDue(active.Count)),
+                    RunnerCapabilityProbe.Telemetry(admissionTelemetry),
                     ++capabilityGeneration,
                     shutdown);
                 nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
             }
-            var claimedAny = false;
-            while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
+
+            var admission = ReviewSlotAdmissionPolicy.Decide(
+                admissionTelemetry,
+                active.Count,
+                _options.HostMaxParallelism,
+                _options.ClaimMaxLoadPerCore);
+            if (!admission.Admitted)
             {
+                if (!admissionClosed)
+                    _log($"review slot admission closed: {admission.Reason}; activeSlots={active.Count}");
+                admissionClosed = true;
+            }
+            else
+            {
+                if (admissionClosed)
+                    _log($"review slot admission reopened: {admission.Reason}; activeSlots={active.Count}");
+                admissionClosed = false;
                 ReviewClaimResponse claim;
                 try
                 {
@@ -68,7 +98,7 @@ public sealed class RemoteReviewDaemon
                             _options.RunnerId,
                             _client.RunnerInstanceId,
                             _options.TtlSeconds,
-                            _options.HostMaxParallelism - active.Count),
+                            AvailableSlots: 1),
                         shutdown);
                 }
                 catch (TaskServerException fatal) when (fatal.StatusCode is 401 or 403)
@@ -87,27 +117,35 @@ public sealed class RemoteReviewDaemon
                     // re-claim it from zero (observed as a 409 crash-loop). Absorb
                     // like the coding daemon and retry on the next poll tick.
                     _log($"review claim poll failed; retrying next tick: {exception.Message}");
-                    break;
+                    claim = new ReviewClaimResponse("empty");
                 }
-                if (!string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase))
-                    break;
-                // In-flight dedup: after a lease died mid-run (renew outage), the
-                // server hands the same attempt out again with a fresh fence. This
-                // very process may still be executing it - starting a second
-                // executor would double-run the review and discard the first via
-                // StaleFence. Skip; the running slot finishes or dies first.
-                if (active.Any(slot => string.Equals(slot.AttemptId, claim.Attempt!.AttemptId, StringComparison.Ordinal)))
+                if (string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase))
                 {
-                    _log($"claim returned attempt {claim.Attempt!.AttemptId} already in flight on this host; skipping duplicate execution");
-                    break;
+                    // In-flight dedup: after a lease died mid-run (renew outage), the
+                    // server hands the same attempt out again with a fresh fence. This
+                    // very process may still be executing it - starting a second
+                    // executor would double-run the review and discard the first via
+                    // StaleFence. Skip; the running slot finishes or dies first.
+                    if (active.Any(slot => string.Equals(
+                            slot.AttemptId,
+                            claim.Attempt!.AttemptId,
+                            StringComparison.Ordinal)))
+                    {
+                        _log($"claim returned attempt {claim.Attempt!.AttemptId} already in flight on this host; skipping duplicate execution");
+                    }
+                    else
+                    {
+                        _log($"claimed remote review attempt={claim.Attempt!.AttemptId} subject={claim.Subject!.SubjectId} slot={active.Count + 1}/{_options.HostMaxParallelism}");
+                        active.Add((new RemoteReviewExecutor(_options, _client, _log)
+                            .RunClaimedAsync(claim, shutdown), claim.Attempt!.AttemptId));
+                    }
                 }
-                claimedAny = true;
-                _log($"claimed remote review attempt={claim.Attempt!.AttemptId} subject={claim.Subject!.SubjectId} slot={active.Count + 1}/{_options.HostMaxParallelism}");
-                active.Add((new RemoteReviewExecutor(_options, _client, _log)
-                    .RunClaimedAsync(claim, shutdown), claim.Attempt!.AttemptId));
             }
-            if (!claimedAny)
-                await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
+
+            // Admit at most one review per telemetry observation. The pause lets
+            // the new process affect the next load sample before another lease
+            // can enter this host.
+            await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
         }
         if (active.Count > 0)
             await Task.WhenAll(active.Select(slot => slot.Run));

@@ -649,6 +649,7 @@ public static class V1ReviewPlaneEndpoints
                    ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
         if (string.IsNullOrWhiteSpace(plan.IntegrationRef) && integrationRef is not null)
             plan = plan with { IntegrationRef = integrationRef };
+        plan = Contract.ReviewPlanResourcePolicy.Apply(plan);
         return new Contract.ReviewSubjectDto(
             review.Subject.SubjectId,
             task?.Id ?? review.TaskKey,
