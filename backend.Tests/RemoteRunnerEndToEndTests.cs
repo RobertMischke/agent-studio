@@ -39,6 +39,8 @@ using RRemoteComplete = Runner::AgentRunner.RemoteRunCompletionRequest;
 using ROptions = Runner::AgentRunner.RunnerOptions;
 using RTaskRunner = Runner::AgentRunner.RemoteTaskRunner;
 using RRemoteCompletionResponse = Runner::AgentRunner.RemoteRunCompletionResponse;
+using RReviewDaemon = Runner::AgentRunner.RemoteReviewDaemon;
+using RReviewStateStore = Runner::AgentRunner.ReviewStateStore;
 
 namespace AgentStudio.Tests;
 
@@ -2090,6 +2092,296 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         await GitAsync(seed, "remote", "add", "origin", origin);
         await GitAsync(seed, "push", "-u", "origin", "main");
         return origin;
+    }
+
+    [Fact]
+    public async Task Review_daemon_restart_adopts_in_flight_worker_without_repeating_completed_commands()
+    {
+        const string reviewRunnerId = "review-runner-restart";
+        var origin = await SeedOriginAsync();
+        var resultSha = (await GitAsync(origin, "rev-parse", "refs/heads/main")).StdOut.Trim();
+        var marker = Path.Combine(_workspace, "review-command-marker.txt");
+        var release = Path.Combine(_workspace, "release-review-command");
+        SeedTask(
+            TaskStates.AutoReview,
+            TaskKey,
+            "Adopt review across daemon restart",
+            "Run both review commands once.");
+
+        using var factory = BuildFactory();
+        using var httpOne = factory.CreateClient();
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(origin)!;
+        var run = authority.AcquireRun(
+            TaskKey,
+            repositoryId,
+            null,
+            RunnerId,
+            "coding-host",
+            120,
+            "restart-review-run").RunAttempt!;
+        var completed = authority.SettleRun(
+            new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "restart-review-run-complete"),
+            "done",
+            resultSha,
+            null,
+            resultEnvelope: new Contract.ImmutableResultEnvelope(
+                repositoryId,
+                run.AttemptId,
+                resultSha,
+                resultSha,
+                "refs/heads/main",
+                null,
+                new string('a', 64),
+                RepositoryUrl: origin));
+        Assert.True(completed.Accepted);
+        var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            TaskKey,
+            repositoryId,
+            resultSha,
+            run.AttemptId,
+            "requirements",
+            "restart-adoption-policy",
+            [],
+            "restart-review-create",
+            RepositoryUrl: origin,
+            ResultRef: "refs/heads/main",
+            Plan: new Contract.ReviewPlanDto(
+                [
+                    new Contract.ReviewCommandDto(
+                        "completed-before-restart",
+                        "build-tests",
+                        "/bin/sh",
+                        ["-c", $"printf 'first\\n' >> '{marker}'"]),
+                    new Contract.ReviewCommandDto(
+                        "in-flight-during-restart",
+                        "build-tests",
+                        "/bin/sh",
+                        [
+                            "-c",
+                            $"while [ ! -f '{release}' ]; do sleep 0.05; done; " +
+                            $"printf 'second\\n' >> '{marker}'",
+                        ]),
+                ],
+                ["build-tests"])));
+        Assert.True(created.Accepted);
+
+        var options = ReviewRunnerOptions(reviewRunnerId);
+        var firstLogs = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var firstClient = new RClient(
+            httpOne,
+            reviewRunnerId,
+            usesDurableTaskServer: true,
+            options: options,
+            runnerInstanceId: "review-host:generation-1");
+        using var firstStop = new CancellationTokenSource();
+        var firstDaemon = new RReviewDaemon(options, firstClient, firstLogs.Enqueue);
+        var firstRun = firstDaemon.RunAsync(firstStop.Token);
+
+        await WaitUntilAsync(
+            () => File.Exists(marker)
+                  && File.ReadAllLines(marker).SequenceEqual(["first"]),
+            "first review command did not complete");
+        var firstSlot = Assert.Single(new RReviewStateStore(options.StateDir).LoadAll());
+        var originalFence = firstSlot.Claim.Lease!.Fence;
+        Assert.Equal("review-host:generation-1", firstSlot.Claim.Lease.InstanceId);
+
+        firstStop.Cancel();
+        await firstRun.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Contains(firstLogs, line => line.Contains(
+            "detached worker left running for replacement adoption",
+            StringComparison.Ordinal));
+
+        using var httpTwo = factory.CreateClient();
+        var secondLogs = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var secondClient = new RClient(
+            httpTwo,
+            reviewRunnerId,
+            usesDurableTaskServer: true,
+            options: options,
+            runnerInstanceId: "review-host:generation-2");
+        using var secondStop = new CancellationTokenSource();
+        var secondDaemon = new RReviewDaemon(options, secondClient, secondLogs.Enqueue);
+        var secondRun = secondDaemon.RunAsync(secondStop.Token);
+
+        await WaitUntilAsync(
+            () => secondLogs.Any(line => line.Contains(
+                "adopting persisted review",
+                StringComparison.Ordinal)),
+            "replacement daemon did not adopt the persisted review");
+        await File.WriteAllTextAsync(release, "continue");
+        await WaitUntilAsync(
+            () => Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)),
+            "adopted review did not reach Human Review");
+        await WaitUntilAsync(
+            () => !new RReviewStateStore(options.StateDir).LoadAll().Any(),
+            "adopted review state was not cleaned up");
+
+        secondStop.Cancel();
+        await secondRun.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(["first", "second"], File.ReadAllLines(marker));
+        var terminal = authority.GetReview(created.ReviewAttempt!.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Completed, terminal.State);
+        Assert.Equal(ReviewTerminalOutcome.Pass, terminal.Outcome);
+        Assert.Equal(originalFence, terminal.LastFence);
+        Assert.Single(terminal.Reports);
+    }
+
+    [Fact]
+    public async Task Review_daemon_restart_reports_non_adoptable_process_with_loss_extent_and_retry_reason()
+    {
+        const string reviewRunnerId = "review-runner-lost-process";
+        var origin = await SeedOriginAsync();
+        var resultSha = (await GitAsync(origin, "rev-parse", "refs/heads/main")).StdOut.Trim();
+        SeedTask(
+            TaskStates.AutoReview,
+            TaskKey,
+            "Report non-adoptable review",
+            "Keep restart loss visible.");
+
+        using var factory = BuildFactory();
+        using var firstHttp = factory.CreateClient();
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(origin)!;
+        var run = authority.AcquireRun(
+            TaskKey,
+            repositoryId,
+            null,
+            RunnerId,
+            "coding-host",
+            120,
+            "lost-review-run").RunAttempt!;
+        authority.SettleRun(
+            new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "lost-review-run-complete"),
+            "done",
+            resultSha,
+            null,
+            resultEnvelope: new Contract.ImmutableResultEnvelope(
+                repositoryId,
+                run.AttemptId,
+                resultSha,
+                resultSha,
+                "refs/heads/main",
+                null,
+                new string('b', 64),
+                RepositoryUrl: origin));
+        var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            TaskKey,
+            repositoryId,
+            resultSha,
+            run.AttemptId,
+            "requirements",
+            "lost-process-policy",
+            [],
+            "lost-review-create",
+            RepositoryUrl: origin,
+            ResultRef: "refs/heads/main",
+            Plan: new Contract.ReviewPlanDto([], [])));
+        Assert.True(created.Accepted);
+
+        var options = ReviewRunnerOptions(reviewRunnerId);
+        using (var firstClient = new RClient(
+                   firstHttp,
+                   reviewRunnerId,
+                   usesDurableTaskServer: true,
+                   options: options,
+                   runnerInstanceId: "review-host:lost-generation"))
+        {
+            await firstClient.RegisterAsync(reviewRunnerId, "review-executor", CancellationToken.None);
+            var claim = await firstClient.ClaimReviewAsync(
+                new Contract.ReviewClaimRequest(
+                    reviewRunnerId,
+                    "review-host:lost-generation",
+                    120),
+                CancellationToken.None);
+            Assert.Equal("claimed", claim.Status);
+            var repositoryPath = Path.Combine(
+                options.ReviewWorkDir,
+                claim.Lease!.ResourceNamespace,
+                "repository");
+            new RReviewStateStore(options.StateDir).Create(claim, repositoryPath);
+        }
+
+        using var replacementHttp = factory.CreateClient();
+        var replacementLogs = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var replacementClient = new RClient(
+            replacementHttp,
+            reviewRunnerId,
+            usesDurableTaskServer: true,
+            options: options,
+            runnerInstanceId: "review-host:replacement-generation");
+        using var replacementStop = new CancellationTokenSource();
+        var replacementRun = new RReviewDaemon(
+                options,
+                replacementClient,
+                replacementLogs.Enqueue)
+            .RunAsync(replacementStop.Token);
+
+        await WaitUntilAsync(
+            () => authority.GetReview(created.ReviewAttempt!.AttemptId)?.Outcome
+                  == ReviewTerminalOutcome.InfrastructureFailure,
+            "non-adoptable review did not produce an infrastructure terminal");
+        replacementStop.Cancel();
+        await replacementRun.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var terminal = authority.GetReview(created.ReviewAttempt!.AttemptId)!;
+        Assert.Equal("ExecutorRestarted", terminal.FailureClassification);
+        Assert.Contains("Lost work extent: 0 of 0 review commands completed", terminal.TerminalReason);
+        Assert.Contains("no persisted review process identity", terminal.TerminalReason);
+        Assert.Contains(replacementLogs, line => line.Contains(
+            "settling visible restart loss",
+            StringComparison.Ordinal));
+        var reportPath = Path.Combine(
+            _watchPath,
+            TaskStates.AutoReview,
+            TaskKey,
+            $"remote-review-grade-{created.ReviewAttempt.AttemptId}.md");
+        Assert.True(File.Exists(reportPath));
+        Assert.Contains("ExecutorRestarted", File.ReadAllText(reportPath), StringComparison.Ordinal);
+        Assert.Contains("Lost work extent", File.ReadAllText(reportPath), StringComparison.Ordinal);
+    }
+
+    private ROptions ReviewRunnerOptions(string runnerId) => new()
+    {
+        ServerUrl = "http://in-process",
+        RunnerId = runnerId,
+        RunnerName = runnerId,
+        Hostname = "review-host",
+        BackendName = "remote-review",
+        Role = "review",
+        WorkDir = Path.Combine(_workspace, "coding-work-not-used"),
+        ReviewWorkDir = Path.Combine(_workspace, "review-work"),
+        StateDir = Path.Combine(_workspace, "review-state"),
+        BaseBranch = "main",
+        CliBin = "unused",
+        CliArgs = string.Empty,
+        TtlSeconds = 120,
+        HeartbeatSeconds = 1,
+        RunTimeoutSeconds = 30,
+        HostMaxParallelism = 1,
+        PollSeconds = 1,
+    };
+
+    private static async Task WaitUntilAsync(
+        Func<bool> condition,
+        string failure,
+        int attempts = 200)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            if (condition()) return;
+            await Task.Delay(50);
+        }
+        Assert.Fail(failure);
     }
 
     [Fact]

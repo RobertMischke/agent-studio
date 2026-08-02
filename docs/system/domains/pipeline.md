@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -283,6 +283,18 @@ pipeline view.
   names every new failure. A command with unparseable failing-test output stays
   fail-closed as a new failure. This comparison does not weaken the absolute
   full-suite boundary before advancing `main`.
+- Remote Review command execution is durable across a planned Review daemon
+  restart. Workspace preparation first persists the immutable subject and
+  lease/fence. The review plan then runs in a detached worker that atomically
+  records its PID generation, completed step ids, completed command-seconds,
+  and terminal evidence. A replacement daemon verifies the exact process cwd,
+  adopts the original ReviewAttempt and fence, and reads the same result instead
+  of rerunning completed commands. The report key is fixed to
+  `review-report:<attempt>:<fence>`; replaying that key with another terminal
+  payload is rejected. If process adoption cannot be proven, the old attempt
+  ends visibly as `ReviewInfra / ExecutorRestarted`, including lost-work extent
+  and retry reason, before the Task Server schedules a replacement attempt. See
+  the originating [AGT-2471 incident](../../concepts/orchestrator-drive-to-conclusion.html#case-agt-2471).
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.

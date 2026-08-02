@@ -768,6 +768,21 @@ public sealed class AttemptAuthorityService
             var deliveryKey = DeliveryKey("settle", request.Write.IdempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
             {
+                var delivered = review.Reports.LastOrDefault(report => Same(
+                    report.IdempotencyKey,
+                    request.Write.IdempotencyKey));
+                if (delivered is not null
+                    && (!Same(delivered.MaterializedResultSha, request.MaterializedResultSha)
+                        || delivered.Outcome != request.Outcome
+                        || !Same(delivered.FailureClassification, request.FailureClassification)
+                        || !Same(delivered.Reason, request.Reason)))
+                {
+                    return new AttemptWriteResult(
+                        AttemptWriteStatus.Invalid,
+                        review.AttemptId,
+                        "A review settlement idempotency key cannot be replayed with a different terminal payload.",
+                        ReviewAttempt: ToDto(review));
+                }
                 var replayStatus = request.Write.AuthorityEpoch != _state.AuthorityEpoch
                                    || review.AuthorityEpoch != _state.AuthorityEpoch
                     ? AttemptWriteStatus.AuthorityEpochMismatch

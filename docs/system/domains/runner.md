@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-29
+Version: 2026-08-02
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -121,6 +121,14 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`,
+  `runner/RemoteReviewDaemon.cs`, and `runner/RemoteReviewExecutor.cs`: durable
+  Remote Review handoff. The daemon persists the immutable ReviewAttempt,
+  subject, lease/fence, workspace, phase, and worker PID generation below
+  `RUNNER_STATE_DIR/reviews`. The detached worker persists command checkpoints
+  and terminal evidence. A replacement daemon adopts only a positively matched
+  PID start time and workspace cwd, renews the original lease instance, and
+  submits the deterministic `review-report:<attempt>:<fence>` terminal key.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive
@@ -260,7 +268,10 @@ state.
   consume no coding attempt.
 - Draining closes review admission but not active renew, report, or cleanup.
   Safe shutdown and restore include unresolved ReviewAttempt authority, and
-  restart takeover changes both the durable fence and the containment namespace.
+  a positively proven planned-restart adoption retains the ReviewAttempt,
+  fence, lease instance, and containment namespace. A non-adoption takeover
+  changes the durable fence and containment namespace only after the old
+  process can no longer retain authority.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
 - Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
@@ -334,18 +345,25 @@ state.
   response projects the actual local or remote hostname, repository path,
   branch, and HEAD; a reassignment invalidates a cached host context.
 - A planned `agent-host` daemon restart is an execution handoff, not an attempt
-  boundary. The daemon persists lease, fence, Task Server run/instance,
-  worktree, detached-worker PID/start time, and file-log progress below
-  `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
-  workers. A pre-launch slot marker plus worker-written atomic identity closes
-  the `Process.Start`-to-slot-save handoff window. The replacement renews
-  authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
-  persisted worktree, then follows JSONL output and completes the same attempt.
-  Reattachment also reopens the durable outbox with the original persisted
-  attempt instance, never the replacement daemon's process identity.
-  Missing or mismatched processes are actively released and returned to Ready;
-  DB lease presence alone is never process-liveness evidence. systemd must use
-  `KillMode=process`.
+  boundary. Coding persists lease, fence, Task Server run/instance, worktree,
+  detached-worker PID/start time, and file-log progress below
+  `RUNNER_STATE_DIR`. Review persists the equivalent ReviewAttempt, immutable
+  subject, ReviewLease, exact workspace, command checkpoints, and terminal
+  evidence below `RUNNER_STATE_DIR/reviews`. SIGTERM stops claims and exits
+  without cancelling either worker type. A pre-launch slot marker plus a
+  worker-written atomic identity closes the `Process.Start`-to-slot-save handoff
+  window. The replacement renews authority only after PID generation and Linux
+  `/proc/<pid>/cwd` match the persisted worktree or review repository. It then
+  follows the coding JSONL output or the review checkpoint/result files and
+  completes the same attempt under the original fence. Reattachment uses the
+  original persisted attempt instance, never the replacement daemon's process
+  identity. Missing or mismatched coding processes are actively released and
+  returned to Ready. A non-adoptable review is settled as `ReviewInfra` with
+  classification `ExecutorRestarted`, the completed-command count and duration,
+  the failed process proof, and the retry reason. DB lease presence alone is
+  never process-liveness evidence. systemd must use `KillMode=process`. This
+  closes the restart-loss gap first made visible by
+  [AGT-2471](../../concepts/orchestrator-drive-to-conclusion.html#case-agt-2471).
 - A failed lease renewal consumes the last server-issued authority window. The
   default requested window is 15 minutes, with a durable stop-before boundary
   one renewal interval before expiry. The standalone Runner persists that

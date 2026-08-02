@@ -270,6 +270,42 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Daemon_generations_cannot_reuse_one_report_key_for_different_terminal_results()
+    {
+        var service = NewService();
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var claimed = service.ClaimReview(
+            review.AttemptId,
+            "reviewer",
+            "review-host",
+            60,
+            "claim-generation-one").ReviewAttempt!;
+        var write = new AttemptWriteReference(
+            claimed.AttemptId,
+            claimed.LastFence,
+            claimed.AuthorityEpoch,
+            $"review-report:{claimed.AttemptId}:{claimed.LastFence}");
+
+        var first = service.SettleReview(new SettleReviewAttemptRequest(
+            write,
+            "sha-a",
+            ReviewTerminalOutcome.Pass,
+            Reason: "generation one completed the adopted worker"));
+        var conflicting = service.SettleReview(new SettleReviewAttemptRequest(
+            write,
+            "sha-a",
+            ReviewTerminalOutcome.ProductFailure,
+            Reason: "generation two tried a different terminal payload"));
+
+        Assert.Equal(AttemptWriteStatus.Accepted, first.Status);
+        Assert.Equal(AttemptWriteStatus.Invalid, conflicting.Status);
+        Assert.Contains("different terminal payload", conflicting.Message, StringComparison.Ordinal);
+        var terminal = service.GetReview(review.AttemptId)!;
+        Assert.Equal(ReviewTerminalOutcome.Pass, terminal.Outcome);
+        Assert.Single(terminal.Reports);
+    }
+
+    [Fact]
     public void Idempotency_keys_are_scoped_by_task_and_cannot_alias_another_attempt()
     {
         var service = NewService();

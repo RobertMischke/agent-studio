@@ -535,8 +535,7 @@ reached, it reaps and verifies every process whose cwd belongs to the worktree,
 records `authority-deadline-exhausted`, and retains the slot for honest server
 reconciliation. It never starts a replacement while death is unproven.
 
-A
-persisted attempt is adopted only when its worker PID still has the recorded
+A persisted coding attempt is adopted only when its worker PID still has the recorded
 start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
 and follows the worker's JSONL output file from the persisted sequence. A
@@ -550,6 +549,24 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+The Review service uses the same positive process-proof boundary under
+`RUNNER_STATE_DIR/reviews`. Before starting the ReviewPlan it persists the
+immutable ReviewAttempt, subject, original lease/fence, and exact review
+workspace. Its detached worker writes `review-worker.json`,
+`review-progress.json`, and `review-result.json`. On restart the replacement
+Review daemon verifies PID start time and `/proc/<pid>/cwd`, renews the persisted
+lease instance, and completes the same attempt and fence. Completed review
+commands and an in-flight command are not relaunched.
+
+If the Review worker is missing, its PID was reused, or its cwd differs, the
+replacement does not adopt or execute it. It submits a fenced
+`ReviewInfra / ExecutorRestarted` report containing the failed proof, completed
+step ids, completed-command duration, and retry reason. If the old lease already
+expired, the daemon reclaims that attempt under a fresh fence solely to deliver
+this loss report; it never runs from the unproven process. This visible fallback
+comes from [AGT-2471](../../concepts/orchestrator-drive-to-conclusion.html#case-agt-2471),
+which recorded about 28 minutes of repeated review test time after a restart.
 
 During a Task Server or transport outage, transient claim, heartbeat, event,
 artifact, result-handoff, and completion failures do not terminate the daemon.
@@ -612,21 +629,29 @@ recovery. Installing or changing the unit requires root, followed by
 ### Planned daemon restart and deploy
 
 A planned Runner deploy no longer waits for host idle. Replace the published
-files and restart the main service process:
+files and restart the applicable service process:
 
 ```bash
 sudo systemctl restart agent-host
 sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+
+sudo systemctl restart agent-runner-review
+sudo journalctl -u agent-runner-review --since '-2 minutes' \
+  | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
 ```
 
-On SIGTERM the old daemon stops making claims, leaves detached job workers
-running, flushes its already-atomic slot records, and exits. systemd starts the
-replacement, which verifies and reattaches those workers before opening any
-freed slot to claims. Confirm every previously occupied slot reports either
-`persisted attempt accepted` or `releasing dead persisted attempt`. The latter
-must be followed by a Ready card and a later higher-fence claim. Do not change
-the unit back to `KillMode=control-group`.
+On SIGTERM the old daemon stops making claims, leaves detached coding and review
+workers running, flushes its already-atomic slot records, and exits. systemd
+starts the replacement, which verifies and reattaches those workers before
+opening any freed slot to claims. For Coding, confirm every occupied slot reports
+either `persisted attempt accepted` or `releasing dead persisted attempt`; the
+latter must be followed by a Ready card and a later higher-fence claim. For
+Review, confirm `review daemon handoff` is followed by `persisted review
+accepted` and `adopting persisted review` under the same attempt and fence. A
+`review adoption failed` line must be followed by an accepted
+`ExecutorRestarted` infrastructure report with explicit loss extent and retry
+reason. Do not change either unit back to `KillMode=control-group`.
 
 This procedure covers a planned daemon binary restart, not a machine reboot,
 power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
