@@ -1049,6 +1049,113 @@ public sealed class TaskServerStoreTests
         Assert.Equal(0, await restarted.ReconcileInvariantsAsync(default));
     }
 
+    [Fact]
+    public async Task Result_handoff_rejects_a_ref_from_another_fence_generation()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-a"),
+            "test",
+            default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        var lease = claim.Lease!;
+        var request = Handoff(claim.Run!.RunId, lease, sequence: 1);
+        var staleEnvelope = request.Envelope with
+        {
+            ImmutableRemoteRef = FencedGitRefs.ImmutableResult(
+                claim.Run.RunId,
+                lease.Fence + 1,
+                request.Envelope.ResultSha),
+        };
+        var staleRequest = request with
+        {
+            Envelope = staleEnvelope,
+            EnvelopeDigest = ResultEnvelopeDigest.Compute(staleEnvelope),
+        };
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.AcknowledgeResultHandoffAsync(
+                claim.Run.RunId,
+                staleRequest,
+                "runner-a",
+                default));
+
+        Assert.Contains("Immutable result ref must be", error.Message);
+        Assert.Contains($"fence-{lease.Fence}/", error.Message);
+    }
+
+    [Fact]
+    public async Task Result_handoff_replays_an_already_acknowledged_legacy_ref_during_upgrade()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-a"),
+            "test",
+            default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        var request = Handoff(claim.Run!.RunId, claim.Lease!, sequence: 1);
+        await store.AcknowledgeResultHandoffAsync(
+            claim.Run.RunId,
+            request,
+            "runner-a",
+            default);
+
+        var legacyEnvelope = request.Envelope with
+        {
+            ImmutableRemoteRef =
+                $"refs/heads/agent-studio/results/{claim.Run.RunId}/" +
+                request.Envelope.ResultSha,
+        };
+        var legacyDigest = ResultEnvelopeDigest.Compute(legacyEnvelope);
+        var legacyKey = $"handoff:{claim.Run.RunId}:{legacyDigest}";
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={store.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE result_handoffs
+                   SET immutable_remote_ref = $ref,
+                       envelope_digest = $digest,
+                       idempotency_key = $key
+                 WHERE run_id = $run;
+                """;
+            command.Parameters.AddWithValue("$ref", legacyEnvelope.ImmutableRemoteRef);
+            command.Parameters.AddWithValue("$digest", legacyDigest);
+            command.Parameters.AddWithValue("$key", legacyKey);
+            command.Parameters.AddWithValue("$run", claim.Run.RunId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var replay = await store.AcknowledgeResultHandoffAsync(
+            claim.Run.RunId,
+            request with
+            {
+                Envelope = legacyEnvelope,
+                EnvelopeDigest = legacyDigest,
+                IdempotencyKey = legacyKey,
+            },
+            "runner-a",
+            default);
+
+        Assert.True(replay.Replay);
+        Assert.Equal(legacyDigest, replay.EnvelopeDigest);
+    }
+
     private static ResultHandoffRequest Handoff(string runId, LeaseDto lease, long sequence)
     {
         var envelope = new ImmutableResultEnvelope(
@@ -1056,7 +1163,7 @@ public sealed class TaskServerStoreTests
             runId,
             new string('1', 40),
             new string('2', 40),
-            $"refs/heads/agent-studio/results/{runId}/{new string('2', 40)}",
+            FencedGitRefs.ImmutableResult(runId, lease.Fence, new string('2', 40)),
             null,
             new string('3', 64));
         var digest = ResultEnvelopeDigest.Compute(envelope);

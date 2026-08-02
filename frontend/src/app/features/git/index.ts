@@ -52,6 +52,12 @@ export {
   branchCategoryLabel,
 } from './models/git-tree.model';
 export { buildGitGraphRows } from './models/git-graph-layout.model';
+export {
+  buildGitCommitChips,
+  type GitCommitChip,
+  type GitCommitChipKind,
+  type GitCommitChipTone,
+} from './models/git-commit-chip.model';
 export type {
   GitTreeGroupId,
   GitTreeGroup,

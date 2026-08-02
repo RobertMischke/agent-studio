@@ -77,10 +77,11 @@ public sealed class IntakeRunner
 {
     public const string IntakeParticipantPrefix = "intake:";
     public const string EnrichedContextRelativePath = "intake/enriched-context.md";
-    public const int MaxEnrichmentContextCharacters = 8_000;
-    public const int MaxEnrichmentEstimatedTokens = 2_000;
+    public const int MaxEnrichmentContextCharacters = 6_000;
+    public const int MaxEnrichmentEstimatedTokens = 1_500;
+    public const int MaxOptionalEnrichmentBlocks = 2;
     private const int MaxDetailedOmissions = 16;
-    private const string EnrichmentSelector = "constraint-selector-v3-budgeted-style-guides";
+    public const string EnrichmentSelector = "constraint-selector-v4-token-economy";
 
     private readonly TaskScannerService _scanner;
     private readonly TaskMutationService _mutations;
@@ -126,7 +127,7 @@ public sealed class IntakeRunner
         var areaSet = new HashSet<string>(areas, StringComparer.OrdinalIgnoreCase);
         var candidates = new List<IntakeConstraintSelection>();
 
-        foreach (var rule in ConstraintRules)
+        foreach (var rule in ConstraintRules.Where(rule => rule.Constraint.Mandatory))
         {
             if (rule.Applies(areaSet))
                 candidates.Add(CloneConstraint(rule.Constraint));
@@ -150,10 +151,19 @@ public sealed class IntakeRunner
                     Id = $"style-guide:{guide.Id}",
                     Title = guide.Title,
                     Source = $"docs/{guide.RelPath}",
+                    Revision = guide.Version,
+                    Tier = "optional",
+                    Priority = 20,
                     Areas = matchedAreas,
                     Text = $"Style-guide version {guide.Version}; matched task area(s): {string.Join(", ", matchedAreas)}. {guide.PromptSummary}"
                 });
             }
+        }
+
+        foreach (var rule in ConstraintRules.Where(rule => !rule.Constraint.Mandatory))
+        {
+            if (rule.Applies(areaSet))
+                candidates.Add(CloneConstraint(rule.Constraint));
         }
 
         return ApplyEnrichmentBudget(areas, candidates, styleGuideSnapshotId);
@@ -164,8 +174,32 @@ public sealed class IntakeRunner
         IReadOnlyList<IntakeConstraintSelection> candidates,
         string? styleGuideSnapshotId)
     {
-        var selected = candidates.ToList();
+        var ordered = candidates
+            .OrderBy(candidate => candidate.Mandatory ? 0 : 1)
+            .ThenBy(candidate => candidate.Priority)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToList();
+        var selected = ordered
+            .Where(candidate => candidate.Mandatory)
+            .Concat(ordered
+                .Where(candidate => !candidate.Mandatory)
+                .Take(MaxOptionalEnrichmentBlocks))
+            .ToList();
         var omitted = new List<IntakeConstraintOmission>();
+        foreach (var candidate in ordered.Where(candidate =>
+                     !candidate.Mandatory && !selected.Contains(candidate)))
+        {
+            var estimatedCharacters = RenderConstraintMarkdown(candidate).Length;
+            omitted.Add(new IntakeConstraintOmission
+            {
+                Id = candidate.Id,
+                Title = candidate.Title,
+                Source = candidate.Source,
+                Reason = "optional-block-limit",
+                EstimatedCharacters = estimatedCharacters,
+                EstimatedTokens = EstimateTokens(estimatedCharacters)
+            });
+        }
         var detailLimit = MaxDetailedOmissions;
 
         while (true)
@@ -180,6 +214,7 @@ public sealed class IntakeRunner
                 Constraints = selected.ToList(),
                 CharacterBudget = MaxEnrichmentContextCharacters,
                 EstimatedTokenBudget = MaxEnrichmentEstimatedTokens,
+                OptionalBlockLimit = MaxOptionalEnrichmentBlocks,
                 Omissions = detailed,
                 AdditionalOmissionCount = omitted.Count - detailed.Count
             };
@@ -189,7 +224,7 @@ public sealed class IntakeRunner
                 return manifest with
                 {
                     UsedCharacters = rendered.Length,
-                    EstimatedTokens = (rendered.Length + 3) / 4
+                    EstimatedTokens = EstimateTokens(rendered.Length)
                 };
             }
 
@@ -200,8 +235,11 @@ public sealed class IntakeRunner
                 omitted.Insert(0, new IntakeConstraintOmission
                 {
                     Id = removed.Id,
+                    Title = removed.Title,
+                    Source = removed.Source,
                     Reason = "context-character-budget",
-                    EstimatedCharacters = RenderConstraintMarkdown(removed).Length
+                    EstimatedCharacters = RenderConstraintMarkdown(removed).Length,
+                    EstimatedTokens = EstimateTokens(RenderConstraintMarkdown(removed).Length)
                 });
                 continue;
             }
@@ -236,16 +274,16 @@ public sealed class IntakeRunner
     public static string RenderEnrichedContextMarkdown(IntakeEnrichmentManifest manifest)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("## Intake-enriched context");
+        sb.AppendLine("## Prompt enrichment");
         sb.AppendLine();
-        sb.AppendLine("The orchestrator selected these project constraints before the coding run. Treat them as task-specific guardrails on top of `AGENTS.md` and the original prompt.");
+        sb.AppendLine("The task server appended these labelled project constraints before CLI spawn. They supplement the original prompt, which remains unchanged.");
         sb.AppendLine();
         sb.AppendLine($"- Selector: `{(string.IsNullOrWhiteSpace(manifest.Selector) ? EnrichmentSelector : manifest.Selector)}`");
         sb.AppendLine($"- Detected areas: `{(manifest.Areas.Count == 0 ? "general" : string.Join("`, `", manifest.Areas))}`");
-        sb.AppendLine($"- Audit artifact: `{(string.IsNullOrWhiteSpace(manifest.ArtifactPath) ? EnrichedContextRelativePath : manifest.ArtifactPath)}`");
+        sb.AppendLine("- Audit artifact: `enrichment-report.json`");
         if (!string.IsNullOrWhiteSpace(manifest.StyleGuideSnapshotId))
             sb.AppendLine($"- Style-guide snapshot: `{manifest.StyleGuideSnapshotId}`");
-        sb.AppendLine($"- Hard budget: `{(manifest.CharacterBudget > 0 ? manifest.CharacterBudget : MaxEnrichmentContextCharacters)} characters` / `~{(manifest.EstimatedTokenBudget > 0 ? manifest.EstimatedTokenBudget : MaxEnrichmentEstimatedTokens)} tokens`");
+        sb.AppendLine($"- Hard budget: `{(manifest.CharacterBudget > 0 ? manifest.CharacterBudget : MaxEnrichmentContextCharacters)} characters` / `~{(manifest.EstimatedTokenBudget > 0 ? manifest.EstimatedTokenBudget : MaxEnrichmentEstimatedTokens)} tokens` / `{(manifest.OptionalBlockLimit > 0 ? manifest.OptionalBlockLimit : MaxOptionalEnrichmentBlocks)} optional blocks`");
         sb.AppendLine();
 
         if (manifest.Constraints.Count == 0)
@@ -277,7 +315,7 @@ public sealed class IntakeRunner
         return sb.ToString().TrimEnd();
     }
 
-    private static string RenderConstraintMarkdown(IntakeConstraintSelection constraint)
+    public static string RenderConstraintMarkdown(IntakeConstraintSelection constraint)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"- **{constraint.Title}** (`{constraint.Id}`)");
@@ -285,6 +323,8 @@ public sealed class IntakeRunner
         sb.AppendLine($"  {constraint.Text}");
         return sb.ToString();
     }
+
+    public static int EstimateTokens(int characters) => Math.Max(0, (characters + 3) / 4);
 
     /// <summary>
     /// Pure-function evaluation surface. Runs every check in order and
@@ -598,7 +638,8 @@ public sealed class IntakeRunner
         ("frontend", ["frontend", "angular", ".ts", ".scss", "css", "style", "styling", "component", "ui", "design", "token", "layout", "button", "lane", "card", "visual"]),
         ("git", ["git", "commit", "push", "merge", "branch", "worktree", "workspace artifact", "auto-commit", "pull request"]),
         ("filesystem", ["job folder", "task folder", "job.json", "task.json", "lane", "state", "move", "reorder", "archive", ".orchestrator", "workspace"]),
-        ("refactor", ["refactor", "split", "extract", "rename", "namespace", "move file", "decompose"])
+        ("refactor", ["refactor", "split", "extract", "rename", "namespace", "move file", "decompose"]),
+        ("delegation", ["delegate", "delegation", "sub-agent", "subagent", "parallel agent", "spawn agent", "multi-agent"])
     ];
 
     private static readonly ConstraintRule[] ConstraintRules =
@@ -609,6 +650,9 @@ public sealed class IntakeRunner
                 Id = "repo-instructions-source",
                 Title = "Use repository instructions and indexed docs",
                 Source = "AGENTS.md; docs/start/README.md",
+                Tier = "mandatory-project-policy",
+                Mandatory = true,
+                Priority = 0,
                 Areas = ["general"],
                 Text = "Follow the active AGENTS.md rules first. When project documentation is needed, start at docs/start/README.md instead of scanning docs/ blindly. Repository artifacts, prompts, comments, and docs written by this project stay in English."
             },
@@ -619,6 +663,7 @@ public sealed class IntakeRunner
                 Id = "git-handling-api-not-cli",
                 Title = "Keep git/workspace artifact handling in the backend",
                 Source = "AGENTS.md#stable-update-policy; docs/operations/git/commit-push-doctrine.md; docs/system/architecture/decisions/adr-archive.md#adr-0052",
+                Priority = 40,
                 Areas = ["git", "runner", "backend"],
                 Text = "Git handling for workspace artifacts belongs in API/backend orchestration and platform-owned pre/post pipeline steps, not in the CLI/agent layer. Worker CLIs do not commit, push, merge, or manage task worktrees on their own."
             },
@@ -629,6 +674,7 @@ public sealed class IntakeRunner
                 Id = "task-state-api-first",
                 Title = "Use API/state-machine boundaries for task state",
                 Source = "AGENTS.md#task-organization-rule-api-first; docs/system/contracts/filesystem.md",
+                Priority = 50,
                 Areas = ["filesystem", "runner"],
                 Text = "Task folders, lanes, pickup, stop, continue, and state transitions are application-owned. Code should route task mutations through the API/state-machine services instead of direct filesystem moves or job.json state edits."
             },
@@ -639,6 +685,7 @@ public sealed class IntakeRunner
                 Id = "frontend-design-tokens-components",
                 Title = "Use central frontend design tokens and components",
                 Source = "frontend/AGENTS.md#spacing-tokens-never-raw-px; docs/quality/design-principles.md",
+                Priority = 30,
                 Areas = ["frontend"],
                 Text = "Frontend changes should use the central design-token scale and existing standard components. Avoid local hard-coded spacing, colors, badge geometry, or one-off UI primitives when shared tokens/components cover the case."
             },
@@ -649,6 +696,7 @@ public sealed class IntakeRunner
                 Id = "stable-namespaces-on-splits",
                 Title = "Keep namespaces stable during file splits",
                 Source = "AGENTS.md; existing C# project conventions",
+                Priority = 60,
                 Areas = ["refactor", "backend"],
                 Text = "When splitting or extracting files, keep existing namespaces and public type identities stable unless the task explicitly calls for a coordinated namespace migration."
             },
@@ -659,10 +707,22 @@ public sealed class IntakeRunner
                 Id = "orchestrator-state-machine-authority",
                 Title = "The orchestrator remains the state-machine authority",
                 Source = "AGENTS.md#orchestration-philosophy-deterministic-over-prompt-based; docs/system/contracts/agent-task.md",
+                Priority = 70,
                 Areas = ["runner", "backend"],
                 Text = "CLI output and sentinels are inputs, not authority. Runner and policy code own deterministic lifecycle decisions, escalation, retries, and lane movement."
             },
-            areas => areas.Contains("runner"))
+            areas => areas.Contains("runner")),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "delegation-economy",
+                Title = "Keep delegation bounded and evidence-driven",
+                Source = "AGENTS.md#Product-Boundaries; docs/concepts/model-escalation-and-companion-routing.md",
+                Priority = 10,
+                Areas = ["delegation", "runner"],
+                Text = "Delegate only concrete, independent subtasks with a useful concurrency benefit. Keep fan-out bounded, preserve one orchestrator as the lifecycle authority, and account for each delegated call instead of hiding nested work or duplicating context."
+            },
+            areas => areas.Contains("delegation"))
     ];
 
     private static IntakeConstraintSelection CloneConstraint(IntakeConstraintSelection c)

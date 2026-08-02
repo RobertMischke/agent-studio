@@ -1,6 +1,6 @@
 # Status Model Breakpoints — Adversarial Pass (Glossary, Catalog, Hardening Directions, Test Plan)
 
-Date: 2026-07-29 · Author: adversarial concept analysis (operator-commissioned)
+Date: 2026-07-29 · Updated: 2026-07-31 (BP-11 mitigation) · Author: adversarial concept analysis (operator-commissioned)
 Scope: the distributed task execution model on `main` — lease/fence/epoch authority, multi-runner
 task movement, task-as-truth, integration, recovery paths.
 
@@ -36,11 +36,13 @@ Every authority write must present the current fence; a stale fence is rejected
 load-bearing property across restarts). This is the split-brain guard for *server-mediated*
 writes; it does **not** fence direct git pushes (see BP-01).
 
-**AuthorityEpoch** — Global generation counter over the whole authority store. Bumping it
-(`RotateAuthorityEpoch`, `AttemptAuthorityService.cs:825-849`) supersedes **every** non-terminal
-run and review attempt across **all** tasks. Owner: Task Server. Lifetime: store lifetime;
-persisted in `.metadata/attempt-authority.json`. Every write carries the epoch and mismatches are
-rejected (`AttemptWriteStatus.AuthorityEpochMismatch`).
+**AuthorityEpoch** - Global claim-generation counter over the whole authority store. Bumping it
+(`RotateAuthorityEpoch`, `AttemptAuthorityService.cs`) changes the epoch assigned to every new
+run or review claim. A lease minted before the bump drains with its original epoch: its exact
+holder may renew, write, and settle until release, expiry, settlement, or a higher-fence
+takeover. Owner: Task Server. Lifetime: store lifetime; persisted in
+`.metadata/attempt-authority.json`. Every write carries the attempt's epoch, and an epoch that
+does not match that attempt is rejected (`AttemptWriteStatus.AuthorityEpochMismatch`).
 
 **Takeover** — A new executor acquiring authority over a task whose current lease has expired.
 Run side: `AcquireRun` supersedes the old attempt and mints a new fence
@@ -343,18 +345,20 @@ checkout.**
    (b) attempt-scoped worktree paths (include attempt id) so a re-claim can never collide with
    an orphan generation's checkout.
 
-**BP-11 · Epoch rotation is a global kill switch with a slow blast wave.**
-1. Any caller invokes `RotateAuthorityEpoch(reason)` (recovery tooling, a future admin action,
-   or a bug): every non-terminal attempt on every task is superseded at once.
-2. Every in-flight worker keeps executing until its next renewal (up to a full TTL of real
-   work), then hits `AuthorityEpochMismatch`; completions are refused; salvage pushes still
-   happen (BP-01); dozens of cards strand in `Progress` and requeue one grace window later —
-   a synchronized double-execution wave.
-   Anchors: `AttemptAuthorityService.cs:825-849`.
-   Hardening directions: (a) scope epochs (per repository/project) so a rotation's blast radius
-   matches its reason; (b) pair every rotation with an automatic reconciliation pass that
-   re-adopts provably-live generations (the AGT-2395 adoption machinery) instead of letting the
-   requeue policy re-run them from zero.
+**BP-11 · Epoch rotation was a global kill switch with a slow blast wave (mitigated by
+AGT-2461).**
+1. Former behavior: `RotateAuthorityEpoch(reason)` superseded every non-terminal attempt, so
+   in-flight workers lost renew and completion authority together and produced a synchronized
+   requeue wave.
+2. Current behavior: rotation advances only the generation for new claims. Already leased run
+   and review attempts remain current with their original epoch and drain through normal renew,
+   report, settlement, release, or expiry. A contender cannot replace a live draining lease.
+   Pending review work and every genuinely new claim receive the new epoch. Restart reconstructs
+   the same rule from the persisted current epoch plus each attempt's own epoch.
+   Anchors: `AttemptAuthorityService.RotateAuthorityEpoch`, attempt write validation, and
+   `RunLeaseService.Peek` / `IsCurrent`.
+   Remaining hardening direction: repository or project scoping can still reduce the semantic
+   blast radius of a generation change, but it is no longer required to prevent mass stranding.
 
 **BP-12 · Attribution loses cross-generation and cross-runner commits ("Delivered" lies).**
 1. T's chain spans generations: local attempt (commits on `task/T`), reissue, remote attempt
@@ -525,7 +529,7 @@ Per breakpoint:
 | BP-08 | T-EDGE | Acquire persisted, lane move lost, replay claim; assert card is in `3-progress` after replay (`task.json` state + folder), and that a Ready card with a live current lease is claim-ineligible for every other actor. |
 | BP-09 | T-EDGE | Settle persisted, lane move lost, restart, runner poll without T; assert requeue is refused and the card is driven to `4-auto-review` with the original attempt's envelope; `commits[]` reflects attempt 1. |
 | BP-10 | T-FAULT | Delete slot files under a live detached worker; boot replacement; assert no second claim for T is admitted while the worktree scan reports an unslotted live generation. |
-| BP-11 | T-AUTH | Epoch rotation with N in-flight attempts; assert every affected card reaches a *named* recovery state (re-adopted or requeued-with-lineage) — no card silently stays Progress past the grace. |
+| BP-11 | T-AUTH | Rotate with multiple leased run/review attempts and a pending review; assert leased old-epoch attempts remain current, renew and settle, contenders are refused, pending/new claims use the new epoch, and restart preserves the drain. |
 | BP-12 | T-EDGE | Chain local-attempt → reissue → remote-attempt; assert `commits[]` is the union of non-superseded attempts' own commits and contains no commit unreachable from this task's attempt refs (AGT-2242 guard). |
 | BP-13 | T-EDGE | Requeue mints a new claim while the same executor still reports T active; assert the claim is refused server-side (not just skipped client-side). |
 | BP-14 | T-AUTH | Failing writer injected after side effect; retry delivery; assert the side effect's own dedup receipt prevented the double-append (per registered side-effect kind). |
@@ -566,8 +570,8 @@ peek to know the state has found a BP-04-class gap and should fail for that reas
    during the gate window.
 9. **BP-10** Lost runner slot files → live orphan worker + admitted re-claim into the same
    worktree path.
-10. **BP-11** Epoch rotation supersedes *everything* and the blast wave (strand → requeue →
-    duplicate wave) arrives one TTL later.
+10. **BP-11 (mitigated by AGT-2461)** Epoch rotation now drains already leased attempts while
+    assigning the new generation only to new claims; repository/project scoping remains open.
 11. **BP-12** Attribution is last-generation-only and can adopt foreign commits — review scope
     and the Delivered badge argue about the wrong commit set.
 12. **BP-05** The reseed-clobber class: one failed load plus one well-meaning seeder silently

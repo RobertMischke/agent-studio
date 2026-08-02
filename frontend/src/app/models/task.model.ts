@@ -779,9 +779,76 @@ export interface TaskTitleHistoryEntry {
   source: string;
 }
 
+export type PromptEnrichmentStatus = 'enriched' | 'unchanged' | 'fallback-unenriched' | 'blocked';
+
+export interface PromptEnrichmentCandidate {
+  id: string;
+  title: string;
+  source: string;
+  signals: string[];
+  decision: 'appended' | 'rejected-budget' | 'rejected-project-disabled' | string;
+  reason: string;
+  estimatedTokens: number;
+}
+
+export interface PromptEnrichmentBlock {
+  id: string;
+  title: string;
+  source: string;
+  revision: string;
+  digestSha256: string;
+  tier: string;
+  order: number;
+  estimatedTokens: number;
+  exactContent: string;
+}
+
+export interface PromptEnrichmentReport {
+  schemaVersion: string;
+  enrichmentId: string;
+  generatedAtUtc: string;
+  status: PromptEnrichmentStatus;
+  originalPromptSha256: string;
+  enrichedPromptSha256: string;
+  policy: {
+    id: string;
+    version: string;
+    projectEnabled: boolean;
+    selector: string;
+    tokenizer: string;
+    tokenBudget: number;
+    optionalBlockLimit: number;
+    styleGuideSnapshotId?: string | null;
+  };
+  detectedAreas: string[];
+  candidates: PromptEnrichmentCandidate[];
+  appendedBlocks: PromptEnrichmentBlock[];
+  tokens: {
+    tokenizer: string;
+    original: number;
+    appended: number;
+    final: number;
+    preprocessingInput: number;
+    preprocessingOutput: number;
+    preprocessingCacheRead: number;
+    preprocessingCacheCreation: number;
+  };
+  cost: {
+    currency: string;
+    selectorUsd: number;
+    appendedInputUsd?: number | null;
+    estimateModel?: string | null;
+    unknownReason?: string | null;
+  };
+  timingMs: number;
+  warnings: string[];
+  errors: string[];
+}
+
 export interface TaskDetail {
   info: TaskInfo;
   promptMarkdown: string | null;
+  enrichmentReport?: PromptEnrichmentReport | null;
   promptHistory: TaskPromptHistoryEntry[];
   titleHistory: TaskTitleHistoryEntry[];
   statusMarkdown: string | null;

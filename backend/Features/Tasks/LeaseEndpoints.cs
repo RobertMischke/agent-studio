@@ -1,4 +1,5 @@
 using AgentStudio.Pipeline;
+using AgentStudio.Runner;
 using System.Text;
 using CapabilityProtocol = AgentStudio.TaskServer.Contracts.CapabilityProtocol;
 
@@ -151,6 +152,7 @@ public static class LeaseEndpoints
             AgentStudio.Prompts.RuntimePromptService prompts,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
+            PromptEnrichmentService promptEnrichment,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
@@ -332,8 +334,10 @@ public static class LeaseEndpoints
                             DefaultBranch: replayedRepository.DefaultBranch,
                             TaskKind: replayedTask.Kind,
                             // A replay must describe the same run as the original
-                            // claim, so it resolves the spec from the same card.
-                            RunSpec: BuildRunSpec(replayedTask, settings, prompts))));
+                            // claim, including the persisted enrichment framing.
+                            RunSpec: AddPersistedPromptEnrichment(
+                                BuildRunSpec(replayedTask, settings, prompts),
+                                replayedTask))));
                     }
                 }
 
@@ -683,6 +687,33 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
+                var runSpec = BuildRunSpec(candidate, settings, prompts);
+                PromptEnrichmentPreparation? enrichmentPreparation = null;
+                try
+                {
+                    // Epics use the separately rendered decomposition prompt,
+                    // not the authored coding prompt consumed by this step.
+                    if (!string.Equals(candidate.Kind, TaskKinds.Epic, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var promptPath = Path.Combine(candidate.FolderPath, "prompt.md");
+                        var authoredPrompt = File.Exists(promptPath)
+                            ? await File.ReadAllTextAsync(promptPath, ct)
+                            : string.Empty;
+                        enrichmentPreparation =
+                            promptEnrichment.Prepare(candidate, authoredPrompt, runSpec.Model);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "remote-runner-prompt-enrichment-blocked project={Project} task={TaskKey}",
+                        candidate.ProjectName,
+                        taskKey);
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty,
+                        Message: $"Prompt enrichment blocked dispatch: {ex.Message}"));
+                }
+                runSpec = AddPromptEnrichment(runSpec, enrichmentPreparation?.ContextMarkdown);
                 remoteClaimFailures.PrepareForClaim(candidate);
                 var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
                     ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
@@ -779,7 +810,6 @@ public static class LeaseEndpoints
                         InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                         acquire.Lease.FencingToken));
                 }
-                var runSpec = BuildRunSpec(candidate, settings, prompts);
                 logger.LogInformation(
                     "remote-runner-run-spec task={TaskKey} cli={CliType} model={Model} thinking={ThinkingLevel} permission={PermissionMode} context={ContextMode}",
                     taskKey,
@@ -923,6 +953,42 @@ public static class LeaseEndpoints
 
             var attemptId = req.AttemptId.Trim();
             var epoch = req.AuthorityEpoch.Value;
+            if (!string.IsNullOrWhiteSpace(req.ImmutableResultRef)
+                && !string.IsNullOrWhiteSpace(req.ResultSha))
+            {
+                string expectedResultRef;
+                try
+                {
+                    expectedResultRef =
+                        AgentStudio.TaskServer.Contracts.FencedGitRefs.ImmutableResult(
+                            attemptId,
+                            req.FencingToken,
+                            req.ResultSha);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        TaskStates.Progress,
+                        ex.Message,
+                        RunAttemptId: attemptId,
+                        FailureClassification: AttemptWriteStatus.Invalid.ToString()));
+                }
+                if (!string.Equals(
+                        req.ImmutableResultRef,
+                        expectedResultRef,
+                        StringComparison.Ordinal))
+                {
+                    return Results.BadRequest(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        TaskStates.Progress,
+                        $"Immutable result ref must be '{expectedResultRef}' for the current fenced attempt.",
+                        RunAttemptId: attemptId,
+                        FailureClassification: AttemptWriteStatus.SubjectMismatch.ToString()));
+                }
+            }
             // Result-SHA is independent authority. A salvage commit is useful
             // evidence, but it must never be promoted into the review subject.
             var resultSha = req.ResultSha;
@@ -1035,6 +1101,9 @@ public static class LeaseEndpoints
                             deliveryRange.IntegrationBranch!);
                         mutations.SetRemoteCommitAttributionOnFolder(
                             task.FolderPath,
+                            attemptId,
+                            req.RunnerId,
+                            resultSha,
                             remoteAttribution.Commits);
                     }
                 }
@@ -1648,6 +1717,36 @@ public static class LeaseEndpoints
             settings.ResolveCliMode(task.ProjectName, cliType).Mode,
             settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode,
             modeFraming);
+    }
+
+    private static RunSpecDto AddPromptEnrichment(RunSpecDto runSpec, string? enrichmentContext)
+        => runSpec with
+        {
+            ModeFraming = PromptEnrichmentService.ComposeModeFraming(
+                runSpec.ModeFraming,
+                enrichmentContext),
+        };
+
+    private static RunSpecDto AddPersistedPromptEnrichment(RunSpecDto runSpec, TaskInfo task)
+    {
+        if (TaskKinds.IsEpic(task.Kind)) return runSpec;
+        try
+        {
+            var report = PromptEnrichmentService.ReadReport(task.FolderPath);
+            if (report is null || report.Status != PromptEnrichmentStatuses.Enriched)
+                return runSpec;
+            var contextPath = Path.Combine(
+                task.FolderPath,
+                IntakeRunner.EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            return File.Exists(contextPath)
+                ? AddPromptEnrichment(runSpec, File.ReadAllText(contextPath))
+                : runSpec;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "AddPersistedPromptEnrichment: replay uses base mode framing");
+            return runSpec;
+        }
     }
 
     private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)

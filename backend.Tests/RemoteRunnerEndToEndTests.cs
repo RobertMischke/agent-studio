@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using System.Diagnostics;
+using AgentStudio.TestSupport;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -1112,6 +1113,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("claude", claim.RunSpec!.CliType);
         Assert.Equal("claude-opus-4-8", claim.RunSpec.Model);
         Assert.Equal("max", claim.RunSpec.ThinkingLevel);
+        Assert.Contains("## Prompt enrichment", claim.RunSpec.ModeFraming);
+        Assert.Contains("repo-instructions-source", claim.RunSpec.ModeFraming);
         // Both modes resolve from live project settings, so they are always
         // stated; the runner transports them but does not yet build flags.
         Assert.False(string.IsNullOrWhiteSpace(claim.RunSpec.PermissionMode));
@@ -1122,14 +1125,28 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("claude", claudeInvocation.FileName);
         Assert.Equal(["--model", "claude-opus-4-8", "--effort", "max"], claudeInvocation.Arguments);
 
+        // The host-capacity contract admits one slot for this fixture. Release
+        // the first lease before probing the second card's independent RunSpec.
+        await client.ReleaseLeaseAsync(new RRelease(
+            claim.TaskKey!,
+            claim.Lease!.LeaseId,
+            claim.Lease.FencingToken,
+            RunnerId,
+            claim.Lease.AttemptId,
+            claim.Lease.AuthorityEpoch,
+            $"release:{claim.Lease.AttemptId}"), CancellationToken.None);
+
         var codexClaim = await client.ClaimAsync(new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner",
             IdempotencyKey: "spec-claim-codex"), CancellationToken.None);
 
-        Assert.Equal(RClaimStatus.Claimed, codexClaim.Status);
+        Assert.True(
+            codexClaim.Status == RClaimStatus.Claimed,
+            $"Expected the second card to be claimed, got {codexClaim.Status}: {codexClaim.Message}; admission={codexClaim.AdmissionReason}");
         Assert.Equal("AGT-SPEC-CODEX", codexClaim.JobId);
         Assert.Equal("codex", codexClaim.RunSpec!.CliType);
         Assert.Equal("gpt-5.6-codex", codexClaim.RunSpec.Model);
+        Assert.Contains("## Prompt enrichment", codexClaim.RunSpec.ModeFraming);
         // Codex has no "max" rung; the server resolves the card's request against
         // the model's ladder rather than shipping an invalid selector.
         Assert.Equal("medium", codexClaim.RunSpec.ThinkingLevel);
@@ -1152,10 +1169,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             kind: TaskKinds.Epic, cliType: "codex", model: "gpt-5.6-codex");
         var origin = await SeedOriginAsync();
         var runnerWork = Path.Combine(_workspace, "remote-runner-work");
-        var cli = Path.Combine(_workspace, "fake-planner.sh");
-        await File.WriteAllTextAsync(cli,
-            "#!/bin/sh\nprintf '%s\\n' '```json' '{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"},{\"title\":\"Add UI\",\"prompt\":\"Build and test the UI.\"}]}' '```' '[[TASK_DONE]]'\n");
-        File.SetUnixFileMode(cli, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        // The planner stub only has to print a plan and exit; StubCli emits it in
+        // the form this host can execute (a shell script with the executable bit,
+        // or a .cmd on Windows, where neither shebangs nor Unix modes exist).
+        var cli = await StubCli.WriteAsync(
+            _workspace,
+            "fake-planner",
+            "```json",
+            "{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"},{\"title\":\"Add UI\",\"prompt\":\"Build and test the UI.\"}]}",
+            "```",
+            "[[TASK_DONE]]");
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
@@ -1295,7 +1318,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     public async Task Remote_claim_requeues_only_after_grace_and_runner_confirms_inactive(string kind)
     {
         SeedTask(TaskStates.Ready, TaskKey, "Restart recovery", "Prompt.", kind: kind);
-        using var factory = BuildFactory(remoteRequeueGraceSeconds: 1);
+        // Start with a grace so wide that no host can walk out of it. The endpoint
+        // re-reads the value from IConfiguration on every claim, so the test can
+        // narrow it later instead of racing the wall clock: with a 1s grace the
+        // "inside grace" assertions below simply lost on a slow-spawn host, which
+        // is what made both theory cases permanently red on Windows.
+        using var factory = BuildFactory(remoteRequeueGraceSeconds: 900);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         await RegisterCodingRunnerAsync(client, http);
@@ -1315,6 +1343,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(RClaimStatus.Empty, insideGrace.Status);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
 
+        // Narrow the grace to its minimum (the endpoint clamps to 1..900) and let
+        // it elapse. From here the remaining claims turn on the runner's own
+        // active-key report, not on timing.
+        factory.Services.GetRequiredService<IConfiguration>()["Runner:RemoteRequeue:GraceSeconds"] = "1";
         await Task.Delay(TimeSpan.FromMilliseconds(1100));
         var runnerStillActive = await client.ClaimAsync(new RClaim(
             RunnerId, ProjectName, "host", 2, "remote-runner",
@@ -2289,6 +2321,28 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new RAcquire(TaskKey, RunnerId, ProjectName, "coding-host", 4242, "codex"), ct);
         Assert.True(lease.Granted);
 
+        var mismatchedRef = await Assert.ThrowsAsync<Runner::AgentRunner.TaskServerException>(() =>
+            coding.CompleteRunAsync(new RRemoteComplete(
+                TaskKey,
+                lease.Lease!.LeaseId,
+                lease.Lease.FencingToken,
+                RunnerId,
+                "Done",
+                ResultSha: resultSha,
+                AttemptChainId: lease.Lease.LeaseId,
+                Repository: "https://example.invalid/agent-studio.git",
+                AttemptId: lease.Lease.AttemptId,
+                AuthorityEpoch: lease.Lease.AuthorityEpoch,
+                IdempotencyKey: "v1-review-plane-wrong-fence-ref",
+                BaseSha: baseSha,
+                ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                    lease.Lease.AttemptId!,
+                    lease.Lease.FencingToken + 1,
+                    resultSha),
+                ArtifactManifestDigest: artifactDigest), ct));
+        Assert.Equal(400, mismatchedRef.StatusCode);
+        Assert.Contains("current fenced attempt", mismatchedRef.Message);
+
         var completion = await coding.CompleteRunAsync(new RRemoteComplete(
             TaskKey,
             lease.Lease!.LeaseId,
@@ -2302,7 +2356,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "v1-review-plane-completion",
             BaseSha: baseSha,
-            ImmutableResultRef: "refs/heads/agent-studio/results/e2e",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
             ArtifactManifestDigest: artifactDigest), ct);
         Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
 

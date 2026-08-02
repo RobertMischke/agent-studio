@@ -100,8 +100,14 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
   The middle inspector uses the fixed `Task | Activity | Result` order. Task
   renders `prompt.md` and the read-only refinement projection from run/log and
-  steering-history evidence; Activity and Result retain their existing live
-  and settled-run defaults.
+  steering-history evidence. When `enrichment-report.json` exists, Task keeps
+  the authored prompt independently readable and renders a quiet responsive
+  report beside it with status, detected areas, every append/reject decision,
+  original/appended/final token counts, selector-ledger attribution, nullable
+  input-cost estimate, exact expandable blocks, and warnings/errors. The report
+  stacks below the prompt on narrow panes and uses background tint, badge, and
+  dot status treatment without a coloured left accent line. Activity and Result
+  retain their existing live and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, places the primary
   reissue, accept-as-is, and abort decisions beside the recommendation, lists

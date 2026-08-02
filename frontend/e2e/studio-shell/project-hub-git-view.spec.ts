@@ -46,11 +46,11 @@ const INVENTORY = {
   ],
   recentCommits: [],
   history: {
-    offset: 0, pageSize: 50, nextOffset: 2, hasMore: true,
+    offset: 0, pageSize: 50, nextOffset: 5, hasMore: true,
     commits: [
       {
-        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40)],
-        authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev', subject: 'feat: add thing',
+        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40), 'e'.repeat(40)],
+        authorDateUtc: '2026-07-05T10:00:00Z', author: 'dev', subject: 'Merge task/1 into develop',
         filesChanged: 1, added: 3, removed: 1,
         refs: [{ name: 'origin/develop', kind: 'branch', isRemote: true }],
         tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Task work', lane: '3-progress' }],
@@ -62,11 +62,27 @@ const INVENTORY = {
         ],
       },
       {
-        sha: 'f'.repeat(40), shortSha: 'fffffff', parentShas: [],
-        authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: cleanup',
+        sha: 'f'.repeat(40), shortSha: 'fffffff', parentShas: ['9'.repeat(40)],
+        authorDateUtc: '2026-07-04T09:00:00Z', author: 'dev', subject: 'chore: prepare integration line',
         filesChanged: 2, added: 5, removed: 2, refs: [], tasks: [],
         presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
         deployments: [],
+      },
+      {
+        sha: 'e'.repeat(40), shortSha: 'eeeeeee', parentShas: ['b'.repeat(40)],
+        authorDateUtc: '2026-07-04T08:30:00Z', author: 'dev', subject: 'feat: finish task branch',
+        filesChanged: 2, added: 18, removed: 3,
+        refs: [{ name: 'task/1', kind: 'branch', isRemote: false }], tasks: [], presence: null, deployments: [],
+      },
+      {
+        sha: 'b'.repeat(40), shortSha: 'bbbbbbb', parentShas: ['9'.repeat(40)],
+        authorDateUtc: '2026-07-03T12:00:00Z', author: 'dev', subject: 'feat: branch from shared base',
+        filesChanged: 1, added: 12, removed: 0, refs: [], tasks: [], presence: null, deployments: [],
+      },
+      {
+        sha: '9'.repeat(40), shortSha: '9999999', parentShas: ['8'.repeat(40)],
+        authorDateUtc: '2026-07-02T08:00:00Z', author: 'dev', subject: 'refactor: shared graph base',
+        filesChanged: 3, added: 21, removed: 11, refs: [], tasks: [], presence: null, deployments: [],
       },
     ],
   },
@@ -128,12 +144,12 @@ async function installRoutes(page: Page): Promise<void> {
   // The Git View endpoints under test.
   await page.route('**/api/git/inventory**', r => r.fulfill(json(INVENTORY)));
   await page.route('**/api/git/history**', r => r.fulfill(json({
-    offset: 2,
+    offset: 5,
     pageSize: 50,
     nextOffset: null,
     hasMore: false,
     commits: [{
-      sha: '9'.repeat(40), shortSha: '9999999', parentShas: [],
+      sha: '8'.repeat(40), shortSha: '8888888', parentShas: [],
       authorDateUtc: '2026-07-01T08:00:00Z', author: 'dev', subject: 'older paged commit',
       filesChanged: 0, added: 0, removed: 0, refs: [], tasks: [],
       presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
@@ -199,13 +215,35 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await expect(page.getByTestId('git-tree-group-feature')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-task')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-runner')).toBeVisible();
-    await expect(page.getByTestId('git-history')).toContainText('deploy:backend');
-    await expect(page.getByTestId('git-history')).toContainText('deploy:runner');
-    await expect(page.getByTestId('git-history')).toContainText('deploy:frontend');
-    await expect(page.getByTestId('git-history')).toContainText('✓ develop');
-    await expect(page.getByTestId('git-history')).toContainText('○ main');
+    const firstCommit = page.getByTestId('git-commit-row').first();
+    await expect(firstCommit).toContainText('Integrated · develop');
+    await expect(firstCommit).toContainText('Deployed · backend');
+    await expect(firstCommit).toContainText('Deployed · runner');
+    await expect(firstCommit).toContainText('Deployed · frontend');
+    await expect(firstCommit).toContainText('AGT-1');
+    await expect(firstCommit).toContainText('In progress');
+    await expect(firstCommit).toContainText('Remote');
+    await expect(firstCommit).not.toContainText('origin/develop');
+    await expect(firstCommit).not.toContainText('deploy:');
+    await expect(firstCommit.locator('[data-tone="remote"]')).toHaveAttribute('title', /origin\/develop/);
+    await expect(page.getByTestId('git-commit-row').nth(1)).toContainText('Released · main');
     await expect(page.getByTestId('git-graph-node').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open task AGT-1: Task work' }).first()).toBeVisible();
+    await expect(page.locator('[data-testid="git-graph-segment"][data-kind="merge"]')).toBeVisible();
+    await expect(page.locator('[data-testid="git-graph-node"][data-lane="1"]')).toHaveCount(2);
+    await expect(panel.getByText('Read only', { exact: true })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Open card AGT-1: Task work' }).first()).toBeVisible();
+
+    // The header popover defines every member of the one commit-chip vocabulary.
+    await page.getByTestId('git-chip-legend-toggle').click();
+    const legend = page.getByTestId('git-chip-legend-popover');
+    await expect(legend).toBeVisible();
+    await expect(legend).toContainText('Integrated · develop');
+    await expect(legend).toContainText('Released · main');
+    await expect(legend).toContainText('Deployed · runner');
+    await expect(legend).toContainText('AGT-N');
+    await expect(legend).toContainText('In progress');
+    await expect(legend).toContainText('Remote');
+    await page.getByTestId('git-chip-legend-toggle').click();
 
     // Branch rows carry their category badge; main is the current branch.
     await expect(page.locator('[data-testid="git-branch-row"][data-branch="main"]')).toContainText('main');
@@ -215,14 +253,22 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await page.getByTestId('git-history-load-more').click();
     await expect(page.getByTestId('git-history')).toContainText('older paged commit');
 
+    const historyBox = await page.getByTestId('git-history').boundingBox();
+    const lastRowBox = await page.getByTestId('git-commit-row').last().boundingBox();
+    expect(historyBox).not.toBeNull();
+    expect(lastRowBox).not.toBeNull();
+    expect(historyBox!.y + historyBox!.height - (lastRowBox!.y + lastRowBox!.height)).toBeLessThan(3);
+
     // Inspect changes explicitly. The graph itself remains cheap and read-only.
     await page.getByRole('button', { name: 'Inspect changes in ccccccc' }).click();
-    await expect(page.getByTestId('git-changes')).toContainText('feat: add thing');
+    await expect(page.getByTestId('git-changes')).toContainText('Merge task/1 into develop');
     await expect(page.getByTestId('git-file-row').first()).toContainText('src/thing.ts');
     await expect(page.getByTestId('git-diff')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-testid="git-diff"] .d2h-file-name')).toContainText('thing.ts', { timeout: 15_000 });
 
     // Evidence screenshot (mocked API).
+    await page.getByTestId('git-chip-legend-toggle').click();
+    await expect(page.getByTestId('git-chip-legend-popover')).toBeVisible();
     fs.mkdirSync(resultsDir(), { recursive: true });
     const shotPath = path.join(resultsDir(), 'project-hub-git-view--mocked.png');
     await page.screenshot({ path: shotPath, fullPage: true });

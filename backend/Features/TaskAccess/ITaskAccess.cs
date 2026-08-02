@@ -81,10 +81,12 @@ public interface ITaskAccess
 
     /// <summary>
     /// Like <see cref="ListLaneFolderNames"/> but returns absolute
-    /// folder paths instead of slug names. Orphan-rescue paths need
-    /// to read files inside each folder (logs, task.json mtime); having
-    /// the layer hand back the resolved path lets callers skip the
-    /// lane-folder construction they would otherwise do.
+    /// task-folder paths instead of names. In the flat layout, lane membership
+    /// comes from <c>task.json.state</c> under <c>tasks/&lt;bucket&gt;/&lt;key&gt;</c>;
+    /// the legacy fallback enumerates <c>&lt;lane&gt;/&lt;slug&gt;</c> and includes
+    /// folders without task metadata. Orphan-rescue paths need to read files
+    /// inside each folder (logs, task.json mtime); having the layer hand back
+    /// the resolved path keeps that storage knowledge inside this boundary.
     /// </summary>
     IReadOnlyList<LaneFolderRef> ListLaneFolders(string watchPath, string lane);
 

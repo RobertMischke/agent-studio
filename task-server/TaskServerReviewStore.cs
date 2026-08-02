@@ -89,6 +89,10 @@ public sealed partial class TaskServerStore
         CancellationToken ct)
     {
         RequireWritable();
+        request = request with
+        {
+            Plan = ReviewPlanResourcePolicy.Apply(request.Plan),
+        };
         ValidateReviewSubjectRequest(request);
         ReviewSubjectDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>

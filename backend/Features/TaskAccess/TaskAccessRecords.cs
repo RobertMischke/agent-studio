@@ -112,10 +112,10 @@ public enum TaskChangeKind
 
 /// <summary>
 /// Lightweight (watchPath, lane, slug, folderPath) tuple returned by
-/// <see cref="ITaskAccess.ListLaneFolders"/>. Used by orphan-rescue
-/// paths that need an absolute folder path to read its contents
-/// (logs, task.json mtime) without constructing the lane folder
-/// themselves.
+/// <see cref="ITaskAccess.ListLaneFolders"/>. <c>FolderPath</c> may point to a
+/// flat <c>tasks/&lt;bucket&gt;/&lt;key&gt;</c> task or a legacy lane folder. Used by
+/// orphan-rescue paths that need an absolute folder path to read its contents
+/// (logs, task.json mtime) without resolving the storage layout themselves.
 /// </summary>
 public record LaneFolderRef
 {

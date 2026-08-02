@@ -34,16 +34,21 @@ public sealed class RunLivenessMonitorTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _watchPath;
+    private readonly string _secondWatchPath;
     private readonly string _workspaceRoot;
     private const string ProjectName = "demo";
+    private const string SecondProjectName = "other";
 
     public RunLivenessMonitorTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "atp-run-liveness-" + Guid.NewGuid().ToString("N"));
         _workspaceRoot = Path.Combine(_tempDir, "workspace");
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
+        _secondWatchPath = Path.Combine(_workspaceRoot, "projects", SecondProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var watchPath in new[] { _watchPath, _secondWatchPath })
+            foreach (var state in TaskStates.All)
+                Directory.CreateDirectory(Path.Combine(watchPath, state));
     }
 
     public void Dispose()
@@ -100,6 +105,62 @@ public sealed class RunLivenessMonitorTests : IDisposable
         var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "run-liveness.jsonl"));
         Assert.Contains("demoted-process-lost", jsonl);
         Assert.Contains("\"slug\":\"execution-zombie\"", jsonl);
+    }
+
+    [Fact]
+    public async Task BootAdoption_SettledEnvelope_RecoversToReview_AndPreservesCompletedSession()
+    {
+        const string slug = "settled-execution";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "sess-completed", chain: ["sess-completed"]);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "completion reached authority before the lane move");
+        WriteDeadPickupLock(folder);
+
+        var (monitor, _) = Build(configureAuthority: (authority, scanner) =>
+            SettleCompletedRun(authority, ResolveTaskKey(scanner, slug)));
+        var outcome = Assert.Single(await monitor.AdoptOnBootAsync());
+
+        Assert.Equal(RunLivenessOutcomeKinds.SettledRunRecovered, outcome.Kind);
+        Assert.Equal("settled-run-authority", outcome.ReasonCode);
+        Assert.Equal(TaskStates.AutoReview, outcome.TargetState);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        var recovered = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Assert.True(Directory.Exists(recovered));
+        var (sessionName, chain) = ReadSession(Path.Combine(recovered, "task.json"));
+        Assert.Equal("sess-completed", sessionName);
+        Assert.DoesNotContain("(recovery)", chain);
+        Assert.DoesNotContain("requeued to 2-ready", File.ReadAllText(Path.Combine(recovered, "logs", "cli-output.log")));
+    }
+
+    [Fact]
+    public async Task BootAdoption_CorruptSettledEnvelope_FailsClosed_WithoutRequeue()
+    {
+        const string slug = "corrupt-settled-execution";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "sess-completed", chain: ["sess-completed"]);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "completion reached authority before the lane move");
+        WriteDeadPickupLock(folder);
+
+        var (monitor, _) = Build(configureAuthority: (authority, scanner) =>
+        {
+            var taskKey = ResolveTaskKey(scanner, slug);
+            SettleCompletedRun(authority, taskKey);
+            var digest = authority.GetTaskProjection(taskKey).CurrentRunAttempt!.ResultEnvelopeDigest!;
+            var authorityPath = Path.Combine(_workspaceRoot, AttemptAuthorityService.RelativePath);
+            var json = File.ReadAllText(authorityPath);
+            var corrupted = json.Replace(digest, new string('d', digest.Length), StringComparison.Ordinal);
+            Assert.NotEqual(json, corrupted);
+            File.WriteAllText(authorityPath, corrupted);
+        });
+        var outcome = Assert.Single(await monitor.AdoptOnBootAsync());
+
+        Assert.Equal(RunLivenessOutcomeKinds.DemoteFailed, outcome.Kind);
+        Assert.True(Directory.Exists(folder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        var (sessionName, chain) = ReadSession(Path.Combine(folder, "task.json"));
+        Assert.Equal("sess-completed", sessionName);
+        Assert.DoesNotContain("(recovery)", chain);
     }
 
     [Fact]
@@ -180,6 +241,40 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
         Assert.True(Directory.Exists(folder), "a fresh card inside the grace must not be demoted");
         Assert.Empty(outcomes);
+    }
+
+    [Fact]
+    public async Task Uptime_FlatLayoutOrphans_AcrossAllProjects_RequeuedWithJournalFacts()
+    {
+        // Regression 2026-07-31: after the flat tasks/<bucket>/<key> cutover,
+        // ListLaneFolders still enumerated only legacy <lane>/<slug> folders.
+        // The hosted sweep therefore saw zero local 3-progress cards and four
+        // dead runs remained stranded for 10-39 hours after backend restarts.
+        var firstFolder = WriteFlatJobWithSession(
+            _watchPath, "DEM-101", "flat-zombie-a", sessionName: "dead-a");
+        var secondFolder = WriteFlatJobWithSession(
+            _secondWatchPath, "OTH-202", "flat-zombie-b", sessionName: "dead-b");
+
+        var (monitor, _) = Build();
+        var outcomes = await monitor.SweepAsync();
+
+        Assert.Equal(2, outcomes.Count);
+        Assert.All(outcomes, outcome => Assert.Equal(RunLivenessOutcomeKinds.DemotedProcessLost, outcome.Kind));
+        Assert.Equal(
+            new[] { ProjectName, SecondProjectName },
+            outcomes.Select(outcome => outcome.ProjectName).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+
+        // Flat-layout transitions are metadata-only. The task folders stay put
+        // while task.json.state changes back to Ready for a fresh local pickup.
+        Assert.Equal(TaskStates.Ready, ReadState(firstFolder));
+        Assert.Equal(TaskStates.Ready, ReadState(secondFolder));
+        Assert.True(Directory.Exists(firstFolder));
+        Assert.True(Directory.Exists(secondFolder));
+
+        var journal = File.ReadAllLines(Path.Combine(_workspaceRoot, "logs", "run-liveness.jsonl"));
+        Assert.Equal(2, journal.Length);
+        Assert.Contains(journal, line => line.Contains("\"projectName\":\"demo\"", StringComparison.Ordinal));
+        Assert.Contains(journal, line => line.Contains("\"projectName\":\"other\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -363,7 +458,8 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
     private (RunLivenessMonitor Monitor, TaskScannerService Scanner) Build(
         bool enabled = true,
-        RunLeaseService? leases = null)
+        RunLeaseService? leases = null,
+        Action<AttemptAuthorityService, TaskScannerService>? configureAuthority = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -371,6 +467,10 @@ public sealed class RunLivenessMonitorTests : IDisposable
             ["WatchPaths:0:Path"] = _watchPath,
             ["WatchPaths:0:RootPath"] = _workspaceRoot,
             ["WatchPaths:0:RepositoryPath"] = _workspaceRoot,
+            ["WatchPaths:1:Name"] = SecondProjectName,
+            ["WatchPaths:1:Path"] = _secondWatchPath,
+            ["WatchPaths:1:RootPath"] = _workspaceRoot,
+            ["WatchPaths:1:RepositoryPath"] = _workspaceRoot,
             ["TaskRepository"] = _workspaceRoot,
             ["Runner:RunLiveness:Enabled"] = enabled ? "true" : "false",
         }).Build();
@@ -382,7 +482,20 @@ public sealed class RunLivenessMonitorTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
+        var authority = new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance);
+        if (configureAuthority is not null)
+        {
+            configureAuthority(authority, scanner);
+            authority = new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance);
+        }
+        var transitions = new TaskTransitionService(
+            scanner,
+            states,
+            mutations,
+            git,
+            settings,
+            NullLogger<TaskTransitionService>.Instance,
+            attemptAuthority: authority);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var pickupLock = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
@@ -401,6 +514,49 @@ public sealed class RunLivenessMonitorTests : IDisposable
         return (monitor, scanner);
     }
 
+    private static void SettleCompletedRun(AttemptAuthorityService authority, string taskKey)
+    {
+        const string resultSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var acquired = authority.AcquireRun(
+            taskKey,
+            "demo-repository",
+            sourceAttemptId: null,
+            executorId: "runner-a",
+            hostId: "host-a",
+            requestedTtlSeconds: 120,
+            idempotencyKey: $"claim:{taskKey}").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "demo-repository",
+            acquired.AttemptId,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            resultSha,
+            $"refs/agent-studio/results/{taskKey}/{acquired.AttemptId}",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        var settled = authority.SettleRun(
+            new AttemptWriteReference(
+                acquired.AttemptId,
+                acquired.LastFence,
+                acquired.AuthorityEpoch,
+                $"completion:{taskKey}"),
+            "done",
+            resultSha,
+            reason: null,
+            resultEnvelope: envelope,
+            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+    }
+
+    private string ResolveTaskKey(TaskScannerService scanner, string slug)
+    {
+        var task = Assert.IsType<TaskInfo>(scanner.FindJob(slug, _watchPath));
+        return !string.IsNullOrWhiteSpace(task.Key)
+            ? task.Key
+            : !string.IsNullOrWhiteSpace(task.TaskKey)
+                ? task.TaskKey
+                : task.Id;
+    }
+
     private void WriteJobWithSession(string state, string slug, string? sessionName, string[] chain)
     {
         var dir = Path.Combine(_watchPath, state, slug);
@@ -411,6 +567,29 @@ public sealed class RunLivenessMonitorTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"," +
             $"\"sessionName\":{sessionJson},\"sessionChain\":{chainJson},\"enteredLaneAt\":\"{enteredLaneAt}\"}}");
+    }
+
+    private static string WriteFlatJobWithSession(
+        string watchPath, string key, string id, string? sessionName)
+    {
+        var folder = Path.Combine(watchPath, "tasks", "000", key);
+        Directory.CreateDirectory(folder);
+        var enteredLaneAt = DateTime.UtcNow - TimeSpan.FromMinutes(10);
+        File.WriteAllText(Path.Combine(folder, "task.json"), JsonSerializer.Serialize(new
+        {
+            id,
+            key,
+            title = id,
+            state = TaskStates.Progress,
+            order = 1,
+            agent = "claude",
+            sessionName,
+            sessionChain = sessionName == null ? Array.Empty<string>() : new[] { sessionName },
+            enteredLaneAt,
+        }));
+        WriteCliLog(folder, "local CLI died with the backend");
+        SetMtimeOld(Path.Combine(folder, "logs", "cli-output.log"));
+        return folder;
     }
 
     private static void WriteCliLog(string folder, string body)
@@ -465,5 +644,11 @@ public sealed class RunLivenessMonitorTests : IDisposable
             foreach (var el in sc.EnumerateArray())
                 if (el.ValueKind == JsonValueKind.String) chain.Add(el.GetString()!);
         return (name, chain);
+    }
+
+    private static string? ReadState(string folder)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "task.json")));
+        return doc.RootElement.GetProperty("state").GetString();
     }
 }

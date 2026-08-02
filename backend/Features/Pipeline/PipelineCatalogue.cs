@@ -88,6 +88,13 @@ public static class PipelineCatalogue
     /// model and reasoning ladders. Explicit card pins remain authoritative.
     /// </summary>
     public const string ModelQualificationStepId = "pre-model-qualification";
+    /// <summary>
+    /// Deterministic prompt enrichment that classifies the authored task,
+    /// appends bounded curated context, and persists
+    /// <c>enrichment-report.json</c> before CLI dispatch. Default-on and
+    /// project-disableable through the standard pipeline-step convention.
+    /// </summary>
+    public const string PromptEnrichmentStepId = "pre-prompt-enrichment";
 
     /// <summary>
     /// Optional, parallelisable pre-coding step that surfaces the ADR-0026
@@ -529,6 +536,15 @@ public static class PipelineCatalogue
                 {
                     Id = ModelQualificationStepId,
                     DisplayName = "Model qualification",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = PromptEnrichmentStepId,
+                    DisplayName = "Prompt enrichment",
                     Kind = StepKind.Module,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = true,

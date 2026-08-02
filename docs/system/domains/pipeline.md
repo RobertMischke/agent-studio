@@ -36,6 +36,13 @@ pipeline view.
   that classifies the task in project context and maps it onto the selected
   CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
   `TokenEconomy.SuggestModel` seam.
+- `backend/Features/Runner/PromptEnrichmentService.cs`: deterministic,
+  zero-selector-token `pre-prompt-enrichment` step. It classifies the authored
+  card, selects curated versioned project/style/delegation blocks, appends at
+  most two optional blocks within a 1,500-token budget, and persists
+  `enrichment-report.json` before dispatch. Failure to persist the report blocks
+  dispatch. The step is default-on and can be disabled through the normal
+  per-project `PipelineSteps` convention.
 - `backend/Features/Pipeline/PipelineStepEconomyAdvisor.cs`: opt-in automated
   recommendation layer for cheap pipeline work. It passes only live-discovered
   Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
@@ -115,9 +122,13 @@ pipeline view.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
   verification. Test commands marked `CompareToBaseline` compare their parsed
-  failing-test set with the merge-base on the plan's integration ref. Baseline
-  results are single-flight cached by repository, baseline SHA, and command
-  hash. Only failures still new after one subject retry block the review.
+  failing-test set with the merge-base on the plan's integration ref. The
+  parser recognizes .NET, Jest, Karma, Vitest, native Node test, and npm
+  lifecycle output, normalizes ANSI-decorated names and volatile Jest file
+  durations, and versions its cache entries when parsing semantics change.
+  Baseline results are single-flight cached by repository, baseline SHA, and
+  command hash. Only failures still new after one subject retry block the
+  review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel
@@ -311,6 +322,14 @@ pipeline view.
   ids. Explicit card model/reasoning pins always win; legacy cards without
   provenance are treated as pinned. The selected/recommended pair remains
   visible on the step record.
+- `pre-prompt-enrichment` runs after qualification and before CORE spawn. The
+  original task block remains byte-for-byte readable and the labelled
+  enrichment is additive inside the existing mode-framing seam. A worktree
+  containment notice may still precede the task block. Its step token buckets
+  describe selector work only, which is zero in the deterministic
+  implementation. Appended prompt tokens are attributed in
+  `enrichment-report.json` and remain part of CORE input, so pipeline cost
+  totals do not count them twice.
 - Cheap-model routing is explicit and reversible. `PipelineStepSetting` owns the
   `(cliType, model, thinkingLevel)` override per project and step; absent fields
   preserve the current runtime default. Aspect reviews and abort review honor

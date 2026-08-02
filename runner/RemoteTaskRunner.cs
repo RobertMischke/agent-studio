@@ -14,7 +14,7 @@ using AgentStudio.TaskServer.Contracts;
 /// spawn the agent CLI with the fetched prompt, ship its output to the server,
 /// upload the results/ evidence, post a fenced runner completion so the result
 /// enters the normal review pipeline, and always release the lease. Before removing
-/// a worktree it salvages changes and pushes the runner branch to origin.
+/// a worktree it salvages changes to a generation-scoped ref on origin.
 /// </summary>
 public sealed class RemoteTaskRunner
 {
@@ -107,7 +107,15 @@ public sealed class RemoteTaskRunner
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
         var workspace = new GitWorkspace(
-            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch, isProjectClone);
+            _options,
+            taskKey,
+            _log,
+            projectId,
+            repositoryUrl,
+            defaultBranch,
+            isProjectClone,
+            sourceRunAttemptId: runId ?? lease.AttemptId ?? lease.LeaseId,
+            fencingToken: lease.FencingToken);
         var slot = _state.Create(
             taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
             projectId, repositoryUrl, defaultBranch, taskKind, runSpec);
@@ -123,7 +131,9 @@ public sealed class RemoteTaskRunner
         // after every daemon restart.
         var workspace = new GitWorkspace(
             _options, slot.TaskKey, _log, slot.ProjectId, slot.RepositoryUrl, slot.DefaultBranch,
-            restoredBaseSha: slot.BaseSha);
+            restoredBaseSha: slot.BaseSha,
+            sourceRunAttemptId: slot.RunId ?? slot.Lease.AttemptId ?? slot.AttemptId,
+            fencingToken: slot.Lease.FencingToken);
         return await RunPersistedAsync(slot, workspace, stopRun, reattach: true);
     }
 
@@ -435,6 +445,32 @@ public sealed class RemoteTaskRunner
         {
             stopRun.Cancel();
             await SafeAwait(heartbeatTask);
+            // A generation whose authority is known dead may retain useful
+            // local content, but it must not publish a delivery candidate.
+            // Preserve that content under a generation-specific quarantine ref.
+            if (heartbeat.LeaseLost
+                && !epicPlanning
+                && Directory.Exists(workspace.RepoPath))
+            {
+                try
+                {
+                    teardownAttempted = true;
+                    await workspace.TeardownToQuarantineAsync(
+                        outcome.Kind.ToString(),
+                        slot.RunId ?? lease.AttemptId ?? lease.LeaseId,
+                        CancellationToken.None);
+                    _log(
+                        $"lease-loss worktree quarantined task={taskKey} " +
+                        $"attempt={slot.RunId ?? lease.AttemptId ?? lease.LeaseId} " +
+                        $"fence={lease.FencingToken}");
+                }
+                catch (Exception ex)
+                {
+                    _log(
+                        $"lease-loss quarantine failed; retained worktree task={taskKey} " +
+                        $"path={workspace.RepoPath} error={ex.Message}");
+                }
+            }
             // This path covers shutdown, cancellation, quota death, and any
             // exception before the normal completion handoff. Salvage uses an
             // independent token because SIGINT has already cancelled the run.
@@ -584,12 +620,12 @@ public sealed class RemoteTaskRunner
         }
         else
         {
-        var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
-                         ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
+            var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
+                             ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
             prompt = RemoteRunPrompt.Build(taskPrompt, runSpec?.ModeFraming, ResultsDir(taskKey));
-        shipper.Add("system", string.IsNullOrWhiteSpace(runSpec?.ModeFraming)
-            ? "[runner] results-dir context + remote-completion-protocol appended to task prompt"
-            : "[runner] server-rendered mode framing + results-dir context + remote-completion-protocol appended to task prompt");
+            shipper.Add("system", string.IsNullOrWhiteSpace(runSpec?.ModeFraming)
+                ? "[runner] results-dir context + remote-completion-protocol appended to task prompt"
+                : "[runner] server-composed mode framing + results-dir context + remote-completion-protocol appended to task prompt");
         }
 
         var resultsDir = ResultsDir(taskKey);

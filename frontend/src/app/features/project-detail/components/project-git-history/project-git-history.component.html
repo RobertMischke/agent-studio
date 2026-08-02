@@ -2,9 +2,43 @@
   <header class="history__header">
     <div>
       <h2>Commit graph</h2>
-      <p>Branches, cards, runtime markers, and calculated commit presence.</p>
+      <p>Integration, releases, deployments, cards, and current work.</p>
     </div>
-    <span class="history__readonly">Read only</span>
+    <div class="history__header-actions">
+      <span class="history__readonly">Read only</span>
+      <details class="history__legend" data-testid="git-chip-legend">
+        <summary aria-label="Explain commit chips" data-testid="git-chip-legend-toggle">?</summary>
+        <div class="history__legend-popover" data-testid="git-chip-legend-popover">
+          <h3>Commit chips</h3>
+          <dl>
+            <div>
+              <dt><span class="history__chip" data-tone="integrated">Integrated · develop</span></dt>
+              <dd>The commit is contained in the integration branch.</dd>
+            </div>
+            <div>
+              <dt><span class="history__chip" data-tone="released">Released · main</span></dt>
+              <dd>The commit is contained in the release branch.</dd>
+            </div>
+            <div>
+              <dt><span class="history__chip" data-tone="deployed">Deployed · runner</span></dt>
+              <dd>A running target reports this exact build commit.</dd>
+            </div>
+            <div>
+              <dt><span class="history__chip" data-tone="task">AGT-N</span></dt>
+              <dd>The board card associated with the commit.</dd>
+            </div>
+            <div>
+              <dt><span class="history__chip" data-tone="in-progress">In progress</span></dt>
+              <dd>An associated card is in the In Progress lane.</dd>
+            </div>
+            <div>
+              <dt><span class="history__chip" data-tone="remote">Remote</span></dt>
+              <dd>A remote-tracking ref points at the commit. Hover the chip for exact refs.</dd>
+            </div>
+          </dl>
+        </div>
+      </details>
+    </div>
   </header>
 
   <div class="history__list" role="list">
@@ -13,15 +47,18 @@
                [class.history__row--selected]="selectedSha() === row.commit.sha"
                [attr.aria-current]="selectedSha() === row.commit.sha ? 'true' : null"
                data-testid="git-commit-row" [attr.data-sha]="row.commit.sha">
-        <svg class="history__graph" aria-hidden="true" data-testid="git-graph-lanes"
-             [attr.viewBox]="'0 0 ' + row.width + ' 36'"
-             [style.width.px]="row.width">
-          @for (segment of row.segments; track segment.id) {
-            <line [attr.x1]="segment.x1" [attr.y1]="segment.y1"
-                  [attr.x2]="segment.x2" [attr.y2]="segment.y2"></line>
-          }
-          <circle data-testid="git-graph-node" [attr.cx]="row.nodeX" cy="18" r="4"></circle>
-        </svg>
+        <span class="history__graph" aria-hidden="true" data-testid="git-graph-lanes"
+              [style.width.px]="row.width" [style.min-height.px]="row.height">
+          <svg [attr.viewBox]="'0 0 ' + row.width + ' ' + row.height" preserveAspectRatio="none">
+            @for (segment of row.segments; track segment.id) {
+              <path class="history__segment" data-testid="git-graph-segment"
+                    [attr.data-kind]="segment.kind" [attr.data-lane]="segment.lane % 4"
+                    [attr.d]="segment.path"></path>
+            }
+          </svg>
+          <i class="history__node" data-testid="git-graph-node"
+             [attr.data-lane]="row.lane % 4" [style.left.px]="row.nodeX"></i>
+        </span>
 
         <button type="button" class="history__summary" (click)="commitSelected.emit(row.commit)">
           <span class="history__subject">{{ row.commit.subject }}</span>
@@ -33,29 +70,17 @@
         </button>
 
         <div class="history__badges">
-          @for (ref of row.commit.refs; track ref.kind + ':' + ref.name) {
-            <span class="history__ref" [attr.data-kind]="ref.kind" [class.history__ref--remote]="ref.isRemote">
-              {{ ref.name }}
-            </span>
-          }
-          @for (deployment of row.commit.deployments; track deployment.target) {
-            <span class="history__deploy" [attr.data-target]="deployment.target">
-              deploy:{{ deployment.target }}
-            </span>
-          }
-          @for (task of row.commit.tasks; track task.taskKey) {
-            <button type="button" class="history__task" (click)="openTask($event, task)"
-                    [attr.aria-label]="'Open task ' + task.key + ': ' + task.title">{{ task.key }}</button>
-          }
-          @if (row.commit.presence; as presence) {
-            <span class="history__presence" [class.history__presence--on]="presence.inIntegration"
-                  [attr.aria-label]="presence.integrationBranch + (presence.inIntegration ? ' contains this commit' : ' does not contain this commit')">
-              {{ presence.inIntegration ? '✓' : '○' }} {{ presence.integrationBranch }}
-            </span>
-            <span class="history__presence" [class.history__presence--on]="presence.inRelease"
-                  [attr.aria-label]="presence.releaseBranch + (presence.inRelease ? ' contains this commit' : ' does not contain this commit')">
-              {{ presence.inRelease ? '✓' : '○' }} {{ presence.releaseBranch }}
-            </span>
+          @for (chip of row.chips; track chip.id) {
+            @if (chip.task; as task) {
+              <button type="button" class="history__chip" [attr.data-kind]="chip.kind"
+                      [attr.data-tone]="chip.tone" [attr.title]="chip.detail"
+                      (click)="openTask($event, task)"
+                      [attr.aria-label]="chip.detail">{{ chip.label }}</button>
+            } @else {
+              <span class="history__chip" [attr.data-kind]="chip.kind"
+                    [attr.data-tone]="chip.tone" [attr.title]="chip.detail"
+                    [attr.aria-label]="chip.detail">{{ chip.label }}</span>
+            }
           }
         </div>
 

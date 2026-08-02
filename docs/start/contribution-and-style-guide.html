@@ -168,8 +168,8 @@
           <p>Platform-owned branch for isolated task work. The slug is the normalized stable task key, for example <code>task/agt-2237</code>.</p>
         </div>
         <div class="mini">
-          <h3><code>runner/&lt;id&gt;/&lt;key&gt;</code></h3>
-          <p>Remote runner delivery or salvage branch, namespaced by runner identity and task key.</p>
+          <h3><code>agent-studio/{results,salvage}/...</code></h3>
+          <p>Remote result and salvage refs, namespaced by run attempt, fencing token, and immutable result SHA. Lease-loss salvage uses the quarantine namespace.</p>
         </div>
       </div>
       <div class="rule"><strong>Ownership:</strong> the platform creates, commits, pushes, integrates, and cleans up managed task branches. Run agents must not create or switch branches, commit, amend, push, merge, rebase, or mutate remotes unless the individual task explicitly grants that authority.</div>

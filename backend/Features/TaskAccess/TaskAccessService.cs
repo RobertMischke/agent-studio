@@ -496,6 +496,38 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane)) return [];
         if (!TaskStates.All.Contains(lane)) return [];
+
+        // The flat layout stores every task under tasks/<bucket>/<key> and
+        // carries the lane in task.json.state. Once at least one flat task is
+        // present it is authoritative, matching TaskScannerService. This path
+        // is load-bearing for the uptime liveness sweep: enumerating only the
+        // retired <lane>/<slug> tree made every flat 3-progress card invisible
+        // after a backend restart.
+        var firstFlatFolder = TaskStorageLayout.EnumerateJobDirs(watchPath).FirstOrDefault();
+        if (firstFlatFolder != null)
+        {
+            var flatResults = new List<LaneFolderRef>();
+            foreach (var folder in FlatLaneCandidates(watchPath, lane))
+            {
+                var taskJson = Path.Combine(folder, "task.json");
+                if (!TryReadFlatTaskIdentity(taskJson, out var state, out var id)
+                    || !string.Equals(state, lane, StringComparison.Ordinal))
+                    continue;
+
+                flatResults.Add(new LaneFolderRef
+                {
+                    WatchPath = watchPath,
+                    Lane = lane,
+                    Slug = string.IsNullOrWhiteSpace(id) ? Path.GetFileName(folder) ?? "" : id,
+                    FolderPath = folder,
+                });
+            }
+            return flatResults;
+        }
+
+        // Compatibility fallback for projects that have not cut over to the
+        // flat layout. Legacy lane enumeration deliberately includes folders
+        // without task.json so orphan-debris recovery can still see them.
         var laneDir = Path.Combine(watchPath, lane);
         if (!Directory.Exists(laneDir)) return [];
         try
@@ -515,6 +547,72 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         {
             _logger.LogWarning(ex, "TaskAccess.ListLaneFolders failed for {Path}/{Lane}", watchPath, lane);
             return [];
+        }
+    }
+
+    private static IEnumerable<string> FlatLaneCandidates(string watchPath, string lane)
+    {
+        // The boot rebuild and every metadata transition maintain by-state, so
+        // the normal 15-second liveness sweep reads only the requested lane
+        // instead of reparsing every task in every project. Directly constructed
+        // test/pre-boot stores may not have an index yet; a full authoritative
+        // scan is the safe fallback in that rare case.
+        try
+        {
+            if (File.Exists(TaskLayoutIndex.ByStatePath(watchPath)))
+            {
+                var byState = TaskLayoutIndex.ReadByState(watchPath);
+                if (!byState.TryGetValue(lane, out var locations)) return [];
+                return locations.Select(location => Path.Combine(
+                    TaskStorageLayout.JobsRoot(watchPath),
+                    location.Replace('/', Path.DirectorySeparatorChar)));
+            }
+        }
+        catch (JsonException ex)
+        {
+            // Fall through to task.json authority. The next boot rebuild heals
+            // a malformed derived index without hiding local orphaned runs.
+            SilentCatch.Note(ex, "TaskAccess.ListLaneFolders: malformed by-state index; scan flat task authority");
+        }
+        catch (IOException ex)
+        {
+            // A concurrent atomic index replacement is transient. Reading the
+            // authoritative task tree keeps this sweep complete.
+            SilentCatch.Note(ex, "TaskAccess.ListLaneFolders: by-state index unavailable; scan flat task authority");
+        }
+        return TaskStorageLayout.EnumerateJobDirs(watchPath);
+    }
+
+    private static bool TryReadFlatTaskIdentity(string taskJson, out string? state, out string? id)
+    {
+        state = null;
+        id = null;
+        if (!File.Exists(taskJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(taskJson));
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Value.ValueKind != JsonValueKind.String) continue;
+                if (string.Equals(property.Name, "state", StringComparison.OrdinalIgnoreCase))
+                    state = property.Value.GetString();
+                else if (string.Equals(property.Name, "id", StringComparison.OrdinalIgnoreCase))
+                    id = property.Value.GetString();
+            }
+            return !string.IsNullOrWhiteSpace(state);
+        }
+        catch (JsonException)
+        {
+            // Malformed task metadata is owned by the scanner/queue-health
+            // recovery path. It has no trustworthy lane and cannot be safely
+            // returned as a member of the requested lane here.
+            return false;
+        }
+        catch (IOException)
+        {
+            // A concurrent atomic metadata rewrite may make one read transiently
+            // unavailable. The short-cadence caller retries on its next sweep.
+            return false;
         }
     }
 

@@ -32,11 +32,8 @@ public sealed record PersistedRunnerSlot(
     // for persistence compatibility: state written before this field simply loads
     // as null and behaves exactly as it did before.
     string? BaseSha = null,
-    // T0b: the execution spec the claim carried for this card. Persisted for the
-    // same reason as BaseSha - only the claiming process ever saw it, and a
-    // replacement daemon that reattaches (or runs the bounded same-session
-    // resume) must relaunch with the card's CLI, model and reasoning level
-    // instead of silently dropping back to the host's RUNNER_CLI_* configuration.
+    // The execution spec includes the server-composed mode and enrichment
+    // framing. Persisting the one spec keeps daemon replacement deterministic.
     RunSpecDto? RunSpec = null);
 
 /// <summary>Atomic JSON persistence under RUNNER_STATE_DIR.</summary>

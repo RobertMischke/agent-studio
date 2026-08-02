@@ -2,23 +2,29 @@ import type { GitGraphCommit } from './git.model';
 
 export interface GitGraphSegment {
   id: string;
+  kind: 'incoming' | 'carry' | 'parent' | 'merge';
+  lane: number;
   x1: number;
   y1: number;
   x2: number;
   y2: number;
+  path: string;
 }
 
 export interface GitGraphRow {
   commit: GitGraphCommit;
   lane: number;
   nodeX: number;
+  nodeY: number;
   width: number;
+  height: number;
   segments: GitGraphSegment[];
 }
 
-const LANE_STEP = 12;
-const X_ORIGIN = 8;
-const ROW_HEIGHT = 36;
+const LANE_STEP = 16;
+const X_ORIGIN = 10;
+const ROW_HEIGHT = 48;
+const ROW_MIDDLE = ROW_HEIGHT / 2;
 
 /**
  * Turns topologically ordered commits into quiet SVG lanes. The algorithm
@@ -41,16 +47,26 @@ export function buildGitGraphRows(commits: readonly GitGraphCommit[]): GitGraphR
     const deduped = after.filter((sha, index) => after.indexOf(sha) === index);
     const segments: GitGraphSegment[] = [];
 
+    before.forEach((_, index) => {
+      segments.push(segment(`incoming:${index}`, 'incoming', index, index, 0, ROW_MIDDLE));
+    });
     before.forEach((sha, index) => {
       if (sha === commit.sha) return;
       const nextIndex = deduped.indexOf(sha);
       if (nextIndex < 0) return;
-      segments.push(segment(`carry:${sha}`, index, 0, nextIndex, ROW_HEIGHT));
+      segments.push(segment(`carry:${sha}`, 'carry', nextIndex, index, ROW_MIDDLE, ROW_HEIGHT));
     });
     parents.forEach((sha, index) => {
       const nextIndex = deduped.indexOf(sha);
       if (nextIndex < 0) return;
-      segments.push(segment(`parent:${sha}:${index}`, lane, ROW_HEIGHT / 2, nextIndex, ROW_HEIGHT));
+      segments.push(segment(
+        `parent:${sha}:${index}`,
+        index === 0 ? 'parent' : 'merge',
+        nextIndex,
+        lane,
+        ROW_MIDDLE,
+        ROW_HEIGHT,
+      ));
     });
 
     lanes = deduped;
@@ -59,14 +75,29 @@ export function buildGitGraphRows(commits: readonly GitGraphCommit[]): GitGraphR
       commit,
       lane,
       nodeX: x(lane),
+      nodeY: ROW_MIDDLE,
       width: x(laneCount - 1) + X_ORIGIN,
+      height: ROW_HEIGHT,
       segments,
     };
   });
 }
 
-function segment(id: string, fromLane: number, y1: number, toLane: number, y2: number): GitGraphSegment {
-  return { id, x1: x(fromLane), y1, x2: x(toLane), y2 };
+function segment(
+  id: string,
+  kind: GitGraphSegment['kind'],
+  lane: number,
+  fromLane: number,
+  y1: number,
+  y2: number,
+): GitGraphSegment {
+  const x1 = x(fromLane);
+  const x2 = x(lane);
+  const middleY = y1 + (y2 - y1) / 2;
+  const path = x1 === x2
+    ? `M ${x1} ${y1} L ${x2} ${y2}`
+    : `M ${x1} ${y1} C ${x1} ${middleY}, ${x2} ${middleY}, ${x2} ${y2}`;
+  return { id, kind, lane, x1, y1, x2, y2, path };
 }
 
 function x(lane: number): number {

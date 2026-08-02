@@ -71,9 +71,16 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/", (string? project, bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            var projectRequested = !string.IsNullOrWhiteSpace(project);
+            var projectWatchPath = ResolveWatchPath(projects, project, watchPath: null);
+            if (projectRequested && string.IsNullOrWhiteSpace(projectWatchPath))
+                return Results.NotFound(new { error = $"Unknown project '{project}'" });
+
             var raw = ProjectAccessAuthorization.FilterTasks(ctx, scanner.ScanAllJobs(), projects).ToList();
+            if (projectRequested)
+                raw = raw.Where(job => WatchPathComparison.PathsEqual(job.WatchPath, projectWatchPath)).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
@@ -92,6 +99,10 @@ public static class TaskCrudEndpoints
                           .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
+                // The endpoint already resolved the path-free project handle and
+                // scoped the source set. Do not compare a registry id/short code
+                // with TaskInfo.ProjectName inside the analysis engine.
+                query = query with { Project = [] };
                 var response = TaskQueryEngine.Execute(jobs, query);
                 if (response.Error is { Length: > 0 })
                     return Results.BadRequest(new { error = response.Error });

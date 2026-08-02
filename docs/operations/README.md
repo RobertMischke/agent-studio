@@ -22,7 +22,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [security/](security/overview.md) | Security overview, requirements, state, and reviews. |
 | [runtime/](runtime/) | Product runtime observability and log-capture contracts. |
 | [git/](git/) | Commit, push, and attribution doctrine. |
-| [testing/](testing/) | Dedicated test workspace and probe contracts. |
+| [testing/](testing/) | Dedicated test workspace and probe contracts; Windows test baseline and platform gates. |
 | [doku-inventur-2026-07/](doku-inventur-2026-07/README.md) | Per-document July 2026 inventory, sampled code checks, archive decisions, and the Phase 2 structure sketch. |
 | [haertung-verteilte-ausfuehrung/](haertung-verteilte-ausfuehrung/index.html) | Distributed execution hardening, including runner incidents, invariants, and implementation history. |
 | [decision-surface/](decision-surface/README.md) | Ownership, artifact, action, and lifecycle contract for operator decisions on escalated tasks. |

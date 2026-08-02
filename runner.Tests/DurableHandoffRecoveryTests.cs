@@ -33,7 +33,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             authority.RunId,
             new string('1', 40),
             resultSha,
-            $"refs/heads/agent-studio/results/{authority.RunId}/{resultSha}",
+            FencedGitRefs.ImmutableResult(authority.RunId, authority.Fence, resultSha),
             null,
             manifest.Digest);
         outbox.Enqueue("run-context", JsonSerializer.Serialize(
@@ -92,7 +92,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             authority.RunId,
             new string('3', 40),
             resultSha,
-            $"refs/heads/agent-studio/results/{authority.RunId}/{resultSha}",
+            FencedGitRefs.ImmutableResult(authority.RunId, authority.Fence, resultSha),
             null,
             manifest.Digest);
         outbox.Enqueue("run-context", JsonSerializer.Serialize(
@@ -241,7 +241,9 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             _ => { },
             "repo-12",
             origin,
-            "main");
+            "main",
+            sourceRunAttemptId: authority.RunId,
+            fencingToken: authority.Fence);
         await workspace.PrepareAsync(default);
         var baseSha = workspace.BaseSha!;
         await File.WriteAllTextAsync(
@@ -343,7 +345,9 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        // The root holds a git clone; its read-only objects make a plain recursive
+        // delete throw on Windows and fail the test from teardown.
+        ResilientDirectory.TryDelete(_root);
     }
 
     private async Task<string> SeedOriginAsync()

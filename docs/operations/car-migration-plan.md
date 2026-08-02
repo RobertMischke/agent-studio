@@ -114,6 +114,16 @@ Wörtlich aus `execution-model-shift` §5: *„Keine Orchestrierung wandert hine
 
 *Tests:* `backend.Tests/RemoteRunnerEndToEndTests.Daemon_claim_carries_the_cards_execution_spec_and_the_runner_builds_its_cli_args` (Claim trägt die Spec der Karte; eine Codex-Karte mit unerfüllbarer Stufe wird serverseitig auf eine unterstützte aufgelöst) und `runner.Tests/RunSpecInvocationTests` (Args-Bau mit/ohne Spec, CLI-Wechsel, Resume-Args, Roundtrip durch `spec.json` und den Slot inklusive Alt-Format).
 
+*Prompt-enrichment extension (2026-08-01):* The monolith composes the optional,
+audited enrichment block into the existing `RunSpec.ModeFraming` value before
+lease acquisition. The runner persists that one composed `RunSpec` in
+`PersistedRunnerSlot`, so daemon replacement cannot relaunch an attempt without
+its mode contract or audited enrichment. There is no parallel enrichment wire
+field or runner-side sidecar lookup. Older servers remain compatible because
+an absent `RunSpec` or `ModeFraming` retains the previous prompt behavior. The
+separated v1 `Contract.ClaimResponse` is unchanged because that server does not
+publish monolith job-folder enrichment artifacts.
+
 ### T1 = AGT-2370 · Runner-Daemon auf CAR
 
 **Schnitt.** Der detached Worker (`DurableAgentProcess.RunWorkerAsync`, `DurableAgentProcess.cs:241-308`) treibt das CLI künftig über `ICliDriver` statt `ProcessRunner.RunAsync`. Alles außerhalb des Workers bleibt unberührt.

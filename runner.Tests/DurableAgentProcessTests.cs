@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -51,9 +52,18 @@ public sealed class DurableAgentProcessTests : IDisposable
         Assert.Contains(attached.ReadAfter(0), line => line.Text == "[[TASK_DONE]]");
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): the worktree half of the adoption proof reads
+    // /proc/<pid>/cwd. Windows exposes no equivalent for another process, so
+    // DurableAgentProcess.VerifyLive deliberately skips that check there
+    // (OperatingSystem.IsLinux() guard) and the rejection under test cannot occur.
+    // Gating, not filtering: this reports as Skipped with its reason, so nobody
+    // mistakes the Windows run for coverage of the PID-reuse defence.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Pid_with_a_different_worktree_is_not_adopted()
     {
+        PlatformGate.LinuxOnly("the worktree proof reads /proc/<pid>/cwd");
+
         var actual = Path.Combine(_root, "actual");
         var claimed = Path.Combine(_root, "claimed");
         var results = Path.Combine(_root, "results");
@@ -136,7 +146,10 @@ public sealed class DurableAgentProcessTests : IDisposable
         // engine consumes. The worker/reattach mechanics under test are
         // engine-independent; the CAR engine is covered by CarWorkerExecutionTests.
         ExecEngine = RunnerOptions.ExecEngineLegacy,
-        CliBin = "/bin/sh",
+        // A real interpreter, not the literal "/bin/sh": the worker mechanics under
+        // test are portable, and pinning a Unix path made the fake CLI unstartable
+        // on Windows, which showed up as an unexplained non-zero exit code.
+        CliBin = PosixShell.RequirePath(),
         CliArgs = cliArgs,
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
@@ -159,7 +172,7 @@ public sealed class DurableAgentProcessTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch { /* a killed test worker may still be unwinding */ }
+        // Best effort: a killed test worker may still be unwinding and hold a handle.
+        ResilientDirectory.TryDelete(_root);
     }
 }

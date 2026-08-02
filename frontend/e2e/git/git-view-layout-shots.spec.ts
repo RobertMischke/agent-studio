@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * AGT-2011 — Git-View layout evidence shots (before/after).
+ * AGT-2453 Git-View topology and layout evidence shots.
  *
  * Drives the two surfaces the layout overhaul targets, with every backend
  * route mocked, and writes full-page screenshots for both themes:
@@ -49,20 +49,31 @@ const INVENTORY = {
     offset: 0, pageSize: 50, nextOffset: null, hasMore: false,
     commits: [
       {
-        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40)],
-        authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev',
-        subject: 'feat: add the widget rendering pipeline', filesChanged: 3, added: 42, removed: 8,
+        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40), 'e'.repeat(40)],
+        authorDateUtc: '2026-07-05T10:00:00Z', author: 'dev',
+        subject: 'Merge task/1 into develop', filesChanged: 3, added: 42, removed: 8,
         refs: [{ name: 'develop', kind: 'branch', isRemote: false }, { name: 'origin/develop', kind: 'branch', isRemote: true }],
-        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '5-human-review' }],
+        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Widget pipeline', lane: '3-progress' }],
         presence: { inIntegration: true, inRelease: false, integrationBranch: 'develop', releaseBranch: 'main' },
         deployments: [{ target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' }],
       },
       {
         sha: 'f'.repeat(40), shortSha: 'fffffff', parentShas: ['9'.repeat(40)],
-        authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: dependency cleanup',
+        authorDateUtc: '2026-07-04T09:00:00Z', author: 'dev', subject: 'chore: prepare integration line',
         filesChanged: 2, added: 5, removed: 21, refs: [], tasks: [],
         presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
         deployments: [],
+      },
+      {
+        sha: 'e'.repeat(40), shortSha: 'eeeeeee', parentShas: ['b'.repeat(40)],
+        authorDateUtc: '2026-07-04T08:30:00Z', author: 'dev', subject: 'feat: finish task branch',
+        filesChanged: 2, added: 18, removed: 3,
+        refs: [{ name: 'task/1', kind: 'branch', isRemote: false }], tasks: [], presence: null, deployments: [],
+      },
+      {
+        sha: 'b'.repeat(40), shortSha: 'bbbbbbb', parentShas: ['9'.repeat(40)],
+        authorDateUtc: '2026-07-03T12:00:00Z', author: 'dev', subject: 'feat: branch from shared base',
+        filesChanged: 1, added: 12, removed: 0, refs: [], tasks: [], presence: null, deployments: [],
       },
       {
         sha: '9'.repeat(40), shortSha: '9999999', parentShas: [],
@@ -308,7 +319,7 @@ async function save(page: Page, testInfo: import('@playwright/test').TestInfo, n
 
 /* --------------------------------------------------------------------- */
 
-test.describe('AGT-2011 · Git-View layout shots (mocked)', () => {
+test.describe('AGT-2453 Git-View topology and layout shots (mocked)', () => {
   test.use({ viewport: { width: 1680, height: 1050 } });
   test.setTimeout(180_000);
 
@@ -320,6 +331,8 @@ test.describe('AGT-2011 · Git-View layout shots (mocked)', () => {
       await openHubOnGit(page);
 
       await expect(page.getByTestId('project-git-panel')).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('[data-testid="git-graph-segment"][data-kind="merge"]')).toBeVisible();
+      await expect(page.locator('[data-testid="git-graph-node"][data-lane="1"]')).toHaveCount(2);
       await setTheme(page, theme);
 
       // Open a commit so the files list + diff render (the busy state).
@@ -327,6 +340,15 @@ test.describe('AGT-2011 · Git-View layout shots (mocked)', () => {
       await expect(page.getByTestId('git-changes')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('git-file-row').first()).toBeVisible();
       await expect(page.getByTestId('git-diff')).toBeVisible({ timeout: 15_000 });
+      const firstCommit = page.getByTestId('git-commit-row').first();
+      await expect(firstCommit).toContainText('Integrated · develop');
+      await expect(firstCommit).toContainText('Deployed · runner');
+      await expect(firstCommit).toContainText('AGT-1');
+      await expect(firstCommit).toContainText('In progress');
+      await expect(firstCommit).toContainText('Remote');
+      await expect(firstCommit).not.toContainText('origin/develop');
+      await page.getByTestId('git-chip-legend-toggle').click();
+      await expect(page.getByTestId('git-chip-legend-popover')).toBeVisible();
       await dismissErrorDialog(page);
       await page.waitForTimeout(150);
 

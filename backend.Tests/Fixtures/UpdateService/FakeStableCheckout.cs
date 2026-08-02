@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AgentStudio.TestSupport;
 
 namespace AgentStudio.Tests;
 
@@ -56,8 +57,8 @@ public sealed class FakeStableCheckout : IDisposable
     /// </summary>
     public static FakeStableCheckout? TryCreate()
     {
-        var bashPath = FindOnPath("bash") ?? FindWindowsGitBash();
-        var gitPath = FindOnPath("git");
+        var bashPath = PosixShell.Path;
+        var gitPath = Executables.FindOnPath("git");
         if (bashPath == null || gitPath == null) return null;
 
         var root = Path.Combine(Path.GetTempPath(), "atp-update-svc-it-" + Guid.NewGuid().ToString("N").Substring(0, 8));
@@ -125,36 +126,6 @@ public sealed class FakeStableCheckout : IDisposable
         File.WriteAllText(Path.Combine(StableDir, $"local-{Guid.NewGuid():N}.txt"), DateTime.UtcNow.ToString("O"));
         Run(GitPath, StableDir, "add", ".");
         Run(GitPath, StableDir, "commit", "-m", message);
-    }
-
-    private static string? FindOnPath(string exe)
-    {
-        var pathSep = OperatingSystem.IsWindows() ? ';' : ':';
-        var ext = OperatingSystem.IsWindows() ? ".exe" : "";
-        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var dir in pathEnv.Split(pathSep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(dir, exe + ext);
-                if (File.Exists(candidate)) return candidate;
-            }
-            catch { }
-        }
-        return null;
-    }
-
-    private static string? FindWindowsGitBash()
-    {
-        if (!OperatingSystem.IsWindows()) return null;
-        var candidates = new[]
-        {
-            @"C:\Program Files\Git\bin\bash.exe",
-            @"C:\Program Files (x86)\Git\bin\bash.exe",
-        };
-        foreach (var c in candidates)
-            if (File.Exists(c)) return c;
-        return null;
     }
 
     private static void Run(string exe, string workingDir, params string[] args)

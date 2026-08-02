@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentStudio.Git;
 
 using Xunit;
 
@@ -203,6 +204,203 @@ public class TaskCommitBindingTests : IDisposable
         var info = scanner.FindJob("eta", _watchPath);
         Assert.NotNull(info);
         Assert.Empty(info!.Commits);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_TwoGenerations_PersistsTheirUnionWithProducerIdentity()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("theta", "3-progress", legacyCommit: null);
+        var first = MakeCommit(
+            "aaaaaaaa", "feat(AGT-2462): first generation", 1,
+            "2026-07-30T10:00:00Z") with { Branch = "agent-studio/results/run_first/result-a" };
+        var second = MakeCommit(
+            "bbbbbbbb", "fix(AGT-2462): second generation", 2,
+            "2026-07-30T11:00:00Z") with { Branch = "agent-studio/results/run_second/result-b" };
+
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-first", "runner-a", first.Sha, [first]));
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-second", "runner-b", second.Sha, [second]));
+
+        // The ordinary transition attribution pass may subsequently refresh
+        // commit metadata. It must not strip the remote generation proof.
+        Assert.True(mutations.SetCommitAttributionOnFolder(
+            jobDir,
+            [first with { Branch = null }, second with { Branch = null }]));
+
+        var info = scanner.FindJob("theta", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal([first.Sha, second.Sha], info!.Commits.Select(commit => commit.Sha));
+        Assert.Equal("run-first", info.Commits[0].RunAttemptId);
+        Assert.Equal("runner-a", info.Commits[0].RunnerId);
+        Assert.Equal(first.Sha, info.Commits[0].ResultSha);
+        Assert.Equal(first.Branch, info.Commits[0].Branch);
+        Assert.Equal("run-second", info.Commits[1].RunAttemptId);
+        Assert.Equal("runner-b", info.Commits[1].RunnerId);
+        Assert.Equal(second.Sha, info.Commits[1].ResultSha);
+        Assert.Equal(second.Branch, info.Commits[1].Branch);
+        Assert.Equal(second.Sha, info.Commit!.Sha);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_LocalThenRemote_PreservesBothGenerations()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("theta-mixed", "3-progress", legacyCommit: null);
+        var local = MakeCommit(
+            "aaaaaaaa", "feat(AGT-2462): local generation", 1,
+            "2026-07-30T10:00:00Z") with { Branch = "task/AGT-2462" };
+        var remote = MakeCommit(
+            "bbbbbbbb", "fix(AGT-2462): remote continuation", 2,
+            "2026-07-30T11:00:00Z") with { Branch = "runner/runner-b/AGT-2462" };
+
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, local));
+
+        var guardedRemote = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2462",
+            remote.Branch!,
+            [new GitCommitInfo(
+                remote.Sha,
+                remote.ShortSha,
+                remote.At,
+                "Runner B",
+                remote.Message,
+                remote.FilesChanged,
+                1,
+                0)]);
+        Assert.True(guardedRemote.Accepted);
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir,
+            "run-remote",
+            "runner-b",
+            remote.Sha,
+            guardedRemote.Commits));
+
+        var info = scanner.FindJob("theta-mixed", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal([local.Sha, remote.Sha], info!.Commits.Select(commit => commit.Sha));
+        Assert.Null(info.Commits[0].RunAttemptId);
+        Assert.Equal(local.Branch, info.Commits[0].Branch);
+        Assert.Equal("run-remote", info.Commits[1].RunAttemptId);
+        Assert.Equal("runner-b", info.Commits[1].RunnerId);
+        Assert.Equal(remote.Sha, info.Commits[1].ResultSha);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_ReplayedGeneration_ReplacesOnlyThatGeneration()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("theta-replay", "3-progress", legacyCommit: null);
+        var first = MakeCommit(
+            "aaaaaaaa", "feat(AGT-2462): first generation", 1,
+            "2026-07-30T10:00:00Z");
+        var staleSecond = MakeCommit(
+            "bbbbbbbb", "fix(AGT-2462): stale second result", 1,
+            "2026-07-30T11:00:00Z");
+        var replayedSecond = MakeCommit(
+            "cccccccc", "fix(AGT-2462): corrected second result", 1,
+            "2026-07-30T11:30:00Z");
+
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-first", "runner-a", first.Sha, [first]));
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-second", "runner-b", staleSecond.Sha, [staleSecond]));
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-second", "runner-b", replayedSecond.Sha, [replayedSecond]));
+
+        var info = scanner.FindJob("theta-replay", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(
+            [first.Sha, replayedSecond.Sha],
+            info!.Commits.Select(commit => commit.Sha));
+        Assert.Equal("run-first", info.Commits[0].RunAttemptId);
+        Assert.Equal("run-second", info.Commits[1].RunAttemptId);
+        Assert.Equal(replayedSecond.Sha, info.Commits[1].ResultSha);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_InheritedCommit_KeepsItsOriginalGeneration()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("iota", "3-progress", legacyCommit: null);
+        var inherited = MakeCommit(
+            "aaaaaaaa", "feat(AGT-2462): inherited work", 1,
+            "2026-07-30T10:00:00Z") with { Branch = "runner/runner-a/AGT-2462" };
+        var continuation = MakeCommit(
+            "bbbbbbbb", "fix(AGT-2462): continuation", 1,
+            "2026-07-30T11:00:00Z") with { Branch = "runner/runner-b/AGT-2462" };
+
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-first", "runner-a", inherited.Sha, [inherited]));
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-second", "runner-b", continuation.Sha, [inherited, continuation]));
+
+        var info = scanner.FindJob("iota", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(2, info!.Commits.Count);
+        Assert.Equal("run-first", info.Commits[0].RunAttemptId);
+        Assert.Equal("runner-a", info.Commits[0].RunnerId);
+        Assert.Equal("run-second", info.Commits[1].RunAttemptId);
+        Assert.Equal("runner-b", info.Commits[1].RunnerId);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_EmptyRejectedGeneration_DoesNotErasePriorGenerations()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("kappa", "3-progress", legacyCommit: null);
+        var first = MakeCommit(
+            "aaaaaaaa", "feat(AGT-2462): safe generation", 1,
+            "2026-07-30T10:00:00Z") with { Branch = "runner/runner-a/AGT-2462" };
+
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-first", "runner-a", first.Sha, [first]));
+
+        var rejected = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2462",
+            "runner/runner-b/AGT-2462",
+            [new GitCommitInfo(
+                new string('f', 40),
+                "ffffffff",
+                DateTime.Parse("2026-07-30T11:00:00Z"),
+                "Runner B",
+                "fix(AGT-9999): foreign task work",
+                1,
+                1,
+                0)]);
+        Assert.False(rejected.Accepted);
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir, "run-foreign", "runner-b", new string('f', 40), rejected.Commits));
+
+        var info = scanner.FindJob("kappa", _watchPath);
+        Assert.NotNull(info);
+        Assert.Single(info!.Commits);
+        Assert.Equal(first.Sha, info.Commits[0].Sha);
+        Assert.Equal("run-first", info.Commits[0].RunAttemptId);
+    }
+
+    [Fact]
+    public void SetRemoteCommitAttribution_LegacyBackfill_CanReplaceUnscopedForeignEvidence()
+    {
+        var legacy = MakeCommit(
+            "ffffffff", "fix(AGT-9999): legacy foreign work", 1,
+            "2026-07-29T10:00:00Z");
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("lambda", "3-progress", legacy);
+
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir,
+            "legacy-backfill:AGT-2462",
+            "runner-a",
+            new string('f', 40),
+            [],
+            replaceUnscopedLegacyAttribution: true));
+
+        var info = scanner.FindJob("lambda", _watchPath);
+        Assert.NotNull(info);
+        Assert.Empty(info!.Commits);
+        Assert.Null(info.Commit);
     }
 
     private string SeedJobFolder(string id, string lane, TaskCommitInfo? legacyCommit)

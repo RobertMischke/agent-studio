@@ -43,7 +43,10 @@ public sealed class CapabilityAdmissionTests
             "claude",
             default);
         var resultSha = new string('2', 40);
-        var resultRef = $"refs/heads/agent-studio/results/{source.Run!.RunId}/{resultSha}";
+        var resultRef = FencedGitRefs.ImmutableResult(
+            source.Run!.RunId,
+            source.Lease!.Fence,
+            resultSha);
         var envelope = new ImmutableResultEnvelope(
             "repo-project",
             source.Run.RunId,
@@ -503,7 +506,10 @@ public sealed class CapabilityAdmissionTests
         string instance)
     {
         var resultSha = new string('5', 40);
-        var resultRef = $"refs/heads/agent-studio/results/{claim.Run!.RunId}/{resultSha}";
+        var resultRef = FencedGitRefs.ImmutableResult(
+            claim.Run!.RunId,
+            claim.Lease!.Fence,
+            resultSha);
         var envelope = new ImmutableResultEnvelope(
             "repo-project",
             claim.Run.RunId,

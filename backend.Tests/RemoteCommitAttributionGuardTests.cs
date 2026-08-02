@@ -43,7 +43,7 @@ public sealed class RemoteCommitAttributionGuardTests
         // canonical remote card lost its attributed commits).
         var result = RemoteCommitAttributionGuard.Attribute(
             "AGT-2445",
-            "refs/heads/agent-studio/results/run_26f460aab3b64600837bd8a54745bd37/3cd7da14403e934f1fc00a4782a24bb799a398a1",
+            "refs/heads/agent-studio/results/run_26f460aab3b64600837bd8a54745bd37/fence-42/3cd7da14403e934f1fc00a4782a24bb799a398a1",
             [Commit("3cd7da14403e934f1fc00a4782a24bb799a398a1", "docs: link research convention")]);
 
         Assert.True(result.Accepted, result.Warning);

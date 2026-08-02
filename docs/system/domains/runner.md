@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-29
+Version: 2026-07-31
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -38,6 +38,18 @@ state.
   start, stop, continue, and mode surface.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
+- `backend/Features/Runner/PromptEnrichmentService.cs`,
+  `backend/Features/Tasks/LeaseEndpoints.cs`, and
+  `runner/RemoteRunPrompt.cs`: shared pre-spawn prompt materialization. Local
+  fresh runs call the service before the pickup lock and in-memory run claim.
+  Remote claims materialize the same report before lease acquisition and lane
+  movement, then compose the exact generated context into the existing
+  `RunSpec.ModeFraming` value. The runner persists that single spec in its slot,
+  keeping mode framing, results-directory guidance, and enrichment on one
+  deterministic prompt path. The authored `prompt.md` is never rewritten. A
+  missing or unwritable report is an admission failure, while selector failure
+  may use the authored prompt only after a `fallback-unenriched` report has been
+  persisted.
 - `backend/Features/Runner/RunTimelineEventFactory.cs`: canonical projection of
   run execution context and terminal run facts into timeline events. Execution
   context preserves model, thinking level, source origin, and exact source
@@ -117,8 +129,8 @@ state.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
-  one-shot remains for diagnostics. It owns no task state. Its only git write to
-  origin is the mandatory teardown salvage branch described below.
+  one-shot remains for diagnostics. It owns no task state. Its Git writes to
+  origin are generation-scoped salvage and immutable result refs described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
 - `task-server/RemoteRunResultCollector.cs`,
@@ -142,7 +154,12 @@ state.
   and task-and-operation-scoped idempotency. Remote completion carries an
   explicit immutable Result-SHA independently of optional salvage-branch
   metadata, and rejected late review reports remain non-authoritative attempt
-  history. Only an exact
+  history. Authority epochs are claim generations. Rotation advances the epoch
+  used by every newly minted run or review lease, while an already leased
+  attempt keeps renewing, writing, and settling against its own older epoch.
+  Its exact lease remains current until settlement, release, expiry, or a
+  higher-fence takeover, including across a Task Server restart. Rotation does
+  not supersede attempts or make their task appear unleased. Only an exact
   acquire-delivery replay is idempotent; a new acquire from the same executor
   cannot renew a live lease without the canonical attempt and fence. Replayed
   review settlements become superseded once another subject is current. It
@@ -153,8 +170,8 @@ state.
   at the Task Server mutation boundary, and canonical Remote completion suppresses
   the generic local auto-commit, drift, provenance, and post-processing queue
   path. Remote completion owns a separate attribution contract: it fetches the
-  pushed `runner/<runner-id>/<task-key>` ref, verifies that its tip equals the
-  fenced `ResultSha`, and writes every commit in the exact
+  pushed `agent-studio/results/<attempt>/fence-<n>/<result-sha>` ref, verifies
+  that its tip equals the fenced `ResultSha`, and writes every commit in the exact
   `merge-base..ResultSha` range to `commits[]` with `automatic` attribution.
   The range is rejected as a whole, left empty, and logged as a warning when
   the delivery branch belongs to another task or any commit subject explicitly
@@ -234,6 +251,14 @@ state.
 
 ## Invariants
 
+- Origin is a fenced side-effect channel. New Remote Run salvage refs include
+  runner, task, attempt, fence, and SHA; immutable result refs include attempt,
+  fence, and SHA. A newer generation never resumes or overwrites an older
+  generation's moving card ref. Known lease-loss and unattributed crash debris
+  publish only under `agent-studio/quarantine/...` and are never a delivery
+  candidate. The Task Server accepts a result handoff only when its exact ref
+  name matches the request's current run, fence, and result SHA. Integration
+  continues to consume only the settled envelope ref.
 - A coding result is delivered only after `git ls-remote` against the repository
   URL from the project registration resolves the published ref to the exact
   local result commit. The configured `origin` push URL is not delivery
@@ -263,6 +288,15 @@ state.
   restart takeover changes both the durable fence and the containment namespace.
   A report is also rejected when its immutable subject no longer owns the task's
   Auto Review lifecycle.
+- Review slot admission is host-load aware and immediate. Before each claim the
+  Review Executor captures a fresh one-minute load sample and admits at most one
+  new slot per poll only when `Load1 < CpuCores * ClaimMaxLoadPerCore`. Missing
+  load or core evidence closes admission. The configured slot ceiling remains a
+  hard upper bound, and an admission decision never cancels an active review.
+  Immutable ReviewPlans normalize every direct or shell-wrapped `dotnet test`
+  command to `-maxcpucount:2 -p:ParallelizeTestCollections=false` before storage
+  or claim. Subject, baseline, retry, and fenced command evidence therefore use
+  the same bounded command.
 - Capability-aware Remote admission (AGT-2186) is Task Server authority, not a
   daemon-local slot reduction. Coding and review services publish versioned,
   expiring health for provider authentication, Git fetch/push, repository
@@ -390,7 +424,20 @@ state.
   host runs it in a detached disposable checkout. No task branch, salvage
   commit, or push is created. Only the children produced by the plan enter the
   coding pipeline. An interrupted assigned card whose lease is free is requeued
-  to Ready inside the next atomic claim before a higher fence is issued.
+  to Ready inside the next atomic claim before a higher fence is issued. Before
+  any `3-progress` to `2-ready` requeue, `TaskTransitionService` queries attempt
+  authority. If the current RunAttempt is Completed and its immutable
+  ResultEnvelope validates, the Ready move is suppressed: the existing review
+  handoff is recreated idempotently, the card advances to `4-auto-review`, and
+  `settled_run_recovered` records the original attempt and envelope digest.
+  A Completed attempt that carries an invalid envelope or digest fails the
+  requested move closed and remains in Progress for repair; it is never made
+  claimable in Ready. Detector-specific retry state, such as a cleared session
+  or staged steer answer, is applied only after authority confirms a genuine
+  Ready transition.
+  This guard is shared by operator moves, stale sweeps, and liveness or crash
+  detectors. Review reissues from later lanes remain deliberate new delivery
+  cycles and are outside this BP-09 guard.
 
 - A terminal sentinel in the final agent reply is authoritative. Sentinel-shaped
   text in streamed tool output, diffs, file content, or stderr is not a verdict.

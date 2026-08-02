@@ -94,8 +94,7 @@ public sealed class AttemptAuthorityService
             var now = _utcNow();
             var current = CurrentRun(taskKey);
             if (current is { State: AttemptLifecycleState.Leased, Lease: not null }
-                && current.Lease.ExpiresAt > now
-                && current.AuthorityEpoch == _state.AuthorityEpoch)
+                && current.Lease.ExpiresAt > now)
             {
                 return new AttemptWriteResult(
                     AttemptWriteStatus.InvalidState,
@@ -110,7 +109,7 @@ public sealed class AttemptAuthorityService
                 current.TerminalAt = now;
                 current.TerminalOutcome = "superseded";
                 current.TerminalReason = current.AuthorityEpoch != _state.AuthorityEpoch
-                    ? "authority epoch changed"
+                    ? "draining authority epoch lease expired and a new executor took authority"
                     : "lease expired and a new executor took authority";
             }
 
@@ -213,7 +212,7 @@ public sealed class AttemptAuthorityService
             // retained for audit and restart reconstruction.
             if (existing is not null && Terminal(existing.State))
             {
-                if (write.AuthorityEpoch != _state.AuthorityEpoch || existing.AuthorityEpoch != _state.AuthorityEpoch)
+                if (!MatchesAttemptEpoch(write.AuthorityEpoch, existing.AuthorityEpoch))
                     return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, existing.AttemptId, RunAttempt: ToDto(existing));
                 if (!IsCurrentRun(existing) || existing.State == AttemptLifecycleState.Superseded)
                     return new AttemptWriteResult(AttemptWriteStatus.Superseded, existing.AttemptId, RunAttempt: ToDto(existing));
@@ -408,7 +407,7 @@ public sealed class AttemptAuthorityService
             {
                 if (!IsCurrentReview(duplicate) || duplicate.State == AttemptLifecycleState.Superseded)
                     return new AttemptWriteResult(AttemptWriteStatus.Superseded, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
-                if (duplicate.AuthorityEpoch != _state.AuthorityEpoch)
+                if (!KnownAttemptEpoch(duplicate.AuthorityEpoch))
                     return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
                 return new AttemptWriteResult(AttemptWriteStatus.Duplicate, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
             }
@@ -574,7 +573,7 @@ public sealed class AttemptAuthorityService
             if (!IsCurrentReview(review) || Terminal(review.State))
                 return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
             var now = _utcNow();
-            if (review.Lease is { } live && live.ExpiresAt > now && review.AuthorityEpoch == _state.AuthorityEpoch)
+            if (review.Lease is { } live && live.ExpiresAt > now)
                 return new AttemptWriteResult(AttemptWriteStatus.InvalidState, review.AttemptId, $"ReviewAttempt is leased by '{live.ExecutorId}'.", ReviewAttempt: ToDto(review));
 
             var fence = NextFenceLocked(review.TaskKey);
@@ -768,8 +767,9 @@ public sealed class AttemptAuthorityService
             var deliveryKey = DeliveryKey("settle", request.Write.IdempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
             {
-                var replayStatus = request.Write.AuthorityEpoch != _state.AuthorityEpoch
-                                   || review.AuthorityEpoch != _state.AuthorityEpoch
+                var replayStatus = !MatchesAttemptEpoch(
+                                       request.Write.AuthorityEpoch,
+                                       review.AuthorityEpoch)
                     ? AttemptWriteStatus.AuthorityEpochMismatch
                     : !IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded
                         ? AttemptWriteStatus.Superseded
@@ -822,28 +822,34 @@ public sealed class AttemptAuthorityService
         }
     }
 
+    /// <summary>
+    /// Starts a new claim generation without revoking already leased attempts.
+    /// Existing leases keep their own epoch and drain through renewal and
+    /// settlement. Every lease minted after this call uses the new epoch.
+    /// </summary>
     public long RotateAuthorityEpoch(string reason)
     {
         lock (_gate)
         {
+            var previousEpoch = _state.AuthorityEpoch;
             _state.AuthorityEpoch++;
             var now = _utcNow();
-            foreach (var run in _state.RunAttempts.Where(x => !Terminal(x.State)))
-            {
-                run.State = AttemptLifecycleState.Superseded;
-                run.TerminalAt = now;
-                run.TerminalOutcome = "superseded";
-                run.TerminalReason = $"Authority epoch changed: {reason}";
-            }
-            foreach (var review in _state.ReviewAttempts.Where(x => !Terminal(x.State)))
-            {
-                review.State = AttemptLifecycleState.Superseded;
-                review.Outcome = ReviewTerminalOutcome.Superseded;
-                review.TerminalAt = now;
-                review.TerminalReason = $"Authority epoch changed: {reason}";
-            }
+            var drainingRuns = _state.RunAttempts.Count(run =>
+                run.State == AttemptLifecycleState.Leased
+                && run.Lease is { } lease
+                && lease.ExpiresAt > now);
+            var drainingReviews = _state.ReviewAttempts.Count(review =>
+                review.State == AttemptLifecycleState.Leased
+                && review.Lease is { } lease
+                && lease.ExpiresAt > now);
             PersistLocked();
-            _logger.LogWarning("attempt-authority-epoch-rotated epoch={Epoch} reason={Reason}", _state.AuthorityEpoch, reason);
+            _logger.LogWarning(
+                "attempt-authority-epoch-rotated previousEpoch={PreviousEpoch} epoch={Epoch} drainingRuns={DrainingRuns} drainingReviews={DrainingReviews} reason={Reason}",
+                previousEpoch,
+                _state.AuthorityEpoch,
+                drainingRuns,
+                drainingReviews,
+                reason);
             return _state.AuthorityEpoch;
         }
     }
@@ -953,7 +959,7 @@ public sealed class AttemptAuthorityService
         var deliveryKey = DeliveryKey(idempotencyScope, write.IdempotencyKey);
         if (run.IdempotencyKeys.Contains(deliveryKey))
             return new AttemptWriteResult(AttemptWriteStatus.Duplicate, run.AttemptId, RunAttempt: ToDto(run));
-        if (write.AuthorityEpoch != _state.AuthorityEpoch || run.AuthorityEpoch != _state.AuthorityEpoch)
+        if (!MatchesAttemptEpoch(write.AuthorityEpoch, run.AuthorityEpoch))
             return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, run.AttemptId, RunAttempt: ToDto(run));
         if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
             return new AttemptWriteResult(AttemptWriteStatus.Superseded, run.AttemptId, RunAttempt: ToDto(run));
@@ -980,7 +986,7 @@ public sealed class AttemptAuthorityService
         string executorId,
         string? leaseId)
     {
-        if (write.AuthorityEpoch != _state.AuthorityEpoch || run.AuthorityEpoch != _state.AuthorityEpoch)
+        if (!MatchesAttemptEpoch(write.AuthorityEpoch, run.AuthorityEpoch))
             return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, run.AttemptId, RunAttempt: ToDto(run));
         if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
             return new AttemptWriteResult(AttemptWriteStatus.Superseded, run.AttemptId, RunAttempt: ToDto(run));
@@ -1004,7 +1010,7 @@ public sealed class AttemptAuthorityService
         if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
             return new AttemptWriteResult(
                 AttemptWriteStatus.Superseded, run.AttemptId, RunAttempt: ToDto(run));
-        if (run.AuthorityEpoch != _state.AuthorityEpoch)
+        if (!KnownAttemptEpoch(run.AuthorityEpoch))
             return new AttemptWriteResult(
                 AttemptWriteStatus.AuthorityEpochMismatch, run.AttemptId, RunAttempt: ToDto(run));
         if (run.State != AttemptLifecycleState.Leased)
@@ -1032,8 +1038,9 @@ public sealed class AttemptAuthorityService
         AttemptWriteReference? write = null,
         string? claimDeliveryKey = null)
     {
-        if (review.AuthorityEpoch != _state.AuthorityEpoch
-            || (write is not null && write.AuthorityEpoch != _state.AuthorityEpoch))
+        if (!KnownAttemptEpoch(review.AuthorityEpoch)
+            || (write is not null
+                && !MatchesAttemptEpoch(write.AuthorityEpoch, review.AuthorityEpoch)))
             return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, review.AttemptId, ReviewAttempt: ToDto(review));
         if (!IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded)
             return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
@@ -1062,7 +1069,7 @@ public sealed class AttemptAuthorityService
         if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, write.AttemptId);
         if (review.IdempotencyKeys.Contains(DeliveryKey(idempotencyScope, write.IdempotencyKey)))
             return new AttemptWriteResult(AttemptWriteStatus.Duplicate, review.AttemptId, ReviewAttempt: ToDto(review));
-        if (write.AuthorityEpoch != _state.AuthorityEpoch || review.AuthorityEpoch != _state.AuthorityEpoch)
+        if (!MatchesAttemptEpoch(write.AuthorityEpoch, review.AuthorityEpoch))
             return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, review.AttemptId, ReviewAttempt: ToDto(review));
         if (!IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded)
             return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
@@ -1408,6 +1415,10 @@ public sealed class AttemptAuthorityService
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty))).ToLowerInvariant();
     private static string DeliveryKey(string scope, string key) => $"{scope}:{Normalize(key)}";
     private static string NewId(string prefix) => prefix + "_" + Guid.NewGuid().ToString("N");
+    private bool KnownAttemptEpoch(long attemptEpoch)
+        => attemptEpoch > 0 && attemptEpoch <= _state.AuthorityEpoch;
+    private bool MatchesAttemptEpoch(long writeEpoch, long attemptEpoch)
+        => writeEpoch == attemptEpoch && KnownAttemptEpoch(attemptEpoch);
     private static bool Terminal(AttemptLifecycleState state) => state is AttemptLifecycleState.Completed or AttemptLifecycleState.Failed or AttemptLifecycleState.Cancelled or AttemptLifecycleState.Superseded;
     private static bool Same(string? left, string? right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     private static string Normalize(string? value) => (value ?? string.Empty).Trim();

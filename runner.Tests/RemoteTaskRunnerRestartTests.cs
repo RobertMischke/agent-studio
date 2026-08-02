@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -265,7 +266,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         // Fakes the CLI through CliBin/CliArgs, which only the legacy engine
         // consumes; the reattach protocol under test is engine-independent.
         ExecEngine = RunnerOptions.ExecEngineLegacy,
-        CliBin = "/bin/sh",
+        CliBin = PosixShell.RequirePath(),
         CliArgs = "-c \"sleep 1; printf 'reattached-output\\n[[TASK_DONE]]\\n'\"",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
@@ -364,7 +365,6 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch { /* best effort */ }
+        ResilientDirectory.TryDelete(_root);
     }
 }

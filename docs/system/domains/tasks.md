@@ -108,6 +108,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
   visible attribution metadata but are not delivery expectations. A matching
   subject with changed files remains a real integration expectation.
+- Remote commit attribution is evaluated independently for every fenced run
+  attempt. Each attempt's verified delivery range passes through the
+  foreign-task guard before persistence. Card-level `commits[]` is the
+  SHA-deduplicated union across generations; a later attempt does not replace
+  earlier valid commits, and inherited SHAs retain their original
+  `runAttemptId`, `runnerId`, delivery `branch`, and proving `resultSha`.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,

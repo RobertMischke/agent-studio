@@ -1374,11 +1374,14 @@
             visible on the main line. No zero-file marker or direct salvage-to-base refspec was involved.
           </td>
           <td>
-            <span class="pill ok">hardened</span> every moving salvage push now passes a fail-closed target allowlist
-            immediately before <code>git push</code>. Only the exact card branch and collision refs derived from it are
-            accepted; <code>main</code>, <code>develop</code>, fully qualified base refs, and other cards are rejected.
-            An end-to-end regression proves teardown from an authoritative <code>main</code> base leaves
-            <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
+            <span class="pill ok">fenced</span> the first hardening layer rejects <code>main</code>, <code>develop</code>,
+            fully qualified base refs, and other cards immediately before <code>git push</code>. BP-01 adds the authority
+            layer: new salvage and result refs include attempt, fence, and SHA, so generations cannot share a push target;
+            the Task Server accepts only the exact current-fence result ref. A generation after known lease loss and
+            unattributed crash debris publish only under <code>agent-studio/quarantine/...</code>. New generations no
+            longer resume a moving card ref automatically. End-to-end regressions prove two generations retain distinct
+            tips and teardown from an authoritative <code>main</code> base leaves <code>origin/main</code> unchanged.
+            Existing main history is documented and was not rewritten.
           </td>
         </tr>
         <tr>
@@ -1400,6 +1403,50 @@
             Human Review with phase <code>integrating</code> until <code>Merged</code> or <code>AlreadyMerged</code>;
             failures return to Review with a hard badge and journal evidence. Integration fields are recomputed from
             attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2460</code><br><span class="small">settled result requeued into a phantom second run</span></td>
+          <td>
+            A Remote completion could persist a Completed RunAttempt and immutable ResultEnvelope, then lose the
+            following Progress-to-Auto-Review lane move during a backend interruption. Operator recovery, the stale
+            sweep, or a liveness detector could subsequently move the residual Progress card to Ready, allowing a
+            second coding attempt to replace the pending review lineage of the already delivered result.
+          </td>
+          <td>
+            Requeue decisions treated a free lease and the folder lane as sufficient evidence. The shared transition
+            boundary did not query attempt authority for a completed, enveloped current run and had no idempotent path
+            to recreate the missing review handoff.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every Progress-to-Ready transition now checks attempt authority.
+            A valid Completed RunAttempt suppresses requeue, recreates the same review subject idempotently, advances
+            the card to Auto Review, queues post-processing, and records <code>settled_run_recovered</code>. Regression
+            coverage exercises operator, sweep, and detector triggers and asserts that exactly one RunAttempt remains.
+            Invalid settled envelopes fail closed in Progress. Liveness and steer-timeout recovery apply retry-only
+            session or pending-intent mutations only when the authority-backed transition actually reaches Ready.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2463</code><br><span class="small">four local restart orphans</span></td>
+          <td>
+            Four local cards remained in <span class="lane">3-progress</span> for 10 to 39 hours after backend restarts
+            killed their CLI child processes. The registered uptime liveness service reported no actionable candidates,
+            so none of the cards reached its automatic Ready recovery terminal.
+          </td>
+          <td>
+            The flat task-storage cutover moved tasks to <code>tasks/&lt;bucket&gt;/&lt;key&gt;</code> and made
+            <code>task.json.state</code> authoritative, but <code>ITaskAccess.ListLaneFolders</code> still enumerated only
+            retired <code>&lt;lane&gt;/&lt;slug&gt;</code> directories. Local liveness, stale-progress, and steer-timeout sweeps
+            therefore saw zero flat-layout Progress tasks even though all registered projects were already in scope.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared lane-folder read now resolves flat task membership from
+            <code>task.json.state</code>, retains the external task ID for active-run matching, and falls back to physical
+            lane folders only for legacy projects. A two-project regression proves old local runs with no live owner move
+            metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
       </tbody>

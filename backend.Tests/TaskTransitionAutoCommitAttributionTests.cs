@@ -326,6 +326,80 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.Contains(status.Files, f => f.Path.EndsWith("resume-work.txt", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("human:operator")]
+    [InlineData("stale-progress-sweep")]
+    [InlineData("run-liveness-detector")]
+    public async Task ProgressRequeue_WithCompletedEnvelopedAttempt_RecoversOriginalDelivery(
+        string trigger)
+    {
+        const string slug = "settled-run-recovery";
+        const string resultSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        WriteJob(TaskStates.Progress, slug);
+        var queue = new RecordingAutoReviewQueue();
+        var deps = BuildDeps(queue);
+        var task = Assert.IsType<TaskInfo>(deps.Scanner.FindJob(slug, _watchPath));
+        var taskKey = !string.IsNullOrWhiteSpace(task.Key)
+            ? task.Key
+            : !string.IsNullOrWhiteSpace(task.TaskKey)
+                ? task.TaskKey
+                : task.Id;
+        var acquired = deps.Authority.AcquireRun(
+            taskKey,
+            "demo-repository",
+            sourceAttemptId: null,
+            executorId: "runner-a",
+            hostId: "host-a",
+            requestedTtlSeconds: 120,
+            idempotencyKey: "claim-1").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "demo-repository",
+            acquired.AttemptId,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            resultSha,
+            "refs/agent-studio/results/settled-run-recovery/attempt-1",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        var settled = deps.Authority.SettleRun(
+            new AttemptWriteReference(
+                acquired.AttemptId,
+                acquired.LastFence,
+                acquired.AuthorityEpoch,
+                "completion-1"),
+            "done",
+            resultSha,
+            reason: null,
+            resultEnvelope: envelope,
+            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+
+        var outcome = await deps.Transitions.MoveAsync(
+            slug,
+            TaskStates.Ready,
+            _watchPath,
+            cause: trigger,
+            suppressProductExecution: true);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var recovered = Assert.IsType<TaskInfo>(deps.Scanner.FindJob(slug, _watchPath));
+        Assert.Equal(TaskStates.AutoReview, recovered.State);
+        Assert.Null(deps.Scanner.ScanAllJobs().SingleOrDefault(job =>
+            string.Equals(job.Id, slug, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(job.State, TaskStates.Ready, StringComparison.Ordinal)));
+        var projection = deps.Authority.GetTaskProjection(taskKey);
+        Assert.Equal(acquired.AttemptId, projection.CurrentRunAttempt!.AttemptId);
+        Assert.Equal(AttemptLifecycleState.Completed, projection.CurrentRunAttempt.State);
+        Assert.Equal(acquired.AttemptId, projection.CurrentReviewAttempt!.SourceRunAttemptId);
+        Assert.Single(projection.RunAttempts);
+        Assert.Equal(resultSha, AgentStudio.Pipeline.ReviewSubjectStore.Read(recovered.FolderPath)!.ResultSha);
+        Assert.Single(queue.Requests);
+        Assert.Contains(
+            new TimelineLog(NullLogger<TimelineLog>.Instance).ReadAll(recovered.FolderPath),
+            evt => evt.Kind == TimelineEventKinds.SettledRunRecovered
+                   && evt.RunId == acquired.AttemptId
+                   && evt.Details!["trigger"] == trigger);
+    }
+
     [Fact]
     public async Task OperatorMoveFromEscalatedToAutoReview_OpensEpochRotatesVerdictAndQueuesFreshGate()
     {
@@ -514,14 +588,18 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
             config,
             NullLogger<OperatorReviewRequeueService>.Instance,
             timeline);
+        var authority = new AttemptAuthorityService(
+            config,
+            NullLogger<AttemptAuthorityService>.Instance);
         var transitions = new TaskTransitionService(
             scanner, states, mutations, git, settings,
             NullLogger<TaskTransitionService>.Instance,
             sessions,
             autoReviewQueue: autoReviewQueue,
             timeline: timeline,
-            operatorReviewRequeue: operatorRequeue);
-        return new Deps(scanner, transitions, git, settings);
+            operatorReviewRequeue: operatorRequeue,
+            attemptAuthority: authority);
+        return new Deps(scanner, transitions, git, settings, authority);
     }
 
     private static ReviewDecisionRecord Decision(ReviewDecisionKind kind)
@@ -609,7 +687,8 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         TaskScannerService Scanner,
         TaskTransitionService Transitions,
         GitService Git,
-        ProjectSettingsService Settings);
+        ProjectSettingsService Settings,
+        AttemptAuthorityService Authority);
 
     private sealed class RecordingAutoReviewQueue : IAutoReviewPostProcessingQueue
     {

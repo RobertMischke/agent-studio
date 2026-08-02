@@ -85,7 +85,9 @@ public sealed class DurableHandoffRecovery
             _log,
             context.RepositoryId,
             context.RepositoryUrl,
-            context.DefaultBranch);
+            context.DefaultBranch,
+            sourceRunAttemptId: outbox.Authority.RunId,
+            fencingToken: outbox.Authority.Fence);
 
         var finalItem = outbox.Items.LastOrDefault(item => item.Kind == "final-result");
         ImmutableResultEnvelope envelope;

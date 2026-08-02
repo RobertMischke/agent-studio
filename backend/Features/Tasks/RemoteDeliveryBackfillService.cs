@@ -99,7 +99,13 @@ public sealed class RemoteDeliveryBackfillService
 
             var attribution = RemoteCommitAttributionGuard.Attribute(key, branch, range.Commits);
             _mutations.SetRunIntegrationBranchOnFolder(task.FolderPath, range.IntegrationBranch!);
-            _mutations.SetRemoteCommitAttributionOnFolder(task.FolderPath, attribution.Commits);
+            _mutations.SetRemoteCommitAttributionOnFolder(
+                task.FolderPath,
+                completion.RunId ?? $"legacy-backfill:{key}",
+                details.GetValueOrDefault("runner") ?? "remote-runner",
+                resultSha,
+                attribution.Commits,
+                replaceUnscopedLegacyAttribution: true);
             if (!attribution.Accepted)
             {
                 warnings.Add($"{key}: {attribution.Warning}");

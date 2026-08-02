@@ -1,0 +1,12 @@
+TAP version 13
+# Subtest: returns the current lease
+not ok 1 - returns the current lease
+  ---
+  duration_ms: 3.284
+  location: '/srv/app/test/lease.test.mjs:12:1'
+  failureType: 'testCodeFailure'
+  ...
+✖ rejects an expired lease (1.921ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
