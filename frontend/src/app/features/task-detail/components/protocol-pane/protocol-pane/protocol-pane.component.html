@@ -161,6 +161,7 @@
         @if (activeInspectorTab() === 'task') {
           <app-task-inspector-tab
             [promptMarkdown]="detail().promptMarkdown || ''"
+            [enrichmentReport]="detail().enrichmentReport ?? null"
             [refinements]="runTimeline()?.refinements ?? []"
             [jobId]="detail().info.id"
             [watchPath]="detail().info.watchPath" />

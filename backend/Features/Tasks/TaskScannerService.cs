@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Runner;
 
 namespace AgentStudio.Tasks;
 
@@ -652,6 +653,7 @@ public class TaskScannerService : ITaskScanner
         {
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
+            EnrichmentReport = PromptEnrichmentService.ReadReport(dir),
             PromptHistory = ReadPromptHistory(dir),
             TitleHistory = TitleHistoryLog.Read(dir),
             StatusMarkdown = statusMd,

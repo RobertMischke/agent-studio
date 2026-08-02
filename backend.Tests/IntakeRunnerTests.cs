@@ -317,7 +317,9 @@ public class IntakeRunnerTests : IDisposable
         Assert.Contains("git", manifest.Areas);
         Assert.Contains("runner", manifest.Areas);
         Assert.Contains(manifest.Constraints, c => c.Id == "git-handling-api-not-cli");
-        Assert.Contains(manifest.Constraints, c => c.Id == "orchestrator-state-machine-authority");
+        Assert.Contains(manifest.Omissions,
+            omission => omission.Id == "orchestrator-state-machine-authority"
+                        && omission.Reason == "optional-block-limit");
     }
 
     [Fact]
@@ -369,7 +371,7 @@ public class IntakeRunnerTests : IDisposable
             constraint => constraint.Id == "style-guide:angular-components");
         Assert.Equal("docs/quality/angular-components.md", selected.Source);
         Assert.Contains("OnPush", selected.Text);
-        Assert.Equal("constraint-selector-v3-budgeted-style-guides", manifest.Selector);
+        Assert.Equal(IntakeRunner.EnrichmentSelector, manifest.Selector);
         Assert.Equal("snapshot-1", manifest.StyleGuideSnapshotId);
         Assert.Contains("Style-guide snapshot: `snapshot-1`", IntakeRunner.RenderEnrichedContextMarkdown(manifest));
     }
@@ -489,6 +491,32 @@ public class IntakeRunnerTests : IDisposable
         Assert.Equal(first.Omissions.Select(omission => omission.Id), second.Omissions.Select(omission => omission.Id));
         Assert.Equal(first.AdditionalOmissionCount, second.AdditionalOmissionCount);
         Assert.Contains("Omitted relevant constraints", rendered);
+        Assert.True(first.Constraints.Count(constraint => !constraint.Mandatory)
+                    <= IntakeRunner.MaxOptionalEnrichmentBlocks);
+        Assert.Equal(1_500, first.EstimatedTokenBudget);
+        Assert.Equal(2, first.OptionalBlockLimit);
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_DelegationTask_IncludesDelegationEconomy()
+    {
+        var target = new TaskInfo
+        {
+            Id = "delegation-card",
+            Title = "Delegate independent analysis to sub-agents",
+            State = TaskStates.Ready,
+            Tags = ["runner", "multi-agent"]
+        };
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Use bounded delegation for independent research, then merge the evidence in one orchestrator.");
+
+        Assert.Contains("delegation", manifest.Areas);
+        Assert.Contains(manifest.Constraints, constraint => constraint.Id == "delegation-economy");
+        Assert.Contains(manifest.Constraints, constraint =>
+            constraint.Id == "repo-instructions-source"
+            && constraint.Mandatory);
     }
 
     // ---- RunForJob integration: phase transitions + sidecar ------------------
@@ -623,7 +651,7 @@ public class IntakeRunnerTests : IDisposable
             IntakeRunner.EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
         Assert.True(File.Exists(artifactPath));
         var artifact = File.ReadAllText(artifactPath);
-        Assert.Contains("Intake-enriched context", artifact);
+        Assert.Contains("Prompt enrichment", artifact);
         Assert.Contains("git-handling-api-not-cli", artifact);
 
         var sidecar = ReadLifecycleJson("git-card");

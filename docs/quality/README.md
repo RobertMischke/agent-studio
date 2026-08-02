@@ -91,9 +91,12 @@ The catalogue is a thread-safe five-minute snapshot shared by the API and
 Preparation intake. Responses include `snapshotId`, `capturedAtUtc`, and
 `refreshAfterUtc`; an operator can request a fresh bounded scan with
 `?refresh=true`. Intake records the same snapshot id in its enrichment manifest.
-Its rendered prompt context has a hard 8,000-character planning ceiling
-(approximately 2,000 tokens), deterministic selection order, and a bounded
-omissions manifest when relevant rules do not fit.
+The pre-spawn renderer applies a 6,000-character ceiling
+(approximately 1,500 tokens), at most two optional blocks, deterministic
+selection order, and a bounded omissions manifest when relevant rules do not
+fit. Mandatory project policy is accounted separately from the optional-block
+allowance. Every decision is persisted in `enrichment-report.json` and shown
+beside the authored prompt in the Task tab.
 
 See [Adding or changing a rule](adding-a-rule.md) before expanding the family.
 Interactive alternatives or uncertain design questions belong in a

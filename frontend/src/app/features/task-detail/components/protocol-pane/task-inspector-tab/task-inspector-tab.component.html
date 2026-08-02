@@ -1,11 +1,171 @@
 <section class="task-tab" data-testid="task-tab-content">
-  <div class="task-tab__prompt" data-testid="task-tab-prompt">
-    @if (promptMarkdown().trim()) {
-      <cac-markdown
-        [source]="promptMarkdown()"
-        [resolveImageSrc]="imageResolver()" />
-    } @else {
-      <p class="task-tab__empty">No task description is available.</p>
+  <div class="task-tab__layout">
+    <article class="task-tab__prompt" data-testid="task-tab-prompt">
+      @if (promptMarkdown().trim()) {
+        <cac-markdown
+          [source]="promptMarkdown()"
+          [resolveImageSrc]="imageResolver()" />
+      } @else {
+        <p class="task-tab__empty">No task description is available.</p>
+      }
+    </article>
+
+    @if (enrichmentReport(); as report) {
+      <aside
+        class="enrichment-report"
+        [attr.data-status]="report.status"
+        data-testid="enrichment-report"
+        aria-labelledby="enrichment-report-title">
+        <header class="enrichment-report__header">
+          <div>
+            <p class="enrichment-report__eyebrow">Preprocessing</p>
+            <h3 id="enrichment-report-title">Enrichment report</h3>
+          </div>
+          <span class="enrichment-report__status" data-testid="enrichment-report-status">
+            <span class="enrichment-report__dot" aria-hidden="true"></span>
+            {{ statusLabel(report.status) }}
+          </span>
+        </header>
+
+        <dl class="enrichment-report__tokens" aria-label="Prompt token attribution">
+          <div>
+            <dt>Original</dt>
+            <dd>{{ report.tokens.original }}</dd>
+          </div>
+          <div>
+            <dt>Appended</dt>
+            <dd>+{{ report.tokens.appended }}</dd>
+          </div>
+          <div>
+            <dt>Final</dt>
+            <dd>{{ report.tokens.final }}</dd>
+          </div>
+        </dl>
+
+        <div class="enrichment-report__ledger" data-testid="enrichment-ledger">
+          <span>Selector: {{ report.tokens.preprocessingInput + report.tokens.preprocessingOutput }} tokens</span>
+          <span>Input estimate: {{ formatCost(report) }}</span>
+        </div>
+
+        <section class="enrichment-report__section">
+          <h4>Detected</h4>
+          <div class="enrichment-report__chips">
+            @for (area of report.detectedAreas; track area) {
+              <span>{{ area }}</span>
+            } @empty {
+              <span>general</span>
+            }
+          </div>
+        </section>
+
+        <section class="enrichment-report__section">
+          <h4>Decisions</h4>
+          <ul class="enrichment-report__decisions">
+            @for (candidate of report.candidates; track candidate.id) {
+              <li>
+                <span>{{ candidate.title || candidate.id }}</span>
+                <small>{{ candidate.decision }} · {{ candidate.reason }} · ~{{ candidate.estimatedTokens }} tokens</small>
+                <small>{{ candidate.source }}</small>
+              </li>
+            } @empty {
+              <li class="enrichment-report__quiet">No matching optional context.</li>
+            }
+          </ul>
+        </section>
+
+        @if (report.appendedBlocks.length > 0) {
+          <section class="enrichment-report__section">
+            <h4>Appended context</h4>
+            @for (block of report.appendedBlocks; track block.id) {
+              <details class="enrichment-report__block">
+                <summary>
+                  <span>{{ block.title }}</span>
+                  <small>~{{ block.estimatedTokens }} tokens</small>
+                </summary>
+                <p>{{ block.source }} · rev {{ block.revision }}</p>
+                <pre>{{ block.exactContent }}</pre>
+              </details>
+            }
+          </section>
+        }
+
+        <details class="enrichment-report__audit">
+          <summary>Audit details</summary>
+          <dl>
+            <div>
+              <dt>Enrichment ID</dt>
+              <dd>{{ report.enrichmentId }}</dd>
+            </div>
+            <div>
+              <dt>Policy</dt>
+              <dd>{{ report.policy.id }} v{{ report.policy.version }} · {{ report.policy.projectEnabled ? 'enabled' : 'disabled' }}</dd>
+            </div>
+            <div>
+              <dt>Selector</dt>
+              <dd>{{ report.policy.selector }}</dd>
+            </div>
+            <div>
+              <dt>Limits</dt>
+              <dd>{{ report.policy.tokenBudget }} tokens · {{ report.policy.optionalBlockLimit }} optional blocks</dd>
+            </div>
+            <div>
+              <dt>Selector ledger</dt>
+              <dd>
+                in {{ report.tokens.preprocessingInput }},
+                out {{ report.tokens.preprocessingOutput }},
+                cache read {{ report.tokens.preprocessingCacheRead }},
+                cache write {{ report.tokens.preprocessingCacheCreation }}
+              </dd>
+            </div>
+            <div>
+              <dt>Cost</dt>
+              <dd>
+                selector {{ formatUsd(report.cost.selectorUsd) }} ·
+                appended input {{ formatCost(report) }}
+                @if (report.cost.estimateModel) {
+                  on {{ report.cost.estimateModel }}
+                }
+              </dd>
+            </div>
+            @if (report.cost.unknownReason) {
+              <div>
+                <dt>Cost note</dt>
+                <dd>{{ report.cost.unknownReason }}</dd>
+              </div>
+            }
+            @if (report.policy.styleGuideSnapshotId) {
+              <div>
+                <dt>Style snapshot</dt>
+                <dd>{{ report.policy.styleGuideSnapshotId }}</dd>
+              </div>
+            }
+            <div>
+              <dt>Original SHA-256</dt>
+              <dd>{{ report.originalPromptSha256 }}</dd>
+            </div>
+            <div>
+              <dt>Enriched SHA-256</dt>
+              <dd>{{ report.enrichedPromptSha256 }}</dd>
+            </div>
+            <div>
+              <dt>Generated</dt>
+              <dd>{{ formatDateTime(report.generatedAtUtc) }} · {{ report.timingMs }} ms</dd>
+            </div>
+          </dl>
+        </details>
+
+        @if (report.warnings.length > 0 || report.errors.length > 0) {
+          <section class="enrichment-report__section enrichment-report__messages">
+            <h4>Messages</h4>
+            @for (message of report.errors; track message) {
+              <p class="enrichment-report__message enrichment-report__message--error">{{ message }}</p>
+            }
+            @for (message of report.warnings; track message) {
+              <p class="enrichment-report__message">{{ message }}</p>
+            }
+          </section>
+        }
+      </aside>
     }
   </div>
 

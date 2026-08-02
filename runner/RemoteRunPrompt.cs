@@ -30,24 +30,19 @@ public static class RemoteRunPrompt
         "This is required, not optional. The orchestrator parses this token; " +
         "without it the run lands in review as missing-terminal-sentinel.";
 
-    public static string Build(string taskPrompt) => Build(taskPrompt, modeFraming: null, resultsDirectory: null);
+    public static string Build(string taskPrompt) =>
+        Build(taskPrompt, modeFraming: null, resultsDirectory: null);
 
     /// <summary>
-    /// Builds the remote prompt with the server-rendered per-mode framing block
-    /// (read-only / research / concept / web contracts) between the task body and
-    /// the standing instructions - the same relative position the local runner
-    /// gives its <c>{{mode_framing}}</c> slot ("read after the task above").
-    /// A null/empty framing keeps the historical verbatim behaviour.
-    /// <para>
-    /// <paramref name="resultsDirectory"/> is the host-absolute collected-results
-    /// directory (also exported as <c>JOB_RESULTS_DIR</c>). The local runner's
-    /// template names the job folder for evidence; a standalone remote agent has
-    /// no job folder in sight, and AGT-2442 proved that a relative
-    /// <c>results/</c> path silently lands in the disposable worktree and dies
-    /// with it. Only files in this directory are shipped to the task server.
-    /// </para>
+    /// Builds the remote prompt with the server-composed per-mode framing block
+    /// between the task body and the standing instructions. Prompt enrichment is
+    /// one marked block inside this framing value, rather than a parallel prompt
+    /// argument or a separately mutable runner-side channel.
     /// </summary>
-    public static string Build(string taskPrompt, string? modeFraming, string? resultsDirectory = null)
+    public static string Build(
+        string taskPrompt,
+        string? modeFraming,
+        string? resultsDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(taskPrompt);
         var framingBlock = string.IsNullOrWhiteSpace(modeFraming)
