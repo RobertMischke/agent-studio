@@ -53,6 +53,19 @@ public interface ICliExecutionService
     CleanContextPreparation? PrepareCleanContext(string workingDirectory) => null;
 
     /// <summary>
+    /// The task's still-live clean-context home (the isolated
+    /// CLAUDE_CONFIG_DIR / CODEX_HOME all attempts of this task share), or null
+    /// when none is registered or its directory no longer exists. Attempts and
+    /// recoveries of the same run reuse one home so CLI session state stays
+    /// resumable across them (refresh only at run boundaries — MKT-8 / WEB-14
+    /// "Codex rollout state loss"); the runner consults this before planning a
+    /// resume so a clean-context Codex session whose rollout lives in this home
+    /// is actually resumed instead of being discarded into full-context
+    /// recovery. Default null keeps stubs and shared-only backends compilable.
+    /// </summary>
+    string? GetPersistentCleanContextHome(string jobKey) => null;
+
+    /// <summary>
     /// Terminate the live process for <paramref name="taskKey"/>. The
     /// <paramref name="reason"/> flows into <see cref="AgentStudio.Shared.RunStatusClassifier"/>
     /// so user pauses, follow-up pause-and-send, and watchdog kills are

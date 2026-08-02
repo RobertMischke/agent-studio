@@ -13,10 +13,15 @@ namespace AgentStudio.Runner;
 public sealed class AttemptAuthorityService
 {
     public const string RelativePath = ".metadata/attempt-authority.json";
+    public const int DefaultTerminalRetentionCount = 2_000;
     public const int ReviewInfrastructureRetryBudget = 3;
     public const string UnmaterializableReviewSubjectReason = "review-subject-unmaterialisierbar";
+    private const int CurrentSchemaVersion = 4;
+    private const int ArchiveSchemaVersion = 1;
+    private const string ArchiveFilePattern = "attempt-authority.archive-*.json";
     private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan LegacyEnvelopeTerminalizeGrace = TimeSpan.FromMinutes(15);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -27,6 +32,7 @@ public sealed class AttemptAuthorityService
     private readonly ILogger<AttemptAuthorityService> _logger;
     private readonly Func<DateTime> _utcNow;
     private readonly IAtomicJsonFileWriter _writer;
+    private readonly int _terminalRetentionCount;
     private AuthorityState _state;
 
     public AttemptAuthorityService(
@@ -41,8 +47,15 @@ public sealed class AttemptAuthorityService
         var root = configuration["TaskRepository"];
         _path = string.IsNullOrWhiteSpace(root) ? null : Path.Combine(root, RelativePath);
         _state = Load();
+        var requiresCompactionMigration = _state.SchemaVersion < CurrentSchemaVersion;
         NormalizeLoadedState();
         if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
+        _terminalRetentionCount = configuration.GetValue<int?>("AttemptAuthority:TerminalRetentionCount")
+            ?? DefaultTerminalRetentionCount;
+        if (_terminalRetentionCount <= 0)
+            throw new InvalidDataException("AttemptAuthority:TerminalRetentionCount must be greater than zero.");
+        if (requiresCompactionMigration && _path is not null)
+            PersistLocked(forceCompaction: true);
     }
 
     internal AttemptAuthorityService(ILogger<AttemptAuthorityService> logger, Func<DateTime>? utcNow = null)
@@ -539,7 +552,25 @@ public sealed class AttemptAuthorityService
             if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, Normalize(attemptId));
             var deliveryKey = DeliveryKey("claim", idempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
-                return ClassifyReviewLeaseReplay(review, executorId, claimDeliveryKey: deliveryKey);
+            {
+                var replay = ClassifyReviewLeaseReplay(review, executorId, claimDeliveryKey: deliveryKey);
+                // A crash-restarted executor re-claims with the same identity and
+                // therefore the same delivery key. Once the recorded lease is dead
+                // there is no surviving authority to replay - this is a takeover
+                // request, so fall through and mint a fresh lease instead of
+                // bouncing the claim poll with LeaseExpired (which crash-looped
+                // the review daemon: claim -> run -> lease dies -> 409 -> restart).
+                if (replay.Status != AttemptWriteStatus.LeaseExpired)
+                    return replay;
+                // BUT: if the dead lease was claimed with exactly this delivery
+                // key, the claiming PROCESS is still alive (a restart changes the
+                // instance id and thus the key) and its executor may still be
+                // running - minting a fresh fence here would double-execute the
+                // review and discard the first run as StaleFence. Keep answering
+                // LeaseExpired; the daemon's in-flight dedup skips the re-claim.
+                if (Same(review.CurrentClaimDeliveryKey, deliveryKey))
+                    return replay;
+            }
             if (!IsCurrentReview(review) || Terminal(review.State))
                 return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
             var now = _utcNow();
@@ -587,6 +618,14 @@ public sealed class AttemptAuthorityService
             var candidate = _state.ReviewAttempts
                 .Where(review => IsCurrentReview(review) && !Terminal(review.State))
                 .Where(review => review.Lease is null || review.Lease.ExpiresAt <= now)
+                // A subject whose source run carries no Result-Envelope cannot be
+                // materialized by any executor. Inside the terminalization grace it
+                // is not yet evidence of a pre-plane completion either (the
+                // completion ingest may still be in flight), so it is neither killed
+                // nor handed out - it waits for its envelope or for the grace to run
+                // out. Handing it out would burn a fenced attempt on a subject the
+                // executor provably cannot check out.
+                .Where(review => !IsUnmaterializableWithinGrace(review, now))
                 .OrderBy(review => review.CreatedAt)
                 .FirstOrDefault();
             if (candidate is null)
@@ -601,6 +640,16 @@ public sealed class AttemptAuthorityService
                 instanceId);
         }
     }
+
+    /// <summary>
+    /// True while a ReviewAttempt has no materializable subject (its source run
+    /// carries no Result-Envelope) but is still young enough that the missing
+    /// envelope may simply be an in-flight completion ingest. Caller must hold
+    /// <see cref="_gate"/>.
+    /// </summary>
+    private bool IsUnmaterializableWithinGrace(ReviewAttemptRecord review, DateTime now)
+        => FindRun(review.SourceRunAttemptId)?.ResultEnvelope is null
+           && now - review.CreatedAt < LegacyEnvelopeTerminalizeGrace;
 
     /// <summary>
     /// Returns whether another infrastructure retry may be created for the
@@ -652,6 +701,23 @@ public sealed class AttemptAuthorityService
                 if (run?.ResultEnvelope is not null)
                     continue;
 
+                // Grace window: the claim poll races the completion ingest, and
+                // during a runner rollout in-flight old-binary completions land
+                // without an envelope. A fresh review must not be killed by the
+                // very first poll; only reviews that stayed envelope-less past
+                // the grace are terminal evidence of a pre-plane completion.
+                if (now - review.CreatedAt < LegacyEnvelopeTerminalizeGrace)
+                    continue;
+
+                // Never kill a review an executor is actively holding. The live
+                // lease is running work, and terminalizing under it would clear
+                // the lease and flip the state while its fenced report is still
+                // on the way - the executor would then lose to a Superseded /
+                // fence mismatch instead of reporting its own outcome. The
+                // terminalization is picked up once the lease has expired.
+                if (review.Lease is { } lease && lease.ExpiresAt > now)
+                    continue;
+
                 if (!Terminal(review.State))
                 {
                     review.State = AttemptLifecycleState.Failed;
@@ -674,6 +740,22 @@ public sealed class AttemptAuthorityService
                     && Same(review.TerminalReason, UnmaterializableReviewSubjectReason))
                 .Select(ToDto)
                 .ToList();
+        }
+    }
+
+    /// <summary>
+    /// Test seam: backdates a review's CreatedAt past the legacy-envelope
+    /// terminalization grace so the terminalize path can be exercised without
+    /// waiting out the real clock. Never called in production.
+    /// </summary>
+    internal void AgeReviewForTests(string reviewAttemptId, TimeSpan age)
+    {
+        lock (_gate)
+        {
+            var review = FindReview(reviewAttemptId)
+                ?? throw new InvalidOperationException($"Unknown review '{reviewAttemptId}'.");
+            review.CreatedAt -= age;
+            PersistLocked();
         }
     }
 
@@ -793,26 +875,67 @@ public sealed class AttemptAuthorityService
         lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
     }
 
-    public AttemptAuthorityProjection GetTaskProjection(string taskKey)
+    public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
+        var key = Normalize(taskKey);
+        long authorityEpoch;
+        RunAttemptDto? currentRun;
+        ReviewAttemptDto? currentReview;
+        ReviewSubjectDto? currentSubject;
+        List<RunAttemptDto> runs;
+        List<ReviewAttemptDto> reviews;
         lock (_gate)
         {
-            var key = Normalize(taskKey);
-            var runs = _state.RunAttempts.Where(x => Same(x.TaskKey, key)).Select(ToDto).ToList();
-            var reviews = _state.ReviewAttempts.Where(x => Same(x.TaskKey, key)).Select(ToDto).ToList();
-            var currentRun = CurrentRun(key);
-            var currentReview = CurrentReview(key);
-            _state.CurrentSubjectByTask.TryGetValue(key, out var subject);
-            return new AttemptAuthorityProjection(
-                key,
-                _state.AuthorityEpoch,
-                currentRun is null ? null : ToDto(currentRun),
-                subject is null ? null : ToDto(subject),
-                currentReview is null ? null : ToDto(currentReview),
-                runs,
-                reviews,
-                runs.Count == 0 && reviews.Count == 0);
+            authorityEpoch = _state.AuthorityEpoch;
+            currentRun = CurrentRun(key) is { } run ? ToDto(run) : null;
+            currentReview = CurrentReview(key) is { } review ? ToDto(review) : null;
+            currentSubject = _state.CurrentSubjectByTask.TryGetValue(key, out var subject)
+                ? ToDto(subject)
+                : null;
+            runs = _state.RunAttempts
+                .Where(x => Same(x.TaskKey, key))
+                .Select(ToDto)
+                .ToList();
+            reviews = _state.ReviewAttempts
+                .Where(x => Same(x.TaskKey, key))
+                .Select(ToDto)
+                .ToList();
         }
+
+        // Archive I/O is an explicit history operation and must never hold the
+        // authority gate needed by claim, lease, and report traffic. Taking the
+        // live snapshot first also prevents a concurrent compaction from
+        // disappearing between an earlier archive read and the live snapshot.
+        if (includeArchived)
+        {
+            var archives = LoadArchivesForHistory();
+            runs = runs
+                .Concat(archives
+                    .SelectMany(archive => archive.RunAttempts)
+                    .Where(x => Same(x.TaskKey, key))
+                    .Select(ToDto))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            reviews = reviews
+                .Concat(archives
+                    .SelectMany(archive => archive.ReviewAttempts)
+                    .Where(x => Same(x.TaskKey, key))
+                    .Select(ToDto))
+                .DistinctBy(x => x.AttemptId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        runs = runs.OrderBy(x => x.CreatedAt).ToList();
+        reviews = reviews.OrderBy(x => x.CreatedAt).ToList();
+        return new AttemptAuthorityProjection(
+            key,
+            authorityEpoch,
+            currentRun,
+            currentSubject,
+            currentReview,
+            runs,
+            reviews,
+            runs.Count == 0 && reviews.Count == 0);
     }
 
     private AttemptWriteResult ValidateRunWriteLocked(
@@ -1031,22 +1154,9 @@ public sealed class AttemptAuthorityService
             _state.CurrentSubjectByTask ?? [], StringComparer.OrdinalIgnoreCase);
         _state.RunAttempts ??= [];
         _state.ReviewAttempts ??= [];
-        foreach (var run in _state.RunAttempts)
-        {
-            run.IdempotencyKeys ??= [];
-            if (migrateUnscopedIdempotency)
-                run.IdempotencyKeys = ExpandLegacyDeliveryKeys(
-                    run.IdempotencyKeys, ["acquire", "renew", "release", "write", "evidence", "settle"]);
-            run.EvidenceDigests ??= [];
-        }
+        NormalizeRecords(_state.RunAttempts, _state.ReviewAttempts, migrateUnscopedIdempotency);
         foreach (var review in _state.ReviewAttempts)
         {
-            review.IdempotencyKeys ??= [];
-            if (migrateUnscopedIdempotency)
-                review.IdempotencyKeys = ExpandLegacyDeliveryKeys(
-                    review.IdempotencyKeys, ["create", "renew", "claim", "settle"]);
-            review.Reports ??= [];
-            review.Subject.EvidenceDigestInputs ??= [];
             if (Blank(review.CurrentClaimDeliveryKey)
                 && review.State == AttemptLifecycleState.Leased)
             {
@@ -1061,7 +1171,7 @@ public sealed class AttemptAuthorityService
                     review.CurrentClaimDeliveryKey = historicalClaims[0];
             }
         }
-        _state.SchemaVersion = 2;
+        _state.SchemaVersion = CurrentSchemaVersion;
     }
 
     private static HashSet<string> ExpandLegacyDeliveryKeys(
@@ -1070,11 +1180,12 @@ public sealed class AttemptAuthorityService
         .SelectMany(key => scopes.Select(scope => DeliveryKey(scope, key)))
         .ToHashSet(StringComparer.Ordinal);
 
-    private void PersistLocked()
+    private void PersistLocked(bool forceCompaction = false)
     {
         if (_path is null) return;
         try
         {
+            CompactTerminalAttemptsLocked(forceCompaction);
             _writer.Write(_path, JsonSerializer.Serialize(_state, JsonOptions));
         }
         catch
@@ -1086,6 +1197,208 @@ public sealed class AttemptAuthorityService
             NormalizeLoadedState();
             if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
             throw;
+        }
+    }
+
+    private void CompactTerminalAttemptsLocked(bool force)
+    {
+        var now = _utcNow();
+        var newestTerminalAttempts = _state.RunAttempts
+            .Where(run => Terminal(run.State))
+            .Select(run => new TerminalAttemptReference(
+                run.AttemptId,
+                IsReview: false,
+                run.TerminalAt ?? run.CreatedAt,
+                run.CreatedAt))
+            .Concat(_state.ReviewAttempts
+                .Where(review => Terminal(review.State))
+                .Select(review => new TerminalAttemptReference(
+                    review.AttemptId,
+                    IsReview: true,
+                    review.TerminalAt ?? review.CreatedAt,
+                    review.CreatedAt)))
+            .OrderByDescending(attempt => attempt.TerminalAt)
+            .ThenByDescending(attempt => attempt.CreatedAt)
+            .ThenByDescending(attempt => attempt.AttemptId, StringComparer.Ordinal)
+            .Take(_terminalRetentionCount)
+            .ToList();
+        var terminalAttemptCount = _state.RunAttempts.Count(run => Terminal(run.State))
+            + _state.ReviewAttempts.Count(review => Terminal(review.State));
+        if (terminalAttemptCount <= _terminalRetentionCount)
+        {
+            if (force)
+                _state.LastCompactedAt = now;
+            return;
+        }
+        if (!force && _state.LastCompactedAt?.Date >= now.Date)
+            return;
+
+        var retainedRunIds = newestTerminalAttempts
+            .Where(attempt => !attempt.IsReview)
+            .Select(attempt => attempt.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retainedReviewIds = newestTerminalAttempts
+            .Where(attempt => attempt.IsReview)
+            .Select(attempt => attempt.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var protectedReviewIds = new HashSet<string>(
+            _state.CurrentReviewByTask.Values,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var review in _state.ReviewAttempts.Where(review => !Terminal(review.State)))
+            protectedReviewIds.Add(review.AttemptId);
+
+        var pendingReviewIds = new Stack<(string AttemptId, int Depth)>(
+            protectedReviewIds.Select(id => (id, 0)));
+        while (pendingReviewIds.TryPop(out var pending))
+        {
+            var review = FindReview(pending.AttemptId);
+            if (review is null
+                || Blank(review.SourceReviewAttemptId)
+                || pending.Depth >= ReviewInfrastructureRetryBudget)
+                continue;
+            if (protectedReviewIds.Add(review.SourceReviewAttemptId!))
+                pendingReviewIds.Push((review.SourceReviewAttemptId!, pending.Depth + 1));
+        }
+
+        var archivedReviews = _state.ReviewAttempts
+            .Where(review => EligibleForArchive(
+                review.State,
+                retainedReviewIds.Contains(review.AttemptId),
+                protectedReviewIds.Contains(review.AttemptId)))
+            .ToList();
+        var archivedReviewIds = archivedReviews
+            .Select(review => review.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var retainedReviews = _state.ReviewAttempts
+            .Where(review => !archivedReviewIds.Contains(review.AttemptId))
+            .ToList();
+        var protectedRunIds = new HashSet<string>(
+            _state.CurrentRunByTask.Values,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var run in _state.RunAttempts.Where(run => !Terminal(run.State)))
+            protectedRunIds.Add(run.AttemptId);
+        foreach (var review in retainedReviews)
+            protectedRunIds.Add(review.SourceRunAttemptId);
+        foreach (var subject in _state.CurrentSubjectByTask.Values)
+            protectedRunIds.Add(subject.SourceRunAttemptId);
+
+        var archivedRuns = _state.RunAttempts
+            .Where(run => EligibleForArchive(
+                run.State,
+                retainedRunIds.Contains(run.AttemptId),
+                protectedRunIds.Contains(run.AttemptId)))
+            .ToList();
+
+        if (archivedRuns.Count > 0 || archivedReviews.Count > 0)
+        {
+            var archivePath = ArchivePath(now);
+            var archive = new AuthorityArchive
+            {
+                SchemaVersion = ArchiveSchemaVersion,
+                ArchivedAt = now,
+                RunAttempts = archivedRuns
+                .OrderBy(run => run.CreatedAt)
+                .ToList(),
+                ReviewAttempts = archivedReviews
+                .OrderBy(review => review.CreatedAt)
+                .ToList(),
+            };
+            // A same-day file can only precede the durable live-file update
+            // when an earlier rotation was interrupted. The live file still
+            // contains the complete retry set in that case, so atomically
+            // replacing the archive is both recoverable and avoids archive
+            // reads while a lease or report mutation holds the authority gate.
+            _writer.Write(archivePath, JsonSerializer.Serialize(archive, JsonOptions));
+
+            var archivedRunIds = archivedRuns
+                .Select(run => run.AttemptId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _state.RunAttempts.RemoveAll(run => archivedRunIds.Contains(run.AttemptId));
+            _state.ReviewAttempts.RemoveAll(review => archivedReviewIds.Contains(review.AttemptId));
+            _logger.LogInformation(
+                "attempt-authority-compacted archive={ArchivePath} runs={RunCount} reviews={ReviewCount} terminalRetentionCount={TerminalRetentionCount}",
+                archivePath,
+                archivedRuns.Count,
+                archivedReviews.Count,
+                _terminalRetentionCount);
+        }
+
+        _state.LastCompactedAt = now;
+    }
+
+    private static bool EligibleForArchive(
+        AttemptLifecycleState state,
+        bool retainedByCount,
+        bool protectedRecord)
+        => !protectedRecord
+           && Terminal(state)
+           && !retainedByCount;
+
+    private string ArchivePath(DateTime archivedAt)
+    {
+        var directory = Path.GetDirectoryName(_path)
+            ?? throw new InvalidOperationException("Attempt authority path has no parent directory.");
+        return Path.Combine(
+            directory,
+            $"attempt-authority.archive-{archivedAt:yyyy-MM-dd}.json");
+    }
+
+    private IReadOnlyList<AuthorityArchive> LoadArchivesForHistory()
+    {
+        if (_path is null)
+            return [];
+        var directory = Path.GetDirectoryName(_path);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            return [];
+        return Directory.EnumerateFiles(directory, ArchiveFilePattern)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(LoadArchive)
+            .ToList();
+    }
+
+    private static AuthorityArchive LoadArchive(string path)
+    {
+        try
+        {
+            var archive = JsonSerializer.Deserialize<AuthorityArchive>(
+                File.ReadAllText(path),
+                JsonOptions) ?? new AuthorityArchive();
+            archive.RunAttempts ??= [];
+            archive.ReviewAttempts ??= [];
+            NormalizeRecords(archive.RunAttempts, archive.ReviewAttempts, migrateUnscopedIdempotency: false);
+            return archive;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Attempt authority archive '{path}' could not be loaded.",
+                ex);
+        }
+    }
+
+    private static void NormalizeRecords(
+        IEnumerable<RunAttemptRecord> runs,
+        IEnumerable<ReviewAttemptRecord> reviews,
+        bool migrateUnscopedIdempotency)
+    {
+        foreach (var run in runs)
+        {
+            run.IdempotencyKeys ??= [];
+            if (migrateUnscopedIdempotency)
+                run.IdempotencyKeys = ExpandLegacyDeliveryKeys(
+                    run.IdempotencyKeys, ["acquire", "renew", "release", "write", "evidence", "settle"]);
+            run.EvidenceDigests ??= [];
+        }
+        foreach (var review in reviews)
+        {
+            review.IdempotencyKeys ??= [];
+            if (migrateUnscopedIdempotency)
+                review.IdempotencyKeys = ExpandLegacyDeliveryKeys(
+                    review.IdempotencyKeys, ["create", "renew", "claim", "settle"]);
+            review.Reports ??= [];
+            review.Subject ??= new ReviewSubjectRecord();
+            review.Subject.EvidenceDigestInputs ??= [];
         }
     }
 
@@ -1147,8 +1460,9 @@ public sealed class AttemptAuthorityService
 
     private sealed class AuthorityState
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public long AuthorityEpoch { get; set; } = 1;
+        public DateTime? LastCompactedAt { get; set; }
         public Dictionary<string, long> LastFenceByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public List<RunAttemptRecord> RunAttempts { get; set; } = [];
         public List<ReviewAttemptRecord> ReviewAttempts { get; set; } = [];
@@ -1156,6 +1470,20 @@ public sealed class AttemptAuthorityService
         public Dictionary<string, string> CurrentReviewByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, ReviewSubjectRecord> CurrentSubjectByTask { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
+
+    private sealed class AuthorityArchive
+    {
+        public int SchemaVersion { get; set; } = ArchiveSchemaVersion;
+        public DateTime ArchivedAt { get; set; }
+        public List<RunAttemptRecord> RunAttempts { get; set; } = [];
+        public List<ReviewAttemptRecord> ReviewAttempts { get; set; } = [];
+    }
+
+    private sealed record TerminalAttemptReference(
+        string AttemptId,
+        bool IsReview,
+        DateTime TerminalAt,
+        DateTime CreatedAt);
 
     private sealed class AttemptLeaseRecord
     {

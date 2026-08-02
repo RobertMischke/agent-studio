@@ -6,16 +6,16 @@ import * as path from 'path';
  * Project Hub Git View (AGT-1807) — mocked full-stack drive.
  *
  * The Project Hub exposes a dedicated, read-only Git View page: a grouped
- * branch / worktree / recent-history tree on the left, and a detail + diff
- * pane on the right that reuses the shared diff renderer. This spec mounts the
+ * branch / worktree tree on the left, and a commit graph with lazy diff
+ * inspector on the right. This spec mounts the
  * Project Hub straight onto the `git` rail (persisted studio-tab state), with
  * every backend route mocked, and asserts each acceptance bullet:
  *   - the Git View rail is present in the Project Hub navigation and active;
  *   - the tree distinguishes main / develop / feature / task branches and lists
  *     the on-disk worktree/checkout folders;
- *   - selecting a recent commit loads its files and renders the diff through the
+ *   - explicitly inspecting a commit loads its files and renders the diff through the
  *     shared <app-diff-content> renderer;
- *   - selecting a branch shows its detail card.
+ *   - selecting a branch highlights its tree row without mutating git.
  *
  * All API traffic is stubbed, so no live backend is required; the screenshot
  * saved to results/ is therefore labelled `--mocked`.
@@ -38,14 +38,51 @@ const INVENTORY = {
     { path: 'C:/repo/demo-project-task-1', branch: 'task/1', headSha: 'b'.repeat(40), headShortSha: 'bbbbbbb', isPrimary: false, isDetached: false, isBare: false },
   ],
   branches: [
-    { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: true, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'seed', lastCommitAtUtc: '2026-07-01T00:00:00Z', worktreePath: REPO_PATH },
-    { name: 'develop', category: 'develop', tipSha: 'd'.repeat(40), tipShortSha: 'ddddddd', isCurrent: false, upstream: 'origin/develop', ahead: 1, behind: 0, lastCommitSubject: 'dev work', lastCommitAtUtc: '2026-07-02T00:00:00Z', worktreePath: null },
-    { name: 'feature/login', category: 'feature', tipSha: 'e'.repeat(40), tipShortSha: 'eeeeeee', isCurrent: false, upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'feat: login form', lastCommitAtUtc: '2026-07-02T00:00:00Z', worktreePath: null },
-    { name: 'task/1', category: 'task', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: false, upstream: null, ahead: 2, behind: 0, lastCommitSubject: 'task work', lastCommitAtUtc: '2026-07-03T00:00:00Z', worktreePath: 'C:/repo/demo-project-task-1' },
+    { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: true, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'seed', lastCommitAtUtc: '2026-07-01T00:00:00Z', worktreePath: REPO_PATH, isLocal: true, hasRemote: true },
+    { name: 'develop', category: 'develop', tipSha: 'd'.repeat(40), tipShortSha: 'ddddddd', isCurrent: false, upstream: 'origin/develop', ahead: 1, behind: 0, lastCommitSubject: 'dev work', lastCommitAtUtc: '2026-07-02T00:00:00Z', worktreePath: null, isLocal: true, hasRemote: true },
+    { name: 'feature/login', category: 'feature', tipSha: 'e'.repeat(40), tipShortSha: 'eeeeeee', isCurrent: false, upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'feat: login form', lastCommitAtUtc: '2026-07-02T00:00:00Z', worktreePath: null, isLocal: false, hasRemote: true },
+    { name: 'task/1', category: 'task', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: false, upstream: null, ahead: 2, behind: 0, lastCommitSubject: 'task work', lastCommitAtUtc: '2026-07-03T00:00:00Z', worktreePath: 'C:/repo/demo-project-task-1', isLocal: true, hasRemote: false, tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Task work', lane: '3-progress' }] },
+    { name: 'runner/agent-runner-01/AGT-1', category: 'runner', tipSha: COMMIT_SHA, tipShortSha: 'ccccccc', isCurrent: false, upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'feat: add thing', lastCommitAtUtc: '2026-07-03T10:00:00Z', worktreePath: null, isLocal: false, hasRemote: true, tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Task work', lane: '3-progress' }] },
   ],
-  recentCommits: [
-    { sha: COMMIT_SHA, shortSha: 'ccccccc', authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev', subject: 'feat: add thing', filesChanged: 1, added: 3, removed: 1 },
-    { sha: 'f'.repeat(40), shortSha: 'fffffff', authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: cleanup', filesChanged: 2, added: 5, removed: 2 },
+  recentCommits: [],
+  history: {
+    offset: 0, pageSize: 50, nextOffset: 2, hasMore: true,
+    commits: [
+      {
+        sha: COMMIT_SHA, shortSha: 'ccccccc', parentShas: ['f'.repeat(40)],
+        authorDateUtc: '2026-07-03T10:00:00Z', author: 'dev', subject: 'feat: add thing',
+        filesChanged: 1, added: 3, removed: 1,
+        refs: [{ name: 'origin/develop', kind: 'branch', isRemote: true }],
+        tasks: [{ taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Task work', lane: '3-progress' }],
+        presence: { inIntegration: true, inRelease: false, integrationBranch: 'develop', releaseBranch: 'main' },
+        deployments: [
+          { target: 'backend', sha: COMMIT_SHA, shortSha: 'ccccccc' },
+          { target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' },
+          { target: 'frontend', sha: COMMIT_SHA, shortSha: 'ccccccc' },
+        ],
+      },
+      {
+        sha: 'f'.repeat(40), shortSha: 'fffffff', parentShas: [],
+        authorDateUtc: '2026-07-02T09:00:00Z', author: 'dev', subject: 'chore: cleanup',
+        filesChanged: 2, added: 5, removed: 2, refs: [], tasks: [],
+        presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
+        deployments: [],
+      },
+    ],
+  },
+  activeCheckouts: [{
+    task: { taskKey: `${PROJECT}::task-1`, key: 'AGT-1', title: 'Task work', lane: '3-progress' },
+    branch: 'task/1', headSha: 'b'.repeat(40), location: 'remote',
+    runner: 'agent-runner-01', worktreePath: null, activeSince: '2026-07-03T09:00:00Z',
+  }, {
+    task: { taskKey: `${PROJECT}::task-2`, key: 'AGT-2', title: 'Local work', lane: '3-progress' },
+    branch: 'task/2', headSha: '2'.repeat(40), location: 'local',
+    runner: 'stable', worktreePath: 'C:/repo/demo-project-task-2', activeSince: '2026-07-03T09:30:00Z',
+  }],
+  deployments: [
+    { target: 'backend', sha: COMMIT_SHA, shortSha: 'ccccccc' },
+    { target: 'runner', sha: COMMIT_SHA, shortSha: 'ccccccc' },
+    { target: 'frontend', sha: COMMIT_SHA, shortSha: 'ccccccc' },
   ],
   error: null,
 };
@@ -74,6 +111,10 @@ async function installRoutes(page: Page): Promise<void> {
 
   // Catch-all first (returns []); specific routes registered afterwards win.
   await page.route('**/api/**', r => r.fulfill(json([])).catch(() => { /* late */ }));
+  await page.route('**/api/runner/orchestrator-feed**', r => r.fulfill(json({ entries: [], generatedAtUtc: '2026-07-31T00:00:00Z' })));
+  await page.route('**/api/auth/status', r => r.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
   await page.route(/\/api\/(?:jobs|tasks)\/grouped/, r => r.fulfill(json(EMPTY_GROUPED)));
   await page.route(/\/api\/(?:jobs|tasks)(\?|$)/, r => r.fulfill(json([])));
   await page.route('**/api/watch-paths**', r => r.fulfill(json([{ name: PROJECT, path: REPO_PATH, rootPath: REPO_PATH, repositoryPath: REPO_PATH }])));
@@ -86,6 +127,19 @@ async function installRoutes(page: Page): Promise<void> {
 
   // The Git View endpoints under test.
   await page.route('**/api/git/inventory**', r => r.fulfill(json(INVENTORY)));
+  await page.route('**/api/git/history**', r => r.fulfill(json({
+    offset: 2,
+    pageSize: 50,
+    nextOffset: null,
+    hasMore: false,
+    commits: [{
+      sha: '9'.repeat(40), shortSha: '9999999', parentShas: [],
+      authorDateUtc: '2026-07-01T08:00:00Z', author: 'dev', subject: 'older paged commit',
+      filesChanged: 0, added: 0, removed: 0, refs: [], tasks: [],
+      presence: { inIntegration: true, inRelease: true, integrationBranch: 'develop', releaseBranch: 'main' },
+      deployments: [],
+    }],
+  })));
   await page.route('**/api/git/project-commit/files**', r => {
     const sha = new URL(r.request().url()).searchParams.get('sha') ?? COMMIT_SHA;
     return r.fulfill(json({ sha, files: [{ status: 'M', path: 'src/thing.ts', added: 3, removed: 1 }] }));
@@ -136,21 +190,34 @@ test.describe('Project Hub · Git View (mocked)', () => {
     const panel = page.getByTestId('project-git-panel');
     await expect(panel).toBeVisible({ timeout: 15_000 });
 
-    // Repository path + branch/worktree/history groups are shown.
+    // Repository path + branch/worktree/active groups are shown.
     await expect(page.getByTestId('git-repo-path')).toContainText(REPO_PATH);
+    await expect(page.getByTestId('git-tree-group-active')).toContainText('remote');
+    await expect(page.getByTestId('git-tree-group-active')).toContainText('local');
     await expect(page.getByTestId('git-tree-group-worktrees')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-integration')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-feature')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-task')).toBeVisible();
-    await expect(page.getByTestId('git-tree-group-history')).toBeVisible();
+    await expect(page.getByTestId('git-tree-group-runner')).toBeVisible();
+    await expect(page.getByTestId('git-history')).toContainText('deploy:backend');
+    await expect(page.getByTestId('git-history')).toContainText('deploy:runner');
+    await expect(page.getByTestId('git-history')).toContainText('deploy:frontend');
+    await expect(page.getByTestId('git-history')).toContainText('✓ develop');
+    await expect(page.getByTestId('git-history')).toContainText('○ main');
+    await expect(page.getByTestId('git-graph-node').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open task AGT-1: Task work' }).first()).toBeVisible();
 
     // Branch rows carry their category badge; main is the current branch.
     await expect(page.locator('[data-testid="git-branch-row"][data-branch="main"]')).toContainText('main');
     await expect(page.locator('[data-testid="git-branch-row"][data-branch="task/1"]')).toContainText('task');
 
-    // Select a recent commit → files load and the shared diff renderer shows it.
-    await page.locator(`[data-testid="git-commit-row"][data-sha="${COMMIT_SHA}"]`).click();
-    await expect(page.getByTestId('git-detail-card')).toContainText('feat: add thing');
+    // Older history is bounded and fetched only on explicit demand.
+    await page.getByTestId('git-history-load-more').click();
+    await expect(page.getByTestId('git-history')).toContainText('older paged commit');
+
+    // Inspect changes explicitly. The graph itself remains cheap and read-only.
+    await page.getByRole('button', { name: 'Inspect changes in ccccccc' }).click();
+    await expect(page.getByTestId('git-changes')).toContainText('feat: add thing');
     await expect(page.getByTestId('git-file-row').first()).toContainText('src/thing.ts');
     await expect(page.getByTestId('git-diff')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-testid="git-diff"] .d2h-file-name')).toContainText('thing.ts', { timeout: 15_000 });
@@ -161,9 +228,10 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await page.screenshot({ path: shotPath, fullPage: true });
     await testInfo.attach('project-hub-git-view--mocked.png', { path: shotPath, contentType: 'image/png' });
 
-    // Selecting a branch swaps the detail card to that branch.
+    // Selecting a branch only changes selection; it never exposes a git mutation.
     await page.locator('[data-testid="git-branch-row"][data-branch="task/1"]').click();
-    await expect(page.getByTestId('git-detail-card')).toContainText('task/1');
+    await expect(page.locator('[data-testid="git-branch-row"][data-branch="task/1"]')).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByTestId('git-cleanup')).toHaveCount(0);
   });
 
   // AGT-2011: the Git View is a full-bleed tool surface — it must fill the whole

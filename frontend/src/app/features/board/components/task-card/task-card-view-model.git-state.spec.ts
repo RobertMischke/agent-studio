@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { buildGitStateBadge } from './task-card-view-model';
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo } from '../../../../models/task.model';
-import type { TaskProvenanceRecord, TaskProvenanceTransition } from '../../../../features/git';
+import type {
+  TaskIntegrationStatus,
+  TaskProvenanceRecord,
+  TaskProvenanceTransition,
+} from '../../../../features/git';
 
 /**
  * ASS-1752: the git-state pill must read the provenance ground truth (ASS-1724)
@@ -30,6 +34,17 @@ function provenance(overrides: Partial<TaskProvenanceRecord> = {}): TaskProvenan
     base: 'base000',
     transitions: [],
     merge: null,
+    ...overrides,
+  };
+}
+
+function integration(overrides: Partial<TaskIntegrationStatus> = {}): TaskIntegrationStatus {
+  return {
+    status: 'integrated',
+    deliveryRef: null,
+    sha: 'ddddddd',
+    integrationBranch: 'develop',
+    detail: 'anchor-ancestor',
     ...overrides,
   };
 }
@@ -170,9 +185,7 @@ describe('buildGitStateBadge — lifecycle ground truth (ASS-1752)', () => {
       expect(badge!.label).not.toContain('task/');
     });
 
-    it('treats a post-integration review lane as landed even without a merge anchor', () => {
-      // Legacy / merge-anchor-missing: a parallel worktree that reached
-      // human-review has been integrated + torn down. Lane-derived fallback.
+    it('does not treat Human Review plus branch provenance as integration proof', () => {
       const job = makeJob({
         state: TaskState.HumanReview,
         provenance: provenance({
@@ -183,17 +196,66 @@ describe('buildGitStateBadge — lifecycle ground truth (ASS-1752)', () => {
 
       const badge = buildGitStateBadge(job);
 
-      expect(badge!.kind).toBe('post-merge');
-      expect(badge!.label).toBe('develop');
+      expect(badge!.kind).toBe('pre-merge');
+      expect(badge!.label).toBe('task/task-1');
     });
 
-    it('shows develop for an accepted (Completed) task', () => {
-      const job = makeJob({ state: TaskState.Completed, provenance: provenance() });
+    it('shows target membership from the canonical integration status', () => {
+      const job = makeJob({
+        state: TaskState.Completed,
+        provenance: provenance(),
+        integration: integration({ sha: '0ddba11' }),
+      });
 
       const badge = buildGitStateBadge(job);
 
       expect(badge!.kind).toBe('post-merge');
-      expect(badge!.label).toBe('develop');
+      expect(badge!.label).toBe('develop @0ddba11');
+    });
+
+    it('ignores a remembered merge attempt when target membership is pending', () => {
+      const job = makeJob({
+        state: TaskState.Completed,
+        provenance: provenance({
+          merge: {
+            mergeCommit: 'remembered',
+            workBranchHeadBefore: null,
+            workBranchHeadAfter: null,
+            atUtc: '2026-06-10T10:30:00Z',
+          },
+        }),
+        integration: integration({ status: 'pending', sha: null, detail: 'not present' }),
+      });
+
+      const badge = buildGitStateBadge(job);
+
+      expect(badge!.kind).toBe('pre-merge');
+      expect(badge!.label).toBe('main checkout');
+    });
+
+    it('shows the backend-projected remote delivery ref instead of main checkout', () => {
+      const job = makeJob({
+        state: TaskState.HumanReview,
+        codeActivityDetected: false,
+        provenance: provenance({
+          transitions: [anchor({ lane: TaskState.HumanReview, branchTip: null })],
+        }),
+        integration: integration({
+          status: 'pending',
+          deliveryRef: 'runner/agent-runner-01/AGT-2220',
+          sha: null,
+          detail: 'Delivery ref exists but attribution is pending.',
+        }),
+      });
+
+      const badge = buildGitStateBadge(job);
+
+      expect(badge).toMatchObject({
+        kind: 'pre-merge',
+        label: 'runner/agent-runner-01/AGT-2220',
+      });
+      expect(badge!.tooltip).toContain('delivery ref');
+      expect(badge!.label).not.toBe('main checkout');
     });
   });
 

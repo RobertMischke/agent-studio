@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="de" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automatik-Lanes sichtbar machen — 3 Varianten + Empfehlung (AGT-2350)</title>
+<style>
+  /* ------------------------------------------------------------------
+     Token-Basis. Light ist der Standard, Dark kommt automatisch ueber
+     prefers-color-scheme; der Schalter oben rechts erzwingt eine Seite
+     (data-theme="light" | "dark") und gewinnt gegen die Media-Query.
+     Keine externen Assets, keine Libraries, keine Netzwerkzugriffe.
+     ------------------------------------------------------------------ */
+  :root {
+    color-scheme: light;
+    --bg: #eef1f5;
+    --surface: #ffffff;
+    --surface-2: #f3f6f9;
+    --surface-3: #e7ecf2;
+    --ink: #16202c;
+    --ink-strong: #0b1219;
+    --muted: #63707f;
+    --faint: #8b97a5;
+    --line: #d6dee7;
+    --line-soft: #e3e9f0;
+    --brand: #1c6d68;
+    --brand-soft: rgba(28, 109, 104, .12);
+    --blue: #2a63aa;
+    --blue-soft: rgba(42, 99, 170, .11);
+    --violet: #6a4f9c;
+    --violet-soft: rgba(106, 79, 156, .12);
+    --ok: #1f7346;
+    --ok-soft: rgba(31, 115, 70, .12);
+    --warn: #8a5c12;
+    --warn-soft: rgba(160, 108, 22, .14);
+    --danger: #a63c37;
+    --danger-soft: rgba(166, 60, 55, .12);
+    --shadow: 0 14px 40px rgba(24, 39, 56, .10);
+    --shadow-sm: 0 2px 6px rgba(24, 39, 56, .07);
+
+    /* Board-Tokens (Nachbau der Studio-Oberflaeche im Kleinen) */
+    --board-bg: #e4e9f0;
+    --lane-bg: #f7f9fc;
+    --lane-line: #dbe3ec;
+    --card-bg: #ffffff;
+    --card-line: #dde4ec;
+    --machine-tint: rgba(42, 99, 170, .055);
+    --machine-line: rgba(42, 99, 170, .22);
+    --human-tint: rgba(0, 0, 0, .012);
+
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "Cascadia Code", "SFMono-Regular", Consolas, ui-monospace, monospace;
+    --radius: 14px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0c1118;
+      --surface: #141c25;
+      --surface-2: #1a2330;
+      --surface-3: #212d3c;
+      --ink: #e9eff6;
+      --ink-strong: #ffffff;
+      --muted: #97a5b6;
+      --faint: #76849a;
+      --line: #2c3948;
+      --line-soft: #23303e;
+      --brand: #64cdc3;
+      --brand-soft: rgba(100, 205, 195, .14);
+      --blue: #7fb0f2;
+      --blue-soft: rgba(127, 176, 242, .14);
+      --violet: #b9a1e8;
+      --violet-soft: rgba(185, 161, 232, .14);
+      --ok: #6cca94;
+      --ok-soft: rgba(108, 202, 148, .14);
+      --warn: #dfb161;
+      --warn-soft: rgba(223, 177, 97, .15);
+      --danger: #ef8981;
+      --danger-soft: rgba(239, 137, 129, .14);
+      --shadow: 0 18px 48px rgba(0, 0, 0, .40);
+      --shadow-sm: 0 2px 6px rgba(0, 0, 0, .30);
+
+      --board-bg: #0f1620;
+      --lane-bg: #171f2a;
+      --lane-line: #26313f;
+      --card-bg: #1d2733;
+      --card-line: #2c3846;
+      --machine-tint: rgba(127, 176, 242, .055);
+      --machine-line: rgba(127, 176, 242, .24);
+      --human-tint: rgba(255, 255, 255, .014);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c1118;
+    --surface: #141c25;
+    --surface-2: #1a2330;
+    --surface-3: #212d3c;
+    --ink: #e9eff6;
+    --ink-strong: #ffffff;
+    --muted: #97a5b6;
+    --faint: #76849a;
+    --line: #2c3948;
+    --line-soft: #23303e;
+    --brand: #64cdc3;
+    --brand-soft: rgba(100, 205, 195, .14);
+    --blue: #7fb0f2;
+    --blue-soft: rgba(127, 176, 242, .14);
+    --violet: #b9a1e8;
+    --violet-soft: rgba(185, 161, 232, .14);
+    --ok: #6cca94;
+    --ok-soft: rgba(108, 202, 148, .14);
+    --warn: #dfb161;
+    --warn-soft: rgba(223, 177, 97, .15);
+    --danger: #ef8981;
+    --danger-soft: rgba(239, 137, 129, .14);
+    --shadow: 0 18px 48px rgba(0, 0, 0, .40);
+    --shadow-sm: 0 2px 6px rgba(0, 0, 0, .30);
+    --board-bg: #0f1620;
+    --lane-bg: #171f2a;
+    --lane-line: #26313f;
+    --card-bg: #1d2733;
+    --card-line: #2c3846;
+    --machine-tint: rgba(127, 176, 242, .055);
+    --machine-line: rgba(127, 176, 242, .24);
+    --human-tint: rgba(255, 255, 255, .014);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, label { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--blue); }
+  code { font: 12.5px/1.4 var(--mono); background: var(--surface-3); padding: 1px 5px; border-radius: 5px; }
+
+  /* ---------------- Chrome ---------------- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px clamp(16px, 3.4vw, 48px);
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .brand-mark {
+    width: 32px; height: 32px; display: grid; place-items: center;
+    border-radius: 9px; background: var(--brand-soft); color: var(--brand);
+    font-weight: 800; font-size: 13px; letter-spacing: .02em;
+  }
+  .brand-text strong { display: block; font-size: 14px; line-height: 1.25; }
+  .brand-text span { display: block; color: var(--muted); font-size: 12px; }
+  .ghost-btn {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 9px;
+    padding: 7px 11px; font-size: 13px;
+  }
+  .ghost-btn:hover { background: var(--surface-2); }
+
+  main { padding: 30px clamp(16px, 3.4vw, 48px) 72px; display: grid; gap: 26px; max-width: 1480px; margin: 0 auto; }
+
+  .eyebrow {
+    margin: 0 0 9px; color: var(--brand); font-size: 11.5px; font-weight: 800;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  h1 { margin: 0; font-size: clamp(28px, 3.9vw, 46px); line-height: 1.03; letter-spacing: -.035em; max-width: 20ch; }
+  h2 { margin: 0; font-size: 22px; letter-spacing: -.015em; }
+  h3 { margin: 0; font-size: 16px; letter-spacing: -.008em; }
+  h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  p { margin: 0; }
+
+  .panel-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+  .section-head { padding: 18px 20px; border-bottom: 1px solid var(--line-soft); }
+  .section-head p { color: var(--muted); margin-top: 5px; font-size: 14px; max-width: 92ch; }
+  .section-body { padding: 20px; display: grid; gap: 16px; }
+
+  .hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(290px, .6fr); gap: 18px; }
+  .hero-copy { padding: clamp(22px, 3.4vw, 40px); }
+  .hero-copy > p { color: var(--muted); font-size: clamp(15px, 1.5vw, 18px); max-width: 60ch; margin-top: 18px; }
+  .quote {
+    margin-top: 20px; padding: 14px 16px; border-radius: 11px;
+    background: var(--surface-2); border: 1px solid var(--line-soft);
+    font-size: 14.5px; color: var(--ink);
+  }
+  .quote span { display: block; color: var(--faint); font-size: 12px; margin-top: 6px; }
+  .verdict { padding: 20px; background: var(--brand-soft); display: flex; flex-direction: column; gap: 14px; justify-content: space-between; }
+  .verdict h2 { font-size: 19px; }
+  .verdict p { color: var(--muted); font-size: 14px; }
+  .verdict strong { color: var(--ink); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+    border-radius: 999px; padding: 4px 9px; font-size: 11.5px; font-weight: 700;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--line-soft);
+  }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .badge.bad { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+  .badge.info { background: var(--blue-soft); color: var(--blue); border-color: transparent; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .note {
+    padding: 13px 15px; border-radius: 11px; background: var(--surface-2);
+    border: 1px solid var(--line-soft); font-size: 14px; color: var(--muted);
+  }
+  .note strong { color: var(--ink); }
+  .note.warn { background: var(--warn-soft); border-color: transparent; color: var(--ink); }
+
+  /* ================================================================
+     BOARD-NACHBAU
+     Bewusst reduziert: fuenf Lanes, echte Lane-Titel und Icons aus
+     app.ts (englisch, weil das die realen Produktstrings sind), die
+     Kartendaten sind ein realitaetsnaher Auszug.
+     ================================================================ */
+  .board-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .board {
+    display: flex; gap: 10px; align-items: stretch;
+    padding: 12px; border-radius: 13px; background: var(--board-bg);
+    min-width: 900px;
+  }
+  .zone { display: flex; flex-direction: column; gap: 7px; border-radius: 11px; padding: 6px; position: relative; }
+  .zone--plain { background: transparent; border: 1px solid transparent; }
+  .zone__head {
+    display: flex; align-items: center; gap: 7px; padding: 2px 5px 0;
+    font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--faint); font-weight: 700;
+  }
+  .zone__lanes { display: flex; gap: 10px; align-items: stretch; }
+
+  .lane {
+    display: flex; flex-direction: column; gap: 7px;
+    background: var(--lane-bg); border: 1px solid var(--lane-line);
+    border-radius: 10px; padding: 9px; width: 178px; flex: 0 0 178px;
+  }
+  .lane__head { display: flex; align-items: center; gap: 6px; padding-bottom: 7px; border-bottom: 1px solid var(--lane-line); }
+  .lane__icon { font-size: 14px; line-height: 1; }
+  .lane__title { font-size: 12.5px; font-weight: 650; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lane__count {
+    font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    border-radius: 9px; padding: 1px 7px; line-height: 1.5;
+  }
+  .lane__body { display: flex; flex-direction: column; gap: 6px; }
+  .lane__more { font-size: 10.5px; color: var(--faint); text-align: center; padding-top: 2px; }
+
+  .card {
+    background: var(--card-bg); border: 1px solid var(--card-line); border-radius: 8px;
+    padding: 7px 8px; display: flex; flex-direction: column; gap: 4px; position: relative;
+    overflow: hidden;
+  }
+  .card__top { display: flex; align-items: center; gap: 6px; }
+  .card__key { font: 10.5px/1.3 var(--mono); color: var(--muted); }
+  .card__chips { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .card__chip { font-size: 9.5px; line-height: 1.5; padding: 0 5px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted); }
+  .card__title { font-size: 11.5px; line-height: 1.35; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card__status { font-size: 10px; color: var(--faint); display: flex; align-items: center; gap: 5px; }
+  .card__status--live { color: var(--blue); }
+  .card__status--dead { color: var(--faint); }
+  .card__status--wait { color: var(--muted); }
+  .pip { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; background: currentColor; }
+  .pip--hollow { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+
+  /* ================================================================
+     VARIANTEN-BUEHNE — reine CSS-Umschaltung ueber versteckte Radios
+     ================================================================ */
+  .stage { position: relative; }
+  .vradio, .mcheck { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .vradio:focus-visible ~ .tabbar, .mcheck:focus-visible ~ .tabbar { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .tabbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 12px; border: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: 0; background: var(--surface);
+  }
+  .tab {
+    cursor: pointer; border: 1px solid var(--line); border-radius: 9px;
+    padding: 8px 13px; font-size: 13.5px; background: var(--surface-2); color: var(--muted);
+    display: inline-flex; align-items: baseline; gap: 7px;
+  }
+  .tab b { color: var(--ink); font-weight: 700; }
+  .tab:hover { background: var(--surface-3); }
+  .motion-toggle {
+    margin-left: auto; cursor: pointer; font-size: 12.5px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px;
+    display: inline-flex; align-items: center; gap: 7px; background: var(--surface-2);
+  }
+  .motion-toggle .box { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--faint); }
+  #motion-off:checked ~ .tabbar .motion-toggle { background: var(--warn-soft); border-color: transparent; color: var(--ink); }
+  #motion-off:checked ~ .tabbar .motion-toggle .box { background: var(--warn); border-color: var(--warn); }
+
+  .panels { border: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); background: var(--surface); }
+  .panel { display: none; }
+  #v-a:checked ~ .panels #panel-a,
+  #v-b:checked ~ .panels #panel-b,
+  #v-c:checked ~ .panels #panel-c { display: block; }
+  #v-a:checked ~ .tabbar .tab[for="v-a"],
+  #v-b:checked ~ .tabbar .tab[for="v-b"],
+  #v-c:checked ~ .tabbar .tab[for="v-c"] {
+    background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 45%, transparent); color: var(--ink);
+  }
+
+  .panel__head { padding: 20px 20px 0; display: grid; gap: 7px; }
+  .panel__head p { color: var(--muted); font-size: 14.5px; max-width: 88ch; }
+  .panel__board { padding: 18px 20px; }
+  .panel__caption { margin-top: 10px; font-size: 12.5px; color: var(--muted); max-width: 92ch; }
+
+  .assess { padding: 0 20px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .assess-card { border: 1px solid var(--line-soft); border-radius: 11px; padding: 14px; background: var(--surface-2); }
+  .assess-card p { font-size: 13.5px; color: var(--muted); }
+  .assess-card p strong { color: var(--ink); }
+  .assess-card .badge { margin-bottom: 8px; }
+
+  /* ---------------- Variante A: Zonen-Signatur ---------------- */
+  .board--a .zone--machine {
+    background: var(--machine-tint);
+    border: 1px solid var(--machine-line);
+    padding-top: 10px;
+  }
+  .board--a .zone--human { background: var(--human-tint); border: 1px solid var(--line-soft); }
+  .board--a .zone--machine .zone__head { color: var(--blue); }
+  .zone__rail {
+    position: absolute; top: 0; left: 8px; right: 8px; height: 2px; border-radius: 2px;
+    background: color-mix(in srgb, var(--blue) 18%, transparent); overflow: hidden;
+  }
+  .zone__rail::after {
+    content: ""; position: absolute; inset: 0; width: 34%;
+    background: linear-gradient(90deg, transparent, var(--blue), transparent);
+    opacity: .55; animation: rail-sweep 6.5s linear infinite;
+  }
+  .zone--idle .zone__rail { background: color-mix(in srgb, var(--faint) 22%, transparent); }
+  .zone--idle .zone__rail::after { display: none; }
+  @keyframes rail-sweep { from { transform: translateX(-100%); } to { transform: translateX(330%); } }
+  .zone__live { margin-left: auto; font-size: 10px; letter-spacing: .04em; color: var(--blue); text-transform: none; }
+  .zone--human .zone__live { color: var(--muted); }
+
+  /* ---------------- Variante B: Lane-Kopf mit Besitzer ---------------- */
+  .lane__owner {
+    font-size: 10px; line-height: 1; width: 17px; height: 17px; border-radius: 5px;
+    display: grid; place-items: center; flex: 0 0 auto;
+  }
+  .lane__owner--machine { background: var(--blue-soft); color: var(--blue); }
+  .lane__owner--human { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted); }
+  /* Nur eine Trennlinie: traegt die Lane eine Statuszeile, wandert der
+     Header-Strich an die Statuszeile — sonst stehen zwei Regeln 10 px
+     uebereinander. */
+  .board--b .lane__head { border-bottom: 0; padding-bottom: 3px; }
+  .lane__status {
+    display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted);
+    padding: 0 1px 7px; margin-top: -4px; border-bottom: 1px solid var(--lane-line);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lane__status b { color: var(--ink); font-weight: 650; }
+  .lane__status .sep { color: var(--faint); }
+  .lane__status--machine .pip--live { background: var(--blue); animation: pip-breathe 2.6s ease-in-out infinite; }
+  .lane__status--machine .pip--queued { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .lane__status--human .pip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+  .lane__status--idle .pip--live { background: var(--faint); animation: none; }
+  @keyframes pip-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
+  .lane__gap { font-size: 10px; color: var(--warn); }
+
+  /* ---------------- Variante C: Conveyor / Karten-Schimmer ---------------- */
+  .card--conveyor::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: color-mix(in srgb, var(--blue) 20%, transparent);
+  }
+  .card--conveyor::after {
+    content: ""; position: absolute; top: 0; left: 0; height: 2px; width: 40%;
+    background: linear-gradient(90deg, transparent, var(--blue), transparent);
+    animation: card-sweep 3.1s linear infinite;
+  }
+  .card--conveyor:nth-of-type(2)::after { animation-delay: 1.1s; }
+  .card--conveyor:nth-of-type(3)::after { animation-delay: 2.0s; }
+  @keyframes card-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  .steps { display: flex; gap: 3px; align-items: center; margin-top: 1px; }
+  .step { width: 13px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 14%, transparent); }
+  .step--done { background: var(--ok); }
+  .step--active { background: var(--blue); animation: step-breathe 2.2s ease-in-out infinite; }
+  @keyframes step-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* Bewegung-aus-Schalter und System-Praeferenz haben beide das letzte Wort. */
+  #motion-off:checked ~ .panels *,
+  #motion-off:checked ~ .panels *::before,
+  #motion-off:checked ~ .panels *::after { animation: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; }
+  }
+
+  /* ---------------- Tabellen ---------------- */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 720px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 13px; border-bottom: 1px solid var(--line-soft); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); background: var(--surface-2); font-weight: 700; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { font-size: 11.5px; }
+  .rec-row td { background: var(--brand-soft); }
+
+  .cols-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  ul.tight { margin: 8px 0 0; padding-left: 19px; font-size: 14px; color: var(--muted); }
+  ul.tight li + li { margin-top: 5px; }
+  ul.tight strong { color: var(--ink); }
+
+  footer { color: var(--faint); font-size: 12px; text-align: center; padding-top: 6px; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">AL</div>
+    <div class="brand-text">
+      <strong>Automatik-Lanes sichtbar machen</strong>
+      <span>AGT-2350 · Mockup-Runde · 27.07.2026 · nur Konzept, keine Implementierung</span>
+    </div>
+  </div>
+  <button class="ghost-btn" id="themeBtn" type="button">Theme: automatisch</button>
+</header>
+
+<main>
+
+  <!-- ============================== HERO ============================== -->
+  <section class="hero">
+    <div class="panel-card hero-copy">
+      <p class="eyebrow">Frage von Robert · 26.07.</p>
+      <h1>Wer arbeitet in dieser Lane — die Maschine oder ich?</h1>
+      <p>
+        Das Board hat zwei Sorten von Lanes, aber nur eine Optik. In <b>Ready</b>, <b>In Progress</b>
+        und <b>Post Processing</b> arbeitet die Maschine: sie claimt, codiert, bewertet. In
+        <b>Backlog</b>, <b>Escalated</b>, <b>Review</b> und <b>Delivered</b> liegt der Ball beim
+        Menschen. Heute sehen alle sieben gleich aus — also liest der Blick jede Karte als
+        „liegt herum“, auch wenn gerade ein Agent daran schreibt.
+      </p>
+      <div class="quote">
+        „Active ist eine Lane, in der Arbeit automatisch stattfindet — wie könnte man das besser
+        herausstellen?“
+        <span>Robert, 26.07.2026 (Kartentext AGT-2350)</span>
+      </div>
+    </div>
+    <aside class="panel-card verdict">
+      <div>
+        <span class="badge warn"><span class="dot"></span> Entscheidung offen</span>
+        <h2 style="margin-top:10px">Empfehlung: Variante B</h2>
+        <p style="margin-top:8px">
+          <strong>Lane-Kopf trägt den Besitzer, die Statuszeile trägt die Aktivität.</strong>
+          Plus genau ein Element aus A: die statische Zonenbeschriftung im Gruppenkopf — ohne
+          Fläche, ohne Animation.
+        </p>
+      </div>
+      <p style="font-size:12.5px">
+        Begründung und betroffene Code-Stellen stehen unten unter
+        <a href="#empfehlung">Empfehlung</a>.
+      </p>
+    </aside>
+  </section>
+
+  <!-- ============================== IST-ZUSTAND ============================== -->
+  <section class="panel-card">
+    <div class="section-head">
+      <h2>Ist-Zustand: die Lane sagt nichts über ihren Besitzer</h2>
+      <p>
+        Fünf Lanes aus dem echten Board, mit einem realitätsnahen Kartenauszug. Der Lane-Kopf zeigt
+        Icon, Titel, Anzahl — mehr nicht. Die Karten selbst führen zwar seit AGT-2315 eine
+        Liveness-Zeile, aber genau die deckt das Problem auf, statt es zu lösen.
+      </p>
+    </div>
+    <div class="section-body">
+      <div class="board-wrap">
+        <div class="board board--today">
+          <div class="zone zone--plain">
+            <div class="zone__head">Backlog</div>
+            <div class="zone__lanes">
+              <div class="lane">
+                <div class="lane__head"><span class="lane__icon">🗒️</span><span class="lane__title">Backlog</span><span class="lane__count">27</span></div>
+                <div class="lane__body">
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2200</span><span class="card__chips"><span class="card__chip">codex</span></span></div>
+                    <div class="card__title">Remote-Run-Testsuite &amp; Modell-Benchmark</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2132</span><span class="card__chips"><span class="card__chip">EPIC</span></span></div>
+                    <div class="card__title">Release &amp; Deployment First-Class</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">MKT-8</span></div>
+                    <div class="card__title">Launch sequence (DOs): directories, technical launch article</div>
+                  </article>
+                  <div class="lane__more">+ 24 weitere</div>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane__head"><span class="lane__icon">📦</span><span class="lane__title">Ready</span><span class="lane__count">2</span></div>
+                <div class="lane__body">
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2305</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                    <div class="card__title">One-command onboarding: docker compose up</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2278</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                    <div class="card__title">Hosted Wiki: publish the accepted revision</div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="zone zone--plain">
+            <div class="zone__head">Active</div>
+            <div class="zone__lanes">
+              <div class="lane">
+                <div class="lane__head"><span class="lane__icon">🔵</span><span class="lane__title">In Progress</span><span class="lane__count">5</span></div>
+                <div class="lane__body">
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2375</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                    <div class="card__title">Workbench-Archiv schreibt das falsche Feld</div>
+                    <div class="card__status card__status--live"><span class="pip"></span>Coding · Datei geschrieben vor 8s</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2343</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                    <div class="card__title">Abnahme-Guard: Abnahmen terminal machen</div>
+                    <div class="card__status card__status--live"><span class="pip"></span>Coding · Test läuft · 4m12s</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2340</span></div>
+                    <div class="card__title">Execution-Model-Shift: Bypass-Permissions</div>
+                    <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2199</span></div>
+                    <div class="card__title">Backend-Restart verwaist laufende Runs</div>
+                    <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2326</span></div>
+                    <div class="card__title">Integrationsberg: 28 Karten nachziehen</div>
+                    <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                  </article>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane__head"><span class="lane__icon">🤖</span><span class="lane__title">Post Processing</span><span class="lane__count">3</span></div>
+                <div class="lane__body">
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2342</span><span class="card__chips"><span class="card__chip">B+</span></span></div>
+                    <div class="card__title">Scanner-Cache: API 14 s → 0,3 s</div>
+                    <div class="card__status card__status--live"><span class="pip"></span>grade-review läuft</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2381</span></div>
+                    <div class="card__title">Fix: Explorer-Tree Projekt-Kontextmenü</div>
+                    <div class="card__status card__status--wait"><span class="pip pip--hollow"></span>Warteschlange · Position 1</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2220</span></div>
+                    <div class="card__title">Out-of-band-Stempel nur mit verifizierten Commits</div>
+                    <div class="card__status card__status--wait"><span class="pip pip--hollow"></span>Warteschlange · Position 2</div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="zone zone--plain">
+            <div class="zone__head">Done &amp; Decide</div>
+            <div class="zone__lanes">
+              <div class="lane">
+                <div class="lane__head"><span class="lane__icon">👁️</span><span class="lane__title">Review</span><span class="lane__count">4</span></div>
+                <div class="lane__body">
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2302</span><span class="card__chips"><span class="card__chip">A−</span></span></div>
+                    <div class="card__title">Remote host admin: per-project caps</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2250</span><span class="card__chips"><span class="card__chip">B</span></span></div>
+                    <div class="card__title">Pipeline-Steps: Framework-Eignung markieren</div>
+                  </article>
+                  <article class="card">
+                    <div class="card__top"><span class="card__key">AGT-2242</span><span class="card__chips"><span class="card__chip">B+</span></span></div>
+                    <div class="card__title">Wiki: Agent-Lesezähler je Seite</div>
+                  </article>
+                  <div class="lane__more">+ 1 weitere</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note warn">
+        <strong>Das Verwirr-Muster in einem Satz:</strong> „In Progress: 5“ steht im Kopf, aber nur
+        zwei Karten haben einen laufenden Run — drei sagen <code>No active run</code>. Der Kopf
+        behauptet Aktivität, die Karten dementieren sie, und die Lane selbst verrät nicht, ob
+        überhaupt jemand zuständig ist. Die drei Varianten unten greifen dieses Muster auf drei
+        verschiedenen Ebenen an: <b>Zone</b>, <b>Lane</b>, <b>Karte</b>.
+      </div>
+
+      <div class="note">
+        <strong>Zwei Fragen, die heute vermischt sind.</strong> (1) <b>Zuständigkeit</b> — wer ist
+        für diese Lane grundsätzlich verantwortlich? Das ist eine statische Eigenschaft der Lane
+        und ändert sich nie. (2) <b>Aktivität</b> — arbeitet die Maschine <em>jetzt gerade</em>?
+        Das ist ein akuter Zustand. Nach Hausregel R4 („acute signals only for acute states“) darf
+        nur die zweite Frage Bewegung bekommen. Jede Variante wird unten daran gemessen, ob sie die
+        beiden Fragen sauber trennt.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== VARIANTEN ============================== -->
+  <div class="stage">
+    <input class="vradio" type="radio" name="v" id="v-a" checked>
+    <input class="vradio" type="radio" name="v" id="v-b">
+    <input class="vradio" type="radio" name="v" id="v-c">
+    <input class="mcheck" type="checkbox" id="motion-off">
+
+    <div class="tabbar">
+      <label class="tab" for="v-a"><b>A</b> Zonen-Signatur <span style="color:var(--faint)">· Ebene Zone</span></label>
+      <label class="tab" for="v-b"><b>B</b> Besitzer im Lane-Kopf <span style="color:var(--faint)">· Ebene Lane</span></label>
+      <label class="tab" for="v-c"><b>C</b> Conveyor <span style="color:var(--faint)">· Ebene Karte</span></label>
+      <label class="motion-toggle" for="motion-off"><span class="box"></span> Bewegung aus (Unruhe prüfen)</label>
+    </div>
+
+    <div class="panels">
+
+      <!-- ---------------------- VARIANTE A ---------------------- -->
+      <section class="panel" id="panel-a">
+        <div class="panel__head">
+          <span class="badge info"><span class="dot"></span> Variante A · Ebene Zone</span>
+          <h2>Zonen-Signatur — das Board bekommt zwei Territorien</h2>
+          <p>
+            Die Automatik-Lanes werden zu einer zusammenhängenden Fläche mit eigenem Untergrund,
+            eigener Umrandung und einer Zonenüberschrift: <b>„Automatik · die Maschine arbeitet
+            hier“</b>. Am Oberrand der Zone läuft eine 2-px-Laufschiene, aber <em>nur</em> solange
+            mindestens ein Run tatsächlich läuft — steht die Automatik, wird die Schiene grau und
+            die Überschrift sagt es. Die Menschen-Zonen bleiben flach wie heute und bekommen nur
+            eine ruhige Beschriftung.
+          </p>
+        </div>
+
+        <div class="panel__board">
+          <div class="board-wrap">
+            <div class="board board--a">
+              <div class="zone zone--human">
+                <div class="zone__head">👤 Du · Vorbereitung <span class="zone__live">27 unsortiert</span></div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🗒️</span><span class="lane__title">Backlog</span><span class="lane__count">27</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2200</span><span class="card__chips"><span class="card__chip">codex</span></span></div>
+                        <div class="card__title">Remote-Run-Testsuite &amp; Modell-Benchmark</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2132</span><span class="card__chips"><span class="card__chip">EPIC</span></span></div>
+                        <div class="card__title">Release &amp; Deployment First-Class</div>
+                      </article>
+                      <div class="lane__more">+ 25 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--machine">
+                <div class="zone__rail"></div>
+                <div class="zone__head">⚙ Automatik · die Maschine arbeitet hier <span class="zone__live">3 laufen · 4 warten</span></div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">📦</span><span class="lane__title">Ready</span><span class="lane__count">2</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2305</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">One-command onboarding: docker compose up</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2278</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">Hosted Wiki: publish the accepted revision</div>
+                      </article>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🔵</span><span class="lane__title">In Progress</span><span class="lane__count">5</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2375</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Workbench-Archiv schreibt das falsche Feld</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · vor 8s</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2343</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Abnahme-Guard: Abnahmen terminal machen</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · 4m12s</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2340</span></div>
+                        <div class="card__title">Execution-Model-Shift: Bypass-Permissions</div>
+                        <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                      </article>
+                      <div class="lane__more">+ 2 weitere</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🤖</span><span class="lane__title">Post Processing</span><span class="lane__count">3</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2342</span><span class="card__chips"><span class="card__chip">B+</span></span></div>
+                        <div class="card__title">Scanner-Cache: API 14 s → 0,3 s</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>grade-review läuft</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2381</span></div>
+                        <div class="card__title">Fix: Explorer-Tree Projekt-Kontextmenü</div>
+                        <div class="card__status card__status--wait"><span class="pip pip--hollow"></span>Warteschlange · 1</div>
+                      </article>
+                      <div class="lane__more">+ 1 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--human">
+                <div class="zone__head">👤 Du · Entscheidung <span class="zone__live">4 warten auf dich</span></div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">👁️</span><span class="lane__title">Review</span><span class="lane__count">4</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2302</span><span class="card__chips"><span class="card__chip">A−</span></span></div>
+                        <div class="card__title">Remote host admin: per-project caps</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2250</span><span class="card__chips"><span class="card__chip">B</span></span></div>
+                        <div class="card__title">Pipeline-Steps: Framework-Eignung markieren</div>
+                      </article>
+                      <div class="lane__more">+ 2 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="panel__caption">
+            Die Zone ist das lauteste Signal — man sieht auf zwei Meter Abstand, wo die Maschine
+            zu Hause ist. Der Preis: <b>Ready muss umziehen.</b> Heute gehört <code>2-ready</code>
+            zur Board-Gruppe „Backlog“ (<code>app.ts · laneGroups()</code>); für eine
+            zusammenhängende Automatik-Fläche muss die Gruppierung umgebaut werden — und damit
+            ändert sich die räumliche Ordnung, an die Roberts Muskelgedächtnis gewöhnt ist.
+          </p>
+        </div>
+
+        <div class="assess">
+          <div class="assess-card">
+            <span class="badge ok"><span class="dot"></span> Wirkung</span>
+            <p><strong>Zuständigkeit: sehr stark.</strong> Territorium ist die stärkste visuelle
+            Metapher, die ein Board hat. „Da drüben arbeitet die Maschine“ ist nach einem Blick
+            gelernt und muss nie wieder gelesen werden.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge warn"><span class="dot"></span> Unruhe-Risiko</span>
+            <p><strong>Mittel.</strong> Die Laufschiene ist <em>eine</em> Animation für das ganze
+            Board (nicht <em>n</em>), und sie stoppt, wenn nichts läuft. Aber sie liegt in der
+            Peripherie des Blickfelds und läuft potenziell stundenlang — genau die Sorte
+            Dauerbewegung, die Robert im Kartentext ausdrücklich als Risiko benennt.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge bad"><span class="dot"></span> Aufwand</span>
+            <p><strong>Hoch.</strong> Nicht wegen CSS, sondern wegen der Umgruppierung:
+            <code>laneGroups()</code>, die Focus-/Collapse-Persistenz je Gruppen-ID und die
+            E2E-Specs, die auf <code>lane-group-backlog</code> zeigen, hängen alle daran.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge bad"><span class="dot"></span> Was A <em>nicht</em> löst</span>
+            <p>Die eigentliche Verwirrung bleibt. „In Progress: 5“ mit drei toten Karten sieht in
+            der Automatik-Zone genauso aus wie heute — nur auf blauem Grund. A beantwortet
+            Zuständigkeit, nicht Aktivität, und suggeriert durch die laufende Schiene sogar
+            <em>mehr</em> Betrieb, als tatsächlich stattfindet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------- VARIANTE B ---------------------- -->
+      <section class="panel" id="panel-b">
+        <div class="panel__head">
+          <span class="badge info"><span class="dot"></span> Variante B · Ebene Lane</span>
+          <h2>Besitzer im Lane-Kopf — plus eine Zeile, die die Wahrheit sagt</h2>
+          <p>
+            Kein Zonen-Hintergrund, keine Umgruppierung. Jeder Lane-Kopf bekommt zwei Dinge:
+            links ein kleines <b>Besitzer-Glyph</b> (⚙ Maschine / 👤 du) und darunter eine
+            <b>Statuszeile</b>, die die Lane in ihre echten Bestandteile zerlegt — „2 laufen ·
+            3 ohne Run“. Bewegung gibt es an genau einer Stelle: ein 6-px-Punkt, der nur dort
+            atmet, wo wirklich ein Run läuft.
+          </p>
+        </div>
+
+        <div class="panel__board">
+          <div class="board-wrap">
+            <div class="board board--b">
+              <div class="zone zone--plain">
+                <div class="zone__head">Backlog</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head">
+                      <span class="lane__owner lane__owner--human">👤</span>
+                      <span class="lane__title">Backlog</span><span class="lane__count">27</span>
+                    </div>
+                    <div class="lane__status lane__status--human"><span class="pip"></span><b>Du</b> <span class="sep">·</span> unsortiert</div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2200</span><span class="card__chips"><span class="card__chip">codex</span></span></div>
+                        <div class="card__title">Remote-Run-Testsuite &amp; Modell-Benchmark</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2132</span><span class="card__chips"><span class="card__chip">EPIC</span></span></div>
+                        <div class="card__title">Release &amp; Deployment First-Class</div>
+                      </article>
+                      <div class="lane__more">+ 25 weitere</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head">
+                      <span class="lane__owner lane__owner--machine">⚙</span>
+                      <span class="lane__title">Ready</span><span class="lane__count">2</span>
+                    </div>
+                    <div class="lane__status lane__status--machine"><span class="pip pip--queued"></span><b>Auto</b> <span class="sep">·</span> wartet auf Claim</div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2305</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">One-command onboarding: docker compose up</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2278</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">Hosted Wiki: publish the accepted revision</div>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--plain">
+                <div class="zone__head">Active</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head">
+                      <span class="lane__owner lane__owner--machine">⚙</span>
+                      <span class="lane__title">In Progress</span><span class="lane__count">5</span>
+                    </div>
+                    <div class="lane__status lane__status--machine">
+                      <span class="pip pip--live"></span><b>2 laufen</b> <span class="sep">·</span> <span class="lane__gap">3 ohne Run</span>
+                    </div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2375</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Workbench-Archiv schreibt das falsche Feld</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · vor 8s</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2343</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Abnahme-Guard: Abnahmen terminal machen</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · 4m12s</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2340</span></div>
+                        <div class="card__title">Execution-Model-Shift: Bypass-Permissions</div>
+                        <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                      </article>
+                      <div class="lane__more">+ 2 weitere</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head">
+                      <span class="lane__owner lane__owner--machine">⚙</span>
+                      <span class="lane__title">Post Processing</span><span class="lane__count">3</span>
+                    </div>
+                    <div class="lane__status lane__status--machine">
+                      <span class="pip pip--live"></span><b>1 bewertet</b> <span class="sep">·</span> 2 in Warteschlange
+                    </div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2342</span><span class="card__chips"><span class="card__chip">B+</span></span></div>
+                        <div class="card__title">Scanner-Cache: API 14 s → 0,3 s</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>grade-review läuft</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2381</span></div>
+                        <div class="card__title">Fix: Explorer-Tree Projekt-Kontextmenü</div>
+                        <div class="card__status card__status--wait"><span class="pip pip--hollow"></span>Warteschlange · 1</div>
+                      </article>
+                      <div class="lane__more">+ 1 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--plain">
+                <div class="zone__head">Done &amp; Decide</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head">
+                      <span class="lane__owner lane__owner--human">👤</span>
+                      <span class="lane__title">Review</span><span class="lane__count">4</span>
+                    </div>
+                    <div class="lane__status lane__status--human"><span class="pip"></span><b>Du</b> <span class="sep">·</span> ältester wartet 2 T</div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2302</span><span class="card__chips"><span class="card__chip">A−</span></span></div>
+                        <div class="card__title">Remote host admin: per-project caps</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2250</span><span class="card__chips"><span class="card__chip">B</span></span></div>
+                        <div class="card__title">Pipeline-Steps: Framework-Eignung markieren</div>
+                      </article>
+                      <div class="lane__more">+ 2 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="panel__caption">
+            Die entscheidende Zeile steht in <b>In Progress</b>: <b>2 laufen · 3 ohne Run</b>. Damit
+            ist das Verwirr-Muster nicht kaschiert, sondern benannt — und zwar in derselben
+            Ableitung, aus der auch die Karten ihr <code>No active run</code> beziehen, sodass Kopf
+            und Karten nie widersprüchliche Zahlen zeigen (Hausregel R3, Summeninvariante).
+            Steht die Automatik still, verliert der Punkt seine Bewegung und die Zeile liest
+            <b>0 laufen · Auto pausiert</b>.
+          </p>
+        </div>
+
+        <div class="assess">
+          <div class="assess-card">
+            <span class="badge ok"><span class="dot"></span> Wirkung</span>
+            <p><strong>Zuständigkeit: gut. Aktivität: sehr stark.</strong> Das Glyph beantwortet
+            „wer ist zuständig“ statisch, die Statuszeile beantwortet „läuft gerade was“ mit
+            Zahlen. B ist die einzige der drei Varianten, die das eigentliche Verwirr-Muster
+            direkt adressiert, statt es zu übermalen.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge ok"><span class="dot"></span> Unruhe-Risiko</span>
+            <p><strong>Niedrig.</strong> Höchstens drei atmende 6-px-Punkte auf dem ganzen Board,
+            2,6 s Zyklus, nur Opazität (kein Layout, kein Helligkeitsflackern der Fläche). Läuft
+            nichts, bewegt sich nichts — das erfüllt R4 wörtlich.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge ok"><span class="dot"></span> Aufwand</span>
+            <p><strong>Niedrig.</strong> Der Datenlieferant existiert bereits: <code>indicators()</code>
+            in <code>task-column.ts</code> zählt heute schon <em>je Lane</em> laufende, blockierte
+            und eingabebedürftige Karten — gerendert wird das aber nur im eingeklappten Rail.
+            B macht im Wesentlichen sichtbar, was schon berechnet wird.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge warn"><span class="dot"></span> Kosten / Grenzen</span>
+            <p>Die Lane-Köpfe wachsen um eine Zeile (ca. 14 px) — bei sieben Lanes ist das
+            Bildschirmfläche, die den Karten fehlt. Die Zuständigkeit steht nur im Kopf, nicht in
+            der Fläche; wer weit unten in einer langen Lane scrollt, hat sie aus dem Blick. Und
+            eine bewusste Entscheidung im Mockup: das <b>Besitzer-Glyph ersetzt das bisherige
+            Lane-Emoji</b> (🔵, 🤖, 👁️), weil zwei Glyphen in einem 178-px-Kopf zu eng stehen —
+            wer die Emojis behalten will, muss stattdessen den Titel kürzen.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------- VARIANTE C ---------------------- -->
+      <section class="panel" id="panel-c">
+        <div class="panel__head">
+          <span class="badge info"><span class="dot"></span> Variante C · Ebene Karte</span>
+          <h2>Conveyor — die Arbeit bewegt sich, nicht die Lane</h2>
+          <p>
+            Lanes und Zonen bleiben exakt wie heute. Stattdessen bekommt <em>jede Karte mit einem
+            echt laufenden Run</em> eine 2-px-Fortschrittskante am Oberrand, über die ein
+            Schimmer wandert. In <b>Post Processing</b> tritt an die Stelle des Schimmers eine
+            Schrittkette (Pipeline-Steps), bei der nur das aktive Segment atmet. Karten ohne Run
+            bleiben stumpf — der Kontrast innerhalb der Lane <em>ist</em> die Aussage.
+          </p>
+        </div>
+
+        <div class="panel__board">
+          <div class="board-wrap">
+            <div class="board board--c">
+              <div class="zone zone--plain">
+                <div class="zone__head">Backlog</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🗒️</span><span class="lane__title">Backlog</span><span class="lane__count">27</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2200</span><span class="card__chips"><span class="card__chip">codex</span></span></div>
+                        <div class="card__title">Remote-Run-Testsuite &amp; Modell-Benchmark</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2132</span><span class="card__chips"><span class="card__chip">EPIC</span></span></div>
+                        <div class="card__title">Release &amp; Deployment First-Class</div>
+                      </article>
+                      <div class="lane__more">+ 25 weitere</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">📦</span><span class="lane__title">Ready</span><span class="lane__count">2</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2305</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">One-command onboarding: docker compose up</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2278</span><span class="card__chips"><span class="card__chip">opus</span></span></div>
+                        <div class="card__title">Hosted Wiki: publish the accepted revision</div>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--plain">
+                <div class="zone__head">Active</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🔵</span><span class="lane__title">In Progress</span><span class="lane__count">5</span></div>
+                    <div class="lane__body">
+                      <article class="card card--conveyor">
+                        <div class="card__top"><span class="card__key">AGT-2375</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Workbench-Archiv schreibt das falsche Feld</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · vor 8s</div>
+                      </article>
+                      <article class="card card--conveyor">
+                        <div class="card__top"><span class="card__key">AGT-2343</span><span class="card__chips"><span class="card__chip">sonnet</span></span></div>
+                        <div class="card__title">Abnahme-Guard: Abnahmen terminal machen</div>
+                        <div class="card__status card__status--live"><span class="pip"></span>Coding · 4m12s</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2340</span></div>
+                        <div class="card__title">Execution-Model-Shift: Bypass-Permissions</div>
+                        <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2199</span></div>
+                        <div class="card__title">Backend-Restart verwaist laufende Runs</div>
+                        <div class="card__status card__status--dead"><span class="pip pip--hollow"></span>No active run</div>
+                      </article>
+                      <div class="lane__more">+ 1 weitere</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">🤖</span><span class="lane__title">Post Processing</span><span class="lane__count">3</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2342</span><span class="card__chips"><span class="card__chip">B+</span></span></div>
+                        <div class="card__title">Scanner-Cache: API 14 s → 0,3 s</div>
+                        <div class="steps" title="build · test · grade · integrate">
+                          <span class="step step--done"></span><span class="step step--done"></span><span class="step step--active"></span><span class="step"></span>
+                        </div>
+                        <div class="card__status card__status--live">grade-review · Schritt 3 von 4</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2381</span></div>
+                        <div class="card__title">Fix: Explorer-Tree Projekt-Kontextmenü</div>
+                        <div class="steps"><span class="step"></span><span class="step"></span><span class="step"></span><span class="step"></span></div>
+                        <div class="card__status card__status--wait">Warteschlange · Position 1</div>
+                      </article>
+                      <div class="lane__more">+ 1 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zone zone--plain">
+                <div class="zone__head">Done &amp; Decide</div>
+                <div class="zone__lanes">
+                  <div class="lane">
+                    <div class="lane__head"><span class="lane__icon">👁️</span><span class="lane__title">Review</span><span class="lane__count">4</span></div>
+                    <div class="lane__body">
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2302</span><span class="card__chips"><span class="card__chip">A−</span></span></div>
+                        <div class="card__title">Remote host admin: per-project caps</div>
+                      </article>
+                      <article class="card">
+                        <div class="card__top"><span class="card__key">AGT-2250</span><span class="card__chips"><span class="card__chip">B</span></span></div>
+                        <div class="card__title">Pipeline-Steps: Framework-Eignung markieren</div>
+                      </article>
+                      <div class="lane__more">+ 2 weitere</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="panel__caption">
+            C ist die einzige Variante, bei der die Bewegung dort sitzt, wo die Arbeit tatsächlich
+            stattfindet — an der einzelnen Karte. Die Schrittkette in Post Processing ist dabei der
+            stärkste Einzelbaustein des ganzen Mockups: sie erklärt zum ersten Mal, <em>was</em>
+            die Automatik da eigentlich macht, statt nur <em>dass</em> sie etwas macht. Der Preis
+            steht darüber: bei fünf gleichzeitigen Runs laufen fünf Animationen gleichzeitig, mit
+            verschobenen Phasen — das Board flimmert, ohne dass die Zuständigkeitsfrage überhaupt
+            beantwortet wäre.
+          </p>
+        </div>
+
+        <div class="assess">
+          <div class="assess-card">
+            <span class="badge bad"><span class="dot"></span> Wirkung</span>
+            <p><strong>Zuständigkeit: gar nicht. Aktivität: stark.</strong> C zeigt, welche
+            <em>Karten</em> arbeiten, sagt aber nichts darüber, welche <em>Lanes</em> der Maschine
+            gehören. Eine leere Automatik-Lane sieht weiterhin aus wie eine vergessene Lane.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge bad"><span class="dot"></span> Unruhe-Risiko</span>
+            <p><strong>Hoch — der Ausschlussgrund.</strong> Die Anzahl der Animationen skaliert mit
+            der Parallelität, und Parallelität ist erklärtes Projektziel. Auf einem Board mit acht
+            gleichzeitigen Runs sind acht wandernde Schimmer im Blickfeld. Genau das ist der
+            „Dauer-Animation nervt“-Fall aus dem Kartentext.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge warn"><span class="dot"></span> Aufwand</span>
+            <p><strong>Mittel.</strong> Der Schimmer selbst ist billig, aber die Schrittkette
+            braucht eine belastbare Pipeline-Schritt-Projektion je Karte. Die Karte trägt heute
+            <code>postProcessingChecks</code> und <code>phase</code> — nutzbar, aber nicht in der
+            Auflösung „Schritt 3 von 4“ ohne Zusatzarbeit im Backend.</p>
+          </div>
+          <div class="assess-card">
+            <span class="badge warn"><span class="dot"></span> Regel-Konflikt</span>
+            <p>Der Schimmer sitzt an der <em>Ober</em>kante, verletzt R1 (keine linken Accent-Bars)
+            also nicht — aber er animiert eine Fläche auf der Karte, und die Motion-Regeln
+            verbieten Helligkeitsänderungen an Karten ausdrücklich. Das wäre eine Ausnahme, die man
+            in <code>design-principles.md</code> begründen und eintragen müsste.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================== VERGLEICH ============================== -->
+  <section class="panel-card">
+    <div class="section-head">
+      <h2>Vergleich in einer Tabelle</h2>
+      <p>Bewertet wird gegen die beiden Fragen (Zuständigkeit / Aktivität), das Unruhe-Risiko aus
+      dem Kartentext und den Hausregel-Check.</p>
+    </div>
+    <div class="section-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Kriterium</th>
+              <th>A · Zone</th>
+              <th>B · Lane-Kopf</th>
+              <th>C · Karte</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Zuständigkeit</b><br><span style="color:var(--muted)">Wer arbeitet hier grundsätzlich?</span></td>
+              <td><span class="badge ok">sehr stark</span> Territorium, auf zwei Meter lesbar</td>
+              <td><span class="badge ok">gut</span> Glyph im Kopf, ohne Umbau</td>
+              <td><span class="badge bad">nicht adressiert</span></td>
+            </tr>
+            <tr>
+              <td><b>Aktivität jetzt</b><br><span style="color:var(--muted)">Läuft gerade etwas?</span></td>
+              <td><span class="badge warn">grob</span> nur „irgendwo läuft was“</td>
+              <td><span class="badge ok">exakt</span> Zahlen je Lane, dieselbe Quelle wie die Karten</td>
+              <td><span class="badge ok">exakt</span> je Karte, inkl. Pipeline-Schritt</td>
+            </tr>
+            <tr>
+              <td><b>Löst „5 im Kopf, 3 ohne Run“</b></td>
+              <td><span class="badge bad">nein</span> verschlimmert es eher</td>
+              <td><span class="badge ok">ja</span> benennt die Lücke als Zahl</td>
+              <td><span class="badge warn">teilweise</span> sichtbar, aber unbeziffert</td>
+            </tr>
+            <tr>
+              <td><b>Unruhe-Risiko</b></td>
+              <td><span class="badge warn">mittel</span> 1 Dauer-Animation in der Peripherie</td>
+              <td><span class="badge ok">niedrig</span> max. 3 kleine Punkte, Opazität</td>
+              <td><span class="badge bad">hoch</span> skaliert mit Parallelität</td>
+            </tr>
+            <tr>
+              <td><b>Aufwand</b></td>
+              <td><span class="badge bad">hoch</span> Board-Umgruppierung</td>
+              <td><span class="badge ok">niedrig</span> Daten existieren bereits</td>
+              <td><span class="badge warn">mittel</span> Schritt-Projektion nötig</td>
+            </tr>
+            <tr>
+              <td><b>Hausregeln R1/R4/R5</b></td>
+              <td><span class="badge ok">konform</span> Flächentönung statt Balken</td>
+              <td><span class="badge ok">konform</span> akut = akut, sonst still</td>
+              <td><span class="badge warn">Ausnahme nötig</span> Motion-Regel für Karten</td>
+            </tr>
+            <tr>
+              <td><b>Rückbaubarkeit</b></td>
+              <td>schwer — Ordnung ist umgestellt</td>
+              <td>leicht — eine Zeile weniger</td>
+              <td>leicht — eine Klasse weniger</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== EMPFEHLUNG ============================== -->
+  <section class="panel-card" id="empfehlung">
+    <div class="section-head">
+      <h2>Empfehlung</h2>
+      <p>Eine Variante als Basis, ein einziges Element aus einer zweiten, eine klare Absage.</p>
+    </div>
+    <div class="section-body">
+
+      <div class="note" style="background:var(--brand-soft);border-color:transparent">
+        <p style="font-size:15px">
+          <strong>Umsetzen: Variante B</strong> — Besitzer-Glyph plus Statuszeile im Lane-Kopf.
+          <strong>Dazu genau ein Element aus A:</strong> die Zonenbeschriftung im Gruppenkopf
+          („⚙ Automatik“ / „👤 Du“) als reiner Text, <em>ohne</em> Hintergrundfläche, <em>ohne</em>
+          Laufschiene und <em>ohne</em> Umgruppierung von Ready.
+          <strong>Nicht umsetzen: Variante C</strong> in ihrer Kartenschimmer-Form.
+        </p>
+      </div>
+
+      <div class="cols-2">
+        <div class="assess-card">
+          <h3>Warum B</h3>
+          <ul class="tight">
+            <li><strong>Sie trennt die zwei Fragen sauber.</strong> Zuständigkeit ist statisch und
+            bekommt ein statisches Zeichen; Aktivität ist akut und bekommt als einzige Bewegung.
+            Das ist R4 wörtlich befolgt statt umschifft.</li>
+            <li><strong>Sie ist die einzige, die das gemeldete Problem trifft.</strong> Roberts
+            Beobachtung war nicht „ich sehe die Automatik nicht“, sondern „In Progress zeigt viele
+            mit No active run“. Eine Zone übermalt diesen Widerspruch, eine Zahl im Kopf benennt
+            ihn.</li>
+            <li><strong>Sie kostet fast nichts.</strong> <code>indicators()</code> zählt je Lane
+            bereits <code>running</code>, <code>needsInput</code>, <code>error</code> und den
+            aktiven CLI — die Zahlen werden heute nur im eingeklappten Rail gerendert und im
+            aufgeklappten Zustand weggeworfen.</li>
+            <li><strong>Sie ist reversibel.</strong> Fällt das Urteil nach zwei Wochen negativ aus,
+            verschwindet eine Zeile — kein Muskelgedächtnis wurde umtrainiert.</li>
+          </ul>
+        </div>
+        <div class="assess-card">
+          <h3>Warum nicht A, warum nicht C</h3>
+          <ul class="tight">
+            <li><strong>A verlangt den teuersten Eingriff für die schwächste Antwort.</strong> Die
+            zusammenhängende Automatik-Fläche gibt es nur, wenn <code>2-ready</code> aus der
+            Backlog-Gruppe herauswandert. Man zahlt eine Board-Umstellung, bekommt aber keine
+            Aussage über den Ist-Betrieb.</li>
+            <li><strong>A hat eine Dauer-Animation ohne Aussage.</strong> Eine Laufschiene, die
+            „irgendwo läuft irgendwas“ sagt, ist auf Dauer Rauschen — sie darf nicht in die
+            Peripherie eines Fensters, das den ganzen Tag offen steht.</li>
+            <li><strong>C skaliert falsch herum.</strong> Je besser das System arbeitet (mehr
+            Parallelität), desto unruhiger wird das Board. Eine Gestaltung, die den Erfolgsfall
+            bestraft, ist die falsche Gestaltung.</li>
+            <li><strong>Aber C hat einen Baustein, den man retten sollte:</strong> die
+            <em>Schrittkette</em> in Post Processing. Ohne Schimmer, als ruhige Segmentanzeige, ist
+            sie die beste Antwort auf „was macht die Automatik da gerade eigentlich“. Das gehört in
+            eine eigene Karte, nicht in diese.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>Eine Bedingung, die nicht verhandelbar ist.</strong> Die Lane-Zahl und die
+        Karten-Liveness müssen aus <em>derselben</em> Ableitung kommen. Sagt der Kopf „2 laufen“ und
+        drei Karten zeigen einen laufenden Run, ist die Statuszeile schlimmer als gar keine —
+        das ist die Summeninvariante R3. Der bestehende Ableitungspfad in
+        <code>task-live-status.component.ts</code> ist deshalb die Quelle, nicht ein zweiter,
+        neu geschriebener Zähler.
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================== BETROFFENE STELLEN ============================== -->
+  <section class="panel-card">
+    <div class="section-head">
+      <h2>Betroffene Stellen in der echten App</h2>
+      <p>
+        Nur als Orientierung für die spätere Umsetzungskarte — in dieser Runde wurde
+        <b>keine</b> Datei unter <code>frontend/</code> angefasst. Die markierten Zeilen sind der
+        Stand vom 27.07. auf <code>develop</code>.
+      </p>
+    </div>
+    <div class="section-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Datei</th><th>Stelle</th><th>Was dort passieren müsste</th><th>Variante</th></tr>
+          </thead>
+          <tbody>
+            <tr class="rec-row">
+              <td><code>features/board/components/task-column/task-column.html</code></td>
+              <td><code>.column__header</code> (ab Z. 48) — direkt unter dem Header, vor <code>.column__body</code> (Z. 139)</td>
+              <td>Besitzer-Glyph vor <code>.column__title</code>; neue <code>.column__lane-status</code>-Zeile. Der Block <code>@if (statusCluster())</code> (Z. 73) ist heute schon genau dieses Muster — aber auf <code>3-progress</code> beschränkt.</td>
+              <td>B</td>
+            </tr>
+            <tr class="rec-row">
+              <td><code>features/board/components/task-column/task-column.ts</code></td>
+              <td><code>indicators()</code> (Z. 319), <code>statusCluster()</code> (Z. 153), <code>stalledCount()</code> (Z. 95)</td>
+              <td><code>indicators()</code> um „läuft wirklich“ vs. „ohne Run“ erweitern und im aufgeklappten Zustand rendern statt nur im Rail. <code>statusCluster()</code> von <code>3-progress</code> auf alle Automatik-Lanes verallgemeinern.</td>
+              <td>B</td>
+            </tr>
+            <tr class="rec-row">
+              <td><code>features/board/components/task-column/task-column.scss</code></td>
+              <td><code>.column__header</code> (Z. 72), <code>.column__count</code> (Z. 117), <code>.column-rail__*</code></td>
+              <td>Neue <code>.column__owner</code> und <code>.column__lane-status</code>. Achtung: <code>.column</code> hat <code>contain: inline-size layout paint</code> — die Statuszeile braucht <code>white-space: nowrap</code> + Ellipsis, sonst verbreitert sie die Lane nicht (gut) und wird abgeschnitten (muss man einplanen).</td>
+              <td>B</td>
+            </tr>
+            <tr class="rec-row">
+              <td><code>components/task-live-status/task-live-status.component.ts</code></td>
+              <td>Zeile ~103, die <code>'No active run'</code> erzeugt</td>
+              <td>Quelle der Wahrheit für „läuft / läuft nicht“. Die Lane-Zahl muss diese Ableitung wiederverwenden (R3), nicht neu implementieren.</td>
+              <td>B</td>
+            </tr>
+            <tr class="rec-row">
+              <td><code>app.html</code> + <code>app.scss</code></td>
+              <td><code>.lane-group__head</code> / <code>.lane-group__label</code> (app.html Z. 292–294, app.scss ab Z. 1423)</td>
+              <td>Nur die Beschriftung: „ACTIVE“ → „⚙ AUTOMATIK“, „DONE &amp; DECIDE“ → „👤 DU“. Reine Textänderung im bestehenden Gruppenkopf, keine Fläche.</td>
+              <td>A (nur dieses Element)</td>
+            </tr>
+            <tr>
+              <td><code>app.ts</code></td>
+              <td><code>laneGroups()</code> (ab Z. 608)</td>
+              <td>Nur für die volle Variante A: <code>2-ready</code> aus der Backlog-Gruppe in die Automatik-Gruppe ziehen. Zieht Focus-/Collapse-Persistenz (<code>lane-collapse.service.ts</code>) und E2E-Selektoren <code>lane-group-*</code> nach sich. <b>Nicht empfohlen.</b></td>
+              <td>A (voll)</td>
+            </tr>
+            <tr>
+              <td><code>features/board/components/task-card/task-card.component.scss</code></td>
+              <td><code>.task-card--running</code></td>
+              <td>Nur für Variante C. Kollidiert mit der Motion-Regel „Karten animieren keine Flächen/Helligkeit“ in <code>docs/quality/design-principles.md</code> — bräuchte eine dort eingetragene Ausnahme. <b>Nicht empfohlen.</b></td>
+              <td>C</td>
+            </tr>
+            <tr>
+              <td><code>features/board/components/post-processing-summary/</code></td>
+              <td>Bereits im Lane-Kopf von <code>4-auto-review</code> eingebunden (task-column.html Z. 55)</td>
+              <td>Anker für die gerettete Schrittkette aus C — als ruhige Segmentanzeige, eigene Karte.</td>
+              <td>C (Rettung)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <strong>Zu prüfende Regeln vor der Umsetzung:</strong>
+        <code>docs/quality/design/style-guide-hard-rules.md</code> (R1 keine linken Accent-Bars,
+        R3 Summeninvariante, R4 akute Signale nur für akute Zustände, R5 beide Themes + reduced
+        motion) und der Motion-Abschnitt in <code>docs/quality/design-principles.md</code>.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    AGT-2350 · Mockup-Runde, kein Produktionscode · self-contained HTML, keine externen Assets,
+    keine Netzwerkzugriffe · Lane-Titel und Icons entsprechen den echten Produktstrings aus
+    <code>app.ts</code>; die Kartendaten sind ein realitätsnaher Auszug vom 27.07.2026, keine
+    Live-Daten.
+  </footer>
+
+</main>
+
+<script>
+  // Minimaler Theme-Zyklus: automatisch -> hell -> dunkel. Ohne Klick folgt
+  // die Seite prefers-color-scheme; der Schalter ist nur eine Uebersteuerung.
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeBtn');
+    var modes = ['auto', 'light', 'dark'];
+    var labels = { auto: 'Theme: automatisch', light: 'Theme: hell', dark: 'Theme: dunkel' };
+    var i = 0;
+    btn.addEventListener('click', function () {
+      i = (i + 1) % modes.length;
+      root.setAttribute('data-theme', modes[i]);
+      btn.textContent = labels[modes[i]];
+    });
+  })();
+</script>
+
+</body>
+</html>

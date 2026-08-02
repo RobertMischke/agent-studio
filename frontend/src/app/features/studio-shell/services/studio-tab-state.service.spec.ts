@@ -67,6 +67,19 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('keeps the workspace Feed as one persistent editor tab', () => {
+    const tab: StudioTab = { kind: 'feed' };
+    svc.open(tab);
+    svc.open(tab);
+
+    expect(svc.tabs().filter(item => item.kind === 'feed')).toEqual([tab]);
+    expect(svc.activeKey()).toBe('feed');
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+    expect(TestBed.inject(StudioTabStateService).activeTab()).toEqual(tab);
+  });
+
   it('retargets open project tabs and preserves the active settings tab after rename', () => {
     svc.open({ kind: 'board', projectName: 'Old Name' });
     svc.open({ kind: 'hub', projectName: 'Old Name', section: 'settings' });

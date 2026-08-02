@@ -1,0 +1,48 @@
+{
+  "scenario": "reference-change",
+  "seed": "compose-reference-v1",
+  "runId": "canary-machine-10m-reference",
+  "accepted": true,
+  "resultSha": "a703ee085baee8d4edb33c85001a0b2cf611dd52",
+  "semanticTree": "1c903baf39449db19baa7158702dc7fa7e4f7452",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "none",
+  "assertions": [
+    {
+      "id": "reference-change-accepted",
+      "passed": true,
+      "detail": "exact result a703ee085baee8d4edb33c85001a0b2cf611dd52 reached 6-completed through all five phases"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": false,
+    "selected": [],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 0,
+    "consumed": 0
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/scenarios/reference-change/canary-machine-10m-reference",
+  "expectedTerminal": "6-completed",
+  "actualTerminal": "6-completed",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 0,
+    "used": 0
+  },
+  "chronicleLinks": []
+}

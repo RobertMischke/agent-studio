@@ -1,0 +1,302 @@
+[
+    {
+        "Id": "f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba",
+        "Created": "2026-07-29T02:09:53.987129771Z",
+        "Path": "node",
+        "Args": [
+            "/harness/compose-fault-proxy.mjs"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1540094,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-29T02:09:59.967423063Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-07-29T04:20:42.744917109+02:00",
+                        "End": "2026-07-29T04:20:42.872988033+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:44.874148854+02:00",
+                        "End": "2026-07-29T04:20:45.019490752+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:47.020384222+02:00",
+                        "End": "2026-07-29T04:20:47.166435164+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:49.167012413+02:00",
+                        "End": "2026-07-29T04:20:49.284769169+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-07-29T04:20:51.285125606+02:00",
+                        "End": "2026-07-29T04:20:51.40365344+02:00",
+                        "ExitCode": 0,
+                        "Output": ""
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:eff728b072ca0047791e84767b829fb9871d792941ed1d4b1e819e617a972021",
+        "ResolvConfPath": "/var/lib/docker/containers/f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba/hostname",
+        "HostsPath": "/var/lib/docker/containers/f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba/hosts",
+        "LogPath": "/var/lib/docker/containers/f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba/f3d738d4ff54f35b95166df767491b99dd813612402152fe1f08b0a8d9b2cdba-json.log",
+        "Name": "/agt2394-rts-canary-machine-10m-fault-proxy-1",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "agt2394-rts-canary-machine-10m-network",
+            "PortBindings": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19743"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ],
+            "Init": true
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "f3d738d4ff54",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "8080/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "FAULT_PROXY_STUDIO_PORT=7071",
+                "FAULT_PROXY_CONTROL_PORT=8080",
+                "FAULT_PROXY_TARGET_HOST=task-server",
+                "FAULT_PROXY_TARGET_PORT=5071",
+                "FAULT_PROXY_RUNNER_PORT=6071",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=22.23.1",
+                "YARN_VERSION=1.22.22"
+            ],
+            "Cmd": [
+                "/harness/compose-fault-proxy.mjs"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "node",
+                    "-e",
+                    "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "StartPeriod": 2000000000,
+                "Retries": 20
+            },
+            "Image": "agt2394-rts-canary-machine-10m-fault-proxy:local",
+            "Volumes": null,
+            "WorkingDir": "/harness",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.agentstudio.remote-harness.disposable": "true",
+                "com.agentstudio.remote-harness.identity": "agt2394-rts-canary-machine-10m",
+                "com.agentstudio.remote-harness.run-id": "canary-machine-10m",
+                "com.docker.compose.config-hash": "3e13d6cb247b59074d7639ee401f4ee10dbd7721c8347da43ced6886e439945d",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "task-server:service_healthy:false",
+                "com.docker.compose.image": "sha256:eff728b072ca0047791e84767b829fb9871d792941ed1d4b1e819e617a972021",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "agt2394-rts-canary-machine-10m",
+                "com.docker.compose.project.config_files": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite/compose.yaml",
+                "com.docker.compose.project.environment_file": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/compose.env",
+                "com.docker.compose.project.working_dir": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite",
+                "com.docker.compose.service": "fault-proxy",
+                "com.docker.compose.version": "2.40.3",
+                "org.opencontainers.image.revision": "afee6f812080dbb2dfeac15be4f651552422f275"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "49f8b3b84f7d44f4261187670616c32c8c645fbbbecdde6de077c87712189984",
+            "SandboxKey": "/var/run/docker/netns/49f8b3b84f7d",
+            "Ports": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19743"
+                    }
+                ]
+            },
+            "Networks": {
+                "agt2394-rts-canary-machine-10m-network": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "agt2394-rts-canary-machine-10m-fault-proxy-1",
+                        "fault-proxy"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "21681b62ede945ff1f835337eea4273eb5ceedee27a1f2d28788f067d1ea722a",
+                    "EndpointID": "3e19aa64d6fcad42088eab6bc55f1ca59d7240b75d5e8270a1498d8190d5fca5",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.3",
+                    "MacAddress": "02:ff:19:3f:8f:cb",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "agt2394-rts-canary-machine-10m-fault-proxy-1",
+                        "fault-proxy",
+                        "f3d738d4ff54"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:15a3ee7b27a32d4adbfbbf28cec5f9f862d815088167ed7ef3842458316ff87d",
+            "size": 1430,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

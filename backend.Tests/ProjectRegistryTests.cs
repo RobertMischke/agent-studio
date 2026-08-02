@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
@@ -38,6 +39,76 @@ public class ProjectRegistryTests : IDisposable
 
     private ProjectRegistry Build(IAtomicJsonFileWriter? fileWriter = null) =>
         new(_config, NullLogger<ProjectRegistry>.Instance, fileWriter);
+
+    private ProjectRegistry Build(ILogger<ProjectRegistry> logger) =>
+        new(_config, logger);
+
+    [Fact]
+    public void ExistingInvalidFile_FailsClosed_AndPreservesOriginalBytes()
+    {
+        var seeded = Build();
+        seeded.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "protected"),
+            "Protected",
+            DefaultWorkspace.Id);
+
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var corrupt = File.ReadAllText(projectsFile)
+            .Replace("\"Urls\": []", "\"Urls\": null", StringComparison.Ordinal);
+        Assert.Contains("\"Urls\": null", corrupt, StringComparison.Ordinal);
+        File.WriteAllText(projectsFile, corrupt);
+
+        var logger = new RegistryLogger();
+        var reloaded = Build(logger);
+
+        Assert.Throws<ProjectRegistryLoadException>(() =>
+            reloaded.EnsureProjectForStorage(
+                Path.Combine(_root, "projects", "legacy-reseed"),
+                "Legacy Reseed",
+                DefaultWorkspace.Id));
+
+        Assert.Equal(corrupt, File.ReadAllText(projectsFile));
+        Assert.Empty(Directory.GetFiles(
+            RegistryPaths.MetadataDir(_root),
+            $"{RegistryPaths.ProjectsFileName}.quarantine-*"));
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Error
+            && entry.Message.Contains("project-registry-load-failed", StringComparison.Ordinal)
+            && entry.Message.Contains("action=fail-closed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ShrinkingPersist_QuarantinesPreviousRegistry_AndLogsCounts()
+    {
+        var seeded = Build();
+        var first = seeded.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "first"),
+            "First",
+            DefaultWorkspace.Id);
+        seeded.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "second"),
+            "Second",
+            DefaultWorkspace.Id);
+
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var beforeDelete = File.ReadAllText(projectsFile);
+        var logger = new RegistryLogger();
+        var reloaded = Build(logger);
+        Assert.Equal(2, reloaded.List().Count);
+
+        reloaded.Delete(first.Id);
+
+        var quarantines = Directory.GetFiles(
+            RegistryPaths.MetadataDir(_root),
+            $"{RegistryPaths.ProjectsFileName}.quarantine-*");
+        var quarantine = Assert.Single(quarantines);
+        Assert.Equal(beforeDelete, File.ReadAllText(quarantine));
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains("project-registry-shrink-quarantined", StringComparison.Ordinal)
+            && entry.Message.Contains("previousCount=2", StringComparison.Ordinal)
+            && entry.Message.Contains("nextCount=1", StringComparison.Ordinal));
+    }
 
     [Fact]
     public void EnsureProjectForStorage_AllocatesPROJ001_FirstTime()
@@ -202,6 +273,30 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(p.Id, renamed.Id);
         Assert.Equal(p.ShortCode, renamed.ShortCode);
         Assert.Equal("New Name", renamed.DisplayName);
+    }
+
+    private sealed class RegistryLogger : ILogger<ProjectRegistry>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull =>
+            NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 
     [Fact]
@@ -503,7 +598,29 @@ public class ProjectRegistryTests : IDisposable
         Assert.NotNull(rule);
         Assert.Equal("npm run website", rule!.Command); // trimmed
         Assert.Equal(4202, rule.Port);
+        Assert.Equal(30, rule.ReadinessTimeoutSeconds);
+        Assert.Equal(600, rule.StartupTimeoutSeconds);
         Assert.Equal("package-json", rule.Source);
+    }
+
+    [Fact]
+    public void AddUrl_ExistingReadinessTimeoutBecomesSilenceWindowAndKeepsConfiguredStartupLimit()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Website", "http://localhost:4202",
+            new ProjectUrlStartRule
+            {
+                Command = "npm run website",
+                Port = 4202,
+                ReadinessTimeoutSeconds = 20,
+                StartupTimeoutSeconds = 900,
+            });
+
+        var rule = Assert.IsType<ProjectUrlStartRule>(updated.Urls.Single().StartRule);
+        Assert.Equal(20, rule.ReadinessTimeoutSeconds);
+        Assert.Equal(900, rule.StartupTimeoutSeconds);
     }
 
     [Fact]

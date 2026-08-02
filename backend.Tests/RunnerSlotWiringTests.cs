@@ -194,6 +194,7 @@ public sealed class RunnerSlotWiringTests : IDisposable
         Assert.True(runs.ReleaseExecutionSlot("live"));
 
         Assert.Equal(0, runs.Count);
+        Assert.True(runs.HasInFlight);
         Assert.True(runs.Contains("live"));
         Assert.False(runs.HoldsExecutionSlot("live"));
         Assert.Null(runs.SingleJobId);

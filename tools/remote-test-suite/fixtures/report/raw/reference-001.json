@@ -1,0 +1,20 @@
+{
+  "task": { "taskKey": "RTS-1" },
+  "attempt": { "attemptId": "run_01JREFERENCE0001" },
+  "claim": {
+    "leaseId": "lease-reference-001",
+    "authorityEpoch": 7,
+    "fence": 12
+  },
+  "baseSha": "1111111111111111111111111111111111111111",
+  "resultSha": "2222222222222222222222222222222222222222",
+  "review": {
+    "expectedResultSha": "2222222222222222222222222222222222222222",
+    "actualHead": "2222222222222222222222222222222222222222",
+    "outcome": "Pass"
+  },
+  "integration": {
+    "integratedSha": "2222222222222222222222222222222222222222",
+    "status": "integrated"
+  }
+}

@@ -38,7 +38,9 @@
     (generateCommitMessage)="generateCommitMessage()"
     (addCommit)="addCommitFromMenu()" />
 
-  <app-task-live-status [task]="detail().info" variant="detail" />
+  <!-- AGT-2378: the live strip reads the board-fresh runtime overlay, not the
+       detail snapshot frozen at open time. -->
+  <app-task-live-status [task]="liveRunInfo()" variant="detail" />
 
   @if (detail().info.epicId && detail().info.kind !== 'epic') {
     <app-epic-membership-banner
@@ -146,7 +148,7 @@
         [detail]="detail()"
         [maximized]="maximizedPane() === 'protocol'"
         [weight]="paneWeights().protocol"
-        [isRunning]="isRunning()"
+        [isRunning]="effectiveRunActive()"
         [isActiveJob]="isActiveJob()"
         [activeInspectorTab]="activeInspectorTab()"
         [followupPrompt]="followupPrompt()"
@@ -154,6 +156,7 @@
         [chatSendLabel]="chatSendLabel()"
         [chatError]="chatError()"
         [queuedFollowUp]="showQueuedFollowUp()"
+        [mutationsBlocked]="mutationsBlocked()"
         [regenerating]="regeneratingSummary()"
         [runOutcome]="runOutcomePresentation()"
         (maximizeToggle)="toggleMaximize('protocol')"
@@ -162,6 +165,7 @@
         (followupPromptChange)="followupPrompt.set($event)"
         (openLogOverlay)="showLogOverlay.set(true)"
         (sendChat)="sendChatMessage()"
+        (decisionApplied)="fileSaved.emit()"
         (regenerateSummary)="regenerateProtocol()"
         (evidenceMutated)="fileSaved.emit()"
         (followupCreatedFromEvidence)="fileSaved.emit()" />

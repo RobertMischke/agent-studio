@@ -212,7 +212,11 @@ export interface TaskInfo {
    */
   tokenSummary?: TaskTokenSummary | null;
   model: string | null;
+  /** False when model qualification derives the route from task type + policy. */
+  modelExplicit?: boolean;
   thinkingLevel?: string | null;
+  /** False when the policy supplies the reasoning level together with the model tier. */
+  thinkingLevelExplicit?: boolean;
   cliType: CliType | null;
   quotaFallback?: {
     cliType: string;
@@ -391,10 +395,11 @@ export interface TaskInfo {
    * AGT-2202: honest, git-derived integration verdict for accepted cards
    * (5-human-review / 6-completed / 7-archive): is the work actually in develop?
    * Mirrors backend `TaskInfo.Integration`; one of integrated / pending /
-   * conflict-skipped / no-branch. Resolves the "Accept != Merge" blind spot -
-   * unlike `mergeSignal` it also reads the curated `merge(<KEY>)` develop-log
-   * commit, so it survives commit rewriting by the async curated integrator. Null
-   * on cards not in an accepted lane.
+   * conflict-skipped / no-branch. It also projects the actual delivery ref from
+   * card truth, including runner/<host>/<KEY> and evidenced task/<slug> refs.
+   * Resolves the "Accept != Merge" blind spot by reading attributed-commit
+   * membership at the current target HEAD; lane state and remembered merge
+   * attempts cannot force membership. Null on cards not in an accepted lane.
    */
   integration?: TaskIntegrationStatus | null;
 
@@ -577,6 +582,14 @@ export interface ClientSummary {
   runnerLastClaimAt?: string | null;
   runnerActiveSlots?: number | null;
   runnerAvailableSlots?: number | null;
+  /** Central host capacity targets (AGT-2302 / AGT-2376). */
+  runnerDesiredMaxParallelism?: number | null;
+  runnerTargetLoadPercent?: number | null;
+  runnerRampStrategy?: 'conservative' | 'balanced' | 'aggressive' | null;
+  runnerCapacityUpdatedAt?: string | null;
+  /** Ceiling the live daemon reports as adopted. Telemetry, not policy. */
+  runnerEffectiveMaxParallelism?: number | null;
+  runnerEffectiveMaxParallelismAppliedAt?: string | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
 }
@@ -588,6 +601,7 @@ export interface RunnerProjectPreflight {
   repositoryUrl: string;
   fetchUrl: string;
   pushUrl: string;
+  targetBranch?: string;
   status: 'ready' | 'failed';
   detail: string;
   checkedAt: string;
@@ -1130,7 +1144,10 @@ export interface ProjectUrlStartRule {
   cwd: string | null;
   port: number | null;
   healthUrl?: string | null;
+  /** Console-silence window. Existing persisted values retain this field. */
   readinessTimeoutSeconds?: number;
+  /** Absolute startup ceiling even while console output remains active. */
+  startupTimeoutSeconds?: number;
   /** `manual` | `package-json` | `readme`. */
   source: string;
 }
@@ -1252,6 +1269,7 @@ export interface ProjectUrlDiagnostic {
   portReachable: boolean;
   httpStatus: number | null;
   contentReady: boolean;
+  startupFailureReason?: 'process-exit' | 'silence-timeout' | 'startup-limit' | null;
   /** Browser embedding evidence when response headers or the iframe can decide it. */
   iframeReady?: boolean | null;
   /** Bounded blocking X-Frame-Options/CSP evidence, when present. */
@@ -1596,6 +1614,15 @@ export interface TaskPublishSignal {
 export type TestRunMatchQuality = 'none' | 'perfect' | 'contains-diff' | 'does-not-contain-diff';
 export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven';
 
+export interface TaskTestEvidenceSource {
+  kind: 'project-test-run' | 'review-build-tests' | 'build-test-gate' | 'pre-develop-build-gate' | 'pre-main-test-gate' | string;
+  id: string;
+  commit: string;
+  result: 'passed' | 'failed' | 'not-proven' | string;
+  observedAt: string | null;
+  summary: string;
+}
+
 export interface TaskTestRunEvidence {
   runId: string | null;
   runCommit: string | null;
@@ -1608,6 +1635,8 @@ export interface TaskTestRunEvidence {
   evidenceState: TestEvidenceState;
   awaitingEvidence: boolean;
   summary: string;
+  /** SHA-linked task-owned grades and gate logs that complement project TestRunStore runs. */
+  sources?: TaskTestEvidenceSource[];
 }
 
 export interface CrashRecoveryPending {
@@ -1619,6 +1648,7 @@ export interface CrashRecoveryPending {
   files: string[];
   message: string;
   reason: string;
+  classification: 'trivial' | 'review-required';
 }
 
 export interface CrashRecoveryActionResult {

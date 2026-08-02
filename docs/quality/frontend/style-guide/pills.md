@@ -11,6 +11,16 @@ The shell uses small inline labels for three jobs:
 
 See [audit-pills.md](./audit-pills.md) for the inventory of every existing variant.
 
+## Status projection contract
+
+A task-card status pill describes the card now, not something that happened to
+it earlier. Derive it from the current lane, current integration status, and
+latest run outcome. Historical escalation, reissue, abort, and transient error
+events stay in the task timeline. Never render `merged` with `Integration
+error`, or Review with `Escalated`. This is the AGT-2410 Living Style Guide
+contract and the task-card application of
+[R4](../../design/style-guide-hard-rules.md#r4---acute-signals-only-for-acute-states).
+
 ## Pill — accent-tinted (canonical: `m.chip` mixin)
 
 ```scss

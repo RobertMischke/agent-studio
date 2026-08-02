@@ -110,7 +110,11 @@ describe('EscalationSummaryComponent', () => {
     expect(el.querySelector('[data-testid="escalation-delivery-counts"]')?.textContent).toContain('4 files');
 
     // Recommendation
-    expect(el.querySelector('[data-testid="escalation-recommendation"]')?.textContent?.trim()).toBe('Needs decision');
+    const recommendation = el.querySelector('[data-testid="escalation-recommendation"]');
+    expect(recommendation?.textContent?.trim()).toBe('Needs decision');
+    expect(recommendation?.tagName).toBe('SPAN');
+    expect(recommendation?.getAttribute('data-label-kind')).toBe('status');
+    expect(recommendation?.getAttribute('aria-label')).toBe('Recommendation: Needs decision');
     expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).toContain(
       'Delivered and merged; waiting for your decision because the reissue budget is exhausted',
     );

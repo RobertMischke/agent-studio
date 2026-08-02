@@ -2,12 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
-import type {
-  PipelineCatalogueStep,
-  PipelineStepSetting,
-  PipelineStepCondition,
-  PipelineStepConditionToken,
-} from '../../../task-pipeline';
+import type { PipelineCatalogueStep, PipelineStepSetting, PipelineStepCondition,
+  PipelineStepConditionToken, PipelineType } from '../../../task-pipeline';
 import type { ProjectPipelineCostTimeline } from '../../../project-token-usage';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { TooltipDirective, type StructuredTooltip } from 'coding-agent-chat/shared';
@@ -19,6 +15,7 @@ import {
   type PipelineAdminRow,
   type PipelineGroup,
   phaseForStep,
+  pipelineTypeOverrides,
   pipelinePhaseLabel,
   pipelineOrderSection,
   orderedPipelineCatalogue,
@@ -29,25 +26,14 @@ import {
 } from './pipeline-config.util';
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
-import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
-/**
- * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
- * pre/core/post step catalogue as a calm CSS grid where each configurable
- * step exposes activation, ordering, its per-step LLM model, a prompt
- * *binding reference* (content is managed in the Prompts registry, never
- * inline here), and the gate / run-condition controls. Each step also shows
- * the token sum it has spent over the last 90 days, folded across every task
- * run, so the operator gets a feel for how expensive that step is.
- *
- * All writes go through `setProjectPipelineStep` /
- * `setProjectPipelineStepOrder`; the same backend contract the old Project
- * Settings pipeline block used, so every existing configuration stays
- * operable at the new location.
- */
+import { PipelineStepExecutionComponent } from './pipeline-step-execution/pipeline-step-execution.component';
+import { PipelineTypePickerComponent } from './pipeline-type-picker/pipeline-type-picker.component';
+import { PipelineStepRowStateComponent } from './pipeline-step-row-state/pipeline-step-row-state.component';
+/** Per-type project pipeline editor for ordering, activation, agents, prompts, gates, and usage. */
 @Component({
-  selector: 'app-project-pipeline-panel',
-  standalone: true,
-  imports: [FormsModule, CliModelSelectorComponent, PipelineStepToggleComponent, TooltipDirective, PipelineHealthBlockComponent],
+  selector: 'app-project-pipeline-panel', standalone: true,
+  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective, PipelineHealthBlockComponent, PipelineStepExecutionComponent,
+    PipelineTypePickerComponent, PipelineStepRowStateComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
@@ -58,8 +44,8 @@ export class ProjectPipelinePanelComponent {
   /** Deep-link to the Prompts registry rail (content is managed there). */
   readonly openPrompts = output<void>();
   private readonly jobService = inject(TaskService);
-
   readonly catalogue = signal<readonly PipelineCatalogueStep[]>([]);
+  readonly pipelineType = signal<PipelineType>('task');
   readonly overrides = signal<Record<string, PipelineStepSetting>>({});
   readonly order = signal<readonly string[]>([]);
   readonly pipelineCost = signal<ProjectPipelineCostTimeline | null>(null);
@@ -78,17 +64,14 @@ export class ProjectPipelinePanelComponent {
   readonly draggingStepId = signal<string | null>(null);
   readonly dragTargetStepId = signal<string | null>(null);
 
-  /**
-   * In-progress condition edits, keyed by step id. Shadows the persisted
-   * condition so a value-bearing token (task-type / tag) can show its value
-   * input before a value has been entered and persisted.
-   */
+  /** Drafts let value-bearing conditions show their input before persistence. */
   readonly conditionDraft = signal<Record<string, { when: string; value: string }>>({});
 
   constructor() {
     effect(() => {
       const name = this.projectName();
-      if (name) this.load(name);
+      const type = this.pipelineType();
+      if (name) this.load(name, type);
     });
   }
 
@@ -112,11 +95,9 @@ export class ProjectPipelinePanelComponent {
       const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
       const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
       return {
-        id: step.id,
-        displayName: step.displayName,
-        kind: step.kind,
-        runMode: step.runMode ?? '',
-        dependsOn: step.dependsOn ?? [],
+        id: step.id, displayName: step.displayName, kind: step.kind,
+        appliesTo: step.appliesTo ?? 'any', applicable: step.applicable ?? true,
+        effectiveExecution: step.effectiveExecution ?? { executionKind: 'internal', source: 'runtime', commands: [] }, runMode: step.runMode ?? '', dependsOn: step.dependsOn ?? [],
         idempotent: step.idempotent ?? false,
         stub: step.stub ?? false,
         deferred: step.deferred ?? false,
@@ -126,6 +107,7 @@ export class ProjectPipelinePanelComponent {
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
         supportsCondition: step.supportsCondition,
+        framework: step.framework ?? '',
         phase: step.phase ?? phaseForStep(step),
         enabled: ov?.enabled ?? step.defaultEnabled,
         economyModel: ov?.economyModel ?? false,
@@ -165,23 +147,32 @@ export class ProjectPipelinePanelComponent {
     return groups;
   });
 
-  private load(project: string): void {
-    this.jobService.getPipelineCatalogue(project).subscribe({
-      next: (cat) => { this.catalogue.set(cat.steps ?? []); this.loadError.set(null); },
-      error: () => this.loadError.set('Could not load the pipeline catalogue.'),
+  private load(project: string, pipelineType: PipelineType): void {
+    this.catalogue.set([]);
+    this.conditionDraft.set({});
+    this.jobService.getPipelineCatalogue(project, pipelineType).subscribe({
+      next: (cat) => {
+        if (this.pipelineType() !== pipelineType) return;
+        this.catalogue.set(cat.steps ?? []);
+        this.loadError.set(null);
+      },
+      error: () => { if (this.pipelineType() === pipelineType)
+        this.loadError.set('Could not load the pipeline catalogue.'); },
     });
-    this.refreshOverrides(project);
+    this.refreshOverrides(project, pipelineType);
     this.jobService.getProjectPipelineCost(project, this.tokenWindowDays).subscribe({
       next: (t) => this.pipelineCost.set(t),
       error: () => { /* tokens are a secondary read; leave null -> chips just hide */ },
     });
   }
 
-  private refreshOverrides(project: string): void {
+  private refreshOverrides(project: string, pipelineType: PipelineType = this.pipelineType()): void {
     this.jobService.getAllProjectSettings().subscribe({
       next: (all) => {
-        this.overrides.set(all[project]?.pipelineSteps ?? {});
-        this.order.set(all[project]?.pipelineStepOrder ?? []);
+        if (this.pipelineType() !== pipelineType) return;
+        const selected = pipelineTypeOverrides(all[project], pipelineType);
+        this.overrides.set(selected.steps);
+        this.order.set(selected.order);
       },
       error: () => { /* keep last known overrides */ },
     });
@@ -211,17 +202,19 @@ export class ProjectPipelinePanelComponent {
     const stepIds = next
       .filter(step => pipelineOrderSection(step) !== 'core')
       .map(step => step.id);
+    const pipelineType = this.pipelineType();
 
     this.orderBusy.set(true);
     this.order.set(stepIds);
-    this.jobService.setProjectPipelineStepOrder(this.projectName(), stepIds).subscribe({
+    this.jobService.setProjectPipelineStepOrder(this.projectName(), pipelineType, stepIds).subscribe({
       next: (res) => {
         this.orderBusy.set(false);
-        this.order.set(res.pipelineStepOrder ?? stepIds);
+        if (this.pipelineType() === pipelineType)
+          this.order.set(res.pipelineStepOrder ?? stepIds);
       },
       error: () => {
         this.orderBusy.set(false);
-        this.refreshOverrides(this.projectName());
+        this.refreshOverrides(this.projectName(), pipelineType);
       },
     });
   }
@@ -293,17 +286,19 @@ export class ProjectPipelinePanelComponent {
     const stepIds = rows
       .filter(step => pipelineOrderSection(step) !== 'core')
       .map(step => step.id);
+    const pipelineType = this.pipelineType();
 
     this.orderBusy.set(true);
     this.order.set(stepIds);
-    this.jobService.setProjectPipelineStepOrder(this.projectName(), stepIds).subscribe({
+    this.jobService.setProjectPipelineStepOrder(this.projectName(), pipelineType, stepIds).subscribe({
       next: (res) => {
         this.orderBusy.set(false);
-        this.order.set(res.pipelineStepOrder ?? stepIds);
+        if (this.pipelineType() === pipelineType)
+          this.order.set(res.pipelineStepOrder ?? stepIds);
       },
       error: () => {
         this.orderBusy.set(false);
-        this.refreshOverrides(this.projectName());
+        this.refreshOverrides(this.projectName(), pipelineType);
       },
     });
   }
@@ -415,9 +410,11 @@ export class ProjectPipelinePanelComponent {
     const prompt = (patch.prompt !== undefined ? patch.prompt : (cur.prompt ?? ''))?.trim() ?? '';
     const mode = (patch.mode ?? cur.mode ?? '').trim();
     const condition = patch.condition !== undefined ? patch.condition : (cur.condition ?? null);
+    const pipelineType = this.pipelineType();
 
     this.stepBusy[stepId] = true;
     this.jobService.setProjectPipelineStep(this.projectName(), {
+      pipelineType,
       stepId,
       enabled: enabled === defaultEnabled ? null : enabled,
       economyModel: economyModel || null,
@@ -430,13 +427,14 @@ export class ProjectPipelinePanelComponent {
     }).subscribe({
       next: (res) => {
         this.stepBusy[stepId] = false;
+        if (this.pipelineType() !== pipelineType) return;
         this.overrides.set(res.pipelineSteps ?? {});
         this.clearConditionDraft(stepId);
       },
       error: () => {
         this.stepBusy[stepId] = false;
-        this.refreshOverrides(this.projectName());
-        this.clearConditionDraft(stepId);
+        this.refreshOverrides(this.projectName(), pipelineType);
+        if (this.pipelineType() === pipelineType) this.clearConditionDraft(stepId);
       },
     });
   }

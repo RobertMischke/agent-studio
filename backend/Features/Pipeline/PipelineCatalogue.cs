@@ -29,11 +29,11 @@ public static class PipelineCatalogue
     public const string StandardPipelineId = "standard-task-pipeline";
 
     /// <summary>
-    /// The read-only variant for planning / research modes. Same steps as
-    /// <see cref="StandardPipelineId"/> minus the git pre/post steps (see
-    /// <see cref="GitStepIds"/>): render prompt -&gt; run agent -&gt; produce
-    /// report -&gt; status, with no worktree / commit / merge / teardown. Chosen
-    /// per run by <see cref="ForMode"/>.
+    /// The lightweight report pipeline for planning / research modes: qualify,
+    /// run the agent, validate the primary report, and hand it to human review.
+    /// It deliberately omits git, build, test, stylelint, aspects, quality
+    /// grading, Wiki automation, and drift checks. Chosen per run by
+    /// <see cref="ForMode"/>.
     /// </summary>
     public const string ReadOnlyPipelineId = "read-only-task-pipeline";
     public const string ConceptPipelineId = "concept-task-pipeline";
@@ -411,10 +411,9 @@ public static class PipelineCatalogue
     /// Steps whose work mutates the git tree (worktree create, commit + push,
     /// merge / integration, teardown). Today the only catalogue git step is the
     /// commit-attribution slot; future worktree / merge steps add their ids here.
-    /// The read-only pipeline filters these out so a planning / research run does
-    /// no git work - <see cref="BuildReadOnlyPipeline"/> drops any step whose id
-    /// is in this set. The git side effects that live outside the catalogue
-    /// (auto-commit, push, completed-push) are gated separately in
+    /// The read-only pipeline does not include these steps, so a planning /
+    /// research run does no git work. The git side effects that live outside the
+    /// catalogue (auto-commit, push, completed-push) are gated separately in
     /// <c>TaskTransitionService</c> on the same <see cref="TaskModes.IsReadOnly"/>
     /// predicate.
     /// </summary>
@@ -439,15 +438,29 @@ public static class PipelineCatalogue
     public static TaskPipeline UiIteration => UiPipeline;
 
     /// <summary>
-    /// Select the pipeline for a task's execution mode: read-only modes
-    /// (planning / research) get the git-free <see cref="ReadOnly"/> variant;
-    /// concept gets its Workbench/review/sight-review/promotion chain; everything
-    /// else gets <see cref="Standard"/>.
+    /// Select the default definition for an explicit pipeline type. Task, bug,
+    /// and feature currently share the established coding chain; planning owns
+    /// the lightweight git-free definition. Their settings remain independent
+    /// even where catalogue defaults match.
     /// </summary>
-    public static TaskPipeline ForMode(string? mode) =>
-        TaskModes.IsConcept(mode) ? ConceptPipeline
-        : TaskModes.IsReadOnly(mode) ? ReadOnlyPipeline
-        : StandardPipeline;
+    public static TaskPipeline ForType(string? pipelineType) =>
+        PipelineTypes.Normalize(pipelineType) == PipelineTypes.Planning
+            ? ReadOnlyPipeline
+            : StandardPipeline;
+
+    /// <summary>
+    /// Resolve the default pipeline from the card's structural type and mode.
+    /// Concept keeps its dedicated document-first chain.
+    /// </summary>
+    public static TaskPipeline ForTask(string? taskType, string? mode) =>
+        TaskModes.IsConcept(mode)
+            ? ConceptPipeline
+            : ForType(PipelineTypes.Resolve(taskType, mode));
+
+    public static TaskPipeline ForTask(TaskInfo task) => ForTask(task.TaskType, task.Mode);
+
+    /// <summary>Compatibility wrapper for callers that only have an execution mode.</summary>
+    public static TaskPipeline ForMode(string? mode) => ForTask(null, mode);
 
     public static TaskPipeline? Get(string id) =>
         string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline
@@ -458,6 +471,11 @@ public static class PipelineCatalogue
 
     public static IReadOnlyList<TaskPipeline> All { get; } =
         [StandardPipeline, ReadOnlyPipeline, ConceptPipeline, UiPipeline];
+
+    public static PipelineStep? FindStep(string? id) =>
+        All.SelectMany(pipeline => pipeline.AllSteps)
+            .Append(AbortReviewStep)
+            .FirstOrDefault(step => string.Equals(step.Id, id, StringComparison.OrdinalIgnoreCase));
 
     private static TaskPipeline BuildStandardPipeline()
     {
@@ -657,6 +675,7 @@ public static class PipelineCatalogue
                     Id = LintScssStepId,
                     DisplayName = "Frontend stylelint",
                     Kind = StepKind.Tool,
+                    AppliesTo = PipelineStepStacks.Angular,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
@@ -760,24 +779,29 @@ public static class PipelineCatalogue
         };
     }
 
-    // The read-only variant for planning / research modes. It is the standard
-    // pipeline with every git step (see GitStepIds) filtered out of all three
-    // sections, so a read-only run does no worktree / commit / merge / teardown
-    // work: render prompt -> run agent -> produce report -> status. Filtering the
-    // standard definition (rather than hand-listing steps) keeps the two
-    // pipelines in lock-step as the standard pipeline grows.
+    // Planning and research are document runs, not code runs. Keep the useful
+    // deterministic preflight, one core authoring step, and two bounded handoff
+    // checks. New standard post-steps must never leak into this list
+    // automatically: build, test, lint, aspects, grading, Wiki automation, and
+    // drift work are intentionally out of scope.
     private static TaskPipeline BuildReadOnlyPipeline()
     {
-        static List<PipelineStep> WithoutGitSteps(IEnumerable<PipelineStep> steps) =>
-            steps.Where(s => !GitStepIds.Contains(s.Id)).ToList();
+        var review = StandardPipeline.Post.Single(s => s.Id == OrchestratorReviewStepId) with
+        {
+            DependsOn = [CoreAgentRunStepId],
+        };
+        var decision = StandardPipeline.Post.Single(s => s.Id == OrchestratorDecisionStepId) with
+        {
+            DependsOn = [OrchestratorReviewStepId],
+        };
 
         return StandardPipeline with
         {
             Id = ReadOnlyPipelineId,
-            DisplayName = "Read-only task pipeline",
-            Pre = WithoutGitSteps(StandardPipeline.Pre),
-            Core = WithoutGitSteps(StandardPipeline.Core),
-            Post = WithoutGitSteps(StandardPipeline.Post),
+            DisplayName = "Lightweight report pipeline",
+            Pre = [.. StandardPipeline.Pre],
+            Core = [.. StandardPipeline.Core],
+            Post = [review, decision],
         };
     }
 

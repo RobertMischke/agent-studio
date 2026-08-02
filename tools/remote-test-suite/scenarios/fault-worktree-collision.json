@@ -1,0 +1,45 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-worktree-collision",
+  "description": "Occupies the intended worktree target for all five bounded preparation attempts.",
+  "task": {
+    "title": "Verify worktree collision containment",
+    "body": "Prove an occupied target path remains isolated, preserved, and honestly escalated without running product work.",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "acceptance": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-worktree-collision",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination"
+    ],
+    "expectedTerminal": "5-human-review",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 0
+    },
+    "assertions": [
+      "worktree-collision-contained"
+    ]
+  },
+  "hooks": {},
+  "faults": ["worktree-target-collision"],
+  "expected": {
+    "accepted": false,
+    "finalLane": "5-human-review",
+    "incidentOutcome": "worktree-blocked",
+    "phaseSequence": ["claim", "run"]
+  }
+}

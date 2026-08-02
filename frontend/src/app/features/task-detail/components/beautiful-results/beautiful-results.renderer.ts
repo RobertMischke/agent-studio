@@ -199,14 +199,18 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
         return `<code>${escapeHtml(text)}</code>`;
       },
       // External links open in a new tab; internal anchors stay in place.
-      // A relative href that resolves to a repo source path is upgraded to
-      // the same clickable source link as inline code.
+      // Repo docs open the project Wiki, task keys open task detail, and other
+      // relative source paths use the in-app source viewer.
       link(token: Tokens.Link): string {
         const rawHref = token.href ?? '';
         const inner = token.tokens && token.tokens.length
           ? this.parser.parseInline(token.tokens)
           : escapeHtml(token.text ?? '');
         if (!/^[a-z][a-z0-9+.-]*:/i.test(rawHref)) {
+          const wikiPath = detectWikiPath(rawHref);
+          if (wikiPath) return renderWikiLink(wikiPath, inner);
+          const taskKey = detectTaskKey(rawHref, token.text ?? '');
+          if (taskKey) return renderTaskLink(taskKey, inner);
           const ref = detectSourceRef(rawHref);
           if (ref) return renderSourceLink(ref.path, ref.line, inner);
         }
@@ -219,6 +223,36 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
   };
 }
 
+function detectWikiPath(rawHref: string): string | null {
+  const path = rawHref.trim()
+    .split(/[?#]/, 1)[0]
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '');
+  if (!/^docs\/.+\.(?:md|mdx|html?)$/i.test(path) || path.includes('..')) return null;
+  return path.replace(/^docs\//i, '');
+}
+
+function detectTaskKey(rawHref: string, label: string): string | null {
+  const candidates = [rawHref, label];
+  for (const candidate of candidates) {
+    const match = /(?:^|[/#:])([A-Z][A-Z0-9]{1,5}-\d+)(?:$|[/?#])/i.exec(candidate.trim());
+    if (match) return match[1].toUpperCase();
+  }
+  return null;
+}
+
+function renderWikiLink(path: string, inner: string): string {
+  return `<a class="results-internal-link" href="#wiki:${escapeAttr(path)}"`
+    + ` data-results-wiki="${escapeAttr(path)}"`
+    + ` aria-label="Open ${escapeAttr(path)} in project Wiki">${inner}</a>`;
+}
+
+function renderTaskLink(taskKey: string, inner: string): string {
+  return `<a class="results-internal-link" href="#/tasks/${escapeAttr(taskKey)}"`
+    + ` data-results-task-key="${escapeAttr(taskKey)}"`
+    + ` aria-label="Open task ${escapeAttr(taskKey)}">${inner}</a>`;
+}
+
 // Clickable source reference. The host (beautiful-results.component) listens
 // for clicks on `[data-results-source]` via event delegation and emits an
 // `openSource` event with the path + line. This sanitized HTML lives outside
@@ -227,9 +261,9 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
 function renderSourceLink(path: string, line: number | null, inner: string): string {
   const lineAttr = line != null ? ` data-results-line="${escapeAttr(String(line))}"` : '';
   const label = line != null ? `${path}:${line}` : path;
-  return `<button type="button" class="results-source-link"`
+  return `<a class="results-source-link" href="#source:${escapeAttr(label)}"`
     + ` data-results-source="${escapeAttr(path)}"${lineAttr}`
-    + ` aria-label="Open ${escapeAttr(label)} in source viewer">${inner}</button>`;
+    + ` aria-label="Open ${escapeAttr(label)} in source viewer">${inner}</a>`;
 }
 
 function renderCodeBlock(source: string, lang: string | null): string {
@@ -291,6 +325,8 @@ function sanitize(raw: string): string {
       'data-results-diff',
       'data-results-source',
       'data-results-line',
+      'data-results-wiki',
+      'data-results-task-key',
       'data-source',
       'data-lang',
       'loading'

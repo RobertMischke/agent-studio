@@ -1,0 +1,48 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "reference-change",
+  "description": "Deterministic multi-file shipping quote change through remote claim, exact-SHA review, and integration.",
+  "task": {
+    "title": "Add deterministic priority shipping quotes",
+    "body": "Add a priority shipping service. Validate destination zones, apply the declared per-zone base and per-item rates, round once to cents, expose the service from the package entry point, document it, and add semantic tests. Finish with [[TASK_DONE]].",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": [
+      "README.md",
+      "package.json",
+      "src/index.mjs",
+      "src/shipping.mjs",
+      "test/shipping.test.mjs"
+    ]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "acceptance": {
+    "chronicleLinks": [],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 0
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
+  "hooks": {},
+  "faults": [],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "none",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

@@ -59,7 +59,13 @@ public sealed class EngineContractTests
     [Fact]
     public void Version_surface_contains_release_and_git_sha()
     {
-        Assert.StartsWith("orchestrator-engine 0.1.0 (", EngineVersion.Display);
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "VERSION")))
+            directory = directory.Parent;
+
+        Assert.NotNull(directory);
+        var repositoryVersion = File.ReadAllText(Path.Combine(directory.FullName, "VERSION")).Trim();
+        Assert.StartsWith($"orchestrator-engine {repositoryVersion} (", EngineVersion.Display);
         Assert.EndsWith(")", EngineVersion.Display);
     }
 

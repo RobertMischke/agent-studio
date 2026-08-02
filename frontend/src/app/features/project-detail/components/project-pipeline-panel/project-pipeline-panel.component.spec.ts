@@ -65,7 +65,8 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         runMode: 'parallel', dependsOn: ['core-run'], idempotent: true, stub: false,
         resolvedModel: 'claude-sonnet-4.5', modelSource: 'project',
         usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
-        promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: true,
+        framework: 'Angular', promptTemplate: 'aspect-code-quality',
+        canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
       {
         id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', phase: 'tool',
@@ -124,6 +125,10 @@ describe('ProjectPipelinePanelComponent (render)', () => {
 
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="project-detail-pipeline"]')).toBeTruthy();
+    const typeSelect = host.querySelector<HTMLSelectElement>('[data-testid="pipeline-type-select"]');
+    expect(typeSelect?.value).toBe('task');
+    expect(Array.from(typeSelect?.options ?? []).map(option => option.value))
+      .toEqual(['task', 'bug', 'feature', 'planning']);
     expect(host.querySelector('[data-testid="pipeline-empty"]')).toBeNull();
 
     // Phase groups + both step rows.
@@ -156,14 +161,16 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectRow?.textContent).not.toContain('Gate:');
     expect(aspectRow?.textContent).not.toContain('When:');
 
-    // Every collapsed row reserves the same toggle column. Core renders a
-    // disabled, checked switch; configurable steps expose a live switch.
-    const coreToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-enabled-core-run"]');
-    const aspectToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-enabled-aspect-requirement-fit"]');
-    expect(coreToggle?.disabled).toBe(true);
-    expect(coreToggle?.checked).toBe(true);
+    // On/Off lives directly in the collapsed row; fixed core stays labelled.
+    const coreToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-row-enabled-core-run"]');
+    const aspectToggle = host.querySelector<HTMLInputElement>('[data-testid="pipeline-step-row-enabled-aspect-requirement-fit"]');
+    expect(coreToggle).toBeNull();
+    expect(host.querySelector('[data-testid="pipeline-step-row-core-run"]')?.textContent)
+      .toContain('always on');
     expect(aspectToggle?.disabled).toBe(false);
     expect(aspectToggle?.closest('summary')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-framework-aspect-code-quality"]')?.textContent)
+      .toContain('Angular');
 
     // Prompt binding cell: registry template reference + legacy inline override + Clear.
     const promptCell = host.querySelector('[data-testid="pipeline-step-prompt-aspect-requirement-fit"]');

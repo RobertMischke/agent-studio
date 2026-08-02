@@ -8,8 +8,13 @@ public sealed class TaskServerOptions
     public string? BackupDirectory { get; set; }
     public string ListenUrl { get; set; } = "http://127.0.0.1:5071";
     public int MinimumLeaseSeconds { get; set; } = 30;
-    public int MaximumLeaseSeconds { get; set; } = 600;
+    public int MaximumLeaseSeconds { get; set; } = 900;
     public int ResultRetentionDays { get; set; } = 30;
+    public bool ResultRefGcEnabled { get; set; } = true;
+    public int ResultRefGcSweepMinutes { get; set; } = 360;
+    public int ResultRefGcBatchSize { get; set; } = 50;
+    public int ResultRefGcDeleteTimeoutSeconds { get; set; } = 60;
+    public string GitCommand { get; set; } = "git";
     public int InvariantReconciliationSeconds { get; set; } = 30;
     public int InventoryGraceSeconds { get; set; } = 120;
     public int MaximumEventPayloadBytes { get; set; } = 256 * 1024;

@@ -66,7 +66,7 @@ namespace AgentStudio.Runner;
 /// <c>{workspace}/logs/decisions/{project}.jsonl</c>, plus the
 /// orchestrator chat log written into the job's <c>cli-output.log</c>.
 /// The single-state-machine rule still applies: lane transitions go
-/// through <see cref="TaskStateMachine"/>.
+/// through <see cref="TaskTransitionService"/>.
 /// </para>
 ///
 /// <para>
@@ -112,7 +112,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal static readonly TimeSpan VerdictlessBackfillMinimumAge = TimeSpan.FromMinutes(10);
 
     private readonly TaskScannerService _scanner;
-    private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
     private readonly OrchestratorChatLog _chatLog;
     private readonly RuntimePromptService _prompts;
@@ -266,7 +265,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
-        _stateMachine = stateMachine;
         _taskAccess = taskAccess;
         _chatLog = chatLog;
         _prompts = prompts;
@@ -469,6 +467,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
                     if (pending.Kind == ReviewSignalKind.Done)
                     {
+                        if (TaskModes.IsReportOnly(pending.Job.Mode))
+                        {
+                            _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
+                            try
+                            {
+                                await ProcessReportOnlyDoneAsync(
+                                    workspace, entry, pending, cliBinary, ct);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex,
+                                    "ReviewDecisionOrchestrator failed to process lightweight report {Project}/{JobId}",
+                                    entry.Name, pending.Job.Id);
+                            }
+                            finally
+                            {
+                                _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
+                            }
+                            continue;
+                        }
+
                         // Defer to the read-only parallel pool. The cheap
                         // enabled-checks happen here so a disabled/no-aspect
                         // project never occupies a slot.
@@ -596,7 +615,34 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private MoveJobOutcome GuardedMoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
     {
         _postProcessingGitGate.Wait();
-        try { return _stateMachine.MoveJob(jobId, targetState, watchPath, cause); }
+        try
+        {
+            var result = _taskAccess.TransitionLaneAsync(new TaskTransitionRequest
+                {
+                    JobId = jobId,
+                    TargetLane = targetState,
+                    WatchPath = watchPath,
+                    Cause = cause,
+                })
+                .GetAwaiter()
+                .GetResult();
+            return result.Status switch
+            {
+                TaskMutationStatus.Applied => new MoveJobOutcome(
+                    MoveJobStatus.Success,
+                    result.Message,
+                    result.Job?.FolderPath),
+                TaskMutationStatus.NotFound => new MoveJobOutcome(
+                    MoveJobStatus.NotFound,
+                    result.Message),
+                TaskMutationStatus.Conflict => new MoveJobOutcome(
+                    MoveJobStatus.TargetFolderExists,
+                    result.Message),
+                _ => new MoveJobOutcome(
+                    MoveJobStatus.Failure,
+                    result.Message),
+            };
+        }
         finally { _postProcessingGitGate.Release(); }
     }
 
@@ -720,6 +766,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 if (TaskModes.IsConcept(pending.Job.Mode))
                 {
                     await ProcessConceptAsync(workspace, entry, pending, ct);
+                    return;
+                }
+                if (TaskModes.IsReportOnly(pending.Job.Mode))
+                {
+                    await ProcessReportOnlyDoneAsync(workspace, entry, pending, cliBinary, ct);
                     return;
                 }
                 var aspects = ResolveAspectRunners();
@@ -1243,7 +1294,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 stored.RepoRelativeDirectory);
         }
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         _pipelineLog?.EnsureRun(
             current.FolderPath,
             ProjectPipelineOrder.Apply(PipelineCatalogue.Concept, settings),
@@ -1402,7 +1453,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
             var steering = new SteeringContext("noop-recovery", "reissue", priorReissues, reason);
-            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: NOOP recovery, reissued with sharpened framing.",
@@ -1633,7 +1684,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var priorCommits = RunOutcomePolicy.PriorCommitLines(current);
             var steering = new SteeringContext("no-completion-signal", "reissue", priorReissues, reason,
                 PriorCommits: priorCommits);
-            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: run finished without a terminal sentinel, reissued demanding one.",
@@ -1814,7 +1865,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// verdict but never left <c>4-auto-review</c> (the move failed after the
     /// verdict was recorded - a Move-Lock from open handles / orphan processes,
     /// vgl. ASS-759, or a backend restart between record and
-    /// <see cref="TaskStateMachine.MoveJob"/>). This is the move-retry the
+    /// <see cref="TaskTransitionService.MoveAsync"/>). This is the move-retry the
     /// verdict paths lacked: they warned-but-continued on a failed move and left
     /// the card verdict-but-stuck. Performs ONLY the due move
     /// (<see cref="ReviewDecisionKind.Reissue"/> -> 2-ready,
@@ -1913,6 +1964,99 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Completes a planning or research report without entering the code-review
+    /// fan-out. Research has one strict primary artifact:
+    /// <c>results/report.html</c>. Planning retains compatibility with existing
+    /// result formats but still uses the same lightweight pipeline. A missing
+    /// primary result enters the shared bounded completion-gate reissue path.
+    /// </summary>
+    private async Task ProcessReportOnlyDoneAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string cliBinary,
+        CancellationToken ct)
+    {
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var settings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            current);
+        var pipelineRecord = _pipelineLog?.EnsureRun(
+            current.FolderPath,
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(current), settings),
+            entry.Name,
+            current.Id);
+        using var pipelineAttempt = pipelineRecord == null
+            ? null
+            : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
+
+        var isResearch = TaskModes.Normalize(current.Mode) == TaskModes.Research;
+        var primaryReport = Path.Combine(current.FolderPath, "results", "report.html");
+        var hasPrimaryResult = isResearch
+            ? HasPrimaryResearchHtml(primaryReport)
+            : HasResultsArtifacts(current.FolderPath);
+
+        if (!hasPrimaryResult)
+        {
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            var maxReissues = ConfiguredMaxReissues();
+            var requiredArtifact = isResearch
+                ? "a valid HTML document at results/report.html"
+                : "a primary artifact under results/";
+            var gate = new CompletionGate.Decision
+            {
+                Action = priorReissues >= maxReissues
+                    ? CompletionGate.CompletionGateAction.Escalate
+                    : CompletionGate.CompletionGateAction.Reissue,
+                Findings = [$"Required report artifact is missing: {requiredArtifact}."],
+                Reason = priorReissues >= maxReissues
+                    ? $"The lightweight report pipeline still has no primary result after {priorReissues} prior orchestrator reissue(s)."
+                    : $"The lightweight report pipeline requires {requiredArtifact} before handoff.",
+            };
+            await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
+            return;
+        }
+
+        var resultRef = isResearch ? "results/report.html" : "results/";
+        var reason = $"Primary report is ready at {resultRef}; code gates are not applicable.";
+        RecordOrchestratorReviewStep(
+            current.FolderPath, PipelineStepStatus.Passed, ReviewVerdictComplete, reason);
+        RecordOrchestratorDecisionStep(
+            current.FolderPath, PipelineStepStatus.Passed, DecisionVerdictAccept, reason);
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not applicable to a lightweight report run.");
+
+        HandleAcceptAsDone(
+            workspace,
+            entry,
+            pending,
+            "(deterministic lightweight report validation)",
+            resultRef,
+            new OrchestratorDecisionVerdict(OrchestratorDecisionAction.AcceptAsDone, reason),
+            cliBinary);
+        _statusSnapshot.RecordAccept();
+        await Task.CompletedTask;
+    }
+
+    private static bool HasPrimaryResearchHtml(string path)
+    {
+        if (!File.Exists(path)) return false;
+        try
+        {
+            var content = File.ReadAllText(path);
+            return content.Contains("<html", StringComparison.OrdinalIgnoreCase)
+                && content.Contains("</html>", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task ProcessDoneAsync(
         string workspace,
         WatchPathEntry entry,
@@ -1975,32 +2119,35 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // forever while the aspect rows below it completed. EnsureRun
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            current);
         var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
-            ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(current), projectSettings),
             entry.Name,
             current.Id);
         using var pipelineAttempt = pipelineRecord == null
             ? null
             : _pipelineLog!.EnterAttempt(current.FolderPath, pipelineRecord.Attempt);
 
-        // Post-core completeness gate (Orchestrator-Review, the first post-step):
-        // before spending the parallel aspect review, scan the run's OWN close-out
-        // evidence - status Open Items / Notes, the Result line, and the log tail -
-        // for unfinished-work signals: open checklist boxes, self-reported build /
-        // compile / test failures, or a success claim contradicted by a build
-        // error. A hit short-circuits the accept and drives the task to a
-        // conclusion: reissue with the items foregrounded while the shared reissue
-        // budget allows, otherwise escalate to 5e-escalated. This closes the
-        // silent-completion gap (ASS-764 self-reported build error accepted with
-        // concerns; ASS-766 silent finish + open items parked without a verdict)
-        // where a run says done while its own evidence still lists open work.
-        var gate = CompletionGate.Evaluate(
-            statusSummary, recentLog,
+        // Post-core completeness gate. Persist the exact requirement source,
+        // machine evidence, blockers, and lifecycle states before review. Never
+        // infer open work from bullets or narrative in status.md: AGT-2149 was
+        // reopened on four historical/external-access prose lines despite a
+        // TASK_DONE, exit-0, verified run.
+        var acceptance = CompletionAcceptanceRecord.Capture(
+            taskBody,
+            recentLog,
+            CompletionGate.ExtractLatestExitCode(recentLog),
+            CompletionGate.ExtractLatestRunCompleted(recentLog),
+            HasResultsArtifacts(current.FolderPath),
+            parsedDoneSignal: pending.Kind == ReviewSignalKind.Done);
+        CompletionAcceptanceRecord.Write(current.FolderPath, acceptance, _logger);
+        var gate = CompletionGate.EvaluateStructured(
+            acceptance,
             CountPriorReissues(workspace, entry.Name, current.Id),
-            ConfiguredMaxReissues(),
-            HasResultsArtifacts(current.FolderPath));
+            ConfiguredMaxReissues());
         if (gate.IsIncomplete)
         {
             await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
@@ -2042,7 +2189,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
         // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var conditionContext = new PipelineStepConditionContext
         {
             Aborted = false,
@@ -2301,6 +2448,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // and left orphan logs/cli-output.log skeletons in 4-auto-review.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath,
+            "pipeline-execution.json",
+            report.Overall == AspectStatus.Concerns
+                ? $"Structured aspect review accepted with concerns: {FormatConcernCount(report)}"
+                : "Structured aspect review accepted all requirements.",
+            _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -2427,7 +2581,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 evidenceRef: gradeReport.FileName,
                 findingRefs: new[] { gradeReport.FileName },
                 performer: PostProcessingPerformers.Orchestrator);
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
             _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
                 $"Council reaction reopened \"{(moved.Title ?? moved.Id)}\" for {reaction.Assessments.Count} named review finding(s). Next round: {moved.Id} attempt {reaction.TargetRunAttempt}.");
@@ -2542,7 +2696,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 .ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         // F29: keep the operator-facing reissue note short. The full
         // per-aspect verdict list is in the decision journal record below
@@ -2747,6 +2901,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", loopBreak.Reason, _logger);
         if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
@@ -2916,7 +3072,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, gate.Reason);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var count = gate.Findings.Count;
@@ -3039,7 +3195,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 .ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var count = gate.Findings.Count;
@@ -3086,7 +3242,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_lintScssRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var lintStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.LintScssStepId, StringComparison.OrdinalIgnoreCase));
         if (lintStep is not null
@@ -3254,7 +3410,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_buildTestGateRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.BuildTestGateStepId, StringComparison.OrdinalIgnoreCase));
         if (step is not null
@@ -3670,17 +3826,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
-        var count = gate.Findings.Count;
-        var noun = count == 1 ? "item" : "items";
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{title}\" back to 2-ready ({count} unfinished {noun} from its own close-out).");
+            $"Auto-review sent \"{title}\" back to 2-ready. {gate.Reason} Evidence: {findingsBlock}");
 
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
-            $"Reopened: completion gate found {count} unfinished {noun} in the run's own close-out.",
+            $"Reopened: {gate.Reason}",
             BuildReopenDetails("completion-gate",
                 CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
 
@@ -3768,7 +3922,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return null;
         }
 
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            job);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         if (catalogueStep is not null
@@ -3970,7 +4126,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (_taskSpawner == null) return;
 
         var stepId = PipelineCatalogue.TaskSpawnerStepId;
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         var conditionCtx = new PipelineStepConditionContext
@@ -4435,7 +4591,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 : (Func<string, string?, RegressionRadarResult>?)null);
         if (analyze == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var radarStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.RegressionRadarStepId, StringComparison.OrdinalIgnoreCase));
         var shouldRun = radarStep is null
@@ -4515,7 +4671,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiMaintenance == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var wikiStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiMaintenanceStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4603,7 +4759,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiLearnings == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiLearningsStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4788,7 +4944,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_agentsWikiSync == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.AgentsWikiSyncStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -5077,7 +5233,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             evidenceRef: "post-steps/build-test-gate.log");
 
         var followUp = BuildBuildTestGateFollowUp(result, councilReaction);
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         var councilSuffix = councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue
@@ -5213,7 +5369,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DecisionVerdictReissue, LintScssReissueReasonPrefix + $"stylelint exit {result.ExitCode}");
 
         var followUp = BuildLintScssFollowUp(result);
-        await WriteFollowUpFileAsync(moved2, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved2, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved2.Title) ? moved2.Id : moved2.Title;
         _chatLog.Append(moved2, OrchestratorMessageKind.Reissue,
@@ -5636,7 +5792,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (NOOP/BLOCKED/gate reissue + escalate) write their
     /// <c>[orchestrator]</c>/<c>[supervisor]</c> follow-up line FIRST - which
     /// resolves the agent sentinel - then only warn-but-continue if
-    /// <see cref="TaskStateMachine.MoveJob"/> fails (a Move-Lock from open log
+    /// <see cref="TaskTransitionService.MoveAsync"/> fails (a Move-Lock from open log
     /// handles / orphan processes - vgl. ASS-759 - or a backend restart between
     /// recording and moving), yet still append the verdict record. The card is
     /// then invisible to every other path: the sentinel is resolved, and
@@ -6017,7 +6173,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             return;
         }
-        await WriteFollowUpFileAsync(moved, followUp, ct);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
@@ -6143,6 +6299,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        CompletionAcceptanceRecord.MarkAccepted(
+            movedFolderPath, "pipeline-execution.json", reason, _logger);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
             summary: reason,
             performerCliType: NormalizeReviewCliType(cliBinary),
@@ -6342,7 +6500,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // Review is the fail-closed state. The legacy Task Server review
             // loop must not infer a subject from session-events or inspect its
             // own project checkout for a Remote result.
-            var authorityKey = _attemptAuthority is null
+            //
+            // Report-only modes (planning / research) are the exception: their
+            // deliverable is a document in the task folder on THIS server, no
+            // ReviewAttempt is minted for them at completion, and the
+            // lightweight report pipeline validates them deterministically
+            // right here - so they must not wait for a code-review executor
+            // that will never claim them.
+            var authorityKey = _attemptAuthority is null || TaskModes.IsReportOnly(info.Mode)
                 ? null
                 : new[] { info.Key, info.TaskKey, info.Id }
                     .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -6705,9 +6870,150 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (ASS-734): without it the only record of "what did the orchestrator tell
     /// the agent" was a single file the next reissue clobbered.
     /// </summary>
-    private Task WriteFollowUpFileAsync(
+    private const string SteeringPromptHistoryHeading = "## Steering prompt (verbatim)";
+    private const string ReissueRepeatGuardHeading = "## Reissue repeat guard: diagnosis first";
+
+    private async Task<string> WriteFollowUpFileAsync(
         TaskInfo moved, string followUp, CancellationToken ct, SteeringContext? context = null)
-        => WriteFollowUpFilesAsync(moved.FolderPath, followUp, context, moved.Id, _logger, ct);
+    {
+        var guarded = GuardRepeatedReissuePrompt(moved.FolderPath, followUp);
+        await WriteFollowUpFilesAsync(
+            moved.FolderPath, guarded.Prompt, context, moved.Id, _logger, ct);
+
+        if (guarded.Intervened)
+        {
+            EmitVerdictTimeline(
+                moved.FolderPath,
+                TimelineEventKinds.OrchestratorSteered,
+                TimelineActors.QualityLoop,
+                "Repeated reissue prompt detected; diagnosis-first instructions were added before sending.",
+                new Dictionary<string, string>
+                {
+                    ["cause"] = "reissue-prompt-repeat-guard",
+                    ["action"] = "diagnosis-first-enrichment",
+                    ["normalizedMatch"] = "true",
+                    ["matchingPriorPrompts"] = guarded.MatchingPriorPrompts.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    ["matchedHistoryFile"] = guarded.MatchedHistoryFile ?? "unknown",
+                    ["followUpPrompt"] = Truncate(guarded.Prompt, 4000),
+                });
+        }
+
+        return guarded.Prompt;
+    }
+
+    /// <summary>
+    /// Compare a proposed automatic reissue against the append-only steering
+    /// history. Whitespace and casing differences are ignored. When the same
+    /// base instruction has already been sent, replace any older guard block
+    /// with a diagnosis-first block whose intervention count increases on each
+    /// recurrence. This prevents the guard itself from becoming another
+    /// byte-identical repeated prompt.
+    /// </summary>
+    internal static ReissuePromptGuardResult GuardRepeatedReissuePrompt(
+        string folderPath, string followUp)
+    {
+        var basePrompt = StripReissueRepeatGuard(followUp);
+        var normalizedCandidate = NormalizeReissuePrompt(basePrompt);
+        var historyDir = Path.Combine(folderPath, "orchestrator-follow-up-history");
+        if (normalizedCandidate.Length == 0 || !Directory.Exists(historyDir))
+        {
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        var matchingFiles = new List<string>();
+        try
+        {
+            foreach (var historyPath in Directory
+                         .EnumerateFiles(historyDir, "*.md", SearchOption.TopDirectoryOnly)
+                         .OrderBy(path => path, StringComparer.Ordinal))
+            {
+                var priorPrompt = ExtractSteeringPrompt(File.ReadAllText(historyPath));
+                if (priorPrompt is null) continue;
+                var normalizedPrior = NormalizeReissuePrompt(
+                    StripReissueRepeatGuard(priorPrompt));
+                if (string.Equals(
+                        normalizedCandidate, normalizedPrior,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    matchingFiles.Add(historyPath);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // History is an observability sidecar. If it cannot be read, keep
+            // the existing reissue path available rather than stranding a card.
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        if (matchingFiles.Count == 0)
+        {
+            return new ReissuePromptGuardResult(followUp, false, 0, null);
+        }
+
+        var times = matchingFiles.Count == 1
+            ? "1 time"
+            : $"{matchingFiles.Count} times";
+        var enriched = basePrompt.TrimEnd() + "\n\n" +
+            ReissueRepeatGuardHeading + "\n\n" +
+            $"The normalized instruction above has already been sent {times}. " +
+            "Repeating the previous approach unchanged did not converge. Before editing again:\n\n" +
+            "1. Diagnose first from the latest run output and the newest relevant evidence file. " +
+            "Name the exact failed check, blocking aspect, or missing evidence.\n" +
+            "2. Name the target artifact and verification that will close that diagnosed gap.\n" +
+            "3. Continue from the existing diff. Do not restart, redesign, or broaden the task.\n" +
+            "4. Address only the diagnosed gap, run the named verification, and then emit the honest terminal sentinel.\n";
+
+        return new ReissuePromptGuardResult(
+            enriched,
+            true,
+            matchingFiles.Count,
+            Path.GetFileName(matchingFiles[^1]));
+    }
+
+    internal static string NormalizeReissuePrompt(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return string.Empty;
+
+        var normalized = new StringBuilder(prompt.Length);
+        var pendingWhitespace = false;
+        foreach (var ch in prompt)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                pendingWhitespace = normalized.Length > 0;
+                continue;
+            }
+
+            if (pendingWhitespace)
+            {
+                normalized.Append(' ');
+                pendingWhitespace = false;
+            }
+            normalized.Append(char.ToUpperInvariant(ch));
+        }
+        return normalized.ToString();
+    }
+
+    private static string StripReissueRepeatGuard(string prompt)
+    {
+        var normalizedNewlines = (prompt ?? string.Empty).Replace("\r\n", "\n");
+        var guardIndex = normalizedNewlines.IndexOf(
+            ReissueRepeatGuardHeading, StringComparison.Ordinal);
+        return guardIndex < 0
+            ? normalizedNewlines.Trim()
+            : normalizedNewlines[..guardIndex].Trim();
+    }
+
+    private static string? ExtractSteeringPrompt(string historyText)
+    {
+        var headingIndex = historyText.IndexOf(
+            SteeringPromptHistoryHeading, StringComparison.OrdinalIgnoreCase);
+        if (headingIndex < 0) return null;
+        var prompt = historyText[(headingIndex + SteeringPromptHistoryHeading.Length)..].Trim();
+        return prompt.Length == 0 ? null : prompt;
+    }
 
     /// <summary>
     /// Pure-IO core of <see cref="WriteFollowUpFileAsync"/>: write the canonical
@@ -6790,7 +7096,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             }
         }
         sb.AppendLine();
-        sb.AppendLine("## Steering prompt (verbatim)");
+        sb.AppendLine(SteeringPromptHistoryHeading);
         sb.AppendLine();
         sb.AppendLine(followUp);
         return sb.ToString();
@@ -6818,6 +7124,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? Reason = null,
         string? ResumeSessionId = null,
         IReadOnlyList<string>? PriorCommits = null);
+
+    internal sealed record ReissuePromptGuardResult(
+        string Prompt,
+        bool Intervened,
+        int MatchingPriorPrompts,
+        string? MatchedHistoryFile);
 
     private enum ReviewSignalKind
     {

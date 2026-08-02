@@ -109,7 +109,8 @@ public static class GitPushProbe
                 if (!cleanup.Success)
                     log($"runner-git-workflow-probe-cleanup-failed ref={workflowProbeRef} error={OneLine(cleanup.StdErr)}");
             }
-            try { if (Directory.Exists(probePath)) Directory.Delete(probePath, recursive: true); }
+            // probePath is a clone: read-only git objects defeat a plain delete.
+            try { ResilientDirectory.Delete(probePath); }
             catch (Exception ex) { log($"runner-git-push-probe-cleanup-failed path={probePath} error={OneLine(ex.Message)}"); }
         }
     }

@@ -1,0 +1,51 @@
+// FIXTURE - deliberately broken. Stored as .cs.txt so it is never compiled.
+// CliInvocationCentralizationGuardTests feeds this file to the same scanner
+// that walks runner/** and backend/Features/{Cli,Runner}/**; if the guard ever
+// stops reporting it, the guard has gone blunt and the real scan is worthless.
+//
+// Four separate violations are encoded:
+//   1. ProcessStartInfo with FileName = "claude"       -> cli-spawn (nearby identity)
+//   2. Process.Start on that start info                -> cli-spawn (nearby identity)
+//   3. A spec-driven spawn with NO binary literal      -> cli-spawn (file-scoped identity)
+//   4. RUNNER_CLI_BIN read from the environment        -> legacy-env
+using System.Diagnostics;
+
+namespace AgentRunner;
+
+internal static class NewCodingAgentLauncher
+{
+    public static Process Launch(string prompt, string repoPath)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "claude",
+            WorkingDirectory = repoPath,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-p");
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("failed to start the agent CLI");
+        process.StandardInput.Write(prompt);
+        process.StandardInput.Close();
+        return process;
+    }
+
+    public static string BinaryFromEnvironment()
+        => Environment.GetEnvironmentVariable("RUNNER_CLI_BIN") ?? "codex";
+}
+
+// The post-T0b shape: the binary name travels inside a serialised invocation
+// spec, so nothing quotable is left at the spawn site. Only the file-scoped
+// identity rule still recognises this as a coding-agent start.
+internal static class SpecDrivenLauncher
+{
+    public static Task<ProcessResult> RunAsync(DetachedJobSpec spec, CancellationToken ct)
+        => ProcessRunner.RunAsync(
+            spec.FileName,
+            spec.Arguments,
+            spec.WorkingDirectory,
+            spec.Prompt,
+            ct: ct);
+}

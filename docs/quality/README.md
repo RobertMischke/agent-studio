@@ -29,12 +29,28 @@ entry surface.
 | Guide | Applies when | Canonical sources it incorporates |
 |---|---|---|
 | [Angular components](angular-components.md) | Angular is detected | [UI hard rules](./design/style-guide-hard-rules.md), [component vocabulary](./frontend/style-guide/README.md), [performance playbook](./frontend/performance.md) |
+| [Frontend styling context](frontend-styling.md) | Angular + frontend/styling task area are detected | [living styling rules](./frontend/style-guide/living-rules.md), [button vocabulary](./frontend/style-guide/buttons.md), [Deck-Panel v1](../concepts/visual-style-guide/deck-panel-v1.md) |
 | [.NET backend](dotnet-backend.md) | .NET or C# is detected | [backend structure style guide](../system/architecture/backend-structure/styleguide.md), [domain maps](../system/domains/README.md) |
 
 The [UI hard rules](./design/style-guide-hard-rules.md) remain the
 non-negotiable visual baseline. This index is the one place from which a human,
 Deck, and prompt enrichment discover that baseline together with the
 technology-specific guidance around it.
+
+## Styling-card creation
+
+When a card or prompt changes layout, spacing, typography, color, panels,
+buttons, labels, or another visual treatment, describe that scope explicitly
+with terms such as `styling`, `SCSS`, `UI`, or `button`. Preparation detects the
+`frontend` task area and appends the
+[Frontend styling context](frontend-styling.md) through the existing
+`intake/enriched-context.md` style-guide mechanism. For a manually assembled
+prompt that bypasses Preparation, append
+`Context: docs/quality/frontend-styling.md`.
+
+The card must extend the living guide or its Open cases when it discovers a
+reusable styling decision that the guide does not cover. A local exception is
+not a substitute for that update.
 
 ## Applicability contract
 

@@ -1,0 +1,45 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-task-server-network-blips",
+  "description": "Replays bounded Task Server claim, heartbeat, event, artifact, and completion transport blips.",
+  "task": {
+    "title": "Verify Task Server network replay",
+    "body": "Apply the deterministic reference change while the isolated harness injects bounded Task Server disconnects. Finish with [[TASK_DONE]].",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "acceptance": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"
+    ],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 5
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
+  "hooks": {},
+  "faults": ["task-server-network-blips"],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "network-blips-replayed",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

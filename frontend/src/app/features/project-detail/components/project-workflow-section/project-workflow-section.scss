@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 // Workflow / Lanes page - stage 1 (T6a). Token-only: colours via --studio-*
 // tokens + color-mix, spacing via --studio-spacing-*. No hex / raw rgba.
 
@@ -107,16 +109,13 @@
 
 // ---- Read-only transitions ----
 .wf__transitions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--studio-spacing-2);
+  @include m.deck-stack;
 }
 
+// Read-only view of what the platform does today -> muted panel variant.
 .wf__transition {
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border-muted);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--studio-fg-dim) 4%, transparent);
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
 }
 
 .wf__transition-head {

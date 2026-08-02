@@ -27,6 +27,12 @@ public record CliExecutionContext
     public string? Model { get; init; }
 
     /// <summary>
+    /// Effective run-scoped reasoning level selected by RunSpec / model
+    /// qualification, when the CLI supports one.
+    /// </summary>
+    public string? ThinkingLevel { get; init; }
+
+    /// <summary>
     /// Effective permission / sandbox posture for the run. For Claude this is
     /// the CLI's own init-frame term (<c>bypassPermissions</c> / <c>acceptEdits</c>
     /// / <c>plan</c> / <c>default</c>) when available; otherwise the platform

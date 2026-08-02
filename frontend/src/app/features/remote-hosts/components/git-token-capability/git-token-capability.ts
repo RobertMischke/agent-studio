@@ -19,15 +19,15 @@ export class GitTokenCapabilityComponent {
 
   readonly contents = computed(() => {
     if (this.status() === 'ready' || this.status() === 'ready-no-workflow-scope') {
-      return { label: 'Contents: ok', tone: 'ok' };
+      return { label: 'Fallback repo: ok', tone: 'ok' };
     }
     return this.status() === 'read-only'
-      ? { label: 'Contents: blocked', tone: 'error' }
-      : { label: 'Contents: unknown', tone: 'idle' };
+      ? { label: 'Fallback repo: blocked', tone: 'error' }
+      : { label: 'Fallback repo: unknown', tone: 'idle' };
   });
   readonly workflow = computed(() => this.status() === 'ready'
-    ? { label: 'Workflow: ok', tone: 'ok' }
+    ? { label: 'Fallback workflow: ok', tone: 'ok' }
     : this.status() === 'ready-no-workflow-scope'
-      ? { label: 'Workflow: permission missing', tone: 'warn' }
-      : { label: 'Workflow: unknown', tone: 'idle' });
+      ? { label: 'Fallback workflow: permission missing', tone: 'warn' }
+      : { label: 'Fallback workflow: unknown', tone: 'idle' });
 }

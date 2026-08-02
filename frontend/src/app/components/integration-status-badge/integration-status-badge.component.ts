@@ -12,11 +12,12 @@ import { TaskService } from '../../services/task.service';
  *   - green  "merged @sha"          — every attributed commit is provably in develop,
  *   - orange "teilweise integriert" — some attributed commits are in develop, some are not,
  *   - amber  "NICHT integriert"     — accepted work is still not in develop,
- *   - red    "Konflikt"             — the merge-into-develop step hit a conflict/skip,
+ *   - red    "Integration failed"   — the integration step reached a failed outcome,
  *   - grey   "kein Branch"          — nothing to integrate (read-only / no code).
  *
- * The verdict is derived from the SAME attributed `commits[]` list the card's
- * commit widget renders, so badge and widget can never contradict (AGT-2171).
+ * Membership is derived from the SAME attributed `commits[]` list the card's
+ * commit widget renders. Branch presence comes from the acceptance resolver's
+ * projected `deliveryRef`, so a remote delivery cannot render as "kein Branch".
  *
  * Follows the {@link ExecutionLocationBadgeComponent} pill pattern. Purely
  * presentational; hidden when the card carries no integration verdict.
@@ -64,7 +65,7 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
       case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
-      case 'conflict-skipped': return 'Konflikt';
+      case 'conflict-skipped': return 'Integration failed';
       default: return 'kein Branch';
     }
   });
@@ -94,7 +95,7 @@ export class IntegrationStatusBadgeComponent {
         case 'pending':
           return `Accepted, but NOT integrated into ${branch}`;
         case 'conflict-skipped':
-          return `Merge into ${branch} hit a conflict — the work is NOT integrated`;
+          return `Integration into ${branch} failed; the work is NOT integrated`;
         default:
           return 'No task branch or commit to integrate';
       }
@@ -110,7 +111,7 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return `Integrated into ${branch}`;
       case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
-      case 'conflict-skipped': return `Merge conflict; not integrated into ${branch}`;
+      case 'conflict-skipped': return `Integration failed; not integrated into ${branch}`;
       default: return 'No branch to integrate';
     }
   });

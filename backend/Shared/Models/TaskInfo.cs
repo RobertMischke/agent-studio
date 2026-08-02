@@ -121,6 +121,12 @@ public record TaskInfo
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
+    /// <summary>
+    /// Actual repository base line used to prepare the latest runner checkout,
+    /// persisted as <c>refs/heads/main</c> or <c>refs/heads/develop</c>.
+    /// Null on legacy tasks that have not yet been backfilled.
+    /// </summary>
+    public string? IntegrationBranch { get; init; }
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
@@ -324,26 +330,25 @@ public record TaskInfo
     public TaskProvenance? Provenance { get; init; }
 
     /// <summary>
-    /// AGT-2046 — compact, always-on board merge signal: is this task's work
+    /// AGT-2046 - compact, always-on board merge signal: is this task's work
     /// folded into the integration branch (develop) and/or the release branch
     /// (main)? Computed batched + cached per repository by
     /// <c>BoardMergeStatusService</c> (O(repos) git spawns, never per card) and
     /// folded onto the board payload so the kanban card renders a two-segment
     /// [develop|main] indicator without a per-card graph query. Never persisted
-    /// to <c>task.json</c>; null on cards with no committed/merged anchor yet.
+    /// to <c>task.json</c>; null on cards with no attributed task commits.
     /// </summary>
     public TaskMergeSignal? MergeSignal { get; init; }
 
     /// <summary>
-    /// AGT-2202 — honest, git-derived integration verdict for accepted cards
+    /// AGT-2202 - honest, git-derived integration verdict for accepted cards
     /// (5-human-review / 6-completed / 7-archive): is this task's work actually in
-    /// develop? Resolves the "Accept != Merge" blind spot by reading three
-    /// independent git signals (curated <c>merge(&lt;KEY&gt;)</c> log commit, anchor
-    /// ancestry, task-branch-tip ancestry) into one of four discrete states
-    /// (<see cref="IntegrationStatuses"/>). Computed batched + cached per repository
-    /// by <c>TaskIntegrationStatusService</c> (O(repos) git spawns, never per card)
-    /// and folded onto the board payload. Never persisted to <c>task.json</c>; null
-    /// on cards that are not in an accepted lane.
+    /// develop? Resolves the "Accept != Merge" blind spot from attributed-commit
+    /// membership at the current target HEAD. Lane state, provenance, pipeline
+    /// attempts, and curated merge subjects do not force the result. Computed
+    /// batched and cached per repository by <c>TaskIntegrationStatusService</c>
+    /// (O(repos) git spawns, never per card) and folded onto the board payload.
+    /// Never persisted to <c>task.json</c>; null outside accepted lanes.
     /// </summary>
     public TaskIntegrationStatus? Integration { get; init; }
 

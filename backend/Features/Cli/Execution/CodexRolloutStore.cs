@@ -18,15 +18,26 @@ public static class CodexRolloutStore
            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
 
     /// <summary>
-    /// A clean-context invocation always receives a newly-created CODEX_HOME.
-    /// CleanContextPreparer deliberately excludes sessions, so no previous
-    /// rollout can exist there. Shared-context invocations must prove the
-    /// rollout exists before attempting resume.
+    /// Whether <c>codex exec resume &lt;sessionId&gt;</c> can actually open the
+    /// referenced rollout in the home the invocation will run against.
+    /// <para>
+    /// Clean-context invocations run against the task's persistent per-task
+    /// home (all attempts of one task share it — see
+    /// <c>GenericCliExecutionService.AcquireCleanContext</c>), so a resume is
+    /// viable exactly when that home (<paramref name="cleanHome"/>) already
+    /// contains the rollout written by a previous attempt. Without a live
+    /// per-task home (first attempt, or the home was evicted at the run
+    /// boundary) there is nothing to resume: CleanContextPreparer deliberately
+    /// excludes the operator's <c>sessions/</c>, so the shared home's rollout
+    /// is invisible to a clean run. Shared-context invocations must prove the
+    /// rollout exists in the shared home before attempting resume.
+    /// </para>
     /// </summary>
-    public static bool CanResume(string? sessionId, string? contextMode, string? sharedHome = null)
+    public static bool CanResume(string? sessionId, string? contextMode, string? sharedHome = null, string? cleanHome = null)
     {
         if (string.IsNullOrWhiteSpace(sessionId)) return false;
-        if (CliContextModes.Normalize(contextMode) == CliContextModes.Clean) return false;
+        if (CliContextModes.Normalize(contextMode) == CliContextModes.Clean)
+            return !string.IsNullOrWhiteSpace(cleanHome) && HasRollout(cleanHome!, sessionId);
         return HasRollout(sharedHome ?? ResolveSharedHome(), sessionId);
     }
 

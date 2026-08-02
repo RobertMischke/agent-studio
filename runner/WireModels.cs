@@ -66,7 +66,8 @@ public sealed record RunLeaseReleaseRequest(
     string RunnerId,
     string? AttemptId = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    string? Outcome = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(
@@ -112,7 +113,15 @@ public sealed record RunnerClaimRequest(
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
     RunnerProcessInventory? Inventory = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    // Ceiling this daemon currently runs with, and when it adopted it. Pure
+    // telemetry: the server owns the policy and echoes it back on every poll.
+    int? EffectiveMaxParallelism = null,
+    DateTime? EffectiveMaxParallelismAppliedAt = null,
+    // RUNNER_MAX_PARALLELISM. Seeds the central host ceiling on first contact.
+    int? BootstrapMaxParallelism = null,
+    string? CapabilityInstanceId = null,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 public sealed record RunnerProcessInventory(
     DateTime ObservedAt,
@@ -173,6 +182,35 @@ public sealed record HostTelemetrySample(
 
 public enum RunnerClaimStatus { Claimed, Empty, PreflightRequired, PreflightFailed, Invalid }
 
+/// <summary>
+/// T0b — the claimed card's execution specification (CAR migration plan §3 T0b).
+/// The server states which CLI, model and reasoning level the <b>card</b> chose;
+/// <see cref="RunnerOptions.CliBin"/> / <see cref="RunnerOptions.CliArgs"/> stop
+/// being the truth and become the fallback for whatever the spec leaves open.
+///
+/// <para>
+/// Every field is optional. A server that predates T0b sends no spec at all, and
+/// the runner then behaves exactly as it did before — that is what makes the
+/// change safe to deploy server-first.
+/// <see cref="PermissionMode"/> and <see cref="ContextMode"/> are transported and
+/// logged but deliberately not turned into CLI flags yet: injecting a permission
+/// flag or a clean config home remotely is a behaviour jump that belongs to T1
+/// (and clean context additionally waits for CAR-B, or the host's own OAuth token
+/// gets copied instead of linked).
+/// </para>
+/// </summary>
+public sealed record RunSpecDto(
+    string? CliType = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    string? PermissionMode = null,
+    string? ContextMode = null,
+    // Server-rendered per-mode framing block (read-only / research / concept /
+    // web contracts). Appended to the fetched task prompt at this runner's
+    // execution boundary, mirroring the local runner's {{mode_framing}} slot.
+    // Null from an older server keeps the previous verbatim-prompt behaviour.
+    string? ModeFraming = null);
+
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,
     string? TaskKey = null,
@@ -187,7 +225,15 @@ public sealed record RunnerClaimResponse(
     string? RunId = null,
     string? LeaseInstanceId = null,
     IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null,
-    string? RegistrationFingerprint = null);
+    string? RegistrationFingerprint = null,
+    // Central host capacity, echoed on every poll whether or not work was
+    // granted. The daemon adopts these instead of its own environment values.
+    int? DesiredMaxParallelism = null,
+    int? TargetLoadPercent = null,
+    string? RampStrategy = null,
+    string? AdmissionReason = null,
+    // T0b: additive execution spec; an older server simply omits it.
+    RunSpecDto? RunSpec = null);
 
 public static class RemoteChatWorkKinds
 {
@@ -304,7 +350,8 @@ public sealed record RemoteRunCompletionRequest(
     AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null,
     string? BaseSha = null,
     string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    string? ArtifactManifestDigest = null,
+    string? IntegrationBranch = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

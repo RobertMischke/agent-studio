@@ -19,6 +19,8 @@ export type {
   HostRole,
   HostHeartbeatStatus,
   HostActionKind,
+  HostRampStrategy,
+  RuntimeCapacitySettings,
   HostCliQuota,
   HostSystemStats,
   HostTelemetryPoint,

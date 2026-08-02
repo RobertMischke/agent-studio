@@ -1,5 +1,6 @@
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -25,6 +26,7 @@ public sealed class GitWorkspaceTests : IDisposable
 
         await workspace.PrepareAsync(CancellationToken.None);
 
+        Assert.Equal("refs/heads/main", workspace.IntegrationBranchRef);
         Assert.Equal(_origin,
             (await GitAsync(workspace.SharedRepoPath, "remote", "get-url", "origin")).StdOut);
         Assert.Equal(_origin,
@@ -135,10 +137,13 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_workDir, "PROJ-042", "repo", ".git")));
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): the rejection is produced by an executable
+    // POSIX pre-receive hook; Windows has no executable bit for git to honour.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Project_preflight_fails_when_origin_rejects_the_write_probe()
     {
-        if (OperatingSystem.IsWindows()) return;
+        PlatformGate.LinuxOnly("the origin rejects through an executable POSIX pre-receive hook");
 
         await SeedOriginAsync();
         var hook = Path.Combine(_origin, "hooks", "pre-receive");
@@ -159,22 +164,59 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Project_preflight_fails_when_the_delivery_target_branch_does_not_exist()
+    {
+        await SeedOriginAsync();
+
+        var result = await GitWorkspace.PreflightProjectAsync(
+            PreflightOptions(), "PROJ-042", _origin, "develop", _ => { }, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("target branch 'develop' does not exist", result.Detail, StringComparison.OrdinalIgnoreCase);
+        var probeRefs = await GitAsync(_origin, "for-each-ref", "--format=%(refname)",
+            "refs/heads/runner/runner-test/delivery-preflight-*");
+        Assert.Empty(probeRefs.StdOut);
+    }
+
+    [Fact]
     public async Task Teardown_commits_and_pushes_uncommitted_changes_before_removal()
     {
         await SeedOriginAsync();
         var workspace = CreateWorkspace();
         await workspace.PrepareAsync(CancellationToken.None);
+        var authoritativeMain = (await GitAsync(
+            _origin, "rev-parse", "refs/heads/main")).StdOut;
         await File.WriteAllTextAsync(Path.Combine(workspace.RepoPath, "work.txt"), "valuable work");
 
         var result = await workspace.TeardownAsync("Unknown", CancellationToken.None);
 
         Assert.True(result.SecuredWork);
         Assert.Equal("runner/runner-test/AGT-2147", result.Branch);
+        Assert.Equal(authoritativeMain, (await GitAsync(
+            _origin, "rev-parse", "refs/heads/main")).StdOut);
         Assert.False(Directory.Exists(workspace.RepoPath));
         Assert.Equal("valuable work", (await GitAsync(_origin,
             "show", $"refs/heads/{result.Branch}:work.txt")).StdOut);
         Assert.Equal("wip(runner): salvage before teardown - outcome Unknown",
             (await GitAsync(_origin, "log", "-1", "--format=%s", $"refs/heads/{result.Branch}")).StdOut);
+    }
+
+    [Theory]
+    [InlineData("runner/runner-test/AGT-2147", true)]
+    [InlineData("runner/runner-test/AGT-2147-collision-local-remote", true)]
+    [InlineData("main", false)]
+    [InlineData("develop", false)]
+    [InlineData("refs/heads/main", false)]
+    [InlineData("runner/runner-test/AGT-9999", false)]
+    public void Salvage_target_policy_allows_only_the_card_branch_and_its_collision_refs(
+        string targetBranch,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            GitWorkspace.IsCardScopedSalvageTarget(
+                "runner/runner-test/AGT-2147",
+                targetBranch));
     }
 
     [Fact]
@@ -215,10 +257,14 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.False(branch.Success);
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): WorktreeProcessReaper finds the offending
+    // processes through /proc/<pid>/cwd and is a no-op elsewhere.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public async Task Teardown_kills_processes_with_cwd_in_worktree_before_removal()
     {
-        if (!OperatingSystem.IsLinux()) return;
+        PlatformGate.LinuxOnly("the worktree process reaper scans /proc/<pid>/cwd");
+
         await SeedOriginAsync();
         var logs = new List<string>();
         var workspace = CreateWorkspace(logs.Add);
@@ -414,6 +460,7 @@ public sealed class GitWorkspaceTests : IDisposable
         var requeue = CreateWorkspace();
         var sourceBranch = await requeue.PrepareAsync(CancellationToken.None);
         Assert.Equal(salvaged.Branch, sourceBranch);
+        Assert.Equal("refs/heads/main", requeue.IntegrationBranchRef);
         Assert.Equal("first run", await File.ReadAllTextAsync(Path.Combine(requeue.RepoPath, "work.txt")));
 
         var result = await requeue.TeardownAsync("Done", CancellationToken.None);

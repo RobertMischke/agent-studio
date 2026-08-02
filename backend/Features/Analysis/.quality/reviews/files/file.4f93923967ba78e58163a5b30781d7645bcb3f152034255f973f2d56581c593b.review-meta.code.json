@@ -1,0 +1,251 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/24b32fcb102b0b58f80f0bd0d6b3d63dc0308486565cd2c78b7ff5b3f3891562",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+    "displayName": "RecurringOutputPatternService.cs"
+  },
+  "reviewedAt": "2026-07-21T11:28:52.3018369Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-0c34347c14674b26a3cc10c546ad9f51"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "3902e4303db0d150503b1dd82625252c6614228242eb4ec6d7e438bbe77600b7"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+      "selector": "file",
+      "contentHash": "sha256:9344ecb611dcbbe7e361a1dd4d88ab08f2946742834608f01815facbd2de5a83"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "c4b4cccac9e5d009edb5e529e52a2cd3d1354051bd01cf55825d201d76a53afe"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:26e76b6c306d42e8777047e4e65e3ec4bea83478545b867377c89c0360cdc2b3"
+    }
+  },
+  "grade": {
+    "score": 72,
+    "band": "C",
+    "rationale": "The service is well structured and largely readable, but several edge cases can make the reported scope incomplete or incorrect. The most important issues are incomplete window filtering, unreliable activity timestamps, permissive enum parsing, and silent loss of log evidence."
+  },
+  "summary": "The separation between scope selection, prompt rendering, response parsing, and report construction is clear and test-friendly. However, scope selection does not fully honor its stated time window, filesystem failures can silently become negative evidence, and structured-response validation accepts undefined numeric enum values. These issues can produce misleading no-finding reports.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 68,
+        "band": "D",
+        "rationale": "Pattern grouping is deterministic and understandable, but the time-window implementation is incomplete and activity detection can exclude jobs whose relevant evidence changed recently."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 78,
+        "band": "C",
+        "rationale": "The service has cohesive helpers and typed intermediate records, although documentation has drifted from the implementation and some best-effort behavior is implicit rather than represented explicitly."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 82,
+        "band": "B",
+        "rationale": "Names, comments, and method boundaries generally communicate intent well. A few comments promise behavior, such as reading prompt.md or falling back to folder modification time, that the code does not implement."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 61,
+        "band": "D",
+        "rationale": "Some malformed input is handled thoughtfully, but log-read failures are silently converted to empty evidence and report-store failures are not handled despite the documented graceful-degradation contract."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 77,
+        "band": "C",
+        "rationale": "Injected timestamps and plain-data results support fixture-based testing. Direct filesystem and report-store access still make failure-path testing more cumbersome than an injected evidence-reader abstraction would."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "ROP-001",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "The upper end of the requested window is not enforced",
+      "description": "SelectScope excludes jobs older than windowFrom but never excludes jobs whose LastActivityAt is later than windowTo. A future-dated task, or a caller requesting a historical interval, therefore receives evidence outside the interval recorded in the resulting scope and prompt.",
+      "recommendation": "Filter with both bounds, using a clearly documented inclusive or exclusive convention, for example LastActivityAt \u003E= windowFrom \u0026\u0026 LastActivityAt \u003C= windowTo. Add tests for events before, inside, and after the interval.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 115,
+              "column": 9
+            },
+            "end": {
+              "line": 128,
+              "column": 9
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ROP-002",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Recent evidence can be excluded because activity only follows task.json",
+      "description": "LastActivityAt comes from task.json.updatedAt or the task.json modification time. Changes to status.md, cli-output.log, or results do not affect it, even though those files are the evidence being analyzed. The documentation also promises a folder-mtime fallback, but SafeMtime is called for task.json. A recently completed run can consequently be omitted when task.json was not updated alongside its evidence.",
+      "recommendation": "Define activity as the latest reliable timestamp among task.json.updatedAt and the relevant evidence files or directory, or correct the contract if task.json is deliberately authoritative. Cover stale task.json with fresh log/status fixtures.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 350,
+              "column": 1
+            },
+            "end": {
+              "line": 413,
+              "column": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ROP-003",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Numeric strings can bypass enum validation",
+      "description": "Enum.TryParse accepts numeric strings, including values that are not defined enum members. Inputs such as \u0022999\u0022 can therefore be accepted as a structured severity, priority, or related topic and leak invalid enum values into the report contract.",
+      "recommendation": "After parsing, require Enum.IsDefined for each enum, or parse only explicitly recognized symbolic names. Treat undefined values consistently as malformed or apply a documented fallback.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 777,
+              "column": 5
+            },
+            "end": {
+              "line": 793,
+              "column": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ROP-004",
+      "aspect": "error_handling",
+      "severity": "medium",
+      "title": "Log read failures silently become negative evidence",
+      "description": "ReadLogTail catches every exception and returns an empty tail with zero starts. The caller can still set HasCliOutputLog to true, so an unreadable or concurrently changing log is represented as a readable log with no sentinel, commit marker, or retries. This can suppress real patterns and produce a misleading no-finding result without any diagnostic.",
+      "recommendation": "Catch expected I/O exceptions, record an explicit evidence-read error on TaskEvidence, and avoid treating unreadable evidence as an observed negative. Log or otherwise expose the failure through the existing diagnostic mechanism.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 415,
+              "column": 5
+            },
+            "end": {
+              "line": 454,
+              "column": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ROP-005",
+      "aspect": "error_handling",
+      "severity": "low",
+      "title": "Recent-report lookup does not degrade gracefully as documented",
+      "description": "LookupRecentReports directly invokes AnalysisReportStore.Snapshot. Any storage, parsing, or filesystem exception aborts the entire scope selection, contrary to the parameter documentation stating that store lookup degrades gracefully.",
+      "recommendation": "Either catch the store\u0027s documented recoverable exceptions and return an empty pointer list with diagnostics, or remove the graceful-degradation claim and make failure propagation an explicit API contract.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 620,
+              "column": 5
+            },
+            "end": {
+              "line": 636,
+              "column": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ROP-006",
+      "aspect": "clarity",
+      "severity": "low",
+      "title": "Class documentation says prompt.md is read, but the implementation never reads it",
+      "description": "The service-level workflow description lists prompt.md among the evidence sources, while ReadJobEvidence reads task.json, status existence, the CLI log, and result screenshots only. This makes the documented analysis surface broader than the actual detector and can mislead maintainers and tests.",
+      "recommendation": "Either extract the intended signals from prompt.md or update the documentation to list only the evidence actually consumed.",
+      "locations": [
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 20,
+              "column": 1
+            },
+            "end": {
+              "line": 25,
+              "column": 1
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Analysis/RecurringOutputPatternService.cs",
+          "range": {
+            "start": {
+              "line": 350,
+              "column": 1
+            },
+            "end": {
+              "line": 407,
+              "column": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

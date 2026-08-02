@@ -1,0 +1,6 @@
+#! {"scenario":"P5","title":"substantial reply, no terminal sentinel","cli":"claude","form":"plaintext","exitCode":0}
+# Today's remote alt path. No frames, so the outcome adapter has no provider
+# terminal event and no final-assistant aggregate: exit 0 without a sentinel is
+# ProtocolInconclusive -> AskForHumanInput -> lane 5-human-review.
+I refactored the output buffer and left the migration notes in the task folder.
+The remaining work needs a decision on the log sink before it can be finished.

@@ -1,0 +1,48 @@
+{
+  "scenario": "reference-change",
+  "seed": "agt2200-clean-v1",
+  "runId": "canary-ref-a",
+  "accepted": true,
+  "resultSha": "ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71",
+  "semanticTree": "68095f3c0b34f16620d27f1652cdbfa5483e9b70",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "none",
+  "assertions": [
+    {
+      "id": "reference-change-accepted",
+      "passed": true,
+      "detail": "exact result ff0bf2e4e6d776d6d7ed84b61e24a534a4ceea71 reached 6-completed through all five phases"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": false,
+    "selected": [],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 0,
+    "consumed": 0
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/reference-change/canary-ref-a",
+  "expectedTerminal": "6-completed",
+  "actualTerminal": "6-completed",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 0,
+    "used": 0
+  },
+  "chronicleLinks": []
+}

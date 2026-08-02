@@ -145,6 +145,46 @@ public class OrchestratorSteeringTraceabilityTests
         }
     }
 
+    [Fact]
+    public async Task RepeatedReissueGuard_NormalizesAndEnrichesEachRepeatedPrompt()
+    {
+        var folder = NewTempFolder();
+        try
+        {
+            const string original = "Address the missing evidence.\nThen run the focused test.";
+            await ReviewDecisionOrchestrator.WriteFollowUpFilesAsync(
+                folder, original, context: null,
+                jobId: "fix-thing", logger: NullLogger.Instance, ct: default);
+
+            var second = ReviewDecisionOrchestrator.GuardRepeatedReissuePrompt(
+                folder, "  Address the missing evidence.\r\nThen   run the focused test.  ");
+
+            Assert.True(second.Intervened);
+            Assert.Equal(1, second.MatchingPriorPrompts);
+            Assert.Contains("## Reissue repeat guard: diagnosis first", second.Prompt);
+            Assert.Contains("Name the exact failed check, blocking aspect, or missing evidence", second.Prompt);
+            Assert.Contains("Name the target artifact", second.Prompt);
+            Assert.NotEqual(
+                ReviewDecisionOrchestrator.NormalizeReissuePrompt(original),
+                ReviewDecisionOrchestrator.NormalizeReissuePrompt(second.Prompt));
+
+            await ReviewDecisionOrchestrator.WriteFollowUpFilesAsync(
+                folder, second.Prompt, context: null,
+                jobId: "fix-thing", logger: NullLogger.Instance, ct: default);
+
+            var third = ReviewDecisionOrchestrator.GuardRepeatedReissuePrompt(folder, original);
+
+            Assert.True(third.Intervened);
+            Assert.Equal(2, third.MatchingPriorPrompts);
+            Assert.Contains("has already been sent 2 times", third.Prompt);
+            Assert.NotEqual(second.Prompt, third.Prompt);
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
     private static string NewTempFolder()
     {
         var folder = Path.Combine(Path.GetTempPath(), "atp-steer-" + Guid.NewGuid().ToString("N"));

@@ -1,0 +1,66 @@
+{
+  "scenario": "lease-adoption-restart",
+  "seed": "historical-agt-2182",
+  "runId": "canary-lease-adoption",
+  "accepted": true,
+  "expectedTerminal": "4-auto-review",
+  "actualTerminal": "4-auto-review",
+  "recoveryBudget": {
+    "unit": "live-generation-adoptions",
+    "maximum": 1,
+    "used": 1
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"
+  ],
+  "assertions": [
+    {
+      "id": "attempt-authority-four-tuple-persisted",
+      "passed": true,
+      "detail": "pid=1530647, started=2026-07-29T02:08:21.8664279Z, worktree=/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/lease-adoption-restart/canary-lease-adoption/runner-host/repo_ece84343b4e5839f176d8abd4d03e41f3057933554d4781209d3f7930f11a884/worktrees/RTS-21, epoch=0, fence=1"
+    },
+    {
+      "id": "proven-live-generation-adopted",
+      "passed": true,
+      "detail": "replacement retained pid/start/worktree/epoch/fence for run_e48483cbe13f476582a5892124c0a597"
+    },
+    {
+      "id": "adopted-generation-completed-once",
+      "passed": true,
+      "detail": "task=4-auto-review, runs=1, one completion audit"
+    },
+    {
+      "id": "dead-generation-released-to-ready",
+      "passed": true,
+      "detail": "dead pid 1530820 released run run_4799a1b8ff984a11bbc6750a3731df97 to 2-ready"
+    },
+    {
+      "id": "mismatched-generation-released-to-ready",
+      "passed": true,
+      "detail": "mismatched pid generation released run run_2703d79368c44fd7bf19744c543ca125 to 2-ready"
+    },
+    {
+      "id": "all-stale-writers-rejected",
+      "passed": true,
+      "detail": "renew/event/handoff/completion statuses=409,409,409,409,409,409,409,409"
+    }
+  ],
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "evidence": {
+    "runAttemptId": "run_e48483cbe13f476582a5892124c0a597",
+    "pid": 1530647,
+    "processStartedAtUtc": "2026-07-29T02:08:21.8664279Z",
+    "worktreePath": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/lease-adoption-restart/canary-lease-adoption/runner-host/repo_ece84343b4e5839f176d8abd4d03e41f3057933554d4781209d3f7930f11a884/worktrees/RTS-21",
+    "authorityEpoch": 0,
+    "fence": 1,
+    "deadRunAttemptId": "run_4799a1b8ff984a11bbc6750a3731df97",
+    "mismatchedRunAttemptId": "run_2703d79368c44fd7bf19744c543ca125"
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/lease-adoption-restart/canary-lease-adoption"
+}

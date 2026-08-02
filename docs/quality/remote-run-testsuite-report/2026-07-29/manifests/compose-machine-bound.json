@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "name": "compose-machine-bound",
+  "runId": "canary-machine-10m",
+  "autonomyDurationSeconds": 600,
+  "machineBound": true,
+  "sequence": [
+    "reference-task",
+    "multi-slot-task-server-outage",
+    "studio-rolling-update",
+    "runner-rolling-update",
+    "task-server-rolling-update",
+    "identity-scoped-teardown"
+  ]
+}

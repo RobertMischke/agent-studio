@@ -13,6 +13,12 @@
     "project": { "type": "string", "description": "Project name." },
     "cliType": { "type": "string", "description": "Primary CLI whose live catalogue was ranked." },
     "taskType": { "type": "string", "description": "Structural task type." },
+    "policyVersion": { "type": "string", "description": "Version of the repository routing registry used for this decision." },
+    "policyTier": { "type": "string", "description": "Core routing tier selected before catalogue projection." },
+    "policyWikiPath": { "type": "string", "description": "Repository path of the human-readable policy view." },
+    "economyMode": { "type": "boolean", "description": "Whether the workspace economy switch was active." },
+    "economyDowngraded": { "type": "boolean", "description": "Whether economy mode safely lowered this route by one tier." },
+    "correctnessFloorTier": { "type": ["string", "null"], "description": "Hard correctness floor applied after task-type routing." },
     "surface": { "type": "string", "description": "Affected product surface classification." },
     "complexity": { "type": "string", "enum": ["small", "medium", "large"], "description": "Qualified complexity." },
     "score": { "type": "integer", "description": "Deterministic classification score." },
@@ -20,7 +26,7 @@
     "recommendedThinkingLevel": { "type": ["string", "null"], "description": "Recommended reasoning level." },
     "selectedModel": { "type": "string", "description": "Effective input selection after card overrides." },
     "selectedThinkingLevel": { "type": ["string", "null"], "description": "Effective reasoning level after overrides." },
-    "selectionSource": { "type": "string", "enum": ["qualification", "task-override"], "description": "Why the effective pair won." },
+    "selectionSource": { "type": "string", "enum": ["policy", "policy-economy", "task-override"], "description": "Why the effective pair won." },
     "estimatedSavingsPercent": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Heuristic saving versus the top live rung." },
     "reason": { "type": "string", "description": "Human-readable rationale shown in the pipeline." },
     "catalogueSource": { "type": "string", "description": "CLI catalogue provenance." },
@@ -37,7 +43,7 @@
   "allOf": [
     {
       "if": { "properties": { "event": { "const": "decision" } } },
-      "then": { "required": ["decisionId", "cliType", "taskType", "surface", "complexity", "score", "recommendedModel", "selectedModel", "selectionSource", "estimatedSavingsPercent", "reason", "catalogueSource"] }
+      "then": { "required": ["decisionId", "cliType", "taskType", "policyVersion", "policyTier", "policyWikiPath", "economyMode", "economyDowngraded", "surface", "complexity", "score", "recommendedModel", "selectedModel", "selectionSource", "estimatedSavingsPercent", "reason", "catalogueSource"] }
     },
     {
       "if": { "properties": { "event": { "const": "outcome" } } },

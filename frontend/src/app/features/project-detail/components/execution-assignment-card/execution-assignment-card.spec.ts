@@ -153,7 +153,7 @@ describe('ExecutionAssignmentCardComponent', () => {
       projectPreflights: [{
         projectId: 'PROJ-001', projectName: 'Agent Studio', registrationFingerprint: 'b'.repeat(64),
         repositoryUrl: 'https://example.test/studio.git', fetchUrl: 'https://example.test/studio.git',
-        pushUrl: 'https://example.test/studio.git', status: 'failed',
+        pushUrl: 'https://example.test/studio.git', targetBranch: 'develop', status: 'failed',
         detail: 'write probe failed: permission denied', checkedAt: '2026-07-22T10:00:00Z',
       }],
     }]);
@@ -161,6 +161,7 @@ describe('ExecutionAssignmentCardComponent', () => {
 
     const status = fixture.nativeElement.querySelector('[data-testid="project-delivery-preflight"]');
     expect(status?.textContent).toContain('blocked');
+    expect(status?.textContent).toContain('Target develop');
     expect(status?.textContent).toContain('permission denied');
     http.verify();
   });

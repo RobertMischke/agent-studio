@@ -10,6 +10,7 @@
       [items]="catalog()?.items ?? []"
       [selectedName]="selectedName()"
       [projectName]="projectName()"
+      (homeRequest)="goHome()"
       (selectPrompt)="select($event)" />
 
     <div class="prompts__splitter"
@@ -26,7 +27,13 @@
       <span aria-hidden="true"></span>
     </div>
 
-    <main class="prompts__detail" data-testid="prompt-admin-detail">
+    <main #detailScroll class="prompts__detail" data-testid="prompt-admin-detail">
+      @if (actionError()) {
+        <div class="prompts__banner prompts__banner--err" data-testid="prompt-admin-action-error">
+          {{ actionError() }}
+        </div>
+      }
+
       @if (detail(); as d) {
         <header class="prompts__detail-head">
           <div>
@@ -50,41 +57,21 @@
             </span>
           } @else {
             <span class="prompts__pill">shipped</span>
-            <span class="prompts__muted">shipped {{ shortSha(d.defaultSha) }}</span>
           }
+          <span class="prompts__muted"
+            [cacTooltip]="d.lastChangedSha ? 'Commit ' + d.lastChangedSha : 'No git revision available'">
+            last change: {{ d.lastChangedAt ? (d.lastChangedAt | date:'dd.MM.yyyy') : 'unknown' }}
+          </span>
         </div>
 
-        <section class="prompts__meta" data-testid="prompt-admin-meta">
-          <div class="prompts__meta-col">
-            <div class="prompts__meta-head">Slots</div>
-            @if (d.slots.length) {
-              <div class="prompts__slots">
-                @for (slot of d.slots; track slot) {
-                  <code class="prompts__slot" [attr.data-testid]="'prompt-admin-slot-' + slot">{{ '{{' + slot + '}}' }}</code>
-                }
-              </div>
-            } @else {
-              <span class="prompts__muted">No named slots — static template.</span>
-            }
-          </div>
-          <div class="prompts__meta-col">
-            <div class="prompts__meta-head">Used by</div>
-            @if (d.usages.length) {
-              <table class="prompts__usage" data-testid="prompt-admin-usage">
-                <tbody>
-                  @for (use of d.usages; track use.component + use.member) {
-                    <tr>
-                      <td><code>{{ use.component }}.{{ use.member }}</code></td>
-                      <td class="prompts__muted">{{ use.purpose }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            } @else {
-              <span class="prompts__muted">No recorded usage in the registry.</span>
-            }
-          </div>
-        </section>
+        <app-prompt-meta-summary [detail]="d" />
+
+        <app-prompt-call-telemetry [detail]="d" />
+
+        <app-prompt-review-section
+          [detail]="d"
+          [busy]="reviewBusy()"
+          (reviewRequest)="reviewCurrent()" />
 
         @if (staleProjectOverrides(d).length) {
           <div class="prompts__banner prompts__banner--warn"
@@ -119,12 +106,6 @@
               <button type="button" class="prompts__btn prompts__btn--primary" [disabled]="busy()"
                       data-testid="prompt-admin-merge" (click)="openMergeDraft()">Open merge draft</button>
             </div>
-          </div>
-        }
-
-        @if (actionError()) {
-          <div class="prompts__banner prompts__banner--err" data-testid="prompt-admin-action-error">
-            {{ actionError() }}
           </div>
         }
 
@@ -215,33 +196,23 @@
           </div>
         }
       } @else {
-        <div class="prompts__empty">Select a prompt to view and edit it.</div>
+        @if (reviewSummary(); as summary) {
+          <div class="prompts__banner" data-testid="prompt-admin-review-summary">
+            Reviewed {{ summary.reviewedCount }} prompts with {{ summary.findingCount }} findings.
+          </div>
+        }
+        <app-prompt-admin-landing
+          [items]="catalog()?.items ?? []"
+          [orphanedOverrides]="catalog()?.orphanedOverrides ?? []"
+          [deadPromptDays]="catalog()?.deadPromptDays ?? 30"
+          [costDisclaimer]="catalog()?.costDisclaimer ?? ''"
+          [reviewBusy]="reviewBusy()"
+          (openPrompt)="select($event)"
+          (reviewAll)="reviewAll()" />
       }
 
       @if (coverage(); as cov) {
-        <section class="prompts__coverage" data-testid="prompt-admin-coverage">
-          <div class="prompts__coverage-head">
-            <span>Inline-migration coverage</span>
-            <span class="prompts__muted" data-testid="prompt-admin-coverage-count">
-              {{ cov.coveredSites }} / {{ cov.totalSites }} prompt sites template-backed
-            </span>
-          </div>
-          <table class="prompts__usage">
-            <tbody>
-              @for (item of cov.items; track item.component) {
-                <tr [attr.data-testid]="'prompt-admin-coverage-row-' + item.status">
-                  <td>
-                    <span class="prompts__pill"
-                          [class.prompts__pill--ok]="item.status === 'covered'"
-                          [class.prompts__pill--warn]="item.status === 'pending'">{{ item.status }}</span>
-                  </td>
-                  <td><code>{{ item.component }}</code></td>
-                  <td class="prompts__muted">{{ item.detail }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </section>
+        <app-prompt-coverage-section [coverage]="cov" />
       }
     </main>
   </div>

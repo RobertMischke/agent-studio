@@ -1,0 +1,45 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-lost-completion-sentinel",
+  "description": "Drops the completion sentinel while retaining authoritative provider, outbox, and Result-SHA proof.",
+  "task": {
+    "title": "Verify lost completion sentinel recovery",
+    "body": "Apply the deterministic reference change and recover only from durable terminal facts plus immutable Result-SHA proof.",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+    ],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 0
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
+  "hooks": {},
+  "faults": ["lost-completion-sentinel"],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "lost-terminal-marker-recovered",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

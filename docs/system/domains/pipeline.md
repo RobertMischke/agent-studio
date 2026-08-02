@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-26
+Version: 2026-07-30
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -58,6 +58,12 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Features/Pipeline/RemotePipelineExecutionProjection.cs`: read-time
+  bridge for remote cards. It overlays the remote claim and completion facts
+  from session/timeline data, the latest Review Plane grade, and canonical
+  token-ledger calls onto the normal pipeline catalogue while preserving
+  locally recorded integration gates. It never writes
+  `pipeline-execution.json` or another lifecycle state.
 - `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
   `task-server/TaskServerOrchestrationStore.cs`, and
   `orchestrator-engine/`: the separated flow boundary. Project flow
@@ -73,14 +79,24 @@ pipeline view.
   step telemetry.
 - `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
   operator-triggered `post-merge-into-develop` post-step. Performs the real
-  delivery merge when the operator accepts a done-green task (the
-  `HumanReview -> Completed` transition wired in `TaskTransitionService`).
-  Local runs use `task/<id>`. Remote runs use the fenced `ResultRef` and
-  `ResultSha` from `logs/review-subject.json`, fetch that exact
-  `runner/<runner>/<task-key>` delivery from origin, and refuse a ref/SHA
-  mismatch. The configured integration ref is fetched and fast-forwarded
-  before the merge; a missing local branch is created from origin and a
-  divergent one fails visibly. The outcome is recorded so the pending step
+  delivery merge when the operator accepts a done-green task.
+  `TaskTransitionService` keeps the card in Human Review with phase
+  `integrating`, stamps the internal `integrationpending` recovery marker, and
+  enqueues `AcceptedIntegrationQueue`; `AcceptedIntegrationWorker` performs the
+  serialized merge, pre-develop build gate, rollback, and push hand-off outside
+  the HTTP request. Only `Merged` or `AlreadyMerged` moves the card to Completed.
+  Failures clear the phase, retain the card in Human Review, and append a hard
+  integration-failed journal event.
+  `DeliveryRefResolver` chooses the immutable result ref first, then an
+  attributed commit branch, then `runner/<runner>/<task-key>`, with
+  `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
+  from origin and fenced to `ResultSha`. Transactional acceptance first fetches
+  the configured origin integration ref and uses that refreshed remote ancestry
+  for its already-integrated decision, avoiding a redundant gate when the local
+  branch is stale. Immediately before a real merge or release gate, the
+  configured integration ref is fetched again and fast-forwarded; a missing
+  local branch is created from origin and a divergent one fails visibly. The
+  outcome is recorded so the pending step
   flips to passed / failed / skipped in place. After a successful merge it
   also pushes the integration branch itself to `origin`
   (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
@@ -103,9 +119,11 @@ pipeline view.
   results are single-flight cached by repository, baseline SHA, and command
   hash. Only failures still new after one subject retry block the review.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
-  deliveries after a backend restart when the durable lane move landed but the
-  merge did not. It also repairs the legacy `no-branch` outcome caused by
-  looking only for `task/<slug>`.
+  and local deliveries after a backend restart when the durable Human Review
+  `integrating` phase landed but the queued merge did not complete. The channel
+  is only a latency optimization; phase, pending marker, pipeline record, and
+  timeline are the durability boundary. The backstop finalizes Completed only
+  after successful integration and returns decided failures to Human Review.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
@@ -133,6 +151,13 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Shared/Models/PipelineTypes.cs` and
+  `backend/Features/Pipeline/PipelineTypeSettings.cs`: resolve each card to the
+  extensible `task`, `bug`, `feature`, or `planning` settings dimension and
+  project that type's step overrides and order before runtime resolution.
+- `backend/Features/Projects/ProjectSettingsService.cs`: persists typed
+  pipeline overrides and migrates legacy flat settings into all three coding
+  types. Planning deliberately starts from its lightweight defaults.
 - `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
   the lane policy, changed files, project/component ownership, explicit impact
   rules, and Test Hub history. It produces the immutable selection audit used
@@ -148,6 +173,13 @@ pipeline view.
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
   handling.
+- `backend/Features/Pipeline/ProjectStackDetector.cs`: bounded convention-based
+  Angular, .NET, and Node detection from repository markers. Pipeline catalogue
+  applicability never reads the configured build-profile stack label.
+- `backend/Features/Pipeline/PipelineStepExecutionResolver.cs` and
+  `PipelineStepProbeService.cs`: effective shell-command projection and isolated
+  per-step probes. Probes do not create or move tasks and execute through the
+  build/test gate runner so they share its machine lock.
 - `backend/Services/Pipeline/ProjectPipelineCostService.cs` and
   `PipelineCostCalculator.cs`: cost summary projection.
 - `backend/Services/Runner/PostAbortReviewStepService.cs` and
@@ -209,6 +241,20 @@ pipeline view.
 
 ## Invariants
 
+- Pipeline settings are resolved from the card before enablement, ordering,
+  model, prompt, condition, gate, deferred merge, or push decisions. Generic
+  coding work, bugs, and features have independent override maps even though
+  they currently share the standard catalogue defaults. Planning and research
+  use the lightweight planning chain and never inherit migrated coding
+  overrides. Concept retains its dedicated document-first catalogue.
+- The task pipeline endpoint projects local and remote lifecycle facts at read
+  time. A remote claim/completion becomes CORE work, a Review Plane grade
+  becomes the DECISION verdict, and recorded integration gates remain TOOL
+  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
+  structurally omits are `Skipped` with an explicit remote/not-applicable
+  reason. `Not run` is reserved for a step the current attempt genuinely never
+  reached. Remote token totals, historical list-price estimates, and call
+  counts come from the same token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
@@ -252,6 +298,13 @@ pipeline view.
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the
   same boundary.
+- Framework-specific catalogue steps declare `appliesTo`; `any` remains the
+  default. The project catalogue response includes derived `detectedStacks`, an
+  `applicable` flag, and the effective resolved command list for every step.
+  Inapplicable steps remain visible in Project Hub -> Pipeline.
+- A project-level step probe is diagnostic only. It may run the step's resolved
+  shell command against the repository, but it never creates a task or changes a
+  lane. Every shell probe is serialized by the build/test machine lock.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model
@@ -364,13 +417,16 @@ operator changes cause the step to fail before its writer runs.
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
 - A fenced remote completion persists `review-subject.json` with its exact
-  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
-  SHA as their authoritative subject. The build gate's selected subject is
-  carried through the later aspect and grade steps. The grade reviews the full
+  `ResultSha`, delivery ref, and actual integration branch ref. Both
+  `post-build-test-gate` and `post-code-review-grade` use that SHA as their
+  authoritative subject. The build gate's selected subject is carried through
+  the later aspect and grade steps. The grade reviews the full
   merge-base-to-`ResultSha` task range, not only the result commit, and must not
   fall back to the canonical task-branch HEAD when the runner delivered a
-  different commit. Otherwise the pipeline would test one revision and review
-  another, or omit earlier commits from a multi-commit delivery.
+  different commit. Merge and integration projections use the recorded branch
+  ref, not the current project default. Otherwise the pipeline could test one
+  revision, review another, omit earlier commits from a multi-commit delivery,
+  or merge the reviewed result into the wrong line.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
@@ -434,6 +490,11 @@ operator changes cause the step to fail before its writer runs.
   remain `Pending`, catalogue stubs remain `Planned`, and unknown extension rows
   are preserved. `PipelineExecutionLog.Read` applies the same projection purely
   to legacy current and previous attempts without rewriting their JSON files.
+- Task detail renders pending, non-deferred rows as `Not run` when a settled
+  attempt used a lightweight path or escalated before the full pipeline ran.
+  Deferred rows remain `Pending`. The Result view has one verdict badge, and
+  every human-review escalation writes a minimal Result scaffold before moving
+  the task so preparation failures retain durable evidence.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
   fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect
@@ -475,8 +536,13 @@ operator changes cause the step to fail before its writer runs.
   separate post-acquisition watchdog.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
-- The read-only pipeline drops git steps. Planning and research tasks must not
-  be forced through write-oriented post steps.
+- The lightweight report pipeline is selected from canonical task mode
+  `planning` or `research`. It retains deterministic preflight, one core report
+  run, primary-report validation, and human-review handoff. It excludes git,
+  build, automated tests, Stylelint, code-review aspects, code-quality grading,
+  regression radar, Wiki automation, and drift checks. Research additionally
+  requires `results/report.html`; the full deliverable and prompt contract is
+  the [Research task delivery convention](../../operations/research-deliverables/index.html).
 - The concept pipeline is distinct from the report-only pipeline. It runs in an
   isolated worktree, permits a diff only inside one
   `docs/operations/<topic>/` directory, and never merges that task branch.
@@ -493,13 +559,18 @@ operator changes cause the step to fail before its writer runs.
   runs only on an external operator trigger, not automatically in the
   post-bracket. It is distinct from a `Stub`: a stub has no implementation and
   renders "planned", a deferred step renders "pending" until triggered. The
-  merge into develop is best-effort and runs only after the lane move has
-  already landed, so it can never block the transition; a conflict is a visible
-  `Failed` outcome (conflicted files in the verdict summary) and the working
-  tree is left clean, never silently resolved. The paired
+  merge into develop runs on `AcceptedIntegrationWorker` while the card remains
+  in Human Review with phase `integrating`. It is the acceptance transaction's
+  gate: only `Merged` or `AlreadyMerged` commits the move to Completed. A
+  conflict is a visible `Failed` outcome with conflicted files in the verdict
+  summary; the phase clears, the card remains in Review, and the working tree is
+  left clean. Once merge/gate/rollback starts, host cancellation
+  does not interrupt that consistency boundary. `/healthz/drain` reports
+  `gate-busy` while the boundary is active so the external stable restart
+  watcher can wait for a bounded drain window. The paired
   `post-merge-into-develop-push` step (AGT-1999) pushes the integration branch to
   `origin` after a successful merge; it is offloaded off the request path and
-  never force-pushes, so it too can never block the transition, and a push
+  never force-pushes. A push
   failure is a visible step outcome (`environmental` after the AGT-1944 retry
   budget is spent, or `remote-rejected` on a diverged remote) rather than a
   silent drop. The optional AGT-2009 counterpart - auto-cleanup of merged
@@ -577,14 +648,15 @@ operator changes cause the step to fail before its writer runs.
 - Agents/wiki-sync changes need `AgentsWikiSyncPostStepRunnerTests` (registry
   seed, tag / path matching, per-topic progress dedup, dead-pointer finding, and
   the AGENTS.md pointer verify / self-heal) plus the `PipelineCatalogueTests`
-  step-shape pin (opt-in Tool step, after wiki-learnings, before the decision,
-  kept in the read-only pipeline).
+  step-shape pin (opt-in Tool step, after wiki-learnings and before the decision
+  in the standard pipeline, omitted from the lightweight report pipeline).
 - Task-spawner changes need `TaskSpawnerPostStepTests` (relevance sentinel parse
   yes/no/unparseable, dedup-ledger budget + same-target block, best-available-model
   default, and the end-to-end runner writing the follow-up card into a target
   project's flat store with a `relatedTo` back-reference) plus the
-  `PipelineCatalogueTests` step-shape pin (opt-in Orchestrator step, after aspects,
-  before the decision, kept in the read-only pipeline).
+  `PipelineCatalogueTests` step-shape pin (opt-in Orchestrator step, after aspects
+  and before the decision in the standard pipeline, omitted from the lightweight
+  report pipeline).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.
 - Pipeline health changes need `PipelineHealthNightReplayTests`, the

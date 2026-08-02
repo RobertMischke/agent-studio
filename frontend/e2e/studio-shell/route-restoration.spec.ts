@@ -89,6 +89,7 @@ async function stubRouteData(page: Page): Promise<void> {
       return json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
     }
     if (url.pathname === '/api/workspaces') return json([]);
+    if (url.pathname === '/api/projects') return json([]);
     if (url.pathname === '/api/cli/quota') return json({ snapshots: [], ttlSeconds: 600 });
     if (url.pathname.startsWith('/api/runner/token-summary-aggregate')) {
       return json({
@@ -139,7 +140,10 @@ async function stubRouteData(page: Page): Promise<void> {
         disclaimer: '',
       });
     }
-    if (url.pathname === '/api/tags' || url.pathname === '/api/clients/') return json([]);
+    if (url.pathname === '/api/tags' || url.pathname === '/api/clients' || url.pathname === '/api/clients/') {
+      return json([]);
+    }
+    if (url.pathname === '/api/v1/management/remote-hosts') return json([]);
     if (/\/api\/bus\/[^/]+\/messages$/.test(url.pathname)) return json([]);
     if (url.pathname === '/api/watch-paths') {
       return json([{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
@@ -267,6 +271,7 @@ async function stubRouteData(page: Page): Promise<void> {
         branch: 'task/route',
         revision: '1234567890abcdef',
         workingTreeModified: false,
+        fingerprint: 'a'.repeat(64),
       });
     }
     if (/\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
@@ -398,6 +403,51 @@ test.describe('Studio route restoration', () => {
       .toContain('#/projects/route-project');
     await page.reload({ waitUntil: 'commit' });
     await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
+  });
+
+  test('All Projects Board owns its URL across navigation, reload, and browser history', async ({ page }, testInfo) => {
+    await page.goto(`/#/projects/${PROJECT_SLUG}/board`, { waitUntil: 'commit' });
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText(PROJECT);
+
+    await page.getByTestId('studio-explorer-show-all-projects').click();
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText('All projects');
+    await expect.poll(() => new URL(page.url()).hash).toMatch(/^#\/board(?:&|$)/);
+
+    await page.reload({ waitUntil: 'commit' });
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText('All projects');
+    await expect.poll(() => new URL(page.url()).hash).toMatch(/^#\/board(?:&|$)/);
+
+    await page.evaluate(() => {
+      const evidence = document.createElement('div');
+      evidence.dataset['testid'] = 'route-evidence-url';
+      evidence.textContent = `URL: ${window.location.href}`;
+      Object.assign(evidence.style, {
+        position: 'fixed',
+        inset: '8px auto auto 50%',
+        transform: 'translateX(-50%)',
+        zIndex: '2147483647',
+        padding: '8px 12px',
+        border: '1px solid currentColor',
+        borderRadius: '6px',
+        background: 'Canvas',
+        color: 'CanvasText',
+        font: '13px monospace',
+      });
+      document.body.append(evidence);
+    });
+    await expect(page.getByTestId('route-evidence-url')).toContainText('/#/board');
+    await page.screenshot({
+      path: evidencePath(testInfo, 'all-projects-board-route.png'),
+    });
+
+    await page.goBack();
+    await expect.poll(() => new URL(page.url()).hash)
+      .toMatch(new RegExp(`^#/projects/${PROJECT_SLUG}/board(?:&|$)`));
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText(PROJECT);
+
+    await page.goForward();
+    await expect.poll(() => new URL(page.url()).hash).toMatch(/^#\/board(?:&|$)/);
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText('All projects');
   });
 
   test('Project Settings route restores the active Hub rail and survives reload', async ({ page }) => {

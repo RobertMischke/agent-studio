@@ -303,7 +303,8 @@ public sealed partial class TaskServerStore
         var runners = new List<CapabilityRunner>();
         await using (var command = Command(connection, """
             SELECT id, name, host_id, instance_id, runner_version, protocol_version,
-                   status, registered_at, last_seen_at
+                   status, registered_at, last_seen_at, effective_max_parallelism,
+                   runtime_capacity_applied_at
               FROM runners
              ORDER BY host_id, name, id;
             """))
@@ -319,13 +320,20 @@ public sealed partial class TaskServerStore
                     reader.GetInt32(5),
                     reader.GetString(6),
                     Parse(reader.GetString(7)),
-                    Parse(reader.GetString(8))));
+                    Parse(reader.GetString(8)),
+                    reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                    reader.IsDBNull(10) ? null : Parse(reader.GetString(10))));
         }
 
         var result = new List<RunnerCapabilitySnapshotDto>();
         foreach (var runner in runners)
         {
             var hostAdmission = await ReadHostAdmissionAsync(connection, null, runner.HostId, ct);
+            var runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
+                connection,
+                null,
+                runner.HostId,
+                ct);
             var capabilities = new List<CapabilityHealthDto>();
             await using (var command = Command(connection, """
                 SELECT capability_key, category, advertised_status, health_state,
@@ -385,7 +393,10 @@ public sealed partial class TaskServerStore
                 runner.LastSeenAt,
                 hostAdmission,
                 capabilities,
-                telemetry));
+                telemetry,
+                runtimeCapacity,
+                runner.EffectiveMaxParallelism,
+                runner.RuntimeCapacityAppliedAt));
         }
         return result;
     }
@@ -847,7 +858,9 @@ public sealed partial class TaskServerStore
         int ProtocolVersion,
         string Status,
         DateTime RegisteredAt,
-        DateTime LastSeenAt);
+        DateTime LastSeenAt,
+        int? EffectiveMaxParallelism = null,
+        DateTime? RuntimeCapacityAppliedAt = null);
 
     private sealed record CapabilityRow(
         string Key,

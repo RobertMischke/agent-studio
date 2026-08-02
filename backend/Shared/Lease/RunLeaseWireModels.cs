@@ -105,7 +105,15 @@ public sealed record RunnerClaimRequest(
     int? ActiveSlots = null,
     string? IdempotencyKey = null,
     IReadOnlyList<string>? ActiveTaskKeys = null,
-    RunnerProjectPreflightReport? ProjectPreflight = null);
+    RunnerProjectPreflightReport? ProjectPreflight = null,
+    // Ceiling the daemon has actually adopted, reported as telemetry.
+    int? EffectiveMaxParallelism = null,
+    DateTime? EffectiveMaxParallelismAppliedAt = null,
+    // The daemon's own RUNNER_MAX_PARALLELISM. It only seeds the central host
+    // ceiling on first contact; afterwards the server value wins.
+    int? BootstrapMaxParallelism = null,
+    string? CapabilityInstanceId = null,
+    IReadOnlyList<string>? RequiredCapabilities = null);
 
 /// <summary>Host result for the unleased project offered by the previous claim poll.</summary>
 public sealed record RunnerProjectPreflightReport(
@@ -127,6 +135,37 @@ public enum RunnerClaimStatus
     Invalid,
 }
 
+/// <summary>
+/// T0b — the execution specification of the claimed card, carried on the claim
+/// (CAR migration plan §3 T0b / §7 AP3). Before this existed, a remote run took
+/// its CLI, model, and reasoning level from the runner host's
+/// <c>RUNNER_CLI_*</c> environment, so the card's choice was silently ignored
+/// while the local path honoured it — the claim is the only place the server can
+/// state it, because it is the only message that names the card.
+///
+/// <para>
+/// Every field is optional by contract: a runner built before T0b ignores the
+/// whole object, and a server built before T0b simply does not send it, in which
+/// case the runner falls back to its <c>RUNNER_CLI_*</c> configuration exactly as
+/// it did before. That is the additive-first rule from
+/// <c>distributed-agent-studio-target-architecture</c> §10 and the reason this
+/// change needs no protocol-version bump and no rollback step.
+/// </para>
+/// </summary>
+/// <param name="CliType">Card CLI (<c>claude</c> / <c>codex</c>), normalized the way <c>CliRouter.Get</c> resolves it.</param>
+/// <param name="Model">Card model id; null means "no pin", so the CLI's own default wins.</param>
+/// <param name="ThinkingLevel">Reasoning level, resolved against what the CLI + model actually support; null when the card pinned none.</param>
+/// <param name="PermissionMode">Resolved per-project permission posture. Transported for parity; the runner does not build flags from it yet (T1).</param>
+/// <param name="ContextMode">Resolved per-task / per-project context mode. Transported for parity; clean context on the runner waits for CAR-B.</param>
+/// <param name="ModeFraming">Server-rendered per-mode framing block (read-only / research / concept / web contracts). The local in-process runner injects the same block via <c>{{mode_framing}}</c>; a standalone runner appends it at its own execution boundary. Null/empty for a plain coding run.</param>
+public sealed record RunSpecDto(
+    string? CliType = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    string? PermissionMode = null,
+    string? ContextMode = null,
+    string? ModeFraming = null);
+
 /// <summary>Result of one daemon pickup poll.</summary>
 public sealed record RunnerClaimResponse(
     RunnerClaimStatus Status,
@@ -139,7 +178,18 @@ public sealed record RunnerClaimResponse(
     string? RepositoryUrl = null,
     string? DefaultBranch = null,
     string? TaskKind = null,
-    string? RegistrationFingerprint = null);
+    string? RegistrationFingerprint = null,
+    // Central host capacity echoed on every poll, granted or not. The daemon
+    // adopts these values instead of its own environment configuration, which
+    // makes the host row in Studio the one place capacity is steered.
+    int? DesiredMaxParallelism = null,
+    int? TargetLoadPercent = null,
+    string? RampStrategy = null,
+    // Reason code when a poll was held back by host capacity.
+    string? AdmissionReason = null,
+    // T0b: additive execution spec. Placed last so every existing positional
+    // construction keeps compiling and every older runner keeps deserialising.
+    RunSpecDto? RunSpec = null);
 
 /// <summary>Fenced request for the server-rendered Epic decomposition prompt.</summary>
 public sealed record RemoteEpicPlanningPromptRequest(
@@ -198,7 +248,8 @@ public sealed record RemoteRunCompletionRequest(
     IReadOnlyList<string>? GateItems = null,
     string? BaseSha = null,
     string? ImmutableResultRef = null,
-    string? ArtifactManifestDigest = null);
+    string? ArtifactManifestDigest = null,
+    string? IntegrationBranch = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

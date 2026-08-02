@@ -1,0 +1,129 @@
+using AgentStudio.Setup;
+using Xunit;
+
+namespace AgentOrchestratorSetup.Tests;
+
+public sealed class SetupContractTests
+{
+    [Fact]
+    public void JoinToken_RoundTripsAndDetectsCopyDamage()
+    {
+        var payload = new JoinPayload(
+            1,
+            "https://tasks.example.test",
+            new string('a', 64),
+            "0.4.0",
+            new DateTime(2026, 7, 28, 12, 0, 0, DateTimeKind.Utc));
+
+        var token = JoinTokenCodec.Encode(payload);
+        var decoded = JoinTokenCodec.Decode(token);
+
+        Assert.Equal(payload, decoded);
+        Assert.StartsWith("aosj1.", token);
+        var damaged = token[..^1] + (token[^1] == 'a' ? "b" : "a");
+        Assert.Contains(
+            "checksum",
+            Assert.Throws<ArgumentException>(() => JoinTokenCodec.Decode(damaged)).Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JoinToken_RejectsInsecureNonLoopbackServer()
+    {
+        var payload = new JoinPayload(
+            1,
+            "http://tasks.example.test:5071",
+            new string('b', 64),
+            "0.4.0",
+            DateTime.UtcNow);
+
+        Assert.Contains(
+            "HTTPS",
+            Assert.Throws<ArgumentException>(() => JoinTokenCodec.Encode(payload)).Message);
+    }
+
+    [Fact]
+    public void Arguments_NeverAcceptJoinSecretDirectly()
+    {
+        var options = SetupOptions.Parse(
+        [
+            "--join",
+            "--join-token-file",
+            "/secure/join.token",
+            "--runner-name",
+            "agent-runner-01",
+        ]);
+
+        Assert.Equal(SetupMode.AgentHost, options.Mode);
+        Assert.Equal("/secure/join.token", options.JoinTokenFile);
+        Assert.Throws<ArgumentException>(() =>
+            SetupOptions.Parse(["--join-token", "aosj1.secret"]));
+    }
+
+    [Fact]
+    public void DemoCompose_IsPinnedAndMountsNoHostRepository()
+    {
+        var compose = DemoInstaller.BuildCompose(
+            "0.4.0",
+            4011,
+            "ghcr.io/agent-orc");
+
+        Assert.Contains("agent-studio-api:v0.4.0", compose);
+        Assert.Contains("agent-studio-web:v0.4.0", compose);
+        Assert.Contains("\"127.0.0.1:4011:80\"", compose);
+        Assert.Contains("demo-workspace:/data/workspace", compose);
+        Assert.DoesNotContain("./", compose);
+        Assert.DoesNotContain("/home/", compose);
+        Assert.DoesNotContain("agent-host", compose);
+    }
+
+    [Fact]
+    public void ReleaseChecksum_RequiresExactAssetName()
+    {
+        var hash = new string('c', 64);
+        var sums = $"{hash}  agent-host-0.4.0.tar.gz\n";
+
+        Assert.Equal(
+            hash,
+            ReleaseArtifacts.ParseExpectedHash(
+                sums,
+                "agent-host-0.4.0.tar.gz"));
+        Assert.Throws<InvalidDataException>(() =>
+            ReleaseArtifacts.ParseExpectedHash(sums, "agent-host-0.4.1.tar.gz"));
+    }
+
+    [Theory]
+    [InlineData("ready", "ready", "ready")]
+    [InlineData("ready", "ready-no-workflow-scope", "ready-no-workflow-scope")]
+    [InlineData("unavailable", "unavailable", "read-only")]
+    public void GitStartupStatus_ExplainsAdmissionState(
+        string push,
+        string workflow,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            NativeInstaller.ClassifyGitStatus(push, workflow));
+    }
+
+    [Theory]
+    [InlineData("https://github.com/agent-orc/agent-studio.git")]
+    [InlineData("ssh://git@github.com/agent-orc/agent-studio.git")]
+    [InlineData("git@github.com:agent-orc/agent-studio.git")]
+    public void GitRemote_AcceptsCredentialFreeSupportedForms(string remote)
+    {
+        Assert.Equal(remote, SetupValidation.RequireGitRemote(remote));
+    }
+
+    [Theory]
+    [InlineData("demo", "Demo")]
+    [InlineData("single", "SingleMachine")]
+    [InlineData("control-plane", "ControlPlane")]
+    [InlineData("agent-host", "AgentHost")]
+    public void Modes_AreStableCommandLineContracts(
+        string value,
+        string expected)
+    {
+        Assert.Equal(expected, SetupOptions.ParseMode(value).ToString());
+    }
+}

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "harness": "remote-test-suite",
+  "faults": [
+    {
+      "id": "task-server-network-blips",
+      "incidentClass": "task-server-network",
+      "description": "Bounded request loss during claim and heartbeat plus response loss after durable event, artifact, and completion commits.",
+      "anchors": [
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-zombie-leases"
+      ],
+      "schedule": [
+        {
+          "operation": "claim",
+          "occurrences": [1],
+          "action": "disconnect-before-send"
+        },
+        {
+          "operation": "heartbeat",
+          "occurrences": [1],
+          "action": "disconnect-before-send"
+        },
+        {
+          "operation": "event-report",
+          "occurrences": [1],
+          "action": "disconnect-after-commit"
+        },
+        {
+          "operation": "artifact-report",
+          "occurrences": [1],
+          "action": "disconnect-after-commit"
+        },
+        {
+          "operation": "completion-report",
+          "occurrences": [1],
+          "action": "disconnect-after-commit"
+        }
+      ]
+    },
+    {
+      "id": "gate-watchdog-timeout",
+      "incidentClass": "gate-timeout",
+      "description": "A deterministic fixture command exceeds the harness watchdog once and its complete process group is reaped before one bounded retry.",
+      "anchors": [
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-gate-timeout",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates"
+      ],
+      "schedule": [
+        {
+          "operation": "gate-command",
+          "occurrences": [1],
+          "action": "watchdog-timeout",
+          "parameters": {
+            "timeoutMs": 350,
+            "fixtureDelayMs": 10000,
+            "maxRecoveryAttempts": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "worktree-target-collision",
+      "incidentClass": "worktree-collision",
+      "description": "A fixture-owned foreign occupant holds the intended target through all five bounded preparation attempts.",
+      "anchors": [
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-worktree-collision",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination"
+      ],
+      "schedule": [
+        {
+          "operation": "worktree-prepare",
+          "occurrences": [1, 2, 3, 4, 5],
+          "action": "occupy-target",
+          "parameters": {
+            "maxPrepareAttempts": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "lost-completion-sentinel",
+      "incidentClass": "terminal-marker-loss",
+      "description": "The final sentinel is lost while provider completion, exit, outbox, and immutable Result-SHA proof remain durable.",
+      "anchors": [
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+      ],
+      "schedule": [
+        {
+          "operation": "terminal-marker",
+          "occurrences": [1],
+          "action": "drop-sentinel"
+        }
+      ]
+    },
+    {
+      "id": "interrupted-terminal-marker",
+      "incidentClass": "terminal-marker-loss",
+      "description": "The terminal marker and authoritative provider completion are interrupted, forcing a protocol-inconclusive human terminal without integration.",
+      "anchors": [
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-run-wedge",
+        "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+      ],
+      "schedule": [
+        {
+          "operation": "terminal-marker",
+          "occurrences": [1],
+          "action": "interrupt-marker"
+        }
+      ]
+    }
+  ]
+}

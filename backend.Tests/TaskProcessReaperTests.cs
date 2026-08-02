@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using AgentStudio.Cli;
+using AgentStudio.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -17,10 +19,16 @@ namespace AgentStudio.Tests;
 /// </summary>
 public sealed class TaskProcessReaperTests
 {
-    [Fact]
+    // Windows-only 02.08. (AGT-2472): the reaper is built on the Win32 Job Object
+    // primitive. Linux teardown uses process groups and is covered separately.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Windows)]
+    // The runtime gate is PlatformGate.WindowsOnly; this states the same fact to
+    // the platform-compatibility analyzer, which only understands the annotation.
+    [SupportedOSPlatform("windows")]
     public async Task Terminate_KillsDetachedGrandchild_ThatTreeKillWouldMiss()
     {
-        if (!OperatingSystem.IsWindows()) return; // Win32 Job Object primitive — Windows-only.
+        PlatformGate.WindowsOnly("the reaper is built on the Win32 Job Object primitive");
 
         var pidFile = Path.Combine(Path.GetTempPath(), $"reaper-gc-{Guid.NewGuid():N}.pid");
 
@@ -76,10 +84,12 @@ public sealed class TaskProcessReaperTests
         }
     }
 
-    [Fact]
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Windows)]
+    [SupportedOSPlatform("windows")]
     public void CreateForProcess_OnExitedProcess_ReturnsNull_NoThrow()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        PlatformGate.WindowsOnly("the reaper is built on the Win32 Job Object primitive");
 
         using var p = new Process
         {

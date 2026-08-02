@@ -64,6 +64,15 @@ screenshot routes remain migration inputs. The full schema, transient-state
 boundary, route map, and visual ownership diagram are in
 [Studio Route Restoration](../../concepts/studio-route-restoration.md).
 
+The workspace Activity Feed is the embedded `#/feed` main view and is opened
+by the Activity icon. Its 500-event backend snapshot is rendered through a
+bounded, variable-height history window based on the Activity scroll fix, so
+live prepends preserve the operator's reading position without FixedSize
+virtual-scroll assumptions. Only fresh `alert` events contribute to the icon
+badge. The older project-scoped modal remains a quick-access compatibility
+surface and shares the same live feed store. Its bounded panes use Deck-Panel
+v1, and alert treatment follows the AGT-2410 acute-only status contract.
+
 ## Key Code
 
 - `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,
@@ -89,6 +98,10 @@ boundary, route map, and visual ownership diagram are in
   backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+  The middle inspector uses the fixed `Task | Activity | Result` order. Task
+  renders `prompt.md` and the read-only refinement projection from run/log and
+  steering-history evidence; Activity and Result retain their existing live
+  and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, places the primary
   reissue, accept-as-is, and abort decisions beside the recommendation, lists
@@ -99,11 +112,14 @@ boundary, route map, and visual ownership diagram are in
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
-  Timeline and steering text is ANSI-sanitised before rendering. Code Review
-  keeps the last available grade visible with its date when it belongs to an
-  older delivery. The task-detail Docs tab presents rendered result documents
-  before prompt and raw artifacts, with per-document anchors and technical file
-  metadata disclosed from the document details menu.
+  Timeline and steering text is ANSI-sanitised before rendering. Timeline rows
+  project each fact once across title, summary, and badges, omit permanent
+  defaults and zero counts, and disclose the exact members behind source counts.
+  Execution-context rows keep model and thinking level visible without repeating
+  the implied CLI. Code Review keeps the last available grade visible with its
+  date when it belongs to an older delivery. The task-detail Docs tab presents
+  rendered result documents before prompt and raw artifacts, with per-document
+  anchors and technical file metadata disclosed from the document details menu.
   Each review row also shows its council reaction, including
   per-finding rulings and the linked follow-up round. Reviews without a reaction
   sidecar expose that audit gap explicitly.
@@ -133,14 +149,26 @@ boundary, route map, and visual ownership diagram are in
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/system/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- `frontend/src/app/features/project-detail/components/project-url-preview-tab/`
+  owns each online and offline Project URL preview. Its shared context header
+  reads repository name, current branch, HEAD, and ahead/behind distance from
+  `GET /api/projects/{projectId}/urls/{urlId}/context`. The backend resolves Git
+  at the preview command's effective working directory, prefers the branch
+  upstream as comparison line, and falls back to the project's integration
+  line. The header derives its open-task count and expandable task links from
+  the existing Task Server-backed grouped task snapshot, excluding completed
+  and archived cards. Readiness and last-start diagnosis remain independent, so
+  a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
   read-only Workbench host. Explorer discovery is lazy per expanded project;
   Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
-  in an opaque-origin `srcdoc` iframe with the Workbench CSP and no host API
-  bridge. An inert DOM parse moves artifact nodes into a fixed policy-first
-  wrapper, and dirty working-tree content is labelled as uncommitted instead of
-  receiving the current HEAD revision. Chat pinning and decision mutations are
-  intentionally not mounted.
+  in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
+  message boundary maps docs-relative links to the in-app Wiki and opens absolute
+  HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
+  DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
+  pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
+  content is labelled as uncommitted instead of receiving the current HEAD
+  revision. Chat pinning and decision mutations are intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring
@@ -159,8 +187,11 @@ boundary, route map, and visual ownership diagram are in
   the Test Quality run pipeline. It shows planned, running, and completed
   commit-bound runs in product order, including scope, host, duration, result,
   and cards attached by the backend ancestry projection. Board cards render the
-  same projection as perfect, diff included, diff not included, pending, or no
-  assigned run.
+  same project-run projection as perfect, diff included, diff not included,
+  pending, or no assigned run. The card evidence block also renders SHA-linked
+  task-owned Remote Review build-tests grades and build/test gate logs supplied
+  by the backend. It names their source and tested SHA instead of showing the
+  project-run default when task-owned evidence exists.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
@@ -170,7 +201,12 @@ boundary, route map, and visual ownership diagram are in
   `develop`, toolchain, and no-op readiness from the host registry snapshot.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
-  cannot be confused. The historical target is the ordered, immutable route
+  cannot be confused. A fresh connected remote lease also drives the card's
+  CURRENT running copy and the status bar's separate local / remote totals;
+  a disconnected, expired, or recovering location remains an acute orphan
+  candidate. These consumers reuse the grouped-board and execution-location
+  snapshots and do not add another polling path. The historical target is the
+  ordered, immutable route
   defined by [Runner provenance and host handoff](../../concepts/completion-review-and-remote-runner-stability.html#provenance):
   task Overview and run/pipeline detail show actual placement per agent run and
   executed step, preserve A → B → A returns, and label missing legacy data as
@@ -209,6 +245,24 @@ boundary, route map, and visual ownership diagram are in
   summary. It does not own project onboarding or a project-source catalogue.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
+- The System prompts destination is the prompt registry and observability
+  surface. Its overview groups runtime-step, orchestrator, drift, and framing
+  templates, explains application and project pipeline override precedence, and
+  provides a sortable activity table. `RuntimePromptService.Render` appends one
+  row per use to `<TaskRepository>/logs/prompt-calls.jsonl` with the effective
+  content hash, estimated rendered-input tokens, timestamp, and any available
+  project, step, and model context. The API aggregates total and seven-day
+  calls, last call, a 14-day series, current and historical versions, and
+  historical theoretical input cost through `TokenPricing`. Unknown models
+  remain explicitly unpriced. Review actions check the static usage catalogue,
+  repository references, and project pipeline overrides, then persist
+  `prompts/runtime/<name>.md.meta.json`.
+  The durable source, precedence, companion, telemetry, and cost rules are
+  defined by the
+  [runtime prompt registry contract](../contracts/runtime-prompts.md).
+  Result-quality benchmarking by prompt version is deliberately vNext. The
+  versioned call ledger is its data foundation, but this surface does not claim
+  that call volume or cost measures outcome quality.
 - `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
   project onboarding workflow. Its roomy, scrollable form groups project
   identity, repository paths/URL, and execution defaults without a source-type
@@ -233,9 +287,9 @@ The dashboard is a projection over existing domain truths:
 |---|---|---|
 | Delivered work | `GET /api/projects/{projectName}/throughput`, including archived task history and exact rolling 24-hour and 7-day windows | Board and task history |
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
-| Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
+| Project URLs | Embedded project URLs from `GET /api/workspaces`; command-working-directory Git identity from `GET .../context`; Task Server-backed open-card links; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, registry, and grouped task snapshot |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
-| Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
+| Wiki activity | Initial `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`, then a visible-only conditional poll of `GET /api/projects/{projectName}/wiki/recent?limit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |
 | Visual evidence | `GET /api/projects/{projectName}/visual-evidence`, with append-only review receipts shared with task detail | Existing Visual Evidence detail surface |
 | Publishing | Publish targets from `GET /api/projects/{projectName}/snapshot`, rendered by the existing publish panel | Publishing panel |

@@ -1,5 +1,6 @@
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -71,7 +72,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var (workspace, _) = Workspace(
             "attempt-mutates", sha,
             [new ReviewCommandDto(
-                "mutation", "code-quality", "/bin/sh", ["-c", "printf mutation > unexpected.txt"])],
+                "mutation", "code-quality", PosixShell.RequirePath(),
+                ["-c", "printf mutation > unexpected.txt"])],
             24016);
         await workspace.PrepareAsync(null!, default);
 
@@ -127,7 +129,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             var (workspace, _) = Workspace(
                 "attempt-credentials", sha,
                 [new ReviewCommandDto(
-                    "credential-check", "evidence", "/bin/sh",
+                    "credential-check", "evidence", PosixShell.RequirePath(),
                     ["-c", $"test -z \"${{{variable}:-}}\""])],
                 25032);
             await workspace.PrepareAsync(null!, default);
@@ -262,7 +264,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         => new(
             "verify-2",
             "build-tests",
-            "/bin/sh",
+            PosixShell.RequirePath(),
             ["-c", shell],
             CompareToBaseline: true);
 
@@ -369,6 +371,6 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); } catch { }
+        ResilientDirectory.TryDelete(_root);
     }
 }

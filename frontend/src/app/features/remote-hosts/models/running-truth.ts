@@ -1,5 +1,6 @@
 import type { TaskInfo } from '../../../models/task.model';
-import type { HostTelemetryPoint, RemoteHost } from './remote-host.model';
+import { deriveActiveTaskRun } from '../../../services/run-activity.util';
+import type { HostProjectSlots, HostTelemetryPoint, RemoteHost } from './remote-host.model';
 
 export const RUNNING_TELEMETRY_FRESH_MS = 5 * 60_000;
 
@@ -8,37 +9,46 @@ export interface BoardRunningTruth {
   remote: number;
   total: number;
   remoteByRunnerId: ReadonlyMap<string, number>;
+  /**
+   * Per runner, how many of its slots each project occupies. Capacity is a host
+   * ceiling shared by every project (AGT-2302), so this is the breakdown that
+   * makes a host row answer "who is using my slots".
+   */
+  remoteByRunnerAndProject: ReadonlyMap<string, ReadonlyMap<string, number>>;
 }
 
 /**
  * The board's Progress lane is the canonical inventory of active task runs.
- * Local processes prove liveness through their execution record. Remote runs
- * prove it through the fenced lease projection, which is removed when the
- * lease ends. A remote lease wins over an execution snapshot so a task can
- * never be counted in both buckets.
+ * Local processes and fresh remote leases are reconciled by the shared active
+ * run projection. A canonical disconnected location therefore stays outside
+ * both buckets even when a compatibility runner badge is still present.
  */
 export function deriveBoardRunningTruth(progress: readonly TaskInfo[]): BoardRunningTruth {
   let local = 0;
   let remote = 0;
   const remoteByRunnerId = new Map<string, number>();
+  const remoteByRunnerAndProject = new Map<string, Map<string, number>>();
 
   for (const task of progress) {
     if (task.state !== '3-progress') continue;
 
-    const runner = task.runner;
-    const hasActiveLease = !!runner?.leaseId;
-    if (hasActiveLease && runner?.isRemote) {
+    const active = deriveActiveTaskRun(task);
+    if (active?.kind === 'remote') {
       remote++;
-      remoteByRunnerId.set(runner.runnerId, (remoteByRunnerId.get(runner.runnerId) ?? 0) + 1);
+      if (active.runnerId) {
+        remoteByRunnerId.set(active.runnerId, (remoteByRunnerId.get(active.runnerId) ?? 0) + 1);
+        const project = task.projectName || 'Unknown project';
+        const byProject = remoteByRunnerAndProject.get(active.runnerId) ?? new Map<string, number>();
+        byProject.set(project, (byProject.get(project) ?? 0) + 1);
+        remoteByRunnerAndProject.set(active.runnerId, byProject);
+      }
       continue;
     }
 
-    if (task.execution?.status === 'running' || (hasActiveLease && runner?.isRemote === false)) {
-      local++;
-    }
+    if (active?.kind === 'local') local++;
   }
 
-  return { local, remote, total: local + remote, remoteByRunnerId };
+  return { local, remote, total: local + remote, remoteByRunnerId, remoteByRunnerAndProject };
 }
 
 /** Latest telemetry sample, independent of the history window selected in UI. */
@@ -71,6 +81,28 @@ export function boardRemoteSlotsForHost(truth: BoardRunningTruth, host: RemoteHo
     if (ids.has(runnerId)) count += runnerCount;
   }
   return count;
+}
+
+/**
+ * Which projects occupy this host's slots right now, busiest first. The counts
+ * sum to {@link boardRemoteSlotsForHost}, so the host row's per-project rows
+ * always reconcile with its active-slot total.
+ */
+export function boardProjectSlotsForHost(
+  truth: BoardRunningTruth,
+  host: RemoteHost,
+): HostProjectSlots[] {
+  const ids = new Set([host.id, host.clientId]);
+  const totals = new Map<string, number>();
+  for (const [runnerId, byProject] of truth.remoteByRunnerAndProject) {
+    if (!ids.has(runnerId)) continue;
+    for (const [projectName, count] of byProject) {
+      totals.set(projectName, (totals.get(projectName) ?? 0) + count);
+    }
+  }
+  return [...totals.entries()]
+    .map(([projectName, activeSlots]) => ({ projectName, activeSlots }))
+    .sort((a, b) => b.activeSlots - a.activeSlots || a.projectName.localeCompare(b.projectName));
 }
 
 /** Sum only fresh remote-host samples. Null means there is no live comparison source. */

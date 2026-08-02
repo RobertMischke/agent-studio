@@ -52,6 +52,7 @@
           <th scope="col" class="wfolder__th-file">Datei</th>
           <th scope="col" class="wfolder__th-type">Typ</th>
           <th scope="col" class="wfolder__th-class">Status</th>
+          <th scope="col" class="wfolder__th-reads">Reads</th>
           <th scope="col" class="wfolder__th-when">Geändert</th>
           <th scope="col" class="wfolder__th-size">Größe</th>
         </tr>
@@ -82,7 +83,8 @@
                   </button>
                 }
                 <app-studio-icon [name]="child.kind === 'folder' ? 'folder' : (child.fileType === 'html' ? 'code' : 'file')" [size]="13"></app-studio-icon>
-                <span class="wfolder__title-text">{{ child.title || child.name }}</span>
+                <span class="wfolder__title-text"
+                      [attr.data-testid]="'wiki-folder-title-' + child.relPath">{{ child.title || child.name }}</span>
                 @if (child.kind !== 'folder') {
                   <button class="wfolder__star" type="button"
                           [class.wfolder__star--active]="isStarred(child)"
@@ -118,6 +120,13 @@
                 } @else {
                   <span aria-hidden="true">–</span>
                 }
+              }
+            </td>
+            <td class="wfolder__cell-reads" [attr.data-testid]="'wiki-folder-reads-' + child.relPath">
+              @if (child.kind !== 'folder' && child.agentReads; as reads) {
+                <span [cacTooltip]="reads.lastReadAt ? 'Zuletzt gelesen: ' + absoluteTime(reads.lastReadAt) : 'Keine Lesezeit verfügbar'">{{ reads.total }}</span>
+              } @else {
+                <span aria-hidden="true">–</span>
               }
             </td>
             <td class="wfolder__cell-when">

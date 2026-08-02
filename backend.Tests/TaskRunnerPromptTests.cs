@@ -333,6 +333,69 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RunnerAndOrchestratorTemplates_PointToCanonicalContributionGuide()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange,
+            RuntimePromptService.EpicDecomposition,
+            "global-orchestrator-boot.md",
+            "orchestrator-conflict-resolution.md",
+            "orchestrator-decision-oneshot.md",
+            "orchestrator-decision-resume.md",
+            "orchestrator-no-completion-signal.md",
+            "orchestrator-project-boot.md",
+            "orchestrator-reissue-followup.md",
+            "orchestrator-review-decision-fallback.md",
+            "orchestrator-review-decision.md"
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>
+            {
+                ["prompt_path"] = "prompt.md",
+                ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
+                ["user_followup"] = "follow up",
+                ["title"] = "title",
+                ["prompt_text"] = "body",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = "",
+                ["project_name"] = "project",
+                ["decision"] = "continue",
+                ["task_title"] = "task title",
+                ["task_id"] = "AGT-1",
+                ["task_description"] = "task body",
+                ["attachments_block"] = "",
+                ["last_agent_text"] = "question",
+                ["project"] = "project",
+                ["job_id"] = "AGT-1",
+                ["job_title"] = "task title",
+                ["needs_input_reason"] = "question",
+                ["task_body"] = "task body",
+                ["recent_log"] = "log",
+                ["roadmap_excerpt"] = "roadmap",
+                ["adr_titles"] = "ADR",
+                ["previous_decisions"] = "none",
+                ["task_branch"] = "task/agt-1",
+                ["integration_branch"] = "main",
+                ["worktree"] = "worktree",
+                ["conflicted_files"] = "file.cs"
+            });
+
+            Assert.Contains("docs/start/contribution-and-style-guide.html", rendered);
+            Assert.Contains("authoritative source", rendered, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void AllRunnerTemplates_UseCalmPlatformCommitOwnership()
     {
         var prompts = Prompts();
@@ -674,14 +737,31 @@ public class TaskRunnerPromptTests
     [Fact]
     public void RenderModeFraming_Research_AddsBothReadOnlyAndWebHint()
     {
-        // Research is the read-only-with-web mode: it gets the read-only block
-        // and the web hint, read-only first.
+        // Research gets the read-only block, its HTML result contract, and the
+        // web hint in that order.
         var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
 
         Assert.Contains("Read-only run", framing);
+        Assert.Contains("**Research:**", framing);
+        Assert.Contains("results/report.html", framing);
+        Assert.Contains("self-contained HTML", framing);
+        Assert.Contains("link every supporting document", framing);
         Assert.Contains("Web access is enabled", framing);
-        Assert.InRange(framing.IndexOf("Read-only run", StringComparison.Ordinal), 0,
-            framing.IndexOf("Web access is enabled", StringComparison.Ordinal));
+        var readOnlyIndex = framing.IndexOf("Read-only run", StringComparison.Ordinal);
+        var researchIndex = framing.IndexOf("**Research:**", StringComparison.Ordinal);
+        var webIndex = framing.IndexOf("Web access is enabled", StringComparison.Ordinal);
+        Assert.InRange(readOnlyIndex, 0, researchIndex);
+        Assert.InRange(researchIndex, readOnlyIndex, webIndex);
+    }
+
+    [Fact]
+    public void RenderModeFraming_Planning_DoesNotInheritResearchHtmlContract()
+    {
+        var framing = Prompts().RenderModeFraming("planning", allowWebAccess: false);
+
+        Assert.Contains("Read-only run", framing);
+        Assert.DoesNotContain("**Research:**", framing);
+        Assert.DoesNotContain("results/report.html", framing);
     }
 
     [Fact]

@@ -22,6 +22,19 @@ public class GenericCliExecutionService : ICliExecutionService
     private readonly CliBehavior _behavior;
 
     /// <summary>
+    /// Per-task clean-context homes (jobKey → live preparation). Session-state
+    /// stability contract (MKT-8 / WEB-14 "Codex rollout state loss"): all
+    /// attempts/recoveries of the same task reuse ONE isolated home, so the
+    /// CLI's own session state (Codex <c>sessions/rollout-*.jsonl</c>, Claude
+    /// per-cwd transcripts) survives a mid-run restart and a stored session id
+    /// stays resumable. A fresh home is cut only at run boundaries: the task's
+    /// first start, or after the last attempt's tracking entry was evicted
+    /// (which removes + disposes the registry entry below). The registry — not
+    /// the per-attempt <see cref="ProcInfo"/> — owns disposal.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, CleanContextPreparation> _cleanContextsByJob = new();
+
+    /// <summary>
     /// Mutable per-instance CLI path override (set via <see cref="SetCliPath"/>).
     /// Generic to all CLIs, so it lives on the engine; behaviors read it through
     /// <see cref="CliPathOverride"/>.
@@ -455,25 +468,33 @@ public class GenericCliExecutionService : ICliExecutionService
         }
 
         // T1b (ASS-1742): clean context. When the run resolves to CLEAN and this
-        // adapter supports it, seed a fresh per-run config home and point the CLI
-        // at it via its own env override (CLAUDE_CONFIG_DIR / CODEX_HOME). The
+        // adapter supports it, seed an isolated per-task config home and point the
+        // CLI at it via its own env override (CLAUDE_CONFIG_DIR / CODEX_HOME). The
         // child then loads only the seeded auth + base config, not the operator's
         // accumulated session history / memory. Repo AGENTS.md / CLAUDE.md stay
-        // active because they live in the checkout, not the home. The preparation
-        // is stamped on ProcInfo below and disposed (temp home torn down) when
-        // the run's tracking entry is evicted. A null result (shared-only backend
-        // or temp-home creation failure) silently falls back to a shared run.
+        // active because they live in the checkout, not the home.
+        //
+        // Session-state stability (MKT-8 / WEB-14): the home is acquired through
+        // the per-task registry, so a follow-up attempt / recovery of the SAME
+        // task reuses the previous attempt's home instead of cutting a new empty
+        // one. Cutting a new home per attempt refreshed CODEX_HOME between
+        // attempts, deleted the Codex rollout the stored session id pointed at,
+        // and forced every continuation into full-context session recovery
+        // ("Codex rollout is absent from the new clean-context CODEX_HOME").
+        // A null result (shared-only backend or temp-home creation failure)
+        // silently falls back to a shared run.
         CleanContextPreparation? cleanContext = null;
+        var cleanContextReused = false;
         if (CliContextModes.Normalize(contextMode) == CliContextModes.Clean && SupportsCleanContext)
         {
-            cleanContext = PrepareCleanContext(workingDirectory);
+            (cleanContext, cleanContextReused) = AcquireCleanContext(jobKey, workingDirectory);
             if (cleanContext != null)
             {
                 foreach (var kv in cleanContext.EnvOverrides)
                     psi.Environment[kv.Key] = kv.Value;
                 _logger.LogInformation(
-                    "{Cli} clean context for job {JobId}: isolated home at {Home}",
-                    CliType, jobId, cleanContext.TempHome);
+                    "{Cli} clean context for job {JobId}: {Mode} isolated home at {Home}",
+                    CliType, jobId, cleanContextReused ? "reusing session-stable" : "seeded fresh", cleanContext.TempHome);
             }
         }
 
@@ -514,9 +535,15 @@ public class GenericCliExecutionService : ICliExecutionService
         {
             _logger.LogError(ex, "Failed to start {Cli} CLI for job {JobId}", CliType, jobId);
             // The run never reached ProcInfo, so the eviction-time dispose will
-            // never fire — tear the clean home down here so a spawn failure
-            // doesn't leak a temp dir.
-            cleanContext?.Dispose();
+            // never fire — tear a home we freshly cut for THIS call down again
+            // so a spawn failure doesn't leak a temp dir. A REUSED home stays:
+            // it still carries the task's resumable session state, and the
+            // prior attempt's eviction path owns its eventual teardown.
+            if (cleanContext != null && !cleanContextReused)
+            {
+                _cleanContextsByJob.TryRemove(new KeyValuePair<string, CleanContextPreparation>(jobKey, cleanContext));
+                cleanContext.Dispose();
+            }
             return (null, $"Failed to start {CliType} CLI: {ex.Message}");
         }
         var process = child.Process;
@@ -900,6 +927,36 @@ public class GenericCliExecutionService : ICliExecutionService
     /// <inheritdoc cref="ICliExecutionService.PrepareCleanContext" />
     public CleanContextPreparation? PrepareCleanContext(string workingDirectory)
         => _behavior.PrepareCleanContext?.Invoke(this, workingDirectory);
+
+    /// <summary>
+    /// Acquire the clean-context home for one attempt of a task: reuse the
+    /// task's registered home when it is still on disk (session-state
+    /// stability across attempts/recoveries of the same run — MKT-8 / WEB-14),
+    /// otherwise cut a fresh one and register it. Returns
+    /// <c>(preparation, reused)</c>; <c>(null, false)</c> when preparation
+    /// failed and the caller should fall back to a shared run.
+    /// </summary>
+    internal (CleanContextPreparation? Preparation, bool Reused) AcquireCleanContext(string jobKey, string workingDirectory)
+    {
+        if (_cleanContextsByJob.TryGetValue(jobKey, out var existing))
+        {
+            if (Directory.Exists(existing.TempHome))
+                return (existing, true);
+            // The home vanished underneath us (external temp cleanup): the
+            // registration is stale; drop it and cut a fresh home below.
+            _cleanContextsByJob.TryRemove(new KeyValuePair<string, CleanContextPreparation>(jobKey, existing));
+        }
+
+        var prepared = PrepareCleanContext(workingDirectory);
+        if (prepared != null) _cleanContextsByJob[jobKey] = prepared;
+        return (prepared, false);
+    }
+
+    /// <inheritdoc cref="ICliExecutionService.GetPersistentCleanContextHome" />
+    public string? GetPersistentCleanContextHome(string jobKey)
+        => _cleanContextsByJob.TryGetValue(jobKey, out var prep) && Directory.Exists(prep.TempHome)
+            ? prep.TempHome
+            : null;
 
     /// <summary>
     /// Build the convention-only context for a tracked run. Shared by the engine
@@ -1334,22 +1391,42 @@ public class GenericCliExecutionService : ICliExecutionService
 
             _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
             {
-                if (_processes.TryRemove(jobKey, out var removed))
+                // Identity-guarded eviction: remove the entry only when it is
+                // still THIS run's own ProcInfo. The old key-only TryRemove
+                // raced a follow-up attempt that had replaced the entry under
+                // the same jobKey — the stale timer then evicted the LIVE run's
+                // ProcInfo, disposed its open output log, and recursively
+                // deleted its clean-context home (CODEX_HOME/CLAUDE_CONFIG_DIR)
+                // while the CLI was still running. That mid-run home deletion
+                // is the "Codex rollout state loss during run" class (MKT-8):
+                // session state of a running run must stay stable; refresh
+                // happens only at run boundaries.
+                if (!_processes.TryRemove(new KeyValuePair<string, ProcInfo>(jobKey, info)))
+                    return;
+
+                info.OutputLog.Dispose();
+                try { info.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1009"); }
+                // T1b: tear down the task's isolated clean-context home. The
+                // guarded remove above proves no newer attempt replaced this
+                // entry, so this eviction IS the task's run boundary — the one
+                // place the per-task home may be refreshed/torn down. Tied to
+                // eviction (not OnFinished) because DescribeContextSources runs
+                // asynchronously after finish and must still see the temp paths
+                // intact (Exists=true) for the retention window, and because a
+                // same-run follow-up attempt must be able to reuse the home.
+                if (_cleanContextsByJob.TryRemove(jobKey, out var cleanAtBoundary))
                 {
-                    removed.OutputLog.Dispose();
-                    try { removed.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1009"); }
-                    // T1b: tear down the run's isolated clean-context home. Tied
-                    // to eviction (not OnFinished) because DescribeContextSources
-                    // runs asynchronously after finish and must still see the
-                    // temp paths intact (Exists=true) for the retention window.
-                    try { removed.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
-                    // Backstop: close the job handle (kill-on-close reaps any
-                    // straggler Terminate() missed). Normally a no-op because
-                    // the run-finish path already terminated it.
-                    if (OperatingSystem.IsWindows())
-                    {
-                        try { removed.ProcessReaper?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
-                    }
+                    try { cleanAtBoundary.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+                }
+                // Defensive: normally identical to the registry entry disposed
+                // above; Dispose is idempotent, so a stale reference is safe.
+                try { info.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+                // Backstop: close the job handle (kill-on-close reaps any
+                // straggler Terminate() missed). Normally a no-op because
+                // the run-finish path already terminated it.
+                if (OperatingSystem.IsWindows())
+                {
+                    try { info.ProcessReaper?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
                 }
             });
         }

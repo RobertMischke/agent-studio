@@ -1,4 +1,7 @@
-<section class="orch-feed" data-testid="orchestrator-feed">
+<section class="orch-feed"
+         [class.orch-feed--embedded]="embedded()"
+         [attr.data-mode]="embedded() ? 'embedded' : 'overlay'"
+         data-testid="orchestrator-feed">
   <header class="orch-feed__head">
     <div class="orch-feed__title-block">
       <div class="orch-feed__title-row">
@@ -23,14 +26,14 @@
   @if (error()) { <div class="orch-feed__error" role="alert">{{ error() }}</div> }
 
   @if (activeView() === 'load') {
-    <app-load-distribution [entries]="entries()" />
+    <app-load-distribution [entries]="entries()" (openTaskRequest)="openTask.emit($event)" />
   } @else {
     <section class="orch-feed__global" aria-label="Global orchestrator scope">
       <app-global-orchestrator-card />
     </section>
 
   <div class="orch-feed__grid">
-    <aside class="orch-feed__filters" aria-label="Feed filters">
+    <aside class="orch-feed__filters" aria-label="Feed filters" data-testid="orchestrator-feed-filters">
       <div class="orch-feed__filter-group">
         <h3>Projects</h3>
         <button type="button" class="orch-feed__filter"
@@ -60,7 +63,7 @@
       <p class="orch-feed__quiet-note">Signal hides passive observations that already read like the task timeline.</p>
     </aside>
 
-    <section class="orch-feed__stream" data-testid="orchestrator-feed-stream">
+    <section #stream class="orch-feed__stream" data-testid="orchestrator-feed-stream">
       @if (visibleEntries().length === 0 && !loading() && !error()) {
         <div class="orch-feed__empty">No orchestrator activity in this section yet.</div>
       }
@@ -72,26 +75,49 @@
               <span class="orch-feed__project-label"><i [style.--project-hue]="projectHue(group.project)"></i>{{ group.project }}</span>
             </header>
             @for (entry of group.entries; track entry.ts + entry.summary) {
-              <button type="button" class="orch-feed__entry"
+              <article class="orch-feed__entry"
+                      role="button"
+                      tabindex="0"
+                      data-testid="orchestrator-feed-entry"
                       [class.orch-feed__entry--selected]="isSelected(entry)"
                       [class.orch-feed__entry--alert]="entry.kind === 'alert'"
                       [class.orch-feed__entry--decision]="entry.kind === 'decision'"
                       [class.orch-feed__entry--action]="entry.kind === 'action'"
                       [class.orch-feed__entry--observation]="entry.kind === 'observation'"
                       [class.orch-feed__entry--intervention]="entry.kind === 'intervention'"
-                      (click)="selectEntry(entry)">
+                      (click)="selectEntry(entry)"
+                      (keydown.enter)="selectEntry(entry)"
+                      (keydown.space)="selectEntry(entry); $event.preventDefault()">
                 <div class="orch-feed__entry-top">
                   <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
                   <span class="orch-feed__topic">{{ entry.topic }}</span>
                   <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
                 </div>
                 <span class="orch-feed__summary">{{ entry.summary }}</span>
+                @if (entry.jobId && entry.watchPath) {
+                  <span class="orch-feed__task-row">
+                    <span>Task</span>
+                    <button type="button"
+                            class="orch-feed__task-link"
+                            (click)="navigateToTask(entry); $event.stopPropagation()"
+                            [attr.aria-label]="'Open task ' + entry.jobId"
+                            data-testid="orchestrator-entry-task">{{ entry.jobId }}</button>
+                  </span>
+                }
                 @if (entry.tokenUsage; as tu) {
                   <span class="orch-feed__tokens" [cacTooltip]="tokenTooltip(tu)">{{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}</span>
                 }
-              </button>
+              </article>
             }
           </section>
+        }
+        @if (olderEntryCount() > 0) {
+          <button type="button"
+                  class="orch-feed__load-older"
+                  data-testid="orchestrator-feed-load-older"
+                  (click)="loadOlder()">
+            Show {{ olderEntryCount() < 100 ? olderEntryCount() : 100 }} older events
+          </button>
         }
       </div>
     </section>
@@ -106,13 +132,24 @@
         <dl class="orch-feed__meta">
           <div><dt>Time</dt><dd>{{ formatTime(entry.ts) }}</dd></div>
           @if (entry.project) { <div><dt>Project</dt><dd>{{ entry.project }}</dd></div> }
-          @if (entry.jobId) { <div><dt>Task</dt><dd><code>{{ entry.jobId }}</code></dd></div> }
+          @if (entry.jobId && entry.watchPath) {
+            <div>
+              <dt>Task</dt>
+              <dd>
+                <button type="button"
+                        class="orch-feed__detail-task-link"
+                        (click)="navigateToTask(entry)"
+                        [attr.aria-label]="'Open task ' + entry.jobId"
+                        data-testid="orchestrator-detail-task">{{ entry.jobId }}</button>
+              </dd>
+            </div>
+          }
           @if (entry.tokenUsage; as tu) {
             <div><dt>Model</dt><dd>{{ tu.model || '?' }}</dd></div>
             <div><dt>Tokens</dt><dd>↑{{ tu.inputTokens }} / ↓{{ tu.outputTokens }}</dd></div>
           }
         </dl>
-        @if (entry.jobId && entry.project) {
+        @if (entry.jobId && entry.watchPath) {
           <button type="button" class="orch-feed__open-task" (click)="navigateToTask(entry)" data-testid="orchestrator-open-task">Open task</button>
         }
         @if (entry.reasoning) {

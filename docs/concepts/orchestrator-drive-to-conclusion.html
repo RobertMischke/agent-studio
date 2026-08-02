@@ -758,6 +758,25 @@
         </tr>
         <tr>
           <td>2026-07-12</td>
+          <td><code>AGT-2149</code><br><span class="small">completion gate interpreted prose as open work</span></td>
+          <td>
+            Run 6 ended with <code>TASK_DONE</code>, exit 0, a clean worktree, and eight passing focused checks. The
+            completion gate nevertheless reopened it with four findings: a synthesized <code>Status result is Blocked</code>
+            line, GitHub organization-owner deploy-key approval, real-host access, and the statement that no repository-side
+            change could proceed without that external approval.
+          </td>
+          <td>
+            The pre-review gate treated generated status bullets and historical close-out prose as state. It collapsed turn
+            completion, implementation completion, acceptance, and platform-owned push/deployment into one opaque unfinished count.
+          </td>
+          <td>
+            Added durable <code>completion-acceptance.json</code> evidence. The gate now uses structured terminal/process evidence
+            and explicit blocker terminals only, preserves each requirement/evidence/blocker source and reason, and keeps turn,
+            implementation, acceptance, and deployment/push states distinct. Regression coverage reproduces all four false items.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-12</td>
           <td><code>AGT-2157</code><br><span class="small">review CLI configuration silently forced Claude</span></td>
           <td>
             GPT-only Agent Studio cards ran through Codex on the remote host, but local post-orchestrator outcomes still
@@ -1170,6 +1189,217 @@
             lane transition now protects the operator-selected lane. Completed and Archive are explicit boot-repair
             terminals, operator requeues in Ready remain untouched, and every reasoned lane move, including the legacy
             repair itself, records the reason in <code>timeline.jsonl</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-28</td>
+          <td><code>AGT-2387</code><br><span class="small">identical reissue prompt loop<br>(observed on <code>AGT-2255</code>)</span></td>
+          <td>
+            Auto-review sent the same evidence-gate instruction to one card five times. The repeated text added no new
+            diagnosis, target artifact, or next-round framing even though its prior copies were already durable in
+            <code>orchestrator-follow-up-history/</code>.
+          </td>
+          <td>
+            Every gate built its follow-up independently, and the shared follow-up writer persisted the result without
+            comparing it with the append-only history. The bounded reissue budget limited each chain, but it did not stop
+            identical text from consuming another attempt.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared writer now compares normalized base prompts with the complete
+            history before sending. A repeat receives a diagnosis-first block naming the failed check or missing evidence,
+            the closing artifact and verification, and the instruction to continue the existing diff. Each intervention
+            gets a rising count, the enriched text reaches the canonical file, history, and decision journal, and an
+            <code>orchestrator_steered</code> timeline event records cause
+            <code>reissue-prompt-repeat-guard</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-28</td>
+          <td><code>AGT-2418</code><br><span class="small">stable watchdog cut an accepted merge gate<br>(follow-up to <code>AGT-2384</code>)</span></td>
+          <td>
+            The external stable restart watcher could observe an idle task runner while the accepted-integration worker
+            was still inside merge, pre-develop build, or rollback. Its update path then stopped the backend hard and
+            could cut the integration branch mutation before that consistency boundary reached a durable verdict.
+          </td>
+          <td>
+            Runner-idle state did not include background merge-gate activity. The backend exposed no drain signal for
+            that boundary, and the watchdog had no bounded grace window before invoking the hard restart.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> <code>/healthz/drain</code> now reports <code>gate-busy</code> while a merge,
+            gate, or rollback is active or waiting. The accepted worker ignores host cancellation once that boundary
+            starts and finishes it before stopping. The external restart watcher waits up to a configurable 120-second
+            window before the hard update path; durable Completed-lane and pipeline facts remain the recovery terminal
+            if the bounded window expires or the process still dies.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2395</code><br><span class="small">historical lease-adoption replay<br>(reconstructs <code>AGT-2182/2194/2198/2232</code>)</span></td>
+          <td>
+            The real isolated Task Server and Runner replay initially released its v1 claim before worker launch.
+            After repository context was restored, a replacement daemon proved the detached PID generation and
+            worktree but could not reopen the original durable outbox, so the live run still could not reach completion.
+          </td>
+          <td>
+            The separated v1 claim exposed task-project identity but no repository registration, while its compatibility
+            adapter treated that project ID as repository identity and omitted the configured Git URL. On restart,
+            <code>OutboxAuthority</code> then substituted the replacement daemon process identity for the persisted attempt
+            instance, violating the immutable run authority tuple.
+          </td>
+          <td>
+            <span class="pill ok">fixed and replayed</span> v1 claims bind the configured fallback repository to its stable
+            identity, and reopened outboxes retain the original attempt instance. The bounded replay adopts exactly one
+            proven live generation to <span class="lane">4-auto-review</span>, releases dead and PID-mismatched generations
+            to <span class="lane">2-ready</span>, and receives Conflict for every stale renew, event, handoff, and completion
+            writer. See <code>tools/remote-test-suite/scenarios/lease-adoption-restart.json</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>AGT-2400</code><br><span class="small">foreign-CLI fallback cross-applied a model pin<br>(fixed by <code>AGT-2402</code>)</span></td>
+          <td>
+            A card pinned to <code>cliType=claude</code> and <code>model=claude-opus-5</code> was claimed by
+            codex-only <code>agent-runner-01</code>. The runner honestly kept codex, but launched it with
+            <code>-m claude-opus-5</code>. Codex received an OpenAI 400 unsupported-model response, exited 1,
+            was classified <code>CliCrash</code>, and the run escalated.
+          </td>
+          <td>
+            <code>AgentCliProcess.Resolve</code> selected the available host CLI before appending model and thinking
+            selectors, but never checked that the selected CLI still matched the provider requested by the card.
+            Provider-specific pins therefore crossed the fallback boundary.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> a foreign-CLI fallback now drops the card model and thinking
+            pins, runs with the fallback host's configured defaults, and logs
+            <code>source=card-cli-fallback(model-pins-dropped)</code> plus the existing mismatch note. The original
+            incident reached <span class="lane">5e-escalated</span>; the corrected path avoids the unsupported-model
+            crash. Claim-side CLI capability matching is tracked separately.
+          </td>
+        </tr>
+        <tr>
+          <td><code>WEB-14</code><br><span class="small">auto-single reverted during its active run</span></td>
+          <td>
+            ProjectRunner claimed the project's only card in <code>auto-single</code>. The next pickup tick skipped that
+            same active card as a conflict, found no other candidate, and reverted the project to <code>manual</code>.
+            Auto Review later reissued WEB-14 to <span class="lane">2-ready</span>, but no automatic pickup remained.
+          </td>
+          <td>
+            The empty-candidate branch treated "the only candidate is already running" as "the run chain is drained".
+            It also had no distinction between a released coding slot and runner-side or Auto Review post-processing.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> <code>auto-single</code> now stays armed while the project has an
+            in-memory run or finalisation record, a durable <code>post-processing-running</code> phase, or a card in
+            <span class="lane">4-auto-review</span>. A review reissue remains eligible for automatic pickup. The mode
+            returns to <code>manual</code> only after the chain reaches Human Review or Completed and the pickup queue is
+            empty. The observed incident itself had no automatic terminal: WEB-14 waited in Ready for four hours until the
+            operator restored an auto mode.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2393</code><br><span class="small">safe Remote Run fault injection catalog</span></td>
+          <td>
+            The isolated Remote Run suite could prove the clean claim, Result-SHA handoff, review,
+            and integration path, but the four recurring infrastructure incident classes still
+            depended on ad hoc reproduction. A false-positive safety risk also existed if future
+            controls were added directly to a normal Runner configuration.
+          </td>
+          <td>
+            There was no harness-owned fault vocabulary, deterministic operation/occurrence schedule,
+            activation interlock, or shared assertion report spanning lane, lease, process, worktree,
+            outbox, SHA, and incident outcome.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the repository test harness now provides isolated
+            single-fault and selected multi-fault manifests for Task Server blips, a gate watchdog
+            timeout, an occupied worktree target, and lost or interrupted terminal proof. Production
+            binaries import no injection code. Faults require an explicit flag, a run/root-bound
+            acknowledgement, an unchanged safety marker, and a harness-owned Task Server. The timeout
+            process tree is reaped, worktree preparation stops after five attempts without touching
+            the foreign occupant, idempotent evidence replays once, and missing terminal proof reaches
+            Human Review without integration.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2396</code><br><span class="small">ten-minute Runner autonomy without Task Server</span></td>
+          <td>
+            The remote Runner could tolerate short request failures, but its default two-minute lease made a ten-minute Task
+            Server outage impossible. Authority and replay readiness were held only in memory, and a daemon restart could not
+            enforce the original stop-before deadline before reconnecting. Terminal upload and process-generation exhaustion
+            therefore lacked one durable, reviewable drive-to-conclusion proof.
+          </td>
+          <td>
+            The heartbeat treated transport failure as a retry concern without persisting confirmed, uncertain, and rejected
+            authority states beside the worker. Report replay was not gated on a fresh exact-fence renewal, and startup had no
+            deadline watcher capable of reaping a detached generation while Task Server registration remained unavailable.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> a 15-minute server-issued lease now carries a durable stop-before truth.
+            Multiple already-claimed slots may continue and journal locally through ten minutes of transport loss, but they
+            admit no new work and replay nothing until exact authority reconciles. Deadline exhaustion reaps and verifies the
+            whole worktree process generation and retains an honest terminal record. Controlled-time tests cover the full
+            authority window. The card-safe Compose acceptance uses a configurable 25-second real outage and retains the same
+            multi-slot, exact-once, empty-outbox, duplicate-claim, and generation-death assertions. The explicit 600-second proof
+            is a separately marked MachineBound suite run. Runner restart and Task Server restart remain distinct acceptance phases.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2423</code><br><span class="small">salvage commits observed on <code>origin/main</code></span></td>
+          <td>
+            Three teardown commits created for <code>AGT-2394</code>, <code>AGT-2397</code>, and
+            <code>AGT-2399</code> appeared consecutively on the <code>origin/main</code> first-parent line.
+            Later card-scoped integrations then collided with the large changes already present there.
+            All three contain substantive work:
+            <ul>
+              <li><code>ab75046a</code>, <code>AGT-2394</code>, run
+                <code>run_2ba410a28c184fb0a43340e8665019d2</code>: Compose-backed Remote Run
+                harness and operator documentation, 21 files, 2,019 insertions, 9 deletions.</li>
+              <li><code>afee6f81</code>, <code>AGT-2397</code>, run
+                <code>run_d56198256e004cec940895a00c0159ad</code>: parallel delivery and
+                worker-loss harness, 10 files, 2,203 insertions, 3 deletions.</li>
+              <li><code>67d3039c</code>, <code>AGT-2399</code>, run
+                <code>run_bdf4283bc2924d6c99b102a335fc713c</code>: published acceptance
+                report and evidence plus result-contract and durable Runner authority work,
+                273 files, 59,071 insertions, 278 deletions.</li>
+            </ul>
+          </td>
+          <td>
+            Git object and ref evidence distinguishes creation from integration. Each exact commit is still the tip of its
+            <code>runner/agent-runner-01/&lt;task-key&gt;</code> ref and its run-scoped immutable result ref. The Runner's
+            salvage path publishes <code>HEAD</code> explicitly to that card ref. The same objects were subsequently used
+            as fast-forward integration tips for <code>main</code>; their original salvage subjects therefore remained
+            visible on the main line. No zero-file marker or direct salvage-to-base refspec was involved.
+          </td>
+          <td>
+            <span class="pill ok">hardened</span> every moving salvage push now passes a fail-closed target allowlist
+            immediately before <code>git push</code>. Only the exact card branch and collision refs derived from it are
+            accepted; <code>main</code>, <code>develop</code>, fully qualified base refs, and other cards are rejected.
+            An end-to-end regression proves teardown from an authoritative <code>main</code> base leaves
+            <code>origin/main</code> unchanged. Existing main history is documented and was not rewritten.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-29</td>
+          <td><code>AGT-2426</code><br><span class="small">accepted but not integrated</span></td>
+          <td>
+            The 28 July 23:09 acceptance wave moved reviewed remote cards to Completed while their integration steps
+            emitted a series of <code>NoTaskBranch</code> outcomes. The missing AGT-2423 integration on 29 July showed
+            that the UI could still describe the remembered attempt instead of the target-branch graph.
+          </td>
+          <td>
+            The integration runner reconstructed <code>task/&lt;slug&gt;</code> although Remote Run had published
+            <code>runner/&lt;host&gt;/&lt;task-key&gt;</code> and immutable result refs. Acceptance committed the lane
+            transition before inspecting the integration result, while status shortcuts trusted provenance and curated
+            merge subjects rather than attributed-commit presence.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> delivery refs now resolve from immutable card truth; acceptance remains in
+            Human Review with phase <code>integrating</code> until <code>Merged</code> or <code>AlreadyMerged</code>;
+            failures return to Review with a hard badge and journal evidence. Integration fields are recomputed from
+            attributed commits contained in the current target HEAD, so out-of-band merges self-heal on read.
           </td>
         </tr>
       </tbody>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy | Konzept-Workbench</title>
+<style>
+  :root { color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8983; --line:#d8d6cf;
+    --develop:#2a78d6; --taskbr:#4a3aa7; --salvage:#eb6834; --rescue:#b58500;
+    --ok:#008300; --bad:#c93736; --warn:#9a6b00;
+    --accent-soft:#eaf1fb; --bad-soft:#fbecec; --ok-soft:#eaf4ea; --warn-soft:#f8f0dd; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2c2c2a;
+    --ink-1:#fff; --ink-2:#c3c2b7; --ink-3:#8a8983; --line:#3d3d3a;
+    --develop:#3987e5; --taskbr:#9085e9; --salvage:#e5723f; --rescue:#d0a02a;
+    --ok:#4eae4e; --bad:#e66767; --warn:#d9a63f;
+    --accent-soft:#1e2a3a; --bad-soft:#382222; --ok-soft:#1f2f1f; --warn-soft:#33301e; } }
+  *{box-sizing:border-box;} body{margin:0;padding:0 0 80px;background:var(--surface-1);color:var(--ink-1);font:16px/1.6 system-ui,"Segoe UI",sans-serif;}
+  main{max-width:1080px;margin:0 auto;padding:0 28px;}
+  header.page{border-bottom:1px solid var(--line);padding:44px 0 26px;margin-bottom:8px;}
+  .kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;}
+  h1{font-size:34px;line-height:1.2;margin:0 0 12px;} .lede{font-size:18px;color:var(--ink-2);max-width:66ch;margin:0;}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;font-size:13px;color:var(--ink-3);} .meta b{color:var(--ink-2);font-weight:600;}
+  h2{font-size:24px;margin:56px 0 6px;scroll-margin-top:20px;} h2 .no{color:var(--ink-3);font-weight:600;margin-right:10px;}
+  h3{font-size:18px;margin:32px 0 4px;} p{max-width:78ch;} p.dim{color:var(--ink-2);}
+  .box{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:18px 22px;margin:20px 0;}
+  .box.accent{background:var(--accent-soft);border-color:color-mix(in srgb,var(--develop) 30%,var(--line));}
+  .box.bad{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 30%,var(--line));}
+  .box.ok{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line));}
+  .box.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,var(--line));}
+  .box h4{margin:0 0 8px;font-size:15px;} .box p:last-child,.box ul:last-child{margin-bottom:0;}
+  figure{margin:26px 0;} figure svg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:10px;background:var(--surface-1);}
+  figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:88ch;} figcaption b{color:var(--ink-1);}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14.5px;} th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);} td b{font-weight:600;}
+  code,.mono{font:13px/1.5 ui-monospace,Consolas,monospace;background:var(--surface-3);border-radius:4px;padding:1px 5px;}
+  ul{padding-left:22px;} li{margin:5px 0;max-width:78ch;} ol{padding-left:22px;} ol li{margin:6px 0;}
+  .toc{columns:2;gap:40px;font-size:14.5px;} .toc a{color:var(--ink-2);text-decoration:none;} .toc a:hover{color:var(--ink-1);} .toc li{break-inside:avoid;}
+  .s-node{fill:var(--surface-2);stroke:var(--line);} .s-node2{fill:var(--surface-3);stroke:var(--line);}
+  .s-cont{fill:var(--accent-soft);stroke:var(--develop);} .s-bad{fill:var(--bad-soft);stroke:var(--bad);}
+  .s-label{fill:var(--ink-1);font:600 13px system-ui,sans-serif;} .s-sub{fill:var(--ink-2);font:12px system-ui,sans-serif;} .s-tiny{fill:var(--ink-3);font:11px system-ui,sans-serif;}
+  .s-flow{stroke:var(--ink-3);stroke-width:1.6;fill:none;} .s-flowbad{stroke:var(--bad);stroke-width:1.6;fill:none;}
+  .dnum{font-weight:700;color:var(--develop);margin-right:8px;}
+  .pill{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 10px;} .pill.bad{background:var(--bad-soft);color:var(--bad);} .pill.ok{background:var(--ok-soft);color:var(--ok);}
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Architektur / Betrieb</p>
+  <h1>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy</h1>
+  <p class="lede">Die Nacht vom 27.07. hat empirisch gezeigt, wo das verteilte Agent-Studio-System bricht: nicht im Code der Features, sondern an den <b>Verträgen zwischen den Komponenten</b> und am <b>Integrations- und Ausliefer-Modell</b>. Dieses Dokument beschreibt die Komponenten und ihre Protokolle, den Kern-Befund (Versions-Drift), und beantwortet die vier Steuerungsfragen — wie schneiden, bauen, deployen wir, und gehören Binaries/Architektur-Arbeit überhaupt in unabhängige Tasks.</p>
+  <div class="meta">
+    <span><b>Status</b> Aktualisiert 27.07. — Richtung entschieden</span>
+    <span><b>Rolle</b> Tiefen-Doc unter dem <b>Nordstern</b> (Stand &amp; Schritte dort)</span>
+    <span><b>Evidenz</b> Nacht-Incident (siehe [[nacht-incident-2026-07-27-handoff]])</span>
+  </div>
+</header>
+
+<nav><ul class="toc">
+  <li><a href="#evidenz">1 · Evidenz aus der Nacht</a></li>
+  <li><a href="#komponenten">2 · Komponenten &amp; Protokolle</a></li>
+  <li><a href="#drift">3 · Der Kern-Befund: Versions-Drift</a></li>
+  <li><a href="#schnitt">4 · Wie schneiden wir?</a></li>
+  <li><a href="#build">5 · Wie bauen wir?</a></li>
+  <li><a href="#deploy">6 · Wie deployen wir?</a></li>
+  <li><a href="#imziel">7 · Im Zielbild</a></li>
+</ul></nav>
+
+<h2 id="evidenz"><span class="no">1</span>Evidenz aus der Nacht — was wirklich brach</h2>
+<p>In der Nacht wurden nacheinander <b>fünf</b> Infrastruktur-Blocker geheilt (alle auf main committet, System läuft). Auffällig: <b>keiner</b> war ein Feature-Bug. Alle lagen an den Schnittstellen:</p>
+<table>
+  <tr><th>Blocker</th><th>Klasse</th><th>Ursache</th></tr>
+  <tr><td>Workspace-Push abgelehnt</td><td>Storage-Vertrag</td><td>170-MB-Logs committet → GitHub 100-MB-Limit → Lieferung blockiert</td></tr>
+  <tr><td><code>repositoryUrl</code> weg nach Restart</td><td>Config-Persistenz</td><td>Runner claimt still nichts ohne registry-URL — nur Backend-Log</td></tr>
+  <tr><td>Review-Capabilities 404/405</td><td><b>Protokoll-Drift</b></td><td>Runner ruft <code>POST</code>, Backend bot <code>PUT</code></td></tr>
+  <tr><td>Log-Ingest 409-Sturm</td><td><b>Protokoll-Drift</b></td><td>Runner sendet Logs ohne Canonical-Write-Felder; Backend lehnte ab</td></tr>
+  <tr><td>Alle Reviews eskalieren</td><td><b>Protokoll-Drift</b></td><td>Runner hängt keinen <code>ResultEnvelope</code> an; Review-Plane terminalisiert jede Karte als „unmaterializable"</td></tr>
+</table>
+<div class="box bad">
+  <h4>Und die Integrations-Branch selbst ist kaputt</h4>
+  <p>Beim Versuch, die gecodete Arbeit manuell zu integrieren, zeigte sich: <b>develop baut prinzipiell nicht</b>. Ein früherer Teil-Salvage (<code>wip(runner): salvage before teardown</code>) legte Workbench-Dateien ab, die auf Typen zeigen (<code>WorkbenchPresentationSelection</code>, <code>WorkbenchAttachmentRequest</code>), die <b>nirgends definiert</b> sind. Das ist unabhängig von den heutigen Karten — die Integrations-Branch hat sich über Teil-Salvages in einen nicht-baubaren Zustand verheddert.</p>
+</div>
+
+<h2 id="komponenten"><span class="no">2</span>Komponenten &amp; ihre Protokolle</h2>
+<figure>
+<svg viewBox="0 0 1040 300" role="img" aria-label="Komponenten und Protokolle">
+  <rect class="s-cont" x="410" y="24" width="220" height="66" rx="9"/>
+  <text class="s-label" x="520" y="50" text-anchor="middle">Task-Server (Control Plane)</text>
+  <text class="s-sub" x="520" y="70" text-anchor="middle">OrchestratorApi · v1-Plane · Authority</text>
+
+  <rect class="s-node" x="40" y="200" width="200" height="72" rx="9"/>
+  <text class="s-label" x="140" y="226" text-anchor="middle">agent-host (Runner)</text>
+  <text class="s-sub" x="140" y="245" text-anchor="middle">role=coding / role=review</text>
+  <text class="s-tiny" x="140" y="262" text-anchor="middle">spawnt Claude/Codex-CLI</text>
+
+  <rect class="s-node2" x="290" y="200" width="180" height="72" rx="9"/>
+  <text class="s-label" x="380" y="230" text-anchor="middle">CAR</text>
+  <text class="s-sub" x="380" y="249" text-anchor="middle">coding-agent-runner (Lib)</text>
+
+  <rect class="s-node" x="800" y="24" width="200" height="66" rx="9"/>
+  <text class="s-label" x="900" y="50" text-anchor="middle">Studio (Frontend)</text>
+  <text class="s-sub" x="900" y="70" text-anchor="middle">Angular · liest API + Wiki</text>
+
+  <rect class="s-node" x="560" y="210" width="200" height="62" rx="9"/>
+  <text class="s-label" x="660" y="236" text-anchor="middle">workspace-repo</text>
+  <text class="s-tiny" x="660" y="254" text-anchor="middle">Artefakte/Evidence · GitHub</text>
+
+  <rect class="s-node" x="800" y="210" width="200" height="62" rx="9"/>
+  <text class="s-label" x="900" y="236" text-anchor="middle">projekt-repos</text>
+  <text class="s-tiny" x="900" y="254" text-anchor="middle">develop/main · Lieferziel</text>
+
+  <path class="s-flowbad" d="M240 214 C320 150 380 120 430 92" marker-end="url(#arb)"/>
+  <text class="s-tiny" x="300" y="150" fill="var(--bad)">v1: capabilities·claim·log·ResultEnvelope ⚠ Drift</text>
+  <path class="s-flow" d="M520 90 V190 H660 V208" marker-end="url(#ar)"/>
+  <text class="s-tiny" x="530" y="150">artifact-push</text>
+  <path class="s-flow" d="M760 236 H798" marker-end="url(#ar)"/>
+  <path class="s-flow" d="M630 57 H798" marker-end="url(#ar)"/>
+  <text class="s-tiny" x="655" y="48">REST + Wiki</text>
+  <path class="s-flow" d="M340 200 V150 H408" marker-end="url(#ar)" stroke-dasharray="4 4"/>
+  <text class="s-tiny" x="300" y="185">nutzt</text>
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--ink-3)"/></marker>
+    <marker id="arb" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z" fill="var(--bad)"/></marker>
+  </defs>
+</svg>
+<figcaption><b>Das v1-Plane (rot) ist der neuralgische Vertrag.</b> agent-host ↔ Task-Server tauschen darüber Capabilities, Review-Claims, Logs und Attempt-Authority (inkl. <code>ResultEnvelope</code>). Genau hier lagen 3 der 5 Nacht-Blocker — weil Runner-Binary und Backend auf verschiedenen Vertrags-Versionen liefen.</figcaption>
+</figure>
+<table>
+  <tr><th>Vertrag</th><th>zwischen</th><th>trägt</th><th>Nacht-Status</th></tr>
+  <tr><td><b>v1 Capabilities</b></td><td>Runner → Server</td><td>Rollen-Registrierung (coding/review)</td><td class="mono">POST vs PUT → gefixt</td></tr>
+  <tr><td><b>v1 Review-Claim</b></td><td>Review-Runner → Server</td><td>Review-Auftrag + <code>ResultEnvelope</code></td><td class="mono">kein Envelope → alle 5e</td></tr>
+  <tr><td><b>Log-Ingest</b></td><td>Runner → Server</td><td>CLI-Transkript</td><td class="mono">Canonical-Felder → gefixt</td></tr>
+  <tr><td><b>Attempt-Authority</b></td><td>Runner ↔ Server</td><td>Fencing/Idempotenz je Attempt</td><td class="mono">ok (Basis)</td></tr>
+  <tr><td><b>Artifact-Push</b></td><td>Server → workspace-repo</td><td>Evidence/Logs</td><td class="mono">Log-Bloat → gedeckelt (Ticket)</td></tr>
+  <tr><td><b>Delivery/Integration</b></td><td>Server → projekt-repo</td><td>Task-Branch → develop</td><td class="mono">develop kaputt (s.u.)</td></tr>
+</table>
+
+<h2 id="drift"><span class="no">3</span>Der Kern-Befund: Versions-Drift Runner ↔ Backend</h2>
+<div class="box accent">
+  <p>Drei der fünf Blocker haben <b>dieselbe Wurzel</b>: der <b>deployte agent-host-Runner ist älter als das Backend</b>. Das Backend hat das v1-Plane weiterentwickelt (PUT→ergänzt, Canonical-Log-Writes, Envelope-Pflicht), der Runner sendet aber noch das alte Protokoll. Jede Vertrags-Erweiterung im Backend, die der Runner nicht mitmacht, wird zum stillen Blocker. <b>Runner und Backend müssen protokoll-kompatibel gepaart sein — sonst driftet das System auseinander.</b></p>
+</div>
+
+<h2 id="schnitt"><span class="no">4</span>Wie schneiden wir? — die Binaries/Task-Frage</h2>
+<p>Deine Kernfrage: „Eventuell ist es nicht sinnvoll, die Binaries und Zerlegung in Tasks zu machen." <b>Die Nacht liefert die Antwort — und sie ist: differenziert.</b></p>
+<table>
+  <tr><th>Arbeitstyp</th><th>Als unabhängiger Auto-Review-Task?</th><th>Begründung aus der Nacht</th></tr>
+  <tr><td><b>Isolierte Feature-/Bug-Karte</b> (UI-Fix, ein Endpoint, ein Service)</td><td class="pill ok">Ja</td><td>2382 (Wiki-Cache), 2242 (Lesezähler) coden kohärent + card-scoped — genau das Modell funktioniert.</td></tr>
+  <tr><td><b>Architektur/Cross-Cutting</b> (Control-Plane-Split, Protokoll-Änderung, Binary-Rename, CAR-Migration)</td><td class="pill bad">Nein</td><td>Interdependente Karten erzeugen kaputte Integrations-Branches (orphaned Typen), Versions-Drift, und lassen sich nicht card-scoped reviewen. Genau hier brach alles.</td></tr>
+</table>
+<div class="box">
+  <h4>Empfehlung zum Schnitt</h4>
+  <ul>
+    <li><b>Feature/Bug bleibt Task</b> — unabhängig, card-scoped, auto-reviewt. Das ist die Stärke des Systems.</li>
+    <li><b>Architektur/Binary-Arbeit als koordinierte Änderung</b>, nicht als N unabhängige Tasks: entweder eine zusammenhängende Branch mit Integrations-Reihenfolge + gemeinsamer Verifikation, oder ein Epic mit <b>harten dependsOn-Ketten und einem Build-Gate über den ganzen Satz</b> — nie „jede Tranche einzeln nach develop mergen". Protokoll-Änderungen (Server + Runner) gehören <b>in einen Change</b>, weil sie zusammen deployt werden müssen (§6).</li>
+  </ul>
+</div>
+
+<h2 id="build"><span class="no">5</span>Wie bauen wir?</h2>
+<div class="box bad">
+  <h4>Das fehlende Gate</h4>
+  <p>develop war <b>nicht-baubar</b> und <b>niemand hat es bemerkt</b> — es gibt kein Build-Gate, das eine Integration ablehnt, wenn die Ziel-Branch danach nicht mehr kompiliert. Ein Teil-Salvage konnte orphaned Typen hinterlassen.</p>
+</div>
+<ul>
+  <li><b>Build-Gate vor jeder Integration:</b> ein Merge nach develop wird nur akzeptiert, wenn <code>develop + Karte</code> baut (Backend <em>und</em> Frontend). Rot → Integration abgelehnt, Karte bleibt in Review/Escalation. (Heute manuell nachgebaut — muss automatisch im Merge-into-develop-Runner sitzen.)</li>
+  <li><b>Versionierte Binaries:</b> Task-Server, agent-host, Studio je als versioniertes Artefakt (das ist AGT-2333 „Release-Pipeline tag→CI→versioned archives"). Version = Protokoll-Version.</li>
+  <li><b>Integrations-Branch heilbar halten:</b> develop muss jederzeit baubar sein; ein „wip salvage before teardown" darf nie orphaned Referenzen hinterlassen (Build-Gate erzwingt das).</li>
+</ul>
+
+<h2 id="deploy"><span class="no">6</span>Wie deployen wir?</h2>
+<div class="box accent">
+  <p><b>Runner und Backend deployen synchron und protokoll-kompatibel.</b> Der ganze Nacht-Drift entstand, weil das Backend neu gebaut+deployt wurde, der agent-host aber alt blieb. Zielbild:</p>
+  <ul>
+    <li><b>Gepaarte Releases:</b> ein Release-Tag versioniert Task-Server + agent-host + Studio gemeinsam; Deploy spielt kompatible Versionen zusammen aus (AGT-2333/2334-Territorium).</li>
+    <li><b>Protokoll-Version im Handshake:</b> der Runner meldet seine v1-Protokoll-Version beim Connect; das Backend weist inkompatible Runner <b>sichtbar</b> ab (Health-Alert), statt still zu driften.</li>
+    <li><b>Betriebsregel bis dahin:</b> nach jedem Backend-Deploy den agent-host neu deployen/prüfen; <code>repositoryUrl</code> neu setzen (fällt bei Restart weg).</li>
+  </ul>
+</div>
+
+<div class="box accent"><p><b>Stand &amp; Schritte</b> stehen jetzt zentral im <b>Nordstern</b> (<code>operations/nordstern/</code>) und im <b>Umsetzungsplan</b> (<code>operations/umsetzungsplan-zielbild/</code>). Dieses Doc bleibt fokussiert auf die Architektur — Komponenten, Protokolle, Schnitt/Build/Deploy und das Zielbild.</p></div>
+
+<h2 id="imziel"><span class="no">7</span>Im Zielbild — so arbeitet es dann</h2>
+<ul>
+  <li><b>Feature/Bug:</b> Task → code → <b>Envelope-basiertes Auto-Review</b> → completed. Sauber durch die Pipeline, keine manuelle Salvage mehr.</li>
+  <li><b>Runner ↔ Backend immer kompatibel:</b> der Runner meldet seine Protokoll-Version beim Connect; ein inkompatibler wird <b>sichtbar abgewiesen</b> — kein stiller Drift.</li>
+  <li><b>develop ist immer baubar</b> (Build-Gate) — keine orphaned WIP-Reste mehr.</li>
+  <li><b>Architektur koordiniert, Features als Tasks</b> — jede Arbeitsart im passenden Flow.</li>
+  <li><b>Ein Release</b> liefert alle Komponenten protokoll-kompatibel zusammen aus.</li>
+</ul>
+
+</main>
+</body>
+</html>

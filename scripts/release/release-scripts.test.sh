@@ -9,7 +9,7 @@ trap 'rm -rf -- "$test_root"' EXIT HUP INT TERM
 publish_root="$test_root/publish"
 frontend_root="$test_root/frontend/browser"
 output_root="$test_root/artifacts"
-for directory in task-server orchestrator-engine agent-host-linux-x64 agent-host-osx-arm64
+for directory in task-server orchestrator-engine agent-host-linux-x64 agent-host-osx-arm64 setup
 do
     install -d -m 0755 "$publish_root/$directory"
 done
@@ -18,7 +18,8 @@ for executable in \
     task-server/task-server \
     orchestrator-engine/orchestrator-engine \
     agent-host-linux-x64/agent-host \
-    agent-host-osx-arm64/agent-host
+    agent-host-osx-arm64/agent-host \
+    setup/agent-orchestrator-setup
 do
     printf '#!/bin/sh\nexit 0\n' >"$publish_root/$executable"
     chmod 0755 "$publish_root/$executable"
@@ -30,6 +31,7 @@ SOURCE_DATE_EPOCH=1 "$repo_root/scripts/release/package-release.sh" \
 (
     cd "$output_root"
     [ "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 3 ]
+    [ -x agent-orchestrator-setup ]
     sha256sum -c SHA256SUMS
     tar -tzf agent-orchestrator-1.2.3-linux-x64.tar.gz \
         | grep -q 'agent-orchestrator-1.2.3-linux-x64/update.sh'
@@ -255,5 +257,8 @@ then
     exit 1
 fi
 [ ! -e "$test_root/incomplete-etc/server.env" ]
+
+bash "$repo_root/scripts/release/promote-develop-to-main.test.sh"
+bash "$repo_root/scripts/supervisor/test-restart-stable-main-advance.sh"
 
 printf 'Release packaging and install/update/rollback tests passed.\n'

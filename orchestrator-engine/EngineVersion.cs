@@ -5,7 +5,7 @@ namespace AgentStudio.OrchestratorEngine;
 public static class EngineVersion
 {
     public static string ProductVersion
-        => typeof(EngineVersion).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+        => typeof(EngineVersion).Assembly.GetName().Version?.ToString(3) ?? "unknown";
 
     public static string GitSha
     {

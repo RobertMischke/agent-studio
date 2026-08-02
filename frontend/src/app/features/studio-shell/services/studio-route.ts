@@ -10,10 +10,11 @@ export const TASK_DETAIL_TABS = [
 ] as const;
 
 export type TaskDetailRouteTab = typeof TASK_DETAIL_TABS[number];
-export type TaskInspectorRouteTab = 'protocol' | 'activity';
+export type TaskInspectorRouteTab = 'task' | 'activity' | 'protocol';
 
 export type StudioRoute =
   | { kind: 'board'; projectSlug: string | null }
+  | { kind: 'feed' }
   | { kind: 'hub'; projectSlug: string; section: string; page: string | null; folder: string | null }
   | { kind: 'workbench'; projectSlug: string; workbenchId: string }
   | { kind: 'task'; reference: string; tab: TaskDetailRouteTab; inspector: TaskInspectorRouteTab }
@@ -47,6 +48,9 @@ export function parseStudioRoute(hash: string): StudioRoute | null {
 
   if (segments.length === 1 && segments[0] === 'board') {
     return { kind: 'board', projectSlug: null };
+  }
+  if (segments.length === 1 && segments[0] === 'feed') {
+    return { kind: 'feed' };
   }
   if (segments.length === 1 && segments[0] === 'epics') {
     return { kind: 'epics', projectSlug: null };
@@ -109,6 +113,8 @@ export function studioRouteForTab(
       return tab.projectName === '__all__'
         ? '/board'
         : `/projects/${studioProjectSlug(tab.projectName)}/board`;
+    case 'feed':
+      return '/feed';
     case 'hub': {
       const base = `/projects/${studioProjectSlug(tab.projectName)}`;
       return !tab.section || tab.section === 'overview' ? base : `${base}/${encodeURIComponent(tab.section)}`;
@@ -131,18 +137,25 @@ export function studioRouteForTab(
 }
 
 /**
- * Replace the visible Studio route without adding a history entry for every
- * rail/tab click. Route-local query state already present on the same base
- * path is retained, so a later signal refresh cannot erase a Wiki page or a
- * Task tab selection.
+ * Mirror an active Studio surface into the address bar.
+ *
+ * A user-visible surface transition gets its own history entry so Back and
+ * Forward restore the previous editor surface. Cold boot and legacy URLs that
+ * do not name a Studio surface are canonicalized in place. Route hydration
+ * and popstate already carry the requested route, so they are naturally
+ * no-ops and cannot create a duplicate history entry.
+ *
+ * Route-local query state already present on the same base path is retained,
+ * so a later signal refresh cannot erase a Wiki page or Task tab selection.
  */
-export function replaceStudioRoute(route: string): void {
+export function navigateStudioRoute(route: string): void {
   if (typeof window === 'undefined') return;
   const current = routeSegmentOf(window.location.hash);
   if (sameRouteBase(current, route)) return;
   const target = withRouteSegment(window.location.hash, route);
   if (target === window.location.hash) return;
-  window.history.replaceState(
+  const method = current ? 'pushState' : 'replaceState';
+  window.history[method](
     null,
     '',
     window.location.pathname + window.location.search + target,
@@ -189,7 +202,7 @@ export function isTaskDetailTab(value: string | null): value is TaskDetailRouteT
 }
 
 export function isTaskInspectorTab(value: string | null): value is TaskInspectorRouteTab {
-  return value === 'protocol' || value === 'activity';
+  return value === 'task' || value === 'activity' || value === 'protocol';
 }
 
 function sameRouteBase(current: string | null, target: string): boolean {

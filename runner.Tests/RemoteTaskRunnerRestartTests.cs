@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -53,6 +54,117 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.Contains("[[TASK_DONE]]", server.LogBodies.ToString());
         Assert.Empty(replacementStore.LoadAll());
         Assert.False(Directory.Exists(workspace.RepoPath));
+    }
+
+    [Fact]
+    public async Task Restarted_runner_completes_with_the_base_sha_recorded_before_the_restart()
+    {
+        // Only the process that prepared the worktree observes its start commit.
+        // A replacement daemon reattaches to a fresh GitWorkspace, so without the
+        // persisted base SHA every completion after a daemon restart would carry
+        // no Result-Envelope trio at all.
+        var origin = Path.Combine(_root, "origin.git");
+        var seed = Path.Combine(_root, "seed");
+        await CreateOriginAsync(origin, seed);
+        var work = Path.Combine(_root, "runner-work");
+        var stateRoot = Path.Combine(_root, "state");
+        var options = Options(work, stateRoot, origin);
+        var lease = Lease(attemptId: "rat-reattach-envelope");
+        var workspace = new GitWorkspace(options, lease.TaskKey, _ => { });
+        await workspace.PrepareAsync(CancellationToken.None);
+        var baseSha = workspace.BaseSha;
+        Assert.False(string.IsNullOrWhiteSpace(baseSha));
+        var results = Path.Combine(work, "tasks", GitWorkspace.SafeSegment(lease.TaskKey), "results");
+        Directory.CreateDirectory(results);
+
+        var originalStore = new RunnerStateStore(stateRoot);
+        var slot = originalStore.Create(lease.TaskKey, lease, workspace.RepoPath);
+        Assert.Null(slot.BaseSha);
+        var process = DurableAgentProcess.Start(
+            options, slot.WorkerDirectory, workspace.RepoPath, "", results);
+        originalStore.Save(slot with
+        {
+            ProcessId = process.ProcessId,
+            ProcessStartedAtUtc = process.ProcessStartedAtUtc,
+            BaseSha = baseSha,
+            Phase = "running",
+        });
+
+        var replacementStore = new RunnerStateStore(stateRoot);
+        var recovered = Assert.Single(replacementStore.LoadAll());
+        Assert.Equal(baseSha, recovered.BaseSha);
+        var server = new RunnerApiHandler(lease);
+        using var http = new HttpClient(server) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(http, options.RunnerId);
+        var replacement = new RemoteTaskRunner(options, client, _ => { }, replacementStore);
+
+        await replacement.ReattachAsync(recovered, CancellationToken.None);
+
+        // Deliberately no assertion on the run outcome: the envelope trio is
+        // assembled from the workspace and teardown facts on every completion,
+        // and only the base SHA is under test here.
+        Assert.Contains("/api/runner/completion", server.Paths);
+        using var completion = System.Text.Json.JsonDocument.Parse(server.CompletionBodies.ToString());
+        Assert.Equal(baseSha, completion.RootElement.GetProperty("baseSha").GetString());
+        Assert.False(
+            string.IsNullOrWhiteSpace(completion.RootElement.GetProperty("immutableResultRef").GetString()),
+            "the restored base SHA must complete the envelope trio, not stand alone");
+    }
+
+    [Fact]
+    public void Persisted_slot_state_written_before_the_base_sha_field_still_loads()
+    {
+        // Persistence compatibility: a daemon upgraded mid-flight must keep
+        // reading the slot files its predecessor wrote (no field -> null -> the
+        // pre-fix behaviour), never fail startup on them.
+        var stateRoot = Path.Combine(_root, "legacy-state");
+        Directory.CreateDirectory(stateRoot);
+        var lease = Lease();
+        File.WriteAllText(
+            Path.Combine(stateRoot, $"{GitWorkspace.SafeSegment(lease.TaskKey)}.slot.json"),
+            $$"""
+            {
+              "taskKey": "{{lease.TaskKey}}",
+              "attemptId": "{{lease.LeaseId}}",
+              "lease": {{System.Text.Json.JsonSerializer.Serialize(lease, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))}},
+              "runId": null,
+              "leaseInstanceId": null,
+              "projectId": null,
+              "repositoryUrl": null,
+              "defaultBranch": null,
+              "taskKind": null,
+              "worktreePath": "{{Path.Combine(_root, "legacy-worktree").Replace("\\", "\\\\")}}",
+              "workerDirectory": "{{Path.Combine(stateRoot, "worker").Replace("\\", "\\\\")}}",
+              "processId": null,
+              "processStartedAtUtc": null,
+              "lastOutputSequence": 0,
+              "phase": "running",
+              "updatedAtUtc": "2026-07-01T00:00:00Z"
+            }
+            """);
+
+        var recovered = Assert.Single(new RunnerStateStore(stateRoot).LoadAll());
+
+        Assert.Equal(lease.TaskKey, recovered.TaskKey);
+        Assert.Null(recovered.BaseSha);
+    }
+
+    [Fact]
+    public void Reattached_workspace_reports_the_restored_base_sha()
+    {
+        var options = Options(
+            Path.Combine(_root, "runner-work"),
+            Path.Combine(_root, "state"),
+            Path.Combine(_root, "unused-origin.git"));
+
+        Assert.Null(new GitWorkspace(options, "AGT-BASE", _ => { }).BaseSha);
+        Assert.Equal(
+            "0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c",
+            new GitWorkspace(
+                options,
+                "AGT-BASE",
+                _ => { },
+                restoredBaseSha: " 0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c ").BaseSha);
     }
 
     [Fact]
@@ -110,6 +222,35 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.Empty(replacementStore.LoadAll());
     }
 
+    [Fact]
+    public async Task Deadline_exhausted_generation_is_released_with_the_honest_outcome()
+    {
+        var work = Path.Combine(_root, "runner-work");
+        var stateRoot = Path.Combine(_root, "state");
+        var worktree = Path.Combine(work, "deadline-worktree");
+        Directory.CreateDirectory(worktree);
+        var options = Options(work, stateRoot, Path.Combine(_root, "unused-origin.git"));
+        var lease = Lease();
+        var store = new RunnerStateStore(stateRoot);
+        var slot = store.Create(lease.TaskKey, lease, worktree);
+        slot = store.Save(slot with { Phase = "authority-deadline-exhausted" });
+        var server = new RunnerApiHandler(lease);
+        using var http = new HttpClient(server) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(http, options.RunnerId);
+        var replacement = new RemoteTaskRunner(options, client, _ => { }, store);
+
+        var released = await replacement.ReleaseDeadAsync(
+            slot,
+            "local autonomy deadline exhausted after generation death proof");
+
+        Assert.True(released);
+        using var body = System.Text.Json.JsonDocument.Parse(server.ReleaseBodies.ToString());
+        Assert.Equal(
+            "authority-deadline-exhausted",
+            body.RootElement.GetProperty("outcome").GetString());
+        Assert.Empty(store.LoadAll());
+    }
+
     private static RunnerOptions Options(string work, string stateRoot, string origin) => new()
     {
         ServerUrl = "http://task-server",
@@ -122,7 +263,10 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         WorkDir = work,
         StateDir = stateRoot,
         BaseBranch = "main",
-        CliBin = "/bin/sh",
+        // Fakes the CLI through CliBin/CliArgs, which only the legacy engine
+        // consumes; the reattach protocol under test is engine-independent.
+        ExecEngine = RunnerOptions.ExecEngineLegacy,
+        CliBin = PosixShell.RequirePath(),
         CliArgs = "-c \"sleep 1; printf 'reattached-output\\n[[TASK_DONE]]\\n'\"",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
@@ -131,7 +275,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         PollSeconds = 1,
     };
 
-    private static RunLeaseInfoDto Lease() => new(
+    private static RunLeaseInfoDto Lease(string? attemptId = null) => new(
         "AGT-REATTACH",
         "runner-restart-test",
         "runner-restart-test",
@@ -141,7 +285,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         "lease-reattach",
         7,
         DateTime.UtcNow,
-        DateTime.UtcNow.AddMinutes(2));
+        DateTime.UtcNow.AddMinutes(2),
+        attemptId);
 
     private static async Task CreateOriginAsync(string origin, string seed)
     {
@@ -172,6 +317,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         private readonly object _gate = new();
         public List<string> Paths { get; } = [];
         public StringBuilder LogBodies { get; } = new();
+        public StringBuilder CompletionBodies { get; } = new();
+        public StringBuilder ReleaseBodies { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -185,6 +332,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
             {
                 Paths.Add(path);
                 if (path == "/api/runner/logs") LogBodies.Append(body);
+                if (path == "/api/runner/completion") CompletionBodies.Append(body);
+                if (path == "/api/runner/lease/release") ReleaseBodies.Append(body);
             }
 
             var json = path switch
@@ -216,7 +365,6 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch { /* best effort */ }
+        ResilientDirectory.TryDelete(_root);
     }
 }

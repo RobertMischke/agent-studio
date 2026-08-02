@@ -53,7 +53,12 @@ public sealed class RemoteReviewExecutor
                 var failedCapability = CapabilityFor(exception.Classification);
                 if (failedCapability is not null)
                 {
-                    await _client.ReportCapabilityFailureAsync(
+                    // Diagnosis only: a rejected or unmounted capability route must
+                    // never swallow the fenced ReviewReportRequest below, which is
+                    // the report the Task Server actually settles this attempt on.
+                    await CapabilityFailureReporter.TryReportAsync(
+                        _client,
+                        _log,
                         failedCapability,
                         exception.Classification,
                         exception.Message.Length <= 500 ? exception.Message : exception.Message[..500],
@@ -78,7 +83,8 @@ public sealed class RemoteReviewExecutor
                 workspace.EnvironmentEvidence(),
                 evidence.Commands,
                 evidence.Artifacts,
-                evidence.Verdicts);
+                evidence.Verdicts,
+                AuthorityEpoch: lease.AuthorityEpoch);
             report = await _client.ReportReviewAsync(attempt.AttemptId, request, CancellationToken.None);
             _log($"review report accepted attempt={attempt.AttemptId} outcome={report.Outcome} classification={report.FailureClassification ?? "none"} taskState={report.TaskState}");
             return report.Outcome == "Pass" ? 0 : report.Outcome == "ProductFailure" ? 2 : 3;
@@ -113,7 +119,8 @@ public sealed class RemoteReviewExecutor
                         removed,
                         removed ? null : report is null
                             ? "ExecutorStoppedBeforeReport"
-                            : "WorkspaceCleanupFailed"),
+                            : "WorkspaceCleanupFailed",
+                        AuthorityEpoch: lease.AuthorityEpoch),
                     CancellationToken.None);
                 _log($"review cleanup recorded attempt={attempt.AttemptId} status={cleanup.Status} retry={cleanup.RetryScheduled}");
             }
@@ -134,16 +141,39 @@ public sealed class RemoteReviewExecutor
             Math.Max(1, Math.Min(_options.HeartbeatSeconds, Math.Max(1, _options.TtlSeconds / 3)))));
         while (await timer.WaitForNextTickAsync(stop))
         {
-            await _client.RenewReviewLeaseAsync(
-                attemptId,
-                new ReviewLeaseRenewRequest(
-                    lease.ExecutorId,
-                    lease.InstanceId,
-                    lease.LeaseId,
-                    lease.Fence,
-                    $"review-renew:{attemptId}:{lease.Fence}:{++sequence}",
-                    _options.TtlSeconds),
-                stop);
+            try
+            {
+                // The monolith's TryValidateLease requires the exact authority
+                // epoch; the contract default of 0 silently killed every renewal
+                // (and with it the lease) 120s into each review - always send the
+                // claimed epoch.
+                await _client.RenewReviewLeaseAsync(
+                    attemptId,
+                    new ReviewLeaseRenewRequest(
+                        lease.ExecutorId,
+                        lease.InstanceId,
+                        lease.LeaseId,
+                        lease.Fence,
+                        $"review-renew:{attemptId}:{lease.Fence}:{++sequence}",
+                        _options.TtlSeconds,
+                        AuthorityEpoch: lease.AuthorityEpoch),
+                    stop);
+            }
+            catch (TaskServerException dead) when (dead.StatusCode is 404 or 409)
+            {
+                // Definitive authority loss (superseded, stale fence, unknown
+                // attempt): further heartbeats are ghost traffic. Stop renewing
+                // and say so loudly - the report will surface the loss.
+                _log($"review lease authority lost attempt={attemptId} ({dead.StatusCode}); stopping heartbeat: {dead.Message}");
+                return;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // One failed renewal (transient network, backend restart window)
+                // must not end the heartbeat for the rest of a long review - the
+                // next tick retries. A truly lost lease surfaces at report time.
+                _log($"review lease renew failed attempt={attemptId}; retrying next tick: {exception.Message}");
+            }
         }
     }
 

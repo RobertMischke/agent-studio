@@ -176,7 +176,6 @@ public sealed class HumanReviewEscalation
     private const string SystemPrompt = "(deterministic system escalation)";
     private const string NoModelResponse = "(no fast-model call)";
 
-    private readonly TaskStateMachine _states;
     private readonly TaskTransitionService _transitions;
     private readonly string? _workspaceRoot;
     private readonly ILogger _logger;
@@ -207,7 +206,6 @@ public sealed class HumanReviewEscalation
         TaskScannerService? scanner = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
     {
-        _states = states;
         _transitions = transitions;
         _workspaceRoot = workspaceRoot;
         _logger = logger;
@@ -228,7 +226,12 @@ public sealed class HumanReviewEscalation
         string category, string reason, CancellationToken ct = default,
         AttemptWriteReference? authorityWrite = null)
     {
-        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
+        var beforeFolder = ResolveSourceFolder(jobId, watchPath);
+        // Write the Result scaffold before the lane mutation. The folder moves
+        // with status.md on success, and a refused/interrupted move still leaves
+        // reviewable evidence at the source instead of a verdict-less card.
+        if (!string.IsNullOrWhiteSpace(beforeFolder))
+            WriteStatusStubIfMissing(beforeFolder, category, reason);
         var outcome = await _transitions.MoveAsync(
             jobId,
             TaskStates.Escalated,
@@ -251,21 +254,26 @@ public sealed class HumanReviewEscalation
     }
 
     /// <summary>
-    /// Synchronous variant for the pickup loop, which is sync and already moved
-    /// folders through the state machine directly. Records the verdict and
-    /// status stub on success.
+    /// Synchronous variant for the pickup loop. It blocks only on the shared
+    /// transition service so the Result invariant and move notifications remain
+    /// identical to the asynchronous path.
     /// </summary>
     public MoveJobOutcome Escalate(
         string jobId, string watchPath, string project,
         string category, string reason)
     {
-        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
-        var outcome = _states.MoveJob(
-            jobId,
-            TaskStates.Escalated,
-            watchPath,
-            cause: TimelineActors.System,
-            reason: reason);
+        var beforeFolder = ResolveSourceFolder(jobId, watchPath);
+        if (!string.IsNullOrWhiteSpace(beforeFolder))
+            WriteStatusStubIfMissing(beforeFolder, category, reason);
+        var outcome = _transitions.MoveAsync(
+                jobId,
+                TaskStates.Escalated,
+                watchPath,
+                CancellationToken.None,
+                cause: TimelineActors.System,
+                reason: reason)
+            .GetAwaiter()
+            .GetResult();
         if (outcome.Status == MoveJobStatus.Success)
         {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
@@ -276,6 +284,49 @@ public sealed class HumanReviewEscalation
                 "HumanReviewEscalation: move of {Project}/{JobId} to 5e-escalated failed: {Status} {Message}",
                 project, jobId, outcome.Status, outcome.Message);
         return outcome;
+    }
+
+    /// <summary>
+    /// Journal half of the board contract for a REMOTE v1 review verdict that
+    /// parks a card in 5-human-review. Without this record the boot-time
+    /// verdict-less backfill later misreads the freshly reviewed card as
+    /// pre-funnel legacy and escalates it (observed 28.07.: three Pass-reviewed
+    /// cards bounced to 5e on restart). Pass maps to AcceptAsDone; a
+    /// ProductFailure/Inconclusive park maps to Escalate - both make the
+    /// endpoint-derived OrchestratorVerdict non-null.
+    /// </summary>
+    public void RecordRemoteReviewParkVerdict(
+        string project, string jobId, string? folderPath, string outcome, string summary)
+    {
+        if (string.IsNullOrWhiteSpace(_workspaceRoot) || string.IsNullOrWhiteSpace(project))
+        {
+            _logger.LogDebug(
+                "HumanReviewEscalation: TaskRepository not configured or project empty; skipped remote-review verdict journal for {JobId}.",
+                jobId);
+            return;
+        }
+        try
+        {
+            var pass = string.Equals(outcome, "Pass", StringComparison.OrdinalIgnoreCase);
+            ReviewDecisionLog.Append(_workspaceRoot!, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: jobId,
+                Project: project,
+                Kind: pass ? ReviewDecisionKind.AcceptAsDone : ReviewDecisionKind.Escalate,
+                Reason: $"Remote v1 review parked the card in human review with outcome {outcome}.",
+                Prompt: "(remote v1 review plane)",
+                Response: string.IsNullOrWhiteSpace(summary) ? $"outcome={outcome}" : summary,
+                FollowUp: string.Empty)
+            {
+                AttemptEpoch = OperatorReviewRequeueService.ReadEpoch(folderPath),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "HumanReviewEscalation: failed to append remote-review verdict for {Project}/{JobId} (outcome={Outcome})",
+                project, jobId, outcome);
+        }
     }
 
     /// <summary>
@@ -417,6 +468,22 @@ public sealed class HumanReviewEscalation
             || value.Equals("Result: pending", StringComparison.OrdinalIgnoreCase)
             || value.Equals("- Result: pending.", StringComparison.OrdinalIgnoreCase)
             || value.Equals("- Result: pending", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? ResolveSourceFolder(string jobId, string watchPath)
+    {
+        var projected = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
+        if (!string.IsNullOrWhiteSpace(projected)) return projected;
+
+        // Explicit-root/test callers do not always inject a scanner. Resolve
+        // the current lane without mutating anything so the pre-move Result
+        // guarantee still applies to those paths.
+        foreach (var state in TaskStates.All)
+        {
+            var candidate = Path.Combine(watchPath, state, jobId);
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        return null;
     }
 
     /// <summary>

@@ -1,0 +1,11 @@
+{
+  "harness": "remote-test-suite",
+  "version": 1,
+  "scenario": "fault-task-server-network-blips",
+  "runId": "canary-net-blip",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-task-server-network-blips/canary-net-blip",
+  "acknowledgement": "rts-fi-5d54448d2afc4846a7b01714c5c46a108e71c17d83ae68f353e187b22e590d7b",
+  "faults": [
+    "task-server-network-blips"
+  ]
+}

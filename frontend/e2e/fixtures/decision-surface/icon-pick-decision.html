@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Icon source decision</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #11151d;
+      color: #e8edf5;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background:
+        radial-gradient(circle at 100% 0, rgb(104 154 255 / 16%), transparent 36%),
+        #11151d;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .kicker {
+      margin: 0 0 6px;
+      color: #8fb1ff;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .lead {
+      max-width: 720px;
+      margin: 8px 0 18px;
+      color: #aeb8c8;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    article {
+      min-height: 150px;
+      padding: 14px;
+      border: 1px solid #333c4c;
+      border-radius: 12px;
+      background: rgb(25 31 42 / 88%);
+    }
+
+    article.recommended {
+      border-color: #6f9dff;
+      background: rgb(42 62 100 / 68%);
+    }
+
+    .sample {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: #f6f8fb;
+    }
+
+    svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .lucide svg {
+      stroke-width: 1.5;
+    }
+
+    .material svg {
+      stroke-width: 2.4;
+    }
+
+    .current svg {
+      stroke-width: 1;
+    }
+
+    h2 {
+      margin: 0 0 5px;
+      font-size: 13px;
+    }
+
+    article p {
+      margin: 0;
+      color: #aeb8c8;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #315baf;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 750;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 640px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="kicker">AGT-2355 reconstructed decision</p>
+    <h1>Pick one icon language for the task action</h1>
+    <p class="lead">
+      Search, close, and retry appear together in a dense operator row. Compare
+      their weight and rhythm before choosing the implementation direction.
+    </p>
+    <section class="comparison" aria-label="Icon family comparison">
+      <article class="lucide recommended">
+        <div class="sample" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"></path><path d="M7.5 8.2A7 7 0 0 1 20 12M4 12a7 7 0 0 0 12.5 3.8"></path></svg>
+        </div>
+        <h2>Lucide outline</h2>
+        <p>Matches the current 1.5 px shell language and keeps one shared source.</p>
+        <span class="badge">Recommended</span>
+      </article>
+      <article class="material">
+        <div class="sample" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"></circle><path d="m15 15 5 5"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="M19 8v5h-5"></path><path d="M18 13a7 7 0 1 1-2-6"></path></svg>
+        </div>
+        <h2>Material outline</h2>
+        <p>Higher visual weight improves salience but introduces a second grammar.</p>
+      </article>
+      <article class="current">
+        <div class="sample" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"></path></svg>
+          <svg viewBox="0 0 24 24"><path d="M18 8v4h-4"></path><path d="M18 12a6 6 0 1 1-2-4"></path></svg>
+        </div>
+        <h2>Current mixed glyphs</h2>
+        <p>No new implementation pass, with the existing inconsistency retained.</p>
+      </article>
+    </section>
+  </main>
+  <script type="application/json" data-agent-studio-decision>
+  {
+    "version": 1,
+    "id": "icon-source",
+    "title": "Choose the icon source",
+    "question": "Which icon family should the new task action use?",
+    "context": "Search, close, and retry share one dense operator action row in both themes.",
+    "recommendation": {
+      "optionId": "lucide",
+      "reason": "Lucide matches the existing 1.5 px outline language and keeps one icon source."
+    },
+    "options": [
+      {
+        "id": "lucide",
+        "label": "Use Lucide",
+        "summary": "Use the existing outline family for all three actions.",
+        "consequences": [
+          "Consistent with the current shell",
+          "No second icon grammar"
+        ],
+        "action": {
+          "kind": "steer",
+          "prompt": "Use Lucide for search, close, and retry. Preserve the existing icon size and stroke tokens."
+        }
+      },
+      {
+        "id": "material",
+        "label": "Use Material outline",
+        "summary": "Adopt the heavier Material outline treatment.",
+        "consequences": [
+          "Higher visual weight",
+          "A second icon grammar enters the action row"
+        ],
+        "action": {
+          "kind": "steer",
+          "prompt": "Use Material outline icons for search, close, and retry. Normalize their optical size in the action row."
+        }
+      },
+      {
+        "id": "keep-current",
+        "label": "Keep current glyphs",
+        "summary": "Accept the current implementation without another run.",
+        "consequences": [
+          "No additional implementation work",
+          "The mixed icon grammar remains"
+        ],
+        "action": {
+          "kind": "move",
+          "targetState": "6-completed"
+        }
+      }
+    ],
+    "steer": {
+      "label": "Additional icon constraints",
+      "placeholder": "For example: keep close at 16 px and use the shared muted color",
+      "required": false
+    }
+  }
+  </script>
+</body>
+</html>

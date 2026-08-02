@@ -194,6 +194,7 @@
         "src/app/components/task-live-status/task-live-status.component.scss",
         "src/app/components/tooltip/tooltip.scss",
         "src/app/features/board/components/create-task-dialog/create-task-dialog.component.scss",
+        "src/app/features/board/components/model-routing-suggestion/model-routing-suggestion.component.scss",
         "src/app/features/board/components/post-processing-activity/post-processing-activity.component.scss",
         "src/app/features/board/components/post-processing-summary/post-processing-summary.component.scss",
         "src/app/features/board/components/task-card-quota-wait/task-card-quota-wait.component.scss",
@@ -205,13 +206,24 @@
         "src/app/features/project-detail/components/deployment-definition-editor/deployment-definition-editor.scss",
         "src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.component.scss",
         "src/app/features/project-detail/components/project-integration-panel/project-integration-panel.component.scss",
+        "src/app/features/project-detail/components/project-git-changes/project-git-changes.component.scss",
+        "src/app/features/project-detail/components/project-git-history/project-git-history.component.scss",
+        "src/app/features/project-detail/components/project-git-panel/project-git-panel.component.scss",
+        "src/app/features/project-detail/components/project-git-tree/project-git-tree.component.scss",
+        "src/app/features/project-detail/components/project-url-context-header/project-url-context-header.scss",
         "src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.scss",
         "src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss",
         "src/app/features/project-detail/components/pipeline-health-block/pipeline-health-block.scss",
         "src/app/features/project-detail/components/page-action-bar/page-action-bar.scss",
         "src/app/features/project-detail/components/project-style-guides-panel/project-style-guides-panel.scss",
+        "src/app/features/project-detail/components/project-pipeline-panel/pipeline-step-execution/pipeline-step-execution.component.scss",
         "src/app/features/project-detail/components/project-graph/project-graph.component.scss",
         "src/app/features/project-detail/components/project-test-runs-panel/project-test-runs-panel.scss",
+        "src/app/features/orchestrator/components/prompt-admin-landing/prompt-admin-landing.component.scss",
+        "src/app/features/orchestrator/components/prompt-call-telemetry/prompt-call-telemetry.component.scss",
+        "src/app/features/orchestrator/components/prompt-coverage-section/prompt-coverage-section.component.scss",
+        "src/app/features/orchestrator/components/prompt-meta-summary/prompt-meta-summary.component.scss",
+        "src/app/features/orchestrator/components/prompt-review-section/prompt-review-section.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-dashboard/wiki-dashboard.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-folder-view/wiki-folder-view.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-home-links/wiki-home-links.component.scss",
@@ -220,10 +232,14 @@
         "src/app/features/project-detail/components/project-wiki-section/wiki-starred-panel/wiki-starred-panel.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/wiki-pulse.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/workbench-inbox/workbench-inbox.component.scss",
+        "src/app/features/project-detail/components/workbench-decision-panel/workbench-decision-panel.scss",
         "src/app/features/project-detail/components/workbench-viewer/workbench-viewer.component.scss",
         "src/app/features/remote-hosts/components/git-token-capability/git-token-capability.scss",
         "src/app/features/remote-hosts/components/host-workload-summary/host-workload-summary.scss",
+        "src/app/features/remote-hosts/components/host-telemetry-history/host-telemetry-history.scss",
+        "src/app/features/remote-hosts/components/runtime-capacity-editor/runtime-capacity-editor.scss",
         "src/app/features/task-detail/components/protocol-pane/runner-replay-metadata/runner-replay-metadata.scss",
+        "src/app/features/task-detail/components/protocol-pane/task-inspector-tab/task-inspector-tab.component.scss",
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",
         "src/app/features/studio-shell/components/explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component.scss",
@@ -232,9 +248,11 @@
         "src/app/features/studio-shell/components/studio-welcome/studio-welcome.component.scss",
         "src/app/features/task-detail/components/prompt-pane/files-pane/document-details-menu/document-details-menu.component.scss",
         "src/app/features/task-detail/components/detail-load-error/detail-load-error.component.scss",
+        "src/app/features/task-detail/components/decision-surface/decision-surface.component.scss",
         "src/app/features/task-detail/components/escalation-summary/_escalation-summary-actions.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
         "src/app/features/task-detail/components/prompt-pane/overview-failure/overview-failure.component.scss",
+        "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-runs/overview-runs.component.scss",
         "src/app/features/task-detail/components/prompt-pane/post-step-controls/post-step-controls.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-details/pipeline-step-details.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss",
@@ -267,6 +285,15 @@
             "severity": "error"
           }
         ]
+      }
+    },
+    {
+      "comment": "Living styling-guide proof slice: raw hex colors are an error on the Task Detail decision actions.",
+      "files": [
+        "src/app/features/task-detail/components/escalation-summary/_escalation-summary-actions.scss"
+      ],
+      "rules": {
+        "color-no-hex": true
       }
     }
   ],

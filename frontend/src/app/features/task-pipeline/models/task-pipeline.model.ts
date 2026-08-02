@@ -24,9 +24,13 @@ export interface PipelineStep {
   dependsOn: string[];
   model?: string | null;
   cliType?: string | null;
+  /** Technology marker for stack-specific steps, e.g. Angular. */
+  framework?: string | null;
   timeoutMs?: number | null;
   idempotent: boolean;
   stub: boolean;
+  /** Implemented step that waits for an explicit operator trigger. */
+  deferred?: boolean;
 }
 
 /** The full static pipeline definition this job targets. */
@@ -51,6 +55,7 @@ export interface PipelineStepExecution {
   thinkingLevel?: string | null;
   recommendedModel?: string | null;
   recommendedThinkingLevel?: string | null;
+  /** Effective route source: policy, policy-economy, or task-override. */
   selectionSource?: string | null;
   estimatedSavingsPercent?: number | null;
   status: PipelineStepStatus;
@@ -241,6 +246,9 @@ export interface PipelineCatalogueStep {
   pipelineId?: string | null;
   displayName: string;
   kind: StepKind;
+  appliesTo?: 'angular' | 'dotnet' | 'node' | 'any';
+  applicable?: boolean;
+  effectiveExecution?: EffectivePipelineStepExecution;
   phase?: string | null;
   runMode?: StepRunMode | null;
   dependsOn?: string[] | null;
@@ -257,6 +265,8 @@ export interface PipelineCatalogueStep {
   usesPrompt: boolean;
   supportsMode: boolean;
   cliType?: string | null;
+  /** Technology marker for stack-specific steps, e.g. Angular. */
+  framework?: string | null;
   promptTemplate?: string | null;
   canDisable: boolean;
   /**
@@ -297,7 +307,33 @@ export type PipelineStepConditionToken =
 /** Envelope of `GET /api/projects/pipeline-catalogue`. */
 export interface PipelineCatalogue {
   pipelineId: string;
+  pipelineType?: PipelineType;
+  detectedStacks?: string[];
   steps: PipelineCatalogueStep[];
+}
+
+/** Editable pipeline configuration types. */
+export type PipelineType = 'task' | 'bug' | 'feature' | 'planning';
+
+export interface EffectivePipelineCommand {
+  workingSubdir: string;
+  command: string;
+}
+
+export interface EffectivePipelineStepExecution {
+  executionKind: 'shell' | 'internal';
+  source: string;
+  commands: EffectivePipelineCommand[];
+}
+
+export interface PipelineStepProbeResult {
+  stepId: string;
+  status: 'passed' | 'failed' | 'skipped' | 'not-applicable' | 'unavailable';
+  applicable: boolean;
+  exitCode?: number | null;
+  durationMs: number;
+  output: string;
+  queueWaitMs: number;
 }
 
 /**

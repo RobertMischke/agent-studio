@@ -102,8 +102,8 @@ public record TaskProvenanceMerge
 /// <c>[develop|main]</c> indicator without the per-task graph query the detail
 /// header pays (<see cref="TaskProvenanceView"/>). Uses the same
 /// worktree -&gt; develop -&gt; main semantics as the detail landed-state
-/// (ASS-1724): "in develop" == the task's anchor commit is an ancestor of
-/// develop; "in main" == an ancestor of main. Never persisted.
+/// (ASS-1724): every attributed task commit must be reachable from a target
+/// branch for that branch's segment to be true. Never persisted.
 /// </para>
 /// </summary>
 public record TaskMergeSignal
@@ -124,8 +124,8 @@ public record TaskMergeSignal
     public string ReleaseBranch { get; init; } = "main";
 
     /// <summary>
-    /// Short SHA that proves the develop membership - the recorded develop-merge
-    /// commit when present, else the contained anchor. Null when not in develop.
+    /// Short attributed SHA that proves develop membership. Null when the full
+    /// attributed set is not in develop.
     /// </summary>
     public string? IntegrationSha { get; init; }
 
@@ -181,9 +181,8 @@ public record TaskProvenanceView
     public TaskLandedLadder Ladder { get; init; } = new();
 
     /// <summary>
-    /// Per-commit branch membership for the task's merge-set (graph: commits that
-    /// <c>task/&lt;id&gt;</c> is ahead of <see cref="Base"/>, falling back to the
-    /// persisted attributed chain when no branch exists).
+    /// Per-commit branch membership for the persisted attributed commit set.
+    /// Live branch-only WIP and remembered merge attempts are not included.
     /// </summary>
     public List<TaskCommitMembership> Commits { get; init; } = [];
 }
@@ -222,21 +221,17 @@ public record TaskCommitMembership
 }
 
 /// <summary>
-/// AGT-2202 — the honest, git-derived integration verdict for an <b>accepted</b>
+/// AGT-2202 - the honest, git-derived integration verdict for an <b>accepted</b>
 /// card (5-human-review / 6-completed / 7-archive): is this task's work actually
 /// folded into the integration branch (develop)?
 ///
 /// <para>
-/// Motivated by the 20.07. accept-run finding "Accept != Merge": 29 cards were
-/// accepted while their code still sat un-merged on <c>task/</c> branches, because
-/// the async curated auto-integrator merges out-of-band (a
-/// <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit on develop) and
-/// the ephemeral <see cref="TaskMergeSignal"/> anchor-ancestry reading cannot see a
-/// curated (rewritten) merge. Ground truth is only the develop git-log. This field
-/// resolves the truth from three independent git signals and collapses it into one
-/// of four discrete states, so the board can show a single, unambiguous "integrated
-/// / not integrated / conflict / no branch" verdict on every accepted card and the
-/// accept flow can flag an accept-without-merge the moment it happens.
+/// Motivated by the 20.07. accept-run finding "Accept != Merge": accepted lane
+/// state and remembered integration attempts did not prove that delivered code
+/// reached the target branch. This field derives truth only from attributed
+/// commit membership in the current integration-branch graph and collapses it
+/// into a single accepted-card verdict. Out-of-band merges become visible on the
+/// next read without fabricating an integration attempt.
 /// </para>
 ///
 /// <para>
@@ -252,10 +247,16 @@ public record TaskIntegrationStatus
     public string Status { get; init; } = IntegrationStatuses.NoBranch;
 
     /// <summary>
-    /// Short SHA that proves the integration when <see cref="Status"/> is
-    /// <see cref="IntegrationStatuses.Integrated"/> - the curated
-    /// <c>merge(&lt;KEY&gt;)</c> commit when present, else the contained task
-    /// anchor / branch tip. Null for every non-integrated status.
+    /// Actual delivery ref selected from durable card truth. Remote runner refs
+    /// and local <c>task/&lt;slug&gt;</c> refs use the same field. Null only when
+    /// the card has no evidenced delivery ref.
+    /// </summary>
+    public string? DeliveryRef { get; init; }
+
+    /// <summary>
+    /// Short attributed SHA that proves target-branch membership when
+    /// <see cref="Status"/> is <see cref="IntegrationStatuses.Integrated"/>.
+    /// Null for every non-integrated status.
     /// </summary>
     public string? Sha { get; init; }
 
@@ -263,9 +264,8 @@ public record TaskIntegrationStatus
     public string IntegrationBranch { get; init; } = "develop";
 
     /// <summary>
-    /// Which of the three integration signals proved the verdict, or the reason a
-    /// non-integrated card is pending / conflicted / branch-less. Free-form, for
-    /// tooltip + audit only; never drives logic.
+    /// Membership evidence, or the reason a non-integrated card is pending,
+    /// conflicted, or branch-less. Free-form, for tooltip and audit only.
     /// </summary>
     public string? Detail { get; init; }
 }
@@ -277,7 +277,7 @@ public record TaskIntegrationStatus
 /// </summary>
 public static class IntegrationStatuses
 {
-    /// <summary>Every attributed commit the card shows is provably in develop (curated merge, or all attributed commits are ancestors).</summary>
+    /// <summary>Every attributed commit the card shows is provably present in the current integration-branch graph.</summary>
     public const string Integrated = "integrated";
 
     /// <summary>Some — but not all — of the attributed commits the card shows are in develop; the rest have not landed yet.</summary>
@@ -289,18 +289,19 @@ public static class IntegrationStatuses
     /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
     public const string ConflictSkipped = "conflict-skipped";
 
-    /// <summary>The card has no task branch and no attributed commit - nothing to integrate.</summary>
+    /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
     public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
 
     /// <summary>
-    /// Persisted tag stamped on a card that was accepted (moved into 6-completed)
-    /// while its work was not yet in develop (AGT-2202). Tag ids allow only
+    /// Persisted recovery marker stamped while transactional acceptance is
+    /// integrating or after integration returned the card to Human Review.
+    /// Tag ids allow only
     /// <c>[a-z0-9-]</c>; the former call-site literal <c>integration:pending</c>
     /// was therefore normalized to this value by <c>SetJobTags</c>. Durable audit
-    /// marker: the completed-lane audit lists it and clears it once the card
-    /// becomes integrated. Not a hard block.
+    /// marker: audits list it and clear it once the computed target-branch status
+    /// becomes integrated. It is not rendered as a status chip.
     /// </summary>
     public const string PendingTag = "integrationpending";
 

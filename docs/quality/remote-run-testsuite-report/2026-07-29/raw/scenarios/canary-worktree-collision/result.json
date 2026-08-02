@@ -1,0 +1,45 @@
+{
+  "scenario": "fault-worktree-collision",
+  "seed": "agt2200-worktree-v1",
+  "runId": "canary-worktree-collision",
+  "accepted": false,
+  "resultSha": null,
+  "semanticTree": null,
+  "phaseSequence": [
+    "claim",
+    "run"
+  ],
+  "incidentOutcome": "worktree-blocked",
+  "assertions": [
+    {
+      "id": "worktree-collision-contained",
+      "passed": true,
+      "detail": "foreign worktree remained registered and unchanged after 5 bounded attempts"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "worktree-target-collision"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 5
+    },
+    "scheduled": 5,
+    "consumed": 5
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-worktree-collision/canary-worktree-collision",
+  "expectedTerminal": "5-human-review",
+  "actualTerminal": "5-human-review",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 0,
+    "used": 0
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-worktree-collision",
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination"
+  ]
+}

@@ -16,6 +16,7 @@ import {
   buildCommitChainView,
   buildCommitEmptyBadge,
   buildCooldownRetryBanner,
+  currentIntegrationStatus,
   buildEffectiveModelChip,
   buildExecutionBadge,
   buildGitStateBadge,
@@ -58,7 +59,7 @@ import { TaskCardQuotaWaitComponent } from '../task-card-quota-wait/task-card-qu
 import { taskCardNow } from './task-card-clock';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { deriveStalledTaskState } from '../../../../services/run-activity.util';
+import { deriveStalledTaskState, isTaskRunActive } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
@@ -147,13 +148,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId(), this.job().state));
 
-  /**
-   * PUB-1: "publishable: npm, website" chip for accepted (6-completed) cards.
-   * The backend folds `publishSignal` only onto completed tasks whose merged
-   * work touches a derived publish target, so the presence of labels is the
-   * whole gate - no card renders it otherwise (Ruhe by default).
-   */
   readonly publishableChip = computed(() => {
+    if (this.job().state !== TaskState.Completed) return null;
     const labels = this.job().publishSignal?.labels ?? [];
     if (labels.length === 0) return null;
     return { labels, text: labels.join(', ') };
@@ -231,7 +227,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   phaseBadge() {
     if (this.job().state === TaskState.AutoReview) return null;
-    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, taskCardNow());
+    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, taskCardNow(), this.job().state);
   }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
@@ -322,31 +318,17 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return { kind, label, refIcon, refTooltip, value, summary, stat, tooltip };
   });
 
-  /**
-   * AGT-2046 two-segment merge signal ([develop|main]). Always shown on cards
-   * that carry git work so the operator can scan "gemerged in develop / main" at
-   * a glance. Null on pre-work cards with no anchor. See {@link buildMergeSignal}.
-   */
   readonly mergeSignal = computed(() => buildMergeSignal(this.job()));
 
-  /**
-   * AGT-2202 — the honest integration verdict badge for accepted cards
-   * (5-human-review / 6-completed / 7-archive): "merged @sha" / "NICHT
-   * integriert" / "Konflikt" / "kein Branch". The backend only computes it for
-   * accepted lanes, so presence is the whole gate. Makes accept-without-merge
-   * impossible to miss.
-   */
-  readonly integrationStatus = computed(() => this.job().integration ?? null);
-
-  /**
-   * Host-level "this card needs a human" flag. Drives the red uniform ring +
-   * faint tint that visually separates an escalated / reissue card from the
-   * Completed/Archive cards it shares the "Done & Decide" column with.
-   */
+  readonly integrationStatus = computed(() => currentIntegrationStatus(this.job()));
   readonly needsAttention = computed(() => cardNeedsAttention(this.job()));
-
   readonly outcomeIssueBadge = computed(() => buildOutcomeIssueBadge(this.job()));
-
+  readonly currentPendingIntent = computed(() =>
+    this.job().state === TaskState.Progress ? this.job().pendingIntent ?? null : null);
+  readonly currentAutoLoop = computed(() =>
+    this.job().state === TaskState.Progress ? this.job().autoLoop ?? null : null);
+  readonly currentQuotaWait = computed(() =>
+    this.job().state === TaskState.Progress ? this.job().quotaWait ?? null : null);
   /**
    * Card-level "code review running" flag. Reads the shared
    * {@link CodeReviewActivityStore} singleton the detail-pane panel marks
@@ -364,7 +346,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */
   readonly loopHot = computed(() => {
-    const al = this.job().autoLoop;
+    const al = this.currentAutoLoop();
     if (!al || al.maxIterations <= 0) return false;
     return al.iteration / al.maxIterations >= 0.8;
   });
@@ -439,8 +421,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return verdict ? verdict.replace(/-/g, ' ') : null;
   }
 
-  readonly isRunning = computed(() => this.job().state === TaskState.Progress
-    && (this.job().execution?.status === 'running' || this.job().runner != null));
+  readonly isRunning = computed(() =>
+    this.job().state === TaskState.Progress && isTaskRunActive(this.job()));
   readonly stalledState = computed(() => deriveStalledTaskState(this.job(), nowTick()));
   /**
    * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is

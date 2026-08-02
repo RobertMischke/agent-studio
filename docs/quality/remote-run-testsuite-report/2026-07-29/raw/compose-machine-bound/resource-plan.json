@@ -1,0 +1,50 @@
+{
+  "runId": "canary-machine-10m",
+  "project": "agt2394-rts-canary-machine-10m",
+  "profile": "remote-integration",
+  "repoRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399",
+  "suiteRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite",
+  "composeFile": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/tools/remote-test-suite/compose.yaml",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m",
+  "environmentFile": ".tmp/remote-test-suite/compose/canary-machine-10m/compose.env",
+  "tokenFile": "[ephemeral credential removed during teardown]",
+  "evidenceRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/compose/canary-machine-10m/evidence",
+  "ports": {
+    "taskServer": 19741,
+    "studio": 19742,
+    "faultControl": 19743,
+    "runnerControl": 19744
+  },
+  "urls": {
+    "taskServer": "http://127.0.0.1:19741",
+    "studio": "http://127.0.0.1:19742",
+    "faultControl": "http://127.0.0.1:19743",
+    "runnerControl": "http://127.0.0.1:19744"
+  },
+  "resources": {
+    "containers": [
+      "agt2394-rts-canary-machine-10m-task-server-1",
+      "agt2394-rts-canary-machine-10m-fault-proxy-1",
+      "agt2394-rts-canary-machine-10m-agent-runner-1",
+      "agt2394-rts-canary-machine-10m-studio-1"
+    ],
+    "network": "agt2394-rts-canary-machine-10m-network",
+    "volumes": [
+      "agt2394-rts-canary-machine-10m-task-server-data",
+      "agt2394-rts-canary-machine-10m-runner-workspace"
+    ],
+    "images": [
+      "agt2394-rts-canary-machine-10m-task-server:local",
+      "agt2394-rts-canary-machine-10m-fault-proxy:local",
+      "agt2394-rts-canary-machine-10m-agent-runner:local",
+      "agt2394-rts-canary-machine-10m-studio:local"
+    ]
+  },
+  "identityLabel": "com.agentstudio.remote-harness.identity=agt2394-rts-canary-machine-10m",
+  "neverTouches": [
+    "agent-studio",
+    "agent-taskboard-stable/",
+    "agent-taskboard-workspace/projects/",
+    "agent-taskboard-workspace/.metadata/"
+  ]
+}

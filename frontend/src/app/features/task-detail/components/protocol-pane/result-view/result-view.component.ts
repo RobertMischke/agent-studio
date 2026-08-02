@@ -13,7 +13,7 @@ import type { GeneratedFileProvenanceView } from '../../generated-file-provenanc
  * Renders a finished run in the layered, shareable shape the operator asked
  * for, top to bottom:
  *
- *   1. **metric head** - the case badge plus verdict / grade / duration /
+ *   1. **metric head** - the single outcome case badge plus grade / duration /
  *      tokens / commits chips, so "is this fine and how big is it?" answers
  *      at a glance;
  *   2. **overview** - a "problem -> solution" card with case-tuned labels,
@@ -44,6 +44,8 @@ export class ResultViewComponent {
 
   /** Bubbled up from the detail body so the host opens the source viewer. */
   readonly openSource = output<{ path: string; line: number | null }>();
+  readonly openWiki = output<string>();
+  readonly openTask = output<string>();
   readonly navigateMetric = output<string>();
   readonly copyRequested = output<void>();
   readonly moreActions = output<MouseEvent>();

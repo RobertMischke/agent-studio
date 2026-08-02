@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Docs Structure Migration",
+  "source": {
+    "path": "docs/archive/concepts/docs-structure-migration.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "0f69ff92842bc896978a788e97e49584a3ef37e29dfba0dd652e175cfd7fd6e5",
+      "sizeBytes": 9395,
+      "lineCount": 247,
+      "capturedAt": "2026-07-29T20:35:44Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "archived",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

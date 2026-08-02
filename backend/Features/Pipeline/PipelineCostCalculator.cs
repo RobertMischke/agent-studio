@@ -181,6 +181,112 @@ public static class PipelineCostCalculator
     }
 
     /// <summary>
+    /// Replaces the cost rows for read-projected remote steps with the
+    /// canonical per-call token-ledger values. Local rows remain derived from
+    /// <paramref name="record"/> exactly as before. This keeps historical
+    /// per-call pricing and call counts out of <c>pipeline-execution.json</c>
+    /// while making the task total reconcile with the ledger-backed Task tab.
+    /// </summary>
+    public static PipelineCostSummary SummarizeWithLedger(
+        PipelineExecutionRecord? record,
+        IReadOnlyDictionary<string, IReadOnlyList<TaskTokenCall>> ledgerCalls)
+    {
+        var baseline = Summarize(record);
+        if (ledgerCalls.Count == 0) return baseline;
+
+        var steps = baseline.Steps
+            .Select(step => ledgerCalls.TryGetValue(step.StepId, out var calls) && calls.Count > 0
+                ? CostFromLedger(step, calls)
+                : step)
+            .ToList();
+        return new PipelineCostSummary(
+            steps,
+            steps.Sum(step => step.InputTokens),
+            steps.Sum(step => step.OutputTokens),
+            steps.Sum(step => step.CacheReadTokens),
+            steps.Sum(step => step.CacheCreationTokens),
+            steps.Sum(step => step.TotalTokens),
+            Round(steps.Sum(step => step.InputCostUsd)),
+            Round(steps.Sum(step => step.OutputCostUsd)),
+            Round(steps.Sum(step => step.CacheReadCostUsd)),
+            Round(steps.Sum(step => step.CacheCreationCostUsd)),
+            Round(steps.Sum(step => step.CostUsd)),
+            steps.Any(step => step.TotalTokens > 0 && !step.ModelKnown));
+    }
+
+    private static PipelineStepCost CostFromLedger(
+        PipelineStepCost baseline,
+        IReadOnlyList<TaskTokenCall> calls)
+    {
+        long input = 0;
+        long output = 0;
+        long cacheRead = 0;
+        long cacheCreation = 0;
+        decimal inputCost = 0;
+        decimal outputCost = 0;
+        decimal cacheReadCost = 0;
+        decimal cacheCreationCost = 0;
+        var allPriced = true;
+
+        foreach (var call in calls)
+        {
+            input += call.InputTokens;
+            output += call.OutputTokens;
+            cacheRead += call.CacheReadTokens;
+            cacheCreation += call.CacheCreationTokens;
+            allPriced &= call.ModelPriced;
+
+            var estimate = TokenPricing.Estimate(
+                call.Model,
+                call.InputTokens,
+                call.OutputTokens,
+                call.CacheReadTokens,
+                call.CacheCreationTokens,
+                call.Ts);
+            if (estimate.ModelKnown && estimate.Total > 0)
+            {
+                var scale = call.EstimatedApiCostUsd / estimate.Total;
+                inputCost += estimate.InputUsd * scale;
+                outputCost += estimate.OutputUsd * scale;
+                cacheReadCost += estimate.CacheReadUsd * scale;
+                cacheCreationCost += estimate.CacheWriteUsd * scale;
+                continue;
+            }
+
+            // The task ledger has already priced this historical call. If its
+            // display model no longer resolves back to a catalogue id, preserve
+            // the authoritative total and distribute it by token share so the
+            // four visible components still sum exactly to the row.
+            var tokens = call.InputTokens + call.OutputTokens
+                + call.CacheReadTokens + call.CacheCreationTokens;
+            if (call.ModelPriced && tokens > 0)
+            {
+                inputCost += call.EstimatedApiCostUsd * call.InputTokens / tokens;
+                outputCost += call.EstimatedApiCostUsd * call.OutputTokens / tokens;
+                cacheReadCost += call.EstimatedApiCostUsd * call.CacheReadTokens / tokens;
+                cacheCreationCost += call.EstimatedApiCostUsd * call.CacheCreationTokens / tokens;
+            }
+        }
+
+        return baseline with
+        {
+            TokenUsageSource =
+                $"Remote token ledger · {calls.Count} call{(calls.Count == 1 ? "" : "s")}",
+            ModelKnown = allPriced,
+            InputTokens = input,
+            OutputTokens = output,
+            CacheReadTokens = cacheRead,
+            CacheCreationTokens = cacheCreation,
+            TotalTokens = input + output + cacheRead + cacheCreation,
+            InputCostUsd = Round(inputCost),
+            OutputCostUsd = Round(outputCost),
+            CacheReadCostUsd = Round(cacheReadCost),
+            CacheCreationCostUsd = Round(cacheCreationCost),
+            CostUsd = Round(calls.Sum(call => call.EstimatedApiCostUsd)),
+        };
+    }
+
+    /// <summary>
     /// Groups a task's recorded tokens by model, per run and across all runs.
     /// Runs are the current <paramref name="record"/> plus its flattened
     /// <see cref="PipelineExecutionRecord.PreviousAttempts"/>, ordered oldest

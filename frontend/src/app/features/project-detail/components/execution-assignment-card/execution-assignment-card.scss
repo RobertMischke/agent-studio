@@ -1,13 +1,13 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
 .execution-card {
+  @include m.deck-panel;
+
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  background: var(--studio-bg-hover);
   color: var(--studio-fg);
 }
 
@@ -144,9 +144,9 @@
 .execution-card__status-dot[data-status='draining'] { background: var(--studio-warn); }
 
 .execution-card__error {
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--studio-error) 10%, transparent);
+  @include m.deck-panel(var(--studio-spacing-2) var(--studio-spacing-3));
+  @include m.deck-panel-attention;
+
   color: var(--studio-error);
   font-size: 0.8rem;
 }
@@ -154,19 +154,18 @@
 .execution-card__delivery {
   margin: 0;
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border: 1px solid var(--studio-border-strong);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
-  background: var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
   color: var(--studio-fg-dim);
   font-size: 0.8rem;
 }
 .execution-card__delivery[data-status='ready'] {
-  border-color: color-mix(in srgb, var(--studio-success) 34%, var(--studio-border-strong));
-  background: color-mix(in srgb, var(--studio-success) 8%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-success) 34%, var(--studio-card-border));
+  background: color-mix(in srgb, var(--studio-success) 8%, var(--studio-card-bg));
 }
 .execution-card__delivery[data-status='failed'] {
-  border-color: var(--notify-error-border);
-  background: var(--notify-error-tint);
+  @include m.deck-panel-attention;
 }
 .execution-card__delivery[data-status='failed'] strong { color: var(--studio-error); }
 
@@ -211,9 +210,9 @@
   align-items: flex-start;
   gap: var(--studio-spacing-2);
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border: 1px solid var(--studio-border-strong);
+  border: 1px solid var(--studio-card-muted-border);
   border-radius: 6px;
-  background: var(--studio-bg-elevated);
+  background: var(--studio-card-muted-bg);
 }
 
 .execution-card__check > span:last-child {
@@ -230,13 +229,13 @@
 }
 
 .execution-card__check[data-state='passed'] {
-  background: color-mix(in srgb, var(--studio-success) 8%, var(--studio-bg-elevated));
-  border-color: color-mix(in srgb, var(--studio-success) 34%, var(--studio-border-strong));
+  background: color-mix(in srgb, var(--studio-success) 8%, var(--studio-card-bg));
+  border-color: color-mix(in srgb, var(--studio-success) 34%, var(--studio-card-border));
 }
 .execution-card__check[data-state='passed'] .execution-card__check-icon { color: var(--studio-success); }
 .execution-card__check[data-state='failed'] {
-  background: color-mix(in srgb, var(--studio-error) 8%, var(--studio-bg-elevated));
-  border-color: color-mix(in srgb, var(--studio-error) 34%, var(--studio-border-strong));
+  background: color-mix(in srgb, var(--studio-error) 8%, var(--studio-card-bg));
+  border-color: color-mix(in srgb, var(--studio-error) 34%, var(--studio-card-border));
 }
 .execution-card__check[data-state='failed'] .execution-card__check-icon { color: var(--studio-error); }
 .execution-card__check[data-state='running'] .execution-card__check-icon { color: var(--studio-accent-strong); }

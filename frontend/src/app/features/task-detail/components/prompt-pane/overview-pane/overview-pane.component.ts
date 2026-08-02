@@ -68,13 +68,13 @@ import {
   formatTokens,
   historicalStepStatusIcon,
   laneLabel,
-  runStatusIcon,
   stepKindIcon,
   stepKindLabel,
   stepStatusIcon,
   stepStatusLabel,
 } from './overview-pane-formatters';
 import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
+import { OverviewRunsComponent } from './overview-runs/overview-runs.component';
 import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
 import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
 
@@ -101,11 +101,15 @@ interface PipelineRowVm {
   hasExecution: boolean;
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
-  status: PipelineStepStatus | 'disabled';
+  status: PipelineStepStatus | 'disabled' | 'not-run';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
   /** Small causal note for the designed skip cascade after an early escalate. */
   skipHint: string | null;
+  /** This local step is structurally absent from the remote execution route. */
+  remoteNotApplicable: boolean;
+  /** Remote Review Plane explanation when this is its projected decision row. */
+  remoteReviewDetail: string | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
@@ -215,6 +219,8 @@ interface PipelineRunOptionVm {
   glyph: string;
   /** Outcome class driving the chip / status-dot colour. */
   kind: 'pass' | 'fail' | 'pending';
+  /** Honest label when no step reached a pass/fail terminal state. */
+  emptyOutcomeLabel: 'pending' | 'not run';
   /** Compact hover summary: "N OK M fail · 3m34s · 6h ago". */
   tooltip: StructuredTooltip;
 }
@@ -294,8 +300,12 @@ function buildStepStatusTooltip(
   const body = detail?.trim();
   if (!body) return null;
   const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
-  if (status !== 'failed' && status !== 'skipped' && !passedTestCoverage) return null;
-  const title = status === 'failed' ? 'Failed' : status === 'skipped' ? 'Skipped' : 'Passed';
+  if (status !== 'failed' && status !== 'skipped' && status !== 'not-run' && !passedTestCoverage) return null;
+  const title = status === 'failed'
+    ? 'Failed'
+    : status === 'skipped'
+      ? 'Skipped'
+      : status === 'not-run' ? 'Not run' : 'Passed';
   return { title: `${label}: ${title}`, body };
 }
 
@@ -466,7 +476,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, CopyableTaskKeyComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, OverviewRunsComponent, CopyableTaskKeyComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -479,7 +489,6 @@ export class OverviewPaneComponent {
   readonly laneLabel = laneLabel;
   readonly formatTokens = formatTokens;
   readonly formatDuration = formatDuration;
-  readonly runStatusIcon = runStatusIcon;
 
   readonly job = input.required<TaskInfo>();
   /** Raw task prompt markdown (`promptMarkdown`), surfaced via the Prompt
@@ -567,6 +576,14 @@ export class OverviewPaneComponent {
     TaskState.FailedPickup,
     TaskState.CodeNotComplete,
     TaskState.AutoReview,
+  ]);
+
+  /** Lanes where a non-running attempt cannot honestly still be "pending". */
+  private static readonly PIPELINE_ATTEMPT_SETTLED_STATES = new Set<string>([
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
   ]);
 
   readonly canConfigurePendingPipelineSteps = computed(() =>
@@ -788,27 +805,6 @@ export class OverviewPaneComponent {
     return r.length > 0 ? r[r.length - 1] : null;
   });
 
-  readonly recentRuns = computed(() => {
-    const r = this.runs();
-    return r.slice(-8);
-  });
-
-  /** "1 run" / "N runs" label for the consolidated Runs-section summary. */
-  readonly runCountLabel = computed<string>(() => {
-    const n = this.runCount();
-    return n === 1 ? '1 run' : `${n} runs`;
-  });
-
-  /**
-   * Render the consolidated Runs section when there is any run count, any
-   * elapsed time, or at least one run-status icon to show. Folds in the run
-   * count + total duration that used to sit in the Tokens & Performance block
-   * (they duplicated this section), so all CLI-run info has one home.
-   */
-  readonly hasRunsSection = computed<boolean>(() =>
-    this.runCount() > 0 || this.totalDuration() > 0 || this.recentRuns().length > 0,
-  );
-
   readonly totalDuration = computed(() => {
     let total = 0;
     for (const r of this.runs()) {
@@ -847,6 +843,17 @@ export class OverviewPaneComponent {
 
     const selectedExecution = this.selectedPipelineExecution();
     const isCurrentRun = this.selectedPipelineIsCurrent();
+    const attemptSettledOutsideFullPipeline =
+      isCurrentRun
+      && selectedExecution != null
+      && !this.isRunning()
+      && OverviewPaneComponent.PIPELINE_ATTEMPT_SETTLED_STATES.has(this.job().state)
+      && (
+        selectedExecution.completedAt != null
+        || (selectedExecution.attempt ?? 1) > 1
+        || (selectedExecution.previousAttempts?.length ?? 0) > 0
+        || this.job().orchestratorVerdict === 'escalate'
+      );
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const chainEndedByEarlyEscalate = (selectedExecution?.steps ?? []).some(step =>
       step.stepId !== FINAL_VERDICT_STEP_ID
@@ -868,8 +875,10 @@ export class OverviewPaneComponent {
       if (!enabled) status = 'disabled';
       else if (onDemand) status = onDemand.status.toLowerCase() === 'failed' ? 'failed'
         : onDemand.status.toLowerCase() === 'skipped' ? 'skipped' : 'passed';
+      else if (e?.status === 'pending' && attemptSettledOutsideFullPipeline && !step.deferred) status = 'not-run';
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
+      else if (attemptSettledOutsideFullPipeline && !step.deferred) status = 'not-run';
       else status = 'pending';
       const label = step.displayName || step.id;
       // Model precedence: a recorded execution model (what actually ran) wins;
@@ -887,7 +896,13 @@ export class OverviewPaneComponent {
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
-      const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
+      const statusDetail = e?.verdictSummary
+        ?? e?.reason
+        ?? (status === 'not-run'
+          ? 'This attempt used a lightweight pipeline or escalated before this step ran.'
+          : null);
+      const remoteNotApplicable =
+        status === 'skipped' && e?.reason?.startsWith('Executed remotely;') === true;
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
       const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -913,8 +928,16 @@ export class OverviewPaneComponent {
         config: cfg ?? null,
         status,
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
-        skipHint: status === 'skipped' && chainEndedByEarlyEscalate
-          ? 'skipped: chain ended by early escalate'
+        skipHint: status === 'not-run'
+          ? 'not run: lightweight pipeline or escalation'
+          : remoteNotApplicable
+            ? 'executed remotely · not applicable'
+          : status === 'skipped' && chainEndedByEarlyEscalate
+            ? 'skipped: chain ended by early escalate'
+            : null,
+        remoteNotApplicable,
+        remoteReviewDetail: e?.reason?.startsWith('Remote Review Plane verdict')
+          ? e.reason
           : null,
         model,
         thinkingLevel,
@@ -1203,6 +1226,30 @@ export class OverviewPaneComponent {
   decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
     if (!row.isFinalVerdict) return null;
     const authoritative = this.authoritativeDecisionBadge();
+    if (row.remoteReviewDetail && row.verdict) {
+      const reviewPassed = row.verdict.toLowerCase() === 'pass';
+      const reviewInfrastructure = row.verdict.toLowerCase() === 'review-infra';
+      const tone: DecisionBadgeVm['tone'] = reviewPassed
+        ? 'ok'
+        : reviewInfrastructure ? 'warn' : 'danger';
+      const severity: TooltipSeverity = reviewPassed
+        ? 'success'
+        : reviewInfrastructure ? 'warn' : 'error';
+      const label = reviewPassed
+        ? 'Review Pass'
+        : reviewInfrastructure ? 'Review infrastructure' : 'Review product failure';
+      const resultLine = authoritative ? `\n\nTask result: ${authoritative.label}.` : '';
+      return {
+        verdict: row.verdict,
+        label,
+        tone,
+        severity,
+        tooltip: {
+          title: `Remote Review Plane · ${label.replace('Review ', '')}`,
+          body: `${row.remoteReviewDetail}${resultLine}`,
+        },
+      };
+    }
     if (authoritative) return authoritative;
     const info = this.latestSteeringInfo();
     if (info == null) return null;
@@ -1546,6 +1593,23 @@ export class OverviewPaneComponent {
     const attempt = rec.attempt ?? 1;
     const startedAt = rec.startedAt ?? null;
     const kind: PipelineRunOptionVm['kind'] = failed > 0 ? 'fail' : passed > 0 ? 'pass' : 'pending';
+    const settledWithoutExecutedSteps =
+      passed === 0
+      && failed === 0
+      && (
+        rec.completedAt != null
+        || (
+          current
+          && OverviewPaneComponent.PIPELINE_ATTEMPT_SETTLED_STATES.has(this.job().state)
+          && (
+            attempt > 1
+            || (rec.previousAttempts?.length ?? 0) > 0
+            || this.job().orchestratorVerdict === 'escalate'
+          )
+        )
+      );
+    const emptyOutcomeLabel: PipelineRunOptionVm['emptyOutcomeLabel'] =
+      settledWithoutExecutedSteps ? 'not run' : 'pending';
     const glyph = kind === 'fail' ? '✗' : kind === 'pass' ? '✓' : '·';
     return {
       attempt,
@@ -1556,7 +1620,16 @@ export class OverviewPaneComponent {
       failed,
       glyph,
       kind,
-      tooltip: this.buildRunChipTooltip(attempt, current, passed, failed, durationMs, startedAt),
+      emptyOutcomeLabel,
+      tooltip: this.buildRunChipTooltip(
+        attempt,
+        current,
+        passed,
+        failed,
+        emptyOutcomeLabel,
+        durationMs,
+        startedAt,
+      ),
     };
   }
 
@@ -1579,13 +1652,14 @@ export class OverviewPaneComponent {
     current: boolean,
     passed: number,
     failed: number,
+    emptyOutcomeLabel: PipelineRunOptionVm['emptyOutcomeLabel'],
     durationMs: number,
     startedAt: string | null,
   ): StructuredTooltip {
     const outcome: string[] = [];
     if (passed > 0) outcome.push(`${passed} OK`);
     if (failed > 0) outcome.push(`${failed} fail`);
-    const parts: string[] = [outcome.length > 0 ? outcome.join(' ') : 'pending'];
+    const parts: string[] = [outcome.length > 0 ? outcome.join(' ') : emptyOutcomeLabel];
     if (durationMs > 0) parts.push(this.formatStepDuration(durationMs));
     if (startedAt) parts.push(this.formatRelativeTime(startedAt));
     return {
@@ -1722,17 +1796,6 @@ export class OverviewPaneComponent {
     if (ms <= 0) return '—';
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return this.formatDuration(ms / 1000);
-  }
-
-  runTooltip(run: RunRecord): string {
-    const parts: string[] = [
-      `Run #${run.index + 1} (${run.intent})`,
-      `Status: ${run.status}`,
-    ];
-    if (run.startedAt) parts.push(`Started: ${this.formatAbsoluteTime(run.startedAt)}`);
-    if (run.durationSeconds != null) parts.push(`Duration: ${this.formatDuration(run.durationSeconds)}`);
-    if (run.cli) parts.push(`CLI: ${run.cli}`);
-    return parts.join('\n');
   }
 
   cliTypeLabel(t: CliType): string {

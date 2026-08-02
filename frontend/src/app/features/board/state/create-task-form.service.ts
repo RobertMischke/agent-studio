@@ -4,10 +4,11 @@ import { CliType, CLI_TYPES, ComponentRoutingRequest, ComponentRoutingResolution
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
-import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../cli';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { sessionFetch } from '../../../services/session-fetch';
 import { PageTaskRequest, pageContextKey } from '../../../models/page-context.model';
+import { QuotaApiService, type ModelRoutingRecommendation } from '../../quota';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
@@ -31,6 +32,7 @@ export class CreateTaskFormService {
   private readonly jobService = inject(TaskService);
   private readonly catalogStore = inject(CliCatalogStore);
   private readonly errorDialog = inject(ErrorDialogService);
+  private readonly routingPolicy = inject(QuotaApiService);
 
   readonly visible = signal(false);
   readonly routing = signal<ComponentRoutingResolution | null>(null);
@@ -65,6 +67,8 @@ export class CreateTaskFormService {
   static readonly ALLOWED_TARGET_STATES = [TaskState.Backlog, TaskState.Preparation, TaskState.Ready] as const;
 
   readonly availableModels = signal<CliModelInfo[]>([]);
+  readonly policySuggestion = signal<ModelRoutingRecommendation | null>(null);
+  private suggestionRequest = 0;
 
   /** Fired after a successful createJob; shell listens to refresh the board. */
   private readonly submittedSubject = new Subject<{ jobId: string }>();
@@ -99,6 +103,7 @@ export class CreateTaskFormService {
       : TaskState.Preparation;
     this.newWatchPath = pickCreateWatchPath(opts.watchPaths, opts.activeProjects);
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
   }
 
@@ -117,6 +122,7 @@ export class CreateTaskFormService {
     this.newPrompt = event.prefill;
     this.newTitle = `Security follow-up (${event.projectName})`;
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
   }
 
@@ -136,6 +142,7 @@ export class CreateTaskFormService {
     this.newPrompt = event.prefill;
     this.newTitle = event.title;
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
   }
 
@@ -184,6 +191,7 @@ export class CreateTaskFormService {
     this.newKind = 'task';
     this.newMode = 'coding';
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
   }
 
@@ -202,6 +210,7 @@ export class CreateTaskFormService {
     this.newPrompt = event.promptText;
     this.newTitle = deriveDraftTitle(event.promptText);
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
     this.routingPending.set(true);
     this.routingRequest = {
@@ -256,6 +265,7 @@ export class CreateTaskFormService {
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = attachments;
     this.loadCreateModels(this.newCliType);
+    this.refreshPolicySuggestion();
     this.visible.set(true);
   }
 
@@ -267,10 +277,21 @@ export class CreateTaskFormService {
     this.newModel = readDefaultModelPref(t);
     this.newThinkingLevel = readDefaultThinkingLevelPref(t);
     this.loadCreateModels(t);
+    this.refreshPolicySuggestion();
   }
 
   markModelSelectionExplicit(): void {
     this.modelSelectionExplicit = true;
+  }
+
+  onTaskTypeChange(taskType: string): void {
+    this.newTaskType = taskType;
+    this.refreshPolicySuggestion();
+  }
+
+  usePolicySelection(): void {
+    this.modelSelectionExplicit = false;
+    this.applyPolicySuggestion();
   }
 
   /** Mirrors a global "default model for CLI X" change into the form when relevant. */
@@ -308,6 +329,8 @@ export class CreateTaskFormService {
     this.newThinkingLevel = readDefaultThinkingLevelPref(this.newCliType);
     this.modelSelectionExplicit = false;
     this.availableModels.set([]);
+    this.policySuggestion.set(null);
+    this.suggestionRequest++;
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
     this.routing.set(null);
@@ -411,6 +434,28 @@ export class CreateTaskFormService {
       },
       error: () => this.availableModels.set([]),
     });
+  }
+
+  private refreshPolicySuggestion(): void {
+    const request = ++this.suggestionRequest;
+    this.routingPolicy.getModelRoutingRecommendation(this.newTaskType, this.newCliType).subscribe({
+      next: (suggestion) => {
+        if (request !== this.suggestionRequest) return;
+        this.policySuggestion.set(suggestion);
+        this.applyPolicySuggestion();
+      },
+      error: () => {
+        if (request === this.suggestionRequest) this.policySuggestion.set(null);
+      },
+    });
+  }
+
+  private applyPolicySuggestion(): void {
+    if (this.modelSelectionExplicit) return;
+    const suggestion = this.policySuggestion();
+    if (!suggestion) return;
+    this.newModel = suggestion.model;
+    this.newThinkingLevel = suggestion.thinkingLevel;
   }
 
   private async uploadCreateAttachments(

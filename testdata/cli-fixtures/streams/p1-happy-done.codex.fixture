@@ -1,0 +1,9 @@
+#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"codex","form":"stream-json","exitCode":0}
+# Recorded shape: codex exec --experimental-json (codex-cli 0.1.44 frame names).
+{"type":"thread.started","thread_id":"019dee65-7a9b-7843-bfd9-06e555fff02b"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_call","command":"dotnet test runner.Tests"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"dotnet test runner.Tests","aggregated_output":"Passed!  - Failed: 0, Passed: 214, Skipped: 0","exit_code":0}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","file_path":"runner/SentinelScanner.cs"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Implemented the scanner fix and verified the suite.\n\n[[TASK_DONE]]"}}
+{"type":"turn.completed","usage":{"input_tokens":22267,"cached_input_tokens":6528,"output_tokens":910,"reasoning_output_tokens":128}}

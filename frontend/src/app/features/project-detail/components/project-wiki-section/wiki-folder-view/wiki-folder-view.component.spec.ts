@@ -19,6 +19,11 @@ const OVERVIEW: WikiFolderOverview = {
       classification: {
         status: 'ueberholt', supersededBy: 'concepts/new.md', type: 'konzept', analyzedAt: '2026-07-18',
       },
+      agentReads: {
+        total: 23,
+        lastReadAt: '2026-07-22T10:15:00Z',
+        recent: [{ at: '2026-07-22T10:15:00Z', taskKey: 'AGT-2242' }],
+      },
     },
     {
       name: 'viz.html', relPath: 'concepts/deep/viz.html', kind: 'page', fileType: 'html',
@@ -89,12 +94,12 @@ describe('WikiFolderViewComponent', () => {
     clearStarStorage();
   });
 
-  it('renders the children as a table (Titel/Datei/Typ/Geändert/Größe), folders first', async () => {
+  it('renders the children as a table (Titel/Datei/Typ/Status/Reads/Geändert/Größe), folders first', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
 
     const headers = [...root.querySelectorAll('th')].map(th => th.textContent?.trim());
-    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Geändert', 'Größe']);
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Reads', 'Geändert', 'Größe']);
 
     const rowIds = [...root.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
       .map(row => row.getAttribute('data-testid'));
@@ -121,6 +126,19 @@ describe('WikiFolderViewComponent', () => {
     const mtimeMarker = root.querySelector('[data-testid="wiki-folder-mtime-concepts/deep/viz.html"]');
     expect(mtimeMarker?.textContent).toBe('*');
     expect(mtimeMarker?.getAttribute('title')).toBe('Filesystem time because no Git date is available yet');
+    http.verify();
+  });
+
+  it('renders read totals for pages and a dash when no read evidence exists', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    expect(root.querySelector('[data-testid="wiki-folder-reads-concepts/deep/detail.md"]')!.textContent?.trim())
+      .toBe('23');
+    expect(root.querySelector('[data-testid="wiki-folder-reads-concepts/deep/viz.html"]')!.textContent)
+      .toContain('–');
+    expect(root.querySelector('[data-testid="wiki-folder-reads-concepts/deep/sub"]')!.textContent)
+      .toContain('–');
     http.verify();
   });
 

@@ -26,6 +26,13 @@ interface MergeSignal {
   releaseSha: string | null;
 }
 
+interface IntegrationStatus {
+  status: 'integrated' | 'pending' | 'no-branch';
+  sha: string | null;
+  integrationBranch: string;
+  detail: string;
+}
+
 function mergeSignal(inDev: boolean, inMain: boolean): MergeSignal {
   return {
     branch: 'task/ms',
@@ -38,6 +45,18 @@ function mergeSignal(inDev: boolean, inMain: boolean): MergeSignal {
   };
 }
 
+function integrationStatus(inDev: boolean, sha = 'c0ffee1'): IntegrationStatus {
+  return {
+    status: inDev ? 'integrated' : 'pending',
+    deliveryRef: 'task/e2e-merge-signal',
+    sha: inDev ? sha : null,
+    integrationBranch: 'develop',
+    detail: inDev
+      ? 'Every attributed commit is present in develop.'
+      : 'Attributed commits are not present in develop.',
+  };
+}
+
 function makeTask(
   id: string,
   state: string,
@@ -45,6 +64,7 @@ function makeTask(
   signal: MergeSignal | null,
   withMergeFact: boolean,
   withCommit = true,
+  integration: IntegrationStatus | null = null,
 ) {
   return {
     id,
@@ -75,6 +95,7 @@ function makeTask(
     ownerClientId: 'local-default',
     tags: [],
     mergeSignal: signal,
+    integration,
     provenance: {
       branch: 'task/ms',
       base: 'base000',
@@ -90,13 +111,68 @@ function makeTask(
 
 // The four combinations, placed in lanes roughly matching their real position.
 const ON_BRANCH = makeTask('ms-branch', '3-progress', 'Merge signal on branch only', mergeSignal(false, false), false);
-const IN_DEVELOP = makeTask('ms-develop', '5-human-review', 'Merge signal in develop not main', mergeSignal(true, false), true);
-const RELEASED = makeTask('ms-released', '6-completed', 'Merge signal released to main', mergeSignal(true, true), true);
-const ONLY_MAIN = makeTask('ms-onlymain', '5-human-review', 'Merge signal rare only main', mergeSignal(false, true), false);
+const IN_DEVELOP = makeTask(
+  'ms-develop',
+  '5-human-review',
+  'Merge signal in develop not main',
+  mergeSignal(true, false),
+  true,
+  true,
+  integrationStatus(true),
+);
+const RELEASED = makeTask(
+  'ms-released',
+  '6-completed',
+  'Merge signal released to main',
+  mergeSignal(true, true),
+  true,
+  true,
+  integrationStatus(true),
+);
+const ONLY_MAIN = makeTask(
+  'ms-onlymain',
+  '5-human-review',
+  'Merge signal rare only main',
+  mergeSignal(false, true),
+  false,
+  true,
+  integrationStatus(false),
+);
+const STALE_ATTEMPT = makeTask(
+  'ms-stale-attempt',
+  '5-human-review',
+  'Remembered merge attempt is not target truth',
+  mergeSignal(true, false),
+  true,
+  true,
+  integrationStatus(false),
+);
+const SALVAGED = makeTask(
+  'ms-salvaged',
+  '5-human-review',
+  'Out-of-band merge is target truth',
+  mergeSignal(false, false),
+  false,
+  true,
+  integrationStatus(true, '5a1ba9e'),
+);
 // AGT-2063 regression: a commit-less card that still carries a backend mergeSignal
 // (its task/<id> branch base is trivially an ancestor of develop/main) must render
 // NO merge signal - the exact "merge state on a card with no commits" bug.
-const NO_COMMIT = makeTask('ms-nocommit', '5-human-review', 'Merge signal empty card no commits', mergeSignal(true, false), false, false);
+const NO_COMMIT = makeTask(
+  'ms-nocommit',
+  '5-human-review',
+  'Merge signal empty card no commits',
+  mergeSignal(true, false),
+  false,
+  false,
+  {
+    status: 'no-branch',
+    sha: null,
+    integrationBranch: 'develop',
+    detail: 'No attributed commits to integrate.',
+  },
+);
 
 const GROUPED_PAYLOAD = {
   backlog: [],
@@ -107,7 +183,7 @@ const GROUPED_PAYLOAD = {
   failedPickup: [],
   review: [],
   autoReview: [],
-  humanReview: [IN_DEVELOP, ONLY_MAIN, NO_COMMIT],
+  humanReview: [IN_DEVELOP, ONLY_MAIN, STALE_ATTEMPT, SALVAGED, NO_COMMIT],
   completed: [RELEASED],
   archive: [],
 };
@@ -159,6 +235,17 @@ async function installRoutes(page: Page) {
     }));
   await page.route('**/api/tags', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }));
 }
 
 async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
@@ -243,6 +330,22 @@ test.describe('AGT-2046 board card merge signal', () => {
     const onBranch = cardByTitle(page, ON_BRANCH.title);
     const branchDev = onBranch.locator('[data-testid="task-card-merge-signal"] [data-seg="develop"]');
     await expect(branchDev).not.toHaveClass(/task-card__merge-seg--on/);
+  });
+
+  test('accepted cards use only computed target membership despite stale attempt evidence', async ({ page }) => {
+    await gotoBoard(page);
+
+    const stale = cardByTitle(page, STALE_ATTEMPT.title);
+    await expect(stale.getByTestId('integration-status-badge'))
+      .toHaveAttribute('data-integration-status', 'pending');
+    await expect(stale.getByTestId('task-card-merge-signal'))
+      .toHaveAttribute('data-develop', 'false');
+
+    const salvaged = cardByTitle(page, SALVAGED.title);
+    await expect(salvaged.getByTestId('integration-status-badge'))
+      .toHaveAttribute('data-integration-status', 'integrated');
+    await expect(salvaged.getByTestId('task-card-merge-signal'))
+      .toHaveAttribute('data-develop', 'true');
   });
 
   test('replaces the cryptic "BR" chip with a branch icon + name', async ({ page }) => {

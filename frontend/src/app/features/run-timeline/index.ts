@@ -5,6 +5,7 @@ export type {
   RunPromptContextSnapshot,
   RunPromptEntry,
   ReviewAttemptCycle,
+  TaskRefinementEntry,
   RunTimeline,
   RunCommitInfo,
   RunCommitsResponse,

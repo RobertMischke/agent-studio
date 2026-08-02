@@ -1,0 +1,93 @@
+@if (hasContent()) {
+  <section
+    class="overview-runs studio-measure studio-measure--tabular"
+    aria-labelledby="overview-runs-title"
+    data-testid="overview-runs"
+  >
+    <header class="overview-runs__header">
+      <h3 id="overview-runs-title" class="overview-runs__title">Runs</h3>
+      @if (runCount() > 0) {
+        <span class="overview-runs__sum-badge" data-testid="overview-runs-count">{{
+          countLabel()
+        }}</span>
+      }
+    </header>
+
+    @if (totalDurationSeconds() > 0) {
+      <span class="overview-runs__duration" data-testid="overview-runs-duration">{{
+        totalDurationLabel()
+      }}</span>
+    }
+
+    @if (rows().length > 0) {
+      <ol class="overview-runs__list" aria-label="Run history">
+        @for (row of rows(); track row.record.index) {
+          <li
+            class="overview-runs__row"
+            [attr.data-run-index]="row.record.index"
+            data-testid="overview-run-row"
+          >
+            <span class="overview-runs__identity">
+              <span class="overview-runs__run-id">Run #{{ row.record.index }}</span>
+              @if (row.startedAt; as startedAt) {
+                <time
+                  class="overview-runs__started"
+                  [attr.datetime]="row.record.startedAt"
+                  [attr.title]="row.startedAtTitle"
+                  data-testid="overview-run-started"
+                  >{{ startedAt }}</time
+                >
+              }
+            </span>
+
+            <span class="overview-runs__fact">
+              <span class="overview-runs__label">Trigger</span>
+              <span data-testid="overview-run-trigger">{{ row.trigger }}</span>
+            </span>
+
+            <span class="overview-runs__fact">
+              <span class="overview-runs__label">Result</span>
+              <span
+                class="overview-runs__result"
+                [attr.data-tone]="row.resultTone"
+                [attr.title]="row.record.reason || null"
+                data-testid="overview-run-result"
+              >
+                <span class="overview-runs__result-dot" aria-hidden="true"></span>
+                {{ row.result }}
+              </span>
+            </span>
+
+            <span class="overview-runs__fact overview-runs__fact--numeric">
+              <span class="overview-runs__label">Duration</span>
+              <span data-testid="overview-run-duration">{{ row.duration }}</span>
+            </span>
+
+            @if (row.engine; as engine) {
+              <span class="overview-runs__fact overview-runs__engine">
+                <span class="overview-runs__label">Agent</span>
+                <span class="overview-runs__engine-value" data-testid="overview-run-engine">{{
+                  engine
+                }}</span>
+              </span>
+            }
+
+            @if (row.tokens; as tokens) {
+              <span class="overview-runs__fact overview-runs__fact--numeric overview-runs__tokens">
+                <span class="overview-runs__label">Pipeline usage</span>
+                <span data-testid="overview-run-tokens">{{ tokens }}</span>
+              </span>
+            }
+
+            @if (row.reason; as reason) {
+              <span class="overview-runs__reason" data-testid="overview-run-reason">
+                <span class="overview-runs__label">Reason</span>
+                <span class="overview-runs__reason-value">{{ reason }}</span>
+              </span>
+            }
+          </li>
+        }
+      </ol>
+    }
+  </section>
+}

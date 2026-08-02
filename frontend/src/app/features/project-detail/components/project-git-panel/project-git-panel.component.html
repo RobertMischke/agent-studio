@@ -1,187 +1,68 @@
 <section class="git" data-testid="project-git-panel">
   <header class="git__head">
-    <div class="git__head-main">
-      <span class="git__eyebrow">Git View</span>
-      @if (inventory()?.currentBranch; as cb) {
-        <span class="git__branch mono" data-testid="git-current-branch">&#8631; {{ cb }}</span>
+    <div class="git__identity">
+      <div class="git__title-row">
+        <h1>Git tree</h1>
+        <span class="git__readonly">Read only</span>
+        @if (inventory()?.currentBranch; as branch) {
+          <span class="git__branch mono" data-testid="git-current-branch">HEAD {{ branch }}</span>
+        }
+      </div>
+      @if (inventory()?.repositoryPath; as repository) {
+        <code class="git__repo" data-testid="git-repo-path">{{ repository }}</code>
       }
     </div>
-    <div class="git__head-meta">
-      @if (inventory()?.repositoryPath; as repo) {
-        <code class="git__repo" data-testid="git-repo-path">{{ repo }}</code>
-      }
-      <button type="button" class="git__action" data-testid="git-refresh" (click)="refresh()">Refresh</button>
-    </div>
+    <button type="button" class="git__refresh" data-testid="git-refresh" (click)="refresh()">
+      Refresh
+    </button>
   </header>
 
   @if (inventoryState() === 'loading' && !inventory()) {
-    <p class="git__note">Loading git inventory...</p>
+    <div class="git__message" data-testid="git-loading">Loading repository graph...</div>
   } @else if (showEmpty()) {
     <div class="git__empty" data-testid="git-empty">
-      <h3>No git data for this project</h3>
+      <h2>No git data for this project</h2>
       <p>{{ inventoryError() || 'This project folder is not a git repository.' }}</p>
-      @if (inventory()?.repositoryPath; as repo) {
-        <code class="git__repo">{{ repo }}</code>
+      @if (inventory()?.repositoryPath; as repository) {
+        <code>{{ repository }}</code>
       }
     </div>
   } @else {
-    <app-project-git-cleanup class="git__cleanup" [projectName]="projectName()" />
-    <div class="git__panes">
-      <aside class="git__tree" data-testid="git-tree">
-        @for (group of tree(); track group.id) {
-          <section class="git__group" [attr.data-testid]="'git-tree-group-' + group.id">
-            <h4 class="git__group-head">
-              <span class="git__group-label">{{ group.label }}</span>
-              <span class="git__group-count">{{ group.count }}</span>
-            </h4>
-            @for (node of group.children; track node.id) {
-              @if (node.kind === 'branch') {
-                <button type="button" class="git__row"
-                        [class.git__row--selected]="selectedId() === node.id"
-                        data-testid="git-branch-row" [attr.data-branch]="node.branch.name"
-                        (click)="selectBranch(node.branch)">
-                  <span class="git__badge" [attr.data-cat]="node.branch.category">{{ categoryLabel(node.branch.category) }}</span>
-                  <span class="git__row-name mono">{{ node.branch.name }}</span>
-                  @if (node.branch.isCurrent) { <span class="git__cur">HEAD</span> }
-                  @if (aheadBehind(node.branch); as ab) { <span class="git__ab mono">{{ ab }}</span> }
-                </button>
-              } @else if (node.kind === 'worktree') {
-                <button type="button" class="git__row"
-                        [class.git__row--selected]="selectedId() === node.id"
-                        data-testid="git-worktree-row" [attr.data-path]="node.worktree.path"
-                        (click)="selectWorktree(node.worktree)">
-                  <span class="git__badge" [attr.data-cat]="node.worktree.isPrimary ? 'main' : 'task'">{{ node.worktree.isPrimary ? 'main' : 'wt' }}</span>
-                  <span class="git__row-name mono">{{ node.worktree.path }}</span>
-                  @if (node.worktree.branch; as wb) { <span class="git__ab mono">{{ wb }}</span> }
-                </button>
-              } @else if (node.kind === 'commit') {
-                <button type="button" class="git__row"
-                        [class.git__row--selected]="selectedId() === node.id"
-                        data-testid="git-commit-row" [attr.data-sha]="node.commit.sha"
-                        (click)="selectCommit(node.commit)">
-                  <span class="git__sha mono">{{ node.commit.shortSha }}</span>
-                  <span class="git__row-name">{{ node.commit.subject }}</span>
-                  <span class="git__when">{{ when(node.commit.authorDateUtc) }}</span>
-                </button>
-              }
-            }
-          </section>
-        } @empty {
-          <p class="git__note">No branches or worktrees found.</p>
+    <div class="git__workspace" [class.git__workspace--with-changes]="!!inspectedCommit()">
+      <app-project-git-tree
+        class="git__tree"
+        [groups]="tree()"
+        [selectedId]="selectedId()"
+        (branchSelected)="selectBranch($event)"
+        (worktreeSelected)="selectWorktree($event)"
+        (activeSelected)="selectActive($event)"
+      />
+
+      <div class="git__history">
+        <app-project-git-history
+          [commits]="commits()"
+          [selectedSha]="selectedCommitSha()"
+          [hasMore]="historyHasMore()"
+          [loadingMore]="historyLoading()"
+          (commitSelected)="selectCommit($event)"
+          (changesRequested)="inspectChanges($event)"
+          (loadMore)="loadOlder()"
+        />
+        @if (historyError()) {
+          <p class="git__history-error" role="alert" data-testid="git-history-error">
+            {{ historyError() }}
+          </p>
         }
-      </aside>
+      </div>
 
-      <section class="git__detail" data-testid="git-detail">
-        @if (selection(); as sel) {
-          <div class="git__card" data-testid="git-detail-card">
-            @if (sel.kind === 'branch') {
-              <div class="git__card-head">
-                <span class="git__badge" [attr.data-cat]="sel.branch.category">{{ categoryLabel(sel.branch.category) }}</span>
-                <span class="git__card-title mono">{{ sel.branch.name }}</span>
-                @if (sel.branch.isCurrent) { <span class="git__cur">HEAD</span> }
-              </div>
-              <dl class="git__facts">
-                <div><dt>Tip</dt><dd class="mono">{{ short(sel.branch.tipSha) }}</dd></div>
-                @if (sel.branch.upstream) {
-                  <div><dt>Upstream</dt><dd class="mono">{{ sel.branch.upstream }} {{ aheadBehind(sel.branch) }}</dd></div>
-                }
-                @if (sel.branch.lastCommitSubject) {
-                  <div><dt>Last commit</dt><dd>{{ sel.branch.lastCommitSubject }}</dd></div>
-                }
-                @if (sel.branch.lastCommitAtUtc) {
-                  <div><dt>When</dt><dd>{{ when(sel.branch.lastCommitAtUtc) }}</dd></div>
-                }
-                @if (sel.branch.worktreePath) {
-                  <div><dt>Worktree</dt><dd class="mono">{{ sel.branch.worktreePath }}</dd></div>
-                }
-              </dl>
-            } @else if (sel.kind === 'worktree') {
-              <div class="git__card-head">
-                <span class="git__badge" [attr.data-cat]="sel.worktree.isPrimary ? 'main' : 'task'">{{ sel.worktree.isPrimary ? 'primary' : 'worktree' }}</span>
-                <span class="git__card-title mono">{{ sel.worktree.path }}</span>
-              </div>
-              <dl class="git__facts">
-                <div><dt>Branch</dt><dd class="mono">{{ sel.worktree.branch || (sel.worktree.isDetached ? 'detached HEAD' : '-') }}</dd></div>
-                <div><dt>HEAD</dt><dd class="mono">{{ short(sel.worktree.headSha) }}</dd></div>
-              </dl>
-            } @else if (sel.kind === 'commit') {
-              <div class="git__card-head">
-                <span class="git__sha mono">{{ sel.commit.shortSha }}</span>
-                <span class="git__card-title">{{ sel.commit.subject }}</span>
-              </div>
-              <dl class="git__facts">
-                <div><dt>Author</dt><dd>{{ sel.commit.author }}</dd></div>
-                <div><dt>When</dt><dd>{{ when(sel.commit.authorDateUtc) }}</dd></div>
-                <div><dt>Changes</dt><dd class="mono">{{ sel.commit.filesChanged }} files &middot; +{{ sel.commit.added }} / -{{ sel.commit.removed }}</dd></div>
-              </dl>
-            }
-          </div>
-
-          @if (activeSha()) {
-            <div class="git__viewer">
-              <aside class="git__files" data-testid="git-files">
-                @if (filesState() === 'loading') {
-                  <p class="git__note">Loading changed files...</p>
-                } @else if (filesState() === 'error') {
-                  <p class="git__note git__note--error">{{ filesError() }}</p>
-                } @else if (files().length === 0) {
-                  <p class="git__note">No files recorded for this commit.</p>
-                } @else {
-                  @for (file of files(); track trackFile($index, file)) {
-                    <button type="button" class="git__file"
-                            [class.git__file--selected]="selectedPath() === file.path"
-                            data-testid="git-file-row" (click)="selectFile(file.path)">
-                      <span class="git__file-status" [attr.data-status]="file.status">{{ file.status }}</span>
-                      <span class="git__file-path">{{ file.path }}</span>
-                      <span class="git__file-stats">
-                        @if (file.added > 0) { <span class="git__file-add">+{{ file.added }}</span> }
-                        @if (file.removed > 0) { <span class="git__file-del">-{{ file.removed }}</span> }
-                      </span>
-                    </button>
-                  }
-                }
-              </aside>
-
-              <section class="git__render-shell" data-testid="git-render-shell">
-                @if (!selectedPath()) {
-                  <p class="git__note">Select a file to view its diff.</p>
-                } @else if (diffState() === 'loading') {
-                  <p class="git__note">Loading diff for <code>{{ selectedPath() }}</code>...</p>
-                } @else if (diffState() === 'error') {
-                  <div class="git__gated" data-testid="git-diff-error">
-                    <p class="git__note git__note--error">{{ diffError() }}</p>
-                    <div class="git__gated-actions">
-                      <button type="button" class="git__action" (click)="retryDiff()">Retry</button>
-                    </div>
-                  </div>
-                } @else if (!diffText()) {
-                  <p class="git__note" data-testid="git-diff-empty">{{ diffEmptyMessage() || 'No diff available for this path.' }}</p>
-                } @else if (diffGated()) {
-                  <div class="git__gated" data-testid="git-diff-gated">
-                    <div class="git__gated-meta">
-                      @if (selectedFile(); as file) {
-                        <span class="git__file-status" [attr.data-status]="file.status">{{ file.status }}</span>
-                      }
-                      <code class="git__gated-name">{{ selectedPath() }}</code>
-                      <span class="git__gated-size">{{ diffSizeLabel() }}</span>
-                    </div>
-                    <p class="git__gated-hint">Large file - not rendered automatically to keep the view fast.</p>
-                    <div class="git__gated-actions">
-                      <button type="button" class="git__action" (click)="revealCurrentDiff()">Show diff</button>
-                      <button type="button" class="git__action" (click)="revealAll()">Show all large diffs</button>
-                    </div>
-                  </div>
-                } @else {
-                  <app-diff-content class="git__render" data-testid="git-diff"
-                                    [diffText]="diffText()" [sideBySide]="false" />
-                }
-              </section>
-            </div>
-          }
-        } @else {
-          <p class="git__note" data-testid="git-detail-empty">Select a branch, worktree, or commit on the left to inspect it.</p>
-        }
-      </section>
+      @if (inspectedCommit(); as commit) {
+        <app-project-git-changes
+          class="git__changes"
+          [projectName]="projectName()"
+          [commit]="commit"
+          (closed)="closeChanges()"
+        />
+      }
     </div>
   }
 </section>

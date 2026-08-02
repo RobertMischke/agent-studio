@@ -23,7 +23,10 @@ import type { Page } from '@playwright/test';
 interface WatchPath { name: string; path: string }
 interface PipelineStepCondition { when: string; value?: string | null }
 interface PipelineStepSetting { enabled?: boolean | null; economyModel?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }
-interface ProjectSettingsProjection { pipelineSteps?: Record<string, PipelineStepSetting> }
+interface ProjectSettingsProjection {
+  pipelineSteps?: Record<string, PipelineStepSetting>;
+  pipelineStepsByType?: Record<string, Record<string, PipelineStepSetting>>;
+}
 
 const STEP = 'aspect-code-quality';
 const HAIKU = 'claude-haiku-4-5';
@@ -42,6 +45,7 @@ let projectName = '';
 let projectSlug = '';
 let backendBaseUrl = '';
 let originalOverride: PipelineStepSetting | null = null;
+let originalBugOverride: PipelineStepSetting | null = null;
 let originalAbortOverride: PipelineStepSetting | null = null;
 
 async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
@@ -98,6 +102,7 @@ test.beforeEach(async ({ page, devBackend }) => {
   projectName = preferred.name;
   projectSlug = slugFor(projectName);
   originalOverride = (await getStepOverride()) ?? null;
+  originalBugOverride = (await getTypedOverride('bug', STEP)) ?? null;
   originalAbortOverride = (await getOverride(ABORT_STEP)) ?? null;
 
   await proxyBackend(page, devBackend.baseUrl);
@@ -125,7 +130,12 @@ async function getStepOverride(): Promise<PipelineStepSetting | undefined> {
   return getOverride(STEP);
 }
 
-async function setStep(body: { stepId: string; enabled?: boolean | null; economyModel?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
+async function getTypedOverride(pipelineType: string, stepId: string): Promise<PipelineStepSetting | undefined> {
+  const all = await backendApi<Record<string, ProjectSettingsProjection>>('/api/projects/settings');
+  return all[projectName]?.pipelineStepsByType?.[pipelineType]?.[stepId];
+}
+
+async function setStep(body: { pipelineType?: string; stepId: string; enabled?: boolean | null; economyModel?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
   await backendApi(`/api/projects/${enc(projectName)}/pipeline-step`, {
     method: 'PUT',
     body: JSON.stringify(body),
@@ -152,6 +162,7 @@ test.afterEach(async () => {
   if (!projectName) return;
   // Restore the steps to their pre-test state (clear if they had no override).
   await setStep({
+    pipelineType: 'task',
     stepId: STEP,
     enabled: originalOverride?.enabled ?? null,
     economyModel: originalOverride?.economyModel ?? null,
@@ -163,6 +174,19 @@ test.afterEach(async () => {
     condition: originalOverride?.condition ?? null,
   });
   await setStep({
+    pipelineType: 'bug',
+    stepId: STEP,
+    enabled: originalBugOverride?.enabled ?? null,
+    economyModel: originalBugOverride?.economyModel ?? null,
+    cliType: originalBugOverride?.cliType ?? null,
+    model: originalBugOverride?.model ?? null,
+    thinkingLevel: originalBugOverride?.thinkingLevel ?? null,
+    prompt: originalBugOverride?.prompt ?? null,
+    mode: originalBugOverride?.mode ?? null,
+    condition: originalBugOverride?.condition ?? null,
+  });
+  await setStep({
+    pipelineType: 'task',
     stepId: ABORT_STEP,
     enabled: originalAbortOverride?.enabled ?? null,
     cliType: originalAbortOverride?.cliType ?? null,
@@ -224,7 +248,7 @@ test('pipeline: a closed-row toggle disables a step without expanding it', async
   const row = page.getByTestId(`pipeline-step-row-${STEP}`);
   await expect(row).not.toHaveAttribute('open', '');
 
-  const toggle = row.getByTestId(`pipeline-step-enabled-${STEP}`);
+  const toggle = row.getByTestId(`pipeline-step-row-enabled-${STEP}`);
   await expect(toggle).toBeVisible();
   await expect(toggle).toBeChecked();
 
@@ -240,6 +264,32 @@ test('pipeline: a closed-row toggle disables a step without expanding it', async
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-step-disabled.png'), fullPage: true });
 });
 
+test('pipeline: task type is first, switches catalogue, and keeps bug override isolated', async ({ page }) => {
+  await setStep({ pipelineType: 'task', stepId: STEP, enabled: null });
+  await setStep({ pipelineType: 'bug', stepId: STEP, enabled: null });
+
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const type = page.getByTestId('pipeline-type-select');
+  await expect(type).toHaveValue('task');
+  await expect(type.locator('option')).toHaveText(['Task', 'Bug', 'Feature', 'Planning']);
+  const bugCatalogue = page.waitForResponse(response =>
+    response.url().includes('/api/projects/pipeline-catalogue')
+    && response.url().includes('pipelineType=bug'));
+  await type.selectOption('bug');
+  await bugCatalogue;
+
+  const bugToggle = page.getByTestId(`pipeline-step-row-enabled-${STEP}`);
+  await expect(bugToggle).toBeChecked();
+  await bugToggle.uncheck();
+  await expect.poll(async () => (await getTypedOverride('bug', STEP))?.enabled).toBe(false);
+  await expect.poll(async () => (await getStepOverride())?.enabled ?? null).toBe(null);
+
+  await expect(page.getByTestId('pipeline-step-framework-post-lint-scss')).toContainText(/angular/i);
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-bug-type-disabled.png'), fullPage: true });
+});
+
 test('pipeline: economy recommendation opt-in persists for an aspect', async ({ page }) => {
   await setStep({ stepId: STEP, enabled: null, economyModel: null, cliType: null, model: null, thinkingLevel: null });
   await page.goto(`/#/projects/${projectSlug}/pipeline`);
@@ -252,7 +302,7 @@ test('pipeline: economy recommendation opt-in persists for an aspect', async ({ 
   await economy.check();
   await expect.poll(async () => (await getStepOverride())?.economyModel).toBe(true);
 
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-economy-spark-auto.png'), fullPage: true });
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-economy-spark-auto.png'), fullPage: true });
 });
 
 test('pipeline: abort-review exposes a run-condition control that persists', async ({ page }) => {
@@ -268,7 +318,7 @@ test('pipeline: abort-review exposes a run-condition control that persists', asy
   // The abort-review row renders (appended to the catalogue) and starts on.
   const row = page.getByTestId(`pipeline-step-row-${ABORT_STEP}`);
   await expect(row).toBeVisible();
-  const toggle = page.getByTestId(`pipeline-step-enabled-${ABORT_STEP}`);
+  const toggle = page.getByTestId(`pipeline-step-row-enabled-${ABORT_STEP}`);
   await expect(toggle).toBeChecked();
 
   // Opting out must persist enabled=false (not merely clear the override).

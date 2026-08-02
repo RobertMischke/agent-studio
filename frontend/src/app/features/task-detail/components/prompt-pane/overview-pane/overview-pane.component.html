@@ -214,7 +214,7 @@
                   <span class="ov-runs-strip__fail">{{ cur.failed }} fail</span>
                 }
                 @if (cur.passed === 0 && cur.failed === 0) {
-                  <span class="ov-runs-strip__pending">pending</span>
+                  <span class="ov-runs-strip__pending">{{ cur.emptyOutcomeLabel }}</span>
                 }
               </span>
               @if (cur.durationMs > 0) {
@@ -707,42 +707,9 @@
     <app-regression-radar [jobId]="job().id" [watchPath]="job().watchPath" />
   </section>
 
-  <!-- Runs block: the single home for CLI-run info — count, total elapsed,
-       and the per-run status strip. Consolidates the former Tokens &
-       Performance "Runs" / "Total Duration" rows with the run-icon strip so
-       run data has one representation instead of two. The Pipeline section's
-       "Attempt N/M" is a distinct counter (the auto-review completion loop),
-       not a CLI-run count, and stays there. -->
-  @if (hasRunsSection()) {
-    <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-runs">
-      <h3 class="ov-section__title">Runs</h3>
-      @if (runCount() > 0 || totalDuration() > 0) {
-        <div class="ov-runs-summary" data-testid="overview-runs-summary">
-          @if (runCount() > 0) {
-            <span class="ov-runs-summary__stat ov-value--mono"
-                  data-testid="overview-runs-count">{{ runCountLabel() }}</span>
-          }
-          @if (runCount() > 0 && totalDuration() > 0) {
-            <span class="ov-runs-summary__sep" aria-hidden="true">·</span>
-          }
-          @if (totalDuration() > 0) {
-            <span class="ov-runs-summary__stat ov-value--mono"
-                  data-testid="overview-runs-duration">{{ formatDuration(totalDuration()) }} total</span>
-          }
-        </div>
-      }
-      @if (recentRuns().length > 0) {
-        <div class="ov-run-strip">
-          @for (run of recentRuns(); track run.index) {
-            <span class="ov-run-icon"
-                  [class.ov-run-icon--active]="run.status === 'running'"
-                  [cacTooltip]="runTooltip(run)"
-                  data-testid="overview-run-icon">
-              {{ runStatusIcon(run.status) }}
-            </span>
-          }
-        </div>
-      }
-    </section>
-  }
+  <!-- Card-scoped CLI history. Pipeline "Attempt N/M" is a separate
+       completion-loop counter and remains in the Pipeline section. -->
+  <app-overview-runs
+    [runs]="runs()"
+    [fallbackDurationSeconds]="totalDuration()" />
 </div>

@@ -78,15 +78,26 @@ public sealed class RemoteRunnerDaemon
 
     public async Task RunAsync(CancellationToken shutdown)
     {
+        var state = new RunnerStateStore(_options.StateDir);
+        var persistedAtStartup = state.LoadAll();
+        using var startupAuthorityWatch = CancellationTokenSource.CreateLinkedTokenSource(
+            shutdown);
+        var startupAuthorityTasks = persistedAtStartup
+            .Select(slot => EnforcePersistedAuthorityDeadlineAsync(
+                slot,
+                state,
+                startupAuthorityWatch.Token))
+            .ToArray();
+
         var clientId = await WithServerRetryAsync(
             "runner registration",
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
             shutdown);
-        _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
+        _log(
+            $"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; " +
+            $"slots={_client.HostMaxParallelism}");
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
-        await handoffRecovery.RecoverAllAsync(shutdown);
 
-        var state = new RunnerStateStore(_options.StateDir);
         var inventory = new RunnerProcessInventoryTracker();
         var active = new List<ActiveSlot>();
         foreach (var persisted in state.LoadAll())
@@ -117,12 +128,20 @@ public sealed class RemoteRunnerDaemon
                         "Startup is fail-closed and retained the durable state for the next bounded systemd retry.");
             }
         }
+        startupAuthorityWatch.Cancel();
+        foreach (var watcher in startupAuthorityTasks)
+        {
+            try { await watcher; }
+            catch (OperationCanceledException) { }
+        }
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
+        await handoffRecovery.RecoverAllAsync(shutdown);
 
-        // Recover heartbeats before the potentially slow Git capability probe.
-        // Push readiness gates new coding claims, not ownership of work that is
-        // already executing under a valid fenced attempt.
+        // Recover heartbeats before the potentially slow fallback-remote probe.
+        // This startup result is host diagnostics only. Delivery admission is
+        // decided by the repository-specific preflight before each project can
+        // receive a lease.
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await WithServerRetryAsync<object?>(
             "git-capability report",
@@ -134,9 +153,8 @@ public sealed class RemoteRunnerDaemon
             },
             shutdown);
         _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
-        var admissionEnabled = gitCapability.CanPush;
-        if (!admissionEnabled)
-            _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
+        if (!gitCapability.CanPush)
+            _log("Configured fallback Git remote is read-only; project claims remain eligible and are gated by their own delivery preflight.");
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await WithServerRetryAsync<object?>(
             "capability advertisement",
@@ -156,7 +174,12 @@ public sealed class RemoteRunnerDaemon
             shutdown);
         if (!gitCapability.CanPush)
         {
-            await _client.ReportCapabilityFailureAsync(
+            // Diagnosis only: read-only admission is already decided above, so a
+            // server that rejects or does not mount the capability route must not
+            // stop the daemon from coming up and recovering its slots.
+            await CapabilityFailureReporter.TryReportAsync(
+                _client,
+                _log,
                 AgentStudio.TaskServer.Contracts.CapabilityProtocol.GitPush,
                 "GitPushUnavailable",
                 gitCapability.Detail ?? "Git push probe failed.",
@@ -221,22 +244,6 @@ public sealed class RemoteRunnerDaemon
                     .Select(process => process.TaskKey)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
-                if (!admissionEnabled)
-                {
-                    var response = await _client.ClaimAsync(new RunnerClaimRequest(
-                        _options.RunnerId, _options.RunnerName, _options.Hostname,
-                        Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                        TakeTelemetry(),
-                        AvailableSlots: 0,
-                        ActiveSlots: active.Count,
-                        IdempotencyKey: $"read-only:{_options.RunnerId}:{Guid.NewGuid():N}",
-                        ActiveTaskKeys: activeTaskKeys,
-                        Inventory: inventorySnapshot), shutdown);
-                    AcknowledgeInventory(inventory, inventorySnapshot, response);
-                    await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
-                    continue;
-                }
-
                 var loadDecision = loadGate.Observe(
                     TakeTelemetry(),
                     DateTime.UtcNow);
@@ -274,7 +281,7 @@ public sealed class RemoteRunnerDaemon
                     consecutiveFaults = 0;
                     continue;
                 }
-                if (active.Count >= _options.HostMaxParallelism)
+                if (active.Count >= _client.HostMaxParallelism)
                 {
                     inventorySnapshot = inventory.Snapshot();
                     activeTaskKeys = inventorySnapshot.Processes
@@ -291,7 +298,7 @@ public sealed class RemoteRunnerDaemon
                             Inventory: inventorySnapshot), shutdown);
                     AcknowledgeInventory(inventory, inventorySnapshot, response);
                 }
-                while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
+                while (active.Count < _client.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
                     var chatClaim = await _client.ClaimProjectChatWorkAsync(
                         new RemoteChatWorkClaimRequest(
@@ -303,7 +310,7 @@ public sealed class RemoteRunnerDaemon
                         claimedAny = true;
                         _log(
                             $"claimed project chat {chatClaim.Work.ProjectName}/{chatClaim.Work.Kind} " +
-                            $"into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                            $"into slot {active.Count + 1}/{_client.HostMaxParallelism}");
                         active.Add(new ActiveSlot(
                             null,
                             new RemoteProjectChatRunner(_options, _client, _log)
@@ -320,7 +327,7 @@ public sealed class RemoteRunnerDaemon
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         TakeTelemetry(),
-                        AvailableSlots: _options.HostMaxParallelism - active.Count,
+                        AvailableSlots: _client.HostMaxParallelism - active.Count,
                         ActiveSlots: active.Count,
                         IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}",
                         ActiveTaskKeys: activeTaskKeys,
@@ -353,7 +360,8 @@ public sealed class RemoteRunnerDaemon
                         var slot = state.Create(
                             claim.TaskKey, claim.Lease, workspace.RepoPath,
                             claim.RunId, claim.LeaseInstanceId, claim.ProjectId,
-                            claim.RepositoryUrl, claim.DefaultBranch, claim.TaskKind);
+                            claim.RepositoryUrl, claim.DefaultBranch, claim.TaskKind,
+                            claim.RunSpec);
                         const string reason = "planned daemon shutdown completed an in-flight claim before worker start";
                         _log($"releasing claim completed during shutdown task={claim.TaskKey} lease={claim.Lease.LeaseId}");
                         if (!await taskRunner.ReleaseDeadAsync(slot, reason))
@@ -364,7 +372,7 @@ public sealed class RemoteRunnerDaemon
                     }
 
                     claimedAny = true;
-                    _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                    _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_client.HostMaxParallelism}");
                     active.Add(new ActiveSlot(
                         claim.TaskKey,
                         taskRunner.RunClaimedAsync(
@@ -376,7 +384,11 @@ public sealed class RemoteRunnerDaemon
                             claim.DefaultBranch,
                             claim.TaskKind,
                             claim.RunId,
-                            claim.LeaseInstanceId)));
+                            claim.LeaseInstanceId,
+                            // T0b: the card's execution spec. Null from a server
+                            // that predates it - the runner then falls back to
+                            // its RUNNER_CLI_* configuration as before.
+                            claim.RunSpec)));
                 }
 
                 if (!claimedAny)
@@ -407,6 +419,39 @@ public sealed class RemoteRunnerDaemon
         // workers are intentionally left alive for the replacement daemon.
         state.Flush();
         _log($"daemon drain complete; leaving {active.Count} detached job(s) for startup reattach");
+    }
+
+    private async Task EnforcePersistedAuthorityDeadlineAsync(
+        PersistedRunnerSlot slot,
+        RunnerStateStore state,
+        CancellationToken adopted)
+    {
+        var durable = DurableLeaseAuthority.Read(slot.WorkerDirectory);
+        var stopBefore = durable?.StopBeforeUtc
+                         ?? DurableLeaseAuthority.ComputeStopBefore(
+                             slot.Lease.ExpiresAt,
+                             TimeSpan.FromSeconds(
+                                 Math.Max(5, _options.HeartbeatSeconds)));
+        var remaining = stopBefore - DateTime.UtcNow;
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining, adopted);
+        adopted.ThrowIfCancellationRequested();
+
+        _log(
+            $"persisted authority deadline exhausted task={slot.TaskKey} " +
+            $"attempt={slot.AttemptId} stop-before={stopBefore:o}; " +
+            "reaping the contained process generation before any replacement");
+        await WorktreeProcessReaper.ReapAsync(
+            slot.WorktreePath,
+            _log,
+            CancellationToken.None);
+        state.Save(slot with
+        {
+            Phase = "authority-deadline-exhausted",
+        });
+        _log(
+            $"persisted authority generation death proven task={slot.TaskKey} " +
+            $"attempt={slot.AttemptId}; durable state retained for honest release reconciliation");
     }
 
     private async Task<PersistedRunnerSlot> RecoverLaunchingIdentityAsync(

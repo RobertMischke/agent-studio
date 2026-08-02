@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Publishing Workflows (concept)",
+  "source": {
+    "path": "docs/concepts/publishing-workflows.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "e7a6f232169bd93d77008c7f7c8094ac9168d0e9889c105fe8607c0782eb9d1a",
+      "sizeBytes": 8334,
+      "lineCount": 158,
+      "capturedAt": "2026-07-26T12:09:10.7650000Z"
+    }
+  },
+  "agentReads": {
+    "total": 3,
+    "lastReadAt": "2026-07-26T12:09:10.7650000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T12:09:10.7650000Z",
+        "taskKey": "AGT-2097"
+      },
+      {
+        "at": "2026-07-26T09:51:28.6590000Z",
+        "taskKey": "AGT-2033"
+      },
+      {
+        "at": "2026-07-26T09:45:25.6800000Z",
+        "taskKey": "AGT-2032"
+      }
+    ]
+  }
+}

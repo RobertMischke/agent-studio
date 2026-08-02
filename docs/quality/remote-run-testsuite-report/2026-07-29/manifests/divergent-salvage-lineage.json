@@ -1,0 +1,50 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "divergent-salvage-lineage",
+  "description": "Replays divergent host and canonical task lineage, preserves both tips, rejects contaminated and stale review scopes, and reviews only the immutable Base-SHA to Result-SHA range.",
+  "task": {
+    "title": "Replay divergent remote salvage lineage",
+    "body": "Reconcile the recoverable task change from a divergent runner lineage without importing foreign work. Bind review to the immutable Base SHA and Result SHA.",
+    "key": "RTS-11"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": [
+      "README.md",
+      "package.json",
+      "src/index.mjs",
+      "src/shipping.mjs",
+      "test/shipping.test.mjs"
+    ]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-grade-d",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-cross-contamination"
+    ],
+    "expectedTerminal": "5-human-review",
+    "recoveryBudget": {
+      "unit": "review-attempts",
+      "maximum": 3
+    },
+    "assertions": [
+      "divergent-lineage-reconstructed",
+      "recoverable-host-tip-preserved",
+      "immutable-range-excludes-foreign-scope",
+      "cross-contaminated-review-rejected",
+      "stale-canonical-review-rejected",
+      "exact-result-review-passed",
+      "single-coding-attempt-no-reissue"
+    ]
+  },
+  "hooks": {}
+}

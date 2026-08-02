@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "multichat-orchestrator",
+  "source": {
+    "path": "docs/concepts/mockups/multichat-orchestrator.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "0dd40790ba1104acc9794168bc8c2042ce8e4bdb53f5d6a50913f238c6c0ae4b",
+      "sizeBytes": 8244,
+      "lineCount": 118,
+      "capturedAt": "2026-07-26T21:08:21.2730000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T21:08:21.2730000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T21:08:21.2730000Z",
+        "taskKey": "AGT-1932"
+      }
+    ]
+  }
+}

@@ -1,91 +1,28 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
+import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
 import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
-import { NotificationService } from '../../../../services/notification.service';
-
-export const WORKBENCH_CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
-
-/**
- * Parses repository HTML in an inert document, then moves it into a fixed
- * wrapper whose CSP and base elements are always the first nodes in `head`.
- * DOMParser normalises missing, duplicated, or deliberately misplaced head
- * tags without executing their scripts. The iframe parses the returned string
- * only after the policy is in place.
- */
-export function buildWorkbenchSrcdoc(html: string): string {
-  if (!html) return '';
-  const parser = new DOMParser();
-  const artifact = parser.parseFromString(html, 'text/html');
-  const wrapper = parser.parseFromString('<!doctype html><html><head></head><body></body></html>', 'text/html');
-
-  for (const control of Array.from(artifact.querySelectorAll('base, meta'))) {
-    if (isArtifactSecurityControl(control)) control.remove();
-  }
-
-  const policy = wrapper.createElement('meta');
-  policy.httpEquiv = 'Content-Security-Policy';
-  policy.content = WORKBENCH_CSP;
-  const base = wrapper.createElement('base');
-  base.href = 'about:blank';
-  wrapper.head.append(policy, base);
-
-  copyAttributes(artifact.documentElement, wrapper.documentElement);
-  copyAttributes(artifact.head, wrapper.head);
-  copyAttributes(artifact.body, wrapper.body);
-  for (const node of Array.from(artifact.head.childNodes))
-    wrapper.head.append(wrapper.importNode(node, true));
-  for (const node of Array.from(artifact.body.childNodes))
-    wrapper.body.append(wrapper.importNode(node, true));
-
-  // base=about:blank neutralises navigation, but that also breaks in-page
-  // anchors: a plain "#section" click navigates the frame to about:blank and
-  // blanks it. Re-implement anchor clicks as scrolling; swallow every other
-  // link so nothing can blank the frame.
-  const nav = wrapper.createElement('script');
-  nav.textContent = `document.addEventListener('click', function (e) {
-    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-    if (!a) return;
-    var href = a.getAttribute('href') || '';
-    e.preventDefault();
-    if (href.charAt(0) === '#') {
-      var el = document.getElementById(href.slice(1))
-        || document.querySelector('a[name="' + href.slice(1).replace(/"/g, '') + '"]');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, true);`;
-  wrapper.body.append(nav);
-
-  return `<!doctype html>${wrapper.documentElement.outerHTML}`;
-}
-
-function copyAttributes(source: Element, target: Element): void {
-  for (const attribute of Array.from(source.attributes))
-    target.setAttribute(attribute.name, attribute.value);
-}
-
-function isArtifactSecurityControl(node: Node): boolean {
-  if (!(node instanceof HTMLBaseElement || node instanceof HTMLMetaElement)) return false;
-  if (node instanceof HTMLBaseElement) return true;
-  const httpEquiv = node.httpEquiv.trim().toLowerCase();
-  return httpEquiv === 'content-security-policy'
-    || httpEquiv === 'content-security-policy-report-only'
-    || httpEquiv === 'refresh';
-}
+import {
+  ISOLATED_HTML_LINK_MESSAGE,
+  buildIsolatedHtmlSrcdoc,
+  resolveIsolatedHtmlNavigation,
+} from '../../../../services/sandboxed-html.util';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
  * opaque origin (`allow-scripts` without `allow-same-origin`) and a deny-by-
- * default CSP. No credential, API, form, navigation, download, popup, modal, or
- * clipboard capability is bridged into the frame. Future chat pinning and
- * decision actions attach to the typed document signal in host chrome only.
+ * default CSP. No credential, API, form, direct navigation, download, popup,
+ * modal, or clipboard capability is bridged into the frame. Link clicks cross
+ * one typed host boundary: docs-relative targets open in the Wiki and absolute
+ * HTTP(S) targets open in a separate browser tab.
  */
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent],
+  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -93,17 +30,16 @@ function isArtifactSecurityControl(node: Node): boolean {
 export class WorkbenchViewerComponent {
   readonly projectName = input.required<string>();
   readonly workbenchId = input.required<string>();
+  readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
-  private readonly notifications = inject(NotificationService);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
 
   readonly document = signal<WorkbenchDocument | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly archived = signal(false);
-  readonly archiveBusy = signal(false);
+  readonly maximized = signal(false);
 
-  readonly srcdoc = computed(() => buildWorkbenchSrcdoc(this.document()?.html ?? ''));
+  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(this.document()?.html ?? ''));
   readonly pageContext = computed<PageContext | null>(() => {
     const document = this.document();
     if (!document) return null;
@@ -126,36 +62,65 @@ export class WorkbenchViewerComponent {
     effect(() => {
       const project = this.projectName();
       const id = this.workbenchId();
-      this.loading.set(true);
-      this.error.set(null);
-      this.document.set(null);
-      this.archived.set(false);
-      this.docs.getWorkbench(project, id).subscribe({
-        next: document => { this.document.set(document); this.loading.set(false); },
-        error: () => { this.error.set('Workbench could not be loaded.'); this.loading.set(false); },
-      });
+      this.maximized.set(false);
+      this.loadDocument(project, id);
     });
   }
 
   statusLabel(): string {
     const workbench = this.document()?.workbench;
-    return workbench?.phase ?? workbench?.status ?? '';
+    if (!workbench) return '';
+    return workbench.status === 'active'
+      ? workbench.phase ?? workbench.status
+      : workbench.status;
   }
 
-  archivePage(): void {
-    const context = this.pageContext();
-    if (!context || this.archived() || this.archiveBusy()) return;
-    this.archived.set(true);
-    this.archiveBusy.set(true);
-    this.docs.setWikiClassification(context.projectName, context.relPath, 'archived').subscribe({
-      next: () => {
-        this.archiveBusy.set(false);
-        this.notifications.success(`Archived ${context.relPath}.`, 'Page classification');
+  openCurrentPageInWiki(): void {
+    const path = this.document()?.workbench.entryPath.replace(/^docs\//i, '');
+    if (path) this.openWiki.emit(path);
+  }
+
+  @HostListener('window:message', ['$event'])
+  onFrameMessage(event: MessageEvent): void {
+    const frameWindow = this.frame()?.nativeElement.contentWindow;
+    if (!frameWindow || event.source !== frameWindow) return;
+    const message = event.data as { type?: unknown; href?: unknown } | null;
+    if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
+    const entryPath = this.document()?.workbench.entryPath;
+    if (!entryPath) return;
+    const navigation = resolveIsolatedHtmlNavigation(entryPath, message.href);
+    if (navigation?.kind === 'wiki') {
+      this.openWiki.emit(navigation.relPath);
+    } else if (navigation?.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  toggleMaximize(): void {
+    this.maximized.update(value => !value);
+  }
+
+  @HostListener('document:keydown.escape')
+  exitMaximized(): void {
+    if (this.maximized()) this.maximized.set(false);
+  }
+
+  refreshDecision(): void {
+    this.loadDocument(this.projectName(), this.workbenchId(), false);
+  }
+
+  private loadDocument(project: string, id: string, clear = true): void {
+    this.loading.set(true);
+    this.error.set(null);
+    if (clear) this.document.set(null);
+    this.docs.getWorkbench(project, id).subscribe({
+      next: document => {
+        this.document.set(document);
+        this.loading.set(false);
       },
       error: () => {
-        this.archived.set(false);
-        this.archiveBusy.set(false);
-        this.notifications.error(`Could not archive ${context.relPath}.`, 'Page classification');
+        this.error.set('Workbench could not be loaded.');
+        this.loading.set(false);
       },
     });
   }

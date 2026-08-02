@@ -1,0 +1,182 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/0c8b8a2e8988c34c92111703bacc6e0979154a78f917291babbc884117f3c4f1",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+    "displayName": "AdHocUsageService.cs"
+  },
+  "reviewedAt": "2026-07-21T11:24:45.9694182Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-8b1a5a6e0ec74234865b83f437998260"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "f70a722edb908ee5eb5c2e932970867e9759b7f88132bb991f06106aa572c3d3"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+      "selector": "file",
+      "contentHash": "sha256:e5c2b1ca0d1b405ff4df100473ba3852b8163aea75e966eb75757fb1a450191a"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "375130dc3186e94f7d430907339988b910bd43e32b25c2f4f0978339061018f8"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:8da298b7a27a09ab372995a6d89cc6f93845a4986696cd84e3d7b893956865b3"
+    }
+  },
+  "grade": {
+    "score": 84,
+    "band": "B",
+    "rationale": "The aggregation logic is straightforward and mostly correct, with deterministic bucket ordering and a useful pure overload. The main correctness risk is ambiguous DateTime handling, while snapshot consistency and concrete dependencies modestly weaken error handling and testability."
+  },
+  "summary": "The service is clear and well organized, but should establish a UTC timestamp contract, return log data and metadata from a consistent snapshot, and depend on abstractions for easier isolated testing.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 80,
+        "band": "B",
+        "rationale": "Totals, pricing flags, grouping, and ordering are implemented coherently. However, filtering and day grouping can produce environment-dependent results when timestamps or cutoffs have Local or Unspecified DateTime kinds."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 88,
+        "band": "B",
+        "rationale": "The implementation is compact and separates bucket accumulation from projection. Mutable buckets and concrete infrastructure dependencies are manageable but leave some room for stronger boundaries."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 91,
+        "band": "A",
+        "rationale": "Names, comments, and projections make the aggregation behavior easy to follow. The timestamp-zone assumptions and snapshot semantics are not documented."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 78,
+        "band": "C",
+        "rationale": "The service delegates log parsing and storage failures without adding context or consistency guarantees. Reading records and metadata separately can return a misleading mixed snapshot."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 84,
+        "band": "B",
+        "rationale": "The static overload makes aggregation math easy to test, but the filtering, reader selection, and filesystem orchestration paths remain coupled to concrete classes."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "ADHOC-001",
+      "aspect": "correctness",
+      "severity": "medium",
+      "title": "Timestamp handling has no explicit UTC contract",
+      "description": "The cutoff comparison uses DateTime values directly, while day grouping later calls ToUniversalTime(). DateTime comparisons do not establish a shared timezone, and ToUniversalTime interprets an Unspecified timestamp using the host\u0027s local timezone. Consequently, the same records can be included, excluded, or assigned to different days depending on DateTime.Kind and the machine timezone.",
+      "recommendation": "Use DateTimeOffset throughout, or validate and normalize both record timestamps and the cutoff to UTC at the boundary. Define explicitly how Unspecified values are handled, preferably rejecting them rather than applying the host timezone implicitly.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+          "range": {
+            "start": {
+              "line": 49,
+              "column": 9
+            },
+            "end": {
+              "line": 50,
+              "column": 67
+            }
+          }
+        },
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+          "range": {
+            "start": {
+              "line": 92,
+              "column": 13
+            },
+            "end": {
+              "line": 92,
+              "column": 76
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ADHOC-002",
+      "aspect": "error_handling",
+      "severity": "low",
+      "title": "Records and log metadata are not captured consistently",
+      "description": "ReadAll() and Stat() are separate operations. If the recorder appends, rotates, or replaces the log between them, the returned aggregate can contain totals from one state while reporting the size and modification time of another state.",
+      "recommendation": "Add a recorder operation that returns records and metadata as one logical snapshot. If an atomic snapshot is unavailable, compare metadata before and after reading and retry on change, or clearly describe the metadata as best-effort rather than snapshot metadata.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+          "range": {
+            "start": {
+              "line": 48,
+              "column": 9
+            },
+            "end": {
+              "line": 52,
+              "column": 80
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ADHOC-003",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Infrastructure paths depend on concrete reader classes",
+      "description": "The pure overload covers rollup math, but Aggregate(DateTime?) directly depends on concrete recorder and bus-reader types. Tests for cutoff filtering, fallback selection, read failures, and snapshot behavior therefore require those implementations or unusually test-friendly concrete classes.",
+      "recommendation": "Introduce small interfaces for reading usage records and obtaining log metadata, or move cutoff filtering and source selection into independently testable collaborators. Keep the existing pure aggregation method for calculation-focused tests.",
+      "locations": [
+        {
+          "path": "backend/Features/AdHoc/AdHocUsageService.cs",
+          "range": {
+            "start": {
+              "line": 30,
+              "column": 5
+            },
+            "end": {
+              "line": 37,
+              "column": 6
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

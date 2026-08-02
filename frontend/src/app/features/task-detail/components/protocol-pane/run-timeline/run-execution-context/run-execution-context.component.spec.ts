@@ -15,11 +15,13 @@ describe('RunExecutionContextComponent', () => {
       executionContext: {
         source: 'init-frame',
         model: 'gpt-5',
+        thinkingLevel: 'high',
         sources: [{ kind: 'memory', label: 'AGENTS.md', path: 'C:/repo/AGENTS.md', exists: true }],
       },
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('gpt-5');
+    expect(fixture.nativeElement.textContent).toContain('high');
     expect(fixture.nativeElement.textContent).toContain('Memory');
     expect(fixture.nativeElement.querySelector('[data-testid="run-exec-context-2"]')).not.toBeNull();
   });

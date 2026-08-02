@@ -173,6 +173,29 @@ function pipelineRestarted() {
   };
 }
 
+function pipelineEscalatedLightweight() {
+  const attempt2 = pipelineRestarted().execution.previousAttempts[0];
+  return {
+    pipeline: basePipeline(),
+    execution: {
+      pipelineId: 'standard-task-pipeline',
+      pipelineVersion: 1,
+      jobId: JOB_ID,
+      project: PROJECT,
+      startedAt: '2026-07-29T09:30:00Z',
+      completedAt: null,
+      attempt: 3,
+      previousAttempts: [
+        { ...attempt2, attempt: 2 },
+        { ...attempt2, attempt: 1, startedAt: '2026-06-01T08:00:00Z' },
+      ],
+      steps: allSteps.map(item => execStep(item.id, item.kind, 'pending')),
+    },
+    cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+    config: {},
+  };
+}
+
 async function installRoutes(page: Page, state: string, pipelineBody: () => unknown) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
@@ -397,5 +420,37 @@ test.describe('Pipeline restart indicator', () => {
           : `test-results/pipeline-superseded-attempt-${theme}--mocked.png`,
       });
     }
+  });
+
+  test('a settled lightweight escalation marks untouched steps as not run, never pending', async ({ page }) => {
+    await installRoutes(page, '5e-escalated', pipelineEscalatedLightweight);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+      { waitUntil: 'domcontentloaded', timeout: 30_000 },
+    );
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expect(pipeline.getByTestId('overview-pipeline-phase-summary').filter({ hasText: 'Not run' }))
+      .toHaveCount(3);
+    for (const phase of await pipeline.getByTestId('overview-pipeline-phase').all()) {
+      if (await phase.getAttribute('aria-expanded') === 'false') await phase.click();
+    }
+    await expect(pipeline.locator('[data-status="pending"]')).toHaveCount(0);
+    await expect(pipeline.locator('[data-status="not-run"]')).toHaveCount(allSteps.length);
+    const currentRun = pipeline.locator(
+      '[data-testid="overview-pipeline-run-option"][data-current="true"]',
+    );
+    await expect(currentRun).toContainText('not run');
+    await expect(currentRun).not.toContainText('pending');
+    await expect(pipeline.getByTestId('overview-pipeline-skip-hint').first())
+      .toContainText('lightweight pipeline or escalation');
+
+    await pipeline.screenshot({
+      path: RESULTS_DIR
+        ? path.join(RESULTS_DIR, 'pipeline-lightweight-escalation-after--mocked.png')
+        : 'test-results/pipeline-lightweight-escalation-after--mocked.png',
+    });
   });
 });

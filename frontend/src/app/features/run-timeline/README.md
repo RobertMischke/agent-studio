@@ -8,7 +8,7 @@ Imports via `from './features/run-timeline'`. See [`index.ts`](./index.ts).
 
 Pure types only:
 
-- `RunRecord` — one run (index, ts, lineStart/lineEnd, model, token totals, optional commit).
+- `RunRecord`: one run (index, ts, lineStart/lineEnd, runner-resolved model and thinking level, token totals, optional commit).
 - `RunTimeline` — the wrapping response (`runs[]` + `hasActiveRun` flag).
 - `RunCommitInfo`, `RunCommitsResponse` — commits attributed to a run.
 - `RunFileChange`, `RunFilesResponse` — file changes per run.

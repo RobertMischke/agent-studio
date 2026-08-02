@@ -915,9 +915,26 @@ public sealed record PendingCrashRecovery
     [JsonPropertyName("files")] public IReadOnlyList<string> Files { get; init; } = [];
     [JsonPropertyName("message")] public string Message { get; init; } = "";
     [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+    [JsonPropertyName("classification")]
+    public string Classification => CrashRecoveryClassifications.Classify(JobId, Files);
 
     [JsonIgnore] public string? JobFolder { get; init; }
     [JsonIgnore] public IReadOnlyList<string>? Pathspecs { get; init; }
+}
+
+public static class CrashRecoveryClassifications
+{
+    public const string Trivial = "trivial";
+    public const string ReviewRequired = "review-required";
+
+    public static string Classify(string? jobId, IReadOnlyList<string> files)
+    {
+        var onlyReadEvidenceSidecars = files.Count > 0
+            && files.All(path => path.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(jobId) && onlyReadEvidenceSidecars
+            ? Trivial
+            : ReviewRequired;
+    }
 }
 
 public sealed record CrashRecoveryActionResult(

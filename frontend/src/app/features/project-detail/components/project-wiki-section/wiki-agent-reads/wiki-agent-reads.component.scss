@@ -1,0 +1,82 @@
+:host {
+  display: block;
+  border-bottom: 1px solid var(--studio-border);
+  background: transparent;
+}
+
+.war__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 0 var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.war__head [data-testid='project-wiki-agent-reads-total'] {
+  font-variant-numeric: tabular-nums;
+}
+
+.war__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+  padding: var(--studio-spacing-3);
+}
+
+.war__info div {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--studio-spacing-1);
+}
+
+.war__info dt {
+  margin: 0;
+  color: var(--studio-fg-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.war__info dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--studio-fg);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.war__recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: 0 var(--studio-spacing-3) var(--studio-spacing-3);
+  list-style: none;
+}
+
+.war__recent li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  color: var(--studio-fg-muted);
+  font-size: 0.72rem;
+}
+
+.war__recent time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.war__recent code {
+  flex-shrink: 0;
+  color: var(--studio-fg);
+}

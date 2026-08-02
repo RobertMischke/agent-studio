@@ -21,6 +21,7 @@ Use this page as the first stop when you need the right document quickly.
 | [operations/](../operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
 | [reports/](../system/reports/README.md) | Report contracts, HTML visual reports, and screenshot-backed visual documentation. |
 | [concepts/](../concepts/README.md) | Architecture concepts that have not become a domain or ADR yet, plus hand-maintained living concept/knowledge pages with running knowledge logs, dated deep dives, mockups, and proposals. |
+| [archive/](../archive/README.md) | Quiet historical pages retained by explicit inventory passes, with pointers from their former current locations. |
 | [common-problems/](../operations/common-problems/README.md) | Known recurring problems with root-cause analysis, occurrence logs, and workarounds. Search here first on a familiar symptom. |
 | [learnings/](../operations/learnings/README.md) | Per-task run learnings auto-distilled by the opt-in `post-wiki-learnings` pipeline step. Do not edit by hand. |
 | [mockups/](../concepts/mockups/) | Locked design references and click-dummies (under `concepts/`). |
@@ -50,6 +51,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
+| Runtime prompt registry, review companions, call telemetry, and costs | [contracts/runtime-prompts.md](../system/contracts/runtime-prompts.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
 | Frontend | [domains/frontend.md](../system/domains/frontend.md) |
 | Stable view URL contract | [contracts/stable-view-urls.md](../system/contracts/stable-view-urls.md) |
@@ -59,17 +61,22 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model routing policy (model, thinking level, risk floors, benchmark evidence) | [domains/model-routing-policy.md](../system/domains/model-routing-policy.md) |
 | Tokens | [domains/tokens.md](../system/domains/tokens.md) |
 | Remote execution outcome and recovery | [contracts/run-outcome.md](../system/contracts/run-outcome.md#remote-execution-outcome-adapter) |
+| Remote infrastructure scenario result contract | [contracts/remote-run-result.md](../system/contracts/remote-run-result.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
 | Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Reissue prompt sharpness and convergence evidence (AGT-2380) | [interactive Workbench](../quality/reissue-prompt-convergence/index.html) · [evidence snapshot](../quality/reissue-prompt-convergence/evidence-snapshot.json) · [analysis script](../quality/reissue-prompt-convergence/analyze.mjs) |
+| Remote Run infrastructure testsuite report (acceptance matrix, phase timing, incident recovery, and raw evidence) | [2026-07-29 acceptance canary](../quality/remote-run-testsuite-report/2026-07-29/index.html) · [report workbench](../quality/remote-run-testsuite-report/index.html) · [validated fixture](../../tools/remote-test-suite/fixtures/report/validated-runs.json) · [schema](../../tools/remote-test-suite/run-result.schema.json) |
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
+| Board status model, lane-transition map, and integration/archive guard decisions (AGT-2424) | [interactive Workbench](../operations/board-statusmodell-ist-soll/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |
+| Living frontend styling rules and compact prompt context | [living rules](../quality/frontend/style-guide/living-rules.md) · [styling context](../quality/frontend-styling.md) |
 | Project Deck visual audit and Deck-Panel v1 recommendation | [interactive Deck Audit](../concepts/visual-style-guide/deck-audit.html) · [implementation contract](../concepts/visual-style-guide/deck-panel-v1.md) |
 | Model and thinking-level indicator vocabulary | [design/model-level-indicator.md](../quality/design/model-level-indicator.md) |
 | Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](../quality/README.md) |
@@ -86,6 +93,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](../concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
 | UI task iteration pipeline and Human Gate hand-off | [contracts/ui-task-pipeline.md](../system/contracts/ui-task-pipeline.md) |
+| Operator decision surface for escalated tasks | [operations/decision-surface/README.md](../operations/decision-surface/README.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](../concepts/publishing-workflows.md) |
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](../system/reports/git-info-performance-agt-2007.md) |
@@ -94,7 +102,10 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
+| Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
+| OSS setup path decision and clean-host evidence | [setup path decision](../operations/haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
+| Develop to main promotion train, full gate, release marker, and deploy cron | [operations/develop-main-promotion.md](../operations/develop-main-promotion.md) |
 | Orchestrator control-plane migration plan | [target architecture plan](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md) |
 | Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](../concepts/deployment-first-class.md) · [interactive mockup](../concepts/mockups/deployment-first-class.html) |
@@ -109,11 +120,17 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
+| Contributor source-build setup | [operations/setup/contributor-setup.md](../operations/setup/contributor-setup.md) |
+| GitHub repository metadata recommendations | [repo-metadata.md](../repo-metadata.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner / agent host daemon (Linux) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
+| Guided multi-machine setup (Control Plane, join token, Agent Hosts) | [operations/setup/multi-machine.md](../operations/setup/multi-machine.md) |
+| Website onboarding source copy (Demo, Single Machine, Multi Machine) | [operations/setup/website-onboarding-template.md](../operations/setup/website-onboarding-template.md) |
 | Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |
 | Execution hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](../operations/setup/remote-runner-persistent-connection.md) |
+| Remote three-unit Compose infrastructure harness | [operations/setup/remote-compose-test-harness.md](../operations/setup/remote-compose-test-harness.md) |
+| Private Hetzner Task Server with local Angular Studio (Phase A architecture, migration, security, and rollback) | [operations/remote-task-server-local-studio.md](../operations/remote-task-server-local-studio.md) |
 | Common problems | [common-problems/README.md](../operations/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [concepts/designated-topics/README.md](../concepts/designated-topics/README.md) |
 | API project identity / watchPath | [concepts/api-project-identity-and-watchpath.md](../concepts/api-project-identity-and-watchpath.md) |
@@ -125,6 +142,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Auto-review reissue / evidence-gate analysis | [concepts/auto-review-evidence-gate-analysis.html](../concepts/auto-review-evidence-gate-analysis.html) |
 | Completion, review, runner provenance, host handoff, and Remote Runner stability | [concepts/completion-review-and-remote-runner-stability.html](../concepts/completion-review-and-remote-runner-stability.html) |
 | Planning & Research task type | [concepts/planning-research-task-type.html](../concepts/planning-research-task-type.html) |
+| AGT-2380 reissue-prompt convergence research | [research/reissue-prompt-konvergenz.html](../research/reissue-prompt-konvergenz.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](../concepts/screen-tooling-mvp-presentation-2026-07.md) |
 | MVP presentation capture runbook | [operations/setup/presentation-capture.md](../operations/setup/presentation-capture.md) |
 | MVP presentation storyboard and shot list | [product/mvp-presentation-storyboard.md](../concepts/mvp-presentation-storyboard.md) |
@@ -135,7 +153,9 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Runner stability & incident chronicle (incidents, invariants, sessions; supersedes the retired runner-stability / overnight / claude-termination pages) | [workbenches/haertung-verteilte-ausfuehrung/historie.html](../operations/haertung-verteilte-ausfuehrung/historie.html) |
 | Agent fencing (platform-owned Git history, trust-graded oversight, real incidents, open proof point) | [operations/haertung-verteilte-ausfuehrung/agent-fencing.html](../operations/haertung-verteilte-ausfuehrung/agent-fencing.html) · [separate AHP-style diagram](../operations/haertung-verteilte-ausfuehrung/agent-fencing-diagram.html) |
 | Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](../concepts/process-termination-scenarios.html) |
+| Documentation inventory and cleanup (July 2026) | [inventory](../operations/doku-inventur-2026-07/README.md) · [archive convention](../archive/README.md) |
 | Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |
+| Research task delivery convention (research cards deliver exactly one primary HTML document at `results/report.html`) | [operations/research-deliverables/index.html](../operations/research-deliverables/index.html) |
 
 ## Organization Rules
 

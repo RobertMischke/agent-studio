@@ -5,6 +5,71 @@ namespace AgentRunner.Tests;
 
 public sealed class RemoteCompletionProtocolTests
 {
+    private const string ValidBaseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string ValidResultSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string ValidManifestDigest =
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+    private static WorktreeTeardownResult SecuredTeardown(
+        string? resultSha = ValidResultSha,
+        string? immutableResultRef = "refs/heads/agent-studio/results/attempt-1/" + ValidResultSha)
+        => new(true, "runner/host/AGT-1", resultSha, null,
+            ResultSha: resultSha,
+            ImmutableResultRef: immutableResultRef);
+
+    [Fact]
+    public void Completion_carries_the_envelope_trio_when_every_field_is_valid()
+    {
+        var (baseSha, resultRef, manifestDigest) = RemoteTaskRunner.BuildEnvelopeCompletionFields(
+            SecuredTeardown(), ValidBaseSha, ValidManifestDigest);
+
+        Assert.Equal(ValidBaseSha, baseSha);
+        Assert.StartsWith("refs/heads/agent-studio/results/", resultRef);
+        Assert.Equal(ValidManifestDigest, manifestDigest);
+    }
+
+    [Fact]
+    public void Missing_immutable_result_ref_degrades_to_the_pre_envelope_completion()
+    {
+        var (baseSha, resultRef, manifestDigest) = RemoteTaskRunner.BuildEnvelopeCompletionFields(
+            SecuredTeardown(immutableResultRef: null), ValidBaseSha, ValidManifestDigest);
+
+        Assert.Null(baseSha);
+        Assert.Null(resultRef);
+        Assert.Null(manifestDigest);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-sha")]
+    [InlineData("abc123")]
+    public void Invalid_base_sha_suppresses_the_whole_trio(string? baseSha)
+    {
+        var fields = RemoteTaskRunner.BuildEnvelopeCompletionFields(
+            SecuredTeardown(), baseSha, ValidManifestDigest);
+
+        Assert.Equal((null, null, null), fields);
+    }
+
+    [Fact]
+    public void Invalid_manifest_digest_suppresses_the_whole_trio()
+    {
+        var fields = RemoteTaskRunner.BuildEnvelopeCompletionFields(
+            SecuredTeardown(), ValidBaseSha, "zz" + ValidManifestDigest[2..]);
+
+        Assert.Equal((null, null, null), fields);
+    }
+
+    [Fact]
+    public void No_work_teardown_never_produces_envelope_fields()
+    {
+        var fields = RemoteTaskRunner.BuildEnvelopeCompletionFields(
+            WorktreeTeardownResult.NoWork, ValidBaseSha, ValidManifestDigest);
+
+        Assert.Equal((null, null, null), fields);
+    }
+
     [Fact]
     public void Daemon_prompt_adds_the_terminal_contract_to_the_task_prompt()
     {
@@ -14,6 +79,7 @@ public sealed class RemoteCompletionProtocolTests
         Assert.Contains("docs/system/domains/model-routing-policy.md", prompt);
         Assert.Contains("authoritative source", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("correctness-risk floors", prompt);
+        Assert.Contains("docs/start/contribution-and-style-guide.html", prompt);
         Assert.Contains("MUST end with exactly one", prompt);
         Assert.Contains("[[TASK_DONE]]", prompt);
         Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", prompt);

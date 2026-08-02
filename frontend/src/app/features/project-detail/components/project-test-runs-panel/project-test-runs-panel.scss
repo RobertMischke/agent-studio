@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
   display: block;
   min-width: 0;
@@ -67,11 +69,9 @@ button:focus-visible {
 }
 
 .test-runs__summary {
+  @include m.deck-panel;
   flex-wrap: wrap;
   gap: var(--studio-spacing-4);
-  padding: var(--studio-spacing-3) var(--studio-spacing-4);
-  border-radius: 8px;
-  background: var(--studio-surface-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -87,20 +87,17 @@ button:focus-visible {
 
 .test-runs__lane ol {
   display: grid;
-  gap: var(--studio-spacing-2);
+  gap: var(--studio-deck-panel-gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .test-runs__lane li {
+  @include m.deck-panel;
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(360px, 2fr);
   gap: var(--studio-spacing-3) var(--studio-spacing-5);
-  padding: var(--studio-spacing-4);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-card-bg, var(--studio-bg-sidebar));
 }
 
 .test-runs__identity {
@@ -173,9 +170,8 @@ code {
 }
 
 .test-runs__empty {
-  padding: var(--studio-spacing-4);
-  border-radius: 8px;
-  background: var(--studio-surface-muted);
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
   color: var(--studio-fg-dim);
 }
 

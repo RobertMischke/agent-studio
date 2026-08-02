@@ -1,26 +1,26 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
-import { taskNavigationHref } from '../../../task-detail/state/task-url';
+import { OrchestratorFeedStore } from '../../state/orchestrator-feed.store';
+import { OrchestratorFeedWindow } from './orchestrator-feed-windowing';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
-/**
- * Per-project orchestrator log feed. Reads
- * `/api/runner/{projectName}/orchestrator-log` on init and every 10s
- * while mounted. Renders a chronological list of entries: decisions,
- * actions (queued follow-ups, watchdog kills), observations,
- * interventions. The entry shape carries enough metadata for future
- * "override this decision" affordances (kept as a TODO note in the UI
- * but not wired today).
- *
- * Today's entries are written by the runner / watchdog. Phase D will
- * add an orchestrator-as-CLI process that writes its own reasoning
- * here with the same shape, so the feed stays one timeline.
- */
+/** Workspace feed shared by the embedded main route and quick-access modal. */
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
@@ -29,24 +29,26 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'
 })
-export class OrchestratorFeedComponent implements OnInit, OnDestroy {
+export class OrchestratorFeedComponent {
   readonly projectName = input.required<string>();
+  readonly embedded = input(false);
+  readonly openTask = output<{ jobId: string; watchPath: string }>();
 
   private readonly jobService = inject(TaskService);
-  readonly entries = signal<OrchestratorLogEntry[]>([]);
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
+  readonly feedStore = inject(OrchestratorFeedStore);
+  readonly entries = this.feedStore.entries;
+  readonly loading = this.feedStore.loading;
+  readonly error = this.feedStore.error;
   readonly kindFilter = signal<string>('signal');
   readonly projectFilter = signal<string>('all');
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
   readonly activeView = signal<'activity' | 'load'>('activity');
-  /** Timestamp of the entry currently being overridden (one at a time). */
   readonly overridingTs = signal<string | null>(null);
-  /** Submit-in-flight flag so the user cannot double-send. */
   readonly submittingOverride = signal(false);
-  /** Two-way bound textarea draft. Cleared after each submit / cancel. */
   overrideDraft = '';
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly historyWindow = new OrchestratorFeedWindow();
+  private readonly streamRef = viewChild<ElementRef<HTMLElement>>('stream');
+  private anchorFrame: number | null = null;
 
   readonly kindFilters = [
     { id: 'signal', label: 'Signal' },
@@ -58,7 +60,6 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     { id: 'all', label: 'All activity' }
   ];
 
-  /** UI shows newest entries first; the on-disk log is oldest first. */
   readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project).filter(Boolean) as string[])].sort());
   readonly reversed = computed(() => [...this.entries()].sort((a, b) => b.ts.localeCompare(a.ts)));
   readonly visibleEntries = computed(() => {
@@ -69,16 +70,19 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
       && (filter === 'all' || (filter === 'signal' ? entry.kind !== 'observation' : entry.kind === filter))
     );
   });
+  readonly windowedEntries = computed(() => this.historyWindow.slice(this.visibleEntries()));
   readonly groupedEntries = computed(() => {
     const groups: { key: string; day: string; project: string; entries: OrchestratorLogEntry[] }[] = [];
-    for (const entry of this.visibleEntries()) {
+    const byKey = new Map<string, typeof groups[number]>();
+    for (const entry of this.windowedEntries()) {
       const day = this.formatDay(entry.ts);
       const project = entry.project || this.projectName();
       const key = `${day}\u0000${project}`;
-      let group = groups.find(item => item.key === key);
+      let group = byKey.get(key);
       if (!group) {
         group = { key, day, project, entries: [] };
         groups.push(group);
+        byKey.set(key, group);
       }
       group.entries.push(entry);
     }
@@ -89,36 +93,35 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     for (const entry of this.entries()) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
     return counts;
   });
+  readonly olderEntryCount = computed(() =>
+    this.historyWindow.remaining(this.visibleEntries().length, this.windowedEntries().length)
+  );
 
-  ngOnInit(): void {
-    this.refresh();
-    this.pollTimer = setInterval(() => this.refresh(true), 10_000);
-  }
+  private readonly selectionEffect = effect(() => {
+    const entries = this.reversed();
+    const selected = this.selectedEntry();
+    if (selected && entries.includes(selected)) return;
+    this.selectedEntry.set(entries[0] ?? null);
+  });
 
-  ngOnDestroy(): void {
-    if (this.pollTimer != null) clearInterval(this.pollTimer);
-    this.pollTimer = null;
-  }
+  private readonly feedGrowthEffect = effect(() => {
+    const scope = `${this.projectFilter()}\u0000${this.kindFilter()}`;
+    const total = this.visibleEntries().length;
+    const stream = this.streamRef()?.nativeElement;
+    const followingNewest = !stream || stream.scrollTop <= 8;
+    const beforeHeight = stream?.scrollHeight ?? 0;
+    const beforeTop = stream?.scrollTop ?? 0;
+    const grewBy = this.historyWindow.sync(scope, total, followingNewest);
+    if (!stream || followingNewest || grewBy === 0 || typeof requestAnimationFrame === 'undefined') return;
+    if (this.anchorFrame !== null) cancelAnimationFrame(this.anchorFrame);
+    this.anchorFrame = requestAnimationFrame(() => {
+      this.anchorFrame = null;
+      stream.scrollTop = beforeTop + Math.max(0, stream.scrollHeight - beforeHeight);
+    });
+  });
 
   refresh(silent = false): void {
-    if (!silent) this.loading.set(true);
-    this.jobService.getGlobalOrchestratorFeed().subscribe({
-      next: (resp) => {
-        const entries = resp.entries ?? [];
-        this.entries.set(entries);
-        const selected = this.selectedEntry();
-        if (!selected && entries.length > 0) {
-          this.selectedEntry.set(entries[entries.length - 1]);
-        }
-        this.error.set(null);
-        if (!silent) this.loading.set(false);
-      },
-      error: (err) => {
-        const message = err?.error?.error || err?.message || 'Failed to load orchestrator log';
-        this.error.set(message);
-        if (!silent) this.loading.set(false);
-      }
-    });
+    this.feedStore.refresh(silent);
   }
 
   kindLabel(kind: string): string {
@@ -139,6 +142,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   }
 
   selectFilter(kind: string): void {
+    this.historyWindow.reset(`${this.projectFilter()}\u0000${kind}`);
     this.kindFilter.set(kind);
     const first = this.visibleEntries()[0] ?? null;
     this.selectedEntry.set(first);
@@ -149,18 +153,18 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   }
 
   selectProject(project: string): void {
+    this.historyWindow.reset(`${project}\u0000${this.kindFilter()}`);
     this.projectFilter.set(project);
     this.selectedEntry.set(this.visibleEntries()[0] ?? null);
   }
 
   navigateToTask(entry: OrchestratorLogEntry): void {
     if (!entry.jobId || !entry.watchPath) return;
-    this.jobService.getDetail(entry.jobId, entry.watchPath).subscribe({
-      next: (detail) => {
-        const href = taskNavigationHref(detail.info);
-        if (href) window.location.assign(href);
-      },
-    });
+    this.openTask.emit({ jobId: entry.jobId, watchPath: entry.watchPath });
+  }
+
+  loadOlder(): void {
+    this.historyWindow.loadOlder(this.olderEntryCount());
   }
 
   isSelected(entry: OrchestratorLogEntry): boolean {
@@ -187,13 +191,6 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
-  /**
-   * Project colour-dot hue. Delegates to the shared project-identity util
-   * (the AGT-2034 convention, an 11-hue curated palette) so a project's dot
-   * in the feed matches the exact same hue it gets on board cards, studio
-   * tabs, and task micro-cards. The former local hash produced an
-   * off-palette hue that drifted from the rest of the app.
-   */
   projectHue(project: string): number {
     return projectIdentity(project).hue;
   }
@@ -227,7 +224,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.submittingOverride.set(false);
         const message = err?.error?.error || err?.message || 'Override failed';
-        this.error.set(message);
+        this.feedStore.reportError(message);
       }
     });
   }

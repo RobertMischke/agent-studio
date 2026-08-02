@@ -1,0 +1,22 @@
+#cloud-config
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - docker.io
+  - docker-compose-v2
+runcmd:
+  - |
+    set -eu
+    trap 'status=$?; echo "AGT2305_VM_EXIT=$status"; poweroff' EXIT
+    systemctl enable --now docker
+    mkdir -p /opt/agent-studio
+    mkdir -p /mnt/agent-studio-source
+    mount -L AGT2305SRC /mnt/agent-studio-source
+    tar -xzf /mnt/agent-studio-source/agent-studio-source.tar.gz \
+      --strip-components=1 \
+      -C /opt/agent-studio
+    umount /mnt/agent-studio-source
+    cd /opt/agent-studio
+    scripts/compose-smoke-test.sh
+    echo "AGT2305_VM_RESULT=passed"

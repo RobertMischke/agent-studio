@@ -152,6 +152,12 @@ internal sealed class ActiveRuns
     /// <summary>Number of slots backed by a live coding CLI process.</summary>
     public int Count => _runs.Values.Count(r => r.HoldsExecutionSlot);
 
+    /// <summary>
+    /// True while any run still belongs to the runner, including a run whose
+    /// CLI seat was released but whose final post-processing has not finished.
+    /// </summary>
+    public bool HasInFlight => !_runs.IsEmpty;
+
     /// <summary>True when another run may be admitted under <paramref name="maxParallelism"/>.</summary>
     public bool HasFreeSlot(int maxParallelism) => Count < ParallelSlotPolicy.ClampMax(maxParallelism);
 

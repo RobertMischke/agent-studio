@@ -1,0 +1,16 @@
+# Caddy config for the containerised frontend: static Angular bundle plus a
+# reverse proxy for the API. Plain HTTP - TLS termination is the host's concern.
+:80 {
+	encode zstd gzip
+
+	@api path /api/* /hubs/* /healthz /readyz
+	handle @api {
+		reverse_proxy {$STUDIO_API_UPSTREAM:orchestrator-api:5031}
+	}
+
+	handle {
+		root * /srv/studio
+		try_files {path} /index.html
+		file_server
+	}
+}

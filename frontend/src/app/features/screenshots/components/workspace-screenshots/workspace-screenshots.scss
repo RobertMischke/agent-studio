@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
 .wss {
@@ -78,25 +80,20 @@
   font: inherit;
 }
 
+/* Empty / loading state: nothing acute, so a solid muted panel. */
 .wss__placeholder {
-  padding: 24px;
+  @include m.deck-panel;
+  @include m.deck-panel-muted;
   text-align: center;
   color: var(--studio-fg-dim);
-  border: 1px dashed var(--studio-border-strong);
-  border-radius: 8px;
 }
 
 .wss__buckets {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  @include m.deck-stack;
 }
 
 .wss__bucket {
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg-hover);
-  padding: 6px 8px 8px;
+  @include m.deck-panel;
 }
 
 .wss__bucket-head {

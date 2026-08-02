@@ -24,7 +24,20 @@ public sealed record PersistedRunnerSlot(
     DateTime? ProcessStartedAtUtc,
     long LastOutputSequence,
     string Phase,
-    DateTime UpdatedAtUtc);
+    DateTime UpdatedAtUtc,
+    // Commit the task worktree started from, recorded once the workspace has been
+    // prepared. It is the Result-Envelope's BaseSha and only the preparing process
+    // knows it, so a replacement daemon that reattaches to a detached worker can
+    // only complete with a full envelope trio if the value survived here. Optional
+    // for persistence compatibility: state written before this field simply loads
+    // as null and behaves exactly as it did before.
+    string? BaseSha = null,
+    // T0b: the execution spec the claim carried for this card. Persisted for the
+    // same reason as BaseSha - only the claiming process ever saw it, and a
+    // replacement daemon that reattaches (or runs the bounded same-session
+    // resume) must relaunch with the card's CLI, model and reasoning level
+    // instead of silently dropping back to the host's RUNNER_CLI_* configuration.
+    RunSpecDto? RunSpec = null);
 
 /// <summary>Atomic JSON persistence under RUNNER_STATE_DIR.</summary>
 public sealed class RunnerStateStore
@@ -49,7 +62,8 @@ public sealed class RunnerStateStore
         string? projectId = null,
         string? repositoryUrl = null,
         string? defaultBranch = null,
-        string? taskKind = null)
+        string? taskKind = null,
+        RunSpecDto? runSpec = null)
     {
         var workerDirectory = Path.Combine(Root, GitWorkspace.SafeSegment(lease.LeaseId));
         Directory.CreateDirectory(workerDirectory);
@@ -69,7 +83,8 @@ public sealed class RunnerStateStore
             null,
             0,
             "claimed",
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            RunSpec: runSpec);
         Save(slot);
         return slot;
     }

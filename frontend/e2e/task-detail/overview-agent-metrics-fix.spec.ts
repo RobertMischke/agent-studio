@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import * as fs from 'fs';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Visual + behavioural evidence for the agent-run-metrics bug fix
@@ -13,8 +15,8 @@ import * as path from 'path';
  *     Claude stream-json `result`-frame usage in ClaudeCliService and mirrors
  *     it onto the agent message bus, so the bus-backed per-job token summary
  *     (TaskInfo.tokenSummary) now includes the claude agent run. This spec
- *     feeds that post-fix summary shape and asserts the Tokens section renders
- *     the claude token values.
+ *     feeds that post-fix summary shape and asserts the CORE row and latest
+ *     run-history row render the claude token values.
  *
  *   Symptom 2 - implausible duration: the single persistent CORE pipeline step
  *     was overwritten with only the LAST run's duration (~55s for a task that
@@ -81,7 +83,15 @@ function makeDetail(state: string) {
 }
 
 function step(id: string, displayName: string, kind: string) {
-  return { id, displayName, kind, runMode: 'sequential', dependsOn: [], idempotent: true, stub: false };
+  return {
+    id,
+    displayName,
+    kind,
+    runMode: 'sequential',
+    dependsOn: [],
+    idempotent: true,
+    stub: false,
+  };
 }
 
 const allSteps = [
@@ -111,9 +121,43 @@ function pipelineBody() {
       startedAt: '2026-06-02T08:00:00Z',
       completedAt: '2026-06-03T09:30:00Z',
       steps: [
-        { stepId: 'pre-loop-guard', kind: 'module', status: 'passed', durationMs: 12, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, startedAt: '2026-06-02T08:00:00Z', completedAt: '2026-06-02T08:00:00Z' },
-        { stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'passed', durationMs: 125_000, inputTokens: 12_840, outputTokens: 7_960, cacheReadTokens: 61_300, cacheCreationTokens: 4_120, startedAt: '2026-06-02T08:00:01Z', completedAt: '2026-06-03T09:30:00Z' },
-        { stepId: 'aspect-requirement-fit', kind: 'aspect', status: 'passed', durationMs: 4_200, inputTokens: 41_200, outputTokens: 39_900, cacheReadTokens: 0, cacheCreationTokens: 0, startedAt: '2026-06-03T09:30:00Z', completedAt: '2026-06-03T09:30:04Z' },
+        {
+          stepId: 'pre-loop-guard',
+          kind: 'module',
+          status: 'passed',
+          durationMs: 12,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          startedAt: '2026-06-02T08:00:00Z',
+          completedAt: '2026-06-02T08:00:00Z',
+        },
+        {
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          status: 'passed',
+          durationMs: 125_000,
+          inputTokens: 12_840,
+          outputTokens: 7_960,
+          cacheReadTokens: 61_300,
+          cacheCreationTokens: 4_120,
+          startedAt: '2026-06-02T08:00:01Z',
+          completedAt: '2026-06-03T09:30:00Z',
+        },
+        {
+          stepId: 'aspect-requirement-fit',
+          kind: 'aspect',
+          status: 'passed',
+          durationMs: 4_200,
+          inputTokens: 41_200,
+          outputTokens: 39_900,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          startedAt: '2026-06-03T09:30:00Z',
+          completedAt: '2026-06-03T09:30:04Z',
+        },
       ],
     },
     // Full PipelineCostSummary shape (per-step + totals). The real backend
@@ -123,19 +167,55 @@ function pipelineBody() {
     cost: {
       steps: [
         {
-          stepId: 'pre-loop-guard', kind: 'module', model: null, tokenUsageSource: null, modelKnown: true,
-          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0,
-          inputCostUsd: 0, outputCostUsd: 0, cacheReadCostUsd: 0, cacheCreationCostUsd: 0, costUsd: 0,
+          stepId: 'pre-loop-guard',
+          kind: 'module',
+          model: null,
+          tokenUsageSource: null,
+          modelKnown: true,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          totalTokens: 0,
+          inputCostUsd: 0,
+          outputCostUsd: 0,
+          cacheReadCostUsd: 0,
+          cacheCreationCostUsd: 0,
+          costUsd: 0,
         },
         {
-          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', tokenUsageSource: 'cli-footer', modelKnown: true,
-          inputTokens: 12_840, outputTokens: 7_960, cacheReadTokens: 61_300, cacheCreationTokens: 4_120, totalTokens: 86_220,
-          inputCostUsd: 0.1926, outputCostUsd: 0.5970, cacheReadCostUsd: 0.0919, cacheCreationCostUsd: 0.0773, costUsd: 0.9588,
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          tokenUsageSource: 'cli-footer',
+          modelKnown: true,
+          inputTokens: 12_840,
+          outputTokens: 7_960,
+          cacheReadTokens: 61_300,
+          cacheCreationTokens: 4_120,
+          totalTokens: 86_220,
+          inputCostUsd: 0.1926,
+          outputCostUsd: 0.597,
+          cacheReadCostUsd: 0.0919,
+          cacheCreationCostUsd: 0.0773,
+          costUsd: 0.9588,
         },
         {
-          stepId: 'aspect-requirement-fit', kind: 'aspect', model: 'claude-haiku-4-5', tokenUsageSource: 'orchestrator', modelKnown: true,
-          inputTokens: 41_200, outputTokens: 39_900, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 81_100,
-          inputCostUsd: 0.0330, outputCostUsd: 0.1596, cacheReadCostUsd: 0, cacheCreationCostUsd: 0, costUsd: 0.1926,
+          stepId: 'aspect-requirement-fit',
+          kind: 'aspect',
+          model: 'claude-haiku-4-5',
+          tokenUsageSource: 'orchestrator',
+          modelKnown: true,
+          inputTokens: 41_200,
+          outputTokens: 39_900,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          totalTokens: 81_100,
+          inputCostUsd: 0.033,
+          outputCostUsd: 0.1596,
+          cacheReadCostUsd: 0,
+          cacheCreationCostUsd: 0,
+          costUsd: 0.1926,
         },
       ],
       totalInputTokens: 54_040,
@@ -154,12 +234,47 @@ function pipelineBody() {
   };
 }
 
-function runRecord(index: number, intent: string, startedAt: string, durationSeconds: number) {
+function runRecord(
+  index: number,
+  intent: string,
+  startedAt: string,
+  durationSeconds: number,
+  options: { status?: string; userFollowup?: string | null; totalTokens?: number } = {},
+) {
   return {
-    index, intent, startedAt, endedAt: null, status: 'completed', cli: 'claude',
-    exitCode: 0, durationSeconds, inputSessionId: null, capturedSessionId: null,
-    resumed: intent !== 'start', reason: null, userFollowup: null, lineStart: null,
-    lineEnd: null, headShaBefore: null, headShaAfter: null, contextRef: null,
+    index,
+    intent,
+    startedAt,
+    endedAt: null,
+    status: options.status ?? 'completed',
+    cli: 'claude',
+    exitCode: 0,
+    durationSeconds,
+    inputSessionId: null,
+    capturedSessionId: null,
+    resumed: intent !== 'start',
+    reason: null,
+    userFollowup: options.userFollowup ?? null,
+    lineStart: null,
+    lineEnd: null,
+    headShaBefore: null,
+    headShaAfter: null,
+    contextRef: null,
+    ...(options.totalTokens === undefined
+      ? {}
+      : {
+          tokenSummary: {
+            calls: 1,
+            inputTokens: options.totalTokens,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            totalTokens: options.totalTokens,
+            lastModel: 'claude-opus-4-8',
+            lastUpdate: startedAt,
+            entries: [],
+          },
+        }),
   };
 }
 
@@ -173,11 +288,15 @@ function multiRunTimeline() {
     lastActivityAt: '2026-06-03T09:30:00Z',
     hasActiveRun: false,
     runs: [
-      runRecord(0, 'start', '2026-06-02T08:00:01Z', 22),
-      runRecord(1, 'continue', '2026-06-02T08:40:00Z', 18),
-      runRecord(2, 'recovery', '2026-06-02T09:10:00Z', 12),
-      runRecord(3, 'continue', '2026-06-03T08:55:00Z', 18),
-      runRecord(4, 'continue', '2026-06-03T09:30:00Z', 55),
+      runRecord(1, 'start', '2026-06-02T08:00:01Z', 22),
+      runRecord(2, 'continue', '2026-06-02T08:40:00Z', 18, {
+        userFollowup: 'Address the browser evidence gap.',
+      }),
+      runRecord(3, 'recovery', '2026-06-02T09:10:00Z', 12),
+      runRecord(4, 'continue', '2026-06-03T08:55:00Z', 18),
+      runRecord(5, 'continue', '2026-06-03T09:30:00Z', 55, {
+        totalTokens: 86_220,
+      }),
     ],
   };
 }
@@ -187,8 +306,22 @@ async function installRoutes(page: Page, state: string): Promise<void> {
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
+      // A more specific route may already have completed this request.
+    });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -197,9 +330,15 @@ async function installRoutes(page: Page, state: string): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        preparation: [], orchestratorPrep: [], ready: [],
-        progress: [], failedPickup: [], autoReview: [], humanReview: [],
-        completed: [], archive: [],
+        preparation: [],
+        orchestratorPrep: [],
+        ready: [],
+        progress: [],
+        failedPickup: [],
+        autoReview: [],
+        humanReview: [],
+        completed: [],
+        archive: [],
       }),
     }),
   );
@@ -241,7 +380,11 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
   await page.route('**/api/cli/usage**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    }),
   );
   await page.route('**/api/cli/quota**', (route) =>
     route.fulfill({
@@ -257,8 +400,11 @@ async function installRoutes(page: Page, state: string): Promise<void> {
       body: JSON.stringify({
         projects: {
           [PROJECT]: {
-            projectName: PROJECT, mode: 'auto', activeJobId: null,
-            activeExecution: null, queuedJobIds: [],
+            projectName: PROJECT,
+            mode: 'auto',
+            activeJobId: null,
+            activeExecution: null,
+            queuedJobIds: [],
           },
         },
       }),
@@ -269,16 +415,27 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(multiRunTimeline()) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(multiRunTimeline()),
+    }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/agent-work-summary(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        calls: 5, recovered: true, toolCalls: 96,
-        toolCounts: [{ tool: 'Edit', count: 38 }, { tool: 'Read', count: 41 }, { tool: 'Bash', count: 17 }],
-        startedAt: '2026-06-02T08:00:01Z', lastTouchAt: '2026-06-03T09:30:00Z',
+        calls: 5,
+        recovered: true,
+        toolCalls: 96,
+        toolCounts: [
+          { tool: 'Edit', count: 38 },
+          { tool: 'Read', count: 41 },
+          { tool: 'Bash', count: 17 },
+        ],
+        startedAt: '2026-06-02T08:00:01Z',
+        lastTouchAt: '2026-06-03T09:30:00Z',
         currentSessionId: '0c1e3817-91c2-43a1-a1aa-9f73d161d4a2',
       }),
     }),
@@ -291,7 +448,11 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pipelineBody()) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(pipelineBody()),
+    }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
@@ -305,17 +466,22 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {
+      // Best effort: the mocked page remains usable if the dev-only dialog races away.
+    });
   }
 }
 
 async function openDetail(page: Page): Promise<void> {
-  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await page.goto(
+    `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+  );
   await dismissErrorDialog(page);
   await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
 }
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
+const REVIEW_RESULTS_DIR = path.resolve(__dirname, '..', '..', 'results', 'AGT-2377');
 
 test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', () => {
   test.beforeEach(async ({ page }) => {
@@ -331,21 +497,18 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     });
   });
 
-  test('claude agent tokens render and the CORE row shows the cumulative duration', async ({ page }) => {
+  test('claude agent tokens render and the CORE row shows the cumulative duration', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1280, height: 1200 });
     await installRoutes(page, '3-progress');
     await openDetail(page);
 
-    // Symptom 1: the Tokens section is present (not the "no token activity"
-    // empty state) and carries the claude agent run's values.
-    const tokens = page.getByTestId('overview-tokens');
-    await expect(tokens).toBeVisible();
-    const orchestrator = page.getByTestId('overview-tokens-orchestrator');
-    await expect(orchestrator).toBeVisible();
-    await expect(page.getByTestId('overview-tokens-empty')).toHaveCount(0);
-
-    // Symptom 2: the CORE Agent-execution row shows the cumulative 125s
+    // The CORE Agent-execution row shows the cumulative 125s
     // ("2m 5s"), not the last run's 55s.
+    await page
+      .locator('[data-testid="overview-pipeline-phase"][data-phase="core"]')
+      .click();
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
     const coreDuration = coreRow.getByTestId('overview-pipeline-step-duration');
     await expect(coreDuration).toBeVisible();
@@ -357,6 +520,19 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     await expect(runsDuration).toBeVisible();
     await expect(runsDuration).toHaveText('2m 5s total');
 
+    // The Overview owns a compact, card-scoped history rather than hiding
+    // trigger/result/duration in icon tooltips.
+    const runs = page.getByTestId('overview-runs');
+    await expect(runs.getByTestId('overview-runs-count')).toHaveText('5 runs');
+    const runRows = runs.getByTestId('overview-run-row');
+    await expect(runRows).toHaveCount(5);
+    await expect(runRows.first()).toHaveAttribute('data-run-index', '5');
+    await expect(runRows.first().getByTestId('overview-run-trigger')).toHaveText('Continue');
+    await expect(runRows.first().getByTestId('overview-run-result')).toContainText('Completed');
+    await expect(runRows.first().getByTestId('overview-run-duration')).toHaveText('55s');
+    await expect(runRows.first().getByTestId('overview-run-tokens')).toHaveText('86.2k tokens');
+    await expect(runRows.nth(3).getByTestId('overview-run-trigger')).toHaveText('User follow-up');
+
     // Symptom 1 (direct): the CORE Agent-execution row now carries the claude
     // run's own token + cost values on the pipeline row, not "—".
     const coreTokens = coreRow.getByTestId('overview-pipeline-step-tokens');
@@ -367,6 +543,15 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     // The rendered Overview is clean: no runtime-error dialog over the pane
     // (the fixture supplies a complete cost summary, as the real backend does).
     await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+
+    fs.mkdirSync(REVIEW_RESULTS_DIR, { recursive: true });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      await runs.screenshot({
+        path: path.join(REVIEW_RESULTS_DIR, `overview-runs-${theme}--mocked.png`),
+      });
+    }
 
     if (RESULTS_DIR) {
       await page.screenshot({

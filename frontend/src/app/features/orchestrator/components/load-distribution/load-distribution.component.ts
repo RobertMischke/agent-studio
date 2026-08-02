@@ -1,9 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { CliUsageStore } from '../../../tokens';
 import type { CliUsageQuotaRow, TokenSummaryByModel } from '../../../tokens';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
-import { TaskService } from '../../../../services/task.service';
-import { taskNavigationHref } from '../../../task-detail/state/task-url';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 type Period = '1h' | '24h' | '7d';
@@ -27,8 +25,8 @@ interface ModelRow {
 })
 export class LoadDistributionComponent implements OnInit, OnDestroy {
   readonly entries = input<OrchestratorLogEntry[]>([]);
+  readonly openTaskRequest = output<{ jobId: string; watchPath: string }>();
   readonly store = inject(CliUsageStore);
-  private readonly tasks = inject(TaskService);
   readonly period = signal<Period>('24h');
   readonly decisionFilter = signal('all');
   readonly periods: { id: Period; label: string; hours: number }[] = [
@@ -108,12 +106,7 @@ export class LoadDistributionComponent implements OnInit, OnDestroy {
   }
   openTask(entry: OrchestratorLogEntry): void {
     if (!entry.jobId || !entry.watchPath) return;
-    this.tasks.getDetail(entry.jobId, entry.watchPath).subscribe({
-      next: (detail) => {
-        const href = taskNavigationHref(detail.info);
-        if (href) window.location.assign(href);
-      },
-    });
+    this.openTaskRequest.emit({ jobId: entry.jobId, watchPath: entry.watchPath });
   }
   formatTokens(value: number): string {
     if (value < 1_000) return value.toLocaleString();

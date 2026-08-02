@@ -383,7 +383,9 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.True(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
             boundary, 1));
 
-        Assert.False(File.Exists(Path.Combine(moved.FolderPath, "status.md")));
+        var freshStatus = File.ReadAllText(Path.Combine(moved.FolderPath, "status.md"));
+        Assert.Contains("<!-- agent-studio:result-scaffold -->", freshStatus);
+        Assert.DoesNotContain("Old escalation must not drive the next verdict", freshStatus);
         Assert.False(File.Exists(Path.Combine(moved.FolderPath, "aspect-code-quality.md")));
         Assert.False(File.Exists(Path.Combine(
             moved.FolderPath,

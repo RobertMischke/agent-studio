@@ -1,5 +1,8 @@
-import { test, expect, Page } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { api } from '../helpers/api';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 /**
  * Completed-lane primary = "Archive & Next" (feature: rename the detail
@@ -125,7 +128,8 @@ async function openTaskInDetail(page: Page, id: string, watchPath: string) {
 }
 
 test.describe('Completed lane primary is "Archive & Next"', () => {
-  test('label reads "Archive & Next" and clicking archives the card + advances to the next completed card', async ({ page }) => {
+  test('non-integrated archive warns, then archives and advances after confirmation', async ({ page, devBackend }) => {
+    void devBackend;
     const wp = await getFirstWatchPath();
     const tasks = await plantCompletedTasks(wp, 2);
     try {
@@ -153,18 +157,27 @@ test.describe('Completed lane primary is "Archive & Next"', () => {
       // Acceptance #2a: the Completed-lane primary is labelled "Archive & Next".
       const archiveBtn = page.getByTestId('studio-triage-action-archive');
       await expect(archiveBtn).toBeVisible({ timeout: 10_000 });
+      await expect(archiveBtn).toBeEnabled();
       await expect(archiveBtn).toHaveText(/Archive & Next/);
 
+      const beforeUrl = page.url();
+      const departingId = tasks[0].id;
+      // Dispatch through the element so a late notification toast cannot
+      // intercept the click after the overlay cleanup above.
+      await archiveBtn.evaluate((element: HTMLButtonElement) => element.click());
+
+      const confirm = page.getByTestId('confirm-dialog');
+      await expect(confirm).toBeVisible();
+      await expect(page.getByTestId('confirm-dialog-message')).toContainText('not integrated');
+      await expect(page.getByTestId('confirm-dialog-confirm')).toHaveText('Archive anyway');
+      const evidenceDir = resolve(process.env.JOB_RESULTS_DIR ?? join('..', 'results', 'AGT-2425'));
+      mkdirSync(evidenceDir, { recursive: true });
+      await confirm.screenshot({ path: join(evidenceDir, 'archive-guard-after-warning.png') });
       const movePromise = page.waitForResponse(
         r => r.url().includes(`/api/tasks/${encodeURIComponent(tasks[0].id)}/move`),
         { timeout: 10_000 },
       );
-
-      const beforeUrl = page.url();
-      const departingId = tasks[0].id;
-      // force:true — a late notification toast can stack over the slim
-      // tab-bar between the dismiss and the click.
-      await archiveBtn.click({ force: true });
+      await page.getByTestId('confirm-dialog-confirm').click();
 
       // Acceptance #2b: the detail advances off the archived card to the
       // next completed peer. We assert the URL leaves the departing slug

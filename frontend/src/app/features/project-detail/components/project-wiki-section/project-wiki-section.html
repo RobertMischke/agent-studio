@@ -374,6 +374,22 @@
                   (archiveCompleted)="refresh({ soft: true })" />
               </header>
 
+              @if (pageUpdated()) {
+                <div class="pwiki__update-banner"
+                     role="status"
+                     data-testid="project-wiki-update-banner">
+                  <span>Diese Seite wurde aktualisiert.</span>
+                  <button type="button"
+                          data-testid="project-wiki-update-reload"
+                          [disabled]="pageReloading()"
+                          (click)="reloadUpdatedPage()">
+                    {{ pageReloading() ? 'Wird neu geladen...' : 'Neu laden' }}
+                  </button>
+                  <button type="button"
+                          data-testid="project-wiki-update-dismiss"
+                          (click)="dismissPageUpdate()">Ausblenden</button>
+                </div>
+              }
               @if (revisionSha(); as sha) {
                 <div class="pwiki__rev-banner" data-testid="project-wiki-rev-banner">
                   Viewing revision <code>{{ sha }}</code>
@@ -392,6 +408,7 @@
                     </div>
                   } @else {
                     <iframe class="pwiki__html-frame pwiki__report-frame"
+                            #wikiHtmlFrame
                             data-testid="project-wiki-report-frame"
                             sandbox="allow-scripts"
                             [srcdoc]="trustedReportHtml()"
@@ -450,11 +467,18 @@
               } @else if (loadingDoc()) {
                 <p class="studio-empty pwiki__reader-empty">Loading document...</p>
               } @else if (openedType() === 'html') {
-                <iframe class="pwiki__html-frame"
-                        data-testid="project-wiki-html-frame"
-                        sandbox="allow-scripts"
-                        [srcdoc]="trustedHtml()"
-                        aria-label="HTML knowledge page" appTooltip="HTML knowledge page"></iframe>
+                <div class="pwiki__doc-frame" [class.pwiki__doc-frame--max]="maximized()">
+                  <button type="button" class="pwiki__maximize" data-testid="project-wiki-maximize"
+                          (click)="maximized.set(!maximized())"
+                          [appTooltip]="maximized() ? 'Lesemodus schliessen (Esc)' : 'Maximieren - nur den Inhalt lesen'"
+                          [attr.aria-label]="maximized() ? 'Close reading mode' : 'Maximize document'">{{ maximized() ? '✕ Schließen' : '⤢ Lesen' }}</button>
+                  <iframe class="pwiki__html-frame"
+                          #wikiHtmlFrame
+                          data-testid="project-wiki-html-frame"
+                          sandbox="allow-scripts"
+                          [srcdoc]="trustedHtml()"
+                          aria-label="HTML knowledge page"></iframe>
+                </div>
               } @else if (openedType() === 'json') {
                 <div class="pwiki__json-preview" data-testid="project-wiki-json-preview">
                   <pre>{{ displayJson() }}</pre>
@@ -591,7 +615,6 @@
                     </dl>
                 </app-wiki-meta-section>
               }
-
               <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-linked-elements"
                   sectionId="linkedElements" title="Linked elements"
                   toggleTestId="project-wiki-section-toggle-linked-elements"
@@ -622,6 +645,10 @@
                     <p class="pwiki__panel-empty">No page or task links detected.</p>
                   }
               </app-wiki-meta-section>
+
+              @if (openedNode()?.metadata?.agentReads; as reads) {
+                <app-wiki-agent-reads [reads]="reads" />
+              }
 
               <app-wiki-meta-section class="pwiki__panel pwiki__panel--history"
                   data-testid="project-wiki-history-panel" sectionId="history" title="History"

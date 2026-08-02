@@ -37,6 +37,7 @@ public sealed class LogShipper
     private readonly RunLeaseInfoDto _lease;
     private readonly Action<string> _diag;
     private readonly DurableRunOutbox? _outbox;
+    private readonly DurableLeaseAuthority? _authority;
     private readonly ConcurrentQueue<CliOutputLine> _pending = new();
     private int _pendingCount;
     private long _dropped;
@@ -49,13 +50,15 @@ public sealed class LogShipper
         string taskKey,
         RunLeaseInfoDto lease,
         Action<string> diag,
-        DurableRunOutbox? outbox = null)
+        DurableRunOutbox? outbox = null,
+        DurableLeaseAuthority? authority = null)
     {
         _client = client;
         _taskKey = taskKey;
         _lease = lease;
         _diag = diag;
         _outbox = outbox;
+        _authority = authority;
     }
 
     /// <summary>Approximate number of lines currently buffered (test/diagnostic seam).</summary>
@@ -96,6 +99,8 @@ public sealed class LogShipper
     {
         if (_outbox is not null)
         {
+            if (_authority is { ReplayAllowed: false })
+                return false;
             try
             {
                 await _outbox.ReplayAsync(

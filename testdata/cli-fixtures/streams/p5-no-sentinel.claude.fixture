@@ -1,0 +1,9 @@
+#! {"scenario":"P5","title":"substantial reply, no terminal sentinel","cli":"claude","form":"stream-json","exitCode":0}
+# The migration's sharpest edge (plan section 8): the legacy remote path scans
+# plaintext and lands on ProtocolInconclusive, while the stream-json form gives
+# the outcome adapter a provider completion plus a final reply and lands on
+# SuccessfulCompletion. Same scenario, two verdicts - keep both recordings.
+{"type":"system","subtype":"init","session_id":"e0b7f3a1-55c2-4f9d-8a17-4c6b2d803ef5","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit","Bash"],"slash_commands":[]}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"runner/ProcessRunner.cs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"applied"}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":263400,"num_turns":14,"result":"I refactored the output buffer and left the migration notes in the task folder. The remaining work needs a decision on the log sink before it can be finished.","session_id":"e0b7f3a1-55c2-4f9d-8a17-4c6b2d803ef5","total_cost_usd":0.5510,"usage":{"input_tokens":2240,"cache_creation_input_tokens":3010,"cache_read_input_tokens":61200,"output_tokens":1440}}

@@ -109,6 +109,40 @@ const QUEUED = task(
   '2026-07-24T19:59:40Z',
 );
 
+const PRE_STEP = task(
+  'agt-pre-step',
+  'Live preparation step',
+  '3-progress',
+  {
+    attempt: 1,
+    activeStep: {
+      stepId: 'pre-worktree-create',
+      displayName: 'Create worktree',
+      kind: 'pre',
+      startedAt: '2026-07-24T20:00:30Z',
+    },
+    nextSteps: [{ stepId: 'core', displayName: 'Agent execution' }],
+    queue: null,
+    latestEventAt: '2026-07-24T20:00:30Z',
+  },
+  '2026-07-24T20:00:30Z',
+);
+
+Object.assign(PRE_STEP, {
+  runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'stale failure' },
+  execution: {
+    jobId: 'agt-pre-step',
+    taskKey: `${WATCH_PATH}::agt-pre-step`,
+    processId: 0,
+    startedAt: '2026-07-24T19:59:30Z',
+    status: 'failed',
+    exitCode: 1,
+    durationSeconds: 1,
+    model: 'gpt-5.4-mini',
+    runOutcome: 'failed',
+  },
+});
+
 const STALLED = task(
   'agt-stalled',
   'Possible pipeline hang',
@@ -126,7 +160,7 @@ const STALLED = task(
   '2026-07-24T19:48:40Z',
 );
 
-const TASKS = [ACTIVE, QUEUED, STALLED];
+const TASKS = [ACTIVE, QUEUED, PRE_STEP, STALLED];
 
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
@@ -167,7 +201,7 @@ async function installRoutes(page: Page): Promise<void> {
         preparation: [],
         orchestratorPrep: [],
         ready: [],
-        progress: [STALLED],
+        progress: [PRE_STEP, STALLED],
         failedPickup: [],
         codeNotComplete: [],
         review: [],
@@ -220,6 +254,7 @@ test.describe('task live status', () => {
 
     const activeCard = page.locator('[data-testid="task-card"]', { hasText: 'Live review chain' });
     const queuedCard = page.locator('[data-testid="task-card"]', { hasText: 'Waiting review slot' });
+    const preStepCard = page.locator('[data-testid="task-card"]', { hasText: 'Live preparation step' });
     const stalledCard = page.locator('[data-testid="task-card"]', { hasText: 'Possible pipeline hang' });
 
     await expect(activeCard.getByTestId('task-live-current')).toContainText('Review aspect · Tests and evidence');
@@ -229,6 +264,11 @@ test.describe('task live status', () => {
     await expect(activeCard.getByTestId('task-live-status')).toContainText('via Codex');
     await expect(activeCard.getByTestId('task-live-next')).toContainText('Grade → Gate → Merge');
     await expect(queuedCard.getByTestId('task-live-current')).toContainText('Waiting for review slot · position 3');
+    await expect(preStepCard).toHaveAttribute('data-running', 'true');
+    await expect(preStepCard.getByTestId('task-live-current')).toContainText('Create worktree');
+    await expect(preStepCard).not.toContainText('No active run');
+    await expect(preStepCard).not.toContainText('Failed');
+    await expect(preStepCard).not.toContainText('Stalled');
     await expect(stalledCard.getByTestId('task-live-current'))
       .toContainText(/No activity for 12m\d{2}s · possible hang/);
 

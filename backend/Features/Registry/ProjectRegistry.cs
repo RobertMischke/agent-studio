@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -18,16 +19,17 @@ namespace AgentStudio.Registry;
 /// <c>.task-counter.json</c> per watch-path folder).</item>
 /// </list>
 ///
-/// <para>F45a ships the read surface plus boot-time auto-discovery
-/// (<see cref="EnsureProjectForStorage"/>) that populates the registry
-/// from the configured <c>WatchPaths</c>. Project creation via REST,
-/// rename, archive, and workspace reassignment land in F45b.</para>
+/// <para>F45a ships the read surface plus first-boot auto-discovery
+/// (<see cref="EnsureProjectForStorage"/>) that populates a missing registry
+/// from the configured <c>WatchPaths</c>. Project creation via REST, rename,
+/// archive, and workspace reassignment land in F45b.</para>
 /// </summary>
 public sealed class ProjectRegistry
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true,
+        RespectNullableAnnotations = true,
         WriteIndented = true,
     };
 
@@ -39,6 +41,7 @@ public sealed class ProjectRegistry
     private readonly object _gate = new();
     private ProjectsFile _state = new();
     private bool _loaded;
+    private bool _registryFileWasMissingAtLoad;
 
     public ProjectRegistry(
         IConfiguration config,
@@ -58,29 +61,55 @@ public sealed class ProjectRegistry
         lock (_gate)
         {
             if (_loaded) return;
-            _loaded = true;
-            if (_taskRepositoryRoot == null) return;
+            if (_taskRepositoryRoot == null)
+            {
+                _loaded = true;
+                return;
+            }
 
             var path = RegistryPaths.ProjectsFilePath(_taskRepositoryRoot);
-            if (!File.Exists(path)) return;
+            if (!File.Exists(path))
+            {
+                _registryFileWasMissingAtLoad = true;
+                _loaded = true;
+                return;
+            }
 
             try
             {
                 var json = File.ReadAllText(path);
-                var parsed = JsonSerializer.Deserialize<ProjectsFile>(json, JsonOpts);
-                if (parsed != null)
-                {
-                    _state = parsed;
-                    _logger.LogInformation(
-                        "project-registry-loaded path={Path} count={Count} nextSeq={Next}",
-                        path, _state.Projects.Count, _state.NextProjectIdSeq);
-                }
+                var parsed = JsonSerializer.Deserialize<ProjectsFile>(json, JsonOpts)
+                    ?? throw new JsonException("The project registry JSON root is null.");
+                ValidateLoadedState(parsed);
+                _state = parsed;
+                _loaded = true;
+                _logger.LogInformation(
+                    "project-registry-loaded path={Path} count={Count} nextSeq={Next}",
+                    path, _state.Projects.Count, _state.NextProjectIdSeq);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "project-registry-load-failed path={Path} - starting with empty list",
+                    "project-registry-load-failed path={Path} action=fail-closed",
                     path);
+                throw new ProjectRegistryLoadException(path, ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// True only when this service first loaded while <c>projects.json</c> did
+    /// not exist. Legacy WatchPaths discovery may seed records only in this
+    /// state. An existing empty file is still an authoritative registry.
+    /// </summary>
+    public bool RegistryFileWasMissingAtLoad
+    {
+        get
+        {
+            EnsureLoaded();
+            lock (_gate)
+            {
+                return _registryFileWasMissingAtLoad;
             }
         }
     }
@@ -553,8 +582,7 @@ public sealed class ProjectRegistry
             var updated = owner with { OwnershipMappings = mappings, OwnershipMappingAudit = audit };
             var next = _state.Projects.ToList();
             next[idx] = updated;
-            _state = _state with { Projects = next };
-            PersistLocked();
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
             _logger.LogInformation(
                 "project-ownership-mapping-upserted id={Id} mappingId={MappingId} version={Version} actor={Actor}",
                 id, normalized.Id, normalized.Version, changedBy);
@@ -815,7 +843,8 @@ public sealed class ProjectRegistry
             Cwd = cwd,
             Port = rule.Port,
             HealthUrl = string.IsNullOrWhiteSpace(rule.HealthUrl) ? null : ValidateUrl(rule.HealthUrl),
-            ReadinessTimeoutSeconds = Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120),
+            ReadinessTimeoutSeconds = Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 30 : rule.ReadinessTimeoutSeconds, 2, 300),
+            StartupTimeoutSeconds = Math.Clamp(rule.StartupTimeoutSeconds <= 0 ? 600 : rule.StartupTimeoutSeconds, 2, 3600),
             Source = source,
         };
     }
@@ -957,7 +986,7 @@ public sealed class ProjectRegistry
     {
         var previous = _state;
         _state = next;
-        try { PersistLocked(); }
+        try { PersistLocked(previous.Projects.Count); }
         catch
         {
             _state = previous;
@@ -965,12 +994,23 @@ public sealed class ProjectRegistry
         }
     }
 
-    private void PersistLocked()
+    private void PersistLocked(int previousProjectCount)
     {
         if (_taskRepositoryRoot == null) return;
         try
         {
             var path = RegistryPaths.ProjectsFilePath(_taskRepositoryRoot);
+            if (_state.Projects.Count < previousProjectCount && File.Exists(path))
+            {
+                var quarantinePath = NextQuarantinePath(path);
+                File.Copy(path, quarantinePath);
+                _logger.LogWarning(
+                    "project-registry-shrink-quarantined path={Path} quarantinePath={QuarantinePath} previousCount={PreviousCount} nextCount={NextCount}",
+                    path,
+                    quarantinePath,
+                    previousProjectCount,
+                    _state.Projects.Count);
+            }
             _fileWriter.Write(path, JsonSerializer.Serialize(_state, JsonOpts));
         }
         catch (Exception ex)
@@ -981,9 +1021,56 @@ public sealed class ProjectRegistry
         }
     }
 
+    private static string NextQuarantinePath(string registryPath)
+    {
+        var timestamp = DateTime.UtcNow.ToString(
+            "yyyyMMdd'T'HHmmssfffffff'Z'",
+            CultureInfo.InvariantCulture);
+        var basePath = $"{registryPath}.quarantine-{timestamp}";
+        var candidate = basePath;
+        var suffix = 1;
+        while (File.Exists(candidate))
+        {
+            candidate = $"{basePath}-{suffix}";
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private static void ValidateLoadedState(ProjectsFile state)
+    {
+        if (state.Projects == null)
+            throw new JsonException("Projects must not be null.");
+
+        for (var index = 0; index < state.Projects.Count; index++)
+        {
+            var project = state.Projects[index];
+            if (project == null)
+                throw new JsonException($"Projects[{index}] must not be null.");
+            if (project.Urls == null)
+                throw new JsonException($"Projects[{index}].Urls must not be null.");
+            if (project.OwnershipMappings == null)
+                throw new JsonException($"Projects[{index}].OwnershipMappings must not be null.");
+            if (project.OwnershipMappingAudit == null)
+                throw new JsonException($"Projects[{index}].OwnershipMappingAudit must not be null.");
+        }
+    }
+
     private static string NormalisePath(string? p)
     {
         if (string.IsNullOrWhiteSpace(p)) return "";
         return p.Replace('\\', '/').TrimEnd('/').ToLowerInvariant();
+    }
+}
+
+/// <summary>
+/// The durable project registry exists but could not be read as its declared
+/// schema. Callers must abort startup or reject the operation without writing.
+/// </summary>
+public sealed class ProjectRegistryLoadException : IOException
+{
+    public ProjectRegistryLoadException(string path, Exception innerException)
+        : base($"Could not load the project registry at '{path}'. No registry writes are allowed.", innerException)
+    {
     }
 }

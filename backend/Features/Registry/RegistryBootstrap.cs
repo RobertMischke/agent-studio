@@ -4,15 +4,14 @@ namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — boot-time discovery pass. Runs once at startup before the
-/// app accepts requests. Populates the workspace + project registries
-/// from the configured <c>WatchPaths</c> so the new identity layer is
-/// load-bearing the first time the API serves
+/// app accepts requests. Populates a missing project registry from the
+/// configured <c>WatchPaths</c> so the new identity layer is load-bearing
+/// the first time the API serves
 /// <c>GET /api/workspaces</c> or <c>GET /api/projects</c>.
 ///
-/// <para>F45a is additive: this pass does not write to watched project
-/// folders, does not move jobs, and does not rename anything on disk.
-/// It only writes <c>&lt;TaskRepository&gt;/.metadata/workspaces.json</c>
-/// and <c>projects.json</c>.</para>
+/// <para>F45a does not write to watched project folders, move jobs, or rename
+/// anything on disk. It seeds projects only when <c>projects.json</c> was
+/// absent at initial load. An existing registry is authoritative.</para>
 ///
 /// <para>F45c will extend the bootstrap with the migration steps
 /// (task-key assignment, lane-folder restructure, project.json backlink
@@ -36,10 +35,13 @@ public static class RegistryBootstrap
             return;
         }
 
+        projects.EnsureLoaded();
+        var seedLegacyWatchPaths = projects.RegistryFileWasMissingAtLoad;
         var defaultWorkspace = workspaces.EnsureDefaultWorkspace(clock);
 
         var watchPaths = scanner.GetWatchPaths();
         var discovered = 0;
+        var skippedLegacySeeds = 0;
         var divergedDisplayNames = 0;
         foreach (var entry in watchPaths)
         {
@@ -65,6 +67,16 @@ public static class RegistryBootstrap
                         existing.Id, existing.DisplayName, entry.Name, entry.Path);
                     divergedDisplayNames++;
                 }
+                continue;
+            }
+
+            if (!seedLegacyWatchPaths)
+            {
+                skippedLegacySeeds++;
+                logger.LogWarning(
+                    "registry-bootstrap-watchpath-seed-skipped reason=project-registry-file-exists watchPathName={WatchPathName} storage={Storage}",
+                    entry.Name,
+                    entry.Path);
                 continue;
             }
 
@@ -126,10 +138,11 @@ public static class RegistryBootstrap
         }
 
         logger.LogInformation(
-            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} watchPathDisplayNameDivergences={Divergences}",
+            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} legacySeedsSkipped={SkippedLegacySeeds} watchPathDisplayNameDivergences={Divergences}",
             workspaces.List().Count,
             discovered,
             projects.List().Count,
+            skippedLegacySeeds,
             divergedDisplayNames);
     }
 

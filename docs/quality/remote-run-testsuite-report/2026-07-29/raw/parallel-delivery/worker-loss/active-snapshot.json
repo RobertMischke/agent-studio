@@ -1,0 +1,134 @@
+[
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-1",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-1",
+    "title": "Isolated parallel reference delivery 1",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4205517Z",
+    "updatedAt": "2026-07-29T02:08:45.742866Z",
+    "body": "Create only the deterministic namespace for RTL-1. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-2",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-2",
+    "title": "Isolated parallel reference delivery 2",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4319895Z",
+    "updatedAt": "2026-07-29T02:08:45.7604546Z",
+    "body": "Create only the deterministic namespace for RTL-2. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-3",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-3",
+    "title": "Isolated parallel reference delivery 3",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4455723Z",
+    "updatedAt": "2026-07-29T02:08:45.7808911Z",
+    "body": "Create only the deterministic namespace for RTL-3. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-4",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-4",
+    "title": "Isolated parallel reference delivery 4",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4574446Z",
+    "updatedAt": "2026-07-29T02:08:45.8109414Z",
+    "body": "Create only the deterministic namespace for RTL-4. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-5",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-5",
+    "title": "Isolated parallel reference delivery 5",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4682357Z",
+    "updatedAt": "2026-07-29T02:08:45.8396985Z",
+    "body": "Create only the deterministic namespace for RTL-5. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-6",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-6",
+    "title": "Isolated parallel reference delivery 6",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4826665Z",
+    "updatedAt": "2026-07-29T02:08:45.8635506Z",
+    "body": "Create only the deterministic namespace for RTL-6. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-7",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-7",
+    "title": "Isolated parallel reference delivery 7",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.4942699Z",
+    "updatedAt": "2026-07-29T02:08:45.8861105Z",
+    "body": "Create only the deterministic namespace for RTL-7. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-8",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-8",
+    "title": "Isolated parallel reference delivery 8",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.5079369Z",
+    "updatedAt": "2026-07-29T02:08:45.9023738Z",
+    "body": "Create only the deterministic namespace for RTL-8. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-9",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-9",
+    "title": "Isolated parallel reference delivery 9",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.5223582Z",
+    "updatedAt": "2026-07-29T02:08:45.9152503Z",
+    "body": "Create only the deterministic namespace for RTL-9. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-10",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-10",
+    "title": "Isolated parallel reference delivery 10",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.5333045Z",
+    "updatedAt": "2026-07-29T02:08:45.9309029Z",
+    "body": "Create only the deterministic namespace for RTL-10. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-11",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-11",
+    "title": "Isolated parallel reference delivery 11",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.5478685Z",
+    "updatedAt": "2026-07-29T02:08:45.9462525Z",
+    "body": "Create only the deterministic namespace for RTL-11. Infrastructure verification task."
+  },
+  {
+    "taskId": "tsk-canary-parallel-12-worker-loss-12",
+    "projectId": "prj-canary-parallel-12-worker-loss",
+    "taskKey": "RTL-12",
+    "title": "Isolated parallel reference delivery 12",
+    "state": "3-progress",
+    "version": 2,
+    "createdAt": "2026-07-29T02:08:45.562216Z",
+    "updatedAt": "2026-07-29T02:08:45.9614258Z",
+    "body": "Create only the deterministic namespace for RTL-12. Infrastructure verification task."
+  }
+]

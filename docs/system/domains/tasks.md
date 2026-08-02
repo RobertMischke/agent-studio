@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-23
+Version: 2026-07-30
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -10,8 +10,14 @@ or commit attribution.
 ## Execution modes
 
 - `coding` is the default source-mutating mode.
-- `planning` and `research` are report-only modes. They run without git
-  mutation steps and must finish with a clean product checkout.
+- `planning` and `research` are report-only modes. They run the lightweight
+  report pipeline without git, build, test, Stylelint, aspect, or code-quality
+  steps and must finish with a clean product checkout.
+- Research is recognized by canonical task metadata `mode=research`, shown as a
+  Research pill, and reinforced by the effective prompt heading `Research:`.
+  Its primary artifact is `results/report.html`; every optional companion is
+  linked from that HTML. See the
+  [Research task delivery convention](../../operations/research-deliverables/index.html).
 - `concept` is document-first. It uses an isolated worktree but may change only
   one `docs/operations/<topic>/` Workbench. The published document, not
   `status.md`, is the promotion source.
@@ -65,6 +71,15 @@ the dedicated `PUT /api/projects/{projectName}/execution-runner` contract.
 Project id, source type, storage location, creation time, and the task-key
 counter are immutable and are never accepted as update fields.
 
+The project registry is fail-closed. If an existing
+`<TaskRepository>/.metadata/projects.json` is not deserializable, startup
+terminates with `ProjectRegistryLoadException` and
+`project-registry-load-failed`; no empty replacement state is exposed or
+written. Legacy `WatchPaths` seeding is eligible only when the registry file
+was absent at its initial load. Every persisted project-count reduction first
+copies the current file to `projects.json.quarantine-<UTC timestamp>` and logs
+`project-registry-shrink-quarantined`.
+
 ## API-First Task Organization
 
 Agents must organize tasks through the application API, never by direct
@@ -87,6 +102,27 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
+- Integration status accepts persisted abbreviated Git SHAs of at least seven
+  hexadecimal characters when they match a reachable full SHA by prefix.
+  Zero-file lifecycle entries whose subjects start with
+  `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
+  visible attribution metadata but are not delivery expectations. A matching
+  subject with changed files remains a real integration expectation.
+- Accepted-card `integration.status` is a read-time projection of attributed
+  commit membership in the configured target branch, cached against that
+  branch's current HEAD. Lane state, provenance merge records, pipeline success,
+  and curated merge subjects do not force `integrated`; an out-of-band merge is
+  detected on the next read.
+- Human acceptance is transactional. A coding card remains in
+  `5-human-review` with phase `integrating` until the delivery reaches `Merged`
+  or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
+  to ordinary Human Review with an Integration failed badge and timeline
+  evidence. Before the already-integrated decision, acceptance fetches the
+  configured origin integration ref and evaluates refreshed local plus remote
+  ancestry. A remote-only out-of-band integration therefore skips the merge
+  queue and gate, while local/remote divergence becomes a failed integration
+  record instead of being overwritten. The `integrationpending` tag is an
+  internal recovery marker, not a second UI status.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
@@ -110,11 +146,51 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
   blocks, or starts a new attempt.
 - [../concepts/task-integration-and-merge-workflow.md](../../concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
-  `5-human-review -> 6-completed` accept trigger).
+  transactional Human Review accept trigger).
 - [../concepts/task-integration-merge-config-analysis.html](../../concepts/task-integration-merge-config-analysis.html):
   why integration semantics should not depend on `maxParallelism`.
 - [../concepts/auto-review-evidence-gate-analysis.html](../../concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
+
+## Card test evidence projection
+
+The board's test-evidence block is a read-time projection, not one persisted
+test status on `task.json`. `TestRunService` reconciles these evidence classes:
+
+| Evidence class | Durable source | Reaches the card | Matching rule |
+|---|---|---|---|
+| Project Test Quality run | `<TaskRepository>/.metadata/test-runs/<projectId>.json` | Yes | Exact task commit, a later run that contains the task commit, or a qualifying integration recut found through Git ancestry |
+| Remote Review `build-tests` grade | `remote-review-grade-<attemptId>.md` in the task folder | Yes | The grade must contain a `build-tests` verdict and its immutable result SHA must equal or contain the current card anchor |
+| Post-processing build/test gate | `post-steps/build-test-gate-*.log` | Yes | The tested SHA must equal or contain the current card anchor |
+| Pre-develop build gate and pre-main test gate | `post-steps/pre-develop-build-gate-*.log` and `pre-main-test-gate-*.log` | Yes | The tested merge SHA must equal or contain the current card anchor |
+| Review aspect `tests-and-evidence` | `aspect-tests-and-evidence.json` or Markdown twin | No green claim | This is an LLM review verdict, not proof that deterministic commands passed |
+| Build profile readiness | Project settings `buildProfile.status` | No | It controls pickup readiness. Evidence exists only after configured commands execute in a gate or recorded project test run |
+| Agent-authored test output and Playwright screenshots | `status.md`, run logs, and `results/` | No automatic green claim | They remain inspectable task artifacts until a structured SHA-bound producer records them |
+
+A project test run is assigned only when the project Test Quality API has a
+recorded run and Git ancestry links its commit to the card. Gate execution does
+not create a project test-run record. Gate logs and Remote Review reports are
+separate task-owned evidence sources and are reconciled alongside project runs.
+A source for an older card commit is deliberately ignored after the card gains
+a newer commit.
+
+The 2026-07-29 archived-card incident demonstrated the former gap:
+
+| Card | Former card projection | Evidence that actually existed |
+|---|---|---|
+| AGT-2416 | `Evidence pending: No test run assigned` | Remote Review `review_05aa90204763466abc2627c9be2eedc8`: `Pass`, `build-tests: pass`, exact SHA `3aa5ad85` |
+| AGT-2399 | `Evidence pending: No test run assigned` | Remote Review `review_b916bab377404c1f9457f6cf075c58f1`: `Pass`, `build-tests: pass`, exact SHA `67d3039c` |
+| AGT-2426 | `Evidence pending: No test run assigned` | Remote Review `review_8017590a9dd34619b1480e0fdbb5938e`: `Pass`, `build-tests: pass`, exact SHA `d1649ce9` |
+
+All three reports also recorded an immutable materialized HEAD equal to the
+card commit. The old projection queried only the project Test Quality store,
+which had no runs for these cards, and never inspected their task-owned report
+files. The corrected card copy names the source and SHA, for example
+`Review build-tests Pass at d1649ce9` or
+`Build/test gate green at <sha>`. Truly unassigned cards use
+`No test evidence assigned` and say that no SHA-linked project run, build gate,
+or review grade is recorded. Only a matched planned or running project test
+run uses `Evidence pending`.
 
 ## Files-tab document projection
 
@@ -132,6 +208,38 @@ of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
+
+## Result transition invariant
+
+`TaskTransitionService` is the single enforcement point for Result availability.
+Every successful move into `4-auto-review`, `5-human-review`, `5e-escalated`,
+or `6-completed` carries a non-empty `status.md`. When no generated protocol is
+available, the service writes a marked, evidence-only scaffold before the
+folder move and enriches its own scaffold after the move with the computed
+integration projection. It never replaces a real Result. Backend startup runs
+the same idempotent repair over missing Results in `5-human-review`,
+`6-completed`, and `7-archive`; repaired files are marked as operator
+backfills.
+
+## Task-tab refinement projection
+
+The task-detail inspector orders its tabs as `Task | Activity | Result`.
+`Task` renders the current `prompt.md`, followed by a quiet chronological
+refinement history. `GET /api/tasks/{id}/runs` derives that history at read
+time from existing evidence:
+
+- `prompt-N.md` supplies full multiline operator refinements created through
+  Extend mode.
+- The run timeline supplies other operator follow-ups from the `[user]` rows
+  in `logs/cli-output.log`; the paired run start is the displayed time and the
+  session-event reason supplies the reason when present.
+- `orchestrator-follow-up-history/*.md` supplies system reissues, including
+  their recorded timestamp, reason or cause, and verbatim steering prompt.
+
+The projection de-duplicates an Extend prompt when the nearby run-log
+follow-up contains the same normalized text. It adds no task files and no
+write-side contract. Legacy follow-ups that exist only as `[user]` log rows
+therefore remain visible without inventing a second persistence mechanism.
 
 ## Project proposals
 
@@ -189,9 +297,10 @@ cannot erase an operator decision.
 - `backend/Services/Tasks/LaneMutexRegistry.cs`: per-project lane serialization.
 - `backend/Services/Tasks/CommitAttributionService.cs` and
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
-- `backend/Features/TestRuns/TestRunService.cs`: project-wide test-run
-  lifecycle plus the read-time card evidence projection derived from the
-  latest task-owned commit and Git ancestry.
+- `backend/Features/TestRuns/TestRunService.cs` and
+  `TaskScopedTestEvidenceReader.cs`: project-wide test-run lifecycle plus the
+  read-time card evidence projection derived from the latest task-owned commit,
+  Git ancestry, Remote Review build-tests grades, and deterministic gate logs.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
 - `backend/Features/Registry/WorkspaceSettingsService.cs` and
@@ -215,6 +324,9 @@ cannot erase an operator decision.
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
+- Moving a task from `6-completed` to `7-archive` in task detail requires a
+  second confirmation while `integration.status` is anything other than
+  `integrated`. This is an operator warning, not a server-side hard block.
 - Only `2-ready` and `3-progress` tasks can be started. A `2-ready` card is
   additionally held back from auto-pickup while its `references.dependsOn`
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
@@ -236,11 +348,13 @@ cannot erase an operator decision.
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
-- Test evidence is never persisted on a task. A successful run proves a card
-  only when its commit equals the card commit or contains its change. Direct
-  ancestry proves ordinary commits; a reachable curated `merge(KEY)` or
-  `merge-recut(KEY)` integration anchor proves rewritten task commits only when
-  that integration postdates the card's current attributed commit.
+- The combined test-evidence projection is never persisted on `task.json`.
+  Project runs remain project-scoped objects; task-owned Remote Review grades
+  and gate logs remain immutable files in the task folder. A successful source
+  proves a card only when its commit equals the card commit or contains its
+  change. Direct ancestry proves ordinary commits; a reachable curated
+  `merge(KEY)` or `merge-recut(KEY)` integration anchor proves rewritten task
+  commits only when that integration postdates the card's current attributed commit.
   Missing commit timestamps disable this fallback rather than reusing historical
   key-only evidence. Planned and running matches are pending evidence; an older
   green run remains visible as `diff not included` and never turns the card green.

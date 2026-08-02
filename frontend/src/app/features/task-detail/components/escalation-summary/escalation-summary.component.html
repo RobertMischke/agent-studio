@@ -49,6 +49,8 @@
           <span
             class="escalation__rec escalation__rec--{{ rec.tone }}"
             data-testid="escalation-recommendation"
+            data-label-kind="status"
+            [attr.aria-label]="'Recommendation: ' + rec.label"
             [cacTooltip]="'The completion gate\'s recommendation for this card.'">
             {{ rec.label }}
           </span>

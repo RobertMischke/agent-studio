@@ -9,6 +9,16 @@ namespace AgentStudio.Tasks;
 /// </summary>
 public sealed class TaskTransitionService
 {
+    private const string ResultScaffoldMarker = "<!-- agent-studio:result-scaffold -->";
+    private const string OperatorBackfillMarker = "<!-- agent-studio:operator-result-backfill -->";
+    private static readonly HashSet<string> ResultRequiredStates = new(StringComparer.Ordinal)
+    {
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Escalated,
+        TaskStates.Completed,
+    };
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly TaskMutationService _mutations;
@@ -27,6 +37,7 @@ public sealed class TaskTransitionService
     private readonly TimelineLog? _timeline;
     private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -58,7 +69,8 @@ public sealed class TaskTransitionService
         TaskIntegrationStatusService? integrationStatus = null,
         TimelineLog? timeline = null,
         OperatorReviewRequeueService? operatorReviewRequeue = null,
-        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null)
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null)
     {
         _scanner = scanner;
         _states = states;
@@ -78,6 +90,7 @@ public sealed class TaskTransitionService
         _timeline = timeline;
         _operatorReviewRequeue = operatorReviewRequeue;
         _pipelineLog = pipelineLog;
+        _acceptedIntegrationQueue = acceptedIntegrationQueue;
     }
 
     /// <summary>
@@ -98,13 +111,33 @@ public sealed class TaskTransitionService
         string? reason = null,
         AttemptWriteReference? authorityWrite = null,
         bool suppressProductExecution = false,
-        string? expectedSourceState = null)
+        string? expectedSourceState = null,
+        bool suppressIntegrationTrigger = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
 
         var settings = _settings.Get(info.ProjectName);
         var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
+
+        // Result is a transition invariant, not a runner or endpoint concern.
+        // Materialize the fallback before the folder move so it travels with the
+        // task atomically. If the task store is not writable, refuse the move:
+        // landing a review/terminal card without a Result is not a valid state.
+        if (ResultRequiredStates.Contains(targetState)
+            && !TryEnsureResultDocument(
+                info,
+                targetState,
+                operatorBackfill: false,
+                refreshOwnedScaffold: true,
+                DateTime.UtcNow,
+                integrationReferenceOverride: null,
+                out var resultError))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                $"Cannot move task to {targetState} because status.md could not be ensured: {resultError}");
+        }
 
         // Read-only modes (planning / research) skip every git side effect on the
         // transition: no auto-commit, no immediate push, no commit-attribution,
@@ -141,13 +174,32 @@ public sealed class TaskTransitionService
         var fromState = info.State;
         var projectName = info.ProjectName;
 
+        if (!suppressIntegrationTrigger
+            && !suppressProductExecution
+            && !isReadOnly
+            && !TaskModes.IsConcept(info.Mode)
+            && fromState == TaskStates.HumanReview
+            && targetState == TaskStates.Completed
+            && (_acceptedIntegrationQueue != null || _mergeRunner != null))
+        {
+            return await BeginTransactionalAcceptAsync(
+                info,
+                settings,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite).ConfigureAwait(false);
+        }
+
         if (fromState == TaskStates.Escalated
             && targetState == TaskStates.Completed
             && !CanCompleteEscalatedJob(info, settings))
         {
             return new MoveJobOutcome(
                 MoveJobStatus.Failure,
-                $"Escalated tasks can only be accepted after their latest task commit is integrated into {settings.IntegrationBranch}.");
+                $"Escalated tasks can only be accepted after their latest task commit is integrated into "
+                + $"{TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch)}.");
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
@@ -198,6 +250,34 @@ public sealed class TaskTransitionService
             }
         }
 
+        if (outcome.Status == MoveJobStatus.Success && ResultRequiredStates.Contains(targetState))
+        {
+            // Rebuild only an application-owned scaffold after the move. The
+            // target-lane TaskInfo lets the accepted-card integration projection
+            // contribute its computed status. A real generated status.md is
+            // never overwritten.
+            var moved = _scanner.FindJob(jobId, watchPath);
+            if (moved != null
+                && !TryEnsureResultDocument(
+                    moved,
+                    targetState,
+                    operatorBackfill: false,
+                    refreshOwnedScaffold: true,
+                    DateTime.UtcNow,
+                    integrationReferenceOverride: null,
+                    out var refreshError))
+            {
+                // The pre-move scaffold already preserves the invariant. Keep the
+                // landed transition, but make the failed enrichment visible.
+                _logger.LogError(
+                    "result-scaffold-refresh-failed project={Project} job={JobId} state={State} error={Error}",
+                    moved.ProjectName,
+                    moved.Id,
+                    targetState,
+                    refreshError);
+            }
+        }
+
         // Deterministic commit-attribution post-step (ADR "Commit-Attribution-Regel").
         // Runs on every 3-progress -> 4-auto-review transition, after the
         // auto-commit stamp, so the task's commit set is pinned to its own
@@ -225,7 +305,9 @@ public sealed class TaskTransitionService
             // affect the lane transition that already completed above.
             if (attributed != null && _driftRunner != null)
             {
-                TriggerDriftPostSteps(attributed, settings);
+                TriggerDriftPostSteps(
+                    attributed,
+                    AgentStudio.Pipeline.PipelineTypeSettings.ForTask(settings, attributed)!);
             }
 
             if (attributed != null)
@@ -285,28 +367,49 @@ public sealed class TaskTransitionService
                 }
             }
 
-            // Deferred "Merge into Develop" post-step. Accepting a done-green task
-            // (the move into Completed) is the operator trigger that runs the real
-            // task/<id> -> develop merge. Independent of the push strategy above:
-            // a project that never auto-pushes still wants accepted work folded
-            // into the integration branch. Fully guarded - the runner records a
-            // visible conflict / error into the pipeline view but never throws, so
-            // it cannot undo the lane move that already landed on disk.
-            if (targetState == TaskStates.Completed && !isReadOnly && _mergeRunner != null)
+            var integrationRunsInBackground = _acceptedIntegrationQueue != null;
+
+            // Stamp the durable pending fact before the volatile hand-off. A
+            // pending status is the normal state while the worker waits and is
+            // therefore deliberately quiet. Only a failed hand-off or a decided
+            // inline merge failure emits the accept-without-merge warning.
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && !suppressIntegrationTrigger
+                && integrationRunsInBackground)
+            {
+                var acceptedJob = _scanner.FindJob(jobId, watchPath);
+                if (acceptedJob != null)
+                    FlagIntegrationOnAccept(acceptedJob, warnIfNotIntegrated: false);
+            }
+
+            // Deferred "Merge into Develop" post-step. Production hands the
+            // accepted delivery to a background worker so merge + cold build
+            // gate never occupy the accept HTTP request. The completed lane,
+            // pending pipeline step, and integrationpending marker are durable;
+            // AcceptedIntegrationBackstop recovers a dropped in-memory item.
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && !suppressIntegrationTrigger
+                && (_acceptedIntegrationQueue != null || _mergeRunner != null))
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
                 if (mergeJob != null)
                     await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
             }
 
-            // AGT-2202: accept-without-merge visibility. After the deferred merge
-            // step has had its chance, re-derive the honest git integration verdict
-            // for the just-accepted card. If its work is NOT in develop (pending /
-            // conflict), make it loud - a Warn timeline event + an
+            // AGT-2202: compatibility fixtures without the production queue still
+            // run the merge inline. In that path, derive visibility after the
+            // merge so existing synchronous callers retain their historical
+            // result. If work is NOT in develop, make it loud - a Warn timeline
+            // event plus an
             // integrationpending tag the completed-lane audit can list - WITHOUT
             // blocking the acceptance that already landed (Robert wants visibility,
             // not a new brake). Fully guarded and read-only.
-            if (targetState == TaskStates.Completed && !isReadOnly)
+            if (targetState == TaskStates.Completed
+                && !isReadOnly
+                && !suppressIntegrationTrigger
+                && !integrationRunsInBackground)
             {
                 var acceptedJob = _scanner.FindJob(jobId, watchPath);
                 if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
@@ -323,6 +426,595 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// One-time, idempotent operator repair for legacy accepted cards whose
+    /// Result tab is empty. Existing non-empty status documents are preserved.
+    /// The startup caller invokes this once per process; subsequent boots are
+    /// no-ops because every repaired card now owns a marked status.md.
+    /// </summary>
+    public ResultDocumentBackfillOutcome BackfillMissingResultDocuments(DateTime? nowUtc = null)
+    {
+        var repaired = 0;
+        var failures = new List<string>();
+        var missing = new List<TaskInfo>();
+        var candidates = _scanner.ScanAllJobsWithArchive()
+            .Where(task => task.State is
+                TaskStates.HumanReview or TaskStates.Completed or TaskStates.Archive)
+            .OrderBy(task => task.EnteredLaneAt)
+            .ThenBy(task => task.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var at = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
+
+        foreach (var task in candidates)
+        {
+            var path = Path.Combine(task.FolderPath, "status.md");
+            try
+            {
+                if (File.Exists(path) && !string.IsNullOrWhiteSpace(File.ReadAllText(path)))
+                    continue;
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{task.TaskKey}: {ex.Message}");
+                continue;
+            }
+
+            missing.Add(task);
+        }
+
+        var integrationByKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (_integrationStatus != null && missing.Count > 0)
+        {
+            try
+            {
+                foreach (var (key, status) in _integrationStatus.BuildLookup(missing))
+                    integrationByKey[key] = FormatIntegrationReference(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "result-document-backfill integration batch failed");
+            }
+        }
+
+        foreach (var task in missing)
+        {
+            var integration = integrationByKey.GetValueOrDefault(
+                task.TaskKey,
+                _integrationStatus == null
+                    ? "Not computed (integration projection unavailable)"
+                    : "Unknown (integration projection unavailable for this card)");
+            if (TryEnsureResultDocument(
+                    task,
+                    task.State,
+                    operatorBackfill: true,
+                    refreshOwnedScaffold: false,
+                    at,
+                    integration,
+                    out var error))
+            {
+                repaired++;
+            }
+            else
+            {
+                failures.Add($"{task.TaskKey}: {error}");
+            }
+        }
+
+        if (repaired > 0)
+        {
+            _logger.LogInformation(
+                "result-document-backfill repaired={Repaired} scanned={Scanned}",
+                repaired,
+                candidates.Count);
+        }
+        foreach (var failure in failures)
+            _logger.LogWarning("result-document-backfill-failed task={Failure}", failure);
+
+        return new ResultDocumentBackfillOutcome(candidates.Count, repaired, failures);
+    }
+
+    private bool TryEnsureResultDocument(
+        TaskInfo task,
+        string targetState,
+        bool operatorBackfill,
+        bool refreshOwnedScaffold,
+        DateTime atUtc,
+        string? integrationReferenceOverride,
+        out string? error)
+    {
+        var path = Path.Combine(task.FolderPath, "status.md");
+        try
+        {
+            if (File.Exists(path))
+            {
+                var existing = File.ReadAllText(path);
+                if (!string.IsNullOrWhiteSpace(existing)
+                    && (!refreshOwnedScaffold
+                        || !existing.Contains(ResultScaffoldMarker, StringComparison.Ordinal)))
+                {
+                    error = null;
+                    return true;
+                }
+            }
+
+            Directory.CreateDirectory(task.FolderPath);
+            File.WriteAllText(
+                path,
+                BuildResultScaffold(
+                    task,
+                    targetState,
+                    operatorBackfill,
+                    atUtc,
+                    integrationReferenceOverride),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "result-scaffold-write-failed project={Project} job={JobId} state={State} path={Path}",
+                task.ProjectName,
+                task.Id,
+                targetState,
+                path);
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private string BuildResultScaffold(
+        TaskInfo task,
+        string targetState,
+        bool operatorBackfill,
+        DateTime atUtc,
+        string? integrationReferenceOverride)
+    {
+        var landed = string.Equals(task.State, targetState, StringComparison.Ordinal);
+        var result = ResolveScaffoldResult(task, targetState);
+        var grade = ResolveGradeReference(task);
+        var deliverables = ResolveDeliverablesReference(task);
+        // Do not put a cold Git projection on the transition's preflight path.
+        // Before the move, the target-lane projection is not authoritative
+        // anyway. The post-move refresh and the startup backfill run against the
+        // landed state and write the actual computed integration verdict.
+        var integration = integrationReferenceOverride
+            ?? (landed || operatorBackfill
+                ? ResolveIntegrationReference(task)
+                : "Pending target-lane computation");
+        var provenance = operatorBackfill
+            ? $"Operator backfill on {atUtc:yyyy-MM-ddTHH:mm:ssZ} from existing task artifacts."
+            : landed
+                ? $"Synthesized by Agent Studio after entering `{targetState}` because no generated status.md was available."
+                : $"Prepared by Agent Studio for a transition into `{targetState}` because no generated status.md was available.";
+        var title = SingleLine(task.Title);
+        if (title.Length == 0) title = task.TaskKey;
+        var nl = Environment.NewLine;
+        var sb = new System.Text.StringBuilder();
+        sb.Append(ResultScaffoldMarker).Append(nl);
+        if (operatorBackfill) sb.Append(OperatorBackfillMarker).Append(nl);
+        sb.Append("# Status").Append(nl).Append(nl);
+        sb.Append("- Result: ").Append(result).Append(nl);
+        sb.Append("- Case: ").Append(result is "Success" or "NoOp" ? "generic" : "blocked").Append(nl);
+        sb.Append("- Grade: ").Append(grade).Append(nl);
+        sb.Append("- Deliverables: ").Append(deliverables).Append(nl);
+        sb.Append("- Integration: ").Append(integration).Append(nl);
+        sb.Append("- Provenance: ").Append(provenance).Append(nl).Append(nl);
+        sb.Append("## Overview").Append(nl).Append(nl);
+        sb.Append("- Problem: `status.md` was missing ")
+            .Append(landed ? "when" : "before")
+            .Append(" task `")
+            .Append(SingleLine(task.TaskKey))
+            .Append(landed ? "` reached `" : "` could move into `")
+            .Append(targetState)
+            .Append("`.").Append(nl);
+        sb.Append("- Solution: This honest scaffold exposes the recorded outcome and existing evidence for ")
+            .Append(title)
+            .Append(".").Append(nl).Append(nl);
+        sb.Append("## What Was Done").Append(nl).Append(nl);
+        sb.Append(landed ? "- The task reached `" : "- A transition is pending into `")
+            .Append(targetState)
+            .Append("`.").Append(nl);
+        sb.Append("- Grade, deliverables, and integration facts are linked or stated above when available.")
+            .Append(nl).Append(nl);
+        sb.Append("## Open Items").Append(nl).Append(nl);
+        sb.Append("- None recorded in this synthesized scaffold.").Append(nl).Append(nl);
+        sb.Append("## Notes").Append(nl).Append(nl);
+        sb.Append("- This document does not infer work that is absent from task.json and the task artifact folder.")
+            .Append(nl);
+        return sb.ToString();
+    }
+
+    private static string ResolveScaffoldResult(TaskInfo task, string targetState)
+    {
+        if (targetState == TaskStates.Escalated) return "NeedsInput";
+
+        try
+        {
+            var logPath = TaskPaths.CliOutputLog(task.FolderPath);
+            if (File.Exists(logPath))
+            {
+                var classified = TerminalRunOutcomeClassifier.TryClassifyRenderedLog(
+                    File.ReadAllText(logPath));
+                var result = classified?.Outcome.ProtocolResult;
+                if (result is "Success" or "Failed" or "NoOp" or "Blocked" or "NeedsInput" or "Partial")
+                {
+                    return result;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: scaffold outcome log read is best-effort");
+            // The lane fallback below is deliberately conservative.
+        }
+
+        return targetState == TaskStates.Completed ? "Success" : "Partial";
+    }
+
+    private static string ResolveGradeReference(TaskInfo task)
+    {
+        var gradeTag = (task.Tags ?? [])
+            .FirstOrDefault(tag =>
+                tag.StartsWith("code-review:grade-", StringComparison.OrdinalIgnoreCase));
+        var grade = gradeTag?["code-review:grade-".Length..].Trim().ToUpperInvariant();
+        string? artifact = null;
+        try
+        {
+            artifact = Directory.EnumerateFiles(
+                    task.FolderPath,
+                    "code-review-grade*.md",
+                    SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ThenByDescending(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
+                .Select(Path.GetFileName)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: scaffold grade artifact enumeration is best-effort");
+            // A tag still supplies the recorded grade when enumeration fails.
+        }
+
+        if (!string.IsNullOrWhiteSpace(grade) && !string.IsNullOrWhiteSpace(artifact))
+            return $"{grade} ([{artifact}]({artifact}))";
+        if (!string.IsNullOrWhiteSpace(grade))
+            return $"{grade} (grade artifact not found)";
+        if (!string.IsNullOrWhiteSpace(artifact))
+            return $"See [{artifact}]({artifact})";
+        return "Not recorded";
+    }
+
+    private static string ResolveDeliverablesReference(TaskInfo task)
+    {
+        // Research cards deliver one primary HTML report (AGT-2417 convention);
+        // the scaffold links it so the Result tab names the actual deliverable.
+        var report = Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "report.html");
+        if (TaskModes.IsReportOnly(task.Mode) && File.Exists(report))
+            return "[results/report.html](results/report.html)";
+
+        var path = Path.Combine(TaskPaths.ResultsDir(task.FolderPath), "deliverables.md");
+        return File.Exists(path)
+            ? "[results/deliverables.md](results/deliverables.md)"
+            : "Not recorded";
+    }
+
+    private string ResolveIntegrationReference(TaskInfo task)
+    {
+        if (_integrationStatus == null)
+            return "Not computed (integration projection unavailable)";
+
+        try
+        {
+            var lookup = _integrationStatus.BuildLookup([task]);
+            if (!lookup.TryGetValue(task.TaskKey, out var status))
+                return $"Not applicable in `{task.State}`";
+            return FormatIntegrationReference(status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "result-scaffold-integration-read-failed project={Project} job={JobId}",
+                task.ProjectName,
+                task.Id);
+            return "Unknown (integration projection failed)";
+        }
+    }
+
+    private static string FormatIntegrationReference(TaskIntegrationStatus status)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append('`').Append(SingleLine(status.Status)).Append("` on `")
+            .Append(SingleLine(status.IntegrationBranch)).Append('`');
+        if (!string.IsNullOrWhiteSpace(status.Sha))
+            sb.Append(" at `").Append(SingleLine(status.Sha)).Append('`');
+        if (!string.IsNullOrWhiteSpace(status.Detail))
+            sb.Append(" (").Append(SingleLine(status.Detail)).Append(')');
+        return sb.ToString();
+    }
+
+    private static string SingleLine(string? value)
+        => (value ?? string.Empty)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+
+    private async Task<MoveJobOutcome> BeginTransactionalAcceptAsync(
+        TaskInfo reviewed,
+        ProjectSettings settings,
+        CancellationToken ct,
+        int? targetIndex,
+        string? cause,
+        string? reason,
+        AttemptWriteReference? authorityWrite)
+    {
+        if (string.Equals(reviewed.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Success,
+                "Integration is already in progress.",
+                reviewed.FolderPath);
+        }
+
+        _mutations.SetJobPhase(reviewed.FolderPath, LifecyclePhases.Integrating);
+        var integrating = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        var integrationBranch = TaskIntegrationBranch.Resolve(
+            integrating,
+            settings.IntegrationBranch);
+        FlagIntegrationOnAccept(integrating, warnIfNotIntegrated: false);
+        RecordIntegrationEvent(
+            integrating,
+            TimelineEventKinds.IntegrationStarted,
+            cause,
+            $"Acceptance started integration into {integrationBranch}.",
+            outcome: "integrating");
+
+        var synchronized = RefreshIntegrationBranch(integrating, integrationBranch);
+        if (!synchronized.Success)
+        {
+            RecordIntegrationSyncFailure(
+                integrating,
+                synchronized.Error ?? $"Integration branch '{integrationBranch}' could not be synchronized.");
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                synchronized.Error ?? $"Integration branch '{integrationBranch}' could not be synchronized.",
+                cause);
+        }
+
+        if (IsAlreadyIntegrated(integrating))
+        {
+            return await CompleteTransactionalAcceptAsync(
+                integrating,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite,
+                outcome: "AlreadyIntegrated").ConfigureAwait(false);
+        }
+
+        var queue = _acceptedIntegrationQueue;
+        if (queue != null)
+        {
+            if (queue.Enqueue(new AgentStudio.Pipeline.AcceptedIntegrationRequest(
+                    integrating.ProjectName,
+                    integrating.Id,
+                    integrating.FolderPath,
+                    integrating.WatchPath,
+                    integrationBranch,
+                    settings.IntegrationStrategy,
+                    targetIndex,
+                    cause,
+                    reason)))
+            {
+                return new MoveJobOutcome(
+                    MoveJobStatus.Success,
+                    "Integration started; the task remains in Human Review until it succeeds.",
+                    integrating.FolderPath);
+            }
+
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                "The integration queue is unavailable; the task remains in Human Review.",
+                cause);
+        }
+
+        var runner = _mergeRunner;
+        if (runner == null)
+        {
+            return FailTransactionalAccept(
+                integrating,
+                MergeIntoIntegrationOutcome.Error,
+                "The integration runner is unavailable; the task remains in Human Review.",
+                cause);
+        }
+
+        var result = await runner.RunAsync(
+            integrating.ProjectName,
+            integrating.Id,
+            integrating.FolderPath,
+            integrating.WatchPath,
+            integrationBranch,
+            ct,
+            settings.IntegrationStrategy).ConfigureAwait(false);
+        if (result.Outcome is not (
+                MergeIntoIntegrationOutcome.Merged
+                or MergeIntoIntegrationOutcome.AlreadyMerged))
+        {
+            return FailTransactionalAccept(
+                integrating,
+                result.Outcome,
+                result.Error ?? $"Integration ended with {result.Outcome}.",
+                cause);
+        }
+
+        if (_provenance != null
+            && result.Outcome == MergeIntoIntegrationOutcome.Merged
+            && !string.IsNullOrWhiteSpace(result.MergedSha))
+        {
+            _provenance.RecordMerge(integrating, result.MergedSha);
+            integrating = _scanner.FindJob(integrating.Id, integrating.WatchPath) ?? integrating;
+        }
+        return await CompleteTransactionalAcceptAsync(
+            integrating,
+            ct,
+            targetIndex,
+            cause,
+            reason,
+            authorityWrite,
+            result.Outcome.ToString()).ConfigureAwait(false);
+    }
+
+    private bool IsAlreadyIntegrated(TaskInfo job)
+    {
+        if (_integrationStatus == null) return false;
+        var lookup = _integrationStatus.BuildLookup([job]);
+        return lookup.TryGetValue(job.TaskKey, out var status)
+               && status.Status == IntegrationStatuses.Integrated;
+    }
+
+    private IntegrationBranchSyncResult RefreshIntegrationBranch(
+        TaskInfo job,
+        string integrationBranch)
+    {
+        var repoRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath)
+            ?? (string.IsNullOrWhiteSpace(job.WatchPath) ? null : job.WatchPath);
+        return string.IsNullOrWhiteSpace(repoRoot)
+            ? new IntegrationBranchSyncResult(
+                IntegrationBranchSyncOutcome.Error,
+                "Could not resolve repository root for the integration branch sync.")
+            : _git.RefreshIntegrationBranch(repoRoot, integrationBranch);
+    }
+
+    private void RecordIntegrationSyncFailure(TaskInfo job, string detail)
+    {
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "error",
+            VerdictSummary = "Integration branch synchronization failed.",
+            Reason = detail,
+        });
+    }
+
+    private async Task<MoveJobOutcome> CompleteTransactionalAcceptAsync(
+        TaskInfo integrating,
+        CancellationToken ct,
+        int? targetIndex,
+        string? cause,
+        string? reason,
+        AttemptWriteReference? authorityWrite,
+        string outcome)
+    {
+        if (outcome == "AlreadyIntegrated")
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(integrating.FolderPath, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Passed,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "already-integrated",
+                VerdictSummary = "Attributed commits are already present in the target branch; no merge was run.",
+            });
+        }
+        var clearedTags = (integrating.Tags ?? [])
+            .Where(tag => !IntegrationStatuses.IsPendingTag(tag))
+            .ToList();
+        if (clearedTags.Count != (integrating.Tags?.Count ?? 0))
+        {
+            _mutations.SetJobTags(integrating.Id, clearedTags, integrating.WatchPath);
+            integrating = _scanner.FindJob(integrating.Id, integrating.WatchPath) ?? integrating;
+        }
+        RecordIntegrationEvent(
+            integrating,
+            TimelineEventKinds.IntegrationSucceeded,
+            TimelineActors.System,
+            $"Integration into {TaskIntegrationBranch.Resolve(
+                integrating,
+                _settings.Get(integrating.ProjectName).IntegrationBranch)} succeeded.",
+            outcome);
+        var completed = await MoveAsync(
+            integrating.Id,
+            TaskStates.Completed,
+            integrating.WatchPath,
+            ct,
+            targetIndex,
+            cause,
+            reason,
+            authorityWrite,
+            expectedSourceState: TaskStates.HumanReview,
+            suppressIntegrationTrigger: true).ConfigureAwait(false);
+        if (completed.Status == MoveJobStatus.Success)
+        {
+            var accepted = _scanner.FindJob(integrating.Id, integrating.WatchPath);
+            if (accepted != null)
+            {
+                _mutations.SetJobPhase(accepted.FolderPath, null);
+            }
+        }
+        return completed;
+    }
+
+    private MoveJobOutcome FailTransactionalAccept(
+        TaskInfo reviewed,
+        MergeIntoIntegrationOutcome outcome,
+        string detail,
+        string? cause)
+    {
+        _mutations.SetJobPhase(reviewed.FolderPath, null);
+        var current = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        RecordIntegrationEvent(
+            current,
+            TimelineEventKinds.IntegrationFailed,
+            cause,
+            $"Integration failed ({outcome}); the task remains in Human Review.",
+            outcome.ToString(),
+            detail);
+        return new MoveJobOutcome(
+            MoveJobStatus.Failure,
+            $"Integration failed ({outcome}); the task remains in Human Review. {detail}",
+            current.FolderPath);
+    }
+
+    private void RecordIntegrationEvent(
+        TaskInfo job,
+        string kind,
+        string? actor,
+        string summary,
+        string outcome,
+        string? detail = null)
+    {
+        _timeline?.Append(
+            job.FolderPath,
+            new TimelineEvent
+            {
+                Ts = DateTime.UtcNow,
+                Kind = kind,
+                Actor = string.IsNullOrWhiteSpace(actor) ? TimelineActors.System : actor,
+                Summary = summary,
+                Details = new Dictionary<string, string>
+                {
+                    ["outcome"] = outcome,
+                    ["integrationBranch"] = TaskIntegrationBranch.Resolve(
+                        job,
+                        _settings.Get(job.ProjectName).IntegrationBranch),
+                    ["detail"] = detail ?? string.Empty,
+                },
+            });
     }
 
     private void RecordConceptSightReviewCompletion(
@@ -381,7 +1073,9 @@ public sealed class TaskTransitionService
         // ancestor probe always fails (rc=128, SHA absent) and NO escalated coding
         // task can ever be accepted. Resolve the real code repo root first.
         var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath) ?? info.WatchPath;
-        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, settings.IntegrationBranch);
+        var integrationBranch = _git.ResolveIntegrationBranch(
+            repoRoot,
+            TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch));
         return _git.IsAncestor(repoRoot, latest, integrationBranch);
     }
 
@@ -601,10 +1295,10 @@ public sealed class TaskTransitionService
     /// <summary>
     /// Triggers the deferred "Merge into Develop" post-step
     /// (<see cref="AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
-    /// on task acceptance. The runner performs the real
+    /// on task acceptance. Production enqueues the real
     /// <c>task/&lt;id&gt; -&gt; develop</c> merge and records the outcome into the
-    /// pipeline view; it self-guards and never throws, so a conflict is made
-    /// visible without affecting the lane move that already completed.
+    /// pipeline view on a background worker. The synchronous runner fallback is
+    /// retained only for isolated fixtures that do not wire hosted services.
     /// </summary>
     private async Task TriggerMergeIntoDevelopAsync(
         TaskInfo moved,
@@ -612,6 +1306,25 @@ public sealed class TaskTransitionService
         CancellationToken ct)
     {
         var runner = _mergeRunner;
+        var queue = _acceptedIntegrationQueue;
+        if (queue != null)
+        {
+            if (!queue.Enqueue(new AgentStudio.Pipeline.AcceptedIntegrationRequest(
+                    moved.ProjectName,
+                    moved.Id,
+                    moved.FolderPath,
+                    moved.WatchPath,
+                    settings.IntegrationBranch,
+                    settings.IntegrationStrategy)))
+            {
+                FlagIntegrationOnAccept(moved);
+                _logger.LogWarning(
+                    "Accepted integration enqueue failed for {JobId}; the durable backstop will retry",
+                    moved.Id);
+            }
+            return;
+        }
+
         if (runner == null) return;
         try
         {
@@ -620,15 +1333,15 @@ public sealed class TaskTransitionService
                 moved.Id,
                 moved.FolderPath,
                 moved.WatchPath,
-                settings.IntegrationBranch,
+                TaskIntegrationBranch.Resolve(moved, settings.IntegrationBranch),
                 ct,
-                settings.IntegrationStrategy).ConfigureAwait(false);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(moved)).ConfigureAwait(false);
 
-            // ASS-1752: persist the develop-merge fact so the board card can show
-            // the landed state (`develop @sha`) instead of a dead worktree path,
-            // without a per-card graph query. `moved` was just freshly scanned, so
-            // its provenance is current (replace-all write needs that). Only a real
-            // new merge carries a SHA; write-once on the service side.
+            // ASS-1752: persist historical merge-attempt provenance. Accepted
+            // card status is derived separately from target-branch membership.
+            // `moved` was freshly scanned, so the replace-all provenance write
+            // cannot drop earlier transitions.
             if (_provenance != null
                 && result.Outcome == AgentStudio.Git.MergeIntoIntegrationOutcome.Merged
                 && !string.IsNullOrWhiteSpace(result.MergedSha))
@@ -643,16 +1356,15 @@ public sealed class TaskTransitionService
     }
 
     /// <summary>
-    /// AGT-2202 accept-without-merge guard. Derives the honest git integration
-    /// verdict for a freshly accepted card and, when its work is not in develop,
-    /// records a Warn timeline event and stamps the <c>integrationpending</c> tag
-    /// so the state is visible on the board and listable by the completed-lane
-    /// audit. Deliberately NOT a hard block: the acceptance already landed, this
-    /// only makes "Accept != Merge" loud. When the card IS integrated, any stale
-    /// <c>integrationpending</c> tag from an earlier accept is cleared so the
-    /// marker self-heals. Best-effort and fully guarded.
+    /// Derives the canonical target-branch verdict and maintains the durable
+    /// <c>integrationpending</c> recovery marker. Transactional acceptance calls
+    /// this before queue hand-off with warnings disabled; compatibility callers
+    /// may still emit the legacy warning. When the card is integrated, a stale
+    /// pending marker is cleared. Best-effort and fully guarded.
     /// </summary>
-    private void FlagIntegrationOnAccept(TaskInfo accepted)
+    private void FlagIntegrationOnAccept(
+        TaskInfo accepted,
+        bool warnIfNotIntegrated = true)
     {
         if (_integrationStatus == null) return;
         try
@@ -670,6 +1382,8 @@ public sealed class TaskTransitionService
                     tags.Add(IntegrationStatuses.PendingTag);
                     _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
                 }
+
+                if (!warnIfNotIntegrated) return;
 
                 _timeline?.Append(accepted.FolderPath, new TimelineEvent
                 {
@@ -947,3 +1661,8 @@ public sealed class TaskTransitionService
         }
     }
 }
+
+public sealed record ResultDocumentBackfillOutcome(
+    int Scanned,
+    int Repaired,
+    IReadOnlyList<string> Failures);

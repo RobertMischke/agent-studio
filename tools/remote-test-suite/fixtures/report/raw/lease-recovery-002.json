@@ -1,0 +1,21 @@
+{
+  "task": { "taskKey": "RTS-2" },
+  "attempt": { "attemptId": "run_01JRECOVERY0002" },
+  "baseSha": "3333333333333333333333333333333333333333",
+  "resultSha": "4444444444444444444444444444444444444444",
+  "reattach": {
+    "originalAttemptId": "run_01JRECOVERY0002",
+    "reattachedAttemptId": "run_01JRECOVERY0002",
+    "fence": 18,
+    "status": "reattached"
+  },
+  "claims": {
+    "claimsGranted": 1,
+    "duplicateClaims": 0
+  },
+  "review": {
+    "expectedResultSha": "4444444444444444444444444444444444444444",
+    "actualHead": "4444444444444444444444444444444444444444",
+    "outcome": "Pass"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "../scenario.schema.json",
+  "version": 1,
+  "name": "fault-gate-timeout",
+  "description": "Times out one deterministic gate fixture, reaps its process tree, and performs one bounded recovery.",
+  "task": {
+    "title": "Verify gate timeout recovery",
+    "body": "Apply the deterministic reference change and prove a watchdog timeout is infrastructure, not a red product test. Finish with [[TASK_DONE]].",
+    "key": "RTS-1"
+  },
+  "fixture": {
+    "defaultBranch": "develop",
+    "changeCommand": ["node", "{suiteRoot}/apply-reference-change.mjs", "--seed", "{seed}"],
+    "acceptanceCommand": ["node", "--test", "test/*.test.mjs"],
+    "expectedChangedFiles": ["README.md", "package.json", "src/index.mjs", "src/shipping.mjs", "test/shipping.test.mjs"]
+  },
+  "phases": ["claim", "run", "gate", "review", "integration"],
+  "resources": {
+    "workspaceId": "wsp-{runId}",
+    "projectId": "prj-{runId}",
+    "taskId": "tsk-{runId}"
+  },
+  "contract": {
+    "chronicleLinks": [
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-gate-timeout",
+      "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-remote-gates"
+    ],
+    "expectedTerminal": "6-completed",
+    "recoveryBudget": {
+      "unit": "recovery-attempts",
+      "maximum": 1
+    },
+    "assertions": [
+      "reference-change-accepted"
+    ]
+  },
+  "hooks": {},
+  "faults": ["gate-watchdog-timeout"],
+  "expected": {
+    "accepted": true,
+    "finalLane": "6-completed",
+    "incidentOutcome": "gate-timeout-recovered",
+    "phaseSequence": ["claim", "run", "gate", "review", "integration"]
+  }
+}

@@ -318,6 +318,279 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('hydrates and updates the Task Server runtime capacity by host id and version', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const capacity = {
+      hostId: 'host-a',
+      maxParallelism: 4,
+      targetLoadPercent: 80,
+      rampStrategy: 'balanced' as const,
+      version: 1,
+      updatedAt: now,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'host-a',
+      instanceId: 'host-a:1',
+      runnerVersion: '1.0.0',
+      protocolVersion: 3,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'host-a',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [],
+      telemetry: null,
+      runtimeCapacity: capacity,
+      effectiveMaxParallelism: 4,
+      runtimeCapacityAppliedAt: now,
+    }]);
+
+    svc.setCapacity('agent-runner-01', 6, 85, 'aggressive');
+    const request = http.expectOne('/api/v1/hosts/host-a/runtime-capacity');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'aggressive',
+      expectedVersion: 1,
+    });
+    request.flush({
+      ...capacity,
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'aggressive',
+      version: 2,
+    });
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 6,
+        targetLoadPercent: 85,
+        rampStrategy: 'aggressive',
+        version: 2,
+      },
+      effectiveMaxParallelism: 4,
+      busyAction: null,
+    });
+    http.verify();
+  });
+
+  it('hydrates and updates monolith host capacity through the client identity', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const client = {
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+      runnerActiveSlots: 2,
+      runnerAvailableSlots: 2,
+      runnerDesiredMaxParallelism: 4,
+      runnerTargetLoadPercent: 80,
+      runnerRampStrategy: 'balanced',
+      runnerEffectiveMaxParallelism: 4,
+      runnerEffectiveMaxParallelismAppliedAt: now,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    // No Task Server record: the client identity is the capacity owner, marked
+    // by version 0 so the write goes to the monolith route.
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 4,
+        targetLoadPercent: 80,
+        rampStrategy: 'balanced',
+        version: 0,
+      },
+      effectiveMaxParallelism: 4,
+    });
+
+    svc.setCapacity('agent-runner-01', 6, 85, 'conservative');
+    const request = http.expectOne('/api/clients/agent-runner-01/runner-capacity');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      maxParallelism: 6,
+      targetLoadPercent: 85,
+      rampStrategy: 'conservative',
+    });
+    request.flush({
+      ...client,
+      runnerDesiredMaxParallelism: 6,
+      runnerTargetLoadPercent: 85,
+      runnerRampStrategy: 'conservative',
+      runnerAvailableSlots: 4,
+    });
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: {
+        maxParallelism: 6,
+        targetLoadPercent: 85,
+        rampStrategy: 'conservative',
+        version: 0,
+      },
+      availableSlots: 4,
+      busyAction: null,
+    });
+    http.verify();
+  });
+
+  it('never lets the client poll demote a Task Server capacity record', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const client = {
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+      // The monolith identity carries a stale migration seed of its own.
+      runnerDesiredMaxParallelism: 2,
+      runnerTargetLoadPercent: 80,
+      runnerRampStrategy: 'balanced',
+      runnerEffectiveMaxParallelism: 5,
+      runnerEffectiveMaxParallelismAppliedAt: now,
+    };
+    const snapshot = {
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'host-a',
+      instanceId: 'host-a:1',
+      runnerVersion: '1.0.0',
+      protocolVersion: 3,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'host-a',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [],
+      telemetry: null,
+      runtimeCapacity: {
+        hostId: 'host-a',
+        maxParallelism: 6,
+        targetLoadPercent: 85,
+        rampStrategy: 'conservative' as const,
+        version: 3,
+        updatedAt: now,
+      },
+      effectiveMaxParallelism: 6,
+      runtimeCapacityAppliedAt: now,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([snapshot]);
+
+    // Second poll: the client identity answers again, and must not overwrite the
+    // versioned record with its own version-0 projection.
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([snapshot]);
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: { maxParallelism: 6, rampStrategy: 'conservative', version: 3 },
+    });
+
+    // And the write still goes to the versioned Task Server route.
+    svc.setCapacity('agent-runner-01', 7, 85, 'conservative');
+    const request = http.expectOne('/api/v1/hosts/host-a/runtime-capacity');
+    expect(request.request.body).toMatchObject({ expectedVersion: 3 });
+    request.flush({ ...snapshot.runtimeCapacity, maxParallelism: 7, version: 4 });
+    http.verify();
+  });
+
+  it('publishes a first ceiling for a host that has none through the client route', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const client = {
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+      runnerActiveSlots: 1,
+    };
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+    // Nobody ever declared a capacity: the row shows none, and that must stay a
+    // starting point rather than blocking the write.
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.runtimeCapacity ?? null)
+      .toBeNull();
+
+    svc.setCapacity('agent-runner-01', 4, 80, 'balanced');
+    const request = http.expectOne('/api/clients/agent-runner-01/runner-capacity');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      maxParallelism: 4,
+      targetLoadPercent: 80,
+      rampStrategy: 'balanced',
+    });
+    request.flush({
+      ...client,
+      runnerDesiredMaxParallelism: 4,
+      runnerTargetLoadPercent: 80,
+      runnerRampStrategy: 'balanced',
+      runnerAvailableSlots: 3,
+    });
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      runtimeCapacity: { maxParallelism: 4, targetLoadPercent: 80, version: 0 },
+      availableSlots: 3,
+      busyAction: null,
+    });
+    http.verify();
+  });
+
   it('invalidates cached project proofs before reloading a re-probed host', () => {
     TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
     const svc = TestBed.inject(RemoteHostsService);

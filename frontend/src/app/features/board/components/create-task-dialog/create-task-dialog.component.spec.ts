@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -40,5 +40,50 @@ describe('CreateTaskDialogComponent (smoke)', () => {
       console.warn('[smoke] CreateTaskDialogComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('shows policy provenance and offers a one-click return from an override', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CreateTaskDialogComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CreateTaskDialogComponent);
+    fixture.componentRef.setInput('cliTypeDraft', 'codex');
+    fixture.componentRef.setInput('modelSelectionExplicit', true);
+    fixture.componentRef.setInput('policySuggestion', {
+      policyVersion: '2026-07-24',
+      policyWikiPath: 'docs/system/domains/model-routing-policy.md',
+      taskType: 'feature',
+      tier: 'terra-medium',
+      model: 'gpt-5.6-terra',
+      thinkingLevel: 'medium',
+      score: 25,
+      economyMode: false,
+      economyDowngraded: false,
+      correctnessFloorTier: null,
+      reason: 'feature default',
+      estimatedSavingsPercent: 35,
+    });
+    const reset = vi.fn();
+    fixture.componentInstance.policySelectionRequest.subscribe(reset);
+
+    fixture.detectChanges();
+
+    const suggestion = fixture.nativeElement.querySelector(
+      '[data-testid="create-model-policy-suggestion"]',
+    ) as HTMLElement;
+    expect(suggestion.dataset['tier']).toBe('terra-medium');
+    expect(suggestion.dataset['source']).toBe('override');
+    expect(suggestion.textContent).toContain('Policy 2026-07-24');
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="create-use-policy-model"]',
+    ) as HTMLButtonElement;
+    button.click();
+    expect(reset).toHaveBeenCalledOnce();
   });
 });

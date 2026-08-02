@@ -186,6 +186,9 @@ public class WikiFolderViewTests : IDisposable
         Assert.Equal(0, warmRollup.Spawns); // the complete 381-page index is HEAD-cached
 
         WritePage("target-architecture/local-draft.md", "# Local draft\n");
+        docs.InvalidateWikiContent(
+            ProjectName,
+            WikiContentCache.InvalidationSource.Watcher);
         var local = docs.GetWikiFolder(ProjectName, "target-architecture", git)!
             .Children.Single(c => c.Name == "local-draft.md");
         Assert.Equal("mtime", local.UpdatedAtSource);
@@ -251,6 +254,34 @@ public class WikiFolderViewTests : IDisposable
         // Folder rows never carry a classification.
         var root = docs.GetWikiFolder(ProjectName, "")!;
         Assert.All(root.Children.Where(c => c.Kind == "folder"), c => Assert.Null(c.Classification));
+    }
+
+    [Fact]
+    public void GetWikiFolder_PagesCarryAgentReadTotalsAndBoundedHistory()
+    {
+        WritePage("concepts/read.md", "# Read\n");
+        WritePage("concepts/read.md.meta.json",
+            """
+            {
+              "source": { "path": "docs/concepts/read.md" },
+              "agentReads": {
+                "total": 23,
+                "lastReadAt": "2026-07-22T10:15:00Z",
+                "recent": [
+                  { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" },
+                  { "at": "2026-07-21T09:00:00Z", "taskKey": "AGT-2200" }
+                ]
+              }
+            }
+            """);
+
+        var row = BuildDocsService().GetWikiFolder(ProjectName, "concepts")!
+            .Children.Single(c => c.Name == "read.md");
+
+        Assert.NotNull(row.AgentReads);
+        Assert.Equal(23, row.AgentReads!.Total);
+        Assert.Equal(DateTime.Parse("2026-07-22T10:15:00Z").ToUniversalTime(), row.AgentReads.LastReadAt);
+        Assert.Equal(new[] { "AGT-2242", "AGT-2200" }, row.AgentReads.Recent.Select(r => r.TaskKey));
     }
 
     // ---- Guards ----

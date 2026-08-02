@@ -15,14 +15,13 @@ import {
 } from '@angular/core';
 import type { CliType } from '../../models/task.model';
 import { CLI_TYPES } from '../../models/task.model';
-import { orderModelCatalog, type CliModelInfo } from '../../features/cli';
+import { CliCatalogStore, orderModelCatalog, type CliModelInfo } from '../../features/cli';
 import {
   cliTypeIcon as fmtCliTypeIcon,
   cliTypeLabel as fmtCliTypeLabel,
 } from '../../services/format.util';
 import { shortModelLabel } from 'coding-agent-chat/core';
 import { ModalStackService } from '../../services/modal-stack.service';
-import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
 import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
 import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';

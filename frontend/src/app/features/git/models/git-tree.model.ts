@@ -2,25 +2,26 @@
  * Pure tree model for the Project Hub Git View. Transforms the flat backend
  * {@link GitProjectInventory} into the grouped, ordered node list the tree
  * browser renders on the left pane: worktrees first, then branches grouped by
- * category (integration / feature / task / other), then recent history.
+ * category (integration / feature / task / runner / other).
  *
  * Kept free of Angular so the grouping/ordering logic is unit-tested in
  * isolation and the component stays a thin renderer over `buildGitTree`.
  */
 import type {
+  GitActiveCheckout,
   GitBranchEntry,
-  GitCommitEntry,
   GitProjectInventory,
   GitWorktreeEntry,
 } from './git.model';
 
 export type GitTreeGroupId =
+  | 'active'
   | 'worktrees'
   | 'integration'
   | 'feature'
   | 'task'
-  | 'other'
-  | 'history';
+  | 'runner'
+  | 'other';
 
 export interface GitTreeBranchNode {
   readonly kind: 'branch';
@@ -34,13 +35,13 @@ export interface GitTreeWorktreeNode {
   readonly worktree: GitWorktreeEntry;
 }
 
-export interface GitTreeCommitNode {
-  readonly kind: 'commit';
+export interface GitTreeActiveNode {
+  readonly kind: 'active';
   readonly id: string;
-  readonly commit: GitCommitEntry;
+  readonly checkout: GitActiveCheckout;
 }
 
-export type GitTreeLeaf = GitTreeBranchNode | GitTreeWorktreeNode | GitTreeCommitNode;
+export type GitTreeLeaf = GitTreeBranchNode | GitTreeWorktreeNode | GitTreeActiveNode;
 
 export interface GitTreeGroup {
   readonly kind: 'group';
@@ -51,12 +52,13 @@ export interface GitTreeGroup {
 }
 
 const GROUP_LABELS: Record<GitTreeGroupId, string> = {
+  active: 'In progress',
   worktrees: 'Worktrees & checkouts',
   integration: 'Integration branches',
   feature: 'Feature branches',
   task: 'Task branches',
+  runner: 'Runner branches',
   other: 'Other branches',
-  history: 'Recent history',
 };
 
 /**
@@ -69,6 +71,15 @@ export function buildGitTree(inventory: GitProjectInventory | null): GitTreeGrou
   if (!inventory || !inventory.isRepo) return [];
 
   const groups: GitTreeGroup[] = [];
+
+  const active = inventory.activeCheckouts ?? [];
+  if (active.length > 0) {
+    groups.push(group('active', active.map((checkout): GitTreeActiveNode => ({
+      kind: 'active',
+      id: `active:${checkout.task.taskKey}`,
+      checkout,
+    }))));
+  }
 
   const worktrees = [...(inventory.worktrees ?? [])].sort(sortWorktrees);
   if (worktrees.length > 0) {
@@ -83,16 +94,8 @@ export function buildGitTree(inventory: GitProjectInventory | null): GitTreeGrou
   pushBranchGroup(groups, 'integration', branches.filter(b => b.category === 'main' || b.category === 'develop'));
   pushBranchGroup(groups, 'feature', branches.filter(b => b.category === 'feature'));
   pushBranchGroup(groups, 'task', branches.filter(b => b.category === 'task'));
+  pushBranchGroup(groups, 'runner', branches.filter(b => b.category === 'runner'));
   pushBranchGroup(groups, 'other', branches.filter(b => b.category === 'other'));
-
-  const commits = inventory.recentCommits ?? [];
-  if (commits.length > 0) {
-    groups.push(group('history', commits.map((c): GitTreeCommitNode => ({
-      kind: 'commit',
-      id: `commit:${c.sha}`,
-      commit: c,
-    }))));
-  }
 
   return groups;
 }
@@ -130,6 +133,7 @@ export function branchCategoryLabel(category: GitBranchEntry['category']): strin
     case 'develop': return 'develop';
     case 'feature': return 'feature';
     case 'task': return 'task';
+    case 'runner': return 'runner';
     default: return 'branch';
   }
 }

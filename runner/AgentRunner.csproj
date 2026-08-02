@@ -20,7 +20,6 @@
     <RootNamespace>AgentRunner</RootNamespace>
     <AssemblyName>agent-host</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>0.1.0</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <InformationalVersion Condition="'$(SourceRevisionId)' != ''">$(Version)+sha.$(SourceRevisionId)</InformationalVersion>
     <InformationalVersion Condition="'$(SourceRevisionId)' == ''">$(Version)+sha.unknown</InformationalVersion>
@@ -40,6 +39,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\contracts\TaskServer.Contracts\TaskServer.Contracts.csproj" />
+    <!--
+      T1 (AGT-2370): the detached worker drives the coding CLI through the
+      CodingAgentRunner library. PackageReference with an exact pin, NOT a
+      ProjectReference: the runner is a separately deployed artifact
+      (/opt/agent-host) and the backend already pins the same package - two
+      reference paths would be exactly the version drift the
+      zielbild-komponenten-protokolle doc warns about. Keep this pin identical
+      to the one in backend/OrchestratorApi.csproj (T4 adds the guard test).
+    -->
+    <PackageReference Include="CodingAgentRunner" Version="[0.7.0]" />
   </ItemGroup>
 
 </Project>

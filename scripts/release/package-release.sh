@@ -35,6 +35,7 @@ for required in \
     "$publish_root/orchestrator-engine/orchestrator-engine" \
     "$publish_root/agent-host-linux-x64/agent-host" \
     "$publish_root/agent-host-osx-arm64/agent-host" \
+    "$publish_root/setup/agent-orchestrator-setup" \
     "$frontend_root/index.html"
 do
     [ -f "$required" ] || {
@@ -116,9 +117,16 @@ archive()
 archive "$orchestrator" "$output_dir/$orchestrator.tar.gz"
 archive "$host" "$output_dir/$host.tar.gz"
 archive "$studio" "$output_dir/$studio.tar.gz"
+install -m 0755 "$publish_root/setup/agent-orchestrator-setup" \
+    "$output_dir/agent-orchestrator-setup"
 (
     cd "$output_dir"
-    sha256sum "$orchestrator.tar.gz" "$host.tar.gz" "$studio.tar.gz" >SHA256SUMS
+    sha256sum \
+        agent-orchestrator-setup \
+        "$orchestrator.tar.gz" \
+        "$host.tar.gz" \
+        "$studio.tar.gz" \
+        >SHA256SUMS
 )
 
-printf 'Created three release archives and SHA256SUMS in %s\n' "$output_dir"
+printf 'Created the guided setup executable, three release archives, and SHA256SUMS in %s\n' "$output_dir"

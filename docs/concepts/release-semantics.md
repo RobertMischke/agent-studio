@@ -168,8 +168,12 @@ wrapper around every card.
 
 1. Keep current merge-on-complete behavior and make the terminology honest now:
    `develop` means integrated, Human Review means accepted evidence.
-2. Ship REL-1 before adding any new one-click release action. Until then,
-   manual Git promotion remains the only safe path.
+2. Ship REL-1 before adding any new one-click release action. Until then, the
+   versioned operator command and checklist in
+   `docs/operations/develop-main-promotion.md` are the safe manual path. They
+   provide an exact commit manifest, fail-closed full gate, annotated release
+   marker, and deploy handoff, but do not pretend to provide REL-1 task-lane
+   attribution or acceptance groups.
 3. Teach Deployment targets to execute the existing project release script and
    attach the REL-1 manifest.
 4. Add REL-2 tags and freeze records; keep the existing stable checkout update

@@ -21,13 +21,11 @@ namespace AgentStudio.Tasks;
 /// </para>
 ///
 /// <para>
-/// The card <b>anchor</b> is the latest attributed TASK commit on the board
-/// payload (<see cref="AnchorFor"/>) - never a fresh per-card branch-tip read, and
-/// never a branch tip / merge fact on their own (AGT-2063: a commit-less card gets
-/// no signal). A recorded develop-merge fact
-/// (<see cref="TaskProvenanceMerge.MergeCommit"/>) still short-circuits the develop
-/// segment to <c>true</c> without any set lookup for an anchored card, because a
-/// merge into develop is an append-only fact.
+/// The card source is the same attributed commit set used by
+/// <see cref="TaskIntegrationStatusService"/>. Every attributed commit must be
+/// present in a target branch for that segment to light up. Lane state,
+/// provenance merge records, and branch tips never override graph membership.
+/// This keeps the compact chip aligned with the canonical integration field.
 /// </para>
 /// </summary>
 public sealed class BoardMergeStatusService
@@ -89,61 +87,46 @@ public sealed class BoardMergeStatusService
 
         // Group the anchored cards by resolved repo root so the batched ancestor
         // sets are computed ONCE per repository, not per card.
-        var byRepo = new Dictionary<string, List<TaskInfo>>(StringComparer.OrdinalIgnoreCase);
+        var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
         foreach (var job in jobs)
         {
-            if (AnchorFor(job) is null) continue;
+            if (TaskIntegrationStatusService.AttributedCommits(job).Count == 0) continue;
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
             if (string.IsNullOrWhiteSpace(root)) continue;
-            if (!byRepo.TryGetValue(root!, out var list))
+            var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
+            if (!byRepo.TryGetValue(key, out var list))
             {
                 list = new List<TaskInfo>();
-                byRepo[root!] = list;
+                byRepo[key] = list;
             }
             list.Add(job);
         }
 
-        var reaches = new ConcurrentDictionary<string, RepoReachability>(StringComparer.OrdinalIgnoreCase);
+        var reaches = new ConcurrentDictionary<RepoBranchKey, RepoReachability>();
         Parallel.ForEach(
             byRepo,
             new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
             pair =>
             {
-                var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
-                var cacheKey = $"{pair.Key}\0{configuredBranch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
-                    pair.Key,
-                    [configuredBranch, ReleaseBranch]);
-                reaches[pair.Key] = _cache.GetOrCreateVersioned(
-                    cacheKey,
-                    refFingerprint.Value,
-                    value => value.Succeeded
-                        ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
-                        : FailureCacheTtl,
-                    () => ComputeReachability(pair.Key, configuredBranch));
+                reaches[pair.Key] = GetReachability(pair.Key);
             });
 
-        foreach (var (root, repoJobs) in byRepo)
+        foreach (var (repoBranch, repoJobs) in byRepo)
         {
-            var reach = reaches[root];
+            var reach = reaches[repoBranch];
 
             foreach (var job in repoJobs)
             {
-                var anchor = AnchorFor(job)!;
-                var mergeSha = job.Provenance?.Merge?.MergeCommit;
+                var commits = TaskIntegrationStatusService.AttributedCommits(job);
+                var anchor = commits[^1];
                 var branch = !string.IsNullOrWhiteSpace(job.Provenance?.Branch)
                     ? job.Provenance!.Branch
                     : WorktreeTaskLifecycle.BranchFor(job.Id);
 
-                // Develop: the recorded merge fact is authoritative (append-only,
-                // zero-cost); otherwise the anchor's graph membership. Main: the
-                // anchor - or the develop-merge commit - reaching the release line.
-                var inIntegration =
-                    (mergeSha is { Length: > 0 })
-                    || reach.Integration.Contains(anchor);
-                var inRelease =
-                    reach.Release.Contains(anchor)
-                    || (mergeSha is { Length: > 0 } && reach.Release.Contains(mergeSha));
+                var inIntegration = commits.All(sha =>
+                    TaskIntegrationStatusService.AncestorSetContains(reach.Integration, sha));
+                var inRelease = commits.All(sha =>
+                    TaskIntegrationStatusService.AncestorSetContains(reach.Release, sha));
 
                 result[job.TaskKey] = new TaskMergeSignal
                 {
@@ -152,7 +135,7 @@ public sealed class BoardMergeStatusService
                     InRelease = inRelease,
                     IntegrationBranch = reach.IntegrationBranch,
                     ReleaseBranch = ReleaseBranch,
-                    IntegrationSha = inIntegration ? Short(mergeSha ?? anchor) : null,
+                    IntegrationSha = inIntegration ? Short(anchor) : null,
                     ReleaseSha = inRelease ? Short(anchor) : null,
                 };
             }
@@ -162,26 +145,43 @@ public sealed class BoardMergeStatusService
     }
 
     /// <summary>
-    /// The card anchor read entirely from the persisted board payload (no git
-    /// spawn): the latest attributed TASK commit SHA. Null when the card has
-    /// committed nothing yet, which suppresses its signal.
-    ///
-    /// <para>
-    /// AGT-2063: the anchor is the task's own commit and nothing else. A recorded
-    /// <c>task/&lt;id&gt;</c> branch tip is deliberately NOT used: for a task that
-    /// produced no commit the tip is just the branch base, which is trivially an
-    /// ancestor of develop/main and would light the develop segment on a card that
-    /// changed nothing (the "merge state on a commit-less card" bug). The recorded
-    /// merge fact still proves the develop segment in <see cref="BuildLookup"/>
-    /// (it reads <c>Merge.MergeCommit</c> directly), but on its own it does not
-    /// manufacture an anchor: no task commit means no signal.
-    /// </para>
+    /// Resolves develop/main presence for an arbitrary bounded commit set using
+    /// the exact same ref-fingerprinted reachability projection as
+    /// <see cref="BuildLookup"/>. The Project Hub Git graph calls this once per
+    /// history page, then renders every commit from in-memory set membership.
+    /// This is intentionally the shared resolver, not a second ancestry path.
+    /// </summary>
+    public Dictionary<string, CommitBranchPresence> BuildCommitPresence(
+        string projectName,
+        string repoRoot,
+        IEnumerable<string> commitShas)
+    {
+        var shas = commitShas
+            .Where(ReviewSubjectStore.IsValidResultSha)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (shas.Count == 0 || string.IsNullOrWhiteSpace(repoRoot)) return [];
+
+        using var _t = GitProcessTelemetry.BeginRequest("git/commit-presence", _logger);
+        var configured = _settings.Get(projectName).IntegrationBranch;
+        var reach = GetReachability(new RepoBranchKey(repoRoot, configured));
+        return shas.ToDictionary(
+            sha => sha,
+            sha => new CommitBranchPresence(
+                reach.Integration.Contains(sha),
+                reach.Release.Contains(sha),
+                reach.IntegrationBranch,
+                ReleaseBranch),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The latest integrable attributed task commit. This delegates to the
+    /// canonical integration source so zero-file lifecycle markers, legacy
+    /// singular commits, and abbreviated SHA handling stay aligned.
     /// </summary>
     internal static string? AnchorFor(TaskInfo job)
-    {
-        var last = job.Commits.Count > 0 ? job.Commits[^1].Sha : job.Commit?.Sha;
-        return string.IsNullOrWhiteSpace(last) ? null : last;
-    }
+        => TaskIntegrationStatusService.AnchorFor(job);
 
     /// <summary>
     /// The develop + main ancestor SHA sets for one repo. TWO (up to four with the
@@ -220,12 +220,26 @@ public sealed class BoardMergeStatusService
         });
     }
 
-    private string ConfiguredIntegrationBranch(string projectName)
+    private RepoReachability GetReachability(RepoBranchKey key)
     {
-        var configured = _settings.Get(projectName).IntegrationBranch;
-        return string.IsNullOrWhiteSpace(configured)
-            ? new ProjectSettings().IntegrationBranch
-            : configured.Trim();
+        var cacheKey = $"{key.Root}\0{key.Branch}";
+        var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
+            key.Root,
+            [key.Branch, ReleaseBranch]);
+        return _cache.GetOrCreateVersioned(
+            cacheKey,
+            refFingerprint.Value,
+            value => value.Succeeded
+                ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
+                : FailureCacheTtl,
+            () => ComputeReachability(key.Root, key.Branch));
+    }
+
+    private string ConfiguredIntegrationBranch(TaskInfo task)
+    {
+        return TaskIntegrationBranch.Resolve(
+            task,
+            _settings.Get(task.ProjectName).IntegrationBranch);
     }
 
     /// <summary>Drops the cached reachability sets. Tests use this to force a fresh read.</summary>
@@ -240,4 +254,12 @@ public sealed class BoardMergeStatusService
         HashSet<string> Integration,
         HashSet<string> Release,
         bool Succeeded);
+
+    private sealed record RepoBranchKey(string Root, string Branch);
 }
+
+public sealed record CommitBranchPresence(
+    bool InIntegration,
+    bool InRelease,
+    string IntegrationBranch,
+    string ReleaseBranch);

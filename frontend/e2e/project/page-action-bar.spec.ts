@@ -31,6 +31,7 @@ interface CapturedCalls {
   chatBodies: Record<string, unknown>[];
   archivePaths: string[];
   pinBodies: Record<string, unknown>[];
+  decisionBodies: Record<string, unknown>[];
 }
 
 function json(route: Route, body: unknown, status = 200) {
@@ -47,6 +48,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     chatBodies: [],
     archivePaths: [],
     pinBodies: [],
+    decisionBodies: [],
   };
   let created = false;
   let pinnedPath: string | null = null;
@@ -263,7 +265,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         title: 'Action Bar Workbench',
         summary: 'Canonical variants and theme tokens.',
         status: 'active',
-        phase: 'testing',
+        phase: 'decision-ready',
         updatedAtUtc: '2026-07-23T10:00:00Z',
         entryPath: `docs/${WORKBENCH_PATH}`,
         valid: true,
@@ -299,23 +301,84 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     captured.archivePaths.push(relPath);
     return json(route, { relPath, sha: 'archive-evidence' });
   });
+  let decision: Record<string, unknown> | null = null;
+  let decisionStage: string | null = null;
+  let revision = '0123456789abcdef';
+  let fingerprint = 'a'.repeat(64);
+  await page.route(
+    `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}/decisions/prepare`,
+    route => {
+      const body = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+      captured.decisionBodies.push(body);
+      revision = '1234567890abcdef';
+      fingerprint = 'b'.repeat(64);
+      decisionStage = 'prepared';
+      decision = {
+        outcome: body['outcome'],
+        state: 'pending',
+        operationId: body['operationId'],
+        sourceRevision: body['expectedRevision'],
+        sourceFingerprint: body['expectedFingerprint'],
+        preparedAt: '2026-07-23T10:01:00Z',
+        preparedBy: body['actor'],
+        confirmedAt: null,
+        confirmedBy: null,
+        decidedAt: null,
+        reason: body['archiveReason'],
+        failure: null,
+        spawnedTaskKeys: [],
+      };
+      return json(route, {
+        success: true, errorCode: null, error: null, workbenchId: WORKBENCH_ID,
+        operationId: body['operationId'], outcome: body['outcome'], decisionStage,
+        revision, fingerprint, spawnedTaskKeys: [], idempotent: false,
+      });
+    },
+  );
+  await page.route(
+    `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}/decisions/confirm`,
+    route => {
+      const body = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+      captured.decisionBodies.push(body);
+      revision = '2345678901abcdef';
+      fingerprint = 'c'.repeat(64);
+      decisionStage = 'succeeded';
+      decision = {
+        ...decision,
+        state: 'succeeded',
+        confirmedAt: '2026-07-23T10:02:00Z',
+        confirmedBy: body['actor'],
+        decidedAt: '2026-07-23T10:02:00Z',
+        spawnedTaskKeys: ['AGT-2400'],
+      };
+      return json(route, {
+        success: true, errorCode: null, error: null, workbenchId: WORKBENCH_ID,
+        operationId: body['operationId'], outcome: 'feature-spawn', decisionStage,
+        revision, fingerprint, spawnedTaskKeys: ['AGT-2400'], idempotent: false,
+      });
+    },
+  );
   await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}`, route => json(route, {
     workbench: {
       id: WORKBENCH_ID,
       title: 'Action Bar Workbench',
       summary: 'Canonical variants and theme tokens for page actions.',
-      status: 'active',
-      phase: 'testing',
+      status: decisionStage === 'succeeded' ? 'decided' : decision ? 'decision-pending' : 'active',
+      phase: 'decision-ready',
       updatedAtUtc: '2026-07-23T10:00:00Z',
       entryPath: `docs/${WORKBENCH_PATH}`,
       valid: true,
       error: null,
       sourceTaskKeys: ['AGT-2282'],
+      lifecycleState: decisionStage === 'succeeded' ? 'decided' : 'review-requested',
+      decision,
+      decisionStage,
     },
     html: pages[WORKBENCH_PATH],
     branch: 'feature/AGT-2282',
-    revision: '0123456789abcdef',
+    revision,
     workingTreeModified: false,
+    fingerprint,
   }));
 
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, route => {
@@ -471,9 +534,29 @@ test('shared page action bar preserves placement, task source, chat context, and
     }));
   }, { project: PROJECT, workbenchId: WORKBENCH_ID });
   await page.reload();
+  const workbenchTab = page.getByRole('tab', { name: 'Action Bar Workbench' });
+  if (await workbenchTab.count()) await workbenchTab.click();
   await expect(page.getByTestId('workbench-viewer')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('page-action-bar')).toHaveAttribute('data-page-type', 'workbench');
-  await expect(page.getByTestId('page-action-extra')).toContainText('Build as feature');
+  await expect(page.getByTestId('page-action-extra')).toHaveCount(0);
+  await expect(page.getByTestId('page-action-archive')).toHaveCount(0);
+  await page.getByTestId('workbench-decision-build').click();
+  await page.getByTestId('workbench-decision-prepare').click();
+  await expect(page.getByTestId('workbench-decision-confirm')).toBeVisible();
+  await page.getByTestId('workbench-decision-confirm').click();
+  await expect(page.getByTestId('workbench-decision-receipt')).toContainText('AGT-2400');
+  expect(captured.decisionBodies).toHaveLength(2);
+  expect(captured.decisionBodies[0]).toEqual(expect.objectContaining({
+    outcome: 'feature-spawn',
+    expectedRevision: '0123456789abcdef',
+    expectedFingerprint: 'a'.repeat(64),
+  }));
+  expect(captured.decisionBodies[1]).toEqual(expect.objectContaining({
+    confirmed: true,
+    outcome: 'feature-spawn',
+    expectedRevision: '1234567890abcdef',
+    expectedFingerprint: 'b'.repeat(64),
+  }));
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     await capture(page, 'workbench-viewer', `page-action-workbench-${theme}.png`);

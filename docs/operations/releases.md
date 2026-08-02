@@ -3,13 +3,15 @@
 Agent Studio releases are tag-bound, create-once GitHub Releases created only
 from an exact `vX.Y.Z` tag whose version matches the repository `VERSION` file.
 The release workflow tests the tagged revision, builds self-contained binaries,
-creates three archives, writes `SHA256SUMS`, attests the archives, and creates
-the GitHub Release. A target host never builds from a checkout.
+creates the guided setup executable and three archives, writes `SHA256SUMS`,
+attests the executable and archives, publishes version-pinned demo images, and
+creates the GitHub Release. A target host never builds from a checkout.
 
 ## Release assets
 
 | Asset | Contents | Supported runtime |
 |---|---|---|
+| `agent-orchestrator-setup` | Guided prerequisite, Demo, Single Machine, Control Plane, and Agent Host join flows | `linux-x64`, self-contained |
 | `agent-orchestrator-X.Y.Z-linux-x64.tar.gz` | Task Server, Orchestrator Engine, systemd units, configuration templates, Caddy template, and lifecycle scripts | `linux-x64`, first-class |
 | `agent-host-X.Y.Z.tar.gz` | Separate self-contained `agent-host` binaries, runner configuration template, and Linux systemd/resource-policy material | `linux-x64`, first-class; `osx-arm64`, supported |
 | `agent-studio-X.Y.Z.tar.gz` | Compiled static Angular application | Any static web host |
@@ -21,14 +23,48 @@ claim. A launchd integration remains host-owned until a product launchd unit is
 shipped.
 
 Every archive contains `VERSION`, `RELEASE-SHA`, and a machine-readable
-`RELEASE` key-value file. Verify an extracted archive against the release-level
-checksums before installation:
+`RELEASE` key-value file. The setup executable verifies every archive before
+extraction. Verify a manually downloaded executable or archive against the
+release-level checksums before installation:
 
 ```sh
 sha256sum -c SHA256SUMS
 gh attestation verify agent-orchestrator-X.Y.Z-linux-x64.tar.gz \
   --repo agent-orc/agent-studio
 ```
+
+The demo path uses the exact release tag on the public
+`ghcr.io/agent-orc/agent-studio-api` and
+`ghcr.io/agent-orc/agent-studio-web` images. It binds the UI to loopback, uses
+isolated Docker volumes, mounts no host repositories, and starts no Agent Host.
+These images are an evaluation channel, not the native repository execution
+path.
+
+## Guided setup
+
+Download one executable and choose the topology:
+
+```sh
+chmod +x agent-orchestrator-setup
+sudo ./agent-orchestrator-setup
+```
+
+The native Single Machine and Multi Machine paths install from the three
+release archives and do not require Docker or .NET. Agent Host paths require
+Git plus an authenticated Codex or Claude CLI owned by the selected Linux
+execution user. The Demo path requires Docker Compose and no Agent CLI.
+
+On a Multi Machine Control Plane, setup prints:
+
+```sh
+sudo ./agent-orchestrator-setup --join
+```
+
+and a protected `aosj1.*` token. The token carries the current separated Task
+Server bearer credential. It is encoded, not encrypted, and remains reusable
+until that credential rotates. The host setup writes the credential to a
+protected file, starts `agent-host`, and waits for the exact registration to
+appear on the Task Server. See [multi-machine.md](./setup/multi-machine.md).
 
 ## Version matrix and compatibility
 

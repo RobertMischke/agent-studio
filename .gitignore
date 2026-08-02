@@ -14,6 +14,8 @@ frontend/build_log.txt
 # re-include specific tracked files below; a bare tools/ would prevent any
 # whitelisting under it.
 tools/*
+!tools/remote-test-suite/
+!tools/remote-test-suite/**
 # Whitelisted: idempotent self-heal script that start.sh runs as a hard
 # pre-flight before the backend boots. Tracked so stable picks it up via
 # update-stable.sh; everything else under tools/ stays local.
@@ -25,6 +27,8 @@ tools/*
 !tools/SilentCatchAnalyzer/**
 
 .test-output
+# Remote Run harness workspaces, credentials, and exported local evidence.
+/.tmp/remote-test-suite/
 
 # .NET 10 Artifacts Output Layout (replaces per-project bin/ and obj/)
 artifacts/
@@ -125,3 +129,6 @@ frontend/.frontend-dev.log
 # product source. Keep them out of broad platform-owned snapshot commits.
 /.tmp-*.mjs
 /tmp-*.mjs
+
+# Container-stack runner identity/tokens (installer writes it from the template)
+/runner.env

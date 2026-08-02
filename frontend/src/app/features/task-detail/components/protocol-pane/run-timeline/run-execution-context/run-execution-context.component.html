@@ -6,6 +6,9 @@
         @if (run().executionContext?.model) {
           <span class="exec-context__scalar"><small>model</small><code>{{ run().executionContext?.model }}</code></span>
         }
+        @if (run().executionContext?.thinkingLevel) {
+          <span class="exec-context__scalar"><small>thinking</small><code>{{ run().executionContext?.thinkingLevel }}</code></span>
+        }
         @if (run().executionContext?.permissionMode) {
           <span class="exec-context__scalar"><small>permission</small><code>{{ run().executionContext?.permissionMode }}</code></span>
         }

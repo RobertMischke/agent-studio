@@ -109,6 +109,10 @@ public sealed class TaskReadModel
                 Detail.PromptMarkdown,
                 Detail.PromptHistory,
                 Detail.ContextUsage),
+            Refinements = TaskRefinementTimelineBuilder.Build(
+                Info.FolderPath,
+                timeline.Runs,
+                Detail.PromptHistory),
             ReviewAttemptEpoch = reviewAttemptEpoch,
             ReviewAttemptCycles = ReviewAttemptTimelineBuilder.Build(
                 reviewAttemptEpoch,

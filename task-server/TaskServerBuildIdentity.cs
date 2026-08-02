@@ -16,7 +16,7 @@ public sealed record TaskServerBuildIdentity(string Release, string GitSha)
             ?.InformationalVersion;
         var release = informational?.Split('+', 2)[0]
                       ?? assembly.GetName().Version?.ToString(3)
-                      ?? "0.0.0";
+                      ?? "unknown";
         var metadataSha = assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
             .FirstOrDefault(attribute =>

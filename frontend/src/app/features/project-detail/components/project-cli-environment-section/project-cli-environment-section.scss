@@ -1,22 +1,26 @@
+@use '../../../../../styles/mixins' as m;
+
 :host {
-  --cli-env-divider: rgba(255,255,255,0.06);
-  --cli-env-border-subtle: rgba(255,255,255,0.10);
-  --cli-env-control-border: rgba(255,255,255,0.14);
-  --cli-env-control-bg: rgba(255,255,255,0.04);
-  --cli-env-control-hover-bg: rgba(137,180,250,0.10);
-  --cli-env-control-hover-border: rgba(137,180,250,0.48);
-  --cli-env-warning-bg: rgba(249,226,175,0.10);
-  --cli-env-warning-border: rgba(249,226,175,0.40);
-  --cli-env-card-bg: rgba(255,255,255,0.035);
-  --cli-env-card-offline-bg: rgba(255,255,255,0.018);
-  --cli-env-ready-bg: rgba(74,222,128,0.10);
-  --cli-env-ready-border: rgba(74,222,128,0.38);
-  --cli-env-issue-bg: rgba(248,113,113,0.10);
-  --cli-env-issue-border: rgba(248,113,113,0.42);
-  --cli-env-info-bg: rgba(137,180,250,0.08);
-  --cli-env-info-border: rgba(137,180,250,0.32);
-  --cli-env-muted-bg: rgba(148,163,184,0.07);
-  --cli-env-muted-border: rgba(148,163,184,0.28);
+  /*
+   * Tone palette for the tiles / cards. Every value resolves to a semantic
+   * studio token so the tones flip with the theme; the panel shape itself
+   * comes from the Deck-Panel v1 mixin (AGT-2280).
+   */
+  --cli-env-divider: var(--studio-border);
+  --cli-env-control-border: var(--studio-card-muted-border);
+  --cli-env-control-bg: var(--studio-card-muted-bg);
+  --cli-env-control-hover-bg: color-mix(in srgb, var(--studio-accent-3) 10%, transparent);
+  --cli-env-control-hover-border: color-mix(in srgb, var(--studio-accent-3) 48%, transparent);
+  --cli-env-warning-bg: color-mix(in srgb, var(--studio-warn) 8%, var(--studio-card-bg));
+  --cli-env-warning-border: color-mix(in srgb, var(--studio-warn) 55%, var(--studio-card-border));
+  --cli-env-ready-bg: color-mix(in srgb, var(--studio-success) 8%, var(--studio-card-bg));
+  --cli-env-ready-border: color-mix(in srgb, var(--studio-success) 45%, var(--studio-card-border));
+  --cli-env-issue-bg: color-mix(in srgb, var(--studio-error) 8%, var(--studio-card-bg));
+  --cli-env-issue-border: color-mix(in srgb, var(--studio-error) 55%, var(--studio-card-border));
+  --cli-env-info-bg: color-mix(in srgb, var(--studio-accent-3) 8%, var(--studio-card-bg));
+  --cli-env-info-border: color-mix(in srgb, var(--studio-accent-3) 40%, var(--studio-card-border));
+  --cli-env-muted-bg: var(--studio-card-muted-bg);
+  --cli-env-muted-border: var(--studio-card-muted-border);
 
   display: block;
   margin-bottom: var(--studio-spacing-5);
@@ -72,32 +76,28 @@
   cursor: wait;
 }
 
+/* Live load failure for this panel — acute now, so the whole surface signals. */
 .cli-env__warn {
+  @include m.deck-panel;
+  @include m.deck-panel-attention(var(--studio-warn));
   display: flex;
   gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-2);
-  border: 1px solid var(--cli-env-warning-border);
-  border-radius: 6px;
-  background: var(--cli-env-warning-bg);
   color: var(--severity-warn);
 }
 
 .cli-env__tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--studio-spacing-2);
+  gap: var(--studio-deck-panel-gap);
 }
 
 .cli-env__tile {
+  @include m.deck-panel;
   min-width: 0;
   min-height: 5.25rem;
   display: grid;
   align-content: center;
   gap: var(--studio-spacing-1);
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border: 1px solid var(--cli-env-border-subtle);
-  border-radius: 6px;
-  background: var(--cli-env-card-bg);
 }
 
 .cli-env__tile-label,
@@ -153,19 +153,17 @@
 .cli-env__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: var(--studio-spacing-2);
+  gap: var(--studio-deck-panel-gap);
 }
 
 .cli-env__card {
+  @include m.deck-panel;
   min-width: 0;
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--cli-env-border-subtle);
-  border-radius: 6px;
-  background: var(--cli-env-card-bg);
 }
 
+/* An offline CLI is a settled, read-only fact — muted, never attention. */
 .cli-env__card--offline {
-  background: var(--cli-env-card-offline-bg);
+  @include m.deck-panel-muted;
   color: var(--studio-fg-muted);
 }
 

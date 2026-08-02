@@ -32,7 +32,8 @@ public static class LogIngestionEndpoints
             HttpContext context,
             ITaskScanner scanner,
             RunLeaseService leases,
-            AttemptAuthorityService authority) =>
+            AttemptAuthorityService authority,
+            AgentStudio.Docs.WikiAgentReadService wikiReads) =>
         {
             if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
                 return Results.Conflict(new LogIngestResponse(req.TaskKey, 0, "The authenticated Runner does not hold the current fenced lease."));
@@ -84,6 +85,22 @@ public static class LogIngestionEndpoints
                 return Results.Problem(CredentialRedactor.Redact($"Failed to ingest logs for '{req.TaskKey}': {ex.Message}"));
             }
 
+            // Remote runs do not flow through the in-process CliRouter. Attribute
+            // their tool-use lines only after the durable, fenced append succeeds.
+            try
+            {
+                wikiReads.ProcessOutput(req.TaskKey, req.Lines.Select(line => new CliOutputLine
+                {
+                    Timestamp = line.Timestamp,
+                    Stream = line.Stream,
+                    Text = line.Text,
+                }));
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "WikiAgentReadService: remote log attribution failed.");
+            }
+
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));
         });
     }
@@ -93,14 +110,14 @@ public static class LogIngestionEndpoints
         AttemptAuthorityService authority,
         Action append)
     {
-        var projection = authority.GetTaskProjection(req.TaskKey);
         if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
             || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
         {
-            return projection.LegacyTask
-                ? null
-                : new AttemptWriteResult(AttemptWriteStatus.Invalid, req.AttemptId ?? string.Empty,
-                    "Canonical runner writes require AttemptId, Fence, AuthorityEpoch, and IdempotencyKey.");
+            // Log ingest is best-effort diagnostic, not an authoritative write: append even
+            // without canonical write authority so a runner on an older agent-host protocol
+            // (no AttemptId/Fence/AuthorityEpoch/IdempotencyKey) does not 409-storm and stall
+            // its runs. Durable authoritative state lives elsewhere; a log line needs no fencing.
+            return null;
         }
         return authority.ExecuteRunWrite(
             new AttemptWriteReference(

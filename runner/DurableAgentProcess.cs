@@ -3,13 +3,40 @@ using System.Text.Json;
 
 namespace AgentRunner;
 
+/// <summary>
+/// What the detached worker executes. The worker only ever needs
+/// <see cref="FileName"/> / <see cref="Arguments"/>; the trailing T0b fields
+/// record <b>why</b> those arguments look the way they do, so a reattaching
+/// daemon and a post-mortem can both read the card's execution spec out of the
+/// same file the run started from.
+///
+/// <para>
+/// The T0b fields are optional on purpose: a <c>spec.json</c> written before T0b
+/// deserialises with nulls and runs exactly as it did, which is what keeps a
+/// runner upgrade safe mid-wave (<c>KillMode=process</c> leaves live workers
+/// behind).
+/// </para>
+/// </summary>
 internal sealed record DetachedJobSpec(
     string FileName,
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
     string Prompt,
     string ResultsDirectory,
-    int TimeoutSeconds);
+    int TimeoutSeconds,
+    string? CliType = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    string? PermissionMode = null,
+    string? ContextMode = null,
+    // T1 (AGT-2370) — CAR execution-engine fields, additive like the T0b block
+    // above: a pre-T1 spec.json deserialises with nulls and Engine=null selects
+    // the legacy raw-spawn branch, which is what keeps a mid-wave runner deploy
+    // legal (KillMode=process leaves live workers on their old binary anyway;
+    // this covers the file contract for any tooling that re-reads a spec).
+    string? Engine = null,
+    string? RunId = null,
+    string? ResumeSessionId = null);
 
 internal sealed record DetachedJobLogLine(long Sequence, DateTime Timestamp, string Stream, string Text);
 
@@ -57,17 +84,14 @@ internal sealed class DurableAgentProcess
         string repoPath,
         string prompt,
         string resultsDirectory,
-        IReadOnlyList<string>? argsOverride = null)
+        IReadOnlyList<string>? argsOverride = null,
+        RunSpecDto? runSpec = null,
+        string? runId = null,
+        string? resumeSessionId = null)
     {
         Directory.CreateDirectory(workerDirectory);
         var specPath = Path.Combine(workerDirectory, "spec.json");
-        var spec = new DetachedJobSpec(
-            options.CliBin,
-            argsOverride ?? AgentCliProcess.SplitArgs(options.CliArgs),
-            Path.GetFullPath(repoPath),
-            prompt,
-            Path.GetFullPath(resultsDirectory),
-            options.RunTimeoutSeconds);
+        var spec = BuildSpec(options, repoPath, prompt, resultsDirectory, argsOverride, runSpec, runId, resumeSessionId);
         File.WriteAllText(specPath, JsonSerializer.Serialize(spec, Json));
 
         var executable = Environment.ProcessPath
@@ -91,6 +115,50 @@ internal sealed class DurableAgentProcess
         process.Dispose();
         return handle;
     }
+
+    /// <summary>
+    /// T0b — the pure part of <see cref="Start"/>: turn the card's execution spec
+    /// plus the host configuration into the exact worker specification, without
+    /// touching the process table. Kept separate so the spec that lands on disk
+    /// can be asserted directly.
+    /// </summary>
+    internal static DetachedJobSpec BuildSpec(
+        RunnerOptions options,
+        string repoPath,
+        string prompt,
+        string resultsDirectory,
+        IReadOnlyList<string>? argsOverride = null,
+        RunSpecDto? runSpec = null,
+        string? runId = null,
+        string? resumeSessionId = null)
+    {
+        // One resolution truth for both engines: which CLI runs (card wish vs.
+        // host binaries, foreign-CLI fallback drops the model pins) comes from
+        // AgentCliProcess.Resolve. The legacy engine additionally uses its argv;
+        // the CAR engine ignores the argv and lets the descriptor build it from
+        // the typed fields below.
+        var invocation = AgentCliProcess.Resolve(options, runSpec, argsOverride);
+        return new DetachedJobSpec(
+            invocation.FileName,
+            invocation.Arguments,
+            Path.GetFullPath(repoPath),
+            prompt,
+            Path.GetFullPath(resultsDirectory),
+            options.RunTimeoutSeconds,
+            invocation.CliType,
+            invocation.Model,
+            invocation.ThinkingLevel,
+            runSpec?.PermissionMode,
+            runSpec?.ContextMode,
+            Engine: options.ExecEngine,
+            RunId: runId,
+            ResumeSessionId: resumeSessionId);
+    }
+
+    /// <summary>Read a worker specification back, including one written before the T0b fields existed.</summary>
+    internal static DetachedJobSpec ReadSpec(string specPath)
+        => JsonSerializer.Deserialize<DetachedJobSpec>(File.ReadAllText(specPath), Json)
+           ?? throw new InvalidDataException($"Detached job spec is empty: {specPath}");
 
     public static DurableAgentProcess Attach(PersistedRunnerSlot slot)
         => new(
@@ -271,30 +339,61 @@ internal sealed class DurableAgentProcess
 
         ProcessResult processResult;
         var timedOut = false;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(spec.TimeoutSeconds));
-        try
+        if (string.Equals(spec.Engine, RunnerOptions.ExecEngineCar, StringComparison.OrdinalIgnoreCase))
         {
-            processResult = await ProcessRunner.RunAsync(
-                spec.FileName,
-                spec.Arguments,
-                spec.WorkingDirectory,
-                spec.Prompt,
-                line => Append("stdout", line),
-                line => Append("stderr", line),
-                new Dictionary<string, string?> { ["JOB_RESULTS_DIR"] = spec.ResultsDirectory },
-                clearEnvironment: false,
-                ct: timeout.Token);
+            try
+            {
+                (processResult, timedOut) = await CarWorkerExecution.RunAsync(spec, directory, Append);
+            }
+            catch (Exception ex)
+            {
+                Append("system", $"[runner] detached worker failed: {ex.Message}");
+                processResult = new ProcessResult(125, string.Empty, ex.ToString());
+            }
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        else
         {
-            timedOut = true;
-            Append("system", $"[runner] run exceeded {spec.TimeoutSeconds}s timeout");
-            processResult = new ProcessResult(124, string.Empty, "Runner timeout");
-        }
-        catch (Exception ex)
-        {
-            Append("system", $"[runner] detached worker failed: {ex.Message}");
-            processResult = new ProcessResult(125, string.Empty, ex.ToString());
+            // Legacy raw spawn — behind RUNNER_EXEC_ENGINE=legacy since AGT-2370,
+            // deleted in AGT-2373. The CAR adapters run in shadow mode on the raw
+            // lines so the typed events.jsonl trace exists on both engines and
+            // event parity is provable before the process start switches.
+            var runId = string.IsNullOrWhiteSpace(spec.RunId)
+                ? Path.GetFileName(Path.TrimEndingDirectorySeparator(directory))
+                : spec.RunId!;
+            using var trace = CarEventTrace.Open(directory);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(spec.TimeoutSeconds));
+            try
+            {
+                processResult = await ProcessRunner.RunAsync(
+                    spec.FileName,
+                    spec.Arguments,
+                    spec.WorkingDirectory,
+                    spec.Prompt,
+                    line =>
+                    {
+                        Append("stdout", line);
+                        trace.WriteFromRawLine(spec.CliType, runId, "stdout", line);
+                    },
+                    line =>
+                    {
+                        Append("stderr", line);
+                        trace.WriteFromRawLine(spec.CliType, runId, "stderr", line);
+                    },
+                    new Dictionary<string, string?> { ["JOB_RESULTS_DIR"] = spec.ResultsDirectory },
+                    clearEnvironment: false,
+                    ct: timeout.Token);
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                timedOut = true;
+                Append("system", $"[runner] run exceeded {spec.TimeoutSeconds}s timeout");
+                processResult = new ProcessResult(124, string.Empty, "Runner timeout");
+            }
+            catch (Exception ex)
+            {
+                Append("system", $"[runner] detached worker failed: {ex.Message}");
+                processResult = new ProcessResult(125, string.Empty, ex.ToString());
+            }
         }
 
         var result = new DetachedJobResult(

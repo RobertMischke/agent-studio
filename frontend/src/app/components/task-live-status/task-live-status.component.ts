@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import type { TaskInfo } from '../../models/task.model';
 import { TaskState } from '../../models/task.model';
 import { NowTickService } from '../../services/now-tick.service';
+import { deriveActiveTaskRun, isTaskRunActive } from '../../services/run-activity.util';
 
 export type TaskLiveStatusVariant = 'card' | 'detail';
 type LiveTone = 'active' | 'waiting' | 'idle' | 'stalled';
@@ -62,6 +63,20 @@ export class TaskLiveStatusComponent {
       };
     }
 
+    const activeRun = deriveActiveTaskRun(task);
+    if (activeRun?.kind === 'remote') {
+      const startedAt = timestamp(activeRun.startedAt);
+      const duration = startedAt === null ? null : elapsed(this.now() - startedAt);
+      const host = activeRun.hostDisplayName || activeRun.runnerId || 'remote host';
+      return {
+        tone: 'active',
+        headline: `Running remote on ${host}`,
+        detail: duration ? `Active for ${duration}` : null,
+        next,
+        attempt: status.attempt,
+      };
+    }
+
     if (status.queue) {
       const queueName = status.queue.kind === 'review' ? 'review slot' : 'runner slot';
       return {
@@ -88,26 +103,29 @@ export class TaskLiveStatusComponent {
 
     const latestAt = latestActivityAt(task, status.latestEventAt);
     const idleMs = latestAt === null ? null : Math.max(0, this.now() - latestAt);
-    // Preparation is a pre-run lane: a card legitimately sits here before any
-    // step or runner has picked it up. Idle time here is not a hang, so it must
-    // not raise the stall/possible-hang alarm — only the running lanes do.
-    const preparing = task.state === TaskState.Preparation;
     const activeLane = task.state === TaskState.Progress
       || task.state === TaskState.AutoReview;
     const stalled = activeLane && idleMs !== null && idleMs >= STALE_AFTER_MS;
-    const noActiveRun = !preparing
+    // AGT-2378: `runActivity` is classified from the LOCAL slot registry plus the
+    // local CLI execution record. A remote run owns the task through a fenced
+    // lease and attempt records, not a local process, so it lands on
+    // `no-active-run` / `failed-idle` while it is demonstrably running — and this
+    // strip then claims "No active run" right next to a live "Run aktiv" pill.
+    // Any positive ownership evidence therefore outranks the negative
+    // classification. The activity-based "possible hang" hint is deliberately
+    // left alone: it is about silence, not about ownership.
+    const runActive = isTaskRunActive(task);
+    const noActiveRun = activeLane && !runActive
       && (task.runActivity?.kind === 'failed-idle'
         || task.runActivity?.kind === 'no-active-run');
 
     return {
-      tone: preparing ? 'idle' : (stalled || noActiveRun ? 'stalled' : 'idle'),
-      headline: preparing
-        ? 'Preparing'
-        : stalled
-          ? `No activity for ${elapsed(idleMs!)} · possible hang`
-          : noActiveRun
-            ? 'No active run'
-            : 'Between steps',
+      tone: stalled || noActiveRun ? 'stalled' : runActive ? 'active' : 'idle',
+      headline: stalled
+        ? `No activity for ${elapsed(idleMs!)} · possible hang`
+        : noActiveRun
+          ? 'No active run'
+          : task.state === TaskState.Preparation ? 'Preparing' : 'Between steps',
       detail: idleMs === null ? 'No recorded activity time' : `Last activity ${elapsed(idleMs)} ago`,
       next,
       attempt: status.attempt,

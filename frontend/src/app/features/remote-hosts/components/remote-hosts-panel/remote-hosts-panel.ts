@@ -2,8 +2,13 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
-import type { HostActionKind, RemoteHost } from '../../models/remote-host.model';
-import { boardRemoteSlotsForHost, deriveBoardRunningTruth } from '../../models/running-truth';
+import type { HostActionKind, HostProjectSlots, RemoteHost } from '../../models/remote-host.model';
+import type { RuntimeCapacityChange } from '../runtime-capacity-editor/runtime-capacity-editor';
+import {
+  boardProjectSlotsForHost,
+  boardRemoteSlotsForHost,
+  deriveBoardRunningTruth,
+} from '../../models/running-truth';
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
@@ -83,6 +88,13 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     return host.role === 'local' ? truth.local : boardRemoteSlotsForHost(truth, host);
   }
 
+  /** Per-project consumption of one host's shared slot ceiling. */
+  projectSlots(host: RemoteHost): readonly HostProjectSlots[] {
+    return host.role === 'local'
+      ? []
+      : boardProjectSlotsForHost(this.boardRunningTruth(), host);
+  }
+
   openWizard(): void { this.wizardOpen.set(true); }
   closeWizard(): void { this.wizardOpen.set(false); }
   openSetup(host: RemoteHost): void { this.setupHost.set(host); }
@@ -96,6 +108,15 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   completeWizard(host: ProvisionedHostDraft): void {
     this.service.addProvisionedHost(host.name, host.address);
     this.wizardOpen.set(false);
+  }
+
+  onCapacityChange(change: RuntimeCapacityChange): void {
+    this.service.setCapacity(
+      change.id,
+      change.maxParallelism,
+      change.targetLoadPercent,
+      change.rampStrategy,
+    );
   }
 
   onAction(evt: { kind: HostActionKind; id: string }): void {

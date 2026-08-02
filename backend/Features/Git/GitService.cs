@@ -25,6 +25,26 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
 
+public enum IntegrationBranchSyncOutcome
+{
+    UpToDate,
+    FastForwarded,
+    RemoteAhead,
+    LocalAhead,
+    NoRemote,
+    Diverged,
+    Error,
+}
+
+public record IntegrationBranchSyncResult(
+    IntegrationBranchSyncOutcome Outcome,
+    string? Error = null)
+{
+    public bool Success => Outcome is not (
+        IntegrationBranchSyncOutcome.Diverged
+        or IntegrationBranchSyncOutcome.Error);
+}
+
 /// <summary>
 /// Result of a single-file content lookup that backs the git-pane's
 /// rendered md/html preview (AGT-2008). <paramref name="Content"/> is the
@@ -65,6 +85,13 @@ public enum MergeIntoIntegrationOutcome
     PushedForReview,
     /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
     Conflict,
+    /// <summary>
+    /// The merge itself succeeded but the pre-develop build gate found the MERGE
+    /// RESULT red, so the integration branch was rolled back to its exact
+    /// pre-merge tip and nothing was pushed. The delivery is not integrated and
+    /// needs a steer round - never silently "delivered".
+    /// </summary>
+    GateFailed,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
     Error,
 }
@@ -103,6 +130,14 @@ public record GitCommitInfo(
     int FilesChanged,
     int Added,
     int Removed);
+
+public sealed record RemoteDeliveryCommitRange(
+    bool Success,
+    string? IntegrationBranch,
+    string? MergeBaseSha,
+    string? TipSha,
+    IReadOnlyList<GitCommitInfo> Commits,
+    string? Warning);
 
 /// <summary>
 /// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
@@ -177,16 +212,18 @@ public record GitWorktreeEntry(
     string? HeadShortSha,
     bool IsPrimary,
     bool IsDetached,
-    bool IsBare);
+    bool IsBare,
+    GitTaskBadge? Task = null);
 
 /// <summary>
-/// One local branch in the Project Hub Git View inventory. <see cref="Category"/>
+/// One logical branch in the Project Hub Git View inventory. It folds matching
+/// local and <c>origin/*</c> refs into one row while retaining their individual
+/// presence flags. <see cref="Category"/>
 /// is a coarse classification (<c>main</c> / <c>develop</c> / <c>feature</c> /
-/// <c>task</c> / <c>other</c>) the frontend groups the branch tree by, so the
-/// operator can see at a glance what is integration, what is a feature branch,
-/// and what is an open task branch. <see cref="WorktreePath"/> is non-null when
-/// the branch is currently checked out in one of the <see cref="GitWorktreeEntry"/>
-/// folders.
+/// <c>task</c> / <c>runner</c> / <c>other</c>) the frontend groups the branch
+/// tree by, so the operator can see at a glance what is integration, feature,
+/// task, or runner state. <see cref="WorktreePath"/> is non-null when the branch
+/// is currently checked out in one of the <see cref="GitWorktreeEntry"/> folders.
 /// </summary>
 public record GitBranchEntry(
     string Name,
@@ -199,7 +236,75 @@ public record GitBranchEntry(
     int Behind,
     string? LastCommitSubject,
     DateTime? LastCommitAtUtc,
-    string? WorktreePath);
+    string? WorktreePath,
+    bool IsLocal = true,
+    bool HasRemote = false,
+    string? RemoteTipSha = null,
+    IReadOnlyList<GitTaskBadge>? Tasks = null);
+
+/// <summary>A task card associated with a branch, worktree, or commit.</summary>
+public sealed record GitTaskBadge(
+    string TaskKey,
+    string Key,
+    string Title,
+    string Lane);
+
+/// <summary>A ref decoration attached to one commit in the graph.</summary>
+public sealed record GitCommitRef(string Name, string Kind, bool IsRemote);
+
+/// <summary>
+/// The shared develop/main commit-presence verdict projected onto a graph row.
+/// </summary>
+public sealed record GitCommitPresence(
+    bool InIntegration,
+    bool InRelease,
+    string IntegrationBranch,
+    string ReleaseBranch);
+
+/// <summary>A running application surface whose immutable build SHA is known.</summary>
+public sealed record GitDeploymentMarker(string Target, string Sha, string ShortSha);
+
+/// <summary>
+/// One topologically ordered commit row. Parents are included so the frontend
+/// can draw graph lanes without another git call.
+/// </summary>
+public sealed record GitGraphCommit
+{
+    public string Sha { get; init; } = "";
+    public string ShortSha { get; init; } = "";
+    public IReadOnlyList<string> ParentShas { get; init; } = [];
+    public DateTime AuthorDateUtc { get; init; }
+    public string Author { get; init; } = "";
+    public string Subject { get; init; } = "";
+    public int FilesChanged { get; init; }
+    public int Added { get; init; }
+    public int Removed { get; init; }
+    public IReadOnlyList<GitCommitRef> Refs { get; init; } = [];
+    public IReadOnlyList<GitTaskBadge> Tasks { get; init; } = [];
+    public GitCommitPresence? Presence { get; init; }
+    public IReadOnlyList<GitDeploymentMarker> Deployments { get; init; } = [];
+}
+
+/// <summary>A bounded page of the all-ref commit graph.</summary>
+public sealed record GitHistoryPage(
+    int Offset,
+    int PageSize,
+    int? NextOffset,
+    bool HasMore,
+    IReadOnlyList<GitGraphCommit> Commits);
+
+/// <summary>
+/// One currently owned task checkout. Remote leases may not have a path visible
+/// to Studio, so <see cref="WorktreePath"/> is optional.
+/// </summary>
+public sealed record GitActiveCheckout(
+    GitTaskBadge Task,
+    string? Branch,
+    string? HeadSha,
+    string Location,
+    string Runner,
+    string? WorktreePath,
+    DateTime? ActiveSince);
 
 /// <summary>
 /// One ref as emitted by <c>git for-each-ref</c>, used by the Git-Management
@@ -226,11 +331,11 @@ public record GitIntegrationMergeCommit(
     string Subject);
 
 /// <summary>
-/// Read-only branch + worktree + recent-history inventory for a single
+/// Read-only branch + worktree + first graph-page inventory for a single
 /// project, returned by <see cref="GitService.GetProjectInventory"/> and
 /// surfaced on the Project Hub Git View. Deliberately project-scoped: it
 /// answers "what branches and checkouts does THIS project's repository have,
-/// and what changed recently", never a global git-client view. Carries an
+/// and how are its refs connected", never a global git-client view. Carries an
 /// <see cref="Error"/> (with <see cref="IsRepo"/> false) when the project has
 /// no configured repository or the folder is not a git working tree, so the
 /// frontend can render a clean empty/error state.
@@ -243,7 +348,10 @@ public record GitProjectInventory(
     List<GitWorktreeEntry> Worktrees,
     List<GitBranchEntry> Branches,
     List<GitCommitInfo> RecentCommits,
-    string? Error);
+    string? Error,
+    GitHistoryPage? History = null,
+    IReadOnlyList<GitActiveCheckout>? ActiveCheckouts = null,
+    IReadOnlyList<GitDeploymentMarker>? Deployments = null);
 
 /// <summary>
 /// Repository hygiene snapshot used by the project header badge and the
@@ -282,6 +390,30 @@ public record GitHygieneStatus
     /// is the entry point. Null for project-only queries.
     /// </summary>
     public TaskHygieneContext? Job { get; init; }
+    public string? Error { get; init; }
+}
+
+/// <summary>
+/// Read-only repository identity for a Project URL preview. Unlike project
+/// hygiene, this snapshot is resolved from the preview command's effective
+/// working directory, so a URL configured for a nested or separate checkout
+/// reports the branch and HEAD that its process actually uses.
+/// </summary>
+public record PreviewRepositoryContext
+{
+    public string ProjectName { get; init; } = "";
+    public string? RepositoryName { get; init; }
+    public string? WorkingDirectory { get; init; }
+    public string? RepoRoot { get; init; }
+    public bool IsRepo { get; init; }
+    public string? Branch { get; init; }
+    public string? HeadSha { get; init; }
+    public string? HeadShortSha { get; init; }
+    public string? ComparisonRef { get; init; }
+    public string? ComparisonKind { get; init; }
+    public int Ahead { get; init; }
+    public int Behind { get; init; }
+    public bool IsDirty { get; init; }
     public string? Error { get; init; }
 }
 
@@ -686,6 +818,135 @@ public class GitService
     }
 
     /// <summary>
+    /// Reads repository identity and integration distance at an explicit
+    /// working directory. The current branch's upstream wins as the comparison
+    /// ref. A branch without an upstream falls back to the project's remote
+    /// integration line, then its local integration line.
+    /// </summary>
+    public PreviewRepositoryContext GetPreviewContext(
+        string projectName,
+        string? workingDirectory,
+        string? configuredIntegrationBranch)
+    {
+        var seed = new PreviewRepositoryContext
+        {
+            ProjectName = projectName,
+            WorkingDirectory = workingDirectory,
+        };
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+            return seed with { Error = "Preview working directory is not configured." };
+        if (!Directory.Exists(workingDirectory))
+            return seed with { Error = $"Preview working directory does not exist: {workingDirectory}" };
+
+        var root = ResolveGitToplevel(workingDirectory);
+        if (root == null)
+        {
+            return seed with
+            {
+                RepositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(workingDirectory)),
+                IsRepo = false,
+                Error = "Preview working directory is not inside a Git repository.",
+            };
+        }
+
+        var (branchOut, _, branchCode) = RunGitArgs(root, "symbolic-ref", "--quiet", "--short", "HEAD");
+        var branch = branchCode == 0 && !string.IsNullOrWhiteSpace(branchOut)
+            ? branchOut.Trim()
+            : "detached HEAD";
+        var (headOut, headError, headCode) = RunGitArgs(root, "rev-parse", "HEAD");
+        if (headCode != 0 || string.IsNullOrWhiteSpace(headOut))
+        {
+            return seed with
+            {
+                RepositoryName = PreviewRepositoryName(root),
+                RepoRoot = root,
+                IsRepo = true,
+                Branch = branch,
+                Error = string.IsNullOrWhiteSpace(headError) ? "Git HEAD is unavailable." : headError.Trim(),
+            };
+        }
+
+        var headSha = headOut.Trim();
+        var comparisonRef = PreviewComparisonRef(root, configuredIntegrationBranch, out var comparisonKind);
+        var ahead = 0;
+        var behind = 0;
+        if (!string.IsNullOrWhiteSpace(comparisonRef))
+        {
+            var (countOut, _, countCode) = RunGitArgs(
+                root, "rev-list", "--left-right", "--count", $"HEAD...{comparisonRef}");
+            if (countCode == 0)
+            {
+                var parts = countOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    int.TryParse(parts[0], out ahead);
+                    int.TryParse(parts[1], out behind);
+                }
+            }
+        }
+
+        var (statusOut, _, statusCode) = RunGitReadonly(root, "status --porcelain=v1");
+        return seed with
+        {
+            RepositoryName = PreviewRepositoryName(root),
+            WorkingDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workingDirectory)),
+            RepoRoot = root,
+            IsRepo = true,
+            Branch = branch,
+            HeadSha = headSha,
+            HeadShortSha = headSha[..Math.Min(8, headSha.Length)],
+            ComparisonRef = comparisonRef,
+            ComparisonKind = comparisonKind,
+            Ahead = ahead,
+            Behind = behind,
+            IsDirty = statusCode == 0 && !string.IsNullOrWhiteSpace(statusOut),
+        };
+    }
+
+    private string? PreviewComparisonRef(string repoRoot, string? configuredIntegrationBranch, out string? kind)
+    {
+        var (upstreamOut, _, upstreamCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}");
+        if (upstreamCode == 0 && !string.IsNullOrWhiteSpace(upstreamOut))
+        {
+            kind = "upstream";
+            return upstreamOut.Trim();
+        }
+
+        var integration = ResolveIntegrationBranch(repoRoot, configuredIntegrationBranch);
+        var remote = integration.StartsWith("origin/", StringComparison.Ordinal)
+            ? integration
+            : "origin/" + integration;
+        var (_, _, remoteCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", remote);
+        if (remoteCode == 0)
+        {
+            kind = "integration";
+            return remote;
+        }
+        var (_, _, localCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", integration);
+        if (localCode == 0)
+        {
+            kind = "integration";
+            return integration;
+        }
+
+        kind = null;
+        return null;
+    }
+
+    private static string PreviewRepositoryName(string repoRoot)
+    {
+        var (originOut, _, originCode) = RunGitArgs(repoRoot, "config", "--get", "remote.origin.url");
+        var source = originCode == 0 && !string.IsNullOrWhiteSpace(originOut)
+            ? originOut.Trim().TrimEnd('/', '\\')
+            : repoRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var separator = Math.Max(source.LastIndexOf('/'), Math.Max(source.LastIndexOf('\\'), source.LastIndexOf(':')));
+        var name = separator >= 0 ? source[(separator + 1)..] : source;
+        var normalized = name.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+        return string.IsNullOrWhiteSpace(normalized) ? "repository" : normalized;
+    }
+
+    /// <summary>
     /// Job-scoped hygiene: project-level snapshot overlaid with whether the
     /// job carries a platform-owned commit stamp, whether the job's lane plus
     /// the live working tree imply accepted task work was left uncommitted,
@@ -866,8 +1127,8 @@ public class GitService
     private static readonly TimeSpan InventoryTtl = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// Branch / worktree / recent-history inventory for one project, backing the
-    /// Project Hub Git View. Read-only: it forks a handful of cheap plumbing
+    /// Branch / worktree / first graph-page inventory for one project, backing
+    /// the Project Hub Git View. Read-only: it forks a bounded set of plumbing
     /// commands (<c>worktree list</c>, <c>for-each-ref</c>, <c>log</c>) and never
     /// mutates the repository. Cached per project for ~3 s so a polling UI can
     /// call freely without forking N git processes per render. Returns a shape
@@ -916,28 +1177,165 @@ public class GitService
         if (root == null)
             return EmptyInventory(projectName, configured, $"Not a git repository: {configured}");
 
-        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
-        var currentBranch = string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim();
-
         var (wtOut, _, wtCode) = RunGitArgs(root, "worktree", "list", "--porcelain");
         var worktrees = wtCode == 0 ? ParseWorktreePorcelain(wtOut) : [];
+        // The primary porcelain entry already carries the checked-out branch.
+        // Reusing it avoids a separate rev-parse spawn on every cold inventory.
+        var currentBranch = worktrees.FirstOrDefault(worktree => worktree.IsPrimary)?.Branch;
         var worktreeByBranch = worktrees
             .Where(w => !string.IsNullOrEmpty(w.Branch))
             .GroupBy(w => w.Branch!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Path, StringComparer.Ordinal);
 
         var branches = ReadBranchInventory(root, currentBranch, worktreeByBranch);
-
-        // Recent history on the current HEAD; the tree browser reads this as the
-        // "browse recent commits" list and hands a selected SHA to the reused
-        // diff renderer. Bounded so a long-lived repo can't stall the render.
-        var (logOut, _, logCode) = RunGitArgs(root,
-            "log", "--no-merges", "--max-count=40", "--shortstat",
-            "--pretty=format:%H%x1f%h%x1f%aI%x1f%aN%x1f%s");
-        var recent = logCode == 0 ? ParseLogBlocks(logOut) : [];
+        var history = ReadProjectHistoryPage(root, offset: 0, pageSize: 50);
+        var recent = history.Commits
+            .Select(commit => new GitCommitInfo(
+                commit.Sha,
+                commit.ShortSha,
+                commit.AuthorDateUtc,
+                commit.Author,
+                commit.Subject,
+                commit.FilesChanged,
+                commit.Added,
+                commit.Removed))
+            .ToList();
 
         return new GitProjectInventory(
-            projectName, root, true, currentBranch, worktrees, branches, recent, null);
+            projectName, root, true, currentBranch, worktrees, branches, recent, null, history);
+    }
+
+    /// <summary>
+    /// Returns one bounded all-ref graph page for a project. The first page is
+    /// already carried by <see cref="GetProjectInventory"/>; this method backs
+    /// explicit "Load older" requests. Inventory cache hits avoid repeat work on
+    /// initial render, while older pages are briefly memoized by project/offset.
+    /// </summary>
+    public GitHistoryPage GetProjectHistory(string projectName, int offset, int pageSize)
+    {
+        offset = Math.Max(0, offset);
+        pageSize = Math.Clamp(pageSize, 10, 100);
+        var inventory = GetProjectInventory(projectName);
+        var root = inventory.IsRepo ? inventory.RepositoryPath : null;
+        if (root == null) return new GitHistoryPage(offset, pageSize, null, false, []);
+
+        var fingerprint = ReadOnlyGitRefFingerprint.Capture(
+            root,
+            inventory.Branches.Select(branch => branch.Name));
+        var logicalKey = $"git-graph\0{root}\0{fingerprint}\0{offset}\0{pageSize}";
+        return MemoizeByHead(root, logicalKey, () => ReadProjectHistoryPage(root, offset, pageSize));
+    }
+
+    private GitHistoryPage ReadProjectHistoryPage(string root, int offset, int pageSize)
+    {
+        const char US = '\x1f';
+        const char RS = '\x1e';
+        var format = string.Join("%x1f",
+            "%H", "%h", "%P", "%aI", "%aN", "%s", "%D");
+        var (output, _, code) = RunGitArgs(
+            root,
+            "log",
+            "--all",
+            "--topo-order",
+            "--date-order",
+            $"--max-count={pageSize + 1}",
+            $"--skip={offset}",
+            "--shortstat",
+            "--decorate=full",
+            $"--pretty=format:%x1e{format}");
+        if (code != 0 || string.IsNullOrWhiteSpace(output))
+            return new GitHistoryPage(offset, pageSize, null, false, []);
+
+        var commits = new List<GitGraphCommit>();
+        foreach (var block in output.Replace("\r\n", "\n").Split(RS))
+        {
+            var lines = block.Split('\n');
+            var recordLine = lines.FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 7) continue;
+            if (!DateTime.TryParse(
+                    parts[3],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var parsedAt))
+                continue;
+            var shortstat = lines
+                .SkipWhile(line => !ReferenceEquals(line, recordLine)
+                    && !string.Equals(line, recordLine, StringComparison.Ordinal))
+                .Skip(1)
+                .FirstOrDefault(line => line.Contains(" changed", StringComparison.Ordinal));
+            var (files, added, removed) = ParseShortstat(shortstat);
+            commits.Add(new GitGraphCommit
+            {
+                Sha = parts[0].Trim(),
+                ShortSha = parts[1].Trim(),
+                ParentShas = parts[2]
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                AuthorDateUtc = DateTime.SpecifyKind(parsedAt, DateTimeKind.Utc),
+                Author = parts[4],
+                Subject = parts[5],
+                FilesChanged = files,
+                Added = added,
+                Removed = removed,
+                Refs = ParseGraphRefs(parts[6]),
+            });
+        }
+
+        var hasMore = commits.Count > pageSize;
+        var page = commits.Take(pageSize).ToList();
+        return new GitHistoryPage(
+            offset,
+            pageSize,
+            hasMore ? offset + page.Count : null,
+            hasMore,
+            page);
+    }
+
+    internal static IReadOnlyList<GitCommitRef> ParseGraphRefs(string? decorations)
+    {
+        if (string.IsNullOrWhiteSpace(decorations)) return [];
+        var refs = new List<GitCommitRef>();
+
+        void Add(string raw)
+        {
+            var value = raw.Trim();
+            if (value.Length == 0) return;
+            if (value.StartsWith("HEAD -> ", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef("HEAD", "head", false));
+                Add(value["HEAD -> ".Length..]);
+                return;
+            }
+            if (value == "HEAD")
+            {
+                refs.Add(new GitCommitRef("HEAD", "head", false));
+                return;
+            }
+            if (value.StartsWith("tag: refs/tags/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["tag: refs/tags/".Length..], "tag", false));
+                return;
+            }
+            if (value.StartsWith("refs/heads/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["refs/heads/".Length..], "branch", false));
+                return;
+            }
+            if (value.StartsWith("refs/remotes/", StringComparison.Ordinal))
+            {
+                refs.Add(new GitCommitRef(value["refs/remotes/".Length..], "branch", true));
+                return;
+            }
+            refs.Add(new GitCommitRef(value, "ref", false));
+        }
+
+        foreach (var decoration in decorations.Split(", ", StringSplitOptions.RemoveEmptyEntries))
+            Add(decoration);
+        return refs
+            .DistinctBy(item => $"{item.Kind}\0{item.Name}", StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>
@@ -1000,54 +1398,110 @@ public class GitService
     private List<GitBranchEntry> ReadBranchInventory(
         string root, string? currentBranch, IReadOnlyDictionary<string, string> worktreeByBranch)
     {
-        // One for-each-ref pass gives tip SHA, upstream, ahead/behind track, the
-        // last-commit date and subject per branch. The explicit refs/heads
-        // pattern is intentional: refs/backups/* is an operational safety net,
-        // not user-visible branch inventory, and large backup namespaces must
-        // not add scan or response cost. Fields are separated by the Unit
-        // Separator (0x1f) so a commit subject with spaces round-trips.
+        // One pass covers local heads and origin tracking refs. Rows are folded
+        // by their branch name so the view can distinguish local-only,
+        // local+origin, and origin-only branches without a second git command.
+        // refs/backups/* stays outside the explicit patterns.
         const char US = '';
         var fmt = string.Join(US.ToString(), new[]
         {
-            "%(refname:short)", "%(objectname)", "%(objectname:short)",
+            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)",
             "%(upstream:short)", "%(upstream:track)",
             "%(committerdate:iso-strict)", "%(contents:subject)"
         });
         var (output, _, code) = RunGitArgs(root,
-            "for-each-ref", "--sort=-committerdate", "--count=200",
-            $"--format={fmt}", "refs/heads");
+            "for-each-ref", "--sort=-committerdate", "--count=400",
+            $"--format={fmt}", "refs/heads", "refs/remotes/origin");
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
 
-        var list = new List<GitBranchEntry>();
+        var byName = new Dictionary<string, BranchInventoryAccumulator>(StringComparer.Ordinal);
+        var order = new List<string>();
         foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
             var parts = raw.Split(US);
-            if (parts.Length < 7) continue;
-            var name = parts[0].Trim();
-            if (name.Length == 0) continue;
+            if (parts.Length < 8) continue;
+            var fullRef = parts[0].Trim();
+            var remote = fullRef.StartsWith("refs/remotes/origin/", StringComparison.Ordinal);
+            if (fullRef == "refs/remotes/origin/HEAD") continue;
+            var name = remote
+                ? fullRef["refs/remotes/origin/".Length..]
+                : fullRef.StartsWith("refs/heads/", StringComparison.Ordinal)
+                    ? fullRef["refs/heads/".Length..]
+                    : parts[1].Trim();
+            if (name.Length == 0 || name == "HEAD") continue;
 
-            var (ahead, behind) = ParseAheadBehind(parts[4]);
+            var (ahead, behind) = ParseAheadBehind(parts[5]);
             DateTime? lastAt = null;
-            if (DateTime.TryParse(parts[5], System.Globalization.CultureInfo.InvariantCulture,
+            if (DateTime.TryParse(parts[6], System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
                     out var ts))
                 lastAt = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
 
-            list.Add(new GitBranchEntry(
+            if (!byName.TryGetValue(name, out var entry))
+            {
+                entry = new BranchInventoryAccumulator(name);
+                byName[name] = entry;
+                order.Add(name);
+            }
+
+            if (remote)
+            {
+                entry.HasRemote = true;
+                entry.RemoteTipSha = EmptyToNull(parts[2]);
+                entry.RemoteTipShortSha = EmptyToNull(parts[3]);
+                entry.RemoteSubject = EmptyToNull(parts[7]);
+                entry.RemoteAt = lastAt;
+            }
+            else
+            {
+                entry.IsLocal = true;
+                entry.LocalTipSha = EmptyToNull(parts[2]);
+                entry.LocalTipShortSha = EmptyToNull(parts[3]);
+                entry.Upstream = EmptyToNull(parts[4]);
+                entry.Ahead = ahead;
+                entry.Behind = behind;
+                entry.LocalSubject = EmptyToNull(parts[7]);
+                entry.LocalAt = lastAt;
+            }
+        }
+        return order.Select(name =>
+        {
+            var entry = byName[name];
+            return new GitBranchEntry(
                 Name: name,
                 Category: CategorizeBranch(name),
-                TipSha: EmptyToNull(parts[1]),
-                TipShortSha: EmptyToNull(parts[2]),
+                TipSha: entry.LocalTipSha ?? entry.RemoteTipSha,
+                TipShortSha: entry.LocalTipShortSha ?? entry.RemoteTipShortSha,
                 IsCurrent: string.Equals(name, currentBranch, StringComparison.Ordinal),
-                Upstream: EmptyToNull(parts[3]),
-                Ahead: ahead,
-                Behind: behind,
-                LastCommitSubject: EmptyToNull(parts[6]),
-                LastCommitAtUtc: lastAt,
-                WorktreePath: worktreeByBranch.TryGetValue(name, out var wt) ? wt : null));
-        }
-        return list;
+                Upstream: entry.Upstream,
+                Ahead: entry.Ahead,
+                Behind: entry.Behind,
+                LastCommitSubject: entry.LocalSubject ?? entry.RemoteSubject,
+                LastCommitAtUtc: entry.LocalAt ?? entry.RemoteAt,
+                WorktreePath: worktreeByBranch.TryGetValue(name, out var wt) ? wt : null,
+                IsLocal: entry.IsLocal,
+                HasRemote: entry.HasRemote,
+                RemoteTipSha: entry.RemoteTipSha);
+        }).ToList();
+    }
+
+    private sealed class BranchInventoryAccumulator(string name)
+    {
+        public string Name { get; } = name;
+        public bool IsLocal { get; set; }
+        public bool HasRemote { get; set; }
+        public string? LocalTipSha { get; set; }
+        public string? LocalTipShortSha { get; set; }
+        public string? RemoteTipSha { get; set; }
+        public string? RemoteTipShortSha { get; set; }
+        public string? Upstream { get; set; }
+        public int Ahead { get; set; }
+        public int Behind { get; set; }
+        public string? LocalSubject { get; set; }
+        public string? RemoteSubject { get; set; }
+        public DateTime? LocalAt { get; set; }
+        public DateTime? RemoteAt { get; set; }
     }
 
     private static string? EmptyToNull(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -1065,6 +1519,7 @@ public class GitService
         if (name is "main" or "master") return "main";
         if (name is "develop" or "dev") return "develop";
         if (name.StartsWith("task/", StringComparison.Ordinal)) return "task";
+        if (name.StartsWith("runner/", StringComparison.Ordinal)) return "runner";
         if (name.StartsWith("feature/", StringComparison.Ordinal) ||
             name.StartsWith("feat/", StringComparison.Ordinal)) return "feature";
         return "other";
@@ -1128,11 +1583,8 @@ public class GitService
     /// </summary>
     private string? ResolveProjectRoot(string projectName)
     {
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-        if (entry == null) return null;
-        var configured = ResolveConfiguredRepositoryPath(entry);
-        if (string.IsNullOrWhiteSpace(configured)) return null;
-        return ResolveGitToplevel(configured);
+        var inventory = GetProjectInventory(projectName);
+        return inventory.IsRepo ? inventory.RepositoryPath : null;
     }
 
     /// <summary>
@@ -1798,6 +2250,8 @@ public class GitService
         if (diff.Length > 60_000) diff = diff[..60_000] + "\n[truncated]";
 
         var intent = ReadTaskIntent(jobId, watchPath);
+        var codexPath = _config["CodexCli:Path"] ?? "codex";
+        var model = ModelIds.Gpt54Mini;
         var prompt = _prompts.Render(RuntimePromptService.CommitMessage,
             new Dictionary<string, string?>
             {
@@ -1812,10 +2266,8 @@ public class GitService
                 ["task_title"] = intent.Title,
                 ["task_prompt_first_paragraph"] = intent.PromptFirstParagraph,
                 ["last_user_continue"] = intent.LastUserContinue
-            });
-
-        var codexPath = _config["CodexCli:Path"] ?? "codex";
-        var model = ModelIds.Gpt54Mini;
+            },
+            new PromptCallContext(Step: "commit-message", Model: model));
 
         var psi = new ProcessStartInfo
         {
@@ -2324,8 +2776,20 @@ public class GitService
     /// <c>failed</c>, plus <c>no-remote</c> (no <c>origin</c> configured -
     /// a local-only project, treated as a benign skip, not a failure) and
     /// <c>missing-branch</c> (the integration branch does not exist locally).
+    /// <para>
+    /// <paramref name="approvedSha"/> pins the exact object that is pushed. The
+    /// caller passes the merge result its gate approved, so a merge that landed
+    /// on the branch after the approval can never ride along to origin; the
+    /// branch tip is only used when no approval SHA is known (the durable restart
+    /// backstop). An approved SHA that is missing or not contained in the local
+    /// branch is a fail-closed <c>missing-sha</c> / <c>sha-not-on-branch</c>.
+    /// </para>
     /// </summary>
-    public Task<GitPushResult> PushIntegrationBranchAsync(string repoRoot, string branch, CancellationToken ct = default)
+    public Task<GitPushResult> PushIntegrationBranchAsync(
+        string repoRoot,
+        string branch,
+        CancellationToken ct = default,
+        string? approvedSha = null)
     {
         if (ct.IsCancellationRequested)
             return Task.FromResult(new GitPushResult(false, string.Empty, "cancelled", "Push cancelled."));
@@ -2341,6 +2805,37 @@ public class GitService
         if (headCode != 0)
             return Task.FromResult(new GitPushResult(false, string.Empty, "missing-branch", headErr.Trim()));
         var sha = headRaw.Trim();
+
+        // The pushed object is the exact SHA the gate approved, not whatever the
+        // branch points at when this deferred push finally runs: the gate window
+        // is minutes long, and a later, not-yet-gated merge can have moved the tip
+        // on in the meantime. Pushing the tip would carry that ungated merge
+        // result to origin under the approval of a different card.
+        if (!string.IsNullOrWhiteSpace(approvedSha))
+        {
+            var candidate = approvedSha!.Trim();
+            if (!IsLikelyShaOrRef(candidate))
+                return Task.FromResult(new GitPushResult(false, string.Empty, "invalid-sha", $"Invalid approved SHA '{candidate}'."));
+            var (approvedRaw, approvedErr, approvedCode) =
+                RunGitArgs(repoRoot, "rev-parse", "--verify", $"{candidate}^{{commit}}");
+            if (approvedCode != 0)
+                return Task.FromResult(new GitPushResult(false, string.Empty, "missing-sha", approvedErr.Trim()));
+            var approved = approvedRaw.Trim();
+            // Fail closed rather than push an object the branch does not contain:
+            // that would advance origin/<branch> to something the local branch
+            // never carried (e.g. after a gate rollback).
+            var (_, _, containedCode) =
+                RunGitArgs(repoRoot, "merge-base", "--is-ancestor", approved, $"refs/heads/{branch}");
+            if (containedCode != 0)
+            {
+                return Task.FromResult(new GitPushResult(
+                    false,
+                    approved,
+                    "sha-not-on-branch",
+                    $"The approved merge result {approved} is not contained in local {branch}; refusing to push it."));
+            }
+            sha = approved;
+        }
 
         // A project without an origin remote is a local-only checkout; there is
         // nothing to push. Treat as a benign skip so the step is not flagged as
@@ -2364,9 +2859,10 @@ public class GitService
             _logger.LogInformation("Integration-branch push did not find origin/{Branch} before pushing: {Error}", branch, remoteErr.Trim());
         }
 
-        // Non-force push of the branch ref. A non-fast-forward (diverged remote)
-        // is reported, never overwritten.
-        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"refs/heads/{branch}:refs/heads/{branch}");
+        // Non-force push of the exact object resolved above (the gate-approved
+        // merge result, or the branch tip when no approval SHA was handed in). A
+        // non-fast-forward (diverged remote) is reported, never overwritten.
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"{sha}:refs/heads/{branch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
 
@@ -2571,6 +3067,28 @@ public class GitService
         var (output, _, code) = RunGitArgs(worktreePath, "diff", "--name-only", "--diff-filter=U");
         if (code != 0 || string.IsNullOrWhiteSpace(output))
             return Array.Empty<string>();
+
+        return output.Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Changed paths of a delivery relative to its merge base with the target
+    /// (<c>git diff --name-only target...source</c>). Returns null when the
+    /// diff could not be computed (unknown refs, no merge base, git failure) -
+    /// callers must then take their conservative path and never assume a
+    /// docs-only delivery.
+    /// </summary>
+    public IReadOnlyList<string>? ChangedPathsAgainstMergeBase(string repoRoot, string targetRef, string sourceRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(targetRef) || !IsLikelyBranchName(sourceRef)) return null;
+
+        var (output, _, code) = RunGitArgs(
+            repoRoot, "diff", "--name-only", $"{targetRef}...{sourceRef}");
+        if (code != 0) return null;
 
         return output.Replace("\r\n", "\n")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -2951,6 +3469,27 @@ public class GitService
     }
 
     /// <summary>
+    /// Returns the first parent of a commit. A newly created integration merge
+    /// uses this as its exact rollback anchor when the configured branch had to
+    /// be recreated from <c>origin/&lt;branch&gt;</c> during the merge and therefore
+    /// had no local tip before the merge primitive ran.
+    /// </summary>
+    public string? GetFirstParent(string repoRoot, string commit)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!ReviewSubjectStore.IsValidResultSha(commit)) return null;
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            $"{commit}^1");
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return ReviewSubjectStore.IsValidResultSha(sha) ? sha : null;
+    }
+
+    /// <summary>
     /// Commits reachable from <paramref name="toRef"/> but not
     /// <paramref name="fromRef"/> (<c>git log fromRef..toRef --no-merges</c>),
     /// newest first. This is the graph merge-set ASS-1724 displays: with
@@ -3005,6 +3544,85 @@ public class GitService
     }
 
     /// <summary>
+    /// Fetches the pushed runner branch, verifies its fenced tip, and returns
+    /// the exact merge-base..tip commit range in chronological order.
+    /// </summary>
+    public RemoteDeliveryCommitRange InspectRemoteDeliveryCommitRange(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string? recordedIntegrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return Failed("Repository root does not exist.");
+        var branch = TaskIntegrationBranch.Name(deliveryBranch, fallback: "");
+        if (!IsLikelyBranchName(branch))
+            return Failed($"Invalid delivery branch '{deliveryBranch}'.");
+        if (!ReviewSubjectStore.IsValidResultSha(expectedResultSha))
+            return Failed("Remote delivery has no valid fenced result SHA.");
+        if (!HasRemote(repoRoot, "origin"))
+            return Failed("Remote delivery cannot be inspected because origin is not configured.");
+
+        var deliveryRef = $"refs/remotes/origin/{branch}";
+        var fetchDelivery = $"+refs/heads/{branch}:{deliveryRef}";
+        var (_, deliveryError, deliveryCode) = RunGitArgs(
+            repoRoot, "fetch", "--no-tags", "origin", fetchDelivery);
+        if (deliveryCode != 0)
+            return Failed($"Delivery branch '{branch}' could not be fetched from origin: {deliveryError.Trim()}");
+
+        var (tipOutput, tipError, tipCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--verify", $"{deliveryRef}^{{commit}}");
+        if (tipCode != 0)
+            return Failed($"Fetched delivery branch '{branch}' is not a commit: {tipError.Trim()}");
+        var tip = tipOutput.Trim();
+        if (!string.Equals(tip, expectedResultSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failed(
+                $"Fenced delivery mismatch for '{branch}': completion expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(tip)}.");
+        }
+
+        var candidates = string.IsNullOrWhiteSpace(recordedIntegrationBranch)
+            ? new[] { "main", "develop" }
+            : new[] { TaskIntegrationBranch.Name(recordedIntegrationBranch, fallback: "") };
+        var resolved = new List<(string Branch, string Ref, string Base, int Distance)>();
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!IsLikelyBranchName(candidate)) continue;
+            var integrationRef = $"refs/remotes/origin/{candidate}";
+            var fetchIntegration = $"+refs/heads/{candidate}:{integrationRef}";
+            var (_, _, fetchCode) = RunGitArgs(
+                repoRoot, "fetch", "--no-tags", "origin", fetchIntegration);
+            if (fetchCode != 0) continue;
+            var mergeBase = GetMergeBase(repoRoot, integrationRef, deliveryRef);
+            if (string.IsNullOrWhiteSpace(mergeBase)) continue;
+            var (distanceText, _, distanceCode) = RunGitArgs(
+                repoRoot, "rev-list", "--count", $"{mergeBase}..{deliveryRef}");
+            if (distanceCode != 0 || !int.TryParse(distanceText.Trim(), out var distance)) continue;
+            resolved.Add((candidate, integrationRef, mergeBase, distance));
+        }
+
+        var selected = resolved
+            .OrderBy(candidate => candidate.Distance)
+            .ThenBy(candidate => string.Equals(candidate.Branch, "main", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(selected.Branch))
+            return Failed("No recorded main/develop base line shares history with the remote delivery.");
+
+        var commits = GetCommitsInRangeAtRoot(repoRoot, selected.Base, deliveryRef);
+        commits.Reverse();
+        return new RemoteDeliveryCommitRange(
+            true,
+            TaskIntegrationBranch.NormalizeRef(selected.Branch),
+            selected.Base,
+            tip,
+            commits,
+            null);
+
+        RemoteDeliveryCommitRange Failed(string warning) =>
+            new(false, null, null, null, [], warning);
+    }
+
+    /// <summary>
     /// Merges <paramref name="taskBranch"/> (e.g. <c>task/&lt;id&gt;</c>) into
     /// <paramref name="integrationBranch"/> (e.g. <c>develop</c>) with an explicit
     /// merge commit (<c>git merge --no-ff --no-edit</c>) so an accepted task lands
@@ -3037,7 +3655,160 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        if (!synchronized.Success)
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: synchronized.Error);
         return MergeRefIntoIntegration(repoRoot, taskBranch, integrationBranch);
+    }
+
+    /// <summary>
+    /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and compares it with the
+    /// local integration branch without moving either branch. The transactional
+    /// accept path uses the refreshed remote-tracking ref as its ancestry truth,
+    /// so it does not wait behind a long-running merge gate or mutate the shared
+    /// checkout. Fetch failures and genuine divergence fail visibly.
+    /// </summary>
+    public IntegrationBranchSyncResult RefreshIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
+    {
+        var fetched = FetchIntegrationBranch(repoRoot, integrationBranch);
+        if (!fetched.Success) return fetched;
+        if (fetched.Outcome == IntegrationBranchSyncOutcome.NoRemote)
+            return fetched;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (!BranchExists(repoRoot, integrationBranch))
+            return new(IntegrationBranchSyncOutcome.RemoteAhead);
+
+        var localTip = GetBranchTip(repoRoot, integrationBranch);
+        var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef);
+        if (string.IsNullOrWhiteSpace(localTip) || string.IsNullOrWhiteSpace(remoteTip))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Could not resolve local and origin tips for integration branch '{integrationBranch}'.");
+        if (string.Equals(localTip, remoteTip, StringComparison.OrdinalIgnoreCase))
+            return new(IntegrationBranchSyncOutcome.UpToDate);
+        if (IsAncestor(repoRoot, remoteIntegrationRef, integrationBranch))
+            return new(IntegrationBranchSyncOutcome.LocalAhead);
+        if (IsAncestor(repoRoot, integrationBranch, remoteIntegrationRef))
+            return new(IntegrationBranchSyncOutcome.RemoteAhead);
+
+        var detail =
+            $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries.";
+        _logger.LogWarning(
+            "Integration branch {Integration} at {Path} diverged from origin; refusing to overwrite either tip",
+            integrationBranch,
+            repoRoot);
+        return new(IntegrationBranchSyncOutcome.Diverged, detail);
+    }
+
+    /// <summary>
+    /// Refreshes the remote-tracking ref and fast-forwards the local integration
+    /// branch before a delivery merge. A local-only repository remains valid,
+    /// and a local branch that is ahead of origin remains untouched.
+    ///
+    /// <para>The local task-branch merge used to skip this entirely - only the
+    /// remote-delivery path synchronized - so a locally diverged integration
+    /// branch silently absorbed delivery after delivery on a stale tip, and every
+    /// later merge attempt reported success while origin never saw the work. The
+    /// synchronization is now symmetric; genuine divergence is surfaced by
+    /// <see cref="MergeRefIntoIntegration"/> as an explicit error instead.</para>
+    /// </summary>
+    public IntegrationBranchSyncResult SynchronizeIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
+    {
+        var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch);
+        if (!refreshed.Success
+            || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
+            return refreshed;
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (!BranchExists(repoRoot, integrationBranch))
+        {
+            var (_, createError, createCode) = RunGitArgs(
+                repoRoot, "branch", integrationBranch, remoteIntegrationRef);
+            if (createCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
+            return new(IntegrationBranchSyncOutcome.FastForwarded);
+        }
+
+        var localTip = GetBranchTip(repoRoot, integrationBranch)!;
+        var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef)!;
+        if (RepoHasUncommittedChanges(repoRoot))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                "Integration working tree has uncommitted changes; refusing to fast-forward it from origin.");
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not check out '{integrationBranch}' for origin synchronization: {checkoutError.Trim()}");
+        }
+
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot, "merge", "--ff-only", remoteIntegrationRef);
+        if (mergeCode != 0)
+        {
+            _logger.LogWarning(
+                "Integration branch {Integration} at {Path} could not fast-forward to origin: {Error}",
+                integrationBranch,
+                repoRoot,
+                mergeError.Trim());
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Integration branch '{integrationBranch}' could not fast-forward to origin: {mergeError.Trim()}");
+        }
+
+        _logger.LogInformation(
+            "Integration branch {Integration} at {Path} fast-forwarded from {Before} to {After}",
+            integrationBranch,
+            repoRoot,
+            AbbreviateSha(localTip),
+            AbbreviateSha(remoteTip));
+        return new(IntegrationBranchSyncOutcome.FastForwarded);
+    }
+
+    private IntegrationBranchSyncResult FetchIntegrationBranch(
+        string repoRoot,
+        string integrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                "Could not resolve repository root for the integration branch sync.");
+        if (!IsLikelyBranchName(integrationBranch))
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Invalid integration branch '{integrationBranch}'.");
+        if (!HasRemote(repoRoot, "origin"))
+            return new(IntegrationBranchSyncOutcome.NoRemote);
+
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        var fetchTarget = $"+refs/heads/{integrationBranch}:{remoteIntegrationRef}";
+        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        if (fetchCode != 0)
+        {
+            var detail =
+                $"Integration branch '{integrationBranch}' could not be fetched from origin: {fetchError.Trim()}";
+            _logger.LogWarning(
+                "Integration branch sync failed for origin/{Integration} at {Path}: {Error}",
+                integrationBranch,
+                repoRoot,
+                fetchError.Trim());
+            return new(IntegrationBranchSyncOutcome.Error, detail);
+        }
+        return new(IntegrationBranchSyncOutcome.UpToDate);
     }
 
     /// <summary>
@@ -3064,19 +3835,13 @@ public class GitService
         if (!HasRemote(repoRoot, "origin"))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery cannot be fetched because origin is not configured.");
 
-        var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
-        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
-        var integrationFetchSource = $"refs/heads/{integrationBranch}";
-        var integrationFetchTarget = $"+{integrationFetchSource}:{remoteIntegrationRef}";
-        var (_, integrationFetchError, integrationFetchCode) = RunGitArgs(
-            repoRoot, "fetch", "--no-tags", "origin", integrationFetchTarget);
-        if (integrationFetchCode != 0)
-        {
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        if (!synchronized.Success)
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
-                error: $"Integration branch '{integrationBranch}' could not be fetched from origin: {integrationFetchError.Trim()}");
-        }
+                error: synchronized.Error);
 
+        var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
         var fetchSource = $"refs/heads/{deliveryBranch}";
         var fetchTarget = $"+{fetchSource}:{remoteRef}";
         var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
@@ -3104,23 +3869,10 @@ public class GitService
                 error: $"Fenced delivery mismatch for '{deliveryBranch}': review expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(actualResultSha)}.");
         }
 
-        if (!BranchExists(repoRoot, integrationBranch))
-        {
-            var (_, createError, createCode) = RunGitArgs(
-                repoRoot, "branch", integrationBranch, remoteIntegrationRef);
-            if (createCode != 0)
-            {
-                return MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: $"Could not create local integration branch '{integrationBranch}' from origin: {createError.Trim()}");
-            }
-        }
-
         return MergeRefIntoIntegration(
             repoRoot,
             expectedResultSha,
-            integrationBranch,
-            remoteIntegrationRef);
+            integrationBranch);
     }
 
     private static string AbbreviateSha(string sha)
@@ -3129,8 +3881,7 @@ public class GitService
     private MergeIntoIntegrationResult MergeRefIntoIntegration(
         string repoRoot,
         string sourceRef,
-        string integrationBranch,
-        string? synchronizeFromRemoteRef = null)
+        string integrationBranch)
     {
         if (!BranchExists(repoRoot, integrationBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Integration branch '{integrationBranch}' does not exist.");
@@ -3149,18 +3900,6 @@ public class GitService
             {
                 _logger.LogWarning("Merge-into-develop: checkout of {Integration} at {Path} failed: {Error}", integrationBranch, repoRoot, coErr.Trim());
                 return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Could not check out '{integrationBranch}': {coErr.Trim()}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(synchronizeFromRemoteRef))
-        {
-            var (_, syncError, syncCode) = RunGitArgs(
-                repoRoot, "merge", "--ff-only", synchronizeFromRemoteRef);
-            if (syncCode != 0)
-            {
-                return MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: $"Local integration branch '{integrationBranch}' diverged from origin; refusing to merge into a stale target: {syncError.Trim()}");
             }
         }
 
@@ -5020,52 +5759,6 @@ public class GitService
             if (parts.Length > 0) graph[parts[0]] = parts.Skip(1).ToArray();
         }
         return graph;
-    }
-
-    /// <summary>
-    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
-    /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
-    /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
-    /// repo (the grep pre-filters to only the curated integrator merges, so the
-    /// output is O(accepted tasks), not O(history)). This is the authoritative
-    /// integration signal that anchor-ancestry cannot see: the async curated
-    /// integrator rewrites commits, so a task's own SHAs are frequently NOT
-    /// ancestors of develop even though its work landed under a curated merge
-    /// commit. Read-only; empty on any failure. When several merges reference the
-    /// same key the newest (first in <c>git log</c> order) wins.
-    /// </summary>
-    public Dictionary<string, string> GetIntegrationMergeShaByKey(string repoRoot, string integrationRef)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return map;
-        if (!IsLikelyBranchName(integrationRef)) return map;
-
-        // Extended-regexp grep: match a subject that starts with merge( or
-        // merge-recut( followed by a task key. --grep is ORed across the two
-        // patterns; -E makes the alternation / groups work.
-        var (output, _, code) = RunGitArgs(
-            repoRoot,
-            "log",
-            "--no-color",
-            "-E",
-            "--grep=^merge(-recut)?\\(",
-            "--format=%H%x1f%s",
-            integrationRef);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return map;
-
-        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var sep = line.IndexOf('\x1f');
-            if (sep <= 0) continue;
-            var sha = line[..sep].Trim();
-            var subject = line[(sep + 1)..];
-            var key = ParseIntegrationMergeKey(subject);
-            if (sha.Length == 0 || key == null) continue;
-            // git log is newest-first; keep the first (newest) merge per key.
-            map.TryAdd(key, sha);
-        }
-        return map;
     }
 
     /// <summary>

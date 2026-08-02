@@ -6,7 +6,7 @@
  */
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
-import type { CliUsageReport, LinkedJobRef } from '../../../../features/cli';
+import type { CliUsageReport, LinkedJobRef } from '../../models/cli.model';
 
 /** One flattened, denormalised session row — the unit the virtual list renders. */
 export interface SessionRow {

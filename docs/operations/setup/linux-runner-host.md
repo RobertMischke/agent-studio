@@ -22,8 +22,10 @@ Linux host and fills a bounded set of task slots without owning task state:
 
 - **Code arrives and leaves via git `origin`** - the runner fetches over the
   credential-free URL and pushes with a write-enabled deploy key dedicated to
-  this host and repository. The daemon proves that push identity at startup;
-  a failed probe leaves the host read-only and blocks new claims.
+  this host and repository. A repository-specific delivery preflight proves
+  that identity and target branch before the server grants a project lease.
+  The daemon's startup probe covers only its configured fallback remote and is
+  diagnostic.
 - **Results leave through a durable outbox** - protocol 2 journals CLI output,
   status, artifacts, Git facts, terminal facts, and the final result envelope
   under `$RUNNER_WORKDIR/outbox/<run-attempt-id>/` before sending them. The
@@ -250,15 +252,16 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. |
 | `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
 | `RUNNER_STATE_DIR` | `--state-dir` | `$RUNNER_WORKDIR/.runner-state` | Durable slot, attempt, PID, worker result, and file-backed output state used for planned restart reattachment. Keep it on persistent local storage. |
-| `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
-| `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
+| `RUNNER_EXEC_ENGINE` | `--exec-engine` | `car` | CLI execution engine inside the detached worker. `car` (default since AGT-2370) drives the CLI through the CodingAgentRunner library: descriptor-built argv, `stream-json` output, permission-mode injection from the card's spec (absent = bypass/yolo), and an isolated per-run config home whose credential file is hard-linked so OAuth refreshes write through. `legacy` is the pre-AGT-2370 raw spawn and is removed in AGT-2373. |
+| `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). Under the `car` engine only the binary path and the CLI family derived from it are used. |
+| `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. **Legacy engine only** — the `car` engine ignores this value (the descriptor owns the argv) and says so at spawn time via the `engine=car` journal line. |
 | `RUNNER_CLI_RESUME_ARGS` | `--cli-resume-args` | (none) | Optional provider-specific same-session arguments containing the literal `{sessionId}` placeholder. A supported infrastructure failure resumes at most once; an invalid session falls back to durable salvage once and then escalates. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
 | `RUNNER_AUTH_TOKEN` | none | (none) | Compatibility environment input. Prefer the credential file so the secret is absent from process diagnostics. |
-| `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
+| `RUNNER_TTL_SECONDS` | `--ttl` | `900` | Requested lease TTL; the server clamps it. The default grants a bounded 15-minute authority window so an already-claimed run can survive ten minutes of transport loss. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
-| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Maximum concurrent task slots on this host. |
+| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts. |
 | `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
 
 Recommended per-CLI headless defaults (verify against your installed version):
@@ -386,7 +389,8 @@ and runner hosts in the operator inventory. Rotate before expiry:
    ```
 
 3. Re-run both `git ls-remote` checks, restart `agent-host.service`, and confirm
-   `Contents: ok` plus `Workflow: ok` in **Workspace Settings -> Execution Hosts**.
+   `Fallback repo: ok` plus `Fallback workflow: ok` in
+   **Workspace Settings -> Execution Hosts**.
 4. Revoke the old token only after every assigned repository and runner is
    green. A token owner's departure or repository-access removal also
    invalidates the runner identity and requires immediate rotation.
@@ -446,14 +450,16 @@ The runner publishes one of three statuses:
 - `ready-no-workflow-scope`: contents pushes succeeded, but GitHub rejected the
   workflow change. Claims remain enabled because card file scope is not known
   before execution.
-- `read-only`: the normal push path failed. The server refuses new claims.
+- `read-only`: the configured fallback push path failed. Project claims still
+  depend on their own repository delivery preflight.
 
-Execution Hosts shows separate **Contents** and **Workflow** badges. A missing
+Execution Hosts shows separate **Fallback repo** and **Fallback workflow**
+badges without presenting either as fleet-wide delivery truth. A missing
 workflow permission links back to this section. The same error classifier also
 recognizes GitHub's first real workflow rejection; if salvage fails, its
 `worktree-blocked` message includes the exact permission checklist and this
 documentation path. Restore or rotate credentials and restart the unit; the
-next startup probe replaces the status.
+next startup probe replaces the fallback status.
 
 ### Remote completion protocol
 
@@ -516,11 +522,20 @@ run without creating or pushing a runner branch. A valid plan creates child
 coding cards and sends the Epic to auto-review. Empty or invalid output, or any
 attempted source mutation, returns the Epic to Backlog.
 
-The startup Git push probe still describes coding capability. A host whose
-identity reports `read-only` may claim Epic planning, but it receives no normal
-coding claims until push capability is restored.
+Epic planning uses the same repository-specific delivery preflight as coding
+claims. A failure blocks only that project's claim and does not reduce the
+host's slots for unrelated projects.
 
-At startup the daemon reads `RUNNER_STATE_DIR` before making a new claim. A
+At startup the daemon reads `RUNNER_STATE_DIR` before registration or a new
+claim. Each live worker directory contains a durable `lease-authority.json`
+with the last server-issued expiry, a stop-before deadline one heartbeat before
+expiry, and confirmed, uncertain, or rejected replay state. A persisted
+deadline watcher runs while registration is unavailable. If stop-before is
+reached, it reaps and verifies every process whose cwd belongs to the worktree,
+records `authority-deadline-exhausted`, and retains the slot for honest server
+reconciliation. It never starts a replacement while death is unproven.
+
+A
 persisted attempt is adopted only when its worker PID still has the recorded
 start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
@@ -535,6 +550,17 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+During a Task Server or transport outage, transient claim, heartbeat, event,
+artifact, result-handoff, and completion failures do not terminate the daemon.
+Already-claimed workers may continue only until their durable stop-before
+deadline. Output and terminal facts accumulate in the monotonic local outbox;
+new claims stop, and no queued report is replayed while authority is uncertain.
+After connectivity returns, a successful exact-lease and exact-fence renewal
+must reconcile authority before replay. Idempotency keys make retrying a lost
+response safe. Task Server restart is different from transport recovery: it
+quarantines the attempt as `process-unknown` and requires positive containment
+proof before a higher-fenced replacement can start.
 
 The per-project probe additionally gates the first claim, including an Epic
 planning claim, because a project must have a proven delivery path before the
@@ -659,10 +685,11 @@ next process starts:
    or the moving salvage branch alone is not sufficient.
 
 If upload, push, the connection, the runner process, or the Task Server fails,
-the daemon replays the original monotonic outbox before claiming new work.
-Idempotency keys make a lost response safe. A transfer failure is retried
-without starting the coding CLI and without consuming coding or completion
-budget. `transfer-recovery` means the host still owns recoverable transfer work.
+the daemon replays the original monotonic outbox only after authority has been
+reconciled and before claiming new work. Idempotency keys make a lost response
+safe. A transfer failure is retried without starting the coding CLI and without
+consuming coding or completion budget. `transfer-recovery` means the host still
+owns recoverable transfer work.
 
 Operators can inspect durable server projections without reading host files:
 
@@ -676,8 +703,32 @@ curl -sS https://tasks.example.com/api/v1/runs/<run-id>/result-handoff \
 The status projection includes total backlog, oldest unacknowledged sequence,
 and counts by final handoff state. Each outbox row includes its RunAttempt.
 Result envelopes are retained through task completion and for at least
-`TaskServer:ResultRetentionDays` afterward, default 30 days. Automatic deletion
-is not currently enabled.
+`TaskServer:ResultRetentionDays` afterward, default 30 days. The Task Server
+runs the result-ref GC sweep immediately after startup and every
+`TaskServer:ResultRefGcSweepMinutes` afterward, default six hours. Each pass is
+bounded by `TaskServer:ResultRefGcBatchSize`, default 50. The sweep deletes an
+immutable ref only when all of these facts hold:
+
+- the retention deadline passed;
+- the card is accepted in `6-completed` or `7-archive`;
+- the matching review produced a terminal `Pass` or `ProductFailure` report
+  and has no queued, leased, or process-unknown retry;
+- a newer result-bearing RunAttempt exists for the card, so the source attempt
+  is no longer the current review subject; and
+- the ref exactly matches
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>`.
+
+The newest result-bearing RunAttempt is retained even for an accepted or
+archived card. This keeps current review and integration recovery
+materializable. A missing
+repository URL, a malformed ref, a Git error, or an unavailable credential
+spares the ref. The Task Server service account therefore needs permission to
+delete only the `refs/heads/agent-studio/results/**` namespace on each
+registered origin. Repository URLs are never written to the sweep log. Every
+pass emits one structured `result-ref-gc` line per deleted, spared, or failed
+ref plus a summary, and successful deletion is persisted in the GC ledger.
+Set `TaskServer:ResultRefGcEnabled=false` to pause remote deletion while
+retention and safety facts continue to accumulate.
 
 On a later pickup, the retained local tip and the existing canonical salvage
 ref are compared by ancestry. Local-ahead is published by normal fast-forward;
@@ -756,10 +807,11 @@ proof.
   the task. The daemon claim path normally avoids this before launch.
 - **`Project delivery preflight failed`** - read the full reason on both the
   Execution Hosts card and the project's Execution card. Run the printed failing
-  Git operation on the host against the registered repository URL. Repair its
-  credential or registration, then choose **Re-Probe** on the host card or
-  update the repository registration so the failed cached result is cleared and
-  probed again.
+  Git operation on the host against the registered repository URL and confirm
+  the named integration branch exists. Repair that repository's credential,
+  branch, or registration, then choose **Re-Probe** on the host card or wait for
+  the five-minute proof expiry. A fallback-repository warning is diagnostic and
+  does not override a successful project delivery preflight.
 - **`connection lost: cannot reach the task server ...` at startup** - the
   preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
   Confirm with `agent-host --health-check`; if it also exits `4`, restart the

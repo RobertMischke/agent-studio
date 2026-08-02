@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-studio.local/schemas/remote-test-scenario-v1.json",
+  "title": "Remote infrastructure test scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "task", "fixture", "phases", "resources", "contract"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+    "description": { "type": "string" },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "body", "key"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]*-[0-9]+$" }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultBranch", "changeCommand", "acceptanceCommand", "expectedChangedFiles"],
+      "properties": {
+        "defaultBranch": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+        "changeCommand": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "acceptanceCommand": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "expectedChangedFiles": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "phases": {
+      "const": ["claim", "run", "gate", "review", "integration"]
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspaceId", "projectId", "taskId"],
+      "properties": {
+        "workspaceId": { "type": "string", "minLength": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "taskId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chronicleLinks", "expectedTerminal", "recoveryBudget", "assertions"],
+      "properties": {
+        "chronicleLinks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^docs/operations/haertung-verteilte-ausfuehrung/historie\\.html#incident-[a-z0-9-]+$"
+          }
+        },
+        "expectedTerminal": {
+          "type": "string",
+          "pattern": "^[0-9]+-[a-z0-9-]+$"
+        },
+        "recoveryBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unit", "maximum"],
+          "properties": {
+            "unit": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" },
+            "maximum": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$" }
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "claim": { "$ref": "#/$defs/hook" },
+        "run": { "$ref": "#/$defs/hook" },
+        "gate": { "$ref": "#/$defs/hook" },
+        "review": { "$ref": "#/$defs/hook" },
+        "integration": { "$ref": "#/$defs/hook" }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted", "finalLane", "incidentOutcome", "phaseSequence"],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "finalLane": { "type": "string", "minLength": 1 },
+        "incidentOutcome": { "type": "string", "minLength": 1 },
+        "phaseSequence": {
+          "type": "array",
+          "items": {
+            "enum": ["claim", "run", "gate", "review", "integration"]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hook": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

@@ -1,21 +1,47 @@
 @if (entries(); as backlog) {
   @if (backlog.length > 0) {
-    <aside class="decision-backlog" data-testid="decision-backlog" aria-label="Decision backlog">
-      <div class="decision-backlog__heading">
-        <span class="decision-backlog__dot" aria-hidden="true"></span>
-        <span>Decision backlog</span>
-      </div>
+    <aside class="decision-backlog"
+           data-testid="decision-backlog"
+           aria-label="Entscheidungen mit wartenden Karten">
       <ol class="decision-backlog__list">
         @for (entry of backlog; track entry.task.taskKey) {
-          <li>
+          <li class="decision-backlog__entry"
+              [class.decision-backlog__entry--expanded]="expandedKey() === entry.key">
             <button type="button"
-                    class="decision-backlog__item"
+                    class="decision-backlog__summary"
                     [attr.data-testid]="'decision-backlog-item-' + entry.key"
-                    [attr.title]="'Waiting cards: ' + entry.waitingKeys.join(', ')"
-                    (click)="taskClick.emit(entry.task)">
-              <span class="decision-backlog__key">{{ entry.key }}</span>
-              <span class="decision-backlog__count">{{ entry.count }} waiting</span>
+                    [attr.aria-expanded]="expandedKey() === entry.key"
+                    [attr.aria-controls]="'decision-backlog-waiters-' + entry.key"
+                    (click)="toggle(entry)">
+              <span>
+                Deine Entscheidung zu
+                <strong class="decision-backlog__key">{{ entry.key }}</strong>
+                blockiert
+                <strong class="decision-backlog__count">
+                  {{ entry.count }} wartende {{ entry.count === 1 ? 'Karte' : 'Karten' }}
+                </strong>
+              </span>
+              <span class="decision-backlog__chevron" aria-hidden="true">⌄</span>
             </button>
+            <div class="decision-backlog__waiters"
+                 [id]="'decision-backlog-waiters-' + entry.key"
+                 [attr.data-testid]="'decision-backlog-waiters-' + entry.key">
+              <p>Diese Karten warten auf deine Entscheidung:</p>
+              <ul>
+                @for (waiter of entry.waiters; track waiter.key) {
+                  <li>
+                    <button type="button"
+                            class="decision-backlog__waiter"
+                            [disabled]="!waiter.task"
+                            [attr.data-testid]="'decision-backlog-waiter-' + waiter.key"
+                            (click)="openWaitingTask(waiter.task)">
+                      <span class="decision-backlog__waiter-key">{{ waiter.key }}</span>
+                      <span class="decision-backlog__waiter-title">{{ waiter.title }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            </div>
           </li>
         }
       </ol>

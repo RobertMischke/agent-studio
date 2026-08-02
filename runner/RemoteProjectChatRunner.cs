@@ -1,4 +1,12 @@
 using System.Text.Json;
+using CodingAgentRunner;
+using CodingAgentRunner.Abstractions;
+using CodingAgentRunner.Delegation;
+using CodingAgentRunner.Execution;
+using CodingAgentRunner.Model;
+// The runner's own wire model also declares a CliOutputLine; the CAR event
+// payload type must resolve to the library's.
+using CarOutputLine = CodingAgentRunner.Model.CliOutputLine;
 
 namespace AgentRunner;
 
@@ -67,32 +75,14 @@ public sealed class RemoteProjectChatRunner
 
                 {work.Prompt}
                 """;
-            var args = new List<string>
-            {
-                "exec",
-                "--experimental-json",
-                "--sandbox",
-                "read-only",
-                "-m",
-                work.Model!,
-            };
-            if (!string.IsNullOrWhiteSpace(work.ThinkingLevel))
-            {
-                args.Add("-c");
-                args.Add($"model_reasoning_effort=\"{work.ThinkingLevel!.Trim()}\"");
-            }
-            args.Add("-");
-
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
             timeout.CancelAfter(TimeSpan.FromSeconds(_options.RunTimeoutSeconds));
-            _log($"project-chat-codex-start path={checkout.RepoPath} model={work.Model} thinking={work.ThinkingLevel ?? "default"}");
-            var process = await ProcessRunner.RunAsync(
-                _options.CodexCliBin,
-                args,
-                checkout.RepoPath,
-                stdin: contextPrompt,
-                onStdErr: line => _log($"project-chat-codex stderr: {line}"),
-                ct: timeout.Token);
+            _log($"project-chat-codex-start engine=car path={checkout.RepoPath} model={work.Model} thinking={work.ThinkingLevel ?? "default"}");
+            // T1c (AGT-2370): the fourth CLI start path runs through CAR with
+            // PermissionMode=read-only - the same `codex exec --experimental-json
+            // --sandbox read-only` posture as before, now descriptor-built. The
+            // reply parsing below is unchanged and still reads the raw frames.
+            var process = await RunCodexThroughCarAsync(work, checkout, contextPrompt, timeout.Token, shutdown);
             var parsed = ParseCodex(process, work.Model!);
             return await CompleteAsync(
                 work, parsed.Success, parsed.ReplyText, parsed.ErrorMessage,
@@ -116,6 +106,102 @@ public sealed class RemoteProjectChatRunner
             catch (OperationCanceledException) { }
             catch (Exception ex) { _log($"project-chat-renew-loop-ended error={ex.Message}"); }
         }
+    }
+
+    /// <summary>
+    /// One chat turn through the CAR codex driver. Deliberate parity with the
+    /// raw spawn it replaces: read-only sandbox, shared config home (a chat turn
+    /// has always used the operator's global CLI state), delegation off, git
+    /// guard off (the checkout is reset-hard per turn and the posture already
+    /// forbids mutation), prompt on stdin. Returns the same
+    /// <see cref="ProcessResult"/> shape so <see cref="ParseCodex"/> is unchanged.
+    /// </summary>
+    private async Task<ProcessResult> RunCodexThroughCarAsync(
+        RemoteChatWorkItem work,
+        ProjectChatCheckout checkout,
+        string contextPrompt,
+        CancellationToken timeoutToken,
+        CancellationToken shutdown)
+    {
+        var logDirectory = Path.Combine(Path.GetTempPath(), "agent-chat-car", work.WorkId);
+        var runner = new CliRunner(
+            new CliOptions
+            {
+                CodexPath = _options.CodexCliBin,
+                AllowAgentGitMutation = true,
+                Delegation = new DelegationOptions { Enabled = false },
+            },
+            logPaths: new ChatRunLogPathProvider(logDirectory));
+        var driver = runner.Codex;
+        var stdout = new System.Text.StringBuilder();
+        var stderr = new System.Text.StringBuilder();
+        var finished = new TaskCompletionSource<CliRunInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnOutput(string id, CarOutputLine line)
+        {
+            if (!string.Equals(id, work.WorkId, StringComparison.Ordinal)) return;
+            if (line.Stream == "stdout") stdout.AppendLine(line.Text);
+            else if (line.Stream == "stderr")
+            {
+                stderr.AppendLine(line.Text);
+                _log($"project-chat-codex stderr: {line.Text}");
+            }
+        }
+
+        void OnFinished(string id, CliRunInfo info)
+        {
+            if (string.Equals(id, work.WorkId, StringComparison.Ordinal)) finished.TrySetResult(info);
+        }
+
+        driver.OnOutput += OnOutput;
+        driver.OnFinished += OnFinished;
+        try
+        {
+            var (run, error) = await driver.StartAsync(
+                new CliRunRequest
+                {
+                    RunId = work.WorkId,
+                    Prompt = contextPrompt,
+                    WorkingDirectory = checkout.RepoPath,
+                    Model = work.Model,
+                    ThinkingLevel = work.ThinkingLevel,
+                    PermissionMode = CliPermissionModes.ReadOnly,
+                    ContextMode = CliContextModes.Shared,
+                },
+                shutdown);
+            if (run is null)
+                throw new InvalidOperationException($"Codex chat run failed to start: {error}");
+
+            var deadline = Task.Delay(Timeout.InfiniteTimeSpan, timeoutToken)
+                .ContinueWith(_ => { }, TaskScheduler.Default);
+            var completed = await Task.WhenAny(finished.Task, deadline);
+            if (!ReferenceEquals(completed, finished.Task))
+            {
+                driver.Stop(work.WorkId, RunStopReason.Watchdog);
+                await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+                // Preserve the raw-spawn contract: a timed-out turn surfaces as the
+                // cancellation the linked token produced, handled by the caller.
+                timeoutToken.ThrowIfCancellationRequested();
+            }
+
+            var info = await finished.Task;
+            return new ProcessResult(info.ExitCode ?? 1, stdout.ToString(), stderr.ToString());
+        }
+        finally
+        {
+            driver.OnOutput -= OnOutput;
+            driver.OnFinished -= OnFinished;
+            driver.Forget(work.WorkId);
+            try { if (Directory.Exists(logDirectory)) Directory.Delete(logDirectory, recursive: true); }
+            catch { /* per-turn log hygiene is best effort */ }
+        }
+    }
+
+    /// <summary>Keeps CAR's per-run output log inside a per-turn temp folder that is deleted with the turn.</summary>
+    private sealed class ChatRunLogPathProvider(string directory) : IRunLogPathProvider
+    {
+        public string GetRunLogDirectory(string runId) => directory;
+        public string GetActiveJobsFile() => Path.Combine(directory, "active-runs.json");
     }
 
     private async Task<int> CompleteAsync(

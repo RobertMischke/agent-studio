@@ -19,7 +19,14 @@ public sealed record ReviewSubjectRecord
     public string Executor { get; init; } = "";
     public string LeaseId { get; init; } = "";
     public long FencingToken { get; init; }
+    /// <summary>
+    /// Immutable delivery ref from the source RunAttempt's ResultEnvelope.
+    /// This is distinct from the legacy <see cref="ResultRef"/>, which may have
+    /// named a mutable salvage branch.
+    /// </summary>
+    public string? ImmutableResultRef { get; init; }
     public string? ResultRef { get; init; }
+    public string? IntegrationBranch { get; init; }
     public DateTimeOffset CompletedAtUtc { get; init; }
 }
 

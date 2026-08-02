@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>agent-studio-bff</AssemblyName>
     <RootNamespace>AgentStudio.Bff</RootNamespace>
-    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

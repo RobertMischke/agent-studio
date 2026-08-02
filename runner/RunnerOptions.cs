@@ -45,6 +45,16 @@ public sealed class RunnerOptions
     public string? AuthToken { get; init; }
 
     /// <summary>
+    /// Explicit opt-in (<c>RUNNER_ALLOW_INSECURE_HTTP=1|true</c>) that allows a
+    /// plain <c>http://</c> Task Server URL outside loopback. It exists for
+    /// container networks where the Task Server is reachable only under its
+    /// service name and never leaves the network (e.g.
+    /// <c>http://orchestrator-api:5031</c> in docker compose). Off by default:
+    /// without it every non-loopback URL must be HTTPS.
+    /// </summary>
+    public bool AllowInsecureHttp { get; init; }
+
+    /// <summary>
     /// Optional SHA-256 pin for a private or rehearsal Task Server certificate.
     /// Public deployments should normally rely on the operating-system trust
     /// store; the pin keeps CI and private-CA topologies explicit and fail closed.
@@ -90,6 +100,19 @@ public sealed class RunnerOptions
     /// <summary>Fallback branch when the task branch is absent or unspecified.</summary>
     public required string BaseBranch { get; init; }
 
+    /// <summary>
+    /// Which execution engine drives the coding CLI inside the detached worker
+    /// (<c>RUNNER_EXEC_ENGINE</c>). <c>car</c> (default) drives it through the
+    /// CodingAgentRunner library: descriptor-built argv, structured events,
+    /// permission-mode injection, clean config home. <c>legacy</c> keeps the
+    /// pre-AGT-2370 raw spawn. The switch is a rollout instrument for the T1
+    /// canary cohorts and is deleted in AGT-2373 together with the legacy path.
+    /// </summary>
+    public string ExecEngine { get; init; } = ExecEngineCar;
+
+    public const string ExecEngineCar = "car";
+    public const string ExecEngineLegacy = "legacy";
+
     /// <summary>Agent CLI binary to spawn (claude, codex, ...).</summary>
     public required string CliBin { get; init; }
 
@@ -106,7 +129,12 @@ public sealed class RunnerOptions
     /// </summary>
     public string? CliResumeArgs { get; init; }
 
-    /// <summary>Lease TTL requested on acquire/renew; the server clamps to its own bounds.</summary>
+    /// <summary>
+    /// Lease TTL requested on acquire/renew; the server clamps to its own
+    /// bounds. The 15-minute default leaves ten complete wall-clock minutes
+    /// after the normal heartbeat safety margin without granting unbounded
+    /// offline authority.
+    /// </summary>
     public int TtlSeconds { get; init; }
 
     /// <summary>Heartbeat cadence; kept well under the TTL so a slow network still renews in time.</summary>
@@ -115,7 +143,10 @@ public sealed class RunnerOptions
     /// <summary>Hard cap on a single CLI run before the runner gives up and reports a blocked completion.</summary>
     public int RunTimeoutSeconds { get; init; }
 
-    /// <summary>Maximum number of concurrently running task slots on this host.</summary>
+    /// <summary>
+    /// Bootstrap/fallback host slot ceiling. A versioned Task Server persists
+    /// the first reported value and returns the centrally managed live ceiling.
+    /// </summary>
     public int HostMaxParallelism { get; init; }
 
     /// <summary>Delay between empty daemon pickup polls.</summary>
@@ -150,6 +181,11 @@ public sealed class RunnerOptions
 
     public static int EnvInt(string name, int fallback)
         => int.TryParse(Env(name), out var v) && v > 0 ? v : fallback;
+
+    /// <summary>Boolean opt-in flag as operators write it in a unit file or compose env.</summary>
+    private static bool OptIn(string value)
+        => value.Trim() is { Length: > 0 } flag
+           && (flag == "1" || string.Equals(flag, "true", StringComparison.OrdinalIgnoreCase));
 
     public static double EnvDouble(string name, double fallback)
         => double.TryParse(
@@ -239,13 +275,14 @@ public sealed class RunnerOptions
                 .ToArray(),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
+            ExecEngine = Val("exec-engine", "RUNNER_EXEC_ENGINE", ExecEngineCar).Trim().ToLowerInvariant(),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
             CodexCliBin = Val("codex-cli", "RUNNER_CODEX_CLI_BIN", "codex"),
             CliArgs = Val("cli-args", "RUNNER_CLI_ARGS", "-p"),
             CliResumeArgs = Val("cli-resume-args", "RUNNER_CLI_RESUME_ARGS").Trim() is { Length: > 0 } resumeArgs
                 ? resumeArgs
                 : null,
-            TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 120),
+            TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 900),
             HeartbeatSeconds = EnvInt("RUNNER_HEARTBEAT_SECONDS", 30),
             RunTimeoutSeconds = EnvInt("RUNNER_RUN_TIMEOUT_SECONDS", 3600),
             HostMaxParallelism = overrides.TryGetValue("max-parallelism", out var max) && int.TryParse(max, out var maxV) && maxV > 0
@@ -262,12 +299,22 @@ public sealed class RunnerOptions
                 ? maxLoadValue
                 : EnvDouble("RUNNER_CLAIM_MAX_LOAD_PER_CORE", 1.5),
             LoadGateSustainedSeconds = EnvInt("RUNNER_LOAD_GATE_SUSTAINED_SECONDS", 120),
+            AllowInsecureHttp = OptIn(Val("allow-insecure-http", "RUNNER_ALLOW_INSECURE_HTTP")),
             HealthCheckOnly = healthCheck,
         };
 
         var serverUri = new Uri(options.ServerUrl, UriKind.Absolute);
-        if (serverUri.Scheme != Uri.UriSchemeHttps && !serverUri.IsLoopback)
-            throw new ArgumentException("RUNNER_SERVER_URL must use HTTPS unless it is a loopback address.");
+        // Plain HTTP outside loopback stays refused unless the operator opted in
+        // explicitly. The opt-in covers exactly one legitimate topology: a private
+        // container network where the Task Server is addressed by service name and
+        // never published outside it.
+        var insecureHttpPermitted = options.AllowInsecureHttp
+                                    && serverUri.Scheme == Uri.UriSchemeHttp;
+        if (serverUri.Scheme != Uri.UriSchemeHttps && !serverUri.IsLoopback && !insecureHttpPermitted)
+            throw new ArgumentException(
+                "RUNNER_SERVER_URL must use HTTPS unless it is a loopback address. "
+                + "Set RUNNER_ALLOW_INSECURE_HTTP=1 to opt in to plain HTTP on a trusted private "
+                + "network (for example a container network such as http://orchestrator-api:5031).");
         if (!serverUri.IsLoopback && string.IsNullOrWhiteSpace(options.AuthToken))
             throw new ArgumentException("RUNNER_AUTH_TOKEN is required for a non-loopback Task Server.");
         if (options.Role is not ("coding" or "review"))
@@ -281,6 +328,8 @@ public sealed class RunnerOptions
         if (options.CliResumeArgs is not null
             && !options.CliResumeArgs.Contains("{sessionId}", StringComparison.Ordinal))
             throw new ArgumentException("RUNNER_CLI_RESUME_ARGS must contain the {sessionId} placeholder.");
+        if (options.ExecEngine is not (ExecEngineCar or ExecEngineLegacy))
+            throw new ArgumentException("RUNNER_EXEC_ENGINE must be 'car' or 'legacy'.");
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);
         return (options, string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(), once, help);

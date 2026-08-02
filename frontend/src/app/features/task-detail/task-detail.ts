@@ -26,7 +26,7 @@ import type {
 import { CLI_TYPES, TaskState } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
 import { TaskService } from '../../services/task.service';
-import { CliCatalogStore } from '../../services/cli-catalog.store';
+import { CliCatalogStore } from '../cli';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { ClientService } from '../../services/client.service';
 import { NowTickService } from '../../services/now-tick.service';
@@ -57,6 +57,7 @@ import { classifyLatestActivityOutcome } from './components/agent-outcome.util';
 import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { TaskLiveStatusComponent } from '../../components/task-live-status/task-live-status.component';
+import { freshestRunInfo, isTaskRunActive } from '../../services/run-activity.util';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -130,7 +131,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly lanePeers = input<TaskInfo[]>([]);
   readonly selectedSubTaskId = input<string | null>(null);
   readonly routeDetailTab = input<PromptPaneTabId | null>(null);
-  readonly routeInspectorTab = input<'protocol' | 'activity' | null>(null);
+  readonly routeInspectorTab = input<'task' | 'activity' | 'protocol' | null>(null);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -182,7 +183,7 @@ export class TaskDetailComponent implements OnDestroy {
   /** Walk to the previous peer in the current lane (k / ↑ / ← / Prev button). */
   readonly prevInLaneRequested = output<void>();
   readonly detailTabChange = output<PromptPaneTabId>();
-  readonly inspectorTabChange = output<'protocol' | 'activity'>();
+  readonly inspectorTabChange = output<'task' | 'activity' | 'protocol'>();
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
   private readonly jobSelection = inject(TaskSelectionService);
@@ -288,6 +289,16 @@ export class TaskDetailComponent implements OnDestroy {
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
   readonly isRunning = this.cliPoll.isRunning;
+  /** AGT-2378: `detail()` is fetched once on open, so its runtime overlay ages
+   *  out; read run liveness through the live board entry instead. The board
+   *  entry only wins when it is at least as fresh, so a lane move applied here
+   *  is not undone by a board push that predates it — see `freshestRunInfo`. */
+  readonly liveRunInfo = computed(() =>
+    freshestRunInfo(this.detail().info, this.jobService.jobs()));
+  /** Includes pipeline pre-steps, between-step ownership, and remote runs (the
+   *  CLI output poll only ever sees locally spawned processes). */
+  readonly effectiveRunActive = computed(() =>
+    this.isRunning() || isTaskRunActive(this.liveRunInfo()));
   readonly startedAt = this.cliPoll.startedAt;
   readonly elapsedTime = this.cliPoll.elapsedTime;
   readonly errorMsg = signal<string | null>(null);
@@ -319,7 +330,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly cliTestResult = signal<CliSettings | null>(null);
   readonly cliTesting = signal(false);
   readonly showLogOverlay = signal(false);
-  readonly activeInspectorTab = signal<'protocol' | 'activity'>('protocol');
+  readonly activeInspectorTab = signal<'task' | 'activity' | 'protocol'>('protocol');
   /** When true while a run is active, the user has manually expanded the
    *  setup bar and we keep it expanded until the run ends or they toggle it
    *  off. Reset on job switch and when the run ends so the next run starts
@@ -708,7 +719,7 @@ export class TaskDetailComponent implements OnDestroy {
       && !!this.detail().statusMarkdown?.trim();
   });
   readonly runOutcomePresentation = computed(() => deriveProtocolVerdict({
-    isRunning: this.isRunning(),
+    isRunning: this.effectiveRunActive(),
     summaryStatus: this.detail().summaryState?.status ?? 'none',
     statusMarkdown: this.detail().statusMarkdown,
     outcomeIssue: this.detail().info.outcomeIssue,
@@ -1278,7 +1289,7 @@ export class TaskDetailComponent implements OnDestroy {
    * manually picked a tab so the auto-switch from "activity → protocol on
    * summary ready" doesn't override their explicit choice.
    */
-  onInspectorTabChange(tab: 'protocol' | 'activity') {
+  onInspectorTabChange(tab: 'task' | 'activity' | 'protocol') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
     this.inspectorTabChange.emit(tab);

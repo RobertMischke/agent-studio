@@ -44,9 +44,11 @@ The convention is:
    and repository-defined Workbench ids. Internal `watchPath::id` keys stay out
    of browser history.
 
-Surface changes and tab changes use `history.replaceState`. They keep the
-current history entry honest without adding an entry for every rail or detail
-tab click. Existing task-opening flows may create a history entry first, then
+Primary surface changes use `history.pushState`, so Browser Back and Forward
+move between Board, project, task, and settings surfaces. Replaceable substate
+within one surface, such as a Hub rail, Wiki page, or detail tab, uses
+`history.replaceState`. Cold boot canonicalization also replaces the current
+entry. Existing task-opening flows may create a history entry first, then
 replace that entry with the fully resolved canonical route. Browser
 Back/Forward and `hashchange` both run the same route-in reconciliation.
 
@@ -58,6 +60,7 @@ such as `AGT-2291`. Values are percent encoded.
 | Surface | Canonical schema | Restored from the route | Deliberately transient |
 |---|---|---|---|
 | Workspace Board | `#/board` | Workspace-wide board and independent `filters=` segment | Lane scroll, card hover, open menus, focused lane, temporary loading state |
+| Activity Feed | `#/feed` | Workspace-wide embedded Feed and its main-navigation state | Project and event filters, selected event, load-distribution period, scroll |
 | Project Board | `#/projects/<project>/board` | Project scope and independent `filters=` segment | Lane collapse, scroll, drag state, selection marquee |
 | Project Deck / Hub section | `#/projects/<project>[/<section>]` | Project Hub and active rail. Missing section means Overview | Rail scroll, expanded navigation groups, fetched panel cache, open dialog |
 | Wiki Overview | `#/projects/<project>/wiki` | Project Hub, Wiki rail, Wiki landing | Tree expansion, scroll, search draft, hover state |
@@ -75,6 +78,11 @@ such as `AGT-2291`. Values are percent encoded.
 Other editor tabs such as a commit diff, activity drilldown, and configured URL
 preview remain implementation follow-ups. They use the same path rule when made
 public; they must not introduce another top-level query or ad hoc hash grammar.
+
+The project-scoped feed modal is retained as a quick-access compatibility
+surface for project and status-bar entry points. It reuses the same feed
+component and shared live store, but it does not own the canonical Feed URL.
+The left Activity icon always opens the embedded `#/feed` tab.
 
 ## State ownership and precedence
 
@@ -134,3 +142,6 @@ review screenshots under the managed task's `results/` directory.
 - **2026-07-24:** Established the canonical hash-path contract, route hydration
   precedence, Wiki and Workbench deep links, Task detail tab state, and the
   route/state/reload test matrix.
+- **2026-07-30:** Promoted the workspace Activity Feed to the embedded
+  `#/feed` main route. Kept the existing project modal as a quick-access
+  compatibility surface rather than a second primary route.

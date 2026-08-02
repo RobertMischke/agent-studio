@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { TaskService } from '../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
-import type { CliUsageReport, CliUsageSection } from '../../../../features/cli';
+import type { CliUsageReport, CliUsageSection } from '../../models/cli.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 /** One filesystem root a CLI holds session state for. */

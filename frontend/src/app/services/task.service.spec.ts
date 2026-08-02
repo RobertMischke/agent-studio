@@ -349,6 +349,28 @@ describe('TaskService', () => {
       sources: [],
     });
   });
+
+  it('sends an operator decision reason through the existing move request', () => {
+    service
+      .moveJob(
+        'AGT-2355',
+        '6-completed',
+        'C:/projects/demo',
+        undefined,
+        'Decision icon-source: selected "Keep current glyphs".',
+      )
+      .subscribe();
+
+    const req = http.expectOne((request) =>
+      request.url === '/api/tasks/AGT-2355/move'
+      && request.params.get('watchPath') === 'C:/projects/demo');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      targetState: '6-completed',
+      reason: 'Decision icon-source: selected "Keep current glyphs".',
+    });
+    req.flush({});
+  });
 });
 
 describe('orchestratorContextChatSegment', () => {

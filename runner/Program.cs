@@ -32,7 +32,16 @@ if (help)
 void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [agent-host] {message}");
 
 var daemonMode = taskKey is null || !once;
-Log($"agent-host starting: server={options.ServerUrl} role={options.Role} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
+Log($"agent-host starting: server={options.ServerUrl} role={options.Role} engine={options.ExecEngine} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
+
+// Migration note (AGT-2370): under the car engine the CAR descriptor owns the
+// argv, so a configured RUNNER_CLI_ARGS is loudly ignored instead of silently
+// half-applied. RUNNER_CLI_BIN stays meaningful on both engines (binary path).
+if (options.ExecEngine == RunnerOptions.ExecEngineCar
+    && !string.IsNullOrWhiteSpace(RunnerOptions.Env("RUNNER_CLI_ARGS")))
+    Log("RUNNER_CLI_ARGS is set but RUNNER_EXEC_ENGINE=car builds the CLI arguments itself; "
+        + "the configured args apply to the legacy engine only and are ignored. "
+        + "Set RUNNER_EXEC_ENGINE=legacy to fall back to the raw spawn (removed in AGT-2373).");
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -148,13 +157,21 @@ static void PrintUsage()
           RUNNER_CLAIM_MAX_LOAD_PER_CORE                      Load/core threshold (default 1.5)
           RUNNER_LOAD_GATE_SUSTAINED_SECONDS                  High-load window (default 120)
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
-          --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
+          --cli-args "<args>"     Headless CLI args, legacy engine only
+                                                            (RUNNER_CLI_ARGS)
+          --exec-engine <car|legacy>
+                                  CLI execution engine        (RUNNER_EXEC_ENGINE, default car).
+                                  car drives the CLI through CodingAgentRunner
+                                  (descriptor argv, stream-json, permission
+                                  injection, clean config home); legacy is the
+                                  pre-AGT-2370 raw spawn and disappears with
+                                  AGT-2373.
           --auth-token-file <p>   Protected credential file  (RUNNER_AUTH_TOKEN_FILE)
           --tls-certificate-sha256 <hex>
                                   Private-CA/rehearsal certificate pin
                                                             (RUNNER_TLS_CERTIFICATE_SHA256)
           --ttl <seconds>         Requested lease TTL         (RUNNER_TTL_SECONDS)
-          --max-parallelism <n>   Daemon host slots            (RUNNER_MAX_PARALLELISM, default 2)
+          --max-parallelism <n>   Bootstrap/fallback host slots (RUNNER_MAX_PARALLELISM, default 2)
           --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)
           --poll                  Run continuously (also the default without a task key)
           -h, --help              Show this help

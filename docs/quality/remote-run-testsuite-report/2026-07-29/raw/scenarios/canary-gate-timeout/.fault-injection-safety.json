@@ -1,0 +1,11 @@
+{
+  "harness": "remote-test-suite",
+  "version": 1,
+  "scenario": "fault-gate-timeout",
+  "runId": "canary-gate-timeout",
+  "root": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-gate-timeout/canary-gate-timeout",
+  "acknowledgement": "rts-fi-90245b01197c64374400c017e587242c0e4edfe1436c4a01c0092637dce54a84",
+  "faults": [
+    "gate-watchdog-timeout"
+  ]
+}

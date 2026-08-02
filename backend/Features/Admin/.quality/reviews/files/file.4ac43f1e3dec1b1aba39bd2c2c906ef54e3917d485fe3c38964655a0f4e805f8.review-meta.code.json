@@ -1,0 +1,221 @@
+{
+  "$schema": "https://agent-orchestrator.dev/quality/schemas/review-meta.v1.schema.json",
+  "schemaVersion": 1,
+  "unit": {
+    "id": "qs-v1/dotnet/file/ce4ea5238f90e289514f7210806899de4ad99443e71ae5ac7611e685a7f635bc",
+    "adapter": "dotnet",
+    "level": "file",
+    "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+    "displayName": "AdminConfigEndpoints.cs"
+  },
+  "reviewedAt": "2026-07-21T11:25:07.3849711Z",
+  "kind": "code",
+  "reviewer": {
+    "agent": "codex",
+    "model": "runner-default",
+    "runId": "quality-572b524335c04dbbb4e8e1f9e7de54d8"
+  },
+  "reviewedHash": {
+    "algorithm": "sha256",
+    "canonicalization": "quality-studio-subject-manifest-v1",
+    "value": "e0e2be99683d0001deffd960ae6961dc5e6f93f93b8e2f91354f1b992607fdaa"
+  },
+  "subjectInputs": [
+    {
+      "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+      "selector": "file",
+      "contentHash": "sha256:25ae462e72bedeb66e64218f59b594ec7e5a1301c7717ef17e2d0d9082eb2929"
+    }
+  ],
+  "reviewInputs": {
+    "effectiveHash": {
+      "algorithm": "sha256",
+      "canonicalization": "quality-studio-review-inputs-v1",
+      "value": "ee1b97d590887514c32666fbfcd6ca862b4f6a5b7cf288693a4f3294f22d3d6d"
+    },
+    "complete": true,
+    "standards": [],
+    "omitted": [],
+    "prompt": {
+      "id": "file-code-review",
+      "version": "1.0.0",
+      "contentHash": "sha256:a31ec43acc80eca6dfedee56890b078a433a5386ad3dc03205dc509afeeb0c12"
+    }
+  },
+  "grade": {
+    "score": 74,
+    "band": "C",
+    "rationale": "The endpoint mappings are compact and generally straightforward, but the file does not visibly enforce its documented authorization boundary on powerful configuration and maintenance operations. Error contracts are inconsistent and coupled to exception messages, while inline handlers and anonymous result types reduce focused unit-testability."
+  },
+  "summary": "The routing and basic request validation are clear, and the prompt routes correctly distinguish missing resources from successful operations. The principal concern is that neither the admin groups nor the maintenance group attaches an authorization policy, despite the file-level contract requiring authenticated human sessions and role checks in the networked profile. Secondary concerns are unstable error responses and handlers that are harder to test independently from the HTTP pipeline.",
+  "aspects": [
+    {
+      "id": "correctness",
+      "title": "Correctness",
+      "grade": {
+        "score": 67,
+        "band": "D",
+        "rationale": "The routes and status-code branches are mostly coherent, but access control required by the documented networked-profile contract is not enforced within this endpoint mapping and may therefore depend on fragile external configuration."
+      }
+    },
+    {
+      "id": "maintainability",
+      "title": "Maintainability",
+      "grade": {
+        "score": 81,
+        "band": "B",
+        "rationale": "The file is well organized into logical route groups, but repeated response construction, anonymous payloads, and inline handlers increase coupling and make API behavior harder to evolve consistently."
+      }
+    },
+    {
+      "id": "clarity",
+      "title": "Clarity",
+      "grade": {
+        "score": 86,
+        "band": "B",
+        "rationale": "Names and comments communicate intent well. Some comments describe security and route-ordering guarantees that are not established by this code, which can mislead future maintainers."
+      }
+    },
+    {
+      "id": "error_handling",
+      "title": "Error Handling",
+      "grade": {
+        "score": 72,
+        "band": "C",
+        "rationale": "Expected missing-resource and basic validation cases are handled, but errors use ad hoc anonymous shapes and the orchestrator endpoint exposes raw exception messages without a stable machine-readable error contract."
+      }
+    },
+    {
+      "id": "testability",
+      "title": "Testability",
+      "grade": {
+        "score": 77,
+        "band": "C",
+        "rationale": "Dependency injection enables integration testing, but all behavior is embedded in route lambdas with inferred result types, making isolated handler tests and compile-time verification of response alternatives less convenient."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "admin-config-authorization-not-attached",
+      "aspect": "correctness",
+      "severity": "high",
+      "title": "Privileged configuration and maintenance routes do not attach authorization requirements",
+      "description": "The file-level documentation states that the networked profile requires an authenticated human session and role checks, but none of the three route groups calls RequireAuthorization or otherwise declares the required policy. The maintenance routes invoke state-changing repair operations and are especially sensitive. A global fallback policy might authenticate callers, but relying on external setup does not establish the role restriction promised by this endpoint surface and can silently expose these routes if hosting configuration changes.",
+      "recommendation": "Attach an explicit named authorization policy to the admin configuration, prompt administration, and maintenance groups. Encode the local-profile exception inside that policy or a dedicated authorization handler so the security boundary remains explicit and testable at the endpoint definition.",
+      "locations": [
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 18,
+              "column": 9
+            },
+            "end": {
+              "line": 18,
+              "column": 61
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 45,
+              "column": 9
+            },
+            "end": {
+              "line": 45,
+              "column": 58
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 91,
+              "column": 9
+            },
+            "end": {
+              "line": 91,
+              "column": 59
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "unstable-error-contract",
+      "aspect": "error_handling",
+      "severity": "medium",
+      "title": "Validation errors expose internal exception text through an ad hoc response contract",
+      "description": "ApplyOverrides failures are translated by catching the broad ArgumentException type and returning ex.Message directly. This couples the public API to implementation wording, can disclose internal parameter details, and may misclassify programming errors as client errors. Other failures use separately constructed anonymous error objects, so clients have no stable error code or ProblemDetails contract.",
+      "recommendation": "Have the service return or throw a dedicated validation result or exception carrying a stable error code and safe client message. Return a typed ProblemDetails response consistently for validation and not-found cases, and allow unexpected ArgumentException instances to reach centralized exception handling.",
+      "locations": [
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 38,
+              "column": 13
+            },
+            "end": {
+              "line": 41,
+              "column": 14
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 57,
+              "column": 13
+            },
+            "end": {
+              "line": 57,
+              "column": 120
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "inline-handlers-limit-isolated-testing",
+      "aspect": "testability",
+      "severity": "low",
+      "title": "Endpoint behavior is embedded in inline delegates with inferred response types",
+      "description": "Validation, service invocation, exception translation, and response selection are all implemented inside route-registration lambdas. This encourages tests to exercise the full web host and provides less compile-time assurance about the possible HTTP result variants, particularly where conditional expressions and anonymous payloads are used.",
+      "recommendation": "Extract non-trivial handlers into internal static methods using TypedResults and explicit Results unions, or move request validation into dedicated validators. Keep route registration declarative and unit-test the extracted handlers alongside a smaller set of routing integration tests.",
+      "locations": [
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 25,
+              "column": 9
+            },
+            "end": {
+              "line": 42,
+              "column": 12
+            }
+          }
+        },
+        {
+          "path": "backend/Features/Admin/AdminConfigEndpoints.cs",
+          "range": {
+            "start": {
+              "line": 63,
+              "column": 9
+            },
+            "end": {
+              "line": 75,
+              "column": 12
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "completedAt": "2026-07-29T02:20:54.054Z",
+  "project": "agt2394-rts-canary-machine-10m",
+  "identityLabel": "com.agentstudio.remote-harness.identity=agt2394-rts-canary-machine-10m",
+  "residues": {
+    "containers": [],
+    "volumes": [],
+    "networks": []
+  }
+}

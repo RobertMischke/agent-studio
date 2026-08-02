@@ -37,7 +37,24 @@ controlled migration that updates its registry record.
 
 ### Project + workspace registry (ADR-0042)
 
-In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name can change without breaking task keys derived from the id. `StorageLocation` is immutable during ordinary project editing and changes only through a controlled legacy-store migration.
+In parallel with the legacy `<projectKey>` slug layout above, projects also
+live as records in `<TaskRepository>/.metadata/projects.json` with immutable
+identifiers (`PROJ-001`, `PROJ-002`, ...) and a workspace membership in
+`<TaskRepository>/.metadata/workspaces.json`. Legacy `WatchPaths` entries are
+auto-registered only when `projects.json` did not exist at the registry's first
+load. An existing empty file is authoritative and does not trigger seeding.
+The id is monotonic and never re-used; the display name can change without
+breaking task keys derived from the id. `StorageLocation` is immutable during
+ordinary project editing and changes only through a controlled legacy-store
+migration.
+
+An existing `projects.json` that cannot be deserialized aborts startup with the
+`project-registry-load-failed` classification. The backend must not substitute
+an empty registry or persist over the invalid file. Before any registry write
+that reduces the project count, the current file is copied byte-for-byte to
+`projects.json.quarantine-<UTC timestamp>` and the
+`project-registry-shrink-quarantined` classification records both counts and
+paths.
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
@@ -107,6 +124,8 @@ Each job folder uses this structure:
   prompt.md         # Task description for the CLI agent
   status.md         # Generated review protocol
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
+  completion-acceptance.json
+                    # Optional: structured requirements, evidence, blockers, and completion lifecycle
   post-processing-outcomes.jsonl
                     # Optional: typed Post Processing outcomes
   .metadata/        # Application-owned sidecars (pipeline-execution.json, files.json, ...)
@@ -214,6 +233,12 @@ Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes.
 
 Valid `outcome` values are `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`. Valid `performer` values are `orchestrator`, `supporting-agent`, and `tool`. `performerCliType` is optional and should be one of the supported CLI values when a supporting CLI performed the check.
 
+### completion-acceptance.json (optional)
+
+The completion gate writes this structured sidecar before aspect review. It preserves the complete requirement source plus every evidence item and explicit blocker with its source and reason. Its lifecycle object keeps four separate facts: `turnComplete`, `implementationComplete`, `taskAccepted`, and `deploymentPushPending`. A successful `TASK_DONE`/process terminal can therefore complete implementation while acceptance is still under review and platform-owned commit, push, or deployment remains pending.
+
+The gate does not derive open work from `status.md` bullets or narrative. Only structured terminal/process evidence and explicit `TASK_BLOCKED` or `TASK_NEEDS_INPUT` terminals drive the pre-review completion ruling. The structured aspect verdict updates `taskAccepted`; deployment/push pending never masquerades as incomplete implementation.
+
 ### results/review-evidence.jsonl (optional)
 
 Append-only JSON-Lines file holding **task-level review evidence**: findings produced by security audits, code-review passes, task checks, or notes written by a reviewer. Lives next to the screenshots in `results/` so it travels with the job folder and stays out of the app source repository.
@@ -246,6 +271,24 @@ Hard rules:
 - **No state-machine effects.** Findings are review evidence, not blockers. `JobTransitionService` does not consult this file. The user can still move the job through `4-auto-review -> 5-human-review -> 6-completed` while findings are open.
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
+
+### results/decision.json or results/decision.html (optional)
+
+The active operator hand-off for a task in `5e-escalated`. A conforming
+`decision.json` uses `decision-surface/v1`: one question, one to eight options,
+an optional recommendation, consequences, optional free steering configuration,
+and an allowlisted existing `steer` or `move` action. A conforming
+`decision.html` embeds the same object in
+`<script type="application/json" data-agent-studio-decision>` and may add a
+self-contained visual explanation.
+
+Task Detail renders HTML with an opaque-origin sandbox and renders every action
+in trusted host chrome. A selection reaches the existing Continue/Steer or Move
+endpoint. Steer text is retained in Activity; Move sends the selection as the
+lane-change `reason`. There is no separate decision persistence.
+
+The complete ownership, schema, lifecycle, precedence, allowlist, and failure
+contract is [Operator Decision Surface](../../operations/decision-surface/README.md).
 
 ### model-qualification.jsonl (optional)
 
@@ -315,7 +358,14 @@ Build feature X.
 
 ### status.md
 
-`status.md` is generated by the application from `logs/cli-output.log` after a run. Agents may read it for recovery context, but durable evidence should live in logs or `results/`.
+`status.md` is application-owned. It is normally generated from
+`logs/cli-output.log` after a run. If it is missing at a move into
+`4-auto-review`, `5-human-review`, `5e-escalated`, or `6-completed`,
+`TaskTransitionService` creates an honest marked scaffold before the move and
+refuses the transition if that write fails. Startup also backfills missing
+Results in `5-human-review`, `6-completed`, and `7-archive`. Agents may read the
+file for recovery context, but durable evidence should live in logs or
+`results/`.
 
 ```markdown
 # Status

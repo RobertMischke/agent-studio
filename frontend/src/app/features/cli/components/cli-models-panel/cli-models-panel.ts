@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
-import type { CliModelInfo } from '../../../../features/cli';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import type { CliModelInfo } from '../../models/cli.model';
+import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
-import { QuotaApiService, type CliModelRouteProfile } from '../../../quota';
+import { QuotaApiService, type CliModelRouteProfile, type ModelRoutingPolicyView } from '../../../quota';
 
 interface CliModelGroup {
   cliType: CliType;
@@ -37,6 +37,8 @@ export class CliModelsPanelComponent implements OnInit {
   private readonly routesApi = inject(QuotaApiService);
   readonly routes = signal<Record<string, CliModelRouteProfile>>({});
   readonly savingCli = signal<string | null>(null);
+  readonly policy = signal<ModelRoutingPolicyView | null>(null);
+  readonly savingEconomyMode = signal(false);
   readonly cliTypes = CLI_TYPES;
 
   /** CLIs whose per-row details (route editor + full model list) are expanded.
@@ -61,6 +63,9 @@ export class CliModelsPanelComponent implements OnInit {
     this.catalog.hydrateAll();
     this.routesApi.getModelRoutes().subscribe({
       next: (response) => this.routes.set(response.profiles ?? {}),
+    });
+    this.routesApi.getModelRoutingPolicy().subscribe({
+      next: (policy) => this.policy.set(policy),
     });
   }
 
@@ -140,6 +145,25 @@ export class CliModelsPanelComponent implements OnInit {
   fallbackThinkingLevels(cliType: CliType): readonly string[] {
     const selected = this.routes()[cliType]?.fallbackModel;
     return this.fallbackModels(cliType).find((m) => m.id === selected)?.thinkingLevels ?? [];
+  }
+
+  setEconomyMode(enabled: boolean): void {
+    const current = this.policy();
+    if (!current || this.savingEconomyMode()) return;
+    this.policy.set({ ...current, economyMode: enabled });
+    this.savingEconomyMode.set(true);
+    this.routesApi.setModelRoutingEconomyMode(enabled).subscribe({
+      next: (state) => {
+        const latest = this.policy();
+        if (latest) this.policy.set({ ...latest, economyMode: state.economyMode });
+        this.savingEconomyMode.set(false);
+      },
+      error: () => {
+        const latest = this.policy();
+        if (latest) this.policy.set({ ...latest, economyMode: current.economyMode });
+        this.savingEconomyMode.set(false);
+      },
+    });
   }
 
   private save(cliType: CliType, changes: Partial<CliModelRouteProfile>): void {

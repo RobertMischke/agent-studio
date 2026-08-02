@@ -98,6 +98,25 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(document);
         });
 
+        // The Sichtblick gate (AGT-2375). Prepare validates the decision against
+        // the exact revision/fingerprint and writes nothing; confirm is the
+        // single durable write and lands in the Workbench's own workbench.json.
+        app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/prepare",
+            (string projectName, string id, PrepareWorkbenchDecisionRequest body,
+                WorkbenchDecisionService decisions) =>
+                WorkbenchDecisionHttpResult(decisions.Prepare(projectName, id, body)));
+
+        app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/confirm",
+            (string projectName, string id, ConfirmWorkbenchDecisionRequest body,
+                WorkbenchDecisionService decisions, ProjectDocsService docs) =>
+            {
+                var result = decisions.Confirm(projectName, id, body);
+                // The descriptor is a docs/ file, so the warm wiki cache must
+                // not keep serving the pre-decision bytes.
+                if (result.Success) docs.InvalidateWikiContent(projectName);
+                return WorkbenchDecisionHttpResult(result);
+            });
+
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
         // that backs the wiki navigation tree. No git is touched here, and a warm
         // cache serves it without opening a file (AGT-2013); the ETag lets a
@@ -130,18 +149,14 @@ public static class ProjectDocsEndpoints
         // composed server-side so the landing
         // surface costs two git walks instead of the tree + recent + per-doc
         // history fan-out. Sits before the /files catch-all for path precedence.
-        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
-            // Pulse is the lifecycle overview, so it deliberately includes
-            // settled Workbenches. Explorer keeps its current-only default.
-            var catalogue = workbenches.List(projectName, includeHistory: true);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(pulse with
                 {
-                    Workbenches = catalogue,
-                    Lifecycle = ProjectDocsService.MergeWorkbenchLifecycle(pulse.Lifecycle, catalogue),
+                    Lifecycle = ProjectDocsService.MergeWorkbenchLifecycle(pulse.Lifecycle, pulse.Workbenches),
                 });
         });
 
@@ -197,7 +212,7 @@ public static class ProjectDocsEndpoints
                     projectName, rel, body.Pinned, body.SectionTitle, body.Label, body.Note);
                 if (!result.Success) return Results.BadRequest(new { error = result.Error });
                 return CommitWikiChange(
-                    git, projectName, result.FullPath!,
+                    docs, git, projectName, result.FullPath!,
                     body.Pinned ? $"wiki: pin {rel} to home" : $"wiki: unpin {rel} from home");
             });
 
@@ -228,26 +243,35 @@ public static class ProjectDocsEndpoints
 
             var repoRel = Path.GetRelativePath(repoRoot, result.FullPath!).Replace('\\', '/');
             var commit = git.CommitPaths(repoRoot, $"wiki: update {rel}", new[] { repoRel });
-            return commit.Success
-                ? Results.Ok(new { relPath = rel, saved = true, changed = true, sha = commit.Sha, branch })
-                : Results.BadRequest(new { error = commit.Error, branch });
+            if (!commit.Success) return Results.BadRequest(new { error = commit.Error, branch });
+            docs.InvalidateWikiContent(projectName);
+            return Results.Ok(new { relPath = rel, saved = true, changed = true, sha = commit.Sha, branch });
         });
 
         // Page lifecycle metadata. Archive changes classification only: the
         // source page remains readable, linkable, and recoverable.
         app.MapPut("/api/projects/{projectName}/wiki/classification/{**relPath}",
             (string projectName, string relPath, WikiClassificationRequest body,
-                ProjectDocsService docs, WikiCompanionStore companions, GitService git) =>
+                ProjectDocsService docs, WikiCompanionStore companions, GitService git,
+                WorkbenchCatalogueService workbenches) =>
             {
                 var rel = Normalize(relPath);
                 if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+                // Generic Wiki classification writes a .meta.json sidecar, which
+                // a Workbench's visibility does not read (AGT-2375). Canonical
+                // Workbenches archive only through their decision endpoint.
+                if (workbenches.OwnsCanonicalPath(projectName, rel))
+                    return Results.Conflict(new
+                    {
+                        error = "Canonical Workbenches must use the explicit decision endpoint; Wiki classification cannot archive them.",
+                    });
                 var status = body.Status?.Trim().ToLowerInvariant();
                 if (status is not ("archived" or "aktuell"))
                     return Results.BadRequest(new { error = "status must be 'archived' or 'aktuell'" });
                 var result = docs.SetWikiClassificationStatus(projectName, rel, status, companions);
                 if (!result.Success) return Results.BadRequest(new { error = result.Error });
                 return CommitWikiChange(
-                    git, projectName, result.FullPath!,
+                    docs, git, projectName, result.FullPath!,
                     $"wiki: classify {rel} as {status}");
             });
 
@@ -299,7 +323,7 @@ public static class ProjectDocsEndpoints
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var result = docs.CreateWikiPage(projectName, rel, body.Content);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}", result.ExtraPaths);
+            return CommitWikiChange(docs, git, projectName, result.FullPath!, $"wiki: create {rel}", result.ExtraPaths);
         });
 
         app.MapPost("/api/projects/{projectName}/wiki/folders", (string projectName, WikiCreateFolderRequest body, ProjectDocsService docs, GitService git) =>
@@ -308,7 +332,7 @@ public static class ProjectDocsEndpoints
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var result = docs.CreateWikiFolder(projectName, rel);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create folder {rel}");
+            return CommitWikiChange(docs, git, projectName, result.FullPath!, $"wiki: create folder {rel}");
         });
 
         // Move/rename a wiki node (file or folder) via git mv + commit.
@@ -329,9 +353,9 @@ public static class ProjectDocsEndpoints
             var fromRepoRel = Path.GetRelativePath(repoRoot, fromFull).Replace('\\', '/');
             var toRepoRel = Path.GetRelativePath(repoRoot, toFull).Replace('\\', '/');
             var commit = git.MoveAndCommit(repoRoot, fromRepoRel, toRepoRel, $"wiki: move {from} -> {to}");
-            return commit.Success
-                ? Results.Ok(new { from, to, sha = commit.Sha })
-                : Results.BadRequest(new { error = commit.Error });
+            if (!commit.Success) return Results.BadRequest(new { error = commit.Error });
+            docs.InvalidateWikiContent(projectName);
+            return Results.Ok(new { from, to, sha = commit.Sha });
         });
 
         // Persist the sibling display order of category folders (consumed by the
@@ -345,7 +369,7 @@ public static class ProjectDocsEndpoints
             var parent = Normalize(body.ParentRelPath) ?? string.Empty;
             var result = docs.SetWikiFolderOrder(projectName, parent, body.OrderedNames);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!,
+            return CommitWikiChange(docs, git, projectName, result.FullPath!,
                 $"wiki: reorder categories under {(parent.Length == 0 ? "root" : parent)}");
         });
 
@@ -358,7 +382,7 @@ public static class ProjectDocsEndpoints
             var parent = Normalize(body.ParentRelPath) ?? string.Empty;
             var result = docs.SetWikiFileOrder(projectName, parent, body.OrderedNames);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!,
+            return CommitWikiChange(docs, git, projectName, result.FullPath!,
                 $"wiki: reorder documents under {(parent.Length == 0 ? "root" : parent)}");
         });
 
@@ -376,9 +400,9 @@ public static class ProjectDocsEndpoints
 
             var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
             var commit = git.RemoveAndCommit(repoRoot, repoRel, $"wiki: delete {rel}");
-            return commit.Success
-                ? Results.Ok(new { relPath = rel, sha = commit.Sha })
-                : Results.BadRequest(new { error = commit.Error });
+            if (!commit.Success) return Results.BadRequest(new { error = commit.Error });
+            docs.InvalidateWikiContent(projectName);
+            return Results.Ok(new { relPath = rel, sha = commit.Sha });
         });
 
         // ---- Architecture decisions ----
@@ -420,6 +444,19 @@ public static class ProjectDocsEndpoints
         return Results.Ok(payload);
     }
 
+    private static IResult WorkbenchDecisionHttpResult(WorkbenchDecisionResult result)
+    {
+        if (result.Success) return Results.Ok(result);
+        return result.ErrorCode switch
+        {
+            "not-canonical" => Results.NotFound(result),
+            "stale-revision" or "dirty-descriptor" or "operation-id-conflict"
+                or "already-settled" => Results.Conflict(result),
+            "validation" => Results.BadRequest(result),
+            _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+        };
+    }
+
     /// <summary>Trims and forward-slashes a client path; null when blank.</summary>
     private static string? Normalize(string? relPath)
     {
@@ -433,7 +470,12 @@ public static class ProjectDocsEndpoints
     /// commit both surface as a 400 so the UI can show the reason.
     /// </summary>
     private static IResult CommitWikiChange(
-        GitService git, string projectName, string fullPath, string message, IReadOnlyList<string>? extraPaths = null)
+        ProjectDocsService docs,
+        GitService git,
+        string projectName,
+        string fullPath,
+        string message,
+        IReadOnlyList<string>? extraPaths = null)
     {
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
@@ -445,9 +487,9 @@ public static class ProjectDocsEndpoints
             foreach (var extra in extraPaths)
                 paths.Add(Path.GetRelativePath(repoRoot, extra).Replace('\\', '/'));
         var commit = git.CommitPaths(repoRoot, message, paths);
-        return commit.Success
-            ? Results.Ok(new { relPath = repoRel, sha = commit.Sha })
-            : Results.BadRequest(new { error = commit.Error });
+        if (!commit.Success) return Results.BadRequest(new { error = commit.Error });
+        docs.InvalidateWikiContent(projectName);
+        return Results.Ok(new { relPath = repoRel, sha = commit.Sha });
     }
 }
 

@@ -1,0 +1,53 @@
+{
+  "scenario": "fault-lost-completion-sentinel",
+  "seed": "agt2200-sentinel-v1",
+  "runId": "canary-sentinel-loss",
+  "accepted": true,
+  "resultSha": "10b6a209eac95b5d5a798e7a2083df24abf67020",
+  "semanticTree": "f9ad6f96bff090a9c6e33f04541cb932fd503356",
+  "phaseSequence": [
+    "claim",
+    "run",
+    "gate",
+    "review",
+    "integration"
+  ],
+  "incidentOutcome": "lost-terminal-marker-recovered",
+  "assertions": [
+    {
+      "id": "reference-change-accepted",
+      "passed": true,
+      "detail": "exact result 10b6a209eac95b5d5a798e7a2083df24abf67020 reached 6-completed through all five phases"
+    }
+  ],
+  "faultSchedule": {
+    "enabled": true,
+    "selected": [
+      "lost-completion-sentinel"
+    ],
+    "encounters": {
+      "claim": 1,
+      "heartbeat": 1,
+      "worktree-prepare": 1,
+      "gate-command": 1,
+      "terminal-marker": 1,
+      "event-report": 1,
+      "artifact-report": 1,
+      "completion-report": 1
+    },
+    "scheduled": 1,
+    "consumed": 1
+  },
+  "resourcesRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/canary-20260729/fault-lost-completion-sentinel/canary-sentinel-loss",
+  "expectedTerminal": "6-completed",
+  "actualTerminal": "6-completed",
+  "recoveryBudget": {
+    "unit": "recovery-attempts",
+    "maximum": 0,
+    "used": 0
+  },
+  "chronicleLinks": [
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-phantom-wave",
+    "docs/operations/haertung-verteilte-ausfuehrung/historie.html#incident-attempt-authority"
+  ]
+}

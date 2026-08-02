@@ -1,5 +1,13 @@
 # Orchestrator Chat Redesign Handoff
 
+> **Sections outdated since the MC-0 through MC-4 deliveries ending in
+> `c42df9901` (2026-07-11):** “Current Problem”, the canonical-session scope
+> table, and several implementation suggestions describe the former panel.
+> The product direction remains useful. See
+> [Orchestrator Chat](orchestrator-chat.md) and
+> [Multichat Orchestrator](multichat-orchestrator.md) for the current session,
+> context, and composer contracts.
+
 This handoff turns the current Orchestrator Chat concept into a product and implementation brief for the redesign.
 
 The north star is a continuous project conversation with strong search and visible context. The user should feel that the project has one durable chat partner that knows the board, the jobs, the project docs, the recent decisions, and the current risks. Technical session mechanics remain inspectable, but they stop dominating the surface.

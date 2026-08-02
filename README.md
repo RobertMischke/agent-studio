@@ -1,5 +1,7 @@
 # agent-orchestrator
 
+[![License](https://img.shields.io/github/license/agent-orc/agent-studio)](LICENSE)
+
 **Management layers on top of coding work.** Agents (Claude Code, Codex, GitHub Copilot, Gemini) write the code; this repository is the Studio: a task board, agent pipelines, and project wikis that assign, gate, review, and account for it.
 
 <picture>
@@ -29,17 +31,41 @@
   definitions and in-flight runs remain durable Task Server data, so restarting
   the Engine does not orphan work.
 
-## Running locally
+## Get started
 
 ```bash
-./api.sh
-cd frontend
-npm install
-npm start
+git clone https://github.com/agent-orc/agent-studio.git
+cd agent-studio
+docker compose up --build --wait
 ```
 
-Or ask your coding-agent CLI to do it. For anything beyond the default setup, see the [setup guide](./docs/operations/setup/getting-started.md) and [AGENTS.md](AGENTS.md).
+Open [http://localhost:4011](http://localhost:4011). Docker Compose is the
+primary new-user installation path. It requires at least 8 GB of free disk
+space; no host .NET or Node.js install, local settings file, maintainer switch,
+or neighbouring repository is required. See the
+[setup guide](./docs/operations/setup/getting-started.md) for prerequisites,
+persistence, and troubleshooting. As an alternative for Linux x64 release
+installs with no source checkout and no .NET prerequisite, the guided
+[`agent-orchestrator-setup`](https://github.com/agent-orc/agent-studio/releases/latest/download/agent-orchestrator-setup)
+executable offers an isolated Docker demo, a native single-machine install, and
+a guided [multi-machine](./docs/operations/setup/multi-machine.md) join flow.
+To add execution capacity after the Studio is running, follow the
+[Agent Host guide](./docs/operations/setup/linux-runner-host.md). Source
+contributors use the separate
+[contributor setup](./docs/operations/setup/contributor-setup.md).
 
 ## More
 
-For architecture, ADRs, contracts, and the full documentation index, see [agent-orchestrator.dev](https://agent-orchestrator.dev).
+Agent Studio is part of the agent-orc ecosystem. It uses
+[Chat](https://github.com/agent-orc/chat) for coding-agent conversations and
+sits alongside [Runner](https://github.com/agent-orc/runner) for hardened CLI
+execution, [Token Economy](https://github.com/agent-orc/token-economy) for
+model pricing and usage accounting, and
+[Quality Studio](https://github.com/agent-orc/quality-studio) for layered code
+review.
+
+For future product direction, see the [roadmap](ROADMAP.md). For architecture,
+ADRs, contracts, and the full documentation index, see
+[agent-orchestrator.dev](https://agent-orchestrator.dev).
+
+Licensed under the [Apache License 2.0](LICENSE).

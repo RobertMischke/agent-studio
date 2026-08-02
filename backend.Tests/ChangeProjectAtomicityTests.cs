@@ -1,4 +1,6 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
+using AgentStudio.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -74,10 +76,13 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
         Assert.Equal(TaskStates.Archive, scanner.FindJob("agt-2166-move-failure", target)!.State);
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): the copy failure is injected by removing the
+    // write permission from a directory, which Windows ACLs do not reproduce.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
     public void ChangeProject_CopyFailure_RestoresArchivedSourceWithoutOrphan()
     {
-        if (OperatingSystem.IsWindows()) return;
+        PlatformGate.LinuxOnly("the failure is injected through Unix directory permissions");
 
         var source = Path.Combine(_root, "failure-source");
         var target = Path.Combine(_root, "failure-target");
@@ -129,10 +134,16 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
         Assert.Empty(Directory.EnumerateDirectories(Path.Combine(target, "tasks"), ".incoming-*", SearchOption.AllDirectories));
     }
 
-    [Fact]
+    // Linux-only 02.08. (AGT-2472): same injection technique as the copy-failure
+    // case - a write-protected directory, which has no Windows equivalent here.
+    [SkippableFact]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
+    // The runtime gate is PlatformGate.LinuxOnly; this states the same fact to the
+    // platform-compatibility analyzer, which only understands the annotation.
+    [UnsupportedOSPlatform("windows")]
     public void ChangeProject_ReferenceWriteFailure_RestoresSourceAndOriginalReferences()
     {
-        if (OperatingSystem.IsWindows()) return;
+        PlatformGate.LinuxOnly("the failure is injected through Unix directory permissions");
 
         var source = Path.Combine(_root, "reference-failure-source");
         var target = Path.Combine(_root, "reference-failure-target");

@@ -16,10 +16,9 @@
     (hide)="hide.emit()">
     <ng-container tabs>
       <app-pane-tabs variant="header"
-                     ariaLabel="Result / Activity"
+                     ariaLabel="Task / Activity / Result"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
-                     [listModifier]="inProgress() ? 'activity-first' : null"
                      (tabChange)="onInspectorTabChange($event)" />
     </ng-container>
     <ng-container trailing>
@@ -84,7 +83,9 @@
     </ng-container>
   </app-pane-header>
   <div class="pane__body">
-    @if (protocolVerdict(); as v) {
+    @if (activeInspectorTab() !== 'task'
+         && (activeInspectorTab() !== 'protocol' || !detail().statusMarkdown)
+         && protocolVerdict(); as v) {
       <app-protocol-verdict-banner
         data-testid="protocol-run-outcome"
         [verdict]="v"
@@ -94,7 +95,7 @@
         [interimElapsedSeconds]="interimElapsedSeconds()"
         (requestInterim)="requestInterimSummary()" />
     }
-    @if (interimSummary(); as s) {
+    @if (activeInspectorTab() !== 'task' && interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
         <div class="interim-summary"
              [attr.data-status]="s.status"
@@ -128,7 +129,9 @@
                                    [markdown]="s.markdown"
                                    [jobId]="detail().info.id"
                                    [watchPath]="detail().info.watchPath"
-                                   (openSource)="openSource($event)" />
+                                   (openSource)="openSource($event)"
+                                   (openWiki)="openWiki($event)"
+                                   (openTask)="openTask($event)" />
           } @else if (s.status === 'failed') {
             <pre class="interim-summary__body interim-summary__body--error"
                  data-testid="protocol-interim-error">{{ s.error || 'Unknown error.' }}</pre>
@@ -137,7 +140,7 @@
       }
     }
     <!-- Visual evidence and code review live in the prompt pane (F38). -->
-    @if (followupCreated(); as fc) {
+    @if (activeInspectorTab() !== 'task' && followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
         <span aria-hidden="true">✓</span>
@@ -155,8 +158,18 @@
     <!-- Tabs live in the pane header; this section only switches content. -->
     <section class="inspector">
       <div class="inspector__body">
-        @if (activeInspectorTab() === 'protocol') {
+        @if (activeInspectorTab() === 'task') {
+          <app-task-inspector-tab
+            [promptMarkdown]="detail().promptMarkdown || ''"
+            [refinements]="runTimeline()?.refinements ?? []"
+            [jobId]="detail().info.id"
+            [watchPath]="detail().info.watchPath" />
+        } @else if (activeInspectorTab() === 'protocol') {
           <section class="notes-panel">
+            <app-decision-surface
+              [detail]="detail()"
+              [mutationsBlocked]="mutationsBlocked()"
+              (decisionApplied)="decisionApplied.emit()" />
             @if (summaryStatus() === 'failed') {
               <div class="summary-error" role="alert" data-testid="protocol-summary-error">
                 <div class="summary-error__head">
@@ -246,7 +259,9 @@
                                  (navigateMetric)="onResultMetricNavigate($event)"
                                  (copyRequested)="copyProtocolMarkdown()"
                                  (moreActions)="openProtocolMenu($event)"
-                                 (openSource)="openSource($event)" />
+                                 (openSource)="openSource($event)"
+                                 (openWiki)="openWiki($event)"
+                                 (openTask)="openTask($event)" />
               }
             }
           </section>
@@ -361,16 +376,16 @@
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
                       <app-runner-replay-metadata [events]="runnerEvents()" />
-                      <!-- Virtualised: the transcript can grow into the thousands of
-                           events for a long-running task, so the view windows its own
-                           DOM and owns its own scroll container (bounded by the
-                           `cac-conversation-view` host sizing in the stylesheet below)
-                           instead of the ancestor `.pane__body` scrolling everything. -->
+                      <!-- Activity rows have deliberately variable heights (short
+                           status lines, Markdown, code blocks, and images). The
+                           library's fixed-height window cannot preserve a stable
+                           anchor for that mix, so the pane renders real rows and
+                           leaves scrolling plus Follow to the shared directive. -->
                       <cac-conversation-view [events]="nextGenChatEvents()"
                                              [isRunning]="isRunning() || isActiveJob()"
                                              [queuedFollowUp]="queuedFollowUp()"
                                              [showHeader]="false"
-                                             [virtualised]="true"
+                                             [virtualised]="false"
                                              variant="embedded"
                                              (openTrace)="onConversationOpenTrace($event)"
                                              (openFollowUp)="onOpenFollowup($event)"

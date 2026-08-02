@@ -65,6 +65,8 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             authority);
         Assert.Equal("completed", reopened.Snapshot.FinalHandoffState);
         Assert.Empty(reopened.Pending);
+        Assert.Equal(1, handler.RenewalCalls);
+        Assert.Equal(authority.Fence, handler.LastRenewal?.Fence);
         Assert.Equal(1, handler.HandoffCalls);
         Assert.Equal(1, handler.CompletionCalls);
         Assert.Equal(0, handler.CodingProcessCalls);
@@ -127,6 +129,58 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
         Assert.Equal("completed", recovered.Snapshot.FinalHandoffState);
         Assert.Equal(1, handler.HandoffCalls);
         Assert.Equal(1, handler.CompletionCalls);
+        Assert.Equal(1, handler.RenewalCalls);
+    }
+
+    [Fact]
+    public async Task Recovery_sends_nothing_when_exact_authority_cannot_be_reconciled()
+    {
+        var authority = new RunOutboxAuthority(
+            "run-unreconciled",
+            "TASK-10B",
+            "runner-a",
+            "old-host:42",
+            "lease-unreconciled",
+            22);
+        var outbox = DurableRunOutbox.Open(
+            Path.Combine(_root, "outbox"),
+            authority);
+        outbox.Enqueue("status", """{"phase":"terminal-queued"}""");
+        outbox.Enqueue("run-context", JsonSerializer.Serialize(
+            new DurableRunContextPayload(
+                "repo-10b", null, "main", new string('5', 40)),
+            WebJson));
+        outbox.Enqueue("terminal", JsonSerializer.Serialize(
+            new DurableTerminalPayload("Done", null),
+            WebJson));
+        outbox.Enqueue(
+            "artifact-manifest",
+            RemoteTaskRunner.BuildArtifactManifest([]).Json);
+
+        var handler = new RecordingHandler(HttpStatusCode.ServiceUnavailable);
+        using var http = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost"),
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner-a",
+            usesDurableTaskServer: true);
+
+        await new DurableHandoffRecovery(Options(), client, _ => { })
+            .RecoverAllAsync(default);
+
+        var unchanged = DurableRunOutbox.Open(
+            Path.Combine(_root, "outbox"),
+            authority);
+        Assert.Equal("collecting", unchanged.Snapshot.FinalHandoffState);
+        Assert.NotEmpty(unchanged.Pending);
+        Assert.Equal(1, handler.RenewalCalls);
+        Assert.Equal(0, handler.EventCalls);
+        Assert.Equal(0, handler.HandoffCalls);
+        Assert.Equal(0, handler.ArtifactCalls);
+        Assert.Equal(0, handler.CompletionCalls);
+        Assert.Equal(0, handler.OutboxStatusCalls);
     }
 
     [Fact]
@@ -161,6 +215,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             Path.Combine(_root, "outbox"),
             authority);
         Assert.Equal("collecting", unchanged.Snapshot.FinalHandoffState);
+        Assert.Equal(0, handler.RenewalCalls);
         Assert.Equal(0, handler.HandoffCalls);
         Assert.Equal(0, handler.CompletionCalls);
     }
@@ -253,6 +308,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
         Assert.False(Directory.Exists(workspace.RepoPath));
         Assert.Equal(1, handler.HandoffCalls);
         Assert.Equal(1, handler.CompletionCalls);
+        Assert.Equal(1, handler.RenewalCalls);
         Assert.Equal(artifactUploadWasAcknowledged ? 0 : 1, handler.ArtifactCalls);
         Assert.Equal(0, handler.CodingProcessCalls);
 
@@ -371,7 +427,9 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        // The root holds a git clone; its read-only objects make a plain recursive
+        // delete throw on Windows and fail the test from teardown.
+        ResilientDirectory.TryDelete(_root);
     }
 
     private async Task<string> SeedOriginAsync()
@@ -415,12 +473,17 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             result.StdErr.Trim());
     }
 
-    private sealed class RecordingHandler : HttpMessageHandler
+    private sealed class RecordingHandler(
+        HttpStatusCode renewalStatus = HttpStatusCode.OK) : HttpMessageHandler
     {
+        public int RenewalCalls { get; private set; }
         public int HandoffCalls { get; private set; }
         public int CompletionCalls { get; private set; }
         public int ArtifactCalls { get; private set; }
+        public int EventCalls { get; private set; }
+        public int OutboxStatusCalls { get; private set; }
         public int CodingProcessCalls { get; private set; }
+        public LeaseRenewRequest? LastRenewal { get; private set; }
         public ImmutableResultEnvelope? LastEnvelope { get; private set; }
         public CompleteRunRequest? LastCompletion { get; private set; }
 
@@ -429,6 +492,31 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/lease/renew", StringComparison.Ordinal))
+            {
+                RenewalCalls++;
+                var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+                LastRenewal = JsonSerializer.Deserialize<LeaseRenewRequest>(
+                    body,
+                    WebJson)!;
+                if (renewalStatus != HttpStatusCode.OK)
+                    return Json(renewalStatus, new { error = "partitioned" });
+                var runId = path.Split(
+                    '/',
+                    StringSplitOptions.RemoveEmptyEntries)[3];
+                return Json(HttpStatusCode.OK, new LeaseResponse(
+                    "renewed",
+                    new LeaseDto(
+                        LastRenewal.LeaseId,
+                        runId,
+                        "task-9",
+                        LastRenewal.RunnerId,
+                        LastRenewal.InstanceId,
+                        LastRenewal.Fence,
+                        DateTime.UtcNow,
+                        DateTime.UtcNow.AddMinutes(15),
+                        "active")));
+            }
             if (path.EndsWith("/result-handoff", StringComparison.Ordinal))
             {
                 HandoffCalls++;
@@ -471,6 +559,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             }
             if (path.EndsWith("/outbox-status", StringComparison.Ordinal))
             {
+                OutboxStatusCalls++;
                 return Json(HttpStatusCode.OK, new RunnerOutboxStatusDto(
                     "runner-a",
                     "new-host:1",
@@ -505,6 +594,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
             }
             if (path.EndsWith("/events", StringComparison.Ordinal))
             {
+                EventCalls++;
                 return Json(HttpStatusCode.Created, new EventDto(
                     1,
                     $"event-{Guid.NewGuid():N}",

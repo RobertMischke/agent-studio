@@ -24,6 +24,10 @@ Import via `from './features/project-detail'`. See [`index.ts`](./index.ts).
 - `ProjectDetailComponent`: legacy per-project settings overlay.
 - `AnalysisReportDrilldownComponent`: drill-down for one analysis report.
 - `AutonomySliderComponent`: the autonomy slider used in project settings.
+- `WorkbenchViewerComponent` and `WorkbenchDecisionPanelComponent`: the isolated
+  Workbench host and its two-step Sichtblick decision surface.
+- `WorkbenchDecisionStore`: prepare/confirm request state for one Workbench
+  decision against the repository-backed decision service.
 
 **Rail panels**:
 
@@ -104,6 +108,11 @@ project sessions. Do not move them back into the operator Overview.
 - **Per-rail follow-ups** bubble up to the shell because they trigger the create
   task dialog whose form state is in
   `features/board/state/create-job-form.service.ts`.
+- **Workbench decisions** stay in trusted host chrome. Prepare only validates
+  against the exact revision/fingerprint; confirm is the single durable write
+  into `workbench.json`, after which the panel reloads the receipt. Canonical
+  Workbenches do not use the generic Wiki archive action, and the decision
+  service hands the validated task draft back instead of creating the card.
 - The Studio Project Hub URL hash is `#/projects/<project-id>` or
   `#/projects/<project-id>/<rail-key>`. The immutable registry id is canonical;
   the former display-name slug remains an input-only legacy alias. The complete

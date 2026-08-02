@@ -74,6 +74,51 @@ public static class CliEndpoints
             }
         });
 
+        cliGroup.MapGet("/model-routing/policy", (
+            ModelRoutingPolicyRegistry registry,
+            ModelRoutingPolicyStateStore state) =>
+        {
+            return Results.Ok(new
+            {
+                version = registry.Policy.Version,
+                wikiPath = registry.Policy.WikiPath,
+                economyMode = state.EconomyMode,
+                economyModeLabel = registry.Policy.EconomyMode.Label,
+                tiers = registry.Policy.Tiers,
+                taskTypeDefaults = registry.Policy.TaskTypeDefaults,
+            });
+        });
+
+        cliGroup.MapPut("/model-routing/economy-mode", (
+            SetModelRoutingEconomyModeRequest request,
+            ModelRoutingPolicyStateStore state) =>
+            Results.Ok(state.SetEconomyMode(request.EconomyMode)));
+
+        cliGroup.MapGet("/model-routing/recommendation", async (
+            string taskType,
+            string cliType,
+            ModelRoutingPolicyRegistry registry,
+            ModelRoutingPolicyStateStore state,
+            CliRouter router,
+            CancellationToken ct) =>
+        {
+            if (!TaskTypes.All.Contains(taskType, StringComparer.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = $"taskType must be one of {string.Join(", ", TaskTypes.All)}" });
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            try
+            {
+                var catalogue = await router.Get(cliType).GetModelCatalogAsync(false, ct);
+                return Results.Ok(registry.Recommend(taskType, catalogue, state.EconomyMode));
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(
+                    new { error = ex.Message, cliType, taskType },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        });
+
         cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
         {
             // Snapshot the runner's per-project active job so the

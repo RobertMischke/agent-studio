@@ -38,6 +38,12 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
   control-plane package.
 - Building the versioned distributable remains a prerequisite for Tranche 1 and
   also serves local installation with the same package and different config.
+- The local OSS entry uses Docker Compose as its sole documented installation
+  path. It builds the current Studio and API containers from one checkout and
+  waits on their health contract. The three release archives remain the
+  production distributable boundary, not a competing getting-started route.
+  The rationale and clean-host evidence live in
+  [setup-scenarios.md](./setup-scenarios.md).
 - On Linux runner hosts, `agent-host` owns role-specific cgroup controls in the
   main Coding and Review units on every install and update. Values follow
   host-derived defaults unless the operator deliberately changes
@@ -66,7 +72,9 @@ and presents the exact GitHub choices:
   `https://github.com/OWNER/REPOSITORY.git`.
 
 The wizard waits for the runner's startup result and explains all three states:
-`ready`, `ready-no-workflow-scope`, and `read-only`. Only `read-only` blocks
-claims. The middle state links to the permission checklist but does not try to
-predict whether a card will touch `.github/workflows`. Rotation repeats both URL
-entries and both checks before the old token is revoked.
+`ready`, `ready-no-workflow-scope`, and `read-only`. These states describe only
+the configured fallback repository. Project claim admission uses the registered
+repository's own URL, target branch, and push proof. The middle state links to
+the permission checklist but does not try to predict whether a card will touch
+`.github/workflows`. Rotation repeats both URL entries and both checks before
+the old token is revoked.

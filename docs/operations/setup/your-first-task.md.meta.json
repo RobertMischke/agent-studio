@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Your first task",
+  "source": {
+    "path": "docs/operations/setup/your-first-task.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "c4c2bf18cf69d57483d3d69e6a1f2500d4c819e3524ee6e76eeb0c9d6d3a925d",
+      "sizeBytes": 5061,
+      "lineCount": 83,
+      "capturedAt": "2026-07-26T20:26:15.1920000Z"
+    }
+  },
+  "agentReads": {
+    "total": 1,
+    "lastReadAt": "2026-07-26T20:26:15.1920000Z",
+    "recent": [
+      {
+        "at": "2026-07-26T20:26:15.1920000Z",
+        "taskKey": "AGT-1919"
+      }
+    ]
+  }
+}

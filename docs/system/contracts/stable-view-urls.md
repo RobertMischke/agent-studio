@@ -12,6 +12,8 @@ that origin.
 | View | Canonical relative URL | Stable identity |
 |---|---|---|
 | Task or epic card | `/?task=AGT-1234` | Public task key |
+| All Projects Board | `/#/board` | Global workspace scope |
+| Activity Feed | `/#/feed` | Global workspace scope |
 | Project Hub overview | `/#/projects/PROJ-002` | Immutable project registry id |
 | Project Hub rail | `/#/projects/PROJ-002/<rail-key>` | Project id plus documented rail key |
 | Project Wiki page | `/#/projects/PROJ-002/wiki?page=concepts%2Foverview.md` | Project id plus repository-relative page path |
@@ -66,6 +68,12 @@ such as the Wiki's `?page=`, remains inside the route segment.
 Browser Back and Forward are navigation, not merely address-bar changes. Route
 owners must restore the matching editor tab and the exact sub-view on reload,
 `popstate`, and `hashchange`.
+
+The Activity Feed is a first-class embedded Studio surface. The Activity icon
+opens `/#/feed` and marks that destination active. The older project-scoped
+feed modal remains available from project and status-bar quick-access entry
+points; it is not the canonical shareable Feed view and retains its compatibility
+route only for existing links.
 
 ## Compatibility and evolution
 

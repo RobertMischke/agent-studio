@@ -1,0 +1,14 @@
+{
+  "role": "review",
+  "workerId": "canary-parallel-12-baseline-review-worker-3",
+  "hostId": "canary-parallel-12-baseline-review-worker-3-host",
+  "slot": 4,
+  "origin": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/baseline/fixture-origin.git",
+  "attemptRoot": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/baseline/review/canary-parallel-12-baseline-review-worker-3/review-rat-9dce37cf36a147c7a8b77af53d9976cb-f1",
+  "workspace": "/home/agent/runner-work/PROJ-002/worktrees/AGT-2399/.tmp/remote-test-suite/parallel-delivery/canary-parallel-12/baseline/review/canary-parallel-12-baseline-review-worker-3/review-rat-9dce37cf36a147c7a8b77af53d9976cb-f1/repository",
+  "taskKey": "RTB-12",
+  "ordinal": 12,
+  "resultRef": "refs/heads/agent-studio/results/run_d5d7332f8bf74573b04a8a756251ca1a/d2f06cb806e79a3bf83c19f203c475d4deb02956",
+  "expectedResultSha": "d2f06cb806e79a3bf83c19f203c475d4deb02956",
+  "holdMs": 100
+}

@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import type { ChatModelControl, ChatModelSelection } from 'coding-agent-chat/core';
-import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../cli';
 import { CLI_TYPES } from '../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
 import type { CliModelInfo } from '../../cli';

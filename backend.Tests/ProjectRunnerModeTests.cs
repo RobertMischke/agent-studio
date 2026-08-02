@@ -16,7 +16,8 @@ namespace AgentStudio.Tests;
 ///
 /// <list type="bullet">
 ///   <item>The <c>auto-single -&gt; manual</c> revert at the top of
-///   <c>TickAsync</c> fires only when <c>_mode == "auto-single"</c>.
+///   <c>TickAsync</c> fires only when <c>_mode == "auto-single"</c>,
+///   the pickup queue is empty, and no project run chain is still in flight.
 ///   <c>auto-continuous</c> drains the queue without flipping.</item>
 ///   <item>A successful auto-pickup that reaches review resets the
 ///   consecutive auto-failure counter. Without this, two prior failures
@@ -34,6 +35,7 @@ public sealed class ProjectRunnerModeTests : IDisposable
 {
     private readonly string _watchPath;
     private readonly string _workspaceRoot;
+    private TaskStateMachine? _states;
     private const string ProjectName = "demo";
 
     public ProjectRunnerModeTests()
@@ -53,8 +55,9 @@ public sealed class ProjectRunnerModeTests : IDisposable
     /// Test (a): auto-continuous + N drained ticks - mode must NOT flip.
     /// Drives <see cref="ProjectRunner.TickAsync"/> directly with an empty
     /// queue three times in a row. The on-empty-queue branch only flips
-    /// the mode when <c>_mode == "auto-single"</c>; locking it here
-    /// guards against a future refactor that broadens the condition.
+    /// the mode when <c>_mode == "auto-single"</c> and no run chain is in
+    /// flight; locking it here guards against a future refactor that broadens
+    /// the condition.
     /// </summary>
     [Fact]
     public async Task AutoContinuous_QueueDrainedAcrossMultipleTicks_ModeStaysAutoContinuous()
@@ -71,7 +74,8 @@ public sealed class ProjectRunnerModeTests : IDisposable
     }
 
     /// <summary>
-    /// Test (b): auto-single + one drained tick - mode flips to manual.
+    /// Test (b): auto-single + one drained tick with no run in flight
+    /// flips the mode to manual.
     /// Locks the existing revert path (trip-wire at the top of
     /// <c>TickAsync</c>) so it cannot be silently removed by a refactor
     /// that would make the two auto modes behave identically.
@@ -82,6 +86,53 @@ public sealed class ProjectRunnerModeTests : IDisposable
         var runner = BuildRunner();
         runner.SetMode("auto-single");
         Assert.Equal("auto-single", runner.GetStatus().Mode);
+
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal("manual", runner.GetStatus().Mode);
+    }
+
+    [Fact]
+    public async Task AutoSingle_OnlyPickupCandidateIsActiveRun_ModeStaysAutoSingle()
+    {
+        WriteJob(TaskStates.Progress, "job-a");
+        var runner = BuildRunner(maxParallelism: 2);
+        runner.SetMode("auto-single");
+        runner.SetActiveJobForTest("job-a");
+
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal("auto-single", runner.GetStatus().Mode);
+    }
+
+    [Fact]
+    public async Task AutoSingle_AutoReviewInFlight_ReissueRemainsPickupEligible()
+    {
+        WriteJob(TaskStates.AutoReview, "job-a");
+        var runner = BuildRunner();
+        runner.SetMode("auto-single");
+
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal("auto-single", runner.GetStatus().Mode);
+
+        var move = _states!.MoveJob("job-a", TaskStates.Ready, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, move.Status);
+
+        var reissued = runner.GetNextReadyJob();
+        Assert.NotNull(reissued);
+        Assert.Equal("job-a", reissued!.Id);
+        Assert.Equal("auto-single", runner.GetStatus().Mode);
+    }
+
+    [Theory]
+    [InlineData(TaskStates.HumanReview)]
+    [InlineData(TaskStates.Completed)]
+    public async Task AutoSingle_TerminalTaskAndEmptyPickupQueue_ModeFlipsToManual(string terminalState)
+    {
+        WriteJob(terminalState, "job-a");
+        var runner = BuildRunner();
+        runner.SetMode("auto-single");
 
         await runner.TickAsync(CancellationToken.None);
 
@@ -478,7 +529,10 @@ public sealed class ProjectRunnerModeTests : IDisposable
         return timeline.ReadAll(folder).LastOrDefault(e => e.Kind == kind);
     }
 
-    private ProjectRunner BuildRunner(ILogger? logger = null, Dictionary<string, string?>? configOverrides = null)
+    private ProjectRunner BuildRunner(
+        ILogger? logger = null,
+        Dictionary<string, string?>? configOverrides = null,
+        int? maxParallelism = null)
     {
         var configValues = new Dictionary<string, string?>
         {
@@ -509,6 +563,7 @@ public sealed class ProjectRunnerModeTests : IDisposable
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        _states = states;
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
@@ -550,6 +605,8 @@ public sealed class ProjectRunnerModeTests : IDisposable
             orchestratorLog, orchestratorRunner, orchestratorSessions,
             settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null,
             timeline: timeline);
+        if (maxParallelism is { } configuredMaxParallelism)
+            settings.SetMaxParallelism(ProjectName, configuredMaxParallelism);
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(config));
         return runner;
     }

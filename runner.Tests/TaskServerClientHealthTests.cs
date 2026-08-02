@@ -1,10 +1,86 @@
 using AgentRunner;
+using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
 namespace AgentRunner.Tests;
 
 public class TaskServerClientHealthTests
 {
+    [Fact]
+    public async Task Monolith_capability_plane_registers_and_advertises_before_legacy_claim()
+    {
+        var handler = new RecordingHandler(request =>
+        {
+            var path = request.RequestUri?.AbsolutePath;
+            var content = path switch
+            {
+                "/api/v1/protocol/compatibility" => """
+                    {
+                      "supported": true,
+                      "server": {
+                        "current": 2,
+                        "minimumSupported": 1,
+                        "maximumSupported": 2,
+                        "serverVersion": "1.0.0",
+                        "serverId": "orchestrator-monolith",
+                        "clientKinds": ["runner"],
+                        "capabilities": ["review-plane", "capability-advertisement"]
+                      }
+                    }
+                    """,
+                "/api/clients/register" => """
+                    {"id":"legacy-client","displayName":"runner","kind":"service"}
+                    """,
+                "/api/runner/claim" => """{"status":"empty"}""",
+                _ => "{}",
+            };
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(content),
+            };
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner",
+            RunnerName = "runner",
+            Hostname = "host",
+            BackendName = "test",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "claude",
+            CliArgs = "",
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner",
+            usesDurableTaskServer: false,
+            options: options);
+
+        await client.EnsureCompatibleAsync(CancellationToken.None);
+        await client.RegisterAsync("runner", "service", CancellationToken.None);
+        await client.AdvertiseCapabilitiesAsync(
+            [new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor")],
+            null,
+            1,
+            CancellationToken.None);
+        await client.ClaimAsync(
+            new RunnerClaimRequest("runner", "runner", "host", 1, "test"),
+            CancellationToken.None);
+
+        Assert.False(client.UsesDurableTaskServer);
+        Assert.Equal(
+            [
+                "/api/v1/protocol/compatibility",
+                "/api/v1/runners/runner",
+                "/api/clients/register",
+                "/api/v1/runners/runner/capabilities",
+                "/api/runner/claim",
+            ],
+            handler.Requests.Select(request => request.PathAndQuery));
+    }
+
     [Fact]
     public async Task Register_uses_and_verifies_the_configured_client_identity()
     {
@@ -125,6 +201,221 @@ public class TaskServerClientHealthTests
 
         Assert.Equal(RemoteChatWorkClaimStatuses.Empty, claim.Status);
         Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Durable_registration_adopts_the_server_owned_host_capacity()
+    {
+        var now = DateTime.UtcNow.ToString("O");
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent($$"""
+                {
+                  "runnerId":"runner-v1",
+                  "name":"Runner v1",
+                  "hostId":"host-a",
+                  "instanceId":"host-a:1",
+                  "runnerVersion":"1.0.0",
+                  "protocolVersion":3,
+                  "status":"active",
+                  "registeredAt":"{{now}}",
+                  "lastSeenAt":"{{now}}",
+                  "runtimeCapacity":{
+                    "hostId":"host-a",
+                    "maxParallelism":7,
+                    "targetLoadPercent":80,
+                    "rampStrategy":"balanced",
+                    "version":1,
+                    "updatedAt":"{{now}}"
+                  }
+                }
+                """),
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1") };
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--poll", "--server", "http://127.0.0.1", "--runner-id", "runner-v1", "--max-parallelism", "2"]);
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true,
+            options: options);
+
+        await client.RegisterAsync("Runner v1", "service", CancellationToken.None);
+
+        Assert.Equal(7, client.HostMaxParallelism);
+        Assert.Equal(HttpMethod.Put, Assert.Single(handler.Requests).Method);
+    }
+
+    [Fact]
+    public async Task Durable_empty_claim_refreshes_capacity_without_restarting_the_daemon()
+    {
+        var now = DateTime.UtcNow.ToString("O");
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent($$"""
+                {
+                  "status":"empty",
+                  "message":"No task available.",
+                  "runtimeCapacity":{
+                    "hostId":"host-a",
+                    "maxParallelism":5,
+                    "targetLoadPercent":85,
+                    "rampStrategy":"conservative",
+                    "version":2,
+                    "updatedAt":"{{now}}"
+                  }
+                }
+                """),
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1") };
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--poll", "--server", "http://127.0.0.1", "--runner-id", "runner-v1", "--max-parallelism", "2"]);
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true,
+            options: options);
+
+        var claim = await client.ClaimAsync(
+            new RunnerClaimRequest(
+                "runner-v1",
+                "Runner v1",
+                "host-a",
+                1,
+                "remote"),
+            CancellationToken.None);
+
+        Assert.Equal(RunnerClaimStatus.Empty, claim.Status);
+        Assert.Equal(5, client.HostMaxParallelism);
+    }
+
+    [Fact]
+    public async Task Durable_task_server_claim_without_repository_registration_uses_runner_git_fallback()
+    {
+        var now = DateTime.UtcNow;
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent($$"""
+                {
+                  "status": "claimed",
+                  "run": {
+                    "runId": "run-v1",
+                    "taskId": "task-v1",
+                    "status": "running",
+                    "runnerId": "runner-v1",
+                    "fence": 7,
+                    "createdAt": "{{now:o}}",
+                    "startedAt": "{{now:o}}",
+                    "finishedAt": null,
+                    "resultSha": null,
+                    "repositoryId": null
+                  },
+                  "task": {
+                    "taskId": "task-v1",
+                    "projectId": "project-v1",
+                    "taskKey": "RTS-21",
+                    "title": "Restart replay",
+                    "state": "3-progress",
+                    "version": 2,
+                    "createdAt": "{{now:o}}",
+                    "updatedAt": "{{now:o}}",
+                    "body": "hold the detached worker"
+                  },
+                  "lease": {
+                    "leaseId": "lease-v1",
+                    "runId": "run-v1",
+                    "taskId": "task-v1",
+                    "runnerId": "runner-v1",
+                    "instanceId": "instance-v1",
+                    "fence": 7,
+                    "acquiredAt": "{{now:o}}",
+                    "expiresAt": "{{now.AddMinutes(2):o}}",
+                    "status": "active"
+                  }
+                }
+                """)
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-v1",
+            RunnerName = "runner-v1",
+            Hostname = "host-v1",
+            BackendName = "test",
+            GitRemote = "/tmp/fallback-origin.git",
+            WorkDir = "/tmp/runner-v1",
+            BaseBranch = "main",
+            CliBin = "/bin/sh",
+            CliArgs = "fixture.sh",
+            TtlSeconds = 120,
+            HeartbeatSeconds = 30,
+            RunTimeoutSeconds = 120,
+            HostMaxParallelism = 1,
+            PollSeconds = 1,
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true,
+            options: options);
+
+        var claim = await client.ClaimAsync(
+            new RunnerClaimRequest(
+                "runner-v1",
+                "runner-v1",
+                "host-v1",
+                42,
+                "test",
+                AvailableSlots: 1),
+            CancellationToken.None);
+
+        Assert.Equal(RunnerClaimStatus.Claimed, claim.Status);
+        Assert.Equal("project-v1", claim.ProjectName);
+        Assert.Equal(
+            TaskServerClient.RepositoryIdentity("/tmp/fallback-origin.git"),
+            claim.ProjectId);
+        Assert.Equal("/tmp/fallback-origin.git", claim.RepositoryUrl);
+        Assert.Equal("main", claim.DefaultBranch);
+        Assert.Equal("run-v1", claim.RunId);
+        Assert.Equal("lease-v1", claim.Lease!.LeaseId);
+    }
+
+    [Fact]
+    public void Restored_run_outbox_keeps_the_original_attempt_instance()
+    {
+        using var http = new HttpClient(new RecordingHandler(_ =>
+            throw new InvalidOperationException("No HTTP request is expected.")))
+        {
+            BaseAddress = new Uri("http://task-server"),
+        };
+        using var client = new TaskServerClient(
+            http,
+            "runner-v1",
+            usesDurableTaskServer: true);
+        var now = DateTime.UtcNow;
+        var lease = new RunLeaseInfoDto(
+            "RTS-21",
+            "runner-v1",
+            "Runner v1",
+            "host-v1",
+            42,
+            "test",
+            "lease-v1",
+            7,
+            now,
+            now.AddMinutes(2),
+            "run-v1");
+
+        client.RestoreRunAuthority(
+            "RTS-21",
+            "run-v1",
+            "host-v1:original-process",
+            lease);
+
+        var authority = client.OutboxAuthority("RTS-21");
+        Assert.Equal("host-v1:original-process", authority.InstanceId);
+        Assert.NotEqual(client.RunnerInstanceId, authority.InstanceId);
     }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

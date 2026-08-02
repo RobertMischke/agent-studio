@@ -1,0 +1,71 @@
+<section class="changes" data-testid="git-changes">
+  <header class="changes__header">
+    <div class="changes__identity">
+      <span class="changes__label">Commit changes</span>
+      <code>{{ commit().shortSha }}</code>
+      <strong>{{ commit().subject }}</strong>
+    </div>
+    <button type="button" class="changes__close" data-testid="git-changes-close"
+            aria-label="Close commit changes" (click)="closed.emit()">Close</button>
+  </header>
+
+  <div class="changes__body">
+    <aside class="changes__files" data-testid="git-files">
+      @if (filesState() === 'loading') {
+        <p class="changes__note">Loading changed files...</p>
+      } @else if (filesState() === 'error') {
+        <p class="changes__note changes__note--error">{{ filesError() }}</p>
+      } @else if (files().length === 0) {
+        <p class="changes__note">No files recorded for this commit.</p>
+      } @else {
+        @for (file of files(); track file.path) {
+          <button type="button" class="changes__file"
+                  [class.changes__file--selected]="selectedPath() === file.path"
+                  data-testid="git-file-row" (click)="selectFile(file.path)">
+            <span class="changes__status" [attr.data-status]="file.status">{{ file.status }}</span>
+            <span class="changes__path">{{ file.path }}</span>
+            <span class="changes__stats">
+              @if (file.added > 0) { <span class="changes__added">+{{ file.added }}</span> }
+              @if (file.removed > 0) { <span class="changes__removed">-{{ file.removed }}</span> }
+            </span>
+          </button>
+        }
+      }
+    </aside>
+
+    <div class="changes__diff" data-testid="git-render-shell">
+      @if (!selectedPath()) {
+        <p class="changes__note">Select a file to view its diff.</p>
+      } @else if (diffState() === 'loading') {
+        <p class="changes__note">Loading diff for <code>{{ selectedPath() }}</code>...</p>
+      } @else if (diffState() === 'error') {
+        <div class="changes__message" data-testid="git-diff-error">
+          <p class="changes__note changes__note--error">{{ diffError() }}</p>
+          <button type="button" class="changes__action" (click)="retryDiff()">Retry</button>
+        </div>
+      } @else if (!diffText()) {
+        <p class="changes__note" data-testid="git-diff-empty">
+          {{ diffEmptyMessage() || 'No diff available for this path.' }}
+        </p>
+      } @else if (diffGated()) {
+        <div class="changes__message" data-testid="git-diff-gated">
+          <div class="changes__gate-meta">
+            @if (selectedFile(); as file) {
+              <span class="changes__status" [attr.data-status]="file.status">{{ file.status }}</span>
+            }
+            <code>{{ selectedPath() }}</code>
+            <span>{{ diffSizeLabel() }}</span>
+          </div>
+          <p class="changes__note">Large file. Rendering is paused to keep the graph responsive.</p>
+          <div class="changes__actions">
+            <button type="button" class="changes__action" (click)="revealCurrentDiff()">Show diff</button>
+            <button type="button" class="changes__action" (click)="revealAll()">Show all large diffs</button>
+          </div>
+        </div>
+      } @else {
+        <app-diff-content class="changes__render" data-testid="git-diff"
+                          [diffText]="diffText()" [sideBySide]="false" />
+      }
+    </div>
+  </div>
+</section>

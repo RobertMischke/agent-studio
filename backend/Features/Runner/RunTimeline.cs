@@ -29,6 +29,10 @@ public sealed record RunRecord
     /// <summary><c>running</c> | <c>completed</c> | <c>failed</c> | <c>cancelled</c> | <c>unknown</c>.</summary>
     public string Status { get; init; } = "unknown";
     public string? Cli { get; init; }
+    /// <summary>Effective model resolved by the runner before this CLI process started.</summary>
+    public string? Model { get; init; }
+    /// <summary>Effective thinking / reasoning level resolved for this run.</summary>
+    public string? ThinkingLevel { get; init; }
     public TaskExecutionLocation? ExecutionLocation { get; init; }
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
@@ -127,6 +131,26 @@ public sealed record ReviewAttemptCycle
 }
 
 /// <summary>
+/// One read-only refinement of the original task prompt. The projection folds
+/// existing task evidence together; it never creates a second persistence
+/// path. <c>operator</c> rows come from <c>prompt-N.md</c> or the user
+/// follow-up paired to a run, while <c>system</c> rows come from the
+/// append-only <c>orchestrator-follow-up-history/</c> files.
+/// </summary>
+public sealed record TaskRefinementEntry
+{
+    public string Id { get; init; } = "";
+    public DateTime At { get; init; }
+    /// <summary><c>operator</c>, <c>agent</c>, or <c>system</c>.</summary>
+    public string Actor { get; init; } = "system";
+    public string? Reason { get; init; }
+    public string Markdown { get; init; } = "";
+    /// <summary><c>prompt-history</c>, <c>run-log</c>, or <c>orchestrator-history</c>.</summary>
+    public string Source { get; init; } = "";
+    public int? RunIndex { get; init; }
+}
+
+/// <summary>
 /// Top-level session shape the <c>/api/tasks/{id}/runs</c> endpoint
 /// returns. The runs list is the primary surface; the aggregates above
 /// it (<see cref="RunCount"/>, <see cref="LastActivityAt"/>) are derived
@@ -141,12 +165,159 @@ public sealed record RunTimeline
     public bool HasActiveRun { get; init; }
     public List<RunRecord> Runs { get; init; } = [];
     public List<RunPromptEntry> PromptEntries { get; init; } = [];
+    /// <summary>Chronological prompt refinements derived from existing task evidence.</summary>
+    public List<TaskRefinementEntry> Refinements { get; init; } = [];
     /// <summary>Typed standalone-runner lifecycle replay. Diagnostics are retained for Trace but never inferred from CLI prose.</summary>
     public List<RunnerRecordedEvent> RunnerEvents { get; init; } = [];
     /// <summary>Current operator-owned review epoch. Legacy tasks are epoch zero.</summary>
     public int ReviewAttemptEpoch { get; init; }
     /// <summary>Current and closed cycles, newest first, for the task-detail Runs surface.</summary>
     public List<ReviewAttemptCycle> ReviewAttemptCycles { get; init; } = [];
+}
+
+/// <summary>
+/// Read-time refinement projection for the Task inspector tab. Extend-mode
+/// files preserve the full multiline operator prompt; other operator
+/// follow-ups are recovered from the run/log projection; system reissues are
+/// parsed from the existing append-only orchestrator steering history.
+/// </summary>
+public static class TaskRefinementTimelineBuilder
+{
+    private const string SteeringPromptHeading = "## Steering prompt (verbatim)";
+
+    public static List<TaskRefinementEntry> Build(
+        string jobFolder,
+        IReadOnlyList<RunRecord> runs,
+        IReadOnlyList<TaskPromptHistoryEntry> promptHistory)
+    {
+        runs ??= [];
+        promptHistory ??= [];
+
+        var result = new List<TaskRefinementEntry>();
+        foreach (var entry in promptHistory.OrderBy(entry => entry.WrittenAt).ThenBy(entry => entry.Index))
+        {
+            if (string.IsNullOrWhiteSpace(entry.Markdown)) continue;
+            result.Add(new TaskRefinementEntry
+            {
+                Id = $"prompt-history-{entry.Index}",
+                At = entry.WrittenAt,
+                Actor = "operator",
+                Reason = "Task extended",
+                Markdown = entry.Markdown.Trim(),
+                Source = "prompt-history",
+            });
+        }
+
+        foreach (var run in runs.OrderBy(run => run.StartedAt).ThenBy(run => run.Index))
+        {
+            if (string.IsNullOrWhiteSpace(run.UserFollowup)) continue;
+            if (MatchesNearbyPromptHistory(run, promptHistory)) continue;
+            result.Add(new TaskRefinementEntry
+            {
+                Id = $"run-followup-{run.Index}",
+                At = run.StartedAt,
+                Actor = "operator",
+                Reason = NormalizeRunReason(run),
+                Markdown = run.UserFollowup.Trim(),
+                Source = "run-log",
+                RunIndex = run.Index,
+            });
+        }
+
+        result.AddRange(ReadOrchestratorHistory(jobFolder));
+        return result
+            .OrderBy(entry => entry.At)
+            .ThenBy(entry => entry.Id, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool MatchesNearbyPromptHistory(
+        RunRecord run,
+        IReadOnlyList<TaskPromptHistoryEntry> promptHistory)
+    {
+        var followup = NormalizeText(run.UserFollowup);
+        return promptHistory.Any(entry =>
+            Math.Abs((run.StartedAt - entry.WrittenAt).TotalMinutes) <= 10
+            && string.Equals(followup, NormalizeText(entry.Markdown), StringComparison.Ordinal));
+    }
+
+    private static string? NormalizeRunReason(RunRecord run)
+    {
+        if (!string.IsNullOrWhiteSpace(run.Reason))
+        {
+            var reason = run.Reason.Trim();
+            return reason.StartsWith("mode=", StringComparison.OrdinalIgnoreCase)
+                ? $"{reason["mode=".Length..]} follow-up"
+                : reason;
+        }
+        return string.Equals(run.Intent, "continue", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : string.IsNullOrWhiteSpace(run.Intent) ? null : $"{run.Intent.Trim()} run";
+    }
+
+    private static IEnumerable<TaskRefinementEntry> ReadOrchestratorHistory(string jobFolder)
+    {
+        var historyDir = Path.Combine(jobFolder, "orchestrator-follow-up-history");
+        if (!Directory.Exists(historyDir)) yield break;
+
+        foreach (var path in Directory.EnumerateFiles(historyDir, "*.md", SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            string markdown;
+            try { markdown = File.ReadAllText(path); }
+            catch { continue; }
+
+            var prompt = ReadSectionBody(markdown, SteeringPromptHeading);
+            if (string.IsNullOrWhiteSpace(prompt)) continue;
+
+            var fileName = Path.GetFileName(path);
+            yield return new TaskRefinementEntry
+            {
+                Id = $"orchestrator-history-{fileName}",
+                At = ReadMetadataDate(markdown, "timestamp")
+                    ?? File.GetLastWriteTimeUtc(path),
+                Actor = "system",
+                Reason = ReadMetadata(markdown, "reason")
+                    ?? ReadMetadata(markdown, "cause")
+                    ?? ReadMetadata(markdown, "verdict"),
+                Markdown = prompt.Trim(),
+                Source = "orchestrator-history",
+            };
+        }
+    }
+
+    private static string? ReadMetadata(string markdown, string key)
+    {
+        var prefix = $"- {key}:";
+        var line = markdown.Replace("\r\n", "\n")
+            .Split('\n')
+            .FirstOrDefault(candidate => candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        var value = line?[prefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static DateTime? ReadMetadataDate(string markdown, string key)
+        => DateTime.TryParse(
+            ReadMetadata(markdown, key),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed)
+                ? parsed
+                : null;
+
+    private static string? ReadSectionBody(string markdown, string heading)
+    {
+        var normalized = markdown.Replace("\r\n", "\n");
+        var headingIndex = normalized.IndexOf(heading, StringComparison.OrdinalIgnoreCase);
+        if (headingIndex < 0) return null;
+        var bodyStart = headingIndex + heading.Length;
+        return normalized[bodyStart..].TrimStart('\n').Trim();
+    }
+
+    private static string NormalizeText(string? value)
+        => string.Join(
+            " ",
+            (value ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
 
 /// <summary>
@@ -482,6 +653,8 @@ public static class RunTimelineBuilder
                 EndedAt = endedAt,
                 Status = status,
                 Cli = evt.Cli ?? startedMarker?.Cli,
+                Model = evt.Model,
+                ThinkingLevel = evt.ThinkingLevel,
                 ExecutionLocation = evt.ExecutionLocation is null ? null : evt.ExecutionLocation with { Historical = true },
                 ExitCode = exitMarker?.ExitCode,
                 DurationSeconds = exitMarker?.Duration,
