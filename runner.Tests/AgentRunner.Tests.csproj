@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\runner\AgentRunner.csproj" />
+    <ProjectReference Include="..\testsupport\AgentStudio.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>
