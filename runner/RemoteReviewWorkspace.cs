@@ -14,6 +14,7 @@ namespace AgentRunner;
 /// </summary>
 public sealed class RemoteReviewWorkspace
 {
+    private const int TestFailureParserVersion = 3;
     private readonly RunnerOptions _options;
     private readonly ReviewSubjectDto _subject;
     private readonly ReviewLeaseDto _lease;
@@ -310,6 +311,7 @@ public sealed class RemoteReviewWorkspace
                 $"Baseline command '{command.StepId}' did not complete normally.");
         var failures = ParsedTestFailures(execution.Process);
         var entry = new BaselineCacheEntry(
+            TestFailureParserVersion,
             baselineSha,
             commandHash,
             execution.Process.ExitCode,
@@ -411,6 +413,7 @@ public sealed class RemoteReviewWorkspace
                 path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
             var entry = await JsonSerializer.DeserializeAsync<BaselineCacheEntry>(stream, cancellationToken: ct);
             return entry is not null
+                   && entry.ParserVersion == TestFailureParserVersion
                    && string.Equals(entry.BaselineSha, baselineSha, StringComparison.OrdinalIgnoreCase)
                    && string.Equals(entry.CommandHash, commandHash, StringComparison.Ordinal)
                 ? entry
@@ -661,18 +664,90 @@ public sealed class RemoteReviewWorkspace
     {
         if (result.Success) return [];
         var failures = new HashSet<string>(StringComparer.Ordinal);
+        var fileFailures = new HashSet<string>(StringComparer.Ordinal);
+        var wrapperFailures = new HashSet<string>(StringComparer.Ordinal);
+        string? jestFile = null;
         foreach (var line in $"{result.StdOut}\n{result.StdErr}"
                      .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
-            var match = DotNetFailedPrefix.Match(line);
-            if (!match.Success) match = DotNetFailSuffix.Match(line);
-            if (!match.Success) continue;
-            var name = match.Groups["name"].Value.Trim();
-            if (name.Length > 0 && !name.StartsWith("!", StringComparison.Ordinal))
-                failures.Add(name);
+            var normalizedLine = AnsiEscapeSequence.Replace(line, string.Empty);
+            var match = DotNetFailedPrefix.Match(normalizedLine);
+            if (!match.Success) match = DotNetFailSuffix.Match(normalizedLine);
+            if (match.Success)
+            {
+                AddFailure(failures, match.Groups["name"].Value);
+                continue;
+            }
+
+            match = KarmaFailure.Match(normalizedLine);
+            if (match.Success)
+            {
+                AddFailure(failures, match.Groups["name"].Value);
+                continue;
+            }
+
+            match = TestFileFailure.Match(normalizedLine);
+            if (match.Success)
+            {
+                var name = NormalizeFailureName(match.Groups["name"].Value);
+                if (name.Contains(" > ", StringComparison.Ordinal))
+                    AddFailure(failures, name);
+                else
+                {
+                    jestFile = name;
+                    AddFailure(fileFailures, name);
+                }
+                continue;
+            }
+
+            match = JestFailure.Match(normalizedLine);
+            if (match.Success)
+            {
+                var name = NormalizeFailureName(match.Groups["name"].Value);
+                if (jestFile is not null)
+                    fileFailures.Remove(jestFile);
+                AddFailure(failures, jestFile is null ? name : $"{jestFile} > {name}");
+                continue;
+            }
+
+            if (NodeTapNonFailure.IsMatch(normalizedLine))
+                continue;
+
+            match = NodeTapFailure.Match(normalizedLine);
+            if (!match.Success) match = NodeSpecFailure.Match(normalizedLine);
+            if (match.Success)
+            {
+                AddFailure(failures, match.Groups["name"].Value);
+                continue;
+            }
+
+            match = NpmLifecycleFailure.Match(normalizedLine);
+            if (!match.Success) match = NpmLegacyLifecycleFailure.Match(normalizedLine);
+            if (match.Success)
+            {
+                AddFailure(wrapperFailures, $"npm script {match.Groups["script"].Value}");
+                continue;
+            }
+
+            if (NpmTestFailure.IsMatch(normalizedLine))
+                wrapperFailures.Add("npm test");
         }
-        return failures.Order(StringComparer.Ordinal).ToArray();
+        failures.UnionWith(fileFailures);
+        var parsed = failures.Count > 0 ? failures : wrapperFailures;
+        return parsed
+            .Order(StringComparer.Ordinal)
+            .ToArray();
     }
+
+    private static void AddFailure(ISet<string> failures, string value)
+    {
+        var name = NormalizeFailureName(value);
+        if (name.Length > 0 && !name.StartsWith("!", StringComparison.Ordinal))
+            failures.Add(name);
+    }
+
+    private static string NormalizeFailureName(string value)
+        => FailureHierarchySeparator.Replace(value.Trim(), " > ");
 
     private static string CommandHash(ReviewCommandDto command)
     {
@@ -688,6 +763,50 @@ public sealed class RemoteReviewWorkspace
 
     private static readonly Regex DotNetFailSuffix = new(
         @"^\s*(?:\[[^\]]+\]\s+)?(?<name>.+?)\s+\[FAIL\]\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex KarmaFailure = new(
+        @"^\s*.+?\([^)]*\)\s+(?<name>.+?)\s+FAILED\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex TestFileFailure = new(
+        @"^\s*FAIL\s+(?<name>.+?)(?:\s+\(\d+(?:\.\d+)?\s*(?:ms|s)\))?\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JestFailure = new(
+        @"^\s*●\s+(?<name>.+?)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex NodeTapFailure = new(
+        @"^\s*not ok\s+\d+\s+-\s+(?<name>.+?)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NodeTapNonFailure = new(
+        @"^\s*not ok\s+\d+\s+-\s+.+?\s+#\s+(?:SKIP|TODO)\b.*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NodeSpecFailure = new(
+        @"^\s*✖\s+(?<name>.+?)(?:\s+\([\d.]+\s*m?s\))?\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex NpmLifecycleFailure = new(
+        """^\s*npm\s+(?:ERR!|error)\s+Lifecycle script\s+[`'"](?<script>[^`'"]+)[`'"]\s+failed\b.*$""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NpmLegacyLifecycleFailure = new(
+        @"^\s*npm\s+ERR!\s+Failed at the\s+.+\s+(?<script>\S+)\s+script\.\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NpmTestFailure = new(
+        @"^\s*npm\s+ERR!\s+Test failed\.\s+See above for more details\.?\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex FailureHierarchySeparator = new(
+        @"\s+(?:›|>)\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex AnsiEscapeSequence = new(
+        "\\x1B(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x07]*(?:\\x07|\\x1B\\\\))",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static string? Field(string marker, string key)
@@ -768,6 +887,7 @@ internal sealed record CommandExecution(
     string? Signal);
 
 internal sealed record BaselineCacheEntry(
+    int ParserVersion,
     string BaselineSha,
     string CommandHash,
     int ExitCode,
