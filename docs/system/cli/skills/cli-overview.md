@@ -1,14 +1,14 @@
 ---
 name: cli-overview
-description: Cross-cutting reference for working on the three CLI integrations in agent-taskboard. Use this skill alongside the per-CLI skills (cli-claude / cli-codex / cli-gemini) whenever you touch backend/Services/Cli/*, backend/Services/Quota/*, the activity-log parser, or anything that consumes CLI output. Contains: the contract every driver must satisfy, where each piece of state lives on disk, the seven invariants we keep tripping over, and an index of the per-CLI skills.
+description: Cross-cutting reference for the Claude, Codex, and Antigravity integrations. Use it with the per-CLI skills when changing backend/Features/Cli, the CAR host bridge, quota probes, the Activity Log parser, or any consumer of CLI output. Covers engine rollout, callback ordering, session capture, durable output, and host-owned lifecycle policy.
 sentinel: TASKBOARD-CLI-SKILL-OVERVIEW-2026
 ---
 
-<!-- SENTINEL: TASKBOARD-CLI-SKILL-OVERVIEW-2026 — pickup-tests assert any CLI driving the repo can echo this back. -->
+<!-- SENTINEL: TASKBOARD-CLI-SKILL-OVERVIEW-2026 - pickup-tests assert any CLI driving the repo can echo this back. -->
 
 # CLI integrations: cross-cutting reference
 
-This project drives **three** coding-agent CLIs from a single backend: Claude Code, OpenAI Codex, and Google Gemini. They share a common contract but behave very differently in practice. This skill captures the cross-cutting things that are easy to get wrong; the per-CLI skills (`cli-claude`, `cli-codex`, `cli-gemini`) carry the CLI-specific operational knowledge.
+This project drives **three** coding-agent integrations from one backend: Claude Code, OpenAI Codex, and Antigravity through `agentapi`. Antigravity retains the persisted CLI type `gemini` for compatibility. The integrations share Studio lifecycle and output contracts, but Claude and Codex use CodingAgentRunner while Antigravity remains on the explicit legacy adapter.
 
 > **GitHub Copilot was removed.** Its driver (`CopilotCliService`) predated the shared base class and couldn't share the hardened spawn/stream path cleanly. References below to slug session ids survive only as the reason `IsCompatibleSessionName` still rejects them.
 
@@ -18,9 +18,10 @@ This project drives **three** coding-agent CLIs from a single backend: Claude Co
 
 | You are working on … | Read first |
 |---|---|
-| `backend/Services/Cli/ClaudeCliService.cs`, Claude `stream-json` framing, Claude session capture, Claude rate-limit pill | `cli-claude` |
-| `backend/Services/Cli/CodexCliService.cs`, Codex `--json`, Codex session_meta, `codex exec` | `cli-codex` |
-| `backend/Services/Cli/GeminiCliService.cs`, Gemini `init` frame, `--skip-trust` / `-y`, the buffered-stdout limitation | `cli-gemini` |
+| Claude behavior, stream-json framing, session capture, rate-limit pill | `cli-claude` |
+| Codex behavior, JSON events, `thread.started`, and `codex exec` | `cli-codex` |
+| Antigravity `agentapi` protocol, stored under CLI type `gemini` | `cli-gemini` until that skill is renamed |
+| Engine rollout or the Studio-to-CAR bridge | This skill and [`BackendCarExecution.cs`](../../../../backend/Features/Cli/Execution/BackendCarExecution.cs) |
 | Adding a new CLI | This skill + [docs/system/cli/supported-clis.md](../supported-clis.md) §4 checklist |
 | Activity-log marker parser, conversation rendering | This skill (§ "Marker-line vocabulary") + the per-CLI `TransformReadLine` notes |
 | Resume / continuation logic across CLIs | This skill (§ "Session model invariants") + `cli-claude` (UUID) |
@@ -28,61 +29,42 @@ This project drives **three** coding-agent CLIs from a single backend: Claude Co
 ## Architecture at a glance
 
 ```text
-                               ┌──────────────────────────────┐
-                               │   ProjectRunner.RunCliAsync  │  RunIntent: ManualStart / AutoPickup / UserContinue
-                               └────────────┬─────────────────┘
-                                            │ RunPlanner.PlanRun
-                            ┌───────────────┴──────────────┐
-                            │ RunPlan { template, resume, } │
-                            └───────────────┬──────────────┘
-                                            │
-                                            ▼
-                                   CliRouter.Get(cliType)
-                                            │
-        ┌─────────────────┬─────────────────┼─────────────────┐
-        ▼                 ▼                 ▼                 ▼
-ClaudeCliService    CodexCliService   GeminiCliService    (new CLI here)
-   (base class)       (base class)     (base class)
-        │                 │                 │
-        └────┬────────────┴────────┬────────┘
-             │                     │
-             ▼                     ▼
-   stream-json frames        plain text
-        │                       │
-        └───── TransformReadLine() → marker lines ───┘
-                                            │
-                                            ▼
-                                   logs/cli-output.log  (JSONL, source of truth)
-                                            │
-                                            ▼
-                              frontend activity-log.parser
-                                            │
-                              ┌─────────────┴────────────┐
-                              ▼                          ▼
-                      Conversation mode             Trace mode
-                      (joined turns,              (per-group
-                       Markdown rendered)         chronological)
+ProjectRunner
+  |
+  +-- resolve local engine: `RUNNER_EXEC_ENGINE` > project > workspace > `car`
+  |
+  +-- GenericCliExecutionService
+        |
+        +-- Claude or Codex, engine `car`
+        |     |
+        |     +-- CAR ICliDriver: descriptor, argv, process lifecycle, typed events
+        |     +-- CarCallbackBridge: raw metadata first, matching typed events second
+        |
+        +-- engine `legacy`, or Antigravity `agentapi`
+              |
+              +-- explicit Studio legacy launch adapter
+
+Both branches -> Studio output mirror -> marker renderer -> SignalR -> Activity Log
+              -> Studio session, quota, usage, ledger, sentinel and reaper policy
 ```
 
-All three drivers (`Claude`, `Codex`, `Gemini`) extend [`CliExecutionServiceBase`](../../../backend/Services/Cli/CliExecutionServiceBase.cs), which owns spawn, lifecycle, persistence, and orphan reaping. A new CLI plugs in the same way.
+[`GenericCliExecutionService`](../../../../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) is the shared Studio host adapter. Its effective engine is resolved from the process environment override `RUNNER_EXEC_ENGINE`, then a project override, then a workspace default, then the platform default `car`. Every configurable tier accepts `car` and `legacy`; `legacy` is the rollback path until T4. Antigravity uses legacy regardless of that setting because its `agentapi` conversation protocol does not match CAR 0.7.0's Antigravity stream and permission contract.
 
 ## Session model invariants
 
-Every current CLI uses a **UUID** session id (Claude / Codex / Gemini). The removed Copilot driver used a **slug** (`taskboard-<jobId>-YYYYMMDDHHmm`); the slug format is gone from the drivers but `IsCompatibleSessionName` still rejects it, so a stale slug from an old run can never be handed to a UUID CLI.
+Every current integration uses a UUID session id. The removed Copilot driver used a slug; compatibility checks still reject that old shape so it cannot be passed to a UUID-based CLI.
 
 | CLI | Format | How we capture it | Resume flag |
 |---|---|---|---|
-| Claude | `8-4-4-4-12` UUID | Parse first `system` `stream-json` frame in `OnOutputLine`; written to a marker line `● Session init <uuid>` then read back. | `-r <uuid>` |
-| Codex | UUID | Parse `thread_id` of the first `thread.started` JSON line (legacy `session_meta.payload.id` also accepted) in `MapLineToRunEvents` — the **raw**-line hook, because `TransformReadLine` now rewrites it to `● Session <id>`. | `exec resume <uuid> "<prompt>"` (positional, before `--json`) |
-| Gemini | UUID | The `init` stream-json frame is rendered to `● Session init <uuid> (<model>)` by `TransformReadLine`; `OnOutputLine` runs on the **transformed** line and reads the UUID back via regex. | `-r <uuid>` (also accepts numeric index or `latest`, but we persist UUIDs only) |
+| Claude | UUID | Capture the rendered session marker from the CAR raw-output path, with a narrow early-frame UUID fallback. | CAR `ResumeSessionId`, rendered as `-r <uuid>` by the descriptor |
+| Codex | UUID | Parse `thread_id` from raw `thread.started`; legacy `session_meta.payload.id` is also accepted. | CAR `ResumeSessionId`, rendered as `exec resume <uuid>` |
+| Antigravity, stored as `gemini` | UUID conversation id | Render the `agentapi` conversation id to `● Session init <uuid>` and capture it from that marker. | `agentapi send-message <uuid> <prompt>` |
 
-**Hard invariant:** `IsCompatibleSessionName` must reject every other CLI's id. Accepting an alien id leads to silent hangs (Claude's `-r` waits forever on a slug, Codex's `exec resume` errors out). The unit tests in `backend.Tests/TaskRunnerPlanTests.cs` lock this matrix; do not relax them without first reading the regression history they protect against.
+**Hard invariant:** `IsCompatibleSessionName` must reject incompatible identifier shapes, and cross-CLI routing must always drop the prior session id. A valid UUID does not encode which provider owns it, so shape validation alone cannot make a cross-CLI resume safe. The task-runner plan tests lock this behavior.
 
-**Two capture strategies, both valid:** the base class invokes `OnOutputLine` *after* `TransformReadLine` but `MapLineToRunEvents` *before* it.
-- **Claude / Gemini** capture in `OnOutputLine` by reading the rendered `● Session init <uuid>` marker back via a narrow regex. This works because the renderer emits the UUID verbatim into the marker.
-- **Codex** captures in `MapLineToRunEvents` by `JsonDocument.Parse`-ing the **raw** `thread.started` frame. It must use the raw-line hook because its renderer collapses the frame to `● Session <id>` with no other recoverable fields, and because the raw hook is where `TryCaptureTurnUsage` already lives.
+**Two capture strategies are valid.** Claude and Antigravity capture the rendered session marker. Codex captures the raw `thread.started` frame before rendering because that is also where its usage and command metadata are parsed.
 
-Either is fine; what breaks is mixing them — reading the marker in `OnOutputLine` *and* having a `TransformReadLine` that emits an extra line which also looks like the session marker double-captures. Keep capture regexes narrow, and when a renderer rewrites the session frame, capture from the raw line instead.
+Either strategy is valid. Do not capture the same identifier from both hooks. Keep marker regexes narrow, and use the raw hook when rendering drops required fields.
 
 ### Stale-session invariants
 
@@ -92,11 +74,11 @@ The [April 23, 2026 Anthropic Claude Code postmortem](https://www.anthropic.com/
 
 For this project, the invariant is: **a successful resume is not proof of a successful continuation.** A continuation is healthy only if the agent acts on the latest user follow-up, reconciles with the job folder, and produces useful new evidence or a clear blocker. Pin that behavior in `RunPlanner`, `RunOutcomePolicy`, and session-event tests before touching per-CLI drivers.
 
-Claude and Codex are the reference paths for stale-session work. Gemini inherits the general recovery contract, but do not drive the next iteration until Claude and Codex are solid.
+Claude and Codex are the reference paths for stale-session work. Antigravity inherits the general recovery contract through its legacy adapter.
 
 ## Marker-line vocabulary
 
-The frontend's [`activity-log.parser`](../../../frontend/src/app/components/activity-log.parser.ts) classifies output lines based on a leading-marker convention. Drivers' `TransformReadLine` must emit lines that match this vocabulary, or they fall into the `message` / `other` bucket.
+The frontend's [`activity-log.parser`](../../../../frontend/src/app/features/task-detail/components/activity-log.parser.ts) classifies output lines based on a leading-marker convention. Renderers must emit lines that match this vocabulary, or they fall into the `message` / `other` bucket.
 
 | Marker | Kind | Example |
 |---|---|---|
@@ -110,12 +92,12 @@ The frontend's [`activity-log.parser`](../../../frontend/src/app/components/acti
 | `● Fetch <url>` | `command` | `● Fetch https://example.com` |
 | `● Todo update` | `todo` | (used by Claude's `TodoWrite` tool) |
 | `● Task <description>` | `task` | (used by Claude's `Task` tool) |
-| `● Session init <uuid> (<model>)` | `message` | Claude/Gemini session frame; captured via regex. Keep the shape stable. |
+| `● Session init <uuid> (<model>)` | `message` | Claude or Antigravity session frame; captured via a narrow regex. Keep the shape stable. |
 | `● Session <uuid>` | `message` | Codex session frame (`thread.started`). Captured from the raw line, not this marker. |
 | `● Result <subtype>` | `message` | Claude final-result frame. |
 | `● Turn completed (tokens: N)` | `message` | Codex `turn.completed`; analogue of Claude's `● Result (success)`. |
 | `● Turn failed: <reason>` | `message` | Codex `turn.failed`; emitted on `stderr`. |
-| `● Rate limit · …  [window=… status=… resetsAt=… overage=… usingOverage=…]` | `message` | Anthropic-only. The bracketed kv tail is parsed back into a typed `ClaudeRateLimitSnapshot` for the UI pill. |
+| `● Rate limit ... [window=... status=... resetsAt=... overage=... usingOverage=...]` | `message` | Anthropic only. The bracketed key-value tail is parsed into a typed `ClaudeRateLimitSnapshot` for the UI pill. |
 
 Continuation lines (`  | <details>` or anything starting with whitespace) attach to the preceding marker as a subtitle / extra body line.
 
@@ -123,54 +105,36 @@ Continuation lines (`  | <details>` or anything starting with whitespace) attach
 
 ## Unified renderer layer
 
-The marker lines above are produced by `ICliOutputRenderer`, the marker-line twin of
-the typed-event `*EventAdapter` classes (ADR-0013). Both are pure, dependency-free
-mappers over a single CLI frame; the difference is the target — the adapter emits
-`CliRunEvent`s for the bus, the renderer emits `CliOutputLine` marker lines for the
-Activity Log.
+The marker lines above are produced by `ICliOutputRenderer`, the marker-line twin of the typed-event adapters. Both are pure mappers over one CLI frame. CAR emits `CliRunEvent` instances for Claude and Codex; Studio renderers emit `CliOutputLine` marker lines for the Activity Log.
 
 ```text
-            raw CLI stdout/stderr line
-                      │
-        ┌─────────────┴──────────────┐
-        ▼                            ▼
-MapLineToRunEvents(raw)      TransformReadLine(raw)
-   → *EventAdapter.Map          → ICliOutputRenderer.Render
-   → CliRunEvent (bus)          → marker lines (Activity Log)
+CAR callback order for one stdout frame:
+
+typed events arrive -> CarCallbackBridge buffers them
+raw line arrives     -> persist -> capture usage/session -> render markers
+                    -> publish the matching typed event batch
 ```
 
-Files live in [`src/AgentTaskboard.Runner/Cli/Rendering/`](../../../src/AgentTaskboard.Runner/Cli/Rendering):
+The ordering bridge is required because the token and cost ledger handles `TurnCompleted` synchronously and immediately reads the usage captured from the raw frame. Publishing CAR's typed event first would produce a missing or stale ledger entry.
 
-- `ICliOutputRenderer` — `IEnumerable<CliOutputLine> Render(CliOutputLine raw)`. Pure: no side effects, no state across calls. Session/telemetry capture is a side effect and stays in the driver's `OnOutputLine` / `MapLineToRunEvents` hooks, never here.
-- `CliMarkerFormat` — stateless string primitives shared by every renderer (`SplitLines`, `TrimSingleLine`, `Truncate`, `FormatRelative`, the `●` bullet). Reuse these so the vocabulary stays byte-identical across CLIs instead of each driver re-deriving them.
-- `ClaudeOutputRenderer`, `CodexOutputRenderer` — one per CLI.
+Files live in [`backend/Features/Cli/Execution/Rendering`](../../../../backend/Features/Cli/Execution/Rendering):
 
-**Why a strategy interface, not a base-class with overridable frame mappers** (the
-AC asked for a justified preference): the per-CLI frame catalogues diverge enough
-(Claude: `system`/`assistant`/`user`/`result`/`rate_limit_event`; Codex:
-`thread.started`/`turn.*`/`item.completed`) that a shared base `switch` would be a
-leaky abstraction. A pure renderer is `new()`-able with zero dependencies, so it
-snapshot-tests per frame without the heavy `CodexCliService` constructor graph; it
-mirrors the existing pure-static `*EventAdapter` pattern; and it keeps rendering out
-of process orchestration. Shared logic is shared through the stateless
-`CliMarkerFormat` helper, not through inheritance.
+- `ICliOutputRenderer` returns marker lines and has no side effects.
+- `CliMarkerFormat` contains shared stateless formatting primitives.
+- `ClaudeOutputRenderer` and `CodexOutputRenderer` implement the CAR-backed renderers.
+
+The CLI frame catalogues diverge enough that a shared base switch would be a leaky abstraction. Pure renderers are easy to fixture-test and keep rendering separate from process orchestration. Shared formatting belongs in `CliMarkerFormat`, not in inheritance.
 
 ### How a new CLI adapter plugs in
 
 1. Implement `ICliOutputRenderer` for the new CLI under `Cli/Rendering/`, mapping each
    frame to an existing marker in the vocabulary table above. Reuse `CliMarkerFormat`
    for splitting/trimming; **don't** invent new marker shapes.
-2. In the driver, override `TransformReadLine` to delegate: `=> _renderer.Render(raw)`
-   (one `private static readonly` renderer instance — it's pure).
-3. Capture session-id / telemetry in `OnOutputLine` (reads the rendered marker) **or**
-   `MapLineToRunEvents` (reads the raw frame), per § "Session model invariants". If the
-   renderer rewrites the session frame, capture from the raw line.
-4. Add a `<Cli>OutputRendererTests.cs` with one snapshot per frame type (frame in →
-   marker out), plus encoding edge cases (umlauts/emoji, CR/LF, empty/long lines).
+2. Wire it through the CLI's `CliBehavior.TransformReadLine` delegate.
+3. Capture session or usage data from either the raw hook or the rendered-line hook, never both.
+4. Add a `<Cli>OutputRendererTests.cs` fixture for each frame type and encoding edge case.
 
-> **Not yet migrated:** `GeminiCliService` still carries its own inline `TransformReadLine`
-> switch — out of this layer's current scope. Migrating it onto `ICliOutputRenderer` is a
-> clean follow-up that does not change its marker output.
+> Antigravity's legacy `agentapi` behavior still carries an inline renderer. Moving it to `ICliOutputRenderer` is independent of whether its process protocol can move to CAR.
 
 ## Output stream conventions
 
@@ -181,46 +145,62 @@ of process orchestration. Shared logic is shared through the stateless
 | `system` | Synthesized by the runner (`Started <cli>`, `<cli> exited`) | Rendered as SYS. |
 | `user` | Synthesized when the user types a follow-up in the chat box (see `TaskRunnerService.AppendUserPromptToCliLog`) | Rendered as YOU; never folded into a tool group. |
 
-`system` and `user` are runner-synthesized. Drivers must not produce them — `stdout`/`stderr` only. The base class strips ANSI escapes from persisted lines but does not strip them from the in-memory buffer; downstream consumers should handle either.
+`system` and `user` are synthesized by Studio. CLI renderers produce only `stdout` and `stderr`. Persisted lines are ANSI-cleaned; downstream consumers should still tolerate ANSI in transient input.
 
-## Lifecycle invariants (apply to all three)
+## Lifecycle invariants
 
-1. **Spawn closes stdin immediately.** Claude's `-p` mode reads stdin even when a prompt is provided and emits a 3 s "no stdin received" warning before continuing. We close stdin right after `Process.Start()` to skip that. Other CLIs do not need this but tolerate it. **Do not remove the close.**
-2. **UTF-8 forced on redirected streams.** Default Windows code page (CP1252) corrupts non-ASCII bytes from Claude/Codex output and silently crashed runs that contained umlauts. The base class sets `StandardOutputEncoding = StandardErrorEncoding = UTF-8` plus `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `PYTHONIOENCODING=utf-8`. Do not override per-CLI.
-3. **Persist before notify.** The runner writes each line to `logs/cli-output.log` (JSONL) *before* invoking subscriber callbacks. A subscriber that throws cannot lose a line. The on-disk log is the durability guarantee `GetOutput` falls back to after a backend restart.
-4. **Subscriber callbacks must not throw.** `OnOutput`/`OnFinished` exceptions used to crash the host. Both are wrapped in `try/catch` now; if you add a new subscriber, do the same.
-5. **Synthetic Started/Exited lines.** Drivers must not skip the `[taskboard] Started <cli> CLI ...` and `[taskboard] <cli> CLI exited: ...` lines. The Activity Log used to be blank for 30+ s of Claude's `-p` buffering; users assumed the job was stuck.
-6. **`ReapOrphans` on startup.** `CliExecutionServiceBase.ReattachOnStartup` kills any leftover CLI process from a previous backend run. PID-recycling is guarded by process name + start time.
-7. **Output buffer cap = 5000 lines.** The in-memory `OutputBuffer` is trimmed to 5000 lines; longer history reads from `cli-output.log`. Don't grow this without thinking about RAM on long-running runs.
+1. **CAR is the local default for Claude and Codex.** Engine resolution is `RUNNER_EXEC_ENGINE`, then project override, then workspace default, then platform `car`. `legacy` is the explicit rollback. Antigravity remains legacy because of its `agentapi` protocol.
+2. **CAR owns launch mechanics for CAR-backed runs.** Descriptor argv, permission flags, common thinking normalization, UTF-8 environment, process lifecycle, process-tree stop, typed events, and Claude npm-shim healing stay in the library.
+3. **Claude prompts use CAR-A stdin.** CAR writes and closes the one-shot prompt stream before the turn. The prompt is not an argv value, and the deterministic gate covers at least 200 KiB.
+4. **Raw metadata precedes matching typed events.** `CarCallbackBridge` buffers CAR events until Studio has persisted and parsed the corresponding raw line. This is mandatory for the synchronous usage ledger.
+5. **Persist before notifying.** Studio writes the raw line to its per-stream JSONL mirror before invoking UI subscribers. Subscriber exceptions are isolated.
+6. **Keep synthetic start and exit lines.** They make process state visible before the first provider frame and at terminal classification.
+7. **Backend restart reaps; it does not reattach.** `ReattachOnStartup` validates persisted PID, process name, and start time, kills the leftover process tree, and clears the active-job record. The run is recovered by demotion or reissue. CAR cannot recover lost pipes after its host process exits.
+8. **Clean context is task-stable in Studio.** Studio reuses one linked clean home across attempts, passes CAR `ContextMode=shared`, and injects `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. CAR 0.7.0 must not create a second process-scoped home.
+9. **Steer is a resumed run.** Product steer records the user input and starts the bounded continuation path. It does not depend on reattaching stdin to a process after backend restart.
+10. **The output buffer cap is 5000 lines.** Longer history is read from the durable per-stream mirror.
+
+## CAR 0.7.0 public API boundaries
+
+The bespoke Studio `WindowsHandleScrubSpawner` was removed. CAR owns npm healing for CAR-backed agent runs. Because CAR 0.7.0 keeps its healer internal, the existing Studio `NpmShimHealer` remains a temporary exception for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam for host bookkeeping and the Claude rules-file overlay. Do not copy CAR's internal Windows helpers into the backend.
+
+Four PROJ-011 cards track the seams still needed for a cleaner integration:
+
+- `public-clean-context-lease`: let a host supply a clean-context lifetime longer than one process.
+- `public-hardened-spawner-composition`: expose a supported way to decorate CAR's hardened default spawner, including its internal Windows handle scrubber.
+- `public-cli-launch-overlay`: add host-owned argv or descriptor overlays without decorating the final spawn request.
+- `public-pre-spawn-health`: expose the driver's pre-spawn health and repair operation to temporary non-driver host paths.
 
 ## Quota probes
 
-Each CLI has a `QuotaProbeBase` subclass under `backend/Services/Quota/`. Probes run in scratch dirs under `%TEMP%/agent-taskboard-quota/<cliType>` (PTY-based for slash-command-driven probes; one-shot exec for command-driven). The aggregated result is served by `/api/cli/quota`.
+Each CLI has a `QuotaProbeBase` subclass under `backend/Features/Cli/Quota/`. Claude and Codex probes run in scratch directories under `%TEMP%/agent-taskboard-quota/<cliType>`. Antigravity has no local numeric quota surface and reports that the IDE session owns quota information. The aggregate is served by `/api/cli/quota`.
 
 **Common pitfalls when adding/changing a probe:**
 - Never run a probe in the user's working directory. The CLI may pollute `~/.<cli>/sessions/` with junk runs and the disk-based session listing in `SessionRegistry` would surface them.
-- Send `<Esc><Esc>` before tearing down a PTY-driven probe to close any open modal pickers. Several CLIs (Codex, Gemini) leave dialogs that block subsequent invocations.
+- Send `<Esc><Esc>` before tearing down a PTY-driven probe to close any open modal pickers.
 - Probes refresh in the background; the user can force-refresh per-CLI via the side-sheet button.
 
 ## Common tasks
 
 | Task | Where to start | Tests to add |
 |---|---|---|
-| Add a new tool marker for an existing CLI | The CLI's `ICliOutputRenderer` under `Cli/Rendering/` (Claude/Codex). Gemini still has an inline `TransformReadLine` switch. | A new snapshot test in the matching `*OutputRendererTests.cs` (or `*CliServiceTests.cs` for Gemini) |
-| Add a new model to the catalog | `GetModelCatalogAsync` in the relevant driver, OR the live-discovery service for that CLI | None usually; live-discovery has integration tests already |
-| Make resume work across a new edge case | `RunPlanner.PlanRun` — never the per-CLI driver | A new row in the `Plan_AlwaysProducesRunnableOutput` matrix in `TaskRunnerPlanTests.cs` |
-| Capture a new piece of telemetry from CLI output | `OnOutputLine` in the relevant driver | A regex / parse test against a captured stream-json fixture |
+| Add a new tool marker for Claude or Codex | `backend/Features/Cli/Execution/Rendering/` | A fixture in the matching `*OutputRendererTests.cs` |
+| Add a new model to the catalog | The live discovery service or `CliBehavior.GetModelCatalog` | Model-catalog or discovery tests |
+| Make resume work across a new edge case | `RunPlanner.PlanRun`, then the CAR request or explicit legacy behavior | A new row in the task-runner plan matrix plus a CAR bridge contract test |
+| Capture new telemetry | `CliBehavior.CaptureRawLine`; verify the CAR event-order bridge | A raw-frame fixture and ledger assertion |
 | Add a brand-new CLI | [docs/system/cli/supported-clis.md](../supported-clis.md) §4 checklist | New `<Cli>CliServiceTests.cs` + new `@billable` E2E `frontend/e2e/<cli>-hello-world.spec.ts` |
-| Fix a "session not captured" regression | First check `OnOutputLine` is wired and the regex matches the *transformed* line shape (Gemini/Claude). Run the relevant `TransformReadLine_*` tests against a real frame fixture. | Add a fixture-based regression test |
+| Fix a session-capture regression | Check whether that CLI owns capture in the raw or rendered hook and confirm the CAR bridge order. | Add a fixture-based regression test |
 
 ## Where state lives on disk
 
-- **Runtime CLI output:** `<TaskRepository>/.runtime/cli-output/<cliType>-<jobKey>.jsonl` (per-job; deleted after summary write)
+- **Studio runtime output mirror:** `<TaskRepository>/.runtime/cli-output/<cliType>-<jobKey>/<stream>.jsonl`
+- **Temporary CAR log mirror:** `<TaskRepository>/.runtime/car-cli-output/...` (deleted when the CAR-backed run finishes)
 - **Active jobs (for orphan reaper):** `<TaskRepository>/.runtime/active-jobs-<cliType>.json`
+- **Task-stable clean home:** a temporary directory referenced by `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, retained across attempts while the task execution state is alive
 - **Session indexes (each CLI's own store):**
   - Claude: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
   - Codex: `~/.codex/session_index.jsonl` + `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
-  - Gemini: `~/.gemini/tmp/<project-slug>/chats/session-*.json` (slug map in `~/.gemini/projects.json`)
+  - Antigravity, stored as `gemini`: legacy session discovery under `~/.gemini/tmp/...` where available
 - **Quota scratch:** `%TEMP%/agent-taskboard-quota/<cliType>/...` (PTY scratch dirs)
 
 `SessionRegistry` reads each store and serves `/api/cli/usage`. Adding a CLI means adding a `BuildXxxProjects()` method here.

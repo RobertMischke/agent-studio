@@ -126,9 +126,11 @@ public class TaskFolderAccessIsolationTest
             // Re-added after the structure migration folded the src/ executor
             // projects back into backend/ (the scan covers them again):
             ["backend/Features/Cli/Execution/NpmShimHealer.cs"] =
-                "npm staging-orphan Directory.Delete under %AppData%/Roaming/npm, not the job-folder tree.",
+                "Temporary legacy/OneShot npm staging cleanup under the user npm directory, not the job-folder tree; removed in AGT-2373.",
             ["backend/Features/Cli/Execution/RunLogStore.cs"] =
                 "Owns the per-run log directory lifecycle (run-context dirs), not lane folders.",
+            ["backend/Features/Cli/Execution/BackendCarExecution.cs"] =
+                "Deletes CAR's temporary mirror under TaskRepository/.runtime/car-cli-output, never a lane or task folder.",
             ["backend/Features/Cli/Execution/CleanContextPreparation.cs"] =
                 "Tears down the per-run clean-context temp CLI config home (OS temp dir), not the job-folder tree.",
             ["backend/Features/Cli/Execution/CliWorkingMemoryService.cs"] =

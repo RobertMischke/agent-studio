@@ -27,6 +27,7 @@ public interface ICliExecutionService
         string? jobFolderPath = null,
         string? permissionMode = null,
         string? contextMode = null,
+        string? executionEngine = null,
         CancellationToken ct = default);
 
     /// <summary>
