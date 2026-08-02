@@ -6,7 +6,7 @@ import type { ProjectQueueHealth, RunnerStatus } from '../../../../models/task.m
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';

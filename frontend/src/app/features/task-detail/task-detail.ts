@@ -26,7 +26,7 @@ import type {
 import { CLI_TYPES, TaskState } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
 import { TaskService } from '../../services/task.service';
-import { CliCatalogStore } from '../../services/cli-catalog.store';
+import { CliCatalogStore } from '../cli';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { ClientService } from '../../services/client.service';
 import { NowTickService } from '../../services/now-tick.service';

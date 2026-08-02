@@ -36,6 +36,14 @@ Narrow start/stop/status for the **dev** backend on `:5030`, used as a Playwrigh
 
 External orchestrator that restarts stable cleanly at quiet boundaries. The motivation is the same crash class that produced ADR-0020: stable serves the source the running tasks edit, so if stable were ever to "restart itself" mid-batch it would be replacing its own running code. ADR-0021 makes that a hard non-goal and assigns the restart responsibility to this watcher.
 
+The one-shot script has two trigger modes. `review-batch` is the existing
+default described below. `ATP_RESTART_TRIGGER=main-advance` instead compares
+the Stable checkout with remote `main`; it is the cron-safe deployment handoff
+after a successful develop-to-main promotion. Both modes use the same
+runner-idle, merge-gate drain, update, logging, and verified-resume path. See the
+[promotion runbook](../../docs/operations/develop-main-promotion.md) for the
+complete command and cron entry.
+
 Trigger conditions (both must hold on a tick):
 
 - At least N (default 3) **new** job folders have appeared in the watched project's `4-review` lane since the last restart (or since the watcher first booted and took its baseline snapshot).
@@ -55,7 +63,7 @@ runner-idle behavior for rolling-upgrade compatibility.
 Each invocation that actually restarts appends one JSON line to `<workspace>/logs/stable-restarts.jsonl`:
 
 ```json
-{"ts":"2026-05-05T08:42:11Z","event":"restart","status":"ok","jobsSinceLastRestart":3,"headBefore":"2bec67c","headAfter":"a1f4b29","durationSeconds":47,"reviewCountAfter":14}
+{"ts":"2026-05-05T08:42:11Z","event":"restart","trigger":"review-batch","status":"ok","jobsSinceLastRestart":3,"targetMain":"","headBefore":"2bec67c","headAfter":"a1f4b29","durationSeconds":47,"reviewCountAfter":14}
 ```
 
 The watcher also persists its rolling snapshot of seen `4-review` folders at `<workspace>/logs/stable-restart-watcher/snapshot.txt`. That file plus the JSONL log are the watcher's only state — delete them to reset.
@@ -93,6 +101,10 @@ If the resume cannot be verified the helper exits non-zero so the watcher can lo
 merge gate delays the update call until it becomes idle, and that a gate which
 stays busy is released to the hard restart only after the configured bounded
 window.
+
+`./scripts/supervisor/test-restart-stable-main-advance.sh` proves that an
+unchanged remote `main` is a no-op, a new main SHA is deployed and logged, and
+an active Stable run defers deployment.
 
 #### How it relates to the system-review monitor
 

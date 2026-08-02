@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import type { CliModelInfo } from '../../cli';
-import { CliCatalogStore } from '../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../cli';
 import { OrchestratorComposerModelService } from './orchestrator-composer-model.service';
 import { availableCodexModels, resolveComposerSelection } from './orchestrator-composer-model.util';
 

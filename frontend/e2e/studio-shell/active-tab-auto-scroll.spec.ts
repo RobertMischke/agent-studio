@@ -35,6 +35,9 @@ async function bootWithTabs(page: Page, tabs: StoredTab[], activeKey: string): P
       contentType: 'application/json',
       body: JSON.stringify(body),
     });
+    if (url.includes('/api/auth/status')) {
+      return json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
+    }
     if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
     if (url.includes('/api/runner/status')) return json({ projects: {} });
     if (/\/api\/tasks(\?|$)/.test(url)) return json([]);

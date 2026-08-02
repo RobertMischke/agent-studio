@@ -129,7 +129,7 @@ import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
-import { CliCatalogStore } from './services/cli-catalog.store';
+import { CliCatalogStore } from './features/cli';
 import type { CliOutputLine } from './models/task.model';
 import type { RunTimeline } from './features/run-timeline';
 import type { TaskScreenshot } from './features/screenshots';

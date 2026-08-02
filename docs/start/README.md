@@ -105,6 +105,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
 | OSS setup path decision and clean-host evidence | [setup path decision](../operations/haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
+| Develop to main promotion train, full gate, release marker, and deploy cron | [operations/develop-main-promotion.md](../operations/develop-main-promotion.md) |
 | Orchestrator control-plane migration plan | [target architecture plan](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md) |
 | Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](../concepts/deployment-first-class.md) · [interactive mockup](../concepts/mockups/deployment-first-class.html) |

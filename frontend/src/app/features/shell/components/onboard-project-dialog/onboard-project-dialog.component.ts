@@ -13,7 +13,7 @@ import {
 } from '../../../../models/project-basics.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
-import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { CliCatalogStore } from '../../../cli';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
 import { RemoteHostsService } from '../../../remote-hosts';
 
