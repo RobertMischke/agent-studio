@@ -262,6 +262,9 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         WorkDir = work,
         StateDir = stateRoot,
         BaseBranch = "main",
+        // Fakes the CLI through CliBin/CliArgs, which only the legacy engine
+        // consumes; the reattach protocol under test is engine-independent.
+        ExecEngine = RunnerOptions.ExecEngineLegacy,
         CliBin = "/bin/sh",
         CliArgs = "-c \"sleep 1; printf 'reattached-output\\n[[TASK_DONE]]\\n'\"",
         TtlSeconds = 120,
