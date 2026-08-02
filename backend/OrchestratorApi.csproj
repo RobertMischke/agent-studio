@@ -37,10 +37,13 @@
        back to the ProjectReference:
        ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj
 
-       0.6.0 adds the opt-in wait-on-quota policy, QuotaWaitStarted /
-       QuotaWaitEnded lifecycle events, and typed CLI diagnostics. -->
+       0.7.0 adds the Claude stdin prompt transport (CAR-A), clean-context
+       credential seeds by link (CAR-B), and tolerant Claude adapters (CAR-E).
+       Keep this pin identical to the one in runner/AgentRunner.csproj - both
+       deployables must run the same CAR (car-migration-plan.md par.6; T4 adds
+       the guard test). -->
   <ItemGroup>
-    <PackageReference Include="CodingAgentRunner" Version="[0.6.0]" />
+    <PackageReference Include="CodingAgentRunner" Version="[0.7.0]" />
   </ItemGroup>
 
   <!-- TokenEconomy owns the shared historical model-price catalog and cost API.

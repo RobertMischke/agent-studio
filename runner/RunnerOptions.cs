@@ -100,6 +100,19 @@ public sealed class RunnerOptions
     /// <summary>Fallback branch when the task branch is absent or unspecified.</summary>
     public required string BaseBranch { get; init; }
 
+    /// <summary>
+    /// Which execution engine drives the coding CLI inside the detached worker
+    /// (<c>RUNNER_EXEC_ENGINE</c>). <c>car</c> (default) drives it through the
+    /// CodingAgentRunner library: descriptor-built argv, structured events,
+    /// permission-mode injection, clean config home. <c>legacy</c> keeps the
+    /// pre-AGT-2370 raw spawn. The switch is a rollout instrument for the T1
+    /// canary cohorts and is deleted in AGT-2373 together with the legacy path.
+    /// </summary>
+    public string ExecEngine { get; init; } = ExecEngineCar;
+
+    public const string ExecEngineCar = "car";
+    public const string ExecEngineLegacy = "legacy";
+
     /// <summary>Agent CLI binary to spawn (claude, codex, ...).</summary>
     public required string CliBin { get; init; }
 
@@ -262,6 +275,7 @@ public sealed class RunnerOptions
                 .ToArray(),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
+            ExecEngine = Val("exec-engine", "RUNNER_EXEC_ENGINE", ExecEngineCar).Trim().ToLowerInvariant(),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
             CodexCliBin = Val("codex-cli", "RUNNER_CODEX_CLI_BIN", "codex"),
             CliArgs = Val("cli-args", "RUNNER_CLI_ARGS", "-p"),
@@ -314,6 +328,8 @@ public sealed class RunnerOptions
         if (options.CliResumeArgs is not null
             && !options.CliResumeArgs.Contains("{sessionId}", StringComparison.Ordinal))
             throw new ArgumentException("RUNNER_CLI_RESUME_ARGS must contain the {sessionId} placeholder.");
+        if (options.ExecEngine is not (ExecEngineCar or ExecEngineLegacy))
+            throw new ArgumentException("RUNNER_EXEC_ENGINE must be 'car' or 'legacy'.");
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);
         return (options, string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(), once, help);
