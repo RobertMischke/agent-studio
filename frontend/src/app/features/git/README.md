@@ -27,6 +27,10 @@ Project Hub Git tree:
   integration, feature, task, and runner branches in the left repository tree.
 - `buildGitGraphRows(commits)` assigns quiet SVG lanes from commit and parent
   SHAs. Older history comes from the bounded `/api/git/history` page endpoint.
+- `buildGitCommitChips(commit)` projects commit facts into the single Project
+  Hub vocabulary: develop/main presence, deployment target, board card, and
+  current work. Raw local and remote ref names stay out of commit rows; exact
+  remote refs are available only in the `Remote` chip detail.
 
 ## Where the consumers live
 

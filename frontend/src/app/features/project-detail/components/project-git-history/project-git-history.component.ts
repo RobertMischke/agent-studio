@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output } f
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { formatCompactDateTime } from '../../../../services/format.util';
 import {
+  buildGitCommitChips,
   buildGitGraphRows,
   type GitGraphCommit,
   type GitTaskBadge,
@@ -26,7 +27,10 @@ export class ProjectGitHistoryComponent {
   readonly changesRequested = output<GitGraphCommit>();
   readonly loadMore = output<void>();
 
-  readonly rows = computed(() => buildGitGraphRows(this.commits()));
+  readonly rows = computed(() => buildGitGraphRows(this.commits()).map(row => ({
+    ...row,
+    chips: buildGitCommitChips(row.commit),
+  })));
 
   when(value: string): string {
     return formatCompactDateTime(value);

@@ -215,16 +215,35 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await expect(page.getByTestId('git-tree-group-feature')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-task')).toBeVisible();
     await expect(page.getByTestId('git-tree-group-runner')).toBeVisible();
-    await expect(page.getByTestId('git-history')).toContainText('deploy:backend');
-    await expect(page.getByTestId('git-history')).toContainText('deploy:runner');
-    await expect(page.getByTestId('git-history')).toContainText('deploy:frontend');
-    await expect(page.getByTestId('git-history')).toContainText('✓ develop');
-    await expect(page.getByTestId('git-history')).toContainText('○ main');
+    const firstCommit = page.getByTestId('git-commit-row').first();
+    await expect(firstCommit).toContainText('Integrated · develop');
+    await expect(firstCommit).toContainText('Deployed · backend');
+    await expect(firstCommit).toContainText('Deployed · runner');
+    await expect(firstCommit).toContainText('Deployed · frontend');
+    await expect(firstCommit).toContainText('AGT-1');
+    await expect(firstCommit).toContainText('In progress');
+    await expect(firstCommit).toContainText('Remote');
+    await expect(firstCommit).not.toContainText('origin/develop');
+    await expect(firstCommit).not.toContainText('deploy:');
+    await expect(firstCommit.locator('[data-tone="remote"]')).toHaveAttribute('title', /origin\/develop/);
+    await expect(page.getByTestId('git-commit-row').nth(1)).toContainText('Released · main');
     await expect(page.getByTestId('git-graph-node').first()).toBeVisible();
     await expect(page.locator('[data-testid="git-graph-segment"][data-kind="merge"]')).toBeVisible();
     await expect(page.locator('[data-testid="git-graph-node"][data-lane="1"]')).toHaveCount(2);
     await expect(panel.getByText('Read only', { exact: true })).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Open task AGT-1: Task work' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open card AGT-1: Task work' }).first()).toBeVisible();
+
+    // The header popover defines every member of the one commit-chip vocabulary.
+    await page.getByTestId('git-chip-legend-toggle').click();
+    const legend = page.getByTestId('git-chip-legend-popover');
+    await expect(legend).toBeVisible();
+    await expect(legend).toContainText('Integrated · develop');
+    await expect(legend).toContainText('Released · main');
+    await expect(legend).toContainText('Deployed · runner');
+    await expect(legend).toContainText('AGT-N');
+    await expect(legend).toContainText('In progress');
+    await expect(legend).toContainText('Remote');
+    await page.getByTestId('git-chip-legend-toggle').click();
 
     // Branch rows carry their category badge; main is the current branch.
     await expect(page.locator('[data-testid="git-branch-row"][data-branch="main"]')).toContainText('main');
@@ -248,6 +267,8 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await expect(page.locator('[data-testid="git-diff"] .d2h-file-name')).toContainText('thing.ts', { timeout: 15_000 });
 
     // Evidence screenshot (mocked API).
+    await page.getByTestId('git-chip-legend-toggle').click();
+    await expect(page.getByTestId('git-chip-legend-popover')).toBeVisible();
     fs.mkdirSync(resultsDir(), { recursive: true });
     const shotPath = path.join(resultsDir(), 'project-hub-git-view--mocked.png');
     await page.screenshot({ path: shotPath, fullPage: true });
