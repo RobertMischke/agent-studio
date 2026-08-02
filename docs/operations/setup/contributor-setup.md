@@ -96,6 +96,27 @@ npm start --prefix frontend
 
 Only needed if you want the in-app Update Center to work. `./update-service.sh start` runs a small standalone process on port 5039 that survives backend restarts during an update.
 
+### 2.7 Run the reproducible Windows test set
+
+Use the same filter whenever a local Windows result is reported as green:
+
+```sh
+dotnet test --filter "Category!=MachineBound&Platform!=Linux"
+```
+
+`Category=MachineBound` identifies intentional real-machine boundaries such as
+timing, live processes, ports, or workspaces. `Platform=Linux` identifies tests
+that intentionally require Linux facilities such as `/proc`, systemd contracts,
+or fixed POSIX executable paths. The traits classify tests and do not skip them,
+so an unfiltered run still exercises the complete suite and may be red on
+Windows by design.
+
+Always report the tested project or solution, this exact filter, and the passed
+test count. A count without that scope is not a reproducible green result. Run
+the excluded groups separately on an appropriate host when the change affects
+them. The repository-wide trait rules live in the
+[contribution and style guide](../../start/contribution-and-style-guide.html#tests).
+
 ## 3. Onboard your first project
 
 **Recommended: the in-app "Onboard Project" dialog**, not hand-editing config files.

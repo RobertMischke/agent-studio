@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using System.Diagnostics;
+using System.Runtime.Versioning;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -69,6 +70,8 @@ namespace AgentStudio.Tests;
 // MachineBound: real server/API, git processes, persisted timestamps, and host
 // scheduling make these end-to-end cases intentionally machine-dependent.
 [Trait("Category", "MachineBound")]
+[Trait("Platform", "Linux")]
+[SupportedOSPlatform("linux")]
 [Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
 {

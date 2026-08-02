@@ -1,0 +1,6 @@
+#! {"scenario":"durable-job","title":"cross-platform delayed durable worker","cli":"claude","form":"plaintext","exitCode":0}
+# The delay keeps the worker alive long enough for restart and identity recovery.
+@delay 1000
+before-restart
+reattached-output
+[[TASK_DONE]]

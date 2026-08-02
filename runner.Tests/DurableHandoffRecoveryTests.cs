@@ -221,6 +221,7 @@ public sealed class DurableHandoffRecoveryTests : IDisposable
     }
 
     [Theory]
+    [Trait("Category", "MachineBound")]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Crash_before_or_after_artifact_upload_converges_without_coding(

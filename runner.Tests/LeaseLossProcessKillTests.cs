@@ -13,9 +13,10 @@ public sealed class LeaseLossProcessKillTests : IDisposable
         "runner-lease-loss-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public async Task Rejected_lease_renewal_kills_the_agent_process_group()
     {
-        if (!OperatingSystem.IsLinux()) return;
         Directory.CreateDirectory(_root);
         var parentPidPath = Path.Combine(_root, "parent.pid");
         var childPidPath = Path.Combine(_root, "child.pid");

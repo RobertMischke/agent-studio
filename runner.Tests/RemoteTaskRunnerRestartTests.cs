@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using AgentRunner;
 using Xunit;
@@ -10,6 +11,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "remote-runner-reattach", Guid.NewGuid().ToString("N"));
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease()
     {
         var origin = Path.Combine(_root, "origin.git");
@@ -56,6 +58,7 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Restarted_runner_completes_with_the_base_sha_recorded_before_the_restart()
     {
         // Only the process that prepared the worktree observes its start commit.
@@ -265,8 +268,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         // Fakes the CLI through CliBin/CliArgs, which only the legacy engine
         // consumes; the reattach protocol under test is engine-independent.
         ExecEngine = RunnerOptions.ExecEngineLegacy,
-        CliBin = "/bin/sh",
-        CliArgs = "-c \"sleep 1; printf 'reattached-output\\n[[TASK_DONE]]\\n'\"",
+        CliBin = "node",
+        CliArgs = $"\"{FakeCliPath()}\" \"{DurableFixturePath()}\"",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
         RunTimeoutSeconds = 10,
@@ -286,6 +289,25 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         DateTime.UtcNow,
         DateTime.UtcNow.AddMinutes(2),
         attemptId);
+
+    private static string FakeCliPath()
+        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
+
+    private static string DurableFixturePath()
+        => Path.Combine(RepoRoot(), "testdata", "runner-fixtures", "durable-job.fixture");
+
+    private static string RepoRoot([CallerFilePath] string sourceFile = "")
+    {
+        var directory = new DirectoryInfo(Path.GetDirectoryName(sourceFile)!);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "agent-taskboard.sln")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException($"Repository root was not found above {sourceFile}.");
+    }
 
     private static async Task CreateOriginAsync(string origin, string seed)
     {

@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
 using Xunit;
@@ -137,10 +138,11 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
+    [SupportedOSPlatform("linux")]
     public async Task Project_preflight_fails_when_origin_rejects_the_write_probe()
     {
-        if (OperatingSystem.IsWindows()) return;
-
         await SeedOriginAsync();
         var hook = Path.Combine(_origin, "hooks", "pre-receive");
         await File.WriteAllTextAsync(hook, """
@@ -254,9 +256,10 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public async Task Teardown_kills_processes_with_cwd_in_worktree_before_removal()
     {
-        if (!OperatingSystem.IsLinux()) return;
         await SeedOriginAsync();
         var logs = new List<string>();
         var workspace = CreateWorkspace(logs.Add);

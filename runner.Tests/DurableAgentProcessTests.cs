@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using AgentRunner;
 using Xunit;
 
@@ -9,6 +9,7 @@ public sealed class DurableAgentProcessTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "runner-restart-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Replacement_daemon_reattaches_live_fake_job_and_reads_its_terminal_result()
     {
         var worktree = Path.Combine(_root, "worktree");
@@ -16,8 +17,7 @@ public sealed class DurableAgentProcessTests : IDisposable
         var stateRoot = Path.Combine(_root, "state");
         Directory.CreateDirectory(worktree);
         Directory.CreateDirectory(results);
-        var options = Options(stateRoot, worktree,
-            "-c \"sleep 1; printf 'before-restart\\n[[TASK_DONE]]\\n'\"");
+        var options = Options(stateRoot, worktree);
         var lease = Lease("AGT-RESTART");
         var firstStore = new RunnerStateStore(stateRoot);
         var slot = firstStore.Create(lease.TaskKey, lease, worktree);
@@ -52,6 +52,8 @@ public sealed class DurableAgentProcessTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public async Task Pid_with_a_different_worktree_is_not_adopted()
     {
         var actual = Path.Combine(_root, "actual");
@@ -61,7 +63,7 @@ public sealed class DurableAgentProcessTests : IDisposable
         Directory.CreateDirectory(actual);
         Directory.CreateDirectory(claimed);
         Directory.CreateDirectory(results);
-        var options = Options(stateRoot, actual, "-c \"sleep 2\"");
+        var options = Options(stateRoot, actual);
         var lease = Lease("AGT-MISMATCH");
         var store = new RunnerStateStore(stateRoot);
         var slot = store.Create(lease.TaskKey, lease, claimed);
@@ -80,6 +82,7 @@ public sealed class DurableAgentProcessTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Worker_identity_closes_the_process_start_to_slot_save_restart_window()
     {
         var worktree = Path.Combine(_root, "launch-window");
@@ -87,7 +90,7 @@ public sealed class DurableAgentProcessTests : IDisposable
         var stateRoot = Path.Combine(_root, "state");
         Directory.CreateDirectory(worktree);
         Directory.CreateDirectory(results);
-        var options = Options(stateRoot, worktree, "-c \"sleep 1; printf 'done\\n'\"");
+        var options = Options(stateRoot, worktree);
         var lease = Lease("AGT-LAUNCH-WINDOW");
         var firstStore = new RunnerStateStore(stateRoot);
         var slot = firstStore.Create(lease.TaskKey, lease, worktree);
@@ -101,9 +104,9 @@ public sealed class DurableAgentProcessTests : IDisposable
         var reason = string.Empty;
         var identityProven = false;
         // Poll tightly: recovery is only observable while the worker is alive, and
-        // on a host where the faked CLI binary does not exist (Windows, /bin/sh)
-        // that window is tens of milliseconds. The contract under test is the
-        // recovery itself, so the loop must not be able to step over the window.
+        // The worker identity may not have reached durable storage yet. Poll
+        // tightly so the test observes the recovery window before the fixture
+        // exits on either supported host platform.
         for (var i = 0; i < 400 && !identityProven; i++)
         {
             identityProven = DurableAgentProcess.TryRecoverIdentity(replacementSlot, out recovered, out reason);
@@ -122,7 +125,7 @@ public sealed class DurableAgentProcessTests : IDisposable
         worker.Kill();
     }
 
-    private static RunnerOptions Options(string stateRoot, string worktree, string cliArgs) => new()
+    private static RunnerOptions Options(string stateRoot, string worktree) => new()
     {
         ServerUrl = "http://localhost",
         RunnerId = "runner-restart-test",
@@ -136,8 +139,8 @@ public sealed class DurableAgentProcessTests : IDisposable
         // engine consumes. The worker/reattach mechanics under test are
         // engine-independent; the CAR engine is covered by CarWorkerExecutionTests.
         ExecEngine = RunnerOptions.ExecEngineLegacy,
-        CliBin = "/bin/sh",
-        CliArgs = cliArgs,
+        CliBin = "node",
+        CliArgs = $"\"{FakeCliPath()}\" \"{DurableFixturePath()}\"",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
         RunTimeoutSeconds = 10,
@@ -156,6 +159,25 @@ public sealed class DurableAgentProcessTests : IDisposable
         1,
         DateTime.UtcNow,
         DateTime.UtcNow.AddMinutes(2));
+
+    private static string FakeCliPath()
+        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
+
+    private static string DurableFixturePath()
+        => Path.Combine(RepoRoot(), "testdata", "runner-fixtures", "durable-job.fixture");
+
+    private static string RepoRoot([CallerFilePath] string sourceFile = "")
+    {
+        var directory = new DirectoryInfo(Path.GetDirectoryName(sourceFile)!);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "agent-taskboard.sln")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException($"Repository root was not found above {sourceFile}.");
+    }
 
     public void Dispose()
     {

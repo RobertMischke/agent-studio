@@ -57,6 +57,8 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Theory]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     [InlineData("coding", "12", "CPUQuota=1200%\nCPUWeight=100\nIOWeight=100\n")]
     [InlineData("review", "12", "CPUQuota=400%\nCPUWeight=30\nIOWeight=30\n")]
     [InlineData("review", "2", "CPUQuota=100%\nCPUWeight=30\nIOWeight=30\n")]
@@ -76,6 +78,8 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public void Agent_host_profile_is_the_only_explicit_resource_override()
     {
         var root = CreateTemporaryDirectory();
@@ -108,6 +112,8 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public void Agent_host_adopts_and_replaces_legacy_resource_drop_in()
     {
         var root = CreateTemporaryDirectory();

@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -75,10 +76,10 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
     public void ChangeProject_CopyFailure_RestoresArchivedSourceWithoutOrphan()
     {
-        if (OperatingSystem.IsWindows()) return;
-
         var source = Path.Combine(_root, "failure-source");
         var target = Path.Combine(_root, "failure-target");
         Directory.CreateDirectory(source);
@@ -130,10 +131,11 @@ public sealed class ChangeProjectAtomicityTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Platform", "Linux")]
+    [SupportedOSPlatform("linux")]
     public void ChangeProject_ReferenceWriteFailure_RestoresSourceAndOriginalReferences()
     {
-        if (OperatingSystem.IsWindows()) return;
-
         var source = Path.Combine(_root, "reference-failure-source");
         var target = Path.Combine(_root, "reference-failure-target");
         Directory.CreateDirectory(source);

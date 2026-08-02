@@ -18,6 +18,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Exact_sha_workspace_records_head_tree_commands_environment_and_clean_after()
     {
         var sha = await SeedOriginAsync();
@@ -46,6 +47,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Wrong_sha_fails_before_any_review_command()
     {
         await SeedOriginAsync();
@@ -65,13 +67,15 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Review_mutation_is_detected_even_when_the_command_exits_zero()
     {
         var sha = await SeedOriginAsync();
         var (workspace, _) = Workspace(
             "attempt-mutates", sha,
             [new ReviewCommandDto(
-                "mutation", "code-quality", "/bin/sh", ["-c", "printf mutation > unexpected.txt"])],
+                "mutation", "code-quality", "node",
+                ["-e", "require('fs').writeFileSync('unexpected.txt', 'mutation')"])],
             24016);
         await workspace.PrepareAsync(null!, default);
 
@@ -82,6 +86,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Three_parallel_reviews_use_distinct_workspaces_caches_ports_and_outputs()
     {
         var sha = await SeedOriginAsync();
@@ -117,6 +122,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Review_child_process_does_not_inherit_unapproved_coding_credentials()
     {
         var sha = await SeedOriginAsync();
@@ -127,8 +133,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             var (workspace, _) = Workspace(
                 "attempt-credentials", sha,
                 [new ReviewCommandDto(
-                    "credential-check", "evidence", "/bin/sh",
-                    ["-c", $"test -z \"${{{variable}:-}}\""])],
+                    "credential-check", "evidence", "node",
+                    ["-e", $"process.exit(process.env.{variable} ? 1 : 0)"])],
                 25032);
             await workspace.PrepareAsync(null!, default);
 
@@ -144,13 +150,14 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Baseline_comparison_blocks_only_new_test_failures_and_names_them()
     {
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
-            "if grep -q subject product.txt; then " +
-            "printf '  Failed Product.ExistingFailure [1 ms]\\n  Failed Product.NewFailure [1 ms]\\n'; " +
-            "else printf '  Failed Product.ExistingFailure [1 ms]\\n'; fi; exit 1");
+            "const subject = require('fs').readFileSync('product.txt', 'utf8').includes('subject'); " +
+            "console.log('  Failed Product.ExistingFailure [1 ms]'); " +
+            "if (subject) console.log('  Failed Product.NewFailure [1 ms]'); process.exit(1)");
         var (workspace, _) = Workspace(
             "attempt-new-failure",
             subjectSha,
@@ -174,11 +181,12 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Baseline_comparison_classifies_shared_red_tests_as_pre_existing()
     {
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
-            "printf '  Failed Product.ExistingFailure [1 ms]\\n'; exit 1");
+            "console.log('  Failed Product.ExistingFailure [1 ms]'); process.exit(1)");
         var (workspace, _) = Workspace(
             "attempt-pre-existing",
             subjectSha,
@@ -201,11 +209,12 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task Baseline_result_is_reused_for_same_repository_sha_and_command()
     {
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
-            "printf '  Failed Product.ExistingFailure [1 ms]\\n'; exit 1");
+            "console.log('  Failed Product.ExistingFailure [1 ms]'); process.exit(1)");
         var first = Workspace(
             "attempt-cache-fill",
             subjectSha,
@@ -233,13 +242,16 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task New_failure_gets_one_retry_and_a_disappearing_flake_does_not_block()
     {
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
-            "if grep -q subject product.txt; then " +
-            "if test ! -f \"$TMPDIR/retry-seen\"; then touch \"$TMPDIR/retry-seen\"; " +
-            "printf '  Failed Product.FlakyFailure [1 ms]\\n'; exit 1; fi; fi; exit 0");
+            "const fs = require('fs'); const path = require('path'); " +
+            "const retry = path.join(process.env.TMPDIR, 'retry-seen'); " +
+            "const subject = fs.readFileSync('product.txt', 'utf8').includes('subject'); " +
+            "if (subject && !fs.existsSync(retry)) { fs.writeFileSync(retry, 'seen'); " +
+            "console.log('  Failed Product.FlakyFailure [1 ms]'); process.exit(1); }");
         var (workspace, _) = Workspace(
             "attempt-flake",
             subjectSha,
@@ -258,12 +270,12 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(0, commandEvidence.ExitCode);
     }
 
-    private static ReviewCommandDto BaselineCommand(string shell)
+    private static ReviewCommandDto BaselineCommand(string javaScript)
         => new(
             "verify-2",
             "build-tests",
-            "/bin/sh",
-            ["-c", shell],
+            "node",
+            ["-e", javaScript],
             CompareToBaseline: true);
 
     private (RemoteReviewWorkspace Workspace, ReviewSubjectDto Subject) Workspace(

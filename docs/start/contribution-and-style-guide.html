@@ -156,6 +156,10 @@
       <p>The canonical routine .NET test command excludes those tests:</p>
       <pre><code>dotnet test --filter Category!=MachineBound</code></pre>
       <p style="margin-top:12px">Run machine-bound tests separately in an appropriate environment when the change affects them, and report both commands and outcomes.</p>
+      <p style="margin-top:12px">Tests that require Linux kernel facilities, Linux filesystem semantics, systemd, or fixed POSIX executable paths must also carry <code>[Trait("Platform", "Linux")]</code>. Use this trait only for an intentional Linux contract. A child process, shell command, or Git fixture that can use a cross-platform test boundary must be repaired instead.</p>
+      <p>The canonical local Windows command excludes both machine-bound and Linux-only tests:</p>
+      <pre><code>dotnet test --filter "Category!=MachineBound&amp;Platform!=Linux"</code></pre>
+      <p style="margin-top:12px">Report the project or solution, the exact filter, and the passed test count. An unfiltered run remains useful for platform diagnostics: platform traits classify tests but never skip them silently.</p>
     </section>
 
     <section id="git">
