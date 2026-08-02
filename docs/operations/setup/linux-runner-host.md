@@ -117,6 +117,32 @@ outbound to the authenticated HTTPS origin with its enrolled service identity.
 The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
+### Own the Task Server route
+
+Do not run the tunnel as an unattended bare `ssh -N` process. For the current
+Windows-to-Linux reverse route, register the repository-owned functional keeper
+from the Studio checkout:
+
+```powershell
+.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -TaskServerPort 5031 `
+    -IntervalMinutes 5
+```
+
+The keeper probes `/healthz` from the Linux host, removes only the matching dead
+forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
+host can initiate the SSH connection, prefer the host-owned `autossh` plus
+systemd form in the linked tunnel runbook because it starts before an
+interactive Windows logon.
+
+Treat either tunnel form as an interim local-profile topology. AGT-2404's
+central Task Server removes the workstation and its SSH process from the
+Runner's availability path. Once an authenticated private Task Server URL is
+available to the host, point `RUNNER_SERVER_URL` at it and disable the tunnel
+keeper rather than carrying both routes forward.
+
 ## Product onboarding from Execution Hosts
 
 The primary setup path is **Workspace Settings -> Execution Hosts -> Set up agent
