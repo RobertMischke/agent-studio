@@ -30,4 +30,27 @@ describe('CapabilityHealthComponent', () => {
     expect(text).toContain('run:one');
     expect(text).not.toContain('Operator-requested');
   });
+
+  it('surfaces a stale Task Server route as an acute host state', () => {
+    TestBed.configureTestingModule({ imports: [CapabilityHealthComponent] });
+    const fixture = TestBed.createComponent(CapabilityHealthComponent);
+    fixture.componentRef.setInput('host', {
+      id: 'runner', name: 'Runner', role: 'remote', address: null, clientId: 'runner',
+      status: 'offline', os: 'Linux', lastHeartbeatAt: '2026-08-01T15:30:00Z',
+      uptimeLabel: null, capabilities: [], cliQuotas: [], stats: null,
+      capabilityHealth: [{
+        key: 'task-server:connectivity', category: 'foundation', advertisedStatus: 'ready',
+        healthState: 'healthy', reason: null, advertisedAt: '2026-08-01T15:30:00Z',
+        freshUntil: '2026-08-01T15:33:00Z', isFresh: false, consecutiveFailures: 0,
+        affectedClaims: [], recoveryHistory: [],
+      }],
+    } satisfies RemoteHost);
+    fixture.detectChanges();
+
+    const route: HTMLElement = fixture.nativeElement.querySelector(
+      '[data-testid="remote-host-task-server-route-state"]');
+    expect(route.getAttribute('data-tone')).toBe('unreachable');
+    expect(route.textContent).toContain('Task Server route unreachable');
+    expect(route.textContent).toContain('Check the tunnel');
+  });
 });

@@ -21,6 +21,9 @@ if (args is ["--version"])
 if (args is ["--detached-worker", var detachedSpec])
     return await DurableAgentProcess.RunWorkerAsync(detachedSpec);
 
+if (args is ["--detached-review-worker", var detachedReviewSpec])
+    return await DurableReviewProcess.RunWorkerAsync(detachedReviewSpec);
+
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 
 if (help)

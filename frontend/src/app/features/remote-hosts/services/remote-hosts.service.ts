@@ -221,6 +221,9 @@ export class RemoteHostsService {
                 snapshot.effectiveMaxParallelism ?? current.effectiveMaxParallelism ?? null,
               runtimeCapacityAppliedAt:
                 snapshot.runtimeCapacityAppliedAt ?? current.runtimeCapacityAppliedAt ?? null,
+              taskServerConnection: snapshot.telemetry
+                ? taskServerConnection(snapshot.telemetry)
+                : current.taskServerConnection ?? null,
               stats,
             };
             if (index >= 0) projected[index] = next;
@@ -468,6 +471,13 @@ interface TaskServerTelemetrySnapshot {
   cpuCores: number;
   diskFreeBytes?: number | null;
   diskTotalBytes?: number | null;
+  taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';
+  taskServerConnectionObservedAt?: string | null;
+  taskServerConnectionFailureStartedAt?: string | null;
+  taskServerConnectionConsecutiveFailures?: number;
+  taskServerConnectionEscalatedAt?: string | null;
+  taskServerConnectionLastError?: string | null;
+  taskServerConnectionLastRecoveredAt?: string | null;
 }
 
 interface TaskServerRunnerCapabilitySnapshot {
@@ -497,6 +507,20 @@ function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<Rem
     cpuLoadPct: telemetry.cpuPercent ?? 0,
     diskTotalGb: (telemetry.diskTotalBytes ?? 0) / 1024 / 1024 / 1024,
     diskFreeGb: (telemetry.diskFreeBytes ?? 0) / 1024 / 1024 / 1024,
+  };
+}
+
+function taskServerConnection(
+  telemetry: TaskServerTelemetrySnapshot,
+): NonNullable<RemoteHost['taskServerConnection']> {
+  return {
+    status: telemetry.taskServerConnectionStatus ?? 'unknown',
+    observedAt: telemetry.taskServerConnectionObservedAt ?? null,
+    failureStartedAt: telemetry.taskServerConnectionFailureStartedAt ?? null,
+    consecutiveFailures: telemetry.taskServerConnectionConsecutiveFailures ?? 0,
+    escalatedAt: telemetry.taskServerConnectionEscalatedAt ?? null,
+    lastError: telemetry.taskServerConnectionLastError ?? null,
+    lastRecoveredAt: telemetry.taskServerConnectionLastRecoveredAt ?? null,
   };
 }
 

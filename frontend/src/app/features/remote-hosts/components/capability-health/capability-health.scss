@@ -1,5 +1,25 @@
 :host { display: contents; }
 
+.route {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+.route span { color: var(--studio-fg-dim); }
+.route[data-tone='reachable'] { background: var(--notify-success-icon-bg); }
+.route[data-tone='degraded'] { background: var(--notify-warning-icon-bg); }
+.route[data-tone='unreachable'] {
+  background: var(--notify-error-icon-bg);
+  color: var(--notify-error-icon-fg);
+}
+.route[data-tone='unreachable'] span { color: inherit; }
+
 .admission {
   display: flex;
   flex-wrap: wrap;

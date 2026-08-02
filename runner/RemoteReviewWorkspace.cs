@@ -134,7 +134,39 @@ public sealed class RemoteReviewWorkspace
         return Proof(repositoryId!, head, _initialTree, false);
     }
 
-    public async Task<ReviewExecutionEvidence> ExecutePlanAsync(CancellationToken ct)
+    /// <summary>
+    /// Reconstructs the in-memory proof state in a detached review worker after
+    /// the daemon prepared the exact-subject workspace. The worker refuses to
+    /// start commands unless the persisted workspace still proves the same
+    /// immutable subject and a clean tree.
+    /// </summary>
+    internal async Task<ReviewWorkspaceProofDto> AdoptPreparedAsync(CancellationToken ct)
+    {
+        if (!Directory.Exists(RepositoryPath))
+            throw new ReviewInfrastructureException(
+                "PreparedWorkspaceMissing",
+                $"Prepared review repository is missing: {RepositoryPath}");
+
+        var head = await GitValueAsync("rev-parse", "HEAD", ct);
+        if (!string.Equals(head, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase))
+            throw new ReviewInfrastructureException(
+                "ShaMismatch",
+                $"Prepared review HEAD '{head}' does not match expected Result-SHA '{_subject.ExpectedResultSha}'.");
+        _initialTree = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
+        _dirtyBefore = (await GitValueAsync("status", "--porcelain", "--untracked-files=all", ct)).Length > 0;
+        if (_dirtyBefore)
+            throw new ReviewInfrastructureException(
+                "DirtyBefore",
+                "Prepared review workspace became dirty before the detached worker adopted it.");
+        return Proof(_subject.RepositoryId, head, _initialTree, false);
+    }
+
+    public Task<ReviewExecutionEvidence> ExecutePlanAsync(CancellationToken ct)
+        => ExecutePlanAsync(ct, checkpoint: null);
+
+    internal async Task<ReviewExecutionEvidence> ExecutePlanAsync(
+        CancellationToken ct,
+        Func<ReviewExecutionCheckpoint, CancellationToken, Task>? checkpoint)
     {
         var commands = new List<ReviewCommandEvidenceDto>();
         var verdicts = new List<ReviewVerdictDto>();
@@ -198,6 +230,17 @@ public sealed class RemoteReviewWorkspace
             verdicts.Add(comparison is null
                 ? ParseVerdict(command, execution.Process)
                 : BaselineVerdict(command, comparison));
+            if (checkpoint is not null)
+            {
+                await checkpoint(
+                    new ReviewExecutionCheckpoint(
+                        commands.Select(item => item.StepId).ToArray(),
+                        commands.Sum(item => Math.Max(
+                            0,
+                            (item.FinishedAt - item.StartedAt).TotalSeconds)),
+                        DateTime.UtcNow),
+                    ct);
+            }
         }
 
         var finalHead = await GitValueAsync("rev-parse", "HEAD", ct);
@@ -879,6 +922,11 @@ public sealed record ReviewExecutionEvidence(
     IReadOnlyList<ReviewCommandEvidenceDto> Commands,
     IReadOnlyList<ReviewArtifactEvidenceDto> Artifacts,
     IReadOnlyList<ReviewVerdictDto> Verdicts);
+
+internal sealed record ReviewExecutionCheckpoint(
+    IReadOnlyList<string> CompletedStepIds,
+    double CompletedCommandSeconds,
+    DateTime UpdatedAtUtc);
 
 internal sealed record CommandExecution(
     ProcessResult Process,

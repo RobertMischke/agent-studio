@@ -117,6 +117,31 @@ outbound to the authenticated HTTPS origin with its enrolled service identity.
 The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
+### Own the Task Server route
+
+Do not run the tunnel as an unattended bare `ssh -N` process. For the current
+Windows-to-Linux reverse route, register the repository-owned functional keeper
+from the Studio checkout:
+
+```powershell
+.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -TaskServerPort 5031 `
+    -IntervalMinutes 5
+```
+
+The keeper probes `/healthz` from the Linux host, removes only the matching dead
+forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
+host can initiate the SSH connection, prefer the host-owned `autossh` plus
+systemd form in the linked tunnel runbook because it starts before an
+interactive Windows logon.
+
+Treat either tunnel form as an interim local-profile topology. Once an
+authenticated private Task Server URL is available to the host, point
+`RUNNER_SERVER_URL` at it and disable the tunnel keeper instead of carrying both
+routes forward.
+
 ## Product onboarding from Execution Hosts
 
 The primary setup path is **Workspace Settings -> Execution Hosts -> Set up agent
@@ -537,8 +562,7 @@ reached, it reaps and verifies every process whose cwd belongs to the worktree,
 records `authority-deadline-exhausted`, and retains the slot for honest server
 reconciliation. It never starts a replacement while death is unproven.
 
-A
-persisted attempt is adopted only when its worker PID still has the recorded
+A persisted coding attempt is adopted only when its worker PID still has the recorded
 start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
 and follows the worker's JSONL output file from the persisted sequence. A
@@ -552,6 +576,26 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+The Review service uses the same positive process-proof boundary under
+`RUNNER_STATE_DIR/reviews`. Before starting the ReviewPlan it persists the
+immutable ReviewAttempt, subject, original lease/fence, and exact review
+workspace. Its detached worker writes `review-worker.json`,
+`review-progress.json`, and `review-result.json`. On restart the replacement
+Review daemon verifies PID start time and `/proc/<pid>/cwd`, renews the persisted
+lease instance, and completes the same attempt and fence. Completed review
+commands and an in-flight command are not relaunched. Recovered slots resume
+before the daemon evaluates host load for a fresh claim, so load admission can
+close without discarding in-flight test time.
+
+If the Review worker is missing, its PID was reused, or its cwd differs, the
+replacement does not adopt or execute it. It submits a fenced
+`ReviewInfra / ExecutorRestarted` report containing the failed proof, completed
+step ids, completed-command duration, and retry reason. If the old lease already
+expired, the daemon reclaims that attempt under a fresh fence solely to deliver
+this loss report; it never runs from the unproven process. The deterministic
+`review-report:<attempt>:<fence>` key can replay the same terminal payload, but
+the authority rejects a conflicting payload.
 
 During a Task Server or transport outage, transient claim, heartbeat, event,
 artifact, result-handoff, and completion failures do not terminate the daemon.
@@ -614,21 +658,29 @@ recovery. Installing or changing the unit requires root, followed by
 ### Planned daemon restart and deploy
 
 A planned Runner deploy no longer waits for host idle. Replace the published
-files and restart the main service process:
+files and restart the applicable service process:
 
 ```bash
 sudo systemctl restart agent-host
 sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+
+sudo systemctl restart agent-runner-review
+sudo journalctl -u agent-runner-review --since '-2 minutes' \
+  | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
 ```
 
-On SIGTERM the old daemon stops making claims, leaves detached job workers
-running, flushes its already-atomic slot records, and exits. systemd starts the
-replacement, which verifies and reattaches those workers before opening any
-freed slot to claims. Confirm every previously occupied slot reports either
-`persisted attempt accepted` or `releasing dead persisted attempt`. The latter
-must be followed by a Ready card and a later higher-fence claim. Do not change
-the unit back to `KillMode=control-group`.
+On SIGTERM the old daemon stops making claims, leaves detached coding and review
+workers running, flushes its already-atomic slot records, and exits. systemd
+starts the replacement, which verifies and reattaches those workers before
+opening any freed slot to claims. For Coding, confirm every occupied slot reports
+either `persisted attempt accepted` or `releasing dead persisted attempt`; the
+latter must be followed by a Ready card and a later higher-fence claim. For
+Review, confirm `review daemon handoff` is followed by `persisted review
+accepted` and `adopting persisted review` under the same attempt and fence. A
+`review adoption failed` line must be followed by an accepted
+`ExecutorRestarted` infrastructure report with explicit loss extent and retry
+reason. Do not change either unit back to `KillMode=control-group`.
 
 This procedure covers a planned daemon binary restart, not a machine reboot,
 power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
@@ -817,6 +869,15 @@ proof.
   tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
   The runner refuses at preflight by design, so no half-started lease or CLI is
   left behind.
+- **Execution Hosts shows `Task Server route unreachable`** - the
+  `task-server:connectivity` advertisement is stale or explicitly unavailable.
+  This is the board-visible transport alarm even when the host itself is still
+  running, because a broken route cannot carry a fresh failure report through
+  itself. For the Windows-to-Linux reverse-tunnel topology, inspect
+  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log`, then run the
+  functional host-side curl from
+  [Remote runner: persistent connection](./remote-runner-persistent-connection.md).
+  Repair the route instead of restarting the review daemon.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
   lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.
@@ -840,7 +901,16 @@ proof.
   `RUNNER_SERVER_URL` straight at the Studio.
 ## Reading host telemetry
 
-The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, active runner slots, and the last locally observed Task Server connection state together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+
+Task Server reachability has two complementary signals. The telemetry snapshot
+contains the daemon's local observation, failure start, consecutive failure
+count, escalation time, last error, and last recovery. The
+`task-server:connectivity` capability carries a three-minute freshness deadline.
+Freshness is the load-bearing remote alarm: when the route is down, the Task
+Server cannot receive another telemetry sample, so the last sample must not be
+misread as proof that the route remains healthy. The host card marks the route
+unreachable as soon as the connectivity capability expires.
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 

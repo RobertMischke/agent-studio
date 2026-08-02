@@ -23,6 +23,7 @@ import {
   meterTone,
   ramUsedPct,
   relativeHeartbeat,
+  taskServerRouteStatus,
   type HostActionKind,
   type HostProjectSlots,
   type MeterTone,
@@ -95,6 +96,14 @@ export class RemoteHostCardComponent {
   readonly liveTelemetry = computed(() => freshHostTelemetry(this.host(), this.now()));
   readonly telemetryStale = computed(() =>
     this.latestTelemetry() !== null && this.liveTelemetry() === null);
+  readonly taskServerRouteLabel = computed(() => {
+    switch (taskServerRouteStatus(this.host())) {
+      case 'reachable': return 'reachable';
+      case 'degraded': return 'degraded';
+      case 'unreachable': return 'unreachable';
+      case 'unknown': return 'not reported';
+    }
+  });
 
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();

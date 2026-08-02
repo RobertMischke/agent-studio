@@ -63,34 +63,48 @@ Host agent-runner
     ExitOnForwardFailure yes
 ```
 
-Auto-reconnect wrapper (`reverse-tunnel.ps1`) - `ssh` exits when the link drops
-or a keepalive lapses (`ServerAliveCountMax`), and the loop dials straight back:
+Use the repository-owned functional keeper instead of a bare `ssh -N` loop:
 
 ```powershell
-# reverse-tunnel.ps1 - keep the Task Server reachable on the runner host.
-while ($true) {
-    ssh -N -R 15031:localhost:5031 agent-runner
-    Start-Sleep -Seconds 5   # link dropped; back off briefly, then reconnect
-}
+Set-Location C:\Projects\agent-studio
+.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -TaskServerPort 5031 `
+    -IntervalMinutes 5
 ```
 
-Register it to start at logon (or at boot with a service account) and restart if
-it ever exits:
+The registration is idempotent. It creates or updates
+`AgentRunner-TunnelKeeper`, uses `IgnoreNew` to prevent overlapping repair
+runs, starts the first run immediately, and repeats every five minutes. It uses
+the current interactive Windows identity because that identity owns the SSH
+key. A machine that must repair the tunnel before user logon needs a dedicated
+service identity with its own protected SSH key instead.
+
+The keeper in
+[`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
+does not equate a local `ssh.exe` process with a working route. It asks the
+Linux host to request `http://127.0.0.1:15031/healthz` and accepts the probe only
+when SSH returns the exact `AGENT_TASK_SERVER_ROUTE_OK` sentinel. If that
+functional probe fails, the keeper stops only `ssh.exe` processes matching the
+configured target and exact reverse-forward tuple, waits for the old listener
+to clear, then starts:
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument '-NoProfile -WindowStyle Hidden -File C:\ops\reverse-tunnel.ps1'
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -RestartInterval (New-TimeSpan -Minutes 1) `
-    -RestartCount 999 -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName 'agent-runner reverse tunnel' `
-    -Action $action -Trigger $trigger -Settings $settings
+ssh.exe -N -T `
+  -o BatchMode=yes `
+  -o ExitOnForwardFailure=yes `
+  -o ServerAliveInterval=30 `
+  -o ServerAliveCountMax=3 `
+  -R 15031:127.0.0.1:5031 agent-runner
 ```
 
-`ExitOnForwardFailure yes` matters: if the host's `15031` is still held by a
-half-dead previous session, `ssh` fails fast instead of connecting **without**
-the forward, which would otherwise present a live SSH session whose tunnel is
-dead - the worst case for a health-check to reason about.
+State and bounded transition logs live under
+`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\`. Healthy scheduled runs stay
+quiet. An ongoing failure is logged on transition and at most hourly, not on
+every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
+`15031` is still held by a half-dead previous session, SSH fails fast instead
+of connecting without the forward.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
@@ -173,12 +187,48 @@ A mid-run drop is handled separately and already: the lease heartbeat logs
 headroom; a genuine takeover surfaces as `lease lost` (exit `3`). See
 [linux-runner-host.md](./linux-runner-host.md) §4.
 
+The long-running coding and review daemons also publish
+`task-server:connectivity` with a three-minute freshness deadline and include
+their last local route observation in `HostTelemetrySnapshotDto`. While the
+route is broken, the host cannot send a new failure through that route. The
+Task Server therefore treats expiration of the connectivity capability as the
+remote alarm. Execution Hosts renders that specific capability as **Task Server
+route unreachable**. The daemon logs the initial transition, escalates after
+five continuous minutes, emits at most one summary per hour, and records one
+recovery transition. A day-long outage no longer produces one journal entry per
+claim poll.
+
 ## Verify
 
 1. Bring the tunnel service up (Option A or B).
-2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` returns `ok`, and
+2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` succeeds, and
    `agent-host --health-check --server http://127.0.0.1:15031` exits `0`.
-3. Kill the tunnel (stop the service / end the scheduled task). The same
-   `--health-check` now exits `4` with a "tunnel down" reason within ~10 s, and
-   an `agent-host <TASK-KEY>` run refuses at preflight instead of attempting a
-   lease. Restart the service; the next probe returns to `0`.
+3. Stop `AgentRunner-TunnelKeeper`, terminate the matching reverse-forward SSH
+   process, and leave the route down. The same `--health-check` exits `4` with a
+   "tunnel down" reason within about 10 seconds. Within the capability's
+   three-minute freshness budget, Execution Hosts shows **Task Server route
+   unreachable**. After five continuous minutes, the runner journal contains
+   one `status=escalated` transition, not repeated poll errors.
+4. Start `AgentRunner-TunnelKeeper`. Its immediate or next scheduled run removes
+   the dead forward, starts a replacement, and accepts it only after the remote
+   sentinel probe passes. The runner logs one `status=recovered` transition and
+   the next capability advertisement returns the host card to **reachable**.
+5. Preserve screenshots from both states and the bounded journal excerpt in the
+   task's absolute `results/` directory.
+
+## Is the tunnel still the right topology?
+
+The reverse tunnel is an interim local-profile route, not the target control
+plane. The central Task Server work tracked by AGT-2404 removes the Windows
+workstation from the Runner's availability path: the Agent Host connects
+directly to a private authenticated Task Server URL and this scheduled task is
+disabled. Do not retain a reverse tunnel merely because the keeper now makes it
+safer.
+
+When a tunnel remains necessary, supervision belongs on the side that can
+initiate the connection. The current topology requires Windows to dial the
+public Linux SSH endpoint, so the repository keeper is the applicable option.
+If the Linux host can reach a protected studio or bastion endpoint, Option B's
+`autossh` plus systemd gives stronger boot-time ownership. A central private
+Task Server is preferable to either form because no workstation process then
+sits on the claim, lease, log, and completion path.

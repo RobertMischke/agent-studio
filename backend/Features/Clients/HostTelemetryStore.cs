@@ -4,7 +4,11 @@ namespace AgentStudio.Clients;
 
 public sealed record HostTelemetrySample(DateTime Timestamp, double? CpuPercent, double? Load1, double? Load5,
     double? Load15, long? MemoryUsedBytes, long? MemoryTotalBytes, long? SwapInBytesPerSecond,
-    long? SwapOutBytesPerSecond, double? CpuStealPercent, double? IoWaitPercent, int CpuCores, int ActiveSlots);
+    long? SwapOutBytesPerSecond, double? CpuStealPercent, double? IoWaitPercent, int CpuCores, int ActiveSlots,
+    string TaskServerConnectionStatus = "unknown", DateTime? TaskServerConnectionObservedAt = null,
+    DateTime? TaskServerConnectionFailureStartedAt = null, int TaskServerConnectionConsecutiveFailures = 0,
+    DateTime? TaskServerConnectionEscalatedAt = null, string? TaskServerConnectionLastError = null,
+    DateTime? TaskServerConnectionLastRecoveredAt = null);
 
 public sealed record HostTelemetryFinding(
     string Kind,
@@ -71,11 +75,16 @@ public sealed class HostTelemetryStore(IConfiguration config, ILogger<HostTeleme
     private static HostTelemetrySample Average(DateTime timestamp, IEnumerable<HostTelemetrySample> values)
     {
         var list = values.ToList();
+        var latest = list.MaxBy(value => value.Timestamp)!;
         double? D(Func<HostTelemetrySample, double?> get) { var v = list.Select(get).Where(x => x.HasValue).Select(x => x!.Value).ToList(); return v.Count == 0 ? null : Math.Round(v.Average(), 2); }
         long? L(Func<HostTelemetrySample, long?> get) { var v = list.Select(get).Where(x => x.HasValue).Select(x => x!.Value).ToList(); return v.Count == 0 ? null : (long)v.Average(); }
         return new(timestamp, D(x => x.CpuPercent), D(x => x.Load1), D(x => x.Load5), D(x => x.Load15), L(x => x.MemoryUsedBytes),
             L(x => x.MemoryTotalBytes), L(x => x.SwapInBytesPerSecond), L(x => x.SwapOutBytesPerSecond), D(x => x.CpuStealPercent),
-            D(x => x.IoWaitPercent), (int)Math.Round(list.Average(x => x.CpuCores)), (int)Math.Round(list.Average(x => x.ActiveSlots)));
+            D(x => x.IoWaitPercent), (int)Math.Round(list.Average(x => x.CpuCores)), (int)Math.Round(list.Average(x => x.ActiveSlots)),
+            latest.TaskServerConnectionStatus, latest.TaskServerConnectionObservedAt,
+            latest.TaskServerConnectionFailureStartedAt, latest.TaskServerConnectionConsecutiveFailures,
+            latest.TaskServerConnectionEscalatedAt, latest.TaskServerConnectionLastError,
+            latest.TaskServerConnectionLastRecoveredAt);
     }
 
     internal static IReadOnlyList<HostTelemetryFinding> Findings(List<HostTelemetrySample> points)

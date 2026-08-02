@@ -127,6 +127,17 @@ export interface HostTelemetrySeries {
   findings: readonly HostTelemetryFinding[];
 }
 
+/** Latest route observation piggybacked on the host telemetry advertisement. */
+export interface TaskServerConnectionTelemetry {
+  status: 'unknown' | 'reachable' | 'unreachable';
+  observedAt: string | null;
+  failureStartedAt: string | null;
+  consecutiveFailures: number;
+  escalatedAt: string | null;
+  lastError: string | null;
+  lastRecoveredAt: string | null;
+}
+
 export type HostLiveDataState = 'loading' | 'ready' | 'error';
 
 export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-open';
@@ -192,6 +203,8 @@ export interface RemoteHost {
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
   telemetry?: HostTelemetrySeries | null;
+  /** Process-local route observation; capability freshness remains the remote alarm. */
+  taskServerConnection?: TaskServerConnectionTelemetry | null;
   /** Freshness of the client/daemon projection requested for this mount. */
   liveDataState?: HostLiveDataState;
   /** Telemetry has a separate request so runtime truth never waits on history. */
@@ -326,4 +339,32 @@ export function hostIsStale(iso: string | null | undefined, nowMs: number, thres
   if (!iso) return true;
   const seen = Date.parse(iso);
   return Number.isNaN(seen) || nowMs - seen > thresholdMs;
+}
+
+export type TaskServerRouteStatus = 'reachable' | 'degraded' | 'unreachable' | 'unknown';
+
+/**
+ * The connectivity capability is the authoritative remote signal while a
+ * route is down: no host can send fresh telemetry through a broken route.
+ */
+export function taskServerRouteStatus(host: RemoteHost): TaskServerRouteStatus {
+  if (host.status === 'retired') return 'unknown';
+  const capability = host.capabilityHealth?.find(item => item.key === 'task-server:connectivity');
+  if (!capability) return host.taskServerConnection?.status ?? 'unknown';
+  if (!capability.isFresh || capability.advertisedStatus !== 'ready'
+      || capability.healthState === 'draining') return 'unreachable';
+  if (capability.healthState === 'suspect' || capability.healthState === 'half-open') return 'degraded';
+  if (host.taskServerConnection?.status === 'unreachable') return 'unreachable';
+  return 'reachable';
+}
+
+export function taskServerRouteDetail(host: RemoteHost): string {
+  const capability = host.capabilityHealth?.find(item => item.key === 'task-server:connectivity');
+  if (capability && !capability.isFresh) {
+    return `No connectivity advertisement has arrived since ${capability.advertisedAt}. Check the tunnel or Task Server route.`;
+  }
+  return host.taskServerConnection?.lastError
+    || capability?.reason
+    || capability?.detail
+    || 'No route observation has been reported yet.';
 }
