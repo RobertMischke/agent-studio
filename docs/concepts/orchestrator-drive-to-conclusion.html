@@ -1449,6 +1449,28 @@
             metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2476</code><br><span class="small">remote CLI launch failure lost at detached-worker boundary</span></td>
+          <td>
+            A Remote Runner claimed and prepared a card successfully, but its configured coding CLI did not exist. The
+            detached CAR worker recorded exit 125, and the host completed the attempt as generic Remote
+            <code>Unknown</code>. The card moved directly to Escalated instead of consuming the bounded pre-agent
+            environment retry budget.
+          </td>
+          <td>
+            CAR knew that <code>StartAsync</code> had returned no process, but <code>result.json</code> persisted only the
+            exit code, stdout, stderr, and timeout flag. The host therefore rebuilt <code>ExecutionRawFacts</code> without
+            <code>LaunchFailed</code> and classified the exit as <code>CliCrash</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the backward-compatible detached result now carries an explicit launch
+            failure fact. Only that fact maps to Remote <code>EnvironmentFailure</code>: the first two failures return the
+            card to <span class="lane">2-ready</span>, while budget exhaustion reaches
+            <span class="lane">5e-escalated</span> with category <code>remote-claim-environment</code> and the final launch
+            diagnostic. Generic exit 125 behavior is unchanged.
+          </td>
+        </tr>
       </tbody>
     </table>
 

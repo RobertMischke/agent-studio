@@ -47,6 +47,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         var run = await RunFixtureAsync(fixture);
 
         Assert.False(run.TimedOut);
+        Assert.False(run.LaunchFailed);
         Assert.Equal(fixture.ExitCode, run.Result.ExitCode);
         Assert.Equal(Normalize(fixture.StdOut), Normalize(run.Result.StdOut));
         Assert.Equal(Normalize(fixture.StdErr), Normalize(run.Result.StdErr));
@@ -166,6 +167,45 @@ public sealed class CarWorkerExecutionTests : IDisposable
     }
 
     [Fact]
+    public async Task Launch_failure_is_preserved_as_an_explicit_pre_agent_fact()
+    {
+        var workerDirectory = Path.Combine(_root, "launch-failure");
+        var workingDirectory = Path.Combine(workerDirectory, "worktree");
+        var resultsDirectory = Path.Combine(workerDirectory, "results");
+        Directory.CreateDirectory(workingDirectory);
+        Directory.CreateDirectory(resultsDirectory);
+        var shipped = new List<(string Stream, string Text)>();
+        var spec = new DetachedJobSpec(
+            FileName: "missing-cli",
+            Arguments: [],
+            WorkingDirectory: workingDirectory,
+            Prompt: "prompt",
+            ResultsDirectory: resultsDirectory,
+            TimeoutSeconds: 30,
+            CliType: "claude",
+            Engine: RunnerOptions.ExecEngineCar,
+            RunId: "car-launch-failure");
+
+        var (result, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(
+            spec,
+            workerDirectory,
+            (stream, text) => shipped.Add((stream, text)),
+            options => options with
+            {
+                ClaudePath = Path.Combine(_root, "missing-cli"),
+            });
+
+        Assert.Equal(125, result.ExitCode);
+        Assert.False(timedOut);
+        Assert.True(
+            launchFailed,
+            $"Expected a launch failure. stdout={result.StdOut}; stderr={result.StdErr}; " +
+            $"events={string.Join(" | ", shipped.Select(line => $"{line.Stream}:{line.Text}"))}");
+        Assert.Contains(shipped, line =>
+            line.Text.Contains("failed to start claude", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task The_typed_event_trace_is_written_and_ends_with_RunEnded()
     {
         if (NodeMissing()) return;
@@ -233,6 +273,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
     private sealed record FixtureRun(
         ProcessResult Result,
         bool TimedOut,
+        bool LaunchFailed,
         string WorkerDirectory,
         string ResultsDirectory,
         IReadOnlyList<(string Stream, string Text)> ShippedRaw,
@@ -278,7 +319,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         if (extraEnvironment is not null)
             foreach (var kv in extraEnvironment) environment[kv.Key] = kv.Value;
 
-        var (result, timedOut) = await CarWorkerExecution.RunAsync(
+        var (result, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(
             spec,
             workerDirectory,
             (stream, text) => { lock (shipped) shipped.Add((stream, text)); },
@@ -299,6 +340,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         return new FixtureRun(
             result,
             timedOut,
+            launchFailed,
             workerDirectory,
             resultsDirectory,
             shipped,

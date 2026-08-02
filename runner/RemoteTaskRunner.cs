@@ -760,6 +760,7 @@ public sealed class RemoteTaskRunner
                             slot.Lease,
                             workspace,
                             processResult,
+                            result.LaunchFailed,
                             sameSessionResumeAttempts);
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
@@ -818,7 +819,7 @@ public sealed class RemoteTaskRunner
 
                     shipper.Add(
                         "system",
-                        $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
+                        $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; launchFailed={classified.Decision.RawFacts.LaunchFailed} typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
                     outbox?.Enqueue(
                         "terminal",
                         JsonSerializer.Serialize(
@@ -869,6 +870,7 @@ public sealed class RemoteTaskRunner
         RunLeaseInfoDto lease,
         GitWorkspace workspace,
         ProcessResult result,
+        bool launchFailed,
         int sameSessionResumeAttempts)
     {
         var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
@@ -893,6 +895,7 @@ public sealed class RemoteTaskRunner
             StdErr: result.StdErr,
             ExitCode: result.ExitCode,
             Signal: SignalFromExitCode(result.ExitCode),
+            LaunchFailed: launchFailed,
             SessionState: sessionState,
             SessionId: provider.SessionId,
             SameSessionResumeAttempts: sameSessionResumeAttempts);
@@ -906,6 +909,10 @@ public sealed class RemoteTaskRunner
                 => new RunOutcome(RunOutcomeKind.Done, sentinelOutcome.Reason),
             ExecutionOutcomeKind.ExplicitAgentBlocker when sentinelOutcome.Kind is RunOutcomeKind.Blocked or RunOutcomeKind.NeedsInput
                 => sentinelOutcome,
+            ExecutionOutcomeKind.LaunchFailure
+                => new RunOutcome(
+                    RunOutcomeKind.EnvironmentFailure,
+                    DescribePreparationFailure(result.StdErr)),
             _ => new RunOutcome(RunOutcomeKind.Unknown, typed.Outcome.ToString()),
         };
         return new RemoteExecutionResult(
@@ -1311,9 +1318,12 @@ public sealed class RemoteTaskRunner
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static string DescribePreparationFailure(Exception exception)
+        => DescribePreparationFailure(exception.Message);
+
+    private static string DescribePreparationFailure(string diagnostic)
     {
         var message = CredentialedHttpUrl
-            .Replace(exception.Message, "${scheme}***@")
+            .Replace(diagnostic, "${scheme}***@")
             .Replace('\r', ' ')
             .Replace('\n', ' ')
             .Trim();
