@@ -40,8 +40,9 @@ public static class PosixShell
     /// </summary>
     public static string RequirePath()
         => Resolved.Value ?? throw new InvalidOperationException(
-            "No POSIX shell found. Install Git for Windows (which ships bash) or "
-            + "put bash on PATH. See docs/operations/testing-on-windows.md.");
+            "No POSIX shell found. Install Git for Windows (which ships bash), put bash "
+            + "on PATH, or set AGENT_STUDIO_TEST_SHELL. See "
+            + "docs/operations/testing/windows-baseline-and-platform-gates.md.");
 
     /// <summary>
     /// Translate a path into the form the resolved shell understands.
