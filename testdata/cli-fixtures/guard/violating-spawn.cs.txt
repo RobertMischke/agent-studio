@@ -3,11 +3,13 @@
 // that walks runner/** and backend/Features/{Cli,Runner}/**; if the guard ever
 // stops reporting it, the guard has gone blunt and the real scan is worthless.
 //
-// Four separate violations are encoded:
+// Six separate violations are encoded:
 //   1. ProcessStartInfo with FileName = "claude"       -> cli-spawn (nearby identity)
 //   2. Process.Start on that start info                -> cli-spawn (nearby identity)
 //   3. A spec-driven spawn with NO binary literal      -> cli-spawn (file-scoped identity)
 //   4. RUNNER_CLI_BIN read from the environment        -> legacy-env
+//   5. ProcessStartInfo with GetCliPath                 -> cli-spawn (indirect identity)
+//   6. Process.Start on that indirect start info        -> cli-spawn (indirect identity)
 using System.Diagnostics;
 
 namespace AgentRunner;
@@ -48,4 +50,22 @@ internal static class SpecDrivenLauncher
             spec.WorkingDirectory,
             spec.Prompt,
             ct: ct);
+}
+
+// The local post-T2 regression shape: the binary path is resolved indirectly,
+// so no provider literal and no CliBin option name sits near the process start.
+// GetCliPath / ResolveExecutable must still identify it as a CLI launch.
+internal static class IndirectPathLauncher
+{
+    public static Process Launch(GenericCliExecutionService cli, string repoPath)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = GenericCliExecutionService.ResolveExecutable(cli.GetCliPath()),
+            WorkingDirectory = repoPath,
+            UseShellExecute = false,
+        };
+        return Process.Start(psi)
+            ?? throw new InvalidOperationException("failed to start the indirectly resolved agent CLI");
+    }
 }

@@ -1449,6 +1449,27 @@
             metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2372</code><br><span class="small">CAR execution parity suite</span></td>
+          <td>
+            The same recorded Codex self-crash was replayed through the local legacy and CAR engines. Both executions
+            reached a failed terminal with the same exit code, but their typed <code>RunEnded.Reason</code> values diverged:
+            the legacy finalizer emitted only <code>failed</code>, while CAR retained a more specific stream failure.
+          </td>
+          <td>
+            The two local finalizers did not share the most recent typed <code>TurnFailed</code> detail. Legacy reduced the
+            reason to its process status and CAR fell back to its separate terminal classifier, so the engine switch changed
+            operator-visible diagnostic evidence even when both engines consumed identical protocol bytes.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the per-run process record now retains the latest unresolved
+            <code>TurnFailed</code> reason, clears it on a later successful turn, and both finalizers prefer it before their
+            process-level fallback. The paired
+            regression reaches <code>RunEnded(Failed, "stream disconnected before completion")</code> on both engines and
+            proves both CLI PIDs are reaped. Lane, retry, and escalation policy are unchanged by this diagnostic alignment.
+          </td>
+        </tr>
       </tbody>
     </table>
 

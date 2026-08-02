@@ -9,9 +9,9 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// One non-billable acceptance slice for the local CAR rollout. It starts a
-/// real Ready card through <see cref="ProjectRunner"/>, replaces only CAR's
-/// final process-spawn boundary with the recorded Claude fixture, and then
+/// One non-billable paired acceptance slice for the local CAR rollout. It
+/// starts the same Ready card through <see cref="ProjectRunner"/> once per
+/// execution engine, feeds both engines the same recorded Claude fixture, and
 /// drives the resulting AutoReview card through deterministic post-steps.
 /// </summary>
 [Trait("Category", "MachineBound")]
@@ -31,16 +31,22 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
         InitializeGitRepository();
     }
 
-    [SkippableFact]
-    public async Task Local_car_card_reaches_green_post_steps_with_live_output_and_token_cost_ledger()
+    [SkippableTheory]
+    [InlineData(CliExecutionEngines.Legacy)]
+    [InlineData(CliExecutionEngines.Car)]
+    public async Task Local_engine_card_reaches_identical_green_post_steps_and_token_cost_ledger(
+        string executionEngine)
     {
         RequireNode();
+        if (executionEngine == CliExecutionEngines.Legacy)
+            Skip.IfNot(OperatingSystem.IsLinux(),
+                "the legacy fixture executable currently requires a POSIX shell");
         WriteReadyCard();
 
         var fixturePath = Path.Combine(
             RepoRoot(), "testdata", "cli-fixtures", "streams", "p1-happy-done.claude.fixture");
         var spawner = new FixtureSpawner(fixturePath);
-        var harness = BuildHarness(spawner);
+        var harness = BuildHarness(spawner, fixturePath, executionEngine);
         var liveOutput = new ConcurrentQueue<CliOutputLine>();
         harness.Router.OnOutput += (_, _, line) => liveOutput.Enqueue(line);
 
@@ -50,15 +56,23 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
         var autoReviewFolder = Path.Combine(_watchPath, TaskStates.AutoReview, Slug);
         await WaitUntilAsync(
             () => Directory.Exists(autoReviewFolder),
-            "ProjectRunner did not move the fixture-backed CAR run to AutoReview.");
+            $"ProjectRunner did not move the fixture-backed {executionEngine} run to AutoReview.");
         await WaitUntilAsync(
             () => harness.Summary.GetState(TaskIdentity.CreateKey(_watchPath, Slug))?.Status
                   == TaskSummaryStatus.Ready,
             "the deterministic post-run summary did not finish.");
 
-        Assert.True(spawner.Spawned, "the injected CAR process spawner was never called");
-        Assert.Contains("--output-format", spawner.PreparedArgv);
-        Assert.Contains("stream-json", spawner.PreparedArgv);
+        if (executionEngine == CliExecutionEngines.Car)
+        {
+            Assert.True(spawner.Spawned, "the injected CAR process spawner was never called");
+            Assert.Contains("--output-format", spawner.PreparedArgv);
+            Assert.Contains("stream-json", spawner.PreparedArgv);
+        }
+        else
+        {
+            Assert.False(spawner.Spawned,
+                "the legacy control unexpectedly crossed the CAR process-spawn boundary");
+        }
         Assert.Contains(liveOutput, line =>
             line.Text.Contains("Patch applied; the suite is green.", StringComparison.Ordinal));
         Assert.Contains(liveOutput, line =>
@@ -132,7 +146,10 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
         Assert.True(pipelineCost.TotalCostUsd > 0m);
     }
 
-    private Harness BuildHarness(FixtureSpawner spawner)
+    private Harness BuildHarness(
+        FixtureSpawner spawner,
+        string fixturePath,
+        string executionEngine)
     {
         var rulesPath = Path.Combine(_workspace, "agent-rules.md");
         File.WriteAllText(rulesPath, "Follow the task and finish with one terminal sentinel.\n");
@@ -168,7 +185,7 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
             NullLogger<TaskMutationService>.Instance);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        settings.SetCliExecutionEngine(Project, CliExecutionEngines.Car);
+        settings.SetCliExecutionEngine(Project, executionEngine);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var transitions = new TaskTransitionService(
             scanner, states, mutations, git, settings,
@@ -186,7 +203,9 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
             config,
             new CliUsageParserRegistry([new ClaudeUsageParser()]),
             new CliModelRegistry());
-        cli.SetCliPath("node");
+        cli.SetCliPath(executionEngine == CliExecutionEngines.Legacy
+            ? WriteLegacyFixtureExecutable(fixturePath)
+            : "node");
         cli.CarOptionsCustomizer = options => options with { Spawner = spawner };
         var router = new CliRouter(cli);
         var busStore = new AgentMessageBusStore();
@@ -368,6 +387,33 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
             Skip.If(true, "node is not on PATH; backend CAR fixture replay requires Node.js.");
         }
     }
+
+    private string WriteLegacyFixtureExecutable(string fixturePath)
+    {
+        var executablePath = Path.Combine(_workspace, "fixture-claude");
+        var fakeCliPath = Path.Combine(
+            RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
+        var script = string.Join('\n',
+            "#!/bin/sh",
+            "if [ \"$1\" = \"--version\" ]; then",
+            "  printf '%s\\n' 'fixture-claude 1.0.0'",
+            "  exit 0",
+            "fi",
+            $"export FAKE_CLI_FIXTURE={ShellQuote(fixturePath)}",
+            "export FAKE_CLI_NO_STDIN=1",
+            $"exec node {ShellQuote(fakeCliPath)} \"$@\"",
+            string.Empty);
+        File.WriteAllText(executablePath, script);
+        File.SetUnixFileMode(
+            executablePath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        return executablePath;
+    }
+
+    private static string ShellQuote(string value)
+        => $"'{value.Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
     {
