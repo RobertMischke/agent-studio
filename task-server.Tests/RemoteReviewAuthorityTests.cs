@@ -373,6 +373,57 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
+    public async Task Baseline_evidence_treats_a_nonreproduced_review_flaky_failure_as_quarantine_not_product_failure()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [new ReviewCommandDto(
+                "verify-2",
+                "build-tests",
+                "dotnet",
+                ["test"],
+                CompareToBaseline: true)],
+            ["build-tests"],
+            IntegrationRef: "refs/heads/develop");
+        await SeedReviewSubjectAsync(store, plan: plan);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var request = PassingReport(claim);
+        request = request with
+        {
+            Commands = request.Commands.Select(command => command with
+            {
+                ExitCode = 0,
+                BaselineSha = new string('c', 40),
+                NewFailures = [],
+                PreExistingFailures = [],
+                RetryPerformed = true,
+                FlakyQuarantinedFailures = ["Product.ProcessTiming"],
+            }).ToArray(),
+            Verdicts =
+            [
+                new ReviewVerdictDto(
+                    "build-tests",
+                    "pass",
+                    "FlakyQuarantine",
+                    "1 flaky quarantined failure: Product.ProcessTiming.")
+            ],
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            request,
+            "review-a",
+            default);
+
+        Assert.Equal("Pass", report.Outcome);
+        Assert.False(report.RetryScheduled);
+    }
+
+    [Fact]
     public async Task Stale_review_subject_cannot_overwrite_a_newer_task_lifecycle()
     {
         using var temp = new TempDirectory();
