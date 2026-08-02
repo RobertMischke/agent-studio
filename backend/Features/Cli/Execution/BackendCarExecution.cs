@@ -507,7 +507,7 @@ public partial class GenericCliExecutionService
             var endReason = endOutcome switch
             {
                 LibOutcome.Stopped => info.StopReason.ToString(),
-                LibOutcome.Failed => terminalOutcome.Reason,
+                LibOutcome.Failed => info.LastTurnFailureReason ?? terminalOutcome.Reason,
                 _ => null,
             };
             RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration)

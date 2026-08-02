@@ -20,11 +20,11 @@ namespace AgentRunner.Tests;
 /// A pin that has to be edited is a behaviour change that needs a decision, not
 /// a test fix.</para>
 ///
-/// <para>Scope today: P1 (terminal <c>[[TASK_DONE]]</c>) and P5 (substantial
-/// reply without a sentinel), each in all recorded forms. P5 is the sharp one:
-/// the same scenario classifies differently in plaintext (today's remote alt
-/// path) than in stream-json (what CAR will produce), and that divergence is
-/// pinned here on purpose rather than discovered in production.</para>
+/// <para>The complete recorded matrix pins P1-P5, P9 and P22. P5 is the sharp
+/// protocol-form case: the same scenario classifies differently in plaintext
+/// and stream-json, and that intentional difference is recorded instead of
+/// being mistaken for engine drift. Process and host scenarios P6-P8 and
+/// P10-P21 are covered by the paired worker and host harnesses.</para>
 /// </summary>
 public sealed class ParityFixtureTests
 {
@@ -43,6 +43,138 @@ public sealed class ParityFixtureTests
         "p5-no-sentinel.claude.fixture",
         "p5-no-sentinel.codex.fixture",
     };
+
+    public static TheoryData<string, RunOutcomeKind, string?, string, ExecutionOutcomeKind, ExecutionRecoveryAction>
+        RecordedTerminalMatrix => new()
+        {
+            {
+                "p1-happy-done.claude.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p1-happy-done.codex.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p2-noop.claude.fixture",
+                RunOutcomeKind.NoOp,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p2-noop.codex.fixture",
+                RunOutcomeKind.NoOp,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p3-blocked-no-reason.claude.fixture",
+                RunOutcomeKind.Blocked,
+                "Agent emitted TASK_BLOCKED without a stated reason.",
+                "5-human-review",
+                ExecutionOutcomeKind.ExplicitAgentBlocker,
+                ExecutionRecoveryAction.AskForHumanInput
+            },
+            {
+                "p3-blocked-no-reason.codex.fixture",
+                RunOutcomeKind.Blocked,
+                "Agent emitted TASK_BLOCKED without a stated reason.",
+                "5-human-review",
+                ExecutionOutcomeKind.ExplicitAgentBlocker,
+                ExecutionRecoveryAction.AskForHumanInput
+            },
+            {
+                "p4-needs-input.claude.fixture",
+                RunOutcomeKind.NeedsInput,
+                "choose-primary-column",
+                "5-human-review",
+                ExecutionOutcomeKind.ExplicitAgentBlocker,
+                ExecutionRecoveryAction.AskForHumanInput
+            },
+            {
+                "p4-needs-input.codex.fixture",
+                RunOutcomeKind.NeedsInput,
+                "choose-primary-column",
+                "5-human-review",
+                ExecutionOutcomeKind.ExplicitAgentBlocker,
+                ExecutionRecoveryAction.AskForHumanInput
+            },
+            {
+                "p9-self-crash.claude.fixture",
+                RunOutcomeKind.Unknown,
+                null,
+                "5-human-review",
+                ExecutionOutcomeKind.CliCrash,
+                ExecutionRecoveryAction.TerminateHonestly
+            },
+            {
+                "p9-self-crash.codex.fixture",
+                RunOutcomeKind.Unknown,
+                null,
+                "5-human-review",
+                ExecutionOutcomeKind.CliCrash,
+                ExecutionRecoveryAction.TerminateHonestly
+            },
+            {
+                "p22-rate-limit-camel.claude.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p22-rate-limit-snake.claude.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p22-rate-limit.codex.fixture",
+                RunOutcomeKind.Unknown,
+                null,
+                "5-human-review",
+                ExecutionOutcomeKind.QuotaExceeded,
+                ExecutionRecoveryAction.WaitForCapabilityRecovery
+            },
+        };
+
+    [Theory]
+    [MemberData(nameof(RecordedTerminalMatrix))]
+    public void Recorded_terminal_matrix_pins_lane_outcome_and_recovery(
+        string fixtureName,
+        RunOutcomeKind expectedSentinel,
+        string? expectedReason,
+        string expectedLane,
+        ExecutionOutcomeKind expectedOutcome,
+        ExecutionRecoveryAction expectedRecovery)
+    {
+        var fixture = CliFixture.Load(fixtureName);
+
+        var sentinel = SentinelScanner.Scan(fixture.StdOut);
+        Assert.Equal(expectedSentinel, sentinel.Kind);
+        Assert.Equal(expectedReason, sentinel.Reason);
+        Assert.Equal(expectedLane, sentinel.TargetState);
+
+        var decision = ExecutionOutcomeAdapter.Classify(Facts(fixture));
+        Assert.Equal(expectedOutcome, decision.Outcome);
+        Assert.Equal(expectedRecovery, decision.RecoveryAction);
+        Assert.False(decision.ConsumesProductDefectBudget);
+    }
 
     [Theory]
     [MemberData(nameof(P1Fixtures))]

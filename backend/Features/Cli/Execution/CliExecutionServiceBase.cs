@@ -80,6 +80,21 @@ public partial class GenericCliExecutionService : ICliExecutionService
     /// </summary>
     internal void RaiseRunEvent(string jobKey, CliRunEvent evt)
     {
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            if (evt is CliRunEvent.TurnFailed failed
+                && !string.IsNullOrWhiteSpace(failed.Reason))
+            {
+                info.LastTurnFailureReason = failed.Reason;
+            }
+            else if (evt is CliRunEvent.TurnCompleted)
+            {
+                // A later successful turn resolves an earlier turn failure in
+                // the same process. Do not reuse stale diagnostic evidence if
+                // the process subsequently fails for a different reason.
+                info.LastTurnFailureReason = null;
+            }
+        }
         try { OnRunEvent?.Invoke(jobKey, evt); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
@@ -1422,7 +1437,9 @@ public partial class GenericCliExecutionService : ICliExecutionService
                     : LibOutcome.Failed;
             var endReason = endOutcome == LibOutcome.Stopped
                 ? info.StopReason.ToString()
-                : endOutcome == LibOutcome.Failed ? status : null;
+                : endOutcome == LibOutcome.Failed
+                    ? info.LastTurnFailureReason ?? terminalOutcome.Reason
+                    : null;
             RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey });
 
             // Reap any helper the agent spawned and let detach (Playwright
@@ -1944,6 +1961,14 @@ public partial class GenericCliExecutionService : ICliExecutionService
         /// <summary>For Claude: the latest <c>rate_limit_event</c> frame parsed
         /// from the stream-json output. Null until the first event arrives.</summary>
         public ClaudeRateLimitSnapshot? LastRateLimit { get; set; }
+
+        /// <summary>
+        /// Most recent unresolved typed turn-failure detail. A later
+        /// <see cref="CliRunEvent.TurnCompleted"/> clears it. Both execution
+        /// engines use it for the terminal event before falling back to the
+        /// host outcome classifier's coarser process-level diagnosis.
+        /// </summary>
+        public string? LastTurnFailureReason { get; set; }
 
         /// <summary>
         /// Resolved platform permission mode the runner handed this run
