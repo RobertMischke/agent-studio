@@ -137,7 +137,20 @@ public sealed record RemoteDeliveryCommitRange(
     string? MergeBaseSha,
     string? TipSha,
     IReadOnlyList<GitCommitInfo> Commits,
-    string? Warning);
+    string? Warning,
+    /// <summary>
+    /// AGT-2220: why the inspection failed, so callers can separate "the
+    /// repository contradicts this delivery" (never stamp) from "we could not
+    /// look" (record honestly, do not upgrade to proof).
+    /// </summary>
+    DeliveryVerificationStatus Verification = DeliveryVerificationStatus.NotVerifiable)
+{
+    /// <summary>True when the repository actively contradicts the claimed delivery.</summary>
+    public bool IsDisproved =>
+        Verification is DeliveryVerificationStatus.ShaMismatch
+            or DeliveryVerificationStatus.RefMissing
+            or DeliveryVerificationStatus.CommitMissing;
+}
 
 /// <summary>
 /// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
@@ -3568,17 +3581,22 @@ public class GitService
         var (_, deliveryError, deliveryCode) = RunGitArgs(
             repoRoot, "fetch", "--no-tags", "origin", fetchDelivery);
         if (deliveryCode != 0)
-            return Failed($"Delivery branch '{branch}' could not be fetched from origin: {deliveryError.Trim()}");
+            return Failed(
+                $"Delivery branch '{branch}' could not be fetched from origin: {deliveryError.Trim()}",
+                DeliveryVerificationStatus.RefMissing);
 
         var (tipOutput, tipError, tipCode) = RunGitArgs(
             repoRoot, "rev-parse", "--verify", $"{deliveryRef}^{{commit}}");
         if (tipCode != 0)
-            return Failed($"Fetched delivery branch '{branch}' is not a commit: {tipError.Trim()}");
+            return Failed(
+                $"Fetched delivery branch '{branch}' is not a commit: {tipError.Trim()}",
+                DeliveryVerificationStatus.RefMissing);
         var tip = tipOutput.Trim();
         if (!string.Equals(tip, expectedResultSha, StringComparison.OrdinalIgnoreCase))
         {
             return Failed(
-                $"Fenced delivery mismatch for '{branch}': completion expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(tip)}.");
+                $"Fenced delivery mismatch for '{branch}': completion expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(tip)}.",
+                DeliveryVerificationStatus.ShaMismatch);
         }
 
         var candidates = string.IsNullOrWhiteSpace(recordedIntegrationBranch)
@@ -3616,10 +3634,129 @@ public class GitService
             selected.Base,
             tip,
             commits,
-            null);
+            null,
+            DeliveryVerificationStatus.Verified);
 
-        RemoteDeliveryCommitRange Failed(string warning) =>
-            new(false, null, null, null, [], warning);
+        RemoteDeliveryCommitRange Failed(
+            string warning,
+            DeliveryVerificationStatus verification = DeliveryVerificationStatus.NotVerifiable) =>
+            new(false, null, null, null, [], warning, verification);
+    }
+
+    /// <summary>
+    /// AGT-2220 - does this commit actually exist in this repository? The local
+    /// counterpart of <see cref="VerifyDeliveredCommit"/>, used by paths whose
+    /// target repository IS the local checkout (crash-recovery attribution).
+    /// Fails closed: an unresolvable repo or SHA is "no".
+    /// </summary>
+    public bool CommitExistsInRepo(string? repoRoot, string? sha)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        var candidate = sha!.Trim();
+        if (candidate.Length < 7 || !candidate.All(Uri.IsHexDigit)) return false;
+        var (_, _, code) = RunGitArgs(repoRoot, "cat-file", "-e", $"{candidate}^{{commit}}");
+        return code == 0;
+    }
+
+    /// <summary>
+    /// AGT-2220 - the single primitive behind the invariant "an out-of-band /
+    /// external completion stamp only with commits that provably exist in the
+    /// target repository".
+    ///
+    /// <para>Verifies one claimed commit against <c>origin</c> of
+    /// <paramref name="repoRoot"/>. When <paramref name="gitRef"/> is given the
+    /// ref is fetched and compared to <paramref name="commitSha"/>; a commit
+    /// that is not the tip but is contained in the ref's history counts as
+    /// <see cref="DeliveryVerificationStatus.VerifiedContained"/> (the delivery
+    /// is real, the branch just moved on). Without a ref the remote ref list is
+    /// scanned for the SHA.</para>
+    ///
+    /// <para>Fails <em>closed</em>: anything that cannot be checked returns
+    /// <see cref="DeliveryVerificationStatus.NotVerifiable"/>, which callers
+    /// must never treat as proof.</para>
+    /// </summary>
+    public DeliveryVerificationResult VerifyDeliveredCommit(
+        string? repoRoot,
+        string? gitRef,
+        string? commitSha)
+    {
+        if (!ReviewSubjectStore.IsValidResultSha(commitSha))
+            return DeliveryVerificationResult.NotVerifiable(
+                "No full 40-character commit SHA was claimed.", commitSha, gitRef);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return DeliveryVerificationResult.NotVerifiable(
+                "Repository root does not exist.", commitSha, gitRef);
+        if (!HasRemote(repoRoot, "origin"))
+            return DeliveryVerificationResult.NotVerifiable(
+                "Target repository has no origin remote.", commitSha, gitRef);
+
+        var sha = commitSha!.Trim();
+        var branch = TaskIntegrationBranch.Name(gitRef, fallback: "");
+
+        if (!string.IsNullOrWhiteSpace(branch) && IsLikelyBranchName(branch))
+        {
+            var verifyRef = $"refs/remotes/origin/{branch}";
+            var (_, fetchError, fetchCode) = RunGitArgs(
+                repoRoot, "fetch", "--no-tags", "origin", $"+refs/heads/{branch}:{verifyRef}");
+            if (fetchCode != 0)
+                return new DeliveryVerificationResult(
+                    DeliveryVerificationStatus.RefMissing,
+                    $"Ref '{branch}' could not be fetched from the target repository: {fetchError.Trim()}",
+                    sha, branch, null);
+
+            var (tipOut, _, tipCode) = RunGitArgs(
+                repoRoot, "rev-parse", "--verify", $"{verifyRef}^{{commit}}");
+            if (tipCode != 0)
+                return new DeliveryVerificationResult(
+                    DeliveryVerificationStatus.RefMissing,
+                    $"Ref '{branch}' does not resolve to a commit in the target repository.",
+                    sha, branch, null);
+
+            var tip = tipOut.Trim();
+            if (string.Equals(tip, sha, StringComparison.OrdinalIgnoreCase))
+                return new DeliveryVerificationResult(
+                    DeliveryVerificationStatus.Verified, null, sha, branch, tip);
+
+            // The tip moved on. The claim is still true when the commit exists
+            // locally after the fetch AND is an ancestor of the fetched ref.
+            var (_, _, existsCode) = RunGitArgs(repoRoot, "cat-file", "-e", $"{sha}^{{commit}}");
+            if (existsCode == 0)
+            {
+                var (_, _, ancestorCode) = RunGitArgs(
+                    repoRoot, "merge-base", "--is-ancestor", sha, verifyRef);
+                if (ancestorCode == 0)
+                    return new DeliveryVerificationResult(
+                        DeliveryVerificationStatus.VerifiedContained, null, sha, branch, tip);
+            }
+
+            return new DeliveryVerificationResult(
+                DeliveryVerificationStatus.ShaMismatch,
+                $"Ref '{branch}' resolves to {AbbreviateSha(tip)}, but {AbbreviateSha(sha)} was claimed "
+                + "and is not contained in that history.",
+                sha, branch, tip);
+        }
+
+        // No usable ref: the commit must show up among the remote's ref tips.
+        var (refsOut, refsError, refsCode) = RunGitArgs(repoRoot, "ls-remote", "origin");
+        if (refsCode != 0)
+            return DeliveryVerificationResult.NotVerifiable(
+                $"Target repository could not be listed: {refsError.Trim()}", sha, gitRef);
+
+        foreach (var line in refsOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tab = line.IndexOf('\t');
+            var candidate = (tab < 0 ? line : line[..tab]).Trim();
+            if (string.Equals(candidate, sha, StringComparison.OrdinalIgnoreCase))
+                return new DeliveryVerificationResult(
+                    DeliveryVerificationStatus.Verified,
+                    null, sha, (tab < 0 ? null : line[(tab + 1)..].Trim()), sha);
+        }
+
+        return new DeliveryVerificationResult(
+            DeliveryVerificationStatus.CommitMissing,
+            $"Commit {AbbreviateSha(sha)} is not present on any ref of the target repository.",
+            sha, gitRef, null);
     }
 
     /// <summary>
