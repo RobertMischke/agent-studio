@@ -832,7 +832,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
-        using var client = new RClient(http, RunnerId);
+        using var client = new RClient(
+            http,
+            RunnerId,
+            options: RunnerOptions("claude", hostMaxParallelism: 20));
         await RegisterCodingRunnerAsync(client, http);
 
         var assignment = await http.PutAsJsonAsync(
@@ -1005,7 +1008,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             order: 2);
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
-        using var client = new RClient(http, RunnerId);
+        using var client = new RClient(
+            http,
+            RunnerId,
+            options: RunnerOptions("claude", hostMaxParallelism: 2));
         await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
@@ -1101,7 +1107,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
-        using var client = new RClient(http, RunnerId);
+        using var client = new RClient(
+            http,
+            RunnerId,
+            options: RunnerOptions("claude", hostMaxParallelism: 2));
         await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
@@ -1213,6 +1222,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             RunTimeoutSeconds = 30,
             HostMaxParallelism = 1,
             PollSeconds = 1,
+            ExecEngine = ROptions.ExecEngineLegacy,
         };
         var taskRunner = new RTaskRunner(options, client, _ => { });
         var exit = await taskRunner.RunClaimedAsync(
@@ -1460,7 +1470,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             additionalWatchPath: deliverableWatchPath);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/blocked-project.git");
         await AssignRemoteAsync(http, deliverableProjectName);
@@ -1520,7 +1530,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/writable-project.git");
 
@@ -1580,7 +1590,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
-        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/seed-clamp.git");
 
@@ -1661,7 +1671,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         SeedTask(TaskStates.Ready, "AGT-PREFLIGHT-D", "Fourth", "Prompt.");
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
-        using var client = new RClient(http, RunnerId);
+        using var client = new RClient(
+            http,
+            RunnerId,
+            options: RunnerOptions("claude", hostMaxParallelism: 4));
         await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/example/writable-project.git");
@@ -2079,12 +2092,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         assignment.EnsureSuccessStatusCode();
     }
 
-    private ROptions RunnerOptions(string cliBin) => new()
+    private ROptions RunnerOptions(string cliBin, int hostMaxParallelism = 1) => new()
     {
         ServerUrl = "http://in-process",
         RunnerId = RunnerId,
         RunnerName = ProjectName,
-        Hostname = "hetzner-test",
+        Hostname = Environment.MachineName,
         BackendName = "remote-runner",
         WorkDir = Path.Combine(_workspace, "remote-runner-work"),
         StateDir = Path.Combine(_workspace, "remote-runner-work", ".runner-state"),
@@ -2094,7 +2107,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
         RunTimeoutSeconds = 30,
-        HostMaxParallelism = 1,
+        HostMaxParallelism = hostMaxParallelism,
         PollSeconds = 1,
     };
 

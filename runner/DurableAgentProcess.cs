@@ -45,7 +45,8 @@ internal sealed record DetachedJobResult(
     string StdOut,
     string StdErr,
     bool TimedOut,
-    DateTime CompletedAtUtc);
+    DateTime CompletedAtUtc,
+    bool LaunchFailed = false);
 
 internal sealed record DetachedJobProcessObservation(
     bool IsLive,
@@ -378,16 +379,18 @@ internal sealed class DurableAgentProcess
 
         ProcessResult processResult;
         var timedOut = false;
+        var launchFailed = false;
         if (string.Equals(spec.Engine, RunnerOptions.ExecEngineCar, StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                (processResult, timedOut) = await CarWorkerExecution.RunAsync(spec, directory, Append);
+                (processResult, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(spec, directory, Append);
             }
             catch (Exception ex)
             {
                 Append("system", $"[runner] detached worker failed: {ex.Message}");
                 processResult = new ProcessResult(125, string.Empty, ex.ToString());
+                launchFailed = true;
             }
         }
         else
@@ -432,6 +435,8 @@ internal sealed class DurableAgentProcess
             {
                 Append("system", $"[runner] detached worker failed: {ex.Message}");
                 processResult = new ProcessResult(125, string.Empty, ex.ToString());
+                launchFailed = ex is System.ComponentModel.Win32Exception
+                               || ex.Message.Contains("Failed to start process", StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -440,7 +445,8 @@ internal sealed class DurableAgentProcess
             processResult.StdOut,
             processResult.StdErr,
             timedOut,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            launchFailed);
         await WriteAtomicAsync(resultPath, JsonSerializer.Serialize(result, Json));
         return processResult.ExitCode;
     }
