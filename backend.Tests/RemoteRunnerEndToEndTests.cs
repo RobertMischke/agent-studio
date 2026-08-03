@@ -2154,16 +2154,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "coding-host",
             120,
             "restart-review-run").RunAttempt!;
-        var completed = authority.SettleRun(
-            new AttemptWriteReference(
+        var completed = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 run.AttemptId,
                 run.LastFence,
                 run.AuthorityEpoch,
                 "restart-review-run-complete"),
-            "done",
-            resultSha,
-            null,
-            resultEnvelope: new Contract.ImmutableResultEnvelope(
+            Outcome = "done",
+            ResultSha = resultSha,
+            Reason = null,
+            ResultEnvelope = new Contract.ImmutableResultEnvelope(
                 repositoryId,
                 run.AttemptId,
                 resultSha,
@@ -2171,7 +2172,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "refs/heads/main",
                 null,
                 new string('a', 64),
-                RepositoryUrl: origin));
+                RepositoryUrl: origin),
+        });
         Assert.True(completed.Accepted);
         var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
             TaskKey,
@@ -2305,16 +2307,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "coding-host",
             120,
             "lost-review-run").RunAttempt!;
-        authority.SettleRun(
-            new AttemptWriteReference(
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 run.AttemptId,
                 run.LastFence,
                 run.AuthorityEpoch,
                 "lost-review-run-complete"),
-            "done",
-            resultSha,
-            null,
-            resultEnvelope: new Contract.ImmutableResultEnvelope(
+            Outcome = "done",
+            ResultSha = resultSha,
+            Reason = null,
+            ResultEnvelope = new Contract.ImmutableResultEnvelope(
                 repositoryId,
                 run.AttemptId,
                 resultSha,
@@ -2322,7 +2325,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "refs/heads/main",
                 null,
                 new string('b', 64),
-                RepositoryUrl: origin));
+                RepositoryUrl: origin),
+        });
         var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
             TaskKey,
             repositoryId,
