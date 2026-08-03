@@ -108,7 +108,7 @@ public sealed class IntakeHostedService : BackgroundService
         // are the runner's signal that the verdict already exists. Intake holds
         // no code seat, so processing several cards in one tick is safe — it is
         // the parallel-prep contract, not a coding run.
-        var candidates = SelectCandidates(scanner.ScanAllJobs(), entry.Path, MaxIntakePerProjectPerTick);
+        var candidates = SelectCandidates(scanner.ScanAllAutomationJobs(), entry.Path, MaxIntakePerProjectPerTick);
 
         foreach (var candidate in candidates)
         {
@@ -180,7 +180,8 @@ public sealed class IntakeHostedService : BackgroundService
     internal static IReadOnlyList<TaskInfo> SelectCandidates(IEnumerable<TaskInfo> jobs, string watchPath, int cap)
     {
         return jobs
-            .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)
+            .Where(j => !j.Fixture
+                        && string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)
                         && j.State == TaskStates.Ready
                         && IsAwaitingIntake(j.Phase))
             .OrderBy(j => j.Order)

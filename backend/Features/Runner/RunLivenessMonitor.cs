@@ -151,6 +151,8 @@ public sealed class RunLivenessMonitor
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
+                if (_scanner.FindJob(laneFolder.Slug, entry.Path)?.Fixture == true)
+                    continue;
                 var folder = laneFolder.FolderPath;
                 // Slice B owns a valid steer-pending wait: it intentionally has
                 // no live CLI heartbeat and must receive its configured T-second

@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-02
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -129,12 +129,22 @@ pipeline view.
   Baseline results are single-flight cached by repository, baseline SHA, and
   command hash. Only failures still new after one subject retry block the
   review.
+- `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`, and
+  `runner/RemoteReviewExecutor.cs`: durable Remote Review execution. Workspace
+  preparation persists the immutable subject and lease/fence before the review
+  plan starts. The detached worker atomically records process identity, command
+  checkpoints, and terminal evidence. A replacement daemon adopts only a
+  positively proven process generation and submits the same attempt through the
+  deterministic `review-report:<attempt>:<fence>` key.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel
   is only a latency optimization; phase, pending marker, pipeline record, and
-  timeline are the durability boundary. The backstop finalizes Completed only
-  after successful integration and returns decided failures to Human Review.
+  timeline are the durability boundary. Recovery consumes the same
+  `TaskIntegrationStatusService` target-branch verdict as the board, so a stale
+  Passed step cannot overrule missing Git presence. The backstop finalizes
+  Completed only after successful integration and returns decided failures to
+  Human Review.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
@@ -291,9 +301,21 @@ pipeline view.
   branch to become absolutely green. For each baseline-compared test command,
   its verdict is based on `subject failures - merge-base failures`.
   Intersecting failures remain visible as pre-existing, while the aspect summary
-  names every new failure. A command with unparseable failing-test output stays
-  fail-closed as a new failure. This comparison does not weaken the absolute
-  full-suite boundary before advancing `main`.
+  names every new failure. The Review Executor reads xUnit
+  `Category=ReviewFlaky` traits from the exact subject's built test assemblies.
+  A newly failing marked test is retried once; if it does not reproduce, the
+  report retains its identity as `FlakyQuarantine` and does not classify the
+  card as `ProductFailure`. A reproduced marked failure remains a blocking new
+  failure. A command with unparseable failing-test output stays fail-closed as a
+  new failure. This comparison does not weaken the absolute full-suite boundary
+  before advancing `main`.
+- Remote Review command execution survives a planned Review daemon restart.
+  Recovered attempts retain their original fence and containment namespace and
+  resume before load-aware admission evaluates any fresh slot. Completed
+  commands are not relaunched. If process adoption cannot be proven, the
+  attempt ends visibly as `ReviewInfra / ExecutorRestarted` with the failed
+  proof, completed-command count and duration, and retry reason. Replaying the
+  fixed report key with another terminal payload is rejected.
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.

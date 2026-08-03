@@ -134,7 +134,39 @@ public sealed class RemoteReviewWorkspace
         return Proof(repositoryId!, head, _initialTree, false);
     }
 
-    public async Task<ReviewExecutionEvidence> ExecutePlanAsync(CancellationToken ct)
+    /// <summary>
+    /// Reconstructs the in-memory proof state in a detached review worker after
+    /// the daemon prepared the exact-subject workspace. The worker refuses to
+    /// start commands unless the persisted workspace still proves the same
+    /// immutable subject and a clean tree.
+    /// </summary>
+    internal async Task<ReviewWorkspaceProofDto> AdoptPreparedAsync(CancellationToken ct)
+    {
+        if (!Directory.Exists(RepositoryPath))
+            throw new ReviewInfrastructureException(
+                "PreparedWorkspaceMissing",
+                $"Prepared review repository is missing: {RepositoryPath}");
+
+        var head = await GitValueAsync("rev-parse", "HEAD", ct);
+        if (!string.Equals(head, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase))
+            throw new ReviewInfrastructureException(
+                "ShaMismatch",
+                $"Prepared review HEAD '{head}' does not match expected Result-SHA '{_subject.ExpectedResultSha}'.");
+        _initialTree = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
+        _dirtyBefore = (await GitValueAsync("status", "--porcelain", "--untracked-files=all", ct)).Length > 0;
+        if (_dirtyBefore)
+            throw new ReviewInfrastructureException(
+                "DirtyBefore",
+                "Prepared review workspace became dirty before the detached worker adopted it.");
+        return Proof(_subject.RepositoryId, head, _initialTree, false);
+    }
+
+    public Task<ReviewExecutionEvidence> ExecutePlanAsync(CancellationToken ct)
+        => ExecutePlanAsync(ct, checkpoint: null);
+
+    internal async Task<ReviewExecutionEvidence> ExecutePlanAsync(
+        CancellationToken ct,
+        Func<ReviewExecutionCheckpoint, CancellationToken, Task>? checkpoint)
     {
         var commands = new List<ReviewCommandEvidenceDto>();
         var verdicts = new List<ReviewVerdictDto>();
@@ -155,6 +187,7 @@ public sealed class RemoteReviewWorkspace
                 comparison = await CompareToBaselineAsync(command, execution.Process, ct);
                 if (comparison.NewFailures.Count > 0)
                 {
+                    var reviewFlakyTests = ReviewFlakyTestIndex.Discover(RepositoryPath, _log);
                     retryPerformed = true;
                     await AddArtifactsAsync(
                         $"{SafeSegment(command.StepId)}.initial",
@@ -162,7 +195,9 @@ public sealed class RemoteReviewWorkspace
                         artifacts,
                         ct);
                     execution = await RunCommandAsync(command, RepositoryPath, ct);
-                    comparison = comparison.Reclassify(SubjectFailures(command, execution.Process));
+                    comparison = comparison.Reclassify(
+                        SubjectFailures(command, execution.Process),
+                        reviewFlakyTests);
                 }
             }
 
@@ -190,7 +225,8 @@ public sealed class RemoteReviewWorkspace
                 comparison?.NewFailures,
                 comparison?.PreExistingFailures,
                 comparison?.CacheHit ?? false,
-                retryPerformed));
+                retryPerformed,
+                comparison?.FlakyQuarantinedFailures));
             artifacts.Add(new ReviewArtifactEvidenceDto(
                 Path.GetFileName(stdoutPath), "text/plain", stdout, new FileInfo(stdoutPath).Length));
             artifacts.Add(new ReviewArtifactEvidenceDto(
@@ -198,6 +234,17 @@ public sealed class RemoteReviewWorkspace
             verdicts.Add(comparison is null
                 ? ParseVerdict(command, execution.Process)
                 : BaselineVerdict(command, comparison));
+            if (checkpoint is not null)
+            {
+                await checkpoint(
+                    new ReviewExecutionCheckpoint(
+                        commands.Select(item => item.StepId).ToArray(),
+                        commands.Sum(item => Math.Max(
+                            0,
+                            (item.FinishedAt - item.StartedAt).TotalSeconds)),
+                        DateTime.UtcNow),
+                    ct);
+            }
         }
 
         var finalHead = await GitValueAsync("rev-parse", "HEAD", ct);
@@ -633,7 +680,7 @@ public sealed class RemoteReviewWorkspace
                 : $"Review command '{command.StepId}' exited {result.ExitCode}.");
     }
 
-    private static ReviewVerdictDto BaselineVerdict(
+    internal static ReviewVerdictDto BaselineVerdict(
         ReviewCommandDto command,
         BaselineComparison comparison)
     {
@@ -643,11 +690,19 @@ public sealed class RemoteReviewWorkspace
         var preExisting = comparison.PreExistingFailures.Count == 0
             ? "0 pre-existing failures"
             : $"{comparison.PreExistingFailures.Count} pre-existing failures: {string.Join(", ", comparison.PreExistingFailures)}";
+        var quarantined = comparison.FlakyQuarantinedFailures.Count == 0
+            ? "0 flaky quarantined failures"
+            : $"{comparison.FlakyQuarantinedFailures.Count} flaky quarantined failures: {string.Join(", ", comparison.FlakyQuarantinedFailures)}";
+        var classification = comparison.NewFailures.Count > 0
+            ? "NewTestFailures"
+            : comparison.FlakyQuarantinedFailures.Count > 0
+                ? ReviewFlakyTestIndex.VerdictClassification
+                : "BaselineCompared";
         return new ReviewVerdictDto(
             command.Aspect,
             comparison.NewFailures.Count == 0 ? "pass" : "block",
-            comparison.NewFailures.Count == 0 ? "BaselineCompared" : "NewTestFailures",
-            $"{newFailures}; {preExisting}. Baseline {comparison.BaselineSha} ({(comparison.CacheHit ? "cache hit" : "cache fill")}).");
+            classification,
+            $"{newFailures}; {preExisting}; {quarantined}. Baseline {comparison.BaselineSha} ({(comparison.CacheHit ? "cache hit" : "cache fill")}).");
     }
 
     private static IReadOnlyList<string> SubjectFailures(
@@ -880,6 +935,11 @@ public sealed record ReviewExecutionEvidence(
     IReadOnlyList<ReviewArtifactEvidenceDto> Artifacts,
     IReadOnlyList<ReviewVerdictDto> Verdicts);
 
+internal sealed record ReviewExecutionCheckpoint(
+    IReadOnlyList<string> CompletedStepIds,
+    double CompletedCommandSeconds,
+    DateTime UpdatedAtUtc);
+
 internal sealed record CommandExecution(
     ProcessResult Process,
     DateTime StartedAt,
@@ -899,6 +959,7 @@ internal sealed record BaselineComparison(
     IReadOnlyList<string> BaselineFailures,
     IReadOnlyList<string> NewFailures,
     IReadOnlyList<string> PreExistingFailures,
+    IReadOnlyList<string> FlakyQuarantinedFailures,
     bool CacheHit)
 {
     public static BaselineComparison Create(
@@ -917,11 +978,24 @@ internal sealed record BaselineComparison(
             subjectFailures.Where(baseline.Contains)
                 .Order(StringComparer.Ordinal)
                 .ToArray(),
+            [],
             cacheHit);
     }
 
-    public BaselineComparison Reclassify(IReadOnlyList<string> subjectFailures)
-        => Create(BaselineSha, BaselineFailures, subjectFailures, CacheHit);
+    public BaselineComparison Reclassify(
+        IReadOnlyList<string> subjectFailures,
+        ReviewFlakyTestIndex reviewFlakyTests)
+    {
+        var retried = Create(BaselineSha, BaselineFailures, subjectFailures, CacheHit);
+        var retriedFailures = subjectFailures.ToHashSet(StringComparer.Ordinal);
+        return retried with
+        {
+            FlakyQuarantinedFailures = NewFailures
+                .Where(failure => !retriedFailures.Contains(failure) && reviewFlakyTests.Contains(failure))
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+        };
+    }
 }
 
 public sealed class ReviewInfrastructureException : Exception

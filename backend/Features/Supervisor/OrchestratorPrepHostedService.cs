@@ -152,7 +152,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         var level = _orchestratorDefaults.ResolveAutonomyLevel(projectName);
         if (level == 0) return; // manual: never moves a task forward
 
-        var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();
+        var allJobs = _scanner.ScanAllAutomationJobs().Where(j => j.WatchPath == watchPath).ToList();
         var prep = allJobs.Where(j => j.State == TaskStates.Preparation).OrderBy(j => j.Order).ToList();
         var ready = allJobs.Where(j => j.State == TaskStates.Ready).OrderBy(j => j.Order).ToList();
 
@@ -300,7 +300,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
         try
         {
-            var stray = _scanner.ScanAllJobs()
+            var stray = _scanner.ScanAllAutomationJobs()
                 .Where(j => j.State == TaskStates.OrchestratorPrep)
                 .ToList();
             foreach (var job in stray)

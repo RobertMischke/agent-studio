@@ -694,7 +694,10 @@ public sealed partial class TaskServerStore
                 && (!ValidDigest(command.BaselineSha, 40, 64)
                     || command.NewFailures is null
                     || command.PreExistingFailures is null
-                    || (command.NewFailures.Count > 0 && !command.RetryPerformed)))
+                    || (command.NewFailures.Count > 0 && !command.RetryPerformed)
+                    || (command.FlakyQuarantinedFailures is { Count: > 0 }
+                        && (!command.RetryPerformed
+                            || command.FlakyQuarantinedFailures.Any(command.NewFailures.Contains)))))
                 return ("ReviewInfra", "BaselineEvidenceInvalid");
         }
         if (request.Artifacts.Any(artifact => !ValidDigest(artifact.Sha256, 64) || artifact.SizeBytes < 0))

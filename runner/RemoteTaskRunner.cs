@@ -722,8 +722,8 @@ public sealed class RemoteTaskRunner
                         slot = _state.Save(slot with { LastOutputSequence = sequence });
                 }
 
-                var result = process.ReadResult();
-                if (result is not null)
+                var observation = DurableAgentProcess.InspectForReattach(slot);
+                if (observation.Result is { } result)
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
@@ -829,8 +829,9 @@ public sealed class RemoteTaskRunner
                     return classified;
                 }
 
-                if (!DurableAgentProcess.VerifyLive(slot, out var reason))
-                    throw new DetachedWorkerLostException($"Detached worker disappeared before recording a result: {reason}");
+                if (!observation.IsLive)
+                    throw new DetachedWorkerLostException(
+                        $"Detached worker disappeared before recording a result: {observation.Detail}");
                 await Task.Delay(TimeSpan.FromMilliseconds(250), stopRun);
             }
         }

@@ -1406,6 +1406,27 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-30</td>
+          <td><code>AGT-2428</code><br><span class="small">detached worker exited while replacement inspected its terminal result</span></td>
+          <td>
+            Remote review exposed a failure in the replacement-daemon test. A worker could atomically publish
+            <code>result.json</code> and exit after startup or the attached-process poll had observed no result
+            but before it checked PID liveness. The replacement could then report the worker missing instead of
+            consuming its terminal result.
+          </td>
+          <td>
+            Startup discovery and <code>RemoteTaskRunner</code> independently combined a result-file read with
+            <code>VerifyLive</code>. The two facts had no shared resolver, and a negative PID result did not
+            re-check the durable terminal fact written concurrently with process exit.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> <code>DurableAgentProcess.InspectForReattach</code> is now the
+            shared verdict for startup and the attached-process poll. It reads the result, verifies PID generation
+            plus worktree, and reads the result again before declaring the worker lost. A deterministic regression
+            pins the exact interleaving, and the complete Runner test project passes.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-31</td>
           <td><code>AGT-2460</code><br><span class="small">settled result requeued into a phantom second run</span></td>
           <td>
@@ -1468,6 +1489,116 @@
             process-level fallback. The paired
             regression reaches <code>RunEnded(Failed, "stream disconnected before completion")</code> on both engines and
             proves both CLI PIDs are reaped. Lane, retry, and escalation policy are unchanged by this diagnostic alignment.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2480</code><br><span class="small">stale lifecycle checks after retries and restarts</span></td>
+          <td>
+            <code>lifecycle.json</code> could retain a Post Processing phase and checks marked
+            <code>running</code> after a coding retry, backend restart, or terminal lane move. System pulse and scheduled
+            recovery scans consequently reported work that no longer existed, including RUN-1xx end-to-end fixtures.
+          </td>
+          <td>
+            Attempt boundaries updated <code>task.json.phase</code> and the volatile queue but did not own a matching
+            lifecycle reset or terminal write. Automated readers also used the fixture-inclusive storage scan, so test
+            cards participated in production health and recovery decisions.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> one synchronized lifecycle writer now clears old checks on a
+            confirmed coding restart, replaces them at recovery time, and closes every active check as
+            <code>completed</code> or <code>failed</code> with <code>finishedAt</code>. Automation scans exclude
+            <code>fixture: true</code>. Regression coverage proves that no active recovered check predates its recovery
+            boundary and that fixtures remain untouched.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2484</code><br><span class="small">review-only Runner test flakes observed on <code>AGT-2457</code> and <code>AGT-2458</code></span></td>
+          <td>
+            Exact-subject Remote Review reported process- and timing-dependent Runner tests as new product failures on cards
+            whose diffs did not touch <code>runner/</code>. Reattach, real grace-window, and fake-CLI timing cases could turn a
+            one-run host scheduling miss into a red Review grade.
+          </td>
+          <td>
+            Baseline comparison retried new failures once but discarded the first failing identity when the retry passed. The
+            review evidence therefore had no durable category for a confirmed one-run flake, and xUnit trait metadata was not
+            consulted by the failure parser.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> intentional cases now carry the additive
+            <code>Category=ReviewFlaky</code> trait alongside <code>MachineBound</code> where required. Remote Review reads that
+            trait from the exact subject's built test assemblies, retries once, and records a disappearing failure as
+            <code>FlakyQuarantine</code> with its test identity. The card reaches <code>Pass</code>; a reproduced failure remains
+            <code>NewTestFailures</code> and reaches <code>ProductFailure</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2463</code><br><span class="small">four local restart orphans</span></td>
+          <td>
+            Four local cards remained in <span class="lane">3-progress</span> for 10 to 39 hours after backend restarts
+            killed their CLI child processes. The registered uptime liveness service reported no actionable candidates,
+            so none of the cards reached its automatic Ready recovery terminal.
+          </td>
+          <td>
+            The flat task-storage cutover moved tasks to <code>tasks/&lt;bucket&gt;/&lt;key&gt;</code> and made
+            <code>task.json.state</code> authoritative, but <code>ITaskAccess.ListLaneFolders</code> still enumerated only
+            retired <code>&lt;lane&gt;/&lt;slug&gt;</code> directories. Local liveness, stale-progress, and steer-timeout sweeps
+            therefore saw zero flat-layout Progress tasks even though all registered projects were already in scope.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared lane-folder read now resolves flat task membership from
+            <code>task.json.state</code>, retains the external task ID for active-run matching, and falls back to physical
+            lane folders only for legacy projects. A two-project regression proves old local runs with no live owner move
+            metadata-only to <span class="lane">2-ready</span> and append one <code>run-liveness.jsonl</code> fact per card.
+          </td>
+        </tr>
+        <tr id="case-agt-2471">
+          <td>2026-08-01 to 2026-08-02</td>
+          <td><code>AGT-2471</code> / <code>AGT-2473</code><br><span class="small">route outage and review restart loss</span></td>
+          <td>
+            The SSH reverse tunnel from a Windows Studio to the remote Runner died and was not restarted. The review
+            daemon issued 7,748 failed Task Server requests in 24 hours while the Review lane made no progress. When the
+            route returned, four queued reviews started together. A later Review daemon restart reclaimed those attempts
+            and discarded about 28 minutes of completed test time.
+          </td>
+          <td>
+            The route had no durable supervisor or remote freshness alarm. Coding attempts had durable process
+            reattachment, but Remote Review ran commands inside the daemon process and held no persisted process,
+            command-progress, or result contract that a replacement generation could adopt.
+          </td>
+          <td>
+            <span class="pill ok">fixed by AGT-2487</span> the superseding slice reports route loss through bounded
+            transition logs, host telemetry, and capability freshness, and supplies a repository-owned tunnel keeper.
+            Review now persists the attempt, original fence, workspace, worker PID generation, command checkpoints, and
+            terminal evidence. A planned restart adopts the detached worker before fresh load admission. Failed adoption
+            produces a fenced <code>ReviewInfra / ExecutorRestarted</code> report with loss extent and retry reason, and a
+            conflicting terminal replay under the deterministic report key is rejected.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2475</code><br><span class="small">live runner publish corrupted CLR metadata</span></td>
+          <td>
+            At 16:13:10 UTC the still-running daemon failed first with
+            <code>CultureNotFoundException</code> under invariant globalization, then with
+            <code>COMException 0x80131130</code> while formatting a stack trace whose symbol names contained control
+            bytes. systemd restarted it after ten seconds. The first actual CAR worker started later, at 16:14:32 UTC,
+            and its separate slot exited with code 1.
+          </td>
+          <td>
+            The multi-file publish replaced <code>CodingAgentRunner.dll</code>, <code>agent-host.dll</code>, and the
+            runtime configuration in the live installation between 16:12:58 and 16:13:01 UTC, but the old daemon was
+            not asked to restart until 16:13:22 UTC. Its CLR subsequently read inconsistent file-backed metadata. CAR
+            0.7.0 contains no named-culture construction in this path, and the production CAR startup passes with
+            invariant globalization; the culture error was a secondary metadata-corruption symptom.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Runner tools now install into immutable version directories and
+            atomically switch <code>current</code>; units execute through that release boundary and old releases remain
+            available to detached workers. Regression coverage rejects global in-place tool updates and executes the
+            real CAR startup path in invariant mode while explicitly guarding <code>CultureNotFoundException</code>.
           </td>
         </tr>
       </tbody>

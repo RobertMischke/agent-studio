@@ -23,6 +23,7 @@ public sealed class TaskServerClient : IDisposable
         new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
+    private readonly string? _runnerInstanceIdOverride;
     private readonly RunnerOptions? _options;
     // Per-run caches, evicted on completion/release so the long-lived daemon does
     // not retain every claimed task's lease and full prompt body for its lifetime.
@@ -80,11 +81,13 @@ public sealed class TaskServerClient : IDisposable
         string? configuredClientId = null,
         string? authToken = null,
         bool usesDurableTaskServer = false,
-        RunnerOptions? options = null)
+        RunnerOptions? options = null,
+        string? runnerInstanceId = null)
     {
         _http = http;
         _options = options;
         _configuredClientId = configuredClientId;
+        _runnerInstanceIdOverride = runnerInstanceId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
@@ -259,7 +262,8 @@ public sealed class TaskServerClient : IDisposable
     public string ClientId { get; private set; } = string.Empty;
 
     public bool UsesDurableTaskServer => _useV1;
-    internal string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+    internal string RunnerInstanceId => _runnerInstanceIdOverride
+                                        ?? $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
     internal int HostMaxParallelism => Math.Clamp(
         _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
         1,

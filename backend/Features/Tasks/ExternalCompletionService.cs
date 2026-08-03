@@ -536,7 +536,7 @@ public sealed class ExternalCompletionService
     /// <summary>
     /// Terminalizes <c>lifecycle.json</c>: sets the phase to
     /// <see cref="LifecyclePhases.AwaitingReview"/> and flips every still-running
-    /// check to <c>skipped</c> with a note, so a card left stuck in
+    /// Post Processing check to <c>failed</c> with a note, so a card left stuck in
     /// <c>post-processing-running</c> stops spamming the scanner warning that
     /// motivated this fix. Rewrites the sidecar even when none exists so the
     /// terminal state is explicit on disk.
@@ -554,7 +554,7 @@ public sealed class ExternalCompletionService
                 PhaseEnteredAt = now,
                 BlockingReason = null,
                 IntakeChecks = TerminalizeChecks(snapshot.IntakeChecks, now, note),
-                PostProcessingChecks = TerminalizeChecks(snapshot.PostProcessingChecks, now, note),
+                PostProcessingChecks = TerminalizePostProcessingChecks(snapshot.PostProcessingChecks, now, note),
             };
             File.WriteAllText(
                 Path.Combine(folderPath, "lifecycle.json"),
@@ -581,6 +581,17 @@ public sealed class ExternalCompletionService
             .Select(c => string.Equals(c.Status, "running", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(c.Status, "pending", StringComparison.OrdinalIgnoreCase)
                 ? c with { Status = "skipped", FinishedAt = now, Detail = note }
+                : c)
+            .ToList();
+
+    private static List<LifecycleCheck> TerminalizePostProcessingChecks(
+        List<LifecycleCheck> checks,
+        DateTime now,
+        string note)
+        => checks
+            .Select(c => string.Equals(c.Status, "running", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(c.Status, "pending", StringComparison.OrdinalIgnoreCase)
+                ? c with { Status = "failed", StartedAt = c.StartedAt ?? now, FinishedAt = now, Detail = note }
                 : c)
             .ToList();
 

@@ -372,6 +372,58 @@ test.describe('Execution Hosts settings section', () => {
     });
   });
 
+  test('shows a stale Task Server route as a visible host outage in both themes', async ({ page }) => {
+    const now = Date.now();
+    const failureStartedAt = new Date(now - 6 * 60_000).toISOString();
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'review', runnerVersion: '1.2.0', protocolVersion: 2,
+        status: 'active', registeredAt: new Date(now - 86_400_000).toISOString(),
+        lastSeenAt: failureStartedAt,
+        hostAdmission: {
+          hostId: 'host-berlin', admissionState: 'open', automaticDrainReason: null,
+          automaticDrainAt: null, operatorDrainReason: null, operatorDrainAt: null,
+        },
+        capabilities: [{
+          key: 'task-server:connectivity', category: 'foundation', advertisedStatus: 'ready',
+          healthState: 'healthy', reason: null, advertisedAt: failureStartedAt,
+          freshUntil: new Date(now - 3 * 60_000).toISOString(), isFresh: false,
+          firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
+          canaryClaimId: null, consecutiveFailures: 0, version: null,
+          identity: '127.0.0.1:15031', detail: 'Task Server route reachable before the outage.',
+          affectedClaims: [], recoveryHistory: [],
+        }],
+        telemetry: {
+          observedAt: failureStartedAt, cpuPercent: 7, memoryUsedBytes: 4_000_000_000,
+          memoryTotalBytes: 16_000_000_000, cpuCores: 6,
+          taskServerConnectionStatus: 'unreachable',
+          taskServerConnectionObservedAt: failureStartedAt,
+          taskServerConnectionFailureStartedAt: failureStartedAt,
+          taskServerConnectionConsecutiveFailures: 61,
+          taskServerConnectionEscalatedAt: new Date(now - 60_000).toISOString(),
+          taskServerConnectionLastError: 'connection refused',
+        },
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-task-server-route')).toContainText('unreachable');
+    const route = remote.getByTestId('remote-host-task-server-route-state');
+    await expect(route).toContainText('Task Server route unreachable');
+    await expect(route).toContainText('No connectivity advertisement has arrived');
+    await expect(route).toContainText('Check the tunnel');
+
+    await setTheme(page, 'dark');
+    await remote.screenshot({ path: join(SHOT_DIR, 'task-server-route-outage-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await remote.screenshot({ path: join(SHOT_DIR, 'task-server-route-outage-light--mocked.png') });
+  });
+
   test('shows selective capability drain, canary context, affected claims, and recovery history without freshening stale metrics', async ({ page }) => {
     const now = Date.now();
     await page.unroute('**/api/v1/management/remote-hosts');

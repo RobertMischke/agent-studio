@@ -18,9 +18,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var first = NewService(() => now);
         var run = first.AcquireRun("AGT-1", "PROJ-1", null, "runner-a", "host-a", 120, "claim-1");
         Assert.Equal(AttemptWriteStatus.Accepted, run.Status);
-        var settled = first.SettleRun(
-            new AttemptWriteReference(run.RunAttempt!.AttemptId, run.RunAttempt.LastFence, run.RunAttempt.AuthorityEpoch, "completion-1"),
-            "done", "589c462f", null);
+        var settled = first.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.RunAttempt!.AttemptId,
+                run.RunAttempt.LastFence,
+                run.RunAttempt.AuthorityEpoch,
+                "completion-1"),
+            Outcome = "done",
+            ResultSha = "589c462f",
+        });
         Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
         var cleanupReference = new AttemptWriteReference(
             run.RunAttempt.AttemptId, run.RunAttempt.LastFence, run.RunAttempt.AuthorityEpoch, "cleanup-1");
@@ -201,15 +208,31 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             service.RenewReview(oldRenewWrite, "reviewer-a", 60).Status);
 
         var runB = service.AcquireRun("AGT-1", "PROJ-1", oldReview.SourceRunAttemptId, "runner-b", "host-b", 60, "run-b").RunAttempt!;
-        service.SettleRun(new AttemptWriteReference(runB.AttemptId, runB.LastFence, runB.AuthorityEpoch, "complete-b"), "done", "sha-b", null);
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                runB.AttemptId,
+                runB.LastFence,
+                runB.AuthorityEpoch,
+                "complete-b"),
+            Outcome = "done",
+            ResultSha = "sha-b",
+        });
 
         var replayedClaim = service.ClaimReview(
             oldReview.AttemptId, "reviewer-a", "host-a", 60, "claim-old");
         var replayedRenew = service.RenewReview(oldRenewWrite, "reviewer-a", 60);
 
-        var replayedOldCompletion = service.SettleRun(
-            new AttemptWriteReference(oldReview.SourceRunAttemptId, oldClaim.LastFence - 1, oldClaim.AuthorityEpoch, "run-complete"),
-            "done", "sha-a", null);
+        var replayedOldCompletion = service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                oldReview.SourceRunAttemptId,
+                oldClaim.LastFence - 1,
+                oldClaim.AuthorityEpoch,
+                "run-complete"),
+            Outcome = "done",
+            ResultSha = "sha-a",
+        });
 
         service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-1", "PROJ-1", "sha-b", runB.AttemptId, "req", "policy", [], "review-b"));
@@ -254,10 +277,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var runB = service.AcquireRun(
             "AGT-1", "PROJ-1", reviewA.SourceRunAttemptId,
             "runner-b", "host-b", 60, "run-b").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
-                runB.AttemptId, runB.LastFence, runB.AuthorityEpoch, "complete-b"),
-            "done", "sha-b", null);
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                runB.AttemptId,
+                runB.LastFence,
+                runB.AuthorityEpoch,
+                "complete-b"),
+            Outcome = "done",
+            ResultSha = "sha-b",
+        });
         service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-1", "PROJ-1", "sha-b", runB.AttemptId,
             "req", "policy", [], "review-b"));
@@ -267,6 +296,42 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(AttemptWriteStatus.Superseded, replay.Status);
         Assert.Equal(reviewA.AttemptId, replay.AttemptId);
         Assert.Equal("sha-b", service.GetTaskProjection("AGT-1").CurrentReviewSubject!.ExpectedResultSha);
+    }
+
+    [Fact]
+    public void Daemon_generations_cannot_reuse_one_report_key_for_different_terminal_results()
+    {
+        var service = NewService();
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var claimed = service.ClaimReview(
+            review.AttemptId,
+            "reviewer",
+            "review-host",
+            60,
+            "claim-generation-one").ReviewAttempt!;
+        var write = new AttemptWriteReference(
+            claimed.AttemptId,
+            claimed.LastFence,
+            claimed.AuthorityEpoch,
+            $"review-report:{claimed.AttemptId}:{claimed.LastFence}");
+
+        var first = service.SettleReview(new SettleReviewAttemptRequest(
+            write,
+            "sha-a",
+            ReviewTerminalOutcome.Pass,
+            Reason: "generation one completed the adopted worker"));
+        var conflicting = service.SettleReview(new SettleReviewAttemptRequest(
+            write,
+            "sha-a",
+            ReviewTerminalOutcome.ProductFailure,
+            Reason: "generation two tried a different terminal payload"));
+
+        Assert.Equal(AttemptWriteStatus.Accepted, first.Status);
+        Assert.Equal(AttemptWriteStatus.Invalid, conflicting.Status);
+        Assert.Contains("different terminal payload", conflicting.Message, StringComparison.Ordinal);
+        var terminal = service.GetReview(review.AttemptId)!;
+        Assert.Equal(ReviewTerminalOutcome.Pass, terminal.Outcome);
+        Assert.Single(terminal.Reports);
     }
 
     [Fact]
@@ -313,15 +378,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "AGT-RUN", "PROJ-1", null, "runner-a", "host-a", 60, "run-a").RunAttempt!;
         var reviewSource = service.AcquireRun(
             "AGT-REVIEW", "PROJ-1", null, "runner-b", "host-b", 60, "review-source").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 reviewSource.AttemptId,
                 reviewSource.LastFence,
                 reviewSource.AuthorityEpoch,
                 "review-source-complete"),
-            "done",
-            "sha-review",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-review",
+        });
         var activeReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-REVIEW",
             "PROJ-1",
@@ -340,15 +406,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
 
         var pendingSource = service.AcquireRun(
             "AGT-PENDING-REVIEW", "PROJ-1", null, "runner-c", "host-c", 60, "pending-source").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 pendingSource.AttemptId,
                 pendingSource.LastFence,
                 pendingSource.AuthorityEpoch,
                 "pending-source-complete"),
-            "done",
-            "sha-pending",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-pending",
+        });
         var pendingReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-PENDING-REVIEW",
             "PROJ-1",
@@ -418,15 +485,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(epoch, freshRun.AuthorityEpoch);
         Assert.Equal(epoch, freshReviewClaim.AuthorityEpoch);
 
-        var completedRun = service.SettleRun(
-            new AttemptWriteReference(
+        var completedRun = service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 activeRun.AttemptId,
                 activeRun.LastFence,
                 activeRun.AuthorityEpoch,
                 "run-complete-after-rotation"),
-            "done",
-            "sha-run",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-run",
+        });
         var completedReview = service.SettleReview(new SettleReviewAttemptRequest(
             new AttemptWriteReference(
                 activeReview.AttemptId,
@@ -467,15 +535,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "AGT-DRAINING", "PROJ-1", null, "runner-a", "host-a", 60, "run-a").RunAttempt!;
         var reviewSource = service.AcquireRun(
             "AGT-DRAINING-REVIEW", "PROJ-1", null, "runner-b", "host-b", 60, "review-source").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 reviewSource.AttemptId,
                 reviewSource.LastFence,
                 reviewSource.AuthorityEpoch,
                 "review-source-complete"),
-            "done",
-            "sha-review",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-review",
+        });
         var drainingReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-DRAINING-REVIEW",
             "PROJ-1",
@@ -510,15 +579,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
                 60).Status);
         Assert.Equal(
             AttemptWriteStatus.Accepted,
-            restarted.SettleRun(
-                new AttemptWriteReference(
+            restarted.SettleRun(new SettleRunAttemptRequest
+            {
+                Write = new AttemptWriteReference(
                     draining.AttemptId,
                     draining.LastFence,
                     draining.AuthorityEpoch,
                     "settle-after-restart"),
-                "done",
-                "sha-drained",
-                null).Status);
+                Outcome = "done",
+                ResultSha = "sha-drained",
+            }).Status);
         Assert.Equal(
             AttemptWriteStatus.Accepted,
             restarted.RenewReview(
@@ -763,15 +833,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var service = NewService(() => now, terminalRetentionCount: 1);
         var oldRun = service.AcquireRun(
             "AGT-1", "PROJ-1", null, "runner-a", "host-a", 60, "old-run-create").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 oldRun.AttemptId,
                 oldRun.LastFence,
                 oldRun.AuthorityEpoch,
                 "old-run-settle"),
-            "done",
-            "sha-old",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-old",
+        });
         var oldReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-1",
             "PROJ-1",
@@ -806,15 +877,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "host-b",
             60,
             "current-run-create").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 currentRun.AttemptId,
                 currentRun.LastFence,
                 currentRun.AuthorityEpoch,
                 "current-run-settle"),
-            "done",
-            "sha-current",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-current",
+        });
         var currentReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-1",
             "PROJ-1",
@@ -1055,15 +1127,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "host-a",
             60,
             "first-run-create").RunAttempt!;
-        service.SettleRun(
-            new AttemptWriteReference(
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 first.AttemptId,
                 first.LastFence,
                 first.AuthorityEpoch,
                 "first-run-settle"),
-            "done",
-            "sha-first",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-first",
+        });
 
         now = now.AddMinutes(1);
         var second = service.AcquireRun(
@@ -1080,15 +1153,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             "attempt-authority.archive-2026-07-28.json");
         File.WriteAllText(archivePath, "{ interrupted archive");
 
-        var settled = service.SettleRun(
-            new AttemptWriteReference(
+        var settled = service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 second.AttemptId,
                 second.LastFence,
                 second.AuthorityEpoch,
                 "second-run-settle"),
-            "done",
-            "sha-second",
-            null);
+            Outcome = "done",
+            ResultSha = "sha-second",
+        });
 
         Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
         Assert.Null(service.GetRun(first.AttemptId));
@@ -1105,7 +1179,16 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     private (RunAttemptDto Run, ReviewAttemptDto Review) CompletedRunWithReview(AttemptAuthorityService service, string sha)
     {
         var run = service.AcquireRun("AGT-1", "PROJ-1", null, "runner", "host", 60, "run-create").RunAttempt!;
-        service.SettleRun(new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "run-complete"), "done", sha, null);
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "run-complete"),
+            Outcome = "done",
+            ResultSha = sha,
+        });
         var review = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
             "AGT-1", "PROJ-1", sha, run.AttemptId, "req", "policy", [], "review-create")).ReviewAttempt!;
         return (service.GetRun(run.AttemptId)!, review);

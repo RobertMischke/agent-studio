@@ -731,7 +731,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Scanner,
             deps.Settings,
             deps.Merge,
-            deps.Pipeline,
             deps.Integration,
             deps.Mutations,
             deps.Configuration,
@@ -770,7 +769,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Scanner,
             deps.Settings,
             deps.Merge,
-            deps.Pipeline,
             deps.Integration,
             deps.Mutations,
             deps.Configuration,
@@ -796,6 +794,48 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public void AcceptanceMerge_PassedStepWithoutGitPresence_IsRevalidated()
+    {
+        var deliverySha = PublishDelivery("lying-step.txt", "git truth wins\n");
+        var deps = Build(deliverySha);
+
+        var moved = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        var completedBefore = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completedBefore);
+        Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+
+        // Reproduce the status contradiction from AGT-2424: the pipeline says
+        // Passed while the reviewed ResultSha is not reachable from develop.
+        deps.Pipeline.RecordStep(completedBefore!.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Passed,
+            StartedAt = DateTime.UtcNow.AddSeconds(-1),
+            CompletedAt = DateTime.UtcNow,
+            Verdict = "merged",
+            Reason = "stale success fixture",
+        });
+
+        var backstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
+        var recovered = backstop.RunOnce();
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
+        Assert.DoesNotContain(
+            deps.Scanner.FindJob(Slug, _watchPath)!.Tags,
+            IntegrationStatuses.IsPendingTag);
+    }
+
+    [Fact]
     public void AcceptanceMerge_LocalDeliveryWithoutReviewSubject_IsRecoveredFromCompletedLane()
     {
         var deliverySha = PublishLocalDelivery("local-restart.txt", "local delivery\n");
@@ -809,7 +849,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Scanner,
             deps.Settings,
             deps.Merge,
-            deps.Pipeline,
             deps.Integration,
             deps.Mutations,
             deps.Configuration,
@@ -847,7 +886,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Scanner,
             deps.Settings,
             deps.Merge,
-            deps.Pipeline,
             deps.Integration,
             deps.Mutations,
             deps.Configuration,

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.Json;
 using System.Threading.Channels;
 
 namespace AgentStudio.Runner;
@@ -122,13 +121,6 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     /// </summary>
     internal Func<AutoReviewPostProcessingRequest, CancellationToken, Task>? ProcessOverride { get; set; }
 
-    private static readonly JsonSerializerOptions LifecycleJsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public AutoReviewPostProcessingWorker(
         AutoReviewPostProcessingQueue queue,
         ReviewDecisionOrchestrator reviewDecisionOrchestrator,
@@ -240,6 +232,9 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     {
         if (!_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
         {
+            TerminalizeActiveLifecycle(
+                request,
+                "Post Processing is disabled, so the queued attempt cannot continue.");
             _logger.LogInformation(
                 "auto-review-postprocessing-skipped project={Project} job={JobId} reason=review-decision-orchestrator-disabled",
                 request.ProjectName, request.JobId);
@@ -249,6 +244,9 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
+            TerminalizeActiveLifecycle(
+                request,
+                "Post Processing cannot continue because the task repository is not configured.");
             _logger.LogWarning(
                 "auto-review-postprocessing-skipped project={Project} job={JobId} reason=missing-task-repository",
                 request.ProjectName, request.JobId);
@@ -272,14 +270,24 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
             _logger.LogInformation(
                 "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs} queueWaitMs={QueueWaitMs} completionLatencyMs={CompletionLatencyMs}",
                 request.ProjectName, request.JobId, sw.ElapsedMilliseconds, queueWaitMs, queueWaitMs + sw.ElapsedMilliseconds);
+
+            TerminalizeActiveLifecycle(
+                request,
+                "Post Processing returned without a terminal decision.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            TerminalizeActiveLifecycle(
+                request,
+                "Post Processing was interrupted during shutdown.");
             throw;
         }
         catch (Exception ex)
         {
             sw.Stop();
+            TerminalizeActiveLifecycle(
+                request,
+                "Post Processing failed before reaching a terminal decision.");
             _logger.LogWarning(
                 ex,
                 "auto-review-postprocessing-failed project={Project} job={JobId} elapsedMs={ElapsedMs}",
@@ -294,34 +302,17 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
             var info = _scanner.FindJob(request.JobId, request.WatchPath);
             if (info == null || info.State != TaskStates.AutoReview) return;
 
-            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.PostProcessingRunning);
             var now = DateTime.UtcNow;
-            var snapshot = ReadLifecycleSnapshot(info.FolderPath) ?? new LifecycleSnapshot
+            if (PostProcessingLifecycleStore.BeginPostProcessing(
+                    info.FolderPath,
+                    now,
+                    PipelineCatalogue.OrchestratorDecisionStepId,
+                    "Auto-review decision started from the run-boundary post-processing queue.",
+                    _logger,
+                    replaceChecks: false))
             {
-                Phase = LifecyclePhases.PostProcessingRunning,
-                PhaseEnteredAt = now,
-            };
-
-            var checks = snapshot.PostProcessingChecks
-                .Where(c => !string.Equals(c.Name, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.Ordinal))
-                .ToList();
-            checks.Add(new LifecycleCheck
-            {
-                Name = PipelineCatalogue.OrchestratorDecisionStepId,
-                Status = "running",
-                StartedAt = now,
-                Detail = "Auto-review decision started from the run-boundary post-processing queue."
-            });
-
-            var updated = snapshot with
-            {
-                Phase = LifecyclePhases.PostProcessingRunning,
-                PhaseEnteredAt = snapshot.PhaseEnteredAt ?? now,
-                PostProcessingChecks = checks,
-            };
-            File.WriteAllText(
-                Path.Combine(info.FolderPath, "lifecycle.json"),
-                JsonSerializer.Serialize(updated, LifecycleJsonOptions));
+                _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.PostProcessingRunning);
+            }
         }
         catch (Exception ex)
         {
@@ -332,19 +323,31 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         }
     }
 
-    private static LifecycleSnapshot? ReadLifecycleSnapshot(string folderPath)
+    private void TerminalizeActiveLifecycle(
+        AutoReviewPostProcessingRequest request,
+        string detail)
     {
-        var path = Path.Combine(folderPath, "lifecycle.json");
-        if (!File.Exists(path)) return null;
         try
         {
-            return JsonSerializer.Deserialize<LifecycleSnapshot>(
-                File.ReadAllText(path),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var info = _scanner.FindJob(request.JobId, request.WatchPath);
+            if (info == null) return;
+            var updated = PostProcessingLifecycleStore.Terminalize(
+                info.FolderPath,
+                DateTime.UtcNow,
+                failed: true,
+                detail,
+                _logger,
+                onlyWhenActive: true);
+            if (updated && string.Equals(info.State, TaskStates.AutoReview, StringComparison.Ordinal))
+                _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.PostProcessingBlocked);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            _logger.LogWarning(
+                ex,
+                "auto-review-postprocessing-lifecycle-terminalize-failed project={Project} job={JobId}",
+                request.ProjectName,
+                request.JobId);
         }
     }
 }

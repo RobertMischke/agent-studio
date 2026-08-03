@@ -31,6 +31,7 @@
     <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
     <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
     <div><span>Daemon</span><strong>{{ daemonLabel() }}</strong></div>
+    <div data-testid="remote-host-task-server-route"><span>Task Server route</span><strong>{{ taskServerRouteLabel() }}</strong></div>
     <div><span>Last claim</span><strong>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'none' }}</strong></div>
     <div><span>Fallback probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
   </section>

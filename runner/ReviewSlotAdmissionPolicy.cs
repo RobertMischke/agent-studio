@@ -3,12 +3,14 @@ namespace AgentRunner;
 public sealed record ReviewSlotAdmissionDecision(
     bool Admitted,
     string Reason,
-    double? LoadPerCore);
+    double? LoadPerCore,
+    bool ActiveSlotsContinue = true);
 
 /// <summary>
 /// Immediate load-aware admission for new Review Executor slots. This policy
 /// never owns or cancels an active review; it decides only whether the daemon
-/// may ask the Task Server for one more attempt.
+/// may ask the Task Server for one more attempt. ActiveSlotsContinue makes that
+/// boundary explicit for restart-recovery and load-gate matrix tests.
 /// </summary>
 public static class ReviewSlotAdmissionPolicy
 {

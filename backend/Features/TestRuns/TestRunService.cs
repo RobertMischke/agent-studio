@@ -109,7 +109,7 @@ public sealed class TestRunService
         var project = ResolveProject(projectHandle);
         if (project is null) return null;
         var runs = Ordered(_store.List(project.Id));
-        var jobs = _scanner.ScanAllJobs()
+        var jobs = _scanner.ScanAllAutomationJobs()
             .Where(job => SamePath(job.WatchPath, project.StorageLocation))
             .ToList();
         var evidence = BuildLookup(jobs);

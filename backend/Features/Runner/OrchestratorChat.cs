@@ -677,7 +677,7 @@ public class OrchestratorChatService
         {
             try
             {
-                var tasks = _scanner.ScanAllJobs()
+                var tasks = _scanner.ScanAllAutomationJobs()
                     .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
                 AppendProjectStateSnapshot(sb, projectName, tasks);

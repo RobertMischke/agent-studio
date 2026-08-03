@@ -69,7 +69,7 @@ public sealed class OrchestratorContextDigestService
         // ORCH-1 is an application-wide read surface, not the board poll. Keep
         // archive in scope so a recent move to 7-archive remains visible in the
         // board pulse and an archived task context can still be reconstructed.
-        var allTasks = _scanner.ScanAllJobsWithArchive();
+        var allTasks = _scanner.ScanAllAutomationJobsWithArchive();
         var scopedTasks = ScopeTasks(context, allTasks, out var focusTask);
         var projectNames = ResolveProjects(context, watchPaths);
         var runnerStatus = SafeRunnerStatus();

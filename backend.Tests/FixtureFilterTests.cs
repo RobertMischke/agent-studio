@@ -13,9 +13,8 @@ namespace AgentStudio.Tests;
 ///    tasks that merely contain "test" or "spec".
 /// 2. The scanner reads <c>"fixture": true</c> off <c>task.json</c>.
 /// 3. The migration service is dry-run by default and idempotent.
-/// 4. Filtering on <c>!Fixture</c> hides marked jobs from the default
-///    list, while <c>?includeFixtures=true</c> re-surfaces them - this
-///    is the contract the endpoints rely on.
+/// 4. Automation scans exclude marked jobs while the raw scanner keeps them
+///    available for explicit fixture management and <c>?includeFixtures=true</c>.
 /// </summary>
 public class FixtureFilterTests : IDisposable
 {
@@ -113,6 +112,18 @@ public class FixtureFilterTests : IDisposable
         var fix = jobs.Single(j => j.Id == "e2e-fix-1");
         Assert.False(real.Fixture);
         Assert.True(fix.Fixture);
+    }
+
+    [Fact]
+    public void AutomationScanner_ExcludesFixtures()
+    {
+        WriteJob(TaskStates.Ready, "real-task", "Real Task");
+        WriteJob(TaskStates.Ready, "e2e-fix-1", "e2e fixture", fixture: true);
+
+        var (scanner, _) = BuildServices();
+
+        Assert.Equal(new[] { "real-task" }, scanner.ScanAllAutomationJobs().Select(job => job.Id));
+        Assert.Equal(2, scanner.ScanAllJobs().Count);
     }
 
     // --- Endpoint filter contract ---

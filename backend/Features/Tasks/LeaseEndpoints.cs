@@ -300,7 +300,11 @@ public static class LeaseEndpoints
                         // occupancy does not grow. Recording the unchanged count
                         // keeps the ledger free of the old "active + 1" drift.
                         var replayedActiveRuns = Math.Max(
-                            CountHostLeases(scanner.ScanAllJobs(), leases, clientId, req.RunnerId),
+                            CountHostLeases(
+                                scanner.ScanAllJobs().Where(task => !task.Fixture),
+                                leases,
+                                clientId,
+                                req.RunnerId),
                             activeSlots ?? 0);
                         // Without a ceiling there is nothing to derive from, so the
                         // daemon's own headroom minus the served lease stays the
@@ -356,7 +360,8 @@ public static class LeaseEndpoints
                 // enough to requeue: wait through the authority grace and require
                 // this assigned runner poll to answer that the task is absent
                 // from its active process set.
-                foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
+                foreach (var interrupted in scanner.ScanAllJobs()
+                             .Where(t => !t.Fixture && t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
                     if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
@@ -468,7 +473,7 @@ public static class LeaseEndpoints
                 }
 
                 var eligible = liveSnapshot
-                    .Where(t => t.State == TaskStates.Ready)
+                    .Where(t => !t.Fixture && t.State == TaskStates.Ready)
                     .Where(t =>
                     {
                         var project = settings.Get(t.ProjectName);
@@ -1031,17 +1036,23 @@ public static class LeaseEndpoints
                     !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest),
                     leasedRun is not null);
             }
-            var settled = authority.SettleRun(
-                new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
-                outcome,
-                resultSha,
-                req.Reason,
-                req.RunnerId,
-                req.LeaseId,
-                req.TaskKey,
-                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"),
-                resultEnvelope: resultEnvelope,
-                resultEnvelopeDigest: resultEnvelopeDigest);
+            var settled = authority.SettleRun(new SettleRunAttemptRequest
+            {
+                Write = new AttemptWriteReference(
+                    attemptId,
+                    req.FencingToken,
+                    epoch,
+                    completionKey),
+                Outcome = outcome,
+                ResultSha = resultSha,
+                Reason = req.Reason,
+                ExecutorId = req.RunnerId,
+                LeaseId = req.LeaseId,
+                ExpectedTaskKey = req.TaskKey,
+                RequireResultSha = !isEpicPlanning && outcome is ("done" or "noop"),
+                ResultEnvelope = resultEnvelope,
+                ResultEnvelopeDigest = resultEnvelopeDigest,
+            });
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(
@@ -1641,6 +1652,7 @@ public static class LeaseEndpoints
         var count = 0;
         foreach (var task in snapshot)
         {
+            if (task.Fixture) continue;
             if (task.State != TaskStates.Progress) continue;
             var key = task.Key ?? task.TaskKey ?? task.Id;
             if (string.IsNullOrWhiteSpace(key)) continue;
@@ -1786,9 +1798,10 @@ public static class LeaseEndpoints
     {
         if (string.IsNullOrWhiteSpace(taskKey)) return null;
         return scanner.ScanAllJobs().FirstOrDefault(t =>
-            string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase));
+            !t.Fixture
+            && (string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool RunnerMatches(HttpContext context, string runnerId, string? runnerName = null)

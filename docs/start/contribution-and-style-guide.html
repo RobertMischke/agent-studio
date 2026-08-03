@@ -153,7 +153,8 @@
       <h2>Separate machine-dependent tests</h2>
       <p>Tests that depend on machine timing, host load, real child processes, real ports or sockets, live services, live workspaces, or performance thresholds must carry the xUnit trait <code>[Trait("Category", "MachineBound")]</code>. Put the trait on the class when every test in the class is machine-bound; otherwise put it on each affected method.</p>
       <div class="rule"><strong>Do not use the trait to hide a fixable test.</strong> Prefer fake time, deterministic synchronization, temporary isolated resources, and mocked boundaries. Apply <code>MachineBound</code> only when the test intentionally exercises a real machine-dependent boundary.</div>
-      <p>The canonical routine .NET test command excludes those tests:</p>
+      <p>Process- and timing-dependent Runner tests that remain useful in exact-subject Remote Review also carry <code>[Trait("Category", "ReviewFlaky")]</code>. This second trait does not replace <code>MachineBound</code>. When one of these tests is a new Review failure, the executor reruns the command once. A failure that disappears is reported as <code>FlakyQuarantine</code> and does not become a product failure; a reproduced failure remains blocking.</p>
+      <p>The canonical routine .NET test command excludes <code>MachineBound</code> tests:</p>
       <pre><code>dotnet test --filter Category!=MachineBound</code></pre>
       <p style="margin-top:12px">Run machine-bound tests separately in an appropriate environment when the change affects them, and report both commands and outcomes.</p>
     </section>
@@ -198,7 +199,7 @@
     </section>
   </div>
 
-  <footer>Canonical as of 22 July 2026. Keep agent prompts and repository navigation pointed at this page instead of duplicating these conventions.</footer>
+  <footer>Canonical as of 2 August 2026. Keep agent prompts and repository navigation pointed at this page instead of duplicating these conventions.</footer>
 </main>
 </body>
 </html>

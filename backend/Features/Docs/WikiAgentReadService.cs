@@ -281,7 +281,7 @@ public sealed class WikiAgentReadService
             // production index cache is active. Historical initialization must
             // include that partition because archived logs are still durable
             // evidence and often make up most of the available inventory.
-            foreach (var task in _scanner.ScanAllJobsWithArchive()
+            foreach (var task in _scanner.ScanAllAutomationJobsWithArchive()
                          .Where(task => !string.IsNullOrWhiteSpace(task.FolderPath))
                          .GroupBy(task => Path.GetFullPath(task.FolderPath), StringComparer.OrdinalIgnoreCase)
                          .Select(group => group.First()))

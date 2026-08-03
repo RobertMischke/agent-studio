@@ -223,9 +223,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             authorityConfig, NullLogger<AttemptAuthorityService>.Instance);
         var run = authority.AcquireRun(
             slug, Project, null, "remote-runner", "remote-host", 60, "claim-remote").RunAttempt!;
-        authority.SettleRun(
-            new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete-remote"),
-            "done", "589c462f", null);
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "complete-remote"),
+            Outcome = "done",
+            ResultSha = "589c462f",
+        });
         var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
             slug, Project, "589c462f", run.AttemptId, "requirements", "policy", [], "create-review"));
         Assert.Equal(AttemptWriteStatus.Accepted, review.Status);
